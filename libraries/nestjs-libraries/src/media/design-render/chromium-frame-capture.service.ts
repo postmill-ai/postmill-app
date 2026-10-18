@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import puppeteer, { Browser, Page } from 'puppeteer';
+import * as fs from 'fs';
 import * as path from 'path';
 import { FRAME_RENDERER_SCRIPT, escapeForScriptTag } from './frame-renderer-script';
 import { buildFramePage, fontLinksForOutput } from './frame-page';
@@ -17,6 +18,11 @@ export interface RenderRouteOptions {
   orgId: string;
   token: string;
 }
+
+const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
+
+/** Per-frame watchdog rejection — the stride retries these once on a fresh page. */
+export class FrameCaptureTimeoutError extends Error {}
 
 function renderBaseUrl(): string {
   return (
@@ -93,10 +99,19 @@ export class ChromiumFrameCaptureService {
    * per document). Page setup (navigation + initial preload) runs SEQUENTIALLY
    * so N pages never spike memory at once — that setup-time RSS spike was the
    * suspected OOM behind the multi-page stall; only the strides overlap.
-   * Screenshots stay serialized within a page; the evaluate+screenshot pipelines
-   * overlap across pages. Every frame runs under a per-frame watchdog
-   * (getFrameTimeoutMs) and a browser-disconnect / page-crash listener rejects
-   * in-flight strides fast.
+   *
+   * Frames leave the page as CANVAS READBACK (canvas.toDataURL in the same
+   * evaluate as renderFrame), never Page.captureScreenshot: in headless
+   * Chromium only the front-most page is `visible`, and a compositor
+   * screenshot of a `hidden` page waits for a frame it never produces — that
+   * wedged page 0's first frame whenever N > 1 (the #152 stall: exactly one
+   * page's stride completes). Canvas 2D raster is CPU-side and
+   * visibility-independent, so every page can produce frames concurrently.
+   *
+   * Every frame runs under a per-frame watchdog (getFrameTimeoutMs); a wedged
+   * frame is retried ONCE on a freshly set-up page before the render aborts,
+   * and a browser-disconnect / page-crash listener rejects in-flight strides
+   * fast.
    *
    * `scale` multiplies the output resolution: the viewport and the page's frame
    * canvas run at canvas×scale (the renderer script reads `renderScale` off the
@@ -191,9 +206,30 @@ export class ChromiumFrameCaptureService {
           }
         };
 
+        // Recreate one capture page from scratch: fresh target, crash listener,
+        // full setup. Used to retry a watchdog-wedged frame — the wedged page's
+        // state (pending CDP call, stuck decoder) is discarded with it.
+        const resetPage = async (oldPage: Page): Promise<Page> => {
+          const oldHandler = pageCrashHandlers.get(oldPage);
+          if (oldHandler) {
+            oldPage.off('error', oldHandler);
+            pageCrashHandlers.delete(oldPage);
+          }
+          await oldPage.close().catch(() => {});
+          const page = await browser.newPage();
+          const onPageError = (err: Error) =>
+            rejectCrashed(
+              new Error(`Chromium page crashed mid-capture: ${err.message}`),
+            );
+          page.on('error', onPageError);
+          pageCrashHandlers.set(page, onPageError);
+          await this.setupFramePage(page, output, width, height, fps, routeOptions, scale, pageCount > 1);
+          return page;
+        };
+
         await Promise.all(
           pages.map((page, pageIndex) =>
-            this.captureFrameStride(page, pageIndex, pageCount, totalFrames, fps, durationMs, frameDir, reportProgress, crashed),
+            this.captureFrameStride(page, pageIndex, pageCount, totalFrames, fps, durationMs, frameDir, reportProgress, crashed, resetPage),
           ),
         );
       } finally {
@@ -279,10 +315,11 @@ export class ChromiumFrameCaptureService {
    * index (`frame-%05d.png`), so per-page files interleave into one contiguous
    * sequence for the encoder.
    *
-   * Each frame's evaluate+screenshot runs under a per-frame watchdog
-   * (getFrameTimeoutMs) and races the shared `crashed` rejection, so a wedged
-   * CDP call or a dead browser fails the stride fast instead of hanging until
-   * the outer render budget burns out.
+   * Each frame's render+readback runs under a per-frame watchdog
+   * (getFrameTimeoutMs) and races the shared `crashed` rejection. A frame that
+   * times out is retried ONCE on a freshly set-up page (`resetPage`) — a single
+   * wedged frame must not kill a minutes-long render; a frame that wedges twice
+   * (or any non-timeout failure) still aborts the stride.
    */
   private async captureFrameStride(
     page: Page,
@@ -294,27 +331,44 @@ export class ChromiumFrameCaptureService {
     frameDir: string,
     reportProgress: () => void,
     crashed: Promise<never>,
+    resetPage: (oldPage: Page) => Promise<Page>,
   ): Promise<void> {
-    const canvas = await page.$('#frame-canvas');
-    if (!canvas) {
-      throw new Error('Frame canvas disappeared during capture');
-    }
     const frameTimeoutMs = getFrameTimeoutMs();
+    let currentPage = page;
     for (let i = pageIndex; i < totalFrames; i += pageCount) {
       const timeMs = Math.min((i * 1000) / fps, durationMs);
-      await Promise.race([
-        this.captureOneFrame(page, canvas, i, timeMs, frameDir, frameTimeoutMs),
-        crashed,
-      ]);
+      try {
+        await Promise.race([
+          this.captureOneFrame(currentPage, i, timeMs, frameDir, frameTimeoutMs),
+          crashed,
+        ]);
+      } catch (err) {
+        if (!(err instanceof FrameCaptureTimeoutError)) throw err;
+        this._logger.warn(
+          `Frame ${i + 1} wedged its capture page (${err.message}); retrying once on a fresh page`,
+        );
+        currentPage = await resetPage(currentPage);
+        await Promise.race([
+          this.captureOneFrame(currentPage, i, timeMs, frameDir, frameTimeoutMs),
+          crashed,
+        ]);
+      }
 
       reportProgress();
     }
   }
 
-  /** Render one frame in the page and screenshot the canvas, bounded by `timeoutMs`. */
+  /**
+   * Render one frame and write it as PNG, bounded by `timeoutMs`.
+   *
+   * The frame leaves the page as a canvas `toDataURL` readback in the SAME
+   * evaluate as the render — not Page.captureScreenshot, which is compositor-
+   * based and pends forever on `hidden` (background) headless pages. The
+   * evaluate returning at all proves the render completed; the data URL carries
+   * the pixels.
+   */
   private async captureOneFrame(
     page: Page,
-    canvas: { screenshot: (opts: { path: string; type: 'png' }) => Promise<unknown> },
     frameIndex: number,
     timeMs: number,
     frameDir: string,
@@ -325,30 +379,34 @@ export class ChromiumFrameCaptureService {
       timer = setTimeout(
         () =>
           reject(
-            new Error(
+            new FrameCaptureTimeoutError(
               `Frame ${frameIndex + 1} capture timed out after ${timeoutMs}ms ` +
-                '(VIDEO_RENDER_FRAME_TIMEOUT_MS) — the page is wedged, aborting the render',
+                '(VIDEO_RENDER_FRAME_TIMEOUT_MS)',
             ),
           ),
         timeoutMs,
       );
     });
     try {
-      await Promise.race([
-        (async () => {
-          await page.evaluate(
-            (t: number) => (window as any).__FRAME_API.renderFrame(t),
-            timeMs,
-          );
-
-          const framePath = path.join(
-            frameDir,
-            `frame-${String(frameIndex + 1).padStart(5, '0')}.png`,
-          );
-          await canvas.screenshot({ path: framePath, type: 'png' });
-        })(),
+      const dataUrl = await Promise.race([
+        page.evaluate(async (t: number) => {
+          await (window as any).__FRAME_API.renderFrame(t);
+          return (document.getElementById('frame-canvas') as HTMLCanvasElement | null)?.toDataURL('image/png') ?? null;
+        }, timeMs),
         timeout,
       ]);
+
+      if (typeof dataUrl !== 'string' || !dataUrl.startsWith(PNG_DATA_URL_PREFIX)) {
+        throw new Error(
+          `Frame ${frameIndex + 1} capture returned no canvas PNG — the frame canvas is missing or unreadable`,
+        );
+      }
+
+      const framePath = path.join(
+        frameDir,
+        `frame-${String(frameIndex + 1).padStart(5, '0')}.png`,
+      );
+      await fs.promises.writeFile(framePath, Buffer.from(dataUrl.slice(PNG_DATA_URL_PREFIX.length), 'base64'));
     } finally {
       if (timer) clearTimeout(timer);
     }

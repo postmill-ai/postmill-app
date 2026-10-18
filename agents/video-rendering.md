@@ -198,15 +198,22 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      spike RSS at once — that setup spike was the suspected OOM behind the old
      multi-page stall — and parallel pages preload videos LAZILY (`preload({lazyVideos})`;
      the frame-renderer script's per-frame cache fetches on demand), while images stay
-     eager. Only the strides overlap: screenshots serialize within a page while the
-     evaluate+screenshot pipelines overlap across pages. Fail-fast hardening: wedged
+     eager. Frames leave the page as CANVAS READBACK: `renderFrame` +
+     `canvas.toDataURL('image/png')` run in ONE `page.evaluate` and the PNG is
+     written host-side — never `Page.captureScreenshot`, which is compositor-based
+     and pends forever on `hidden` headless pages (in headless Chromium only the
+     front-most page is `visible`; that wedged page 0's first frame whenever
+     N > 1 — the post-#172 production wedge — and is the likely mechanism behind
+     the original #152 "one stride completes" stall). Fail-fast hardening: wedged
      video seeks resolve after a 5s timeout instead of hanging a stride
-     (`seekVideo`), each frame's evaluate+screenshot runs under a per-frame watchdog
-     (`VIDEO_RENDER_FRAME_TIMEOUT_MS`, default 30s), and a browser `disconnected` /
-     page `error` (crash) listener rejects all in-flight strides immediately instead
-     of burning the whole render budget. `onProgress` reports a GLOBAL completed
-     count (monotonic). MEMORY: every page loads all clip media, so peak RSS roughly
-     multiplies by N — the render pod is cgroup-capped (default 4 CPU / 8g).
+     (`seekVideo`), each frame's render+readback runs under a per-frame watchdog
+     (`VIDEO_RENDER_FRAME_TIMEOUT_MS`, default 30s), a wedged frame is retried
+     ONCE on a freshly set-up page before the render aborts, and a browser
+     `disconnected` / page `error` (crash) listener rejects all in-flight strides
+     immediately instead of burning the whole render budget. `onProgress` reports
+     a GLOBAL completed count (monotonic). MEMORY: every page loads all clip
+     media, so peak RSS roughly multiplies by N — the render pod is cgroup-capped
+     (default 4 CPU / 8g).
    - **Real render progress** (`design-render/render-progress.ts` +
      `render-progress-throttle.ts`): the capture loop's `onProgress` is wired through
      `FfmpegVideoEncoderService` (`VideoEncodeOptions.onProgress`) to a throttled
