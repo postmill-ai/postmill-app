@@ -3,6 +3,7 @@
 import React, { FC } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement } from './designer.store';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 
 interface ToolbarProps {
   store: any;
@@ -40,6 +41,7 @@ export const SelectionToolbar = React.memo(function SelectionToolbar({
   const doc = store((s: any) => s.doc);
   const currentOutput = store((s: any) => s.currentOutput);
   const selectedIds: string[] = store((s: any) => s.selectedIds);
+  const currentPage = store((s: any) => s.currentPage);
   const updateElements = store((s: any) => s.updateElements);
   const removeElement = store((s: any) => s.removeElement);
   const duplicateElement = store((s: any) => s.duplicateElement);
@@ -48,7 +50,7 @@ export const SelectionToolbar = React.memo(function SelectionToolbar({
   const ungroupSelection = store((s: any) => s.ungroupSelection);
 
   if (!selectedIds.length) return null;
-  const selected: DesignerElement[] = (doc.outputs[currentOutput]?.children || []).filter(
+  const selected: DesignerElement[] = (pageChildren(doc.outputs[currentOutput] as any, currentPage) || []).filter(
     (c: DesignerElement) => selectedIds.includes(c.id)
   );
   if (!selected.length) return null;

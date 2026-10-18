@@ -101,6 +101,29 @@ export class RetentionRepository {
     return total;
   }
 
+  /**
+   * Design versions whose parent design has been soft-deleted past the
+   * retention window (the row survives the design's deletedAt because the FK
+   * cascade only fires on a HARD delete, which the app never does).
+   */
+  async purgeSoftDeletedDesignVersions(cutoff: Date): Promise<number> {
+    let total = 0;
+    for (let i = 0; i < RetentionRepository.MAX_BATCHES; i++) {
+      const rows = await this._prisma.designVersion.findMany({
+        where: { design: { deletedAt: { not: null, lt: cutoff } } },
+        select: { id: true },
+        take: RetentionRepository.BATCH,
+      });
+      if (!rows.length) break;
+      const r = await this._prisma.designVersion.deleteMany({
+        where: { id: { in: rows.map((v) => v.id) } },
+      });
+      total += r.count;
+      if (rows.length < RetentionRepository.BATCH) break;
+    }
+    return total;
+  }
+
   async purgeAiDesignerSessionsOlderThan(cutoff: Date): Promise<number> {
     let total = 0;
     for (let i = 0; i < RetentionRepository.MAX_BATCHES; i++) {

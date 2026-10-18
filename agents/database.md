@@ -110,7 +110,7 @@ sanctioned exceptions (seeders, cross-domain leaf-reads) are enumerated in
 | Org | `Organization`, `UserOrganization` |
 | Channels | `Integration`, `OrgProviderConfiguration` |
 | Posts / comments | `Post`, `Comments`, `PostCommentRead`, `Media` |
-| Designer | `Design`, `DesignTemplate`, `DesignTemplateFolder`, `AiDesignerSession` |
+| Designer | `Design`, `DesignVersion`, `DesignTemplate`, `DesignTemplateFolder`, `AiDesignerSession` |
 | Provider configs | `AIOrgProviderConfig`, `MediaProviderConfig`, `StorageProviderConfig`, `OrgShortLinkConfig`, `OrgVpnConfig`, `ContentPackConfig`, `AuthProviderConfig`, `CommsProviderConfig` (+ per-user `CommsUserLink`) |
 | Billing | `Subscription`, `Credits` |
 | Notifications | `Notifications`, `NotificationRead`, `NotificationPreference`, `NotificationDigestQueue` |

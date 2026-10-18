@@ -25,6 +25,12 @@ function makeModel() {
       update: vi.fn(),
       delete: vi.fn(),
     },
+    designVersion: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      deleteMany: vi.fn(),
+    },
     file: {
       findFirst: vi.fn(),
     },
@@ -34,6 +40,7 @@ function makeModel() {
 function makeRepo(model = makeModel()) {
   return {
     repo: new DesignRepository(
+      { model } as any,
       { model } as any,
       { model } as any,
       { model } as any,
@@ -143,5 +150,64 @@ describe('DesignRepository — template folders', () => {
       where: { id: 't1', organizationId: 'org-1' },
       data: { folderId: null },
     });
+  });
+});
+
+describe('DesignRepository — design versions', () => {
+  it('listVersions strips the doc column (metadata only)', async () => {
+    const { repo, model } = makeRepo();
+    model.designVersion.findMany.mockResolvedValue([]);
+
+    await repo.listVersions('org-1', 'd1');
+
+    expect(model.designVersion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { designId: 'd1', organizationId: 'org-1' },
+        orderBy: { createdAt: 'desc' },
+      })
+    );
+    const select = model.designVersion.findMany.mock.calls[0][0].select;
+    expect(select).not.toHaveProperty('doc');
+    expect(select).toHaveProperty('id');
+    expect(select).toHaveProperty('auto');
+  });
+
+  it('findVersion is scoped by org AND design', async () => {
+    const { repo, model } = makeRepo();
+    model.designVersion.findFirst.mockResolvedValue({ id: 'v1' });
+
+    await repo.findVersion('org-1', 'd1', 'v1');
+
+    expect(model.designVersion.findFirst).toHaveBeenCalledWith({
+      where: { id: 'v1', designId: 'd1', organizationId: 'org-1' },
+    });
+  });
+
+  it('trimVersions deletes everything past the newest `keep` of its class', async () => {
+    const { repo, model } = makeRepo();
+    model.designVersion.findMany.mockResolvedValue([{ id: 'v3' }, { id: 'v4' }]);
+    model.designVersion.deleteMany.mockResolvedValue({ count: 2 });
+
+    const removed = await repo.trimVersions('d1', false, 2);
+
+    expect(model.designVersion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { designId: 'd1', auto: false },
+        orderBy: { createdAt: 'desc' },
+        skip: 2,
+      })
+    );
+    expect(model.designVersion.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ['v3', 'v4'] } },
+    });
+    expect(removed).toBe(2);
+  });
+
+  it('trimVersions is a no-op inside the cap', async () => {
+    const { repo, model } = makeRepo();
+    model.designVersion.findMany.mockResolvedValue([]);
+
+    expect(await repo.trimVersions('d1', true, 10)).toBe(0);
+    expect(model.designVersion.deleteMany).not.toHaveBeenCalled();
   });
 });

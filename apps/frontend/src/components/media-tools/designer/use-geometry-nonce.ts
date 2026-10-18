@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { createDesignerStore, DesignerOutput, DesignerStore } from './designer.store';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 
 type DesignerStoreHook = ReturnType<typeof createDesignerStore>;
 
@@ -26,7 +27,7 @@ export const GEOMETRY_CACHE_DEBOUNCE_MS = 280;
  */
 export const geometrySignature = (state: DesignerStore): string => {
   const out = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
-  return (out?.children || [])
+  return pageChildren(out as DesignerOutput, state.currentPage)
     .map(
       (el) =>
         `${el.id}:${el.x},${el.y},${el.width},${el.height},${el.rotation ?? 0}` +

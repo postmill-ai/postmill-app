@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type Konva from 'konva';
 import type { DesignerElement, DesignerOutput, VideoOutput } from './designer.store';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import {
   ensureBuffer,
   getBuffer,
@@ -179,7 +180,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     // Returned as a pseudo-element keyed `${id}:mask` so the whole brush engine
     // — buffers, undo, clipping — works on it unchanged.
     if (state.maskTargetId) {
-      const children = (state.doc.outputs[state.currentOutput] as DesignerOutput)?.children || [];
+      const children = pageChildren(state.doc.outputs[state.currentOutput] as DesignerOutput, state.currentPage) || [];
       const owner = children.find((c) => c.id === state.maskTargetId);
       if (owner) {
         maskOwnerId.current = owner.id;
@@ -260,7 +261,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     }
 
     rasterClipTrack.current = null;
-    const children = (state.doc.outputs[state.currentOutput] as DesignerOutput)?.children || [];
+    const children = pageChildren(state.doc.outputs[state.currentOutput] as DesignerOutput, state.currentPage) || [];
     const selected = children.find(
       (c: DesignerElement) => c.id === state.selectedIds[0] && c.type === 'raster'
     );
@@ -269,7 +270,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     const before = new Set(children.map((c: DesignerElement) => c.id));
     state.addElement(buildRasterElement(w, h));
     const after =
-      (store.getState().doc.outputs[state.currentOutput] as DesignerOutput)?.children || [];
+      pageChildren(store.getState().doc.outputs[state.currentOutput] as DesignerOutput, store.getState().currentPage) || [];
     const created = after.find((c: DesignerElement) => !before.has(c.id));
     if (created) store.getState().setSelectedIds([created.id]);
     return created || null;
@@ -581,7 +582,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
   const runObjectSelection = useCallback(
     async (elementId: string) => {
       const state = store.getState();
-      const el = ((state.doc.outputs[state.currentOutput] as DesignerOutput)?.children || [])
+      const el = (pageChildren(state.doc.outputs[state.currentOutput] as DesignerOutput, state.currentPage) || [])
         .find((c: DesignerElement) => c.id === elementId);
       if (!el?.src) return;
       const res = await fetchFn('/media/remove-background', {

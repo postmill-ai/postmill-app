@@ -901,4 +901,212 @@ describe('DesignerDocService', () => {
     expect(added.children).toHaveLength(0);
     expect(primary.children[0].originId).toBe('el-1');
   });
+
+  it('applies addPage and assigns a page id', () => {
+    const service = makeService();
+    const doc = createBlankDoc();
+    const result = service.applyOps(doc, [
+      { op: 'addPage', outputIndex: 0, name: 'Slide 2' },
+    ]);
+    const out = result.outputs[0] as any;
+    expect(out.children).toHaveLength(0); // page 1 untouched
+    expect(out.pages).toHaveLength(1);
+    expect(out.pages[0].name).toBe('Slide 2');
+    expect(out.pages[0].id).toMatch(/^pg-[0-9a-f-]{36}$/i);
+    expect(out.pages[0].children).toEqual([]);
+  });
+
+  it('duplicatePage deep-clones with fresh element ids and originIds', () => {
+    const service = makeService();
+    let doc = createBlankDoc();
+    doc = service.applyOps(doc, [
+      { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+    ]);
+    const source = (doc.outputs[0] as any).children[0];
+    const result = service.applyOps(doc, [
+      { op: 'duplicatePage', outputIndex: 0, pageNumber: 0 },
+    ]);
+    const out = result.outputs[0] as any;
+    expect(out.pages).toHaveLength(1);
+    const copyEl = out.pages[0].children[0];
+    expect(copyEl.text).toBe('Hello');
+    expect(copyEl.id).not.toBe(source.id);
+    expect(copyEl.originId).not.toBe(source.originId);
+  });
+
+  it('removePage refuses page 1 and drops a later page', () => {
+    const service = makeService();
+    let doc = createBlankDoc();
+    doc = service.applyOps(doc, [
+      { op: 'addPage', outputIndex: 0 },
+      { op: 'addPage', outputIndex: 0 },
+    ]);
+    expect(() =>
+      service.applyOps(doc, [{ op: 'removePage', outputIndex: 0, pageNumber: 0 }])
+    ).toThrow(DesignerDocOpError);
+    const result = service.applyOps(doc, [
+      { op: 'removePage', outputIndex: 0, pageNumber: 1 },
+    ]);
+    expect((result.outputs[0] as any).pages).toHaveLength(1);
+  });
+
+  it('reorderPage can move page 1 into the extras and back', () => {
+    const service = makeService();
+    let doc = createBlankDoc();
+    doc = service.applyOps(doc, [
+      { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+      { op: 'addPage', outputIndex: 0, name: 'Second' },
+    ]);
+    const firstChildren = (doc.outputs[0] as any).children;
+    const result = service.applyOps(doc, [
+      { op: 'reorderPage', outputIndex: 0, from: 0, to: 1 },
+    ]);
+    const out = result.outputs[0] as any;
+    // The extras page moved onto the base slot; the old page 1's children now
+    // live in pages[0].
+    expect(out.children).toHaveLength(0);
+    expect(out.pages[0].children[0].text).toBe('Hello');
+    expect(out.pages[0].children[0].id).toBe(firstChildren[0].id);
+  });
+
+  it('page ops reject video outputs', () => {
+    const service = makeService();
+    const doc = service.validate({
+      version: 5,
+      mode: 'video',
+      outputs: [
+        {
+          id: 'out-1',
+          formatId: 'tiktok',
+          name: 'TikTok',
+          width: 1080,
+          height: 1920,
+          fps: 30,
+          durationMs: 10000,
+          tracks: [],
+        },
+      ],
+    });
+    expect(() =>
+      service.applyOps(doc, [{ op: 'addPage', outputIndex: 0 }])
+    ).toThrow(DesignerDocOpError);
+  });
+
+  const videoDoc = () =>
+    makeService().validate({
+      version: 5,
+      mode: 'video',
+      outputs: [
+        {
+          id: 'out-v1',
+          formatId: 'custom-wide',
+          name: 'Wide',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          durationMs: 10000,
+          tracks: [
+            {
+              id: 'trk-1',
+              type: 'text',
+              clips: [
+                {
+                  id: 'clip-1',
+                  startMs: 500,
+                  endMs: 4000,
+                  text: 'Headline',
+                  x: 460,
+                  y: 900,
+                  width: 1000,
+                  height: 140,
+                  fontSize: 64,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+  it('applies addOutput on a video doc: cloned variant, fresh ids, reflowed geometry', () => {
+    const doc = videoDoc();
+    const result = makeService().applyOps(doc, [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 },
+      },
+    ]);
+    expect(result.outputs).toHaveLength(2);
+    const added = result.outputs[1] as any;
+    expect(added).toMatchObject({
+      width: 1080,
+      height: 1920,
+      formatId: 'custom-tall',
+      fps: 30,
+      durationMs: 10000,
+    });
+    expect(added.id).toMatch(/^out-[0-9a-f-]{36}$/i);
+    const clip = added.tracks[0].clips[0];
+    const sourceClip = (result.outputs[0] as any).tracks[0].clips[0];
+    expect(clip.id).not.toBe(sourceClip.id);
+    expect(clip.originId).toBe(sourceClip.originId);
+    expect(clip.startMs).toBe(500); // timing invariant
+    expect(clip.y).not.toBe(900); // geometry reflowed
+  });
+
+  it('addOutput with seed:false on a video doc appends an empty timeline', () => {
+    const doc = videoDoc();
+    const result = makeService().applyOps(doc, [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 },
+        seed: false,
+      },
+    ]);
+    const added = result.outputs[1] as any;
+    expect(added.tracks).toEqual([]);
+    // No cross-output linking seeded — the normalize pass only defaults
+    // originId to the clip's own id (its long-standing behavior).
+    const srcClip = (result.outputs[0] as any).tracks[0].clips[0];
+    expect(srcClip.originId).toBe(srcClip.id);
+  });
+
+  it('resizeOutput reflows a video output in place and rejects a bad index', () => {
+    const doc = videoDoc();
+    const result = makeService().applyOps(doc, [
+      { op: 'resizeOutput', outputIndex: 0, width: 1080, height: 1920, formatId: 'custom-tall' },
+    ]);
+    const out = result.outputs[0] as any;
+    expect(out).toMatchObject({ width: 1080, height: 1920, formatId: 'custom-tall', durationMs: 10000 });
+    expect(out.tracks[0].clips[0].id).toBe('clip-1'); // ids preserved
+    expect(out.tracks[0].clips[0].y).not.toBe(900);
+
+    expect(() =>
+      makeService().applyOps(doc, [
+        { op: 'resizeOutput', outputIndex: 7, width: 1080, height: 1920 },
+      ])
+    ).toThrow(DesignerDocOpError);
+  });
+
+  it('image element ops still reject video outputs (gating unchanged)', () => {
+    const doc = videoDoc();
+    expect(() =>
+      makeService().applyOps(doc, [
+        { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+      ])
+    ).toThrow(DesignerDocOpError);
+  });
+
+  it('enforces the pages-per-output cap', () => {
+    const service = makeService();
+    let doc = createBlankDoc();
+    doc = service.applyOps(
+      doc,
+      Array.from({ length: 19 }, () => ({ op: 'addPage' as const, outputIndex: 0 }))
+    );
+    expect((doc.outputs[0] as any).pages).toHaveLength(19);
+    expect(() =>
+      service.applyOps(doc, [{ op: 'addPage', outputIndex: 0 }])
+    ).toThrow(DesignerDocOpError);
+  });
 });

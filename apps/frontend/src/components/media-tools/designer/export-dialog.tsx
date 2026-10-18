@@ -26,6 +26,11 @@ import {
 import { CanvasElements, gradientFillProps, getImageNaturalSize } from './elements';
 import { textureFillProps } from './textures';
 import type { DesignerDoc, DesignerOutput } from './designer.store';
+import {
+  pageChildren,
+  pageBackground,
+  pageCount,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { getThumbnailDataUrl } from './designer';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
@@ -428,9 +433,25 @@ const renderOutputWithFallback = async (
   throw new Error('Could not reduce output under 10 MB');
 };
 
+/**
+ * One page of an output as a standalone output view (doc v8) — same canvas
+ * size, the page's own background override and children. The render/export
+ * helpers below all take an output, so a page IS one as far as they know.
+ */
+const outputPageView = (output: DesignerOutput, page: number): DesignerOutput =>
+  page <= 0
+    ? output
+    : {
+        ...output,
+        bg: pageBackground(output, page),
+        children: pageChildren(output, page),
+      };
+
 // --- Thumbnail renderer ---
 
-const renderOutputThumbnail = async (
+// Exported for the pages panel's thumbnail strip — same off-screen Konva
+// render, so a page thumb always matches the export pipeline's output.
+export const renderOutputThumbnail = async (
   output: DesignerOutput,
   symbols?: SymbolDefinition[]
 ): Promise<string | undefined> => {
@@ -543,6 +564,9 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const [quality, setQuality] = useState(0.92);
   const [scale, setScale] = useState(1);
   const [exportAll, setExportAll] = useState(false);
+  // Page selection per output id (doc v8): absent/empty = ALL pages. PDF
+  // ignores this — it flattens every page sequentially by design.
+  const [pageSelection, setPageSelection] = useState<Record<string, number[]>>({});
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -655,6 +679,32 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   }, [doc.outputs, exportAll, multiOutput, store, forceAllOutputs]);
 
   const outputCount = selectedOutputs.length;
+
+  /** Selected 0-based page numbers for an output (all pages when untouched). */
+  const pagesForOutput = useCallback(
+    (output: DesignerOutput): number[] => {
+      const count = pageCount(output);
+      const sel = pageSelection[output.id];
+      const list = sel && sel.length ? sel : Array.from({ length: count }, (_, i) => i);
+      return list.filter((p) => p >= 0 && p < count);
+    },
+    [pageSelection]
+  );
+
+  const togglePageSelection = useCallback(
+    (output: DesignerOutput, page: number) => {
+      const count = pageCount(output);
+      setPageSelection((prev) => {
+        const current = prev[output.id] ?? Array.from({ length: count }, (_, i) => i);
+        const next = current.includes(page)
+          ? current.filter((p) => p !== page)
+          : [...current, page].sort((a, b) => a - b);
+        // Selecting everything again collapses back to "all" (absent key).
+        return { ...prev, [output.id]: next.length === count ? [] : next };
+      });
+    },
+    []
+  );
 
   const activeOutputId = useMemo(() => {
     if (selectedOutputs.length === 1) return selectedOutputs[0].id;
@@ -909,7 +959,9 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
           method: 'POST',
           body: JSON.stringify({
             composition,
-            outputIndex: i,
+            // The DOC index, not the index in this (possibly filtered) render
+            // list — a subset render used to mislabel every job after the gap.
+            outputIndex: doc.outputs.indexOf(composition),
             format: outputFormat,
             quality: videoQuality === 'high' ? 1 : videoQuality === 'medium' ? 0.7 : 0.4,
             bitrateKbps: videoBitrateKbps,
@@ -1295,19 +1347,8 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
             );
             // A per-output PDF (in a mixed selection) must go through the server
             // renderer — Konva's toBlob can't emit PDF and would otherwise write a
-            // PNG named ".pdf".
-            if (fmt === 'svg') {
-              const svg = await renderOutputAsSvg(output as DesignerOutput, doc.symbols);
-              const fileName = `${baseName} - ${outputName}.svg`;
-              const saved = await uploadBlob(
-                new Blob([svg], { type: 'image/svg+xml' }),
-                fileName
-              );
-              if (saved) {
-                results.push({ id: saved.id, path: saved.path, name: fileName, outputId: output.id });
-              }
-              continue;
-            }
+            // PNG named ".pdf". The server flattens ALL of the output's pages
+            // sequentially (renderPdf), so no page selection applies here.
             if (fmt === 'pdf') {
               const pdfBlob = await renderPdfOnServer([output as DesignerOutput]);
               if (!pdfBlob) throw new Error('PDF render failed');
@@ -1318,25 +1359,48 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
               }
               continue;
             }
-            const { blob, usedFormat } = await renderOutputWithFallback(
-              output as DesignerOutput,
-              fmt,
-              quality,
-              scale,
-              doc.symbols
-            );
-            const ext = extFor(usedFormat);
-            const fileName = `${baseName} - ${outputName}.${ext}`;
-            const saved = await uploadBlob(blob, fileName);
-            if (saved) {
-              const alt = getOutputAlt(output.id);
-              results.push({
-                id: saved.id,
-                path: saved.path,
-                name: fileName,
-                outputId: output.id,
-                alt,
-              });
+            // PNG/JPEG/WebP/SVG: one File per selected page × output. Pages
+            // render through outputPageView, so a page is just "an output"
+            // to the renderers. The page suffix appears only when the output
+            // actually has multiple pages.
+            const pageList =
+              'children' in output ? pagesForOutput(output as DesignerOutput) : [0];
+            const suffixPages = 'children' in output && pageCount(output as DesignerOutput) > 1;
+            for (const p of pageList) {
+              const pageView = outputPageView(output as DesignerOutput, p);
+              const pageSuffix = suffixPages ? ` - Page ${p + 1}` : '';
+              if (fmt === 'svg') {
+                const svg = await renderOutputAsSvg(pageView, doc.symbols);
+                const fileName = `${baseName} - ${outputName}${pageSuffix}.svg`;
+                const saved = await uploadBlob(
+                  new Blob([svg], { type: 'image/svg+xml' }),
+                  fileName
+                );
+                if (saved) {
+                  results.push({ id: saved.id, path: saved.path, name: fileName, outputId: output.id });
+                }
+                continue;
+              }
+              const { blob, usedFormat } = await renderOutputWithFallback(
+                pageView,
+                fmt,
+                quality,
+                scale,
+                doc.symbols
+              );
+              const ext = extFor(usedFormat);
+              const fileName = `${baseName} - ${outputName}${pageSuffix}.${ext}`;
+              const saved = await uploadBlob(blob, fileName);
+              if (saved) {
+                const alt = getOutputAlt(output.id);
+                results.push({
+                  id: saved.id,
+                  path: saved.path,
+                  name: fileName,
+                  outputId: output.id,
+                  alt,
+                });
+              }
             }
           } catch (err) {
             toaster.show((err as Error).message || t('designer_export_failed', 'Export failed'), 'warning');
@@ -1376,6 +1440,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     quality,
     scale,
     selectedOutputs,
+    pagesForOutput,
     pingDownload,
     renderPdfOnServer,
     uploadBlob,
@@ -1400,9 +1465,10 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
             {selectedOutputs.map((output) => {
               const fmt = outputFormats[output.id] || 'png';
               const preset = CHANNEL_PRESETS.find((p) => p.id === output.formatId);
+              const outPageCount = !isVideoMode && 'children' in output ? pageCount(output as DesignerOutput) : 1;
               return (
+                <div key={output.id} className="flex flex-col gap-1">
                 <div
-                  key={output.id}
                   className="flex items-center justify-between gap-2 px-2 py-1 rounded-[6px] bg-newBgColorInner border border-studioBorder/50"
                 >
                   <span className="text-[12px] text-textColor truncate flex-1">
@@ -1419,6 +1485,29 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                       </option>
                     ))}
                   </select>
+                </div>
+                {outPageCount > 1 && fmt !== 'pdf' && (
+                  <div className="flex flex-wrap items-center gap-1 px-1" aria-label={t('designer_pages', 'Pages')}>
+                    {Array.from({ length: outPageCount }, (_, p) => {
+                      const selected = pagesForOutput(output as DesignerOutput).includes(p);
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => togglePageSelection(output as DesignerOutput, p)}
+                          aria-pressed={selected}
+                          className={`px-1.5 py-0.5 rounded-[4px] text-[10px] border transition-all ${
+                            selected
+                              ? 'border-designerAccent bg-designerAccent/15 text-btnPrimaryAccent'
+                              : 'border-studioBorder text-newTextColor/50 hover:text-textColor'
+                          }`}
+                        >
+                          {t('designer_page_number', 'Page {{number}}', { number: p + 1 })}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 </div>
               );
             })}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useRef, useEffect, useState } from 'react';
+import React, { FC, useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import { Stage, Layer, Transformer, Rect, Group, Line as KonvaLine, Image as KonvaImage, Shape, Text as KonvaText } from 'react-konva';
 import {
   findEqualSpacing,
@@ -25,6 +25,7 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement, DesignerOutput, VideoOutput } from './designer.store';
+import { pageChildren, pageBackground } from './designer.store';
 import { composeClipsAtPlayhead } from './video-preview';
 import { reconcileCaptionWords } from './captions';
 import { VideoCanvasOverlay } from './video-canvas-overlay';
@@ -198,10 +199,28 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const fitNonce = store((s) => s.fitNonce);
 
   const output: any = doc.outputs[currentOutput];
+  const currentPage = store((s) => s.currentPage);
+  /**
+   * The ACTIVE PAGE as an output-shaped view: same canvas size and metadata,
+   * but `children`/`bg` resolve to the current page (page 0 = the output
+   * itself). Element tools, hit-testing, the text-edit guard and the paint
+   * stack all read this — never the raw output — so page 2+ edits behave
+   * exactly like page 1 edits.
+   */
+  const pageOutput = useMemo(() => {
+    if (!output || doc.mode === 'video' || !('children' in output) || !currentPage) {
+      return output as DesignerOutput | undefined;
+    }
+    return {
+      ...(output as DesignerOutput),
+      bg: pageBackground(output as DesignerOutput, currentPage),
+      children: pageChildren(output as DesignerOutput, currentPage),
+    };
+  }, [output, currentPage, doc.mode]);
   const paint = usePaintTools({
     store,
     stageRef,
-    output: output as DesignerOutput | undefined,
+    output: pageOutput as DesignerOutput | undefined,
     fetchFn: fetch,
   });
   const isVideo = doc.mode === 'video';
@@ -212,7 +231,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const clearEditingText = useCallback(() => setEditingTextId(null), []);
   useTextEditTargetGuard({
     editingTextId,
-    output,
+    output: pageOutput,
     symbols: doc.symbols,
     isVideo,
     onClear: clearEditingText,
@@ -273,14 +292,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         } as DesignerElement)
       : undefined
     : effectiveTool === 'crop' && selectedIds.length === 1
-      ? ((output as DesignerOutput | undefined)?.children || []).find(
+      ? ((pageOutput as DesignerOutput | undefined)?.children || []).find(
           (c) => c.id === selectedIds[0]
         )
       : undefined;
   /** The selected path, for the anchor-editing pens and Direct Selection. */
   const penEditTarget =
     selectedIds.length === 1
-      ? ((output as DesignerOutput | undefined)?.children || []).find(
+      ? ((pageOutput as DesignerOutput | undefined)?.children || []).find(
           (c) => c.id === selectedIds[0] && c.type === 'path'
         )
       : undefined;
@@ -324,7 +343,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
   // Load a output background image when the output uses an image fill (C4).
   useEffect(() => {
-    const src = output?.bg?.type === 'image' ? output.bg.src : undefined;
+    const src = pageOutput?.bg?.type === 'image' ? pageOutput.bg.src : undefined;
     if (!src) {
       return;
     }
@@ -341,7 +360,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [output?.bg]);
+  }, [pageOutput?.bg]);
 
   // Warm every font the document uses, then redraw. Nothing else loads fonts
   // on OPEN — `ensureFontLoaded` only ran when adding or restyling text — so
@@ -361,9 +380,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       families.get(family)!.add(weight ?? 400);
     };
     for (const out of doc.outputs || []) {
-      for (const el of (out as DesignerOutput).children || []) {
+      const pages = [
+        ...(((out as DesignerOutput).children ? [(out as DesignerOutput).children] : []) as DesignerElement[][]),
+        ...(((out as DesignerOutput).pages?.map((pg) => pg.children) ?? []) as DesignerElement[][]),
+      ];
+      for (const pageEls of pages) {
+      for (const el of pageEls || []) {
         note(el.fontFamily, el.fontWeight);
         for (const run of el.richText || []) note(run.fontFamily, run.fontWeight);
+      }
       }
       for (const track of (out as any).tracks || []) {
         for (const clip of track.clips || []) note(clip.fontFamily, clip.fontWeight);
@@ -541,10 +566,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const handleElementSelect = useCallback(
     (id: string, evt?: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
       if (isVideo) return;
-      const children = (output as DesignerOutput | undefined)?.children || [];
+      const children = (pageOutput as DesignerOutput | undefined)?.children || [];
       // An expanded symbol child (e.g. a CTA label) is not a real layer — its
       // instance is what move/delete/transform should act on.
-      id = resolveSelectableId(output as DesignerOutput | undefined, id);
+      id = resolveSelectableId(pageOutput as DesignerOutput | undefined, id);
       const el = children.find((c) => c.id === id);
       const groupId = el?.groupId;
       const groupIds = groupId
@@ -561,7 +586,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         setSelectedIds(groupIds);
       }
     },
-    [output, selectedIds, setSelectedIds, isVideo]
+    [output, pageOutput, selectedIds, setSelectedIds, isVideo]
   );
 
   const handleStageMouseDown = useCallback(
@@ -839,7 +864,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         const dx = pos.x - s.x;
         const dy = pos.y - s.y;
         if (Math.hypot(dx, dy) >= 4) {
-          const el = ((output as DesignerOutput | undefined)?.children || []).find(
+          const el = ((pageOutput as DesignerOutput | undefined)?.children || []).find(
             (c) => c.id === selectedIds[0]
           );
           const angle = Math.round((Math.atan2(dy, dx) * 180) / Math.PI);
@@ -901,7 +926,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     }
 
     if (marqueeStart.current && marquee && (marquee.w > 3 || marquee.h > 3)) {
-      const hits = ((output as DesignerOutput | undefined)?.children || [])
+      const hits = ((pageOutput as DesignerOutput | undefined)?.children || [])
         .filter((el) => !el.hidden && !el.locked)
         .filter(
           (el) =>
@@ -918,8 +943,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   }, [
     marquee,
     output,
+    pageOutput,
     setSelectedIds,
     effectiveTool,
+    isVideo,
     store,
     selectedIds,
     updateElement,
@@ -933,7 +960,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     (node: Konva.Node) => {
       if (!output || isVideo) return;
       if (!snapEnabled) { setGuides([]); setSpacingGuide(null); return; }
-      const children = (output as DesignerOutput | undefined)?.children || [];
+      const children = (pageOutput as DesignerOutput | undefined)?.children || [];
       const others = children.filter((el) => !selectedIds.includes(el.id) && !el.hidden);
       // A warped shape is a Konva `Line`, whose `width()` is the bbox of its
       // POINTS — so it snapped on its bulge while a warped PATH (a `Shape`,
@@ -1001,7 +1028,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       setGuides(lines);
       setHud({ x: node.x(), y: node.y() - 22, text: `${Math.round(node.x())}, ${Math.round(node.y())}` });
     },
-    [output, selectedIds, snapEnabled, isVideo, docGuides, snapToGrid, gridSize]
+    [output, pageOutput, selectedIds, snapEnabled, isVideo, docGuides, snapToGrid, gridSize]
   );
   // Grid lines in document space. Capped: a 2px grid on a 4000px artboard is
   // 2,000 nodes Konva would redraw on every pan.
@@ -1290,7 +1317,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         e.preventDefault();
         // Photoshop: ⌘A selects PIXELS, ⌥⌘A selects layers.
         if (e.altKey) {
-          setSelectedIds(((output as any)?.children || []).filter((c: any) => !c.hidden).map((c: any) => c.id));
+          setSelectedIds(((pageOutput as any)?.children || []).filter((c: any) => !c.hidden).map((c: any) => c.id));
         } else if (output) {
           st.setSelection(fullMask(output.width, output.height));
         }
@@ -1347,7 +1374,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         if (e.key === 'ArrowRight') dx = delta;
         let moved = false;
         selectedIds.forEach((id) => {
-          const el = ((output as any)?.children || []).find((c: any) => c.id === id);
+          const el = ((pageOutput as any)?.children || []).find((c: any) => c.id === id);
           if (!el || el.locked || el.hidden) return;
           updateElement(id, { x: el.x + dx, y: el.y + dy });
           moved = true;
@@ -1355,13 +1382,13 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         if (moved) pushHistory();
       } else if (e.key === 'Enter') {
         if (selectedIds.length === 1) {
-          if (resolveTextEditTarget(output as DesignerOutput | undefined, doc.symbols, selectedIds[0])) {
+          if (resolveTextEditTarget(pageOutput as DesignerOutput | undefined, doc.symbols, selectedIds[0])) {
             setEditingTextId(selectedIds[0]);
           }
         }
       }
     },
-    [editingTextId, selectedIds, setSelectedIds, updateElement, output, doc, duplicateElement, store, pushHistory, isVideo]
+    [editingTextId, selectedIds, setSelectedIds, updateElement, output, pageOutput, doc, duplicateElement, store, pushHistory, isVideo]
   );
 
   const handleStageDblClick = useCallback(
@@ -1376,11 +1403,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       }
       const target = e.target;
       const id = target.id() || target.getParent()?.id();
-      if (id && resolveTextEditTarget(output as DesignerOutput | undefined, doc.symbols, id)) {
+      if (id && resolveTextEditTarget(pageOutput as DesignerOutput | undefined, doc.symbols, id)) {
         setEditingTextId(id);
       }
     },
-    [output, doc, effectiveTool, paint]
+    [output, pageOutput, doc, effectiveTool, paint]
   );
 
   // Drop from panels (designer elements) and OS file drops.
@@ -1520,7 +1547,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     [addElement, viewportX, viewportY, zoom, store, output, toaster, fetch, isVideo, t]
   );
 
-  const bg = output?.bg;
+  const bg = pageOutput?.bg;
   const bgGrad =
     bg?.type === 'gradient' ? gradientFillProps(bg.gradient, output.width, output.height) : {};
   // The texture is an overlay on the base fill (shared generator tile), painted
@@ -1627,7 +1654,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             y={0}
             width={output.width}
             height={output.height}
-            fill={bg?.type === 'gradient' ? undefined : bg?.color || output?.background || '#ffffff'}
+            fill={bg?.type === 'gradient' ? undefined : bg?.color || pageOutput?.background || '#ffffff'}
             {...bgGrad}
             shadowColor="rgba(0,0,0,0.3)"
             shadowBlur={20}
@@ -1646,7 +1673,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             />
           )}
           <CanvasElements
-            elements={isVideo ? [] : (output?.children || [])}
+            elements={isVideo ? [] : (pageOutput?.children || [])}
             symbols={doc.symbols}
             editingTextId={editingTextId}
             geometryNonce={geometryNonce}
@@ -1663,7 +1690,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
                   y={0}
                   width={output.width}
                   height={output.height}
-                  fill={bg?.type === 'gradient' ? undefined : bg?.color || output?.background || '#ffffff'}
+                  fill={bg?.type === 'gradient' ? undefined : bg?.color || pageOutput?.background || '#ffffff'}
                   {...bgGrad}
                   listening={false}
                 />
@@ -2101,7 +2128,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               if (target.instanceId && target.childId) {
                 // A symbol child writes through the instance's overrides — the
                 // only channel an instance may write (see symbol-edit.ts).
-                const instance = (output?.children || []).find(
+                const instance = (pageOutput?.children || []).find(
                   (c: DesignerElement) => c.id === target.instanceId
                 );
                 if (instance) {

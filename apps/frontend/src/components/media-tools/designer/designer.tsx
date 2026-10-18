@@ -22,6 +22,7 @@ import { TemplatesPanel } from './panels/templates-panel';
 import { MyDesignsPanel } from './panels/my-designs-panel';
 import { LayersPanel } from './panels/layers-panel';
 import { HistoryPanel } from './panels/history-panel';
+import { VersionsPanel, SaveVersionDialog } from './panels/versions-panel';
 import { TemplateFillPanel } from './panels/template-fill-panel';
 import { LayersFooter } from './panels/layers-footer';
 import { usePixelOps } from './use-pixel-ops';
@@ -35,13 +36,15 @@ import { IconsPanel } from './panels/icons-panel';
 import { InspectorPanel } from './panels/inspector-panel';
 import { SelectionToolbar } from './selection-toolbar';
 import { OutputTabs } from './output-tabs';
+import { PagesPanel } from './panels/pages-panel';
 import { ShortcutsOverlay } from './shortcuts';
 import { CommandPalette } from './command-palette';
-import { ExportDialog } from './export-dialog';
+import { ExportDialog, renderOutputThumbnail } from './export-dialog';
 import { VideoTimeline } from './video-timeline';
 import { fitWithin } from './panels/fit-within';
 import { MenuBar } from './menu-bar';
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { useDesignerActions, type DesignerActionCtx } from './actions';
 import { NewDesignDialog } from './new-design-dialog';
 import { CanvasInspector } from './panels/canvas-inspector';
@@ -273,6 +276,14 @@ export const Designer: FC<DesignerProps> = ({
     x: 360,
     y: 16,
     height: 360,
+    open: false,
+  });
+  // Versions (server-side snapshots) floats like History — same "keep open
+  // while experimenting" surface, backed by the DB rather than the undo stack.
+  const versionsPanel = useFloatingPanelState('versions', user?.orgId, {
+    x: 660,
+    y: 16,
+    height: 400,
     open: false,
   });
   // The fill-in-the-blanks form for a slotted template. Floats like the rest,
@@ -514,8 +525,20 @@ export const Designer: FC<DesignerProps> = ({
     previewDataUrl?: string;
   }> => {
     try {
-      const stageEl = document.querySelector('.konva-stage canvas') as HTMLCanvasElement;
-      const previewDataUrl = getThumbnailDataUrl(stageEl);
+      // The design thumbnail is ALWAYS page 1 of output 0 (multi-page docs,
+      // doc v8) — not whatever page/output the stage happens to be showing.
+      // Render it off-stage for image docs; video keeps the live stage frame.
+      const state = store.getState();
+      const first = state.doc.outputs[0] as DesignerOutput | undefined;
+      const previewDataUrl =
+        state.doc.mode === 'image' && first && 'children' in first
+          ? await renderOutputThumbnail(
+              { ...first, children: pageChildren(first, 0) },
+              state.doc.symbols as never
+            )
+          : getThumbnailDataUrl(
+              document.querySelector('.konva-stage canvas') as HTMLCanvasElement
+            );
       const previewBlob = previewDataUrl ? dataUrlToBlob(previewDataUrl) : null;
       if (previewBlob) {
         try {
@@ -537,7 +560,7 @@ export const Designer: FC<DesignerProps> = ({
     } catch {
       return {};
     }
-  }, [fetch]);
+  }, [fetch, store]);
 
   // Autosave pipeline (create-on-first-edit, then PUT) — hoisted so both the
   // debounced-doc effect and manual Save share the same in-flight create guard.
@@ -910,7 +933,7 @@ export const Designer: FC<DesignerProps> = ({
   const onTextToOutlines = useCallback(async () => {
     const state = store.getState();
     const out = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
-    const el = (out?.children || []).find(
+    const el = (out ? pageChildren(out, state.currentPage) : []).find(
       (c: DesignerElement) => state.selectedIds.includes(c.id) && c.type === 'text'
     );
     if (!el) return;
@@ -1037,7 +1060,7 @@ export const Designer: FC<DesignerProps> = ({
   const selectedImageId = useCallback(() => {
     const st = store.getState();
     const out = st.doc.outputs[st.currentOutput] as any;
-    const els = (out?.children || []).filter((c: any) => st.selectedIds.includes(c.id));
+    const els = (out && 'children' in out ? pageChildren(out, st.currentPage) : []).filter((c: any) => st.selectedIds.includes(c.id));
     return els.length === 1 && els[0].type === 'image' ? (els[0].id as string) : null;
   }, [store]);
 
@@ -1103,6 +1126,13 @@ export const Designer: FC<DesignerProps> = ({
           ),
         }),
       onSave: handleSave,
+      onSaveVersion: () =>
+        modals.openModal({
+          title: translate('designer_save_version', 'Save Version'),
+          children: (close: () => void) => (
+            <SaveVersionDialog store={store} onClose={close} saveDesign={handleSave} />
+          ),
+        }),
       onSaveAsTemplate: handleSaveAsTemplate,
       onOpenMedia,
       onInsertMedia,
@@ -1122,6 +1152,10 @@ export const Designer: FC<DesignerProps> = ({
         }
         if (id === 'history') {
           historyPanel.toggle();
+          return;
+        }
+        if (id === 'versions') {
+          versionsPanel.toggle();
           return;
         }
         if (id === 'template') {
@@ -1243,6 +1277,7 @@ export const Designer: FC<DesignerProps> = ({
       decision,
       layersPanel,
       historyPanel,
+      versionsPanel,
       templatePanel,
       brandPanel,
       pixelOps,
@@ -1482,6 +1517,18 @@ export const Designer: FC<DesignerProps> = ({
           </FloatingPanel>
         )}
 
+        {versionsPanel.state.open && (
+          <FloatingPanel
+            title={translate('designer_versions', 'Versions')}
+            onClose={() => versionsPanel.setOpen(false)}
+            position={versionsPanel.state}
+            onPositionChange={versionsPanel.setPosition}
+            width={320}
+          >
+            <VersionsPanel store={store as any} />
+          </FloatingPanel>
+        )}
+
         {layersPanel.state.open && (
           <FloatingPanel
             title={translate('panel_layers', 'Layers')}
@@ -1564,6 +1611,7 @@ export const Designer: FC<DesignerProps> = ({
             )}
           </div>
           {docMode === 'video' && <VideoTimeline store={store} sendTimelineAwareness={collabData.sendTimelineAwareness} />}
+          <PagesPanel store={store} />
           <OutputTabs store={store} />
         </div>
       </div>

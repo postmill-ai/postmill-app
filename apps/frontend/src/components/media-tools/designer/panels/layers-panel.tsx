@@ -3,6 +3,7 @@
 import React, { FC, useCallback, useMemo, useRef, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement, DesignerOutput } from '../designer.store';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import {
   buildLayerTree,
   flattenForDisplay,
@@ -75,7 +76,8 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
   const output = store(
     (s) => s.doc.outputs[s.currentOutput] as DesignerOutput | undefined
   );
-  const elements = useMemo(() => output?.children || [], [output]);
+  const currentPage = store((s) => s.currentPage);
+  const elements = useMemo(() => (output ? pageChildren(output, currentPage) : []), [output, currentPage]);
   const selectedIds = store((s) => s.selectedIds);
 
   const [localEditingId, setLocalEditingId] = useState<string | null>(null);
@@ -168,7 +170,7 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
     const v = Math.max(0, Math.min(100, parsed)) / 100;
     const state = store.getState();
     const out = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
-    const el = out?.children.find((c) => c.id === state.selectedIds[0]);
+    const el = out ? pageChildren(out, state.currentPage).find((c) => c.id === state.selectedIds[0]) : undefined;
     // A no-op commit (Enter then blur) must not stack two history entries.
     if (!el || Math.abs((el.opacity ?? 1) - v) < 0.005) return;
     state.updateElementsSilent(state.selectedIds, { opacity: v });

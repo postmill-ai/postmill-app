@@ -42,6 +42,7 @@ import { RenderVideoDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/
 import { BulkGenerateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/bulk.generate.design.dto';
 import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design.dto';
 import { UpdateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-design.dto';
+import { CreateDesignVersionDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design-version.dto';
 import { CreateTemplateDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-template.dto';
 import { UpdateTemplateDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-template.dto';
 import {
@@ -130,6 +131,68 @@ export class DesignController {
     return { success: true };
   }
 
+  // ── Version history ─────────────────────────────────────────────────────
+
+  @Get('/:id/versions')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async listVersions(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+  ) {
+    return this._designService.listVersions(org.id, id);
+  }
+
+  @Post('/:id/versions')
+  @CheckPolicies([AuthorizationActions.Update, Sections.MEDIA])
+  @RequirePermission('media', 'update')
+  async createVersion(
+    @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
+    @Param('id') id: string,
+    @Body() body: CreateDesignVersionDto,
+  ) {
+    return this._designService.createVersion(org.id, user.id, id, body);
+  }
+
+  @Get('/:id/versions/:vid')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async getVersion(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Param('vid') vid: string,
+  ) {
+    return this._designService.getVersion(org.id, id, vid);
+  }
+
+  /**
+   * Restore is non-destructive server-side: the live doc is snapshotted as an
+   * auto version before the overwrite (see DesignService.restoreVersion).
+   */
+  @Post('/:id/versions/:vid/restore')
+  @CheckPolicies([AuthorizationActions.Update, Sections.MEDIA])
+  @RequirePermission('media', 'update')
+  async restoreVersion(
+    @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
+    @Param('id') id: string,
+    @Param('vid') vid: string,
+  ) {
+    return this._designService.restoreVersion(org.id, user.id, id, vid);
+  }
+
+  @Delete('/:id/versions/:vid')
+  @CheckPolicies([AuthorizationActions.Delete, Sections.MEDIA])
+  @RequirePermission('media', 'delete')
+  async deleteVersion(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Param('vid') vid: string,
+  ) {
+    return this._designService.deleteVersion(org.id, id, vid);
+  }
+
   @Post('/render')
   @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
   @RequirePermission('media', 'create')
@@ -153,6 +216,7 @@ export class DesignController {
       doc,
       body.outputIndex ?? body.pageIndex ?? 0,
       opts,
+      body.pageNumber ?? 0,
     );
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Content-Disposition', 'inline; filename="design.png"');

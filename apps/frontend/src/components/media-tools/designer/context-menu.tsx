@@ -7,7 +7,8 @@ import {
   combineElements,
   PATHFINDER_OPS,
 } from './layer-actions';
-import type { DesignerElement } from './designer.store';
+import type { DesignerElement, DesignerOutput } from './designer.store';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 
 interface ContextMenuProps {
   x: number;
@@ -32,7 +33,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
   const menuRef = useRef<HTMLDivElement>(null);
   const s = store.getState();
   const out = s.doc.outputs[s.currentOutput];
-  const imageOut = 'children' in out ? out : null;
+  const pageEls: DesignerElement[] = 'children' in out ? pageChildren(out as DesignerOutput, s.currentPage) : [];
+  const imageOut = 'children' in out ? { ...(out as DesignerOutput), children: pageEls } : null;
   const el = elementId
     ? imageOut?.children.find((c: { id: string }) => c.id === elementId) ?? null
     : null;

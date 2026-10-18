@@ -99,6 +99,94 @@ export class DesignService {
     return this._designRepository.softDelete(id, orgId);
   }
 
+  // ── Version history ─────────────────────────────────────────────────────
+
+  /**
+   * Retention caps, env-tunable. Named (manual) versions get the larger
+   * budget; auto safety snapshots churn on every restore, so they get less.
+   */
+  private _versionKeep(envKey: string, fallback: number): number {
+    const raw = process.env[envKey];
+    const parsed = raw === undefined || raw === '' ? NaN : Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+    return Math.floor(parsed);
+  }
+
+  /**
+   * Snapshot the design's CURRENT doc as a version. `auto` marks the safety
+   * snapshot taken inside restoreVersion — autosave NEVER calls this.
+   */
+  async createVersion(
+    orgId: string,
+    userId: string,
+    designId: string,
+    data: { name?: string; previewDataUrl?: string; auto?: boolean }
+  ) {
+    const design = await this._designRepository.findById(orgId, designId);
+    if (!design) throw new NotFoundException('Design not found');
+    const validatedDoc = this._designerDocService.validate(design.doc);
+    const firstOutput = validatedDoc.outputs[0];
+    const version = await this._designRepository.createVersion({
+      designId,
+      organizationId: orgId,
+      name: data.name?.trim() || undefined,
+      doc: validatedDoc,
+      auto: !!data.auto,
+      createdById: userId,
+      width: design.width ?? firstOutput.width,
+      height: design.height ?? firstOutput.height,
+      previewDataUrl: data.previewDataUrl,
+    });
+    // Count cap at insert: newest N per class survive.
+    await this._designRepository.trimVersions(
+      designId,
+      !!data.auto,
+      this._versionKeep(
+        data.auto ? 'DESIGN_VERSIONS_KEEP_AUTO' : 'DESIGN_VERSIONS_KEEP_NAMED',
+        data.auto ? 10 : 20
+      )
+    );
+    return version;
+  }
+
+  async listVersions(orgId: string, designId: string) {
+    const design = await this._designRepository.findById(orgId, designId);
+    if (!design) throw new NotFoundException('Design not found');
+    return this._designRepository.listVersions(orgId, designId);
+  }
+
+  async getVersion(orgId: string, designId: string, versionId: string) {
+    const version = await this._designRepository.findVersion(orgId, designId, versionId);
+    if (!version) throw new NotFoundException('Version not found');
+    return version;
+  }
+
+  /**
+   * Restore a version into the live design. NON-destructive on the server
+   * side: the current doc is snapshotted as an auto version BEFORE the
+   * overwrite, so a mistaken restore is itself recoverable.
+   */
+  async restoreVersion(orgId: string, userId: string, designId: string, versionId: string) {
+    const design = await this._designRepository.findById(orgId, designId);
+    if (!design) throw new NotFoundException('Design not found');
+    const version = await this._designRepository.findVersion(orgId, designId, versionId);
+    if (!version) throw new NotFoundException('Version not found');
+
+    await this.createVersion(orgId, userId, designId, {
+      auto: true,
+      previewDataUrl: design.previewDataUrl ?? undefined,
+    });
+
+    return this.updateDesign(orgId, designId, { doc: version.doc });
+  }
+
+  async deleteVersion(orgId: string, designId: string, versionId: string) {
+    const version = await this._designRepository.findVersion(orgId, designId, versionId);
+    if (!version) throw new NotFoundException('Version not found');
+    await this._designRepository.deleteVersion(orgId, designId, versionId);
+    return { success: true };
+  }
+
   async listTemplates(orgId: string) {
     const templates = await this._designRepository.findTemplatesByOrg(orgId);
     return templates.map((t) => ({
@@ -295,6 +383,20 @@ export class DesignService {
           delete e.originId;
           return e;
         });
+        // Pages (v8): strip page ids and their elements' ids the same way.
+        if (Array.isArray(base.pages)) {
+          base.pages = base.pages.map((page: any) => {
+            const p = { ...page };
+            delete p.id;
+            p.children = (p.children || []).map((el: any) => {
+              const e = { ...el };
+              delete e.id;
+              delete e.originId;
+              return e;
+            });
+            return p;
+          });
+        }
       }
       if ('tracks' in base) {
         base.tracks = base.tracks.map((track: any) => {

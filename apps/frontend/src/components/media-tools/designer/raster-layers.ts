@@ -126,7 +126,15 @@ interface PaintSurface {
 const collectSurfaces = (doc: DesignerDoc): PaintSurface[] => {
   const surfaces: PaintSurface[] = [];
   for (const out of doc.outputs) {
-    for (const el of (out as DesignerOutput).children || []) {
+    // Raster surfaces live on EVERY page of an image output, not just page 1 —
+    // a history restore that only scanned `children` would dispose the live
+    // buffers of a page 2+ paint layer.
+    const imagePages = [
+      ...((out as DesignerOutput).children ? [(out as DesignerOutput).children] : []),
+      ...((out as DesignerOutput).pages?.map((p) => p.children) ?? []),
+    ];
+    for (const children of imagePages) {
+    for (const el of children || []) {
       if (el.type === 'raster') {
         surfaces.push({ key: el.id, src: el.src, width: el.width, height: el.height });
       }
@@ -138,6 +146,7 @@ const collectSurfaces = (doc: DesignerDoc): PaintSurface[] => {
           height: el.height,
         });
       }
+    }
     }
     for (const track of (out as VideoOutput).tracks || []) {
       if (track.type !== 'raster') continue;

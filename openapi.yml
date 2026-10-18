@@ -7347,6 +7347,98 @@ paths:
           description: ""
       tags:
         - Design
+  /media/designs/{id}/versions:
+    get:
+      operationId: DesignController_listVersions
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design
+    post:
+      operationId: DesignController_createVersion
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDesignVersionDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Design
+  /media/designs/{id}/versions/{vid}:
+    get:
+      operationId: DesignController_getVersion
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: vid
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design
+    delete:
+      operationId: DesignController_deleteVersion
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: vid
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design
+  /media/designs/{id}/versions/{vid}/restore:
+    post:
+      operationId: DesignController_restoreVersion
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: vid
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+      summary: |-
+        Restore is non-destructive server-side: the live doc is snapshotted as an
+        auto version before the overwrite (see DesignService.restoreVersion).
+      tags:
+        - Design
   /media/designs/render:
     post:
       operationId: DesignController_render
@@ -11822,6 +11914,15 @@ components:
           type: string
         previewFileId:
           type: string
+    CreateDesignVersionDto:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        previewDataUrl:
+          type: string
+          description: Small JPEG data URL snapshot for the versions panel; optional.
     RenderDesignDto:
       type: object
       properties:
@@ -11832,6 +11933,13 @@ components:
           minimum: 0
         outputIndex:
           type: number
+          minimum: 0
+        pageNumber:
+          type: number
+          description: |-
+            Page WITHIN the output (doc v8): 0 is page 1 (`output.children`),
+            n ≥ 1 renders `output.pages[n - 1]`. Distinct from `pageIndex`, which is
+            the legacy alias for `outputIndex` and keeps working unchanged.
           minimum: 0
         format:
           type: string

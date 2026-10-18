@@ -23,6 +23,7 @@ import {
   MAX_SMART_FILTERS,
   MAX_OPS_PER_REQUEST,
   MAX_OUTPUTS,
+  MAX_PAGES_PER_OUTPUT,
   MAX_PATH_NODES,
   MAX_TEXT_LEN,
   MAX_TRACKS,
@@ -666,6 +667,12 @@ export interface ClipTransition {
 
 export interface VideoClip {
   id: string;
+  /**
+   * Cross-output link key for video variants (see `designer-doc/video-reflow`
+   * seeding): sibling clips on other video outputs share it. Geometry and
+   * timing never propagate — content/style do.
+   */
+  originId?: string;
   startMs: number;
   endMs: number;
   trimInMs?: number;
@@ -832,6 +839,18 @@ export interface VideoOutput {
   markers?: VideoMarker[];
 }
 
+export interface DesignerPageContent {
+  id: string;
+  name?: string;
+  /**
+   * Per-page background override. Absent = inherit the output's `bg` /
+   * `background`. Pages deliberately carry NO size — they inherit their
+   * output's canvas.
+   */
+  background?: DesignerBackground;
+  children: DesignerElement[];
+}
+
 export interface DesignerOutput {
   id: string;
   formatId: string;
@@ -841,6 +860,12 @@ export interface DesignerOutput {
   background: string;
   bg?: DesignerBackground;
   children: DesignerElement[];
+  /**
+   * Additional ordered pages (v8, image mode only). `children` above IS page
+   * 1; `pages[0]` is page 2. Linked-edit (originId) propagation across outputs
+   * applies to page 1 only — per-page edits stay local to their page.
+   */
+  pages?: DesignerPageContent[];
   /**
    * Vertical budget of this design's copy stack, as a multiple of the canvas
    * height — see `designer-doc/reflow`'s `typeBasisPx`. Stamped by the AI
@@ -1563,6 +1588,12 @@ const { strict: StrictSpeedCurvePointSchema, lenient: LenientSpeedCurvePointSche
 // ---------------------------------------------------------------------------
 const clipCommon = {
   id: z.string().max(200),
+  /**
+   * Cross-output link key (video variants): clips cloned by addOutput share
+   * the source clip's originId, so a content/style edit on one variant can
+   * propagate to its siblings (mirrors DesignerElement.originId).
+   */
+  originId: z.string().max(200).optional(),
   src: SrcSchema.optional(),
   fileId: z.string().max(200).optional(),
   smartFilters: SmartFilterStackSchema,
@@ -1793,6 +1824,27 @@ const { strict: StrictVideoOutputSchema, lenient: LenientVideoOutputSchema } =
   );
 
 // ---------------------------------------------------------------------------
+// DesignerPageContent (v8 — image outputs only)
+// ---------------------------------------------------------------------------
+const designerPageContentCommon = {
+  id: z.string().max(200),
+  name: z.string().max(200).optional(),
+};
+const { strict: StrictDesignerPageContentSchema, lenient: LenientDesignerPageContentSchema } =
+  dualObject(
+    {
+      ...designerPageContentCommon,
+      background: StrictDesignerBackgroundSchema.optional(),
+      children: z.array(StrictDesignerElementSchema).max(MAX_ELEMENTS_PER_OUTPUT),
+    },
+    {
+      ...designerPageContentCommon,
+      background: LenientDesignerBackgroundSchema.optional(),
+      children: z.array(LenientDesignerElementSchema).max(MAX_ELEMENTS_PER_OUTPUT),
+    }
+  );
+
+// ---------------------------------------------------------------------------
 // DesignerOutput
 // ---------------------------------------------------------------------------
 const designerOutputCommon = {
@@ -1816,6 +1868,12 @@ const { strict: StrictDesignerOutputSchema, lenient: LenientDesignerOutputSchema
         })
         .optional(),
       children: z.array(StrictDesignerElementSchema).max(MAX_ELEMENTS_PER_OUTPUT),
+      // Page 1 is `children` itself, so the extras array caps one short of the
+      // per-output page budget.
+      pages: z
+        .array(StrictDesignerPageContentSchema)
+        .max(MAX_PAGES_PER_OUTPUT - 1)
+        .optional(),
     },
     {
       ...designerOutputCommon,
@@ -1830,6 +1888,10 @@ const { strict: StrictDesignerOutputSchema, lenient: LenientDesignerOutputSchema
         })
         .optional(),
       children: z.array(LenientDesignerElementSchema).max(MAX_ELEMENTS_PER_OUTPUT),
+      pages: z
+        .array(LenientDesignerPageContentSchema)
+        .max(MAX_PAGES_PER_OUTPUT - 1)
+        .optional(),
     }
   );
 
@@ -1872,7 +1934,28 @@ const videoDocCommon = {
   version: z.number().int().min(1).max(DESIGNER_DOC_VERSION),
   mode: z.literal('video'),
 };
-const { strict: VideoDocStrictSchema, lenient: VideoDocLenientSchema } = dualObject(
+
+/**
+ * Pages are an image-mode construct (v8). The strict output shape already
+ * rejects the key as unknown; this guard makes the lenient (passthrough)
+ * video schema refuse it too, instead of silently carrying a field no video
+ * renderer reads.
+ */
+const rejectVideoPages = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.superRefine((doc: any, ctx) => {
+    const outputs = Array.isArray(doc?.outputs) ? doc.outputs : [];
+    outputs.forEach((out: any, i: number) => {
+      if (out && typeof out === 'object' && 'pages' in out && out.pages !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['outputs', i, 'pages'],
+          message: 'pages are only supported on image-mode outputs',
+        });
+      }
+    });
+  }) as unknown as T;
+
+const { strict: VideoDocStrictSchemaBase, lenient: VideoDocLenientSchemaBase } = dualObject(
   {
     ...videoDocCommon,
     outputs: z.array(StrictVideoOutputSchema).min(1).max(MAX_OUTPUTS),
@@ -1886,6 +1969,9 @@ const { strict: VideoDocStrictSchema, lenient: VideoDocLenientSchema } = dualObj
     symbols: z.array(symbolDefinitionShape(LenientDesignerElementSchema)).max(200).optional(),
   }
 );
+
+const VideoDocStrictSchema = rejectVideoPages(VideoDocStrictSchemaBase);
+const VideoDocLenientSchema = rejectVideoPages(VideoDocLenientSchemaBase);
 
 export { StrictTextRunSchema, LenientTextRunSchema };
 export { StrictDesignerTextShadowSchema, LenientDesignerTextShadowSchema };
@@ -1906,6 +1992,7 @@ export { StrictVideoClipSchema, LenientVideoClipSchema };
 export { StrictVideoTrackSchema, LenientVideoTrackSchema };
 export { StrictVideoOutputSchema, LenientVideoOutputSchema };
 export { StrictDesignerOutputSchema, LenientDesignerOutputSchema };
+export { StrictDesignerPageContentSchema, LenientDesignerPageContentSchema };
 export { StrictDesignerAttributionSchema, LenientDesignerAttributionSchema };
 export { ImageDocStrictSchema, ImageDocLenientSchema };
 export { VideoDocStrictSchema, VideoDocLenientSchema };

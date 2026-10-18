@@ -23,6 +23,16 @@ export class RenderDesignDto {
   @Min(0)
   outputIndex?: number;
 
+  /**
+   * Page WITHIN the output (doc v8): 0 is page 1 (`output.children`),
+   * n ≥ 1 renders `output.pages[n - 1]`. Distinct from `pageIndex`, which is
+   * the legacy alias for `outputIndex` and keeps working unchanged.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  pageNumber?: number;
+
   @IsOptional()
   @IsIn(['png', 'pdf'])
   format?: 'png' | 'pdf';

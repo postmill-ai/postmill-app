@@ -200,6 +200,24 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
 - **Guides are editor state that lives on the output.** `output.guides` follows the design rather
   than the session, and **no renderer reads it** — a guide in an export is a defect. The grid and
   snap-to-grid are session view prefs on the store, not document content.
+- **Pages are slides WITHIN one output (doc v8, image mode only).** `output.children` IS page 1;
+  `output.pages[0..n]` are the extra pages (`{ id, name?, background?, children[] }` — no size:
+  pages inherit their output's canvas, capped at `MAX_PAGES_PER_OUTPUT`). Shared accessors live in
+  `designer-doc/designer-doc.pages.ts` (`pageChildren`/`withPageChildren`/`pageBackground`) — never
+  read `output.children` directly in an editing surface. Linked-edit (`originId`) propagation across
+  outputs is a PAGE-1-only behavior; per-page edits stay local. Video outputs reject `pages` in the
+  schema. The store tracks `currentPage` (editor state, reset/clamped on output/history changes);
+  `DesignRenderService.renderPage(doc, outputIndex, opts, pageNumber)` renders one page and
+  `renderPdf` flattens all pages of all outputs sequentially. Server-persisted snapshots of the
+  whole doc live in the `DesignVersion` table (`/media/designs/:id/versions*`) — the versions panel,
+  not the in-memory History panel; restore takes an `auto` safety snapshot server-side first.
+- **Video outputs have variants too.** The `+` add-format flow works in video mode: a new output
+  CLONES the current output's tracks/clips with fresh ids and smart-reflows the geometry onto the
+  new canvas via `designer-doc/video-reflow.ts` (clips map onto pseudo-elements and go through
+  `smartReflow` — timing, fps and durationMs are invariant). `originId` on `VideoClip` links sibling
+  clips across variants: content/style edits propagate through `applyLinkedVideoClip`
+  (`apply-linked.ts`), geometry and timing stay local (`VIDEO_CLIP_LOCAL_KEYS`). The same branches
+  serve the backend `addOutput`/`resizeOutput` ops, so agent-driven edits match the UI.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
   carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame

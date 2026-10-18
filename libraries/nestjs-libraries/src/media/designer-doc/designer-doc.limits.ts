@@ -35,6 +35,11 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * v7 adds `texture` (procedural grain/paper overlays) on output backgrounds.
  * Additive: v6 documents keep validating.
  *
+ * v8 adds optional `pages` on image outputs — ordered slides WITHIN one
+ * output, where `output.children` remains page 1 and `pages[0..n]` are the
+ * additional pages. Additive: v7 documents keep validating. Pages are
+ * image-mode only; video outputs reject the field.
+ *
  * v4 adds Photoshop-parity layers: `group`/`fill`/`adjustment` element types,
  * `parentId`, blend modes and layer styles. Also additive — no rewrite.
  *
@@ -52,7 +57,14 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * every AI-generated design under dozens of folders it never asked for. When a
  * user makes a layer group we set both, so a folder also reflows as a unit.
  */
-export const DESIGNER_DOC_VERSION = 7;
+export const DESIGNER_DOC_VERSION = 8;
+
+/**
+ * Maximum pages per image output, INCLUDING page 1 (`output.children` itself).
+ * `output.pages` therefore holds at most MAX_PAGES_PER_OUTPUT - 1 entries.
+ * Pages exist only on image outputs — video outputs reject the field.
+ */
+export const MAX_PAGES_PER_OUTPUT = 20;
 
 /** Maximum text length on a text element. */
 export const MAX_TEXT_LEN = 20000;

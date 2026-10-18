@@ -179,6 +179,9 @@ const CLIP_SCALAR_KEYS: (keyof VideoClip)[] = [
   'endMs',
   'trimInMs',
   'trimOutMs',
+  // Cross-variant link key — a collab peer whose doc lost originIds would stop
+  // receiving linked clip updates from the other video outputs.
+  'originId',
   'src',
   'fileId',
   'x',

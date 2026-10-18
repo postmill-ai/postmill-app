@@ -117,10 +117,14 @@ export function getBrandViolations(
   const violations: BrandViolation[] = [];
   for (const output of doc.outputs) {
     if (!('children' in output)) continue;
-    for (const el of output.children) {
-      if (el.hidden) continue;
-      if (colorEnforced) collectColorViolations(el, config.brandColors, violations);
-      if (fontEnforced) collectFontViolations(el, config.brandFonts, violations);
+    // Every page of the output is exportable, so every page is audited.
+    const pages = [output.children, ...(output.pages?.map((p) => p.children) ?? [])];
+    for (const children of pages) {
+      for (const el of children) {
+        if (el.hidden) continue;
+        if (colorEnforced) collectColorViolations(el, config.brandColors, violations);
+        if (fontEnforced) collectFontViolations(el, config.brandFonts, violations);
+      }
     }
   }
 

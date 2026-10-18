@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import type { DesignerOutput, DesignerElement } from './designer.store';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { addText as addTextTo } from './add-text';
 import {
   FILTER_FAMILY_ORDER,
@@ -82,6 +83,8 @@ export interface DesignerActionCtx {
   onOpenDesigns: () => void;
   onBrowseTemplates: () => void;
   onSave: () => void;
+  /** Snapshot the current design as a named version (Feature: version history). */
+  onSaveVersion: () => void;
   onSaveAsTemplate: () => void;
   onOpenMedia: () => void;
   /** Insert media of a specific kind, with the picker narrowed to match. */
@@ -240,7 +243,7 @@ export const useDesignerActions = (
       const st = store.getState();
       const out = st.doc.outputs[st.currentOutput] as DesignerOutput | undefined;
       const children =
-        out && 'children' in out ? (out as DesignerOutput).children : [];
+        out && 'children' in out ? pageChildren(out as DesignerOutput, st.currentPage) : [];
       const selectedEls = children.filter((c) => st.selectedIds.includes(c.id));
       return {
         st,
@@ -284,8 +287,9 @@ export const useDesignerActions = (
     const alignSelected = (fn: (el: DesignerElement, frame: { x: number; y: number; width: number; height: number }) => Partial<DesignerElement>) => {
       const st = store.getState();
       const out = st.doc.outputs[st.currentOutput] as DesignerOutput;
+      const pageEls = pageChildren(out, st.currentPage);
       const selected = st.selectedIds
-        .map((id) => out.children.find((c) => c.id === id))
+        .map((id) => pageEls.find((c) => c.id === id))
         .filter((e): e is DesignerElement => !!e);
       const frame =
         selected.length > 1
@@ -301,7 +305,7 @@ export const useDesignerActions = (
             })()
           : { x: 0, y: 0, width: out.width, height: out.height };
       st.selectedIds.forEach((id) => {
-        const el = out.children.find((c) => c.id === id);
+        const el = pageEls.find((c) => c.id === id);
         if (el) st.updateElement(id, fn(el, frame));
       });
     };
@@ -313,8 +317,9 @@ export const useDesignerActions = (
     const distributeSelected = (mode: DistributeMode) => {
       const st = store.getState();
       const out = st.doc.outputs[st.currentOutput] as DesignerOutput;
+      const pageEls = pageChildren(out, st.currentPage);
       const boxes = st.selectedIds
-        .map((id) => out.children.find((c) => c.id === id))
+        .map((id) => pageEls.find((c) => c.id === id))
         .filter((e): e is DesignerElement => !!e)
         .map((e) => ({ id: e.id, x: e.x, y: e.y, width: e.width, height: e.height }));
       const moves = distribute(boxes, mode);
@@ -330,6 +335,7 @@ export const useDesignerActions = (
       { id: 'open-design', label: 'Open Design…', menu: 'file', group: 'open', keywords: ['open', 'my designs'], run: ctx.onOpenDesigns },
       { id: 'browse-templates', label: 'Browse Templates…', menu: 'file', group: 'open', keywords: ['template', 'browse'], run: ctx.onBrowseTemplates },
       { id: 'save', label: 'Save', menu: 'file', group: 'save', shortcut: '⌘S', keywords: ['save'], run: ctx.onSave },
+      { id: 'save-version', label: 'Save Version…', menu: 'file', group: 'save', keywords: ['version', 'snapshot', 'history'], enabled: () => !!store.getState().designId, run: ctx.onSaveVersion },
       { id: 'save-as-template', label: 'Save as Template', menu: 'file', group: 'save', keywords: ['template', 'save as'], run: ctx.onSaveAsTemplate },
       { id: 'import-media', label: 'Import Media…', menu: 'file', group: 'io', keywords: ['import', 'media', 'upload'], run: ctx.onOpenMedia },
       { id: 'export', label: 'Export…', menu: 'file', group: 'io', shortcut: '⌘E', keywords: ['export', 'download'], run: ctx.onExport },
@@ -354,7 +360,7 @@ export const useDesignerActions = (
       { id: 'select-deselect', label: 'Deselect', menu: 'select', group: 'pixels', shortcut: '⌘D', keywords: ['deselect', 'none'], enabled: () => !!store.getState().selection, run: () => store.getState().setSelection(null) },
       { id: 'select-reselect', label: 'Reselect', menu: 'select', group: 'pixels', shortcut: '⇧⌘D', keywords: ['reselect', 'restore'], enabled: () => !store.getState().selection && !!store.getState().lastSelection, run: () => { const st = store.getState(); if (st.lastSelection) st.setSelection(st.lastSelection); } },
       { id: 'select-inverse', label: 'Inverse', menu: 'select', group: 'pixels', shortcut: '⇧⌘I', keywords: ['inverse', 'invert selection'], enabled: () => !!store.getState().selection, run: () => ctx.onSelectInverse() },
-      { id: 'select-all-layers', label: 'All Layers', menu: 'select', group: 'layers', shortcut: '⌥⌘A', keywords: ['select all layers'], run: () => { const st = store.getState(); const out = st.doc.outputs[st.currentOutput] as DesignerOutput; if ('children' in out) st.setSelectedIds(out.children.filter((c) => !c.hidden).map((c) => c.id)); } },
+      { id: 'select-all-layers', label: 'All Layers', menu: 'select', group: 'layers', shortcut: '⌥⌘A', keywords: ['select all layers'], run: () => { const st = store.getState(); const out = st.doc.outputs[st.currentOutput] as DesignerOutput; if ('children' in out) st.setSelectedIds(pageChildren(out, st.currentPage).filter((c) => !c.hidden).map((c) => c.id)); } },
       { id: 'select-deselect-layers', label: 'Deselect Layers', menu: 'select', group: 'layers', keywords: ['deselect layers'], enabled: () => live().hasSelection, run: () => store.getState().setSelectedIds([]) },
 
       // ---------------- Filter ----------------
@@ -466,6 +472,7 @@ export const useDesignerActions = (
       { id: 'win-templates', label: 'Templates', menu: 'view', group: 'win-panels', keywords: ['templates'], run: ctx.onBrowseTemplates },
       { id: 'win-layers', label: 'Layers', menu: 'view', group: 'win-panels', keywords: ['layers'], run: () => ctx.onTogglePanel('layers') },
       { id: 'win-history', label: 'History', menu: 'view', group: 'win-panels', keywords: ['history', 'undo', 'states'], run: () => ctx.onTogglePanel('history') },
+      { id: 'win-versions', label: 'Versions', menu: 'view', group: 'win-panels', keywords: ['versions', 'history', 'restore', 'snapshot'], enabled: () => !!store.getState().designId, run: () => ctx.onTogglePanel('versions') },
       { id: 'win-template', label: 'Template Fields', menu: 'view', group: 'win-panels', keywords: ['template', 'slots', 'fields'], run: () => ctx.onTogglePanel('template') },
       { id: 'win-brand', label: 'Brand', menu: 'view', group: 'win-panels', keywords: ['brand'], run: () => ctx.onTogglePanel('brand') },
       { id: 'win-inspector', label: 'Properties / Inspector', menu: 'view', group: 'win-panels', keywords: ['inspector', 'properties'], run: ctx.onToggleInspector },

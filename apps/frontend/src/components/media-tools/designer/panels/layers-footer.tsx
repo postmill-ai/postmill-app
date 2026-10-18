@@ -4,6 +4,7 @@ import React, { FC, useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement, DesignerOutput } from '../designer.store';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { layerActions } from '../layer-actions';
 import type { DesignerAction } from '../actions';
 import {
@@ -142,7 +143,8 @@ export const LayersFooter: FC<LayersFooterProps> = ({ store }) => {
   const selectedIds = store((s) => s.selectedIds);
   const isVideo = store((s) => s.doc.mode === 'video');
 
-  const elements: DesignerElement[] = output?.children || [];
+  const currentPage = store((s) => s.currentPage);
+  const elements: DesignerElement[] = output ? pageChildren(output, currentPage) : [];
   const selectedEls = elements.filter((el) => selectedIds.includes(el.id));
   const hasSelection = selectedEls.length > 0;
 

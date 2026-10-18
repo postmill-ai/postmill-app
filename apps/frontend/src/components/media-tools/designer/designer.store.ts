@@ -11,13 +11,26 @@ import type { SelectionMask } from './selection-mask';
 import { DESIGNER_DOC_VERSION, MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { splitSpeedCurveForClip } from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
 import {
+  pageChildren,
+  withPageChildren,
+  pageCount,
+  appendPage,
+  removePageAt,
+  duplicatePageAt,
+  movePage,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import {
   migrateDoc,
   genId,
   matchPreset,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import { smartReflow, computeGroupBoxes } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
-import { applyLinked, applyElementPatch, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
+import { applyLinked, applyElementPatch, applyLinkedVideoClip, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
+import {
+  seedVideoOutput,
+  reflowVideoOutputInPlace,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/video-reflow';
 import { moveLayers, descendantIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
 import type {
   DesignerDoc,
@@ -41,6 +54,7 @@ import type {
   DesignerPattern,
   DesignerFillStyle,
   DesignerAdjustment,
+  DesignerPageContent,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import type { FillContents } from '@postmill-ai/nestjs-libraries/media/designer-doc/fill-stroke';
 import { mergeKeyframes } from './keyframe-props';
@@ -67,9 +81,16 @@ export type {
   DesignerPattern,
   DesignerFillStyle,
   DesignerAdjustment,
+  DesignerPageContent,
   FillContents,
 };
 export { migrateDoc };
+export {
+  pageChildren,
+  pageCount,
+  pageBackground,
+  pageName,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 
 export interface DesignerState {
   doc: DesignerDoc;
@@ -81,6 +102,12 @@ export interface DesignerState {
    */
   renamingId: string | null;
   currentOutput: number;
+  /**
+   * 0-based page within the CURRENT output (doc v8): 0 is page 1
+   * (`output.children`), n ≥ 1 is `output.pages[n - 1]`. Editor state, not
+   * document content — it resets/clamps whenever outputs or history change.
+   */
+  currentPage: number;
   zoom: number; viewportX: number; viewportY: number;
   history: DesignerDoc[]; historyIndex: number;
   /**
@@ -224,6 +251,17 @@ export interface DesignerActions {
   addOutput: (preset: { formatId: string; name: string; width: number; height: number }) => void;
   removeOutput: (index: number) => void;
   resizeOutput: (index: number, width: number, height: number, formatId?: string, name?: string) => void;
+  // pages within an image output (doc v8). pageNumber is 0-based; 0 = page 1.
+  setCurrentPage: (pageNumber: number) => void;
+  /** Append a blank page to the current output. No-op at MAX_PAGES_PER_OUTPUT. */
+  addPage: (name?: string) => void;
+  /** Deep-clone page `pageNumber` of the current output (fresh ids/originIds). */
+  duplicatePage: (pageNumber: number) => void;
+  /** Remove page `pageNumber` of the current output; page 1 cannot be removed. */
+  removePage: (pageNumber: number) => void;
+  renamePage: (pageNumber: number, name: string) => void;
+  /** Move a page within the current output's full page range [0..pageCount). */
+  reorderPage: (from: number, to: number) => void;
   // linked-by-default
   setEditFormatOnly: (v: boolean) => void;
   setBrandEnforcement: (v: boolean) => void;
@@ -387,18 +425,31 @@ export const createDesignerStore = (
     const active = () => get().doc.outputs[get().currentOutput] as DesignerOutput | VideoOutput;
     const activeImage = () => get().doc.outputs[get().currentOutput] as DesignerOutput;
     const isVideoMode = () => get().doc.mode === 'video';
+    /** Children of the ACTIVE PAGE — page-aware read counterpart of withActiveChildren. */
+    const activePageChildren = () =>
+      pageChildren(activeImage(), get().currentPage);
     const withActiveChildren = (children: DesignerElement[]) => {
-      const { doc, currentOutput } = get();
+      const { doc, currentOutput, currentPage } = get();
       const outs = [...doc.outputs];
       const out = outs[currentOutput] as DesignerOutput;
-      outs[currentOutput] = { ...out, children };
+      outs[currentOutput] = withPageChildren(out, currentPage, children);
       return outs;
+    };
+    /**
+     * Clamp a page index against an output of an arbitrary doc (undo/redo and
+     * output removal both restore docs whose page counts may have shrunk).
+     */
+    const clampPage = (doc: DesignerDoc, outputIndex: number, page: number) => {
+      const out = doc.outputs[outputIndex] as DesignerOutput | undefined;
+      const max = out && 'children' in out ? pageCount(out) - 1 : 0;
+      return Math.max(0, Math.min(page, max));
     };
     return {
       doc: initialDoc,
       selectedIds: [],
       renamingId: null,
       currentOutput: 0,
+      currentPage: 0,
       zoom: 1, viewportX: 0, viewportY: 0,
       history: [JSON.parse(JSON.stringify(initialDoc))], historyIndex: 0, historyLabels: ['Open'],
       savedHistoryIndex: 0,
@@ -437,12 +488,13 @@ export const createDesignerStore = (
 
       addElement: (element, beforeId) => {
         if (isVideoMode()) return;
-        const { doc, currentOutput } = get();
+        const { doc, currentOutput, currentPage } = get();
         const originId = element.originId || genId();
         const baseEl = { ...element, id: element.id || genId(), originId };
         const sourceOutput = doc.outputs[currentOutput] as DesignerOutput;
+        const sourceChildren = pageChildren(sourceOutput, currentPage);
         const beforeOriginId = beforeId
-          ? sourceOutput.children.find((c) => c.id === beforeId)?.originId
+          ? sourceChildren.find((c) => c.id === beforeId)?.originId
           : undefined;
         const insert = (children: DesignerElement[], el: DesignerElement) => {
           if (!beforeId) return [...children, el];
@@ -454,6 +506,20 @@ export const createDesignerStore = (
           next.splice(idx, 0, el);
           return next;
         };
+        // Linked (originId) seeding across outputs is a PAGE-1 behavior: an
+        // element added on a later page exists on that page only.
+        if (currentPage > 0) {
+          set({
+            doc: {
+              ...doc,
+              outputs: withActiveChildren(insert(sourceChildren, baseEl)),
+            },
+            isDirty: true,
+            selectedIds: [baseEl.id],
+          });
+          get().pushHistory();
+          return;
+        }
         const copyIds = new Map<number, string>();
         const outs = doc.outputs.map((out, i) =>
           i === currentOutput
@@ -495,7 +561,20 @@ export const createDesignerStore = (
 
       updateElement: (id, updates) => {
         if (isVideoMode()) return;
-        const { doc, currentOutput, editFormatOnly, linkedUpdateFlash } = get();
+        const { doc, currentOutput, currentPage, editFormatOnly, linkedUpdateFlash } = get();
+        if (currentPage > 0) {
+          // Per-page edits stay local — linked propagation is page-1-only.
+          set({
+            doc: {
+              ...doc,
+              outputs: withActiveChildren(
+                activePageChildren().map((el) => (el.id === id ? applyElementPatch(el, updates) : el))
+              ),
+            },
+            isDirty: true,
+          });
+          return;
+        }
         const { outputs, affected } = applyLinked(doc, currentOutput, new Set([id]), updates, editFormatOnly);
         const now = Date.now();
         const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
@@ -505,7 +584,21 @@ export const createDesignerStore = (
 
       updateElements: (ids, updates) => {
         if (isVideoMode()) return;
-        const { doc, currentOutput, editFormatOnly, linkedUpdateFlash } = get();
+        const { doc, currentOutput, currentPage, editFormatOnly, linkedUpdateFlash } = get();
+        if (currentPage > 0) {
+          const idSet = new Set(ids);
+          set({
+            doc: {
+              ...doc,
+              outputs: withActiveChildren(
+                activePageChildren().map((el) => (idSet.has(el.id) ? applyElementPatch(el, updates) : el))
+              ),
+            },
+            isDirty: true,
+          });
+          get().pushHistory();
+          return;
+        }
         const { outputs, affected } = applyLinked(doc, currentOutput, new Set(ids), updates, editFormatOnly);
         const now = Date.now();
         const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
@@ -516,7 +609,20 @@ export const createDesignerStore = (
 
       updateElementsSilent: (ids, updates) => {
         if (isVideoMode()) return;
-        const { doc, currentOutput, editFormatOnly, linkedUpdateFlash } = get();
+        const { doc, currentOutput, currentPage, editFormatOnly, linkedUpdateFlash } = get();
+        if (currentPage > 0) {
+          const idSet = new Set(ids);
+          set({
+            doc: {
+              ...doc,
+              outputs: withActiveChildren(
+                activePageChildren().map((el) => (idSet.has(el.id) ? applyElementPatch(el, updates) : el))
+              ),
+            },
+            isDirty: true,
+          });
+          return;
+        }
         const { outputs, affected } = applyLinked(doc, currentOutput, new Set(ids), updates, editFormatOnly);
         const now = Date.now();
         const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
@@ -526,14 +632,15 @@ export const createDesignerStore = (
 
       updateElementEphemeral: (id, updates) => {
         if (isVideoMode()) return;
-        const { doc, currentOutput } = get();
+        const { doc, currentOutput, currentPage } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput | undefined;
         if (!out || !('children' in out)) return;
         const outs = [...doc.outputs];
-        outs[currentOutput] = {
-          ...out,
-          children: out.children.map((el) => (el.id === id ? applyElementPatch(el, updates) : el)),
-        };
+        outs[currentOutput] = withPageChildren(
+          out,
+          currentPage,
+          pageChildren(out, currentPage).map((el) => (el.id === id ? applyElementPatch(el, updates) : el))
+        );
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
       },
 
@@ -541,7 +648,7 @@ export const createDesignerStore = (
         if (isVideoMode()) return;
         const { selectedIds } = get();
         set({
-          doc: { ...get().doc, outputs: withActiveChildren(activeImage().children.filter((el) => el.id !== id)) },
+          doc: { ...get().doc, outputs: withActiveChildren(activePageChildren().filter((el) => el.id !== id)) },
           isDirty: true, selectedIds: selectedIds.filter((s) => s !== id),
         });
         get().pushHistory();
@@ -554,7 +661,7 @@ export const createDesignerStore = (
         const remove = new Set(ids);
         const { selectedIds } = get();
         set({
-          doc: { ...get().doc, outputs: withActiveChildren(activeImage().children.filter((el) => !remove.has(el.id))) },
+          doc: { ...get().doc, outputs: withActiveChildren(activePageChildren().filter((el) => !remove.has(el.id))) },
           isDirty: true, selectedIds: selectedIds.filter((s) => !remove.has(s)),
         });
         get().pushHistory();
@@ -563,7 +670,7 @@ export const createDesignerStore = (
 
       duplicateElement: (id) => {
         if (isVideoMode()) return;
-        const children = activeImage().children;
+        const children = activePageChildren();
         const el = children.find((e) => e.id === id);
         if (!el) return;
 
@@ -625,17 +732,17 @@ export const createDesignerStore = (
       copySelection: () => {
         if (isVideoMode()) return;
         const { selectedIds } = get();
-        set({ clipboard: JSON.parse(JSON.stringify(activeImage().children.filter((el) => selectedIds.includes(el.id)))) });
+        set({ clipboard: JSON.parse(JSON.stringify(activePageChildren().filter((el) => selectedIds.includes(el.id)))) });
       },
 
       cutSelection: () => {
         if (isVideoMode()) return;
         const { selectedIds } = get();
-        const picked = activeImage().children.filter((el) => selectedIds.includes(el.id));
+        const picked = activePageChildren().filter((el) => selectedIds.includes(el.id));
         if (!picked.length) return;
         set({
           clipboard: JSON.parse(JSON.stringify(picked)),
-          doc: { ...get().doc, outputs: withActiveChildren(activeImage().children.filter((el) => !selectedIds.includes(el.id))) },
+          doc: { ...get().doc, outputs: withActiveChildren(activePageChildren().filter((el) => !selectedIds.includes(el.id))) },
           selectedIds: [], isDirty: true,
         });
         get().pushHistory();
@@ -652,7 +759,7 @@ export const createDesignerStore = (
           if (groupId) { groupRemap[groupId] = groupRemap[groupId] || genId(); groupId = groupRemap[groupId]; }
           return { ...el, id: genId(), originId: genId(), x: el.x + 20, y: el.y + 20, groupId };
         });
-        set({ doc: { ...get().doc, outputs: withActiveChildren([...activeImage().children, ...pasted]) }, selectedIds: pasted.map((el) => el.id), isDirty: true });
+        set({ doc: { ...get().doc, outputs: withActiveChildren([...activePageChildren(), ...pasted]) }, selectedIds: pasted.map((el) => el.id), isDirty: true });
         get().pushHistory();
       },
 
@@ -665,11 +772,12 @@ export const createDesignerStore = (
        * travel as one when the design is re-fitted to another format.
        */
       createSymbol: (name) => {
-        const { doc, currentOutput, selectedIds } = get();
+        const { doc, currentOutput, currentPage, selectedIds } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput;
         if (!('children' in out) || selectedIds.length === 0) return;
 
-        const members = out.children.filter((c) => selectedIds.includes(c.id));
+        const pageEls = pageChildren(out, currentPage);
+        const members = pageEls.filter((c) => selectedIds.includes(c.id));
         if (!members.length) return;
 
         // The definition is authored in its own coordinate space, so an
@@ -710,13 +818,10 @@ export const createDesignerStore = (
 
         const outputs = doc.outputs.map((o, i) =>
           i === currentOutput
-            ? {
-                ...(o as DesignerOutput),
-                children: [
-                  ...(o as DesignerOutput).children.filter((c) => !selectedIds.includes(c.id)),
-                  instance,
-                ],
-              }
+            ? withPageChildren(o as DesignerOutput, currentPage, [
+                ...pageChildren(o as DesignerOutput, currentPage).filter((c) => !selectedIds.includes(c.id)),
+                instance,
+              ])
             : o
         );
         set({
@@ -775,7 +880,7 @@ export const createDesignerStore = (
         // single selection too. Only New ▸ Group from Layers is plural-only.
         if (selectedIds.length < 1) return;
 
-        const children = activeImage().children;
+        const children = activePageChildren();
         const gid = genId();
         const groupEl: DesignerElement = {
           id: genId(),
@@ -807,7 +912,7 @@ export const createDesignerStore = (
       ungroupSelection: (ids) => {
         if (isVideoMode()) return;
         const selectedIds = ids ?? get().selectedIds;
-        const children = activeImage().children;
+        const children = activePageChildren();
 
         // Accept either the group itself or any member being selected.
         const targets = new Set<string>();
@@ -840,8 +945,8 @@ export const createDesignerStore = (
 
       moveLayersTo: (ids, targetIndex, parentId) => {
         if (isVideoMode()) return;
-        const next = moveLayers(activeImage().children, ids, targetIndex, parentId);
-        if (next === activeImage().children) return;
+        const next = moveLayers(activePageChildren(), ids, targetIndex, parentId);
+        if (next === activePageChildren()) return;
         set({ doc: { ...get().doc, outputs: withActiveChildren(next) }, isDirty: true });
         get().pushHistory();
       },
@@ -873,7 +978,7 @@ export const createDesignerStore = (
 
       toggleClipped: (ids) => {
         if (isVideoMode() || !ids.length) return;
-        const children = activeImage().children;
+        const children = activePageChildren();
         const allClipped = children
           .filter((el) => ids.includes(el.id))
           .every((el) => el.clipped);
@@ -886,7 +991,7 @@ export const createDesignerStore = (
       setLayerBlend: (ids, blendMode) => {
         if (isVideoMode() || !ids.length) return;
         set({ doc: { ...get().doc, outputs: withActiveChildren(
-          activeImage().children.map((el) => (ids.includes(el.id) ? { ...el, blendMode } : el))
+          activePageChildren().map((el) => (ids.includes(el.id) ? { ...el, blendMode } : el))
         ) }, isDirty: true });
         get().pushHistory();
       },
@@ -896,13 +1001,13 @@ export const createDesignerStore = (
         // Panel-only state, so no history entry — collapsing a folder is not an
         // edit anyone wants to undo.
         set({ doc: { ...get().doc, outputs: withActiveChildren(
-          activeImage().children.map((el) => (el.id === id ? { ...el, collapsed: !el.collapsed } : el))
+          activePageChildren().map((el) => (el.id === id ? { ...el, collapsed: !el.collapsed } : el))
         ) } });
       },
 
       reorder: (ids, dir) => {
         if (isVideoMode()) return;
-        const children = [...activeImage().children];
+        const children = [...activePageChildren()];
         const picked = children.filter((el) => ids.includes(el.id));
         if (!picked.length) return;
         const rest = children.filter((el) => !ids.includes(el.id));
@@ -921,12 +1026,134 @@ export const createDesignerStore = (
       setCurrentOutput: (index) => {
         const { doc } = get();
         if (index < 0 || index >= doc.outputs.length) return;
-        set({ currentOutput: index, selectedIds: [] });
+        // Pages belong to an output; switching outputs always lands on page 1.
+        set({ currentOutput: index, currentPage: 0, selectedIds: [] });
+      },
+
+      setCurrentPage: (pageNumber) => {
+        const { doc, currentOutput } = get();
+        if (doc.mode !== 'image') return;
+        const out = doc.outputs[currentOutput] as DesignerOutput | undefined;
+        if (!out || !('children' in out)) return;
+        if (pageNumber < 0 || pageNumber >= pageCount(out)) return;
+        set({ currentPage: pageNumber, selectedIds: [] });
+      },
+
+      addPage: (name) => {
+        if (isVideoMode()) return;
+        const { doc, currentOutput } = get();
+        const out = doc.outputs[currentOutput] as DesignerOutput;
+        const next = appendPage(out, { id: genId(), name, children: [] });
+        // appendPage returns null at MAX_PAGES_PER_OUTPUT.
+        if (!next) return;
+        const outs = [...doc.outputs];
+        outs[currentOutput] = next;
+        set({
+          doc: { ...doc, outputs: outs },
+          currentPage: pageCount(next) - 1,
+          selectedIds: [],
+          isDirty: true,
+        });
+        get().pushHistory('Add page');
+      },
+
+      duplicatePage: (pageNumber) => {
+        if (isVideoMode()) return;
+        const { doc, currentOutput } = get();
+        const out = doc.outputs[currentOutput] as DesignerOutput;
+        const next = duplicatePageAt(out, pageNumber);
+        if (!next) return;
+        const outs = [...doc.outputs];
+        outs[currentOutput] = next;
+        set({
+          doc: { ...doc, outputs: outs },
+          currentPage: pageNumber + 1,
+          selectedIds: [],
+          isDirty: true,
+        });
+        get().pushHistory('Duplicate page');
+      },
+
+      removePage: (pageNumber) => {
+        if (isVideoMode()) return;
+        const { doc, currentOutput, currentPage } = get();
+        const out = doc.outputs[currentOutput] as DesignerOutput;
+        const next = removePageAt(out, pageNumber);
+        // removePageAt refuses page 1 — it IS the output.
+        if (!next) return;
+        const outs = [...doc.outputs];
+        outs[currentOutput] = next;
+        set({
+          doc: { ...doc, outputs: outs },
+          currentPage: Math.max(0, Math.min(currentPage, pageCount(next) - 1)),
+          selectedIds: [],
+          isDirty: true,
+        });
+        get().pushHistory('Delete page');
+      },
+
+      renamePage: (pageNumber, name) => {
+        if (isVideoMode()) return;
+        const { doc, currentOutput } = get();
+        const out = doc.outputs[currentOutput] as DesignerOutput;
+        // Page 1's name slot is the output's own name — it already has a
+        // rename flow (output-tabs), so only extras are renamed here.
+        if (pageNumber <= 0 || !out.pages?.[pageNumber - 1]) return;
+        const trimmed = name.trim();
+        const outs = [...doc.outputs];
+        outs[currentOutput] = {
+          ...out,
+          pages: out.pages.map((p, i) =>
+            i === pageNumber - 1 ? { ...p, name: trimmed || undefined } : p
+          ),
+        };
+        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        get().pushHistory('Rename page');
+      },
+
+      reorderPage: (from, to) => {
+        if (isVideoMode()) return;
+        const { doc, currentOutput, currentPage } = get();
+        const out = doc.outputs[currentOutput] as DesignerOutput;
+        const next = movePage(out, from, to);
+        if (!next) return;
+        const outs = [...doc.outputs];
+        outs[currentOutput] = next;
+        set({
+          doc: { ...doc, outputs: outs },
+          currentPage: currentPage === from ? to : currentPage,
+          selectedIds: [],
+          isDirty: true,
+        });
+        get().pushHistory('Reorder pages');
       },
 
       addOutput: (preset) => {
-        if (isVideoMode()) return;
         const { doc, currentOutput } = get();
+        if (isVideoMode()) {
+          // Video variant: clone the CURRENT output's tracks/clips with fresh
+          // ids (originId shared, backfilled on the source) and smart-reflow
+          // the geometry onto the new canvas. Timing/fps/durationMs copy
+          // unchanged — see designer-doc/video-reflow.
+          const source = doc.outputs[currentOutput] as VideoOutput;
+          if (!source || !('tracks' in source)) return;
+          const { output, sourceTracks } = seedVideoOutput(source, preset);
+          const outs = doc.outputs.map((o, i) =>
+            i === currentOutput ? { ...(o as VideoOutput), tracks: sourceTracks } : o
+          );
+          outs.push(output);
+          set({
+            doc: { ...doc, outputs: outs },
+            currentOutput: outs.length - 1,
+            currentPage: 0,
+            selectedIds: [],
+            selectedClip: null,
+            selectedClips: [],
+            isDirty: true,
+          });
+          get().pushHistory('Add format');
+          return;
+        }
         const source = doc.outputs[currentOutput] as DesignerOutput;
         const sourceChildren = source.children.map((el) => (el.originId ? el : { ...el, originId: genId() }));
         const groupBoxes = computeGroupBoxes(sourceChildren);
@@ -948,18 +1175,35 @@ export const createDesignerStore = (
         const { doc, currentOutput } = get();
         if (doc.outputs.length <= 1) return;
         const outs = doc.outputs.filter((_, i) => i !== index);
-        set({ doc: { ...doc, outputs: outs }, currentOutput: Math.max(0, Math.min(currentOutput, outs.length - 1)), selectedIds: [], isDirty: true });
+        const nextOutput = Math.max(0, Math.min(currentOutput, outs.length - 1));
+        set({
+          doc: { ...doc, outputs: outs },
+          currentOutput: nextOutput,
+          currentPage: clampPage({ ...doc, outputs: outs } as DesignerDoc, nextOutput, get().currentPage),
+          selectedIds: [],
+          isDirty: true,
+        });
         get().pushHistory();
       },
 
       resizeOutput: (index, width, height, formatId, name) => {
-        if (isVideoMode()) return;
         const { doc } = get();
-        const out = doc.outputs[index] as DesignerOutput;
+        const out = doc.outputs[index];
         if (!out) return;
-        const resized: DesignerOutput = { ...out, width, height, formatId: formatId ?? out.formatId, name: name ?? out.name };
-        const groupBoxes = computeGroupBoxes(out.children);
-        resized.children = out.children.map((el) => seedCopy(el, out, resized, el.originId || el.id, el.groupId ? groupBoxes.get(el.groupId) : undefined));
+        if ('tracks' in out) {
+          // Video outputs resize in place: ids stay, every clip's geometry
+          // smart-reflows onto the new canvas (timing/fps/duration untouched).
+          const resized = reflowVideoOutputInPlace(out as VideoOutput, width, height, formatId, name);
+          const outs = [...doc.outputs]; outs[index] = resized;
+          set({ doc: { ...doc, outputs: outs }, isDirty: true });
+          get().pushHistory('Resize format');
+          return;
+        }
+        if (isVideoMode()) return;
+        const imgOut = out as DesignerOutput;
+        const resized: DesignerOutput = { ...imgOut, width, height, formatId: formatId ?? imgOut.formatId, name: name ?? imgOut.name };
+        const groupBoxes = computeGroupBoxes(imgOut.children);
+        resized.children = imgOut.children.map((el) => seedCopy(el, imgOut, resized, el.originId || el.id, el.groupId ? groupBoxes.get(el.groupId) : undefined));
         const outs = [...doc.outputs]; outs[index] = resized;
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
@@ -974,7 +1218,7 @@ export const createDesignerStore = (
       unlinkElement: (id) => {
         if (isVideoMode()) return;
         set({ doc: { ...get().doc, outputs: withActiveChildren(
-          activeImage().children.map((el) => (el.id === id ? { ...el, originId: undefined } : el))
+          activePageChildren().map((el) => (el.id === id ? { ...el, originId: undefined } : el))
         ) }, isDirty: true });
         get().pushHistory();
       },
@@ -1100,15 +1344,17 @@ export const createDesignerStore = (
       },
 
       jumpToHistory: (index) => {
-        const { history, historyIndex, savedHistoryIndex, currentOutput } = get();
+        const { history, historyIndex, savedHistoryIndex, currentOutput, currentPage } = get();
         if (index < 0 || index >= history.length || index === historyIndex) return;
         const nextDoc = JSON.parse(JSON.stringify(history[index]));
+        const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
         set({
           doc: nextDoc,
           historyIndex: index,
           selectedIds: [],
           isDirty: index !== savedHistoryIndex,
-          currentOutput: Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1)),
+          currentOutput: clampedOutput,
+          currentPage: clampPage(nextDoc, clampedOutput, currentPage),
         });
         // The restored `src` is now the truth for every raster layer — the
         // live paint buffers have to catch up or the canvas keeps showing the
@@ -1117,31 +1363,35 @@ export const createDesignerStore = (
       },
 
       undo: () => {
-        const { historyIndex, history, savedHistoryIndex, currentOutput } = get();
+        const { historyIndex, history, savedHistoryIndex, currentOutput, currentPage } = get();
         if (historyIndex <= 0) return;
         const newIndex = historyIndex - 1;
         const nextDoc = JSON.parse(JSON.stringify(history[newIndex]));
+        const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
         set({
           doc: nextDoc,
           historyIndex: newIndex,
           selectedIds: [],
           isDirty: newIndex !== savedHistoryIndex,
-          currentOutput: Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1)),
+          currentOutput: clampedOutput,
+          currentPage: clampPage(nextDoc, clampedOutput, currentPage),
         });
         reconcileBuffersWithDoc(nextDoc);
       },
 
       redo: () => {
-        const { historyIndex, history, savedHistoryIndex, currentOutput } = get();
+        const { historyIndex, history, savedHistoryIndex, currentOutput, currentPage } = get();
         if (historyIndex >= history.length - 1) return;
         const newIndex = historyIndex + 1;
         const nextDoc = JSON.parse(JSON.stringify(history[newIndex]));
+        const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
         set({
           doc: nextDoc,
           historyIndex: newIndex,
           selectedIds: [],
           isDirty: newIndex !== savedHistoryIndex,
-          currentOutput: Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1)),
+          currentOutput: clampedOutput,
+          currentPage: clampPage(nextDoc, clampedOutput, currentPage),
         });
         reconcileBuffersWithDoc(nextDoc);
       },
@@ -1155,7 +1405,7 @@ export const createDesignerStore = (
         // Every live paint buffer belongs to the document being discarded.
         disposeAllBuffers();
         set({
-          doc: newDoc, selectedIds: [], currentOutput: 0, zoom: 1, viewportX: 0, viewportY: 0,
+          doc: newDoc, selectedIds: [], currentOutput: 0, currentPage: 0, zoom: 1, viewportX: 0, viewportY: 0,
           // Ask the canvas to fit. Bumped here rather than at the call sites so
           // every route into a new document gets it — there are four.
           fitNonce: get().fitNonce + 1,
@@ -1180,7 +1430,7 @@ export const createDesignerStore = (
         set({
           doc: migrated, designId: id, designName: name,
           templateId, designTemplateId: templateId,
-          selectedIds: [], currentOutput: 0,
+          selectedIds: [], currentOutput: 0, currentPage: 0,
           // The zoom and viewport belonged to whatever was open before. Reset
           // them and ask for a fit: leaving a stale zoom on screen for a frame
           // before the fit lands reads as a flash.
@@ -1296,7 +1546,7 @@ export const createDesignerStore = (
       // Returns whether the write landed — a rejected update (unknown clip,
       // out-of-range geometry) must not become an empty undo step.
       updateClipSilent: (outputIndex, trackId, clipId, updates) => {
-        const { doc } = get();
+        const { doc, editFormatOnly, linkedUpdateFlash } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
         if (!vo || doc.mode !== 'video') return false;
         const track = vo.tracks.find((t) => t.id === trackId);
@@ -1308,17 +1558,25 @@ export const createDesignerStore = (
         if (nextEnd > vo.durationMs || nextStart >= vo.durationMs || nextEnd <= nextStart) {
           return false;
         }
-        const updated: VideoOutput = {
-          ...vo,
-          tracks: vo.tracks.map((t) =>
-            t.id === trackId
-              ? { ...t, clips: t.clips.map((c) => (c.id === clipId ? { ...c, ...updates } : c)) }
-              : t
-          ),
-        };
-        const outs = [...doc.outputs];
-        outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        // Linked-by-default across video variants: content/style updates
+        // propagate to same-originId clips on the other outputs; geometry and
+        // timing stay local (VIDEO_CLIP_LOCAL_KEYS), like the image path.
+        const { outputs, affected } = applyLinkedVideoClip(
+          doc,
+          outputIndex,
+          trackId,
+          clipId,
+          updates,
+          editFormatOnly
+        );
+        if (affected.length) {
+          const now = Date.now();
+          const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
+          affected.forEach((i) => (nextFlash[i] = now));
+          set({ doc: { ...doc, outputs }, isDirty: true, linkedUpdateFlash: nextFlash });
+          return true;
+        }
+        set({ doc: { ...doc, outputs }, isDirty: true });
         return true;
       },
 
@@ -1401,7 +1659,7 @@ export const createDesignerStore = (
             durationMs: preset?.maxDurationMs ?? 10000,
             tracks: [{ id: trackId, type: 'video', clips: [] }],
           };
-          set({ doc: { ...doc, mode: 'video', outputs: [vo] }, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, isDirty: true });
+          set({ doc: { ...doc, mode: 'video', outputs: [vo] }, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, currentPage: 0, isDirty: true });
         } else {
           const source = doc.outputs[0] as VideoOutput;
           const imgOut: DesignerOutput = {
@@ -1413,7 +1671,7 @@ export const createDesignerStore = (
             background: '#ffffff',
             children: [],
           };
-          set({ doc: { ...doc, mode: 'image', outputs: [imgOut] }, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, isDirty: true });
+          set({ doc: { ...doc, mode: 'image', outputs: [imgOut] }, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, currentPage: 0, isDirty: true });
         }
         get().pushHistory();
       },

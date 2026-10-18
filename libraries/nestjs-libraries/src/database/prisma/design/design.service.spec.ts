@@ -38,6 +38,11 @@ describe('DesignService', () => {
     deleteFolder: ReturnType<typeof vi.fn>;
     getFolderTree: ReturnType<typeof vi.fn>;
     moveTemplate: ReturnType<typeof vi.fn>;
+    createVersion: ReturnType<typeof vi.fn>;
+    listVersions: ReturnType<typeof vi.fn>;
+    findVersion: ReturnType<typeof vi.fn>;
+    deleteVersion: ReturnType<typeof vi.fn>;
+    trimVersions: ReturnType<typeof vi.fn>;
   };
   let fileService: {
     importFromUrl: ReturnType<typeof vi.fn>;
@@ -63,6 +68,11 @@ describe('DesignService', () => {
       deleteFolder: vi.fn(),
       getFolderTree: vi.fn(),
       moveTemplate: vi.fn(),
+      createVersion: vi.fn(),
+      listVersions: vi.fn(),
+      findVersion: vi.fn(),
+      deleteVersion: vi.fn(),
+      trimVersions: vi.fn(),
     };
     fileService = {
       importFromUrl: vi.fn(),
@@ -636,6 +646,110 @@ describe('DesignService', () => {
       await expect(
         service.updateTemplate('org-1', 't1', { thumbnailFileId: 'new-thumb' })
       ).resolves.toEqual({ id: 't1' });
+    });
+  });
+
+  describe('version history', () => {
+    const designRow = () => ({
+      id: 'd1',
+      organizationId: 'org-1',
+      name: 'Live',
+      doc: makeDoc(),
+      width: 1080,
+      height: 1080,
+      previewDataUrl: null,
+      deletedAt: null,
+    });
+
+    it('createVersion snapshots the validated doc and enforces the named cap', async () => {
+      repository.findById.mockResolvedValue(designRow());
+      repository.createVersion.mockResolvedValue({ id: 'v1' });
+      repository.trimVersions.mockResolvedValue(0);
+
+      await service.createVersion('org-1', 'user-1', 'd1', { name: 'Before launch' });
+
+      expect(repository.createVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          designId: 'd1',
+          organizationId: 'org-1',
+          name: 'Before launch',
+          auto: false,
+          createdById: 'user-1',
+          width: 1080,
+          height: 1080,
+          doc: expect.objectContaining({ mode: 'image' }),
+        })
+      );
+      expect(repository.trimVersions).toHaveBeenCalledWith('d1', false, 20);
+    });
+
+    it('createVersion trims auto snapshots against the smaller auto cap', async () => {
+      repository.findById.mockResolvedValue(designRow());
+      repository.createVersion.mockResolvedValue({ id: 'v2' });
+      repository.trimVersions.mockResolvedValue(0);
+
+      await service.createVersion('org-1', 'user-1', 'd1', { auto: true });
+
+      expect(repository.trimVersions).toHaveBeenCalledWith('d1', true, 10);
+    });
+
+    it('createVersion 404s on a missing design and never writes', async () => {
+      repository.findById.mockResolvedValue(null);
+
+      await expect(
+        service.createVersion('org-1', 'user-1', 'gone', {})
+      ).rejects.toThrow(NotFoundException);
+      expect(repository.createVersion).not.toHaveBeenCalled();
+    });
+
+    it('restoreVersion snapshots the live doc (auto) BEFORE overwriting', async () => {
+      const versionDoc = makeDoc({ output: { name: 'Old layout' } });
+      repository.findById.mockResolvedValue(designRow());
+      repository.findVersion.mockResolvedValue({
+        id: 'v1',
+        designId: 'd1',
+        doc: versionDoc,
+      });
+      repository.createVersion.mockResolvedValue({ id: 'auto-1' });
+      repository.trimVersions.mockResolvedValue(0);
+      repository.update.mockResolvedValue({ id: 'd1' });
+
+      await service.restoreVersion('org-1', 'user-1', 'd1', 'v1');
+
+      // Snapshot ran with auto:true before the design update.
+      const snapshotOrder = repository.createVersion.mock.invocationCallOrder[0];
+      const updateOrder = repository.update.mock.invocationCallOrder[0];
+      expect(snapshotOrder).toBeLessThan(updateOrder);
+      expect(repository.createVersion).toHaveBeenCalledWith(
+        expect.objectContaining({ designId: 'd1', auto: true })
+      );
+      expect(repository.update).toHaveBeenCalledWith(
+        'd1',
+        'org-1',
+        expect.objectContaining({
+          doc: expect.objectContaining({ mode: 'image' }),
+        })
+      );
+    });
+
+    it('restoreVersion 404s on a foreign/unknown version', async () => {
+      repository.findById.mockResolvedValue(designRow());
+      repository.findVersion.mockResolvedValue(null);
+
+      await expect(
+        service.restoreVersion('org-1', 'user-1', 'd1', 'nope')
+      ).rejects.toThrow(NotFoundException);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('deleteVersion removes the row and confirms', async () => {
+      repository.findVersion.mockResolvedValue({ id: 'v1', designId: 'd1' });
+      repository.deleteVersion.mockResolvedValue({ count: 1 });
+
+      await expect(
+        service.deleteVersion('org-1', 'd1', 'v1')
+      ).resolves.toEqual({ success: true });
+      expect(repository.deleteVersion).toHaveBeenCalledWith('org-1', 'd1', 'v1');
     });
   });
 });

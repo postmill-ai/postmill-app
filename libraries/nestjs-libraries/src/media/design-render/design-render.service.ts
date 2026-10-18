@@ -728,18 +728,34 @@ export class DesignRenderService {
 
   constructor(private _fontLoaderService: FontLoaderService) {}
 
+  /**
+   * Render one page of one output. `pageNumber` is 0-based within the output:
+   * 0 is page 1 (`output.children`), n ≥ 1 renders `output.pages[n - 1]` —
+   * same canvas size, the page's own background override when set. Pages
+   * exist on image outputs only (schema-enforced).
+   */
   async renderPage(
     doc: DesignerDoc,
     outputIndex: number,
-    opts?: RenderOptions
+    opts?: RenderOptions,
+    pageNumber = 0
   ): Promise<Buffer> {
-    const output = doc.outputs?.[outputIndex] as DesignerOutput | undefined;
-    if (!output) {
+    const base = doc.outputs?.[outputIndex] as DesignerOutput | undefined;
+    if (!base) {
       throw new Error(`Output ${outputIndex} out of range`);
     }
-    if (!('children' in output)) {
+    if (!('children' in base)) {
       throw new Error(`Output ${outputIndex} is a video output; use /render-video`);
     }
+    // Resolve the requested page into a plain output view, so everything below
+    // (symbols, fonts, layer tree, background) reads exactly one page.
+    const page = pageNumber > 0 ? base.pages?.[pageNumber - 1] : undefined;
+    if (pageNumber > 0 && !page) {
+      throw new Error(`Page ${pageNumber + 1} out of range for output ${outputIndex}`);
+    }
+    const output: DesignerOutput = page
+      ? { ...base, bg: page.background ?? base.bg, children: page.children ?? [] }
+      : base;
 
     // Symbol instances expand to ordinary elements before anything reads the
     // layer list, so nothing below this line needs to know symbols exist.
@@ -1676,13 +1692,17 @@ export class DesignRenderService {
       pdf.on('error', reject);
     });
 
+    // Pages flatten sequentially: every page of output 0, then output 1, …
     for (let i = 0; i < outputs.length; i++) {
       const out = outputs[i];
-      const png = await this.renderPage(doc, i, opts);
-      const w = Math.max(1, Math.round(out.width));
-      const h = Math.max(1, Math.round(out.height));
-      pdf.addPage({ size: [w, h], margin: 0 });
-      pdf.image(png, 0, 0, { width: w, height: h });
+      const totalPages = 1 + (('pages' in out && out.pages?.length) || 0);
+      for (let p = 0; p < totalPages; p++) {
+        const png = await this.renderPage(doc, i, opts, p);
+        const w = Math.max(1, Math.round(out.width));
+        const h = Math.max(1, Math.round(out.height));
+        pdf.addPage({ size: [w, h], margin: 0 });
+        pdf.image(png, 0, 0, { width: w, height: h });
+      }
     }
     pdf.end();
     return done;

@@ -12,6 +12,12 @@ import {
 } from './designer-doc.schema';
 import { migrateDoc } from './designer-doc.migrate';
 import {
+  appendPage,
+  duplicatePageAt,
+  movePage,
+  removePageAt,
+} from './designer-doc.pages';
+import {
   DesignerDocOpSchema,
   DesignerDocOpsSchema,
   IMAGE_ONLY_OPS,
@@ -20,6 +26,11 @@ import {
 import { DesignerDocOpError } from './designer-doc.errors';
 import { MAX_OPS_PER_REQUEST } from './designer-doc.limits';
 import { seedCopy } from './seed-copy';
+import {
+  seedVideoOutput,
+  reflowVideoOutputInPlace,
+} from './video-reflow';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import {
   computeContainerBoxes,
   computeGroupBoxes,
@@ -148,7 +159,85 @@ export class DesignerDocService {
         return { ...doc, outputs } as DesignerDoc;
       }
 
+      case 'addPage':
+      case 'removePage':
+      case 'duplicatePage':
+      case 'reorderPage': {
+        // Target existence/mode was validated by the IMAGE_ONLY_OPS pre-check.
+        const outputs = doc.outputs.map((out, i) => {
+          if (i !== op.outputIndex || !isImageOutput(out)) return out;
+          let next: DesignerOutput | null;
+          switch (op.op) {
+            case 'addPage':
+              next = appendPage(out, {
+                id: '', // assigned by assignIdsAndNormalize
+                name: op.name,
+                background: op.background,
+                children: [],
+              });
+              break;
+            case 'removePage':
+              next = removePageAt(out, op.pageNumber);
+              break;
+            case 'duplicatePage':
+              next = duplicatePageAt(out, op.pageNumber, `pg-${randomUUID()}`);
+              break;
+            case 'reorderPage':
+              next = movePage(out, op.from, op.to);
+              break;
+          }
+          if (!next) {
+            throw new DesignerDocOpError(
+              'DESIGNER_OP_INDEX_OOB',
+              op.op,
+              `op ${op.op} cannot be applied to output ${op.outputIndex} (bad page range or page cap reached)`
+            );
+          }
+          return next;
+        });
+        return { ...doc, outputs } as DesignerDoc;
+      }
+
       case 'addOutput': {
+        // Video documents get a video variant: the primary output's tracks and
+        // clips clone with fresh ids (originId shared, backfilled on the
+        // primary) and smart-reflow onto the new canvas; timing/fps/durationMs
+        // copy unchanged. `seed: false` opts out (empty timeline).
+        if (doc.mode === 'video') {
+          const primary = doc.outputs[0];
+          const source =
+            op.seed !== false && primary && isVideoOutput(primary)
+              ? primary
+              : undefined;
+          if (!source) {
+            const preset = CHANNEL_PRESETS.find((p) => p.id === op.preset.formatId);
+            const newVideoOutput: VideoOutput = {
+              id: '', // assigned by assignIdsAndNormalize
+              formatId: op.preset.formatId,
+              name: op.preset.name,
+              width: op.preset.width,
+              height: op.preset.height,
+              fps: preset?.fps ?? 30,
+              durationMs: preset?.maxDurationMs ?? 10000,
+              tracks: [],
+            };
+            return { ...doc, outputs: [...doc.outputs, newVideoOutput] } as DesignerDoc;
+          }
+          const { output, sourceTracks } = seedVideoOutput(
+            source,
+            op.preset,
+            () => randomUUID()
+          );
+          // The output id follows the `out-…` convention — let the normalize
+          // pass mint it (track/clip ids are already fresh from the seed).
+          output.id = '';
+          const outputs = doc.outputs.map((out, i) =>
+            i === 0 && isVideoOutput(out) ? { ...out, tracks: sourceTracks } : out
+          ) as DesignerDoc['outputs'];
+          outputs.push(output);
+          return { ...doc, outputs } as DesignerDoc;
+        }
+
         // Use the primary (first) image output as the seed source so a
         // headless Composer's `setDoc`+`addOutput` sequence matches the manual
         // Designer's linked-by-default behavior. `seed: false` opts out
@@ -221,6 +310,24 @@ export class DesignerDocService {
       }
 
       case 'resizeOutput': {
+        const target = doc.outputs[op.outputIndex];
+        if (!target) {
+          throw new DesignerDocOpError(
+            'DESIGNER_OP_INDEX_OOB',
+            op.op,
+            `outputIndex ${op.outputIndex} out of range`
+          );
+        }
+        // Video outputs reflow their clips in place (ids preserved, timing
+        // untouched) — the same video-reflow the store's resize applies.
+        if (isVideoOutput(target)) {
+          const outputs = doc.outputs.map((out, i) =>
+            i === op.outputIndex && isVideoOutput(out)
+              ? reflowVideoOutputInPlace(out, op.width, op.height, op.formatId, op.name)
+              : out
+          );
+          return { ...doc, outputs } as DesignerDoc;
+        }
         const outputs = doc.outputs.map((out, i) => {
           if (i !== op.outputIndex || !isImageOutput(out)) return out;
           const updated: DesignerOutput = {
@@ -365,7 +472,14 @@ export class DesignerDocService {
     const outputs = doc.outputs.map((out) => {
       if (isImageOutput(out)) {
         const children = out.children.map((el) => this._normalizeId(el, 'el'));
-        return { ...out, id: out.id || `out-${randomUUID()}`, children };
+        // Page elements are normalized exactly like page-1 children; page ids
+        // get their own prefix so a missing one never collides with elements.
+        const pages = out.pages?.map((page) => ({
+          ...page,
+          id: page.id || `pg-${randomUUID()}`,
+          children: page.children.map((el) => this._normalizeId(el, 'el')),
+        }));
+        return { ...out, id: out.id || `out-${randomUUID()}`, children, pages };
       }
       if (isVideoOutput(out)) {
         const tracks = out.tracks.map((track) => {

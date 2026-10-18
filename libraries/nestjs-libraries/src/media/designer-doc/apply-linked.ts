@@ -3,6 +3,7 @@ import type {
   DesignerElement,
   DesignerOutput,
   SymbolOverrides,
+  VideoClip,
   VideoOutput,
 } from './designer-doc.schema';
 import { typeScaleRatio } from './reflow';
@@ -166,3 +167,120 @@ export const applyLinked = (
 // The per-element half of applyLinked (path-node refit + symbolOverrides
 // merge), for write paths that patch the current output directly.
 export const applyElementPatch = applyPatch;
+
+// ---------------------------------------------------------------------------
+// Video variants — originId propagation across VIDEO outputs
+// ---------------------------------------------------------------------------
+
+/**
+ * Clip keys that never propagate across video variants: per-canvas geometry,
+ * and ALL timing — variants share an edit's timing by construction (seeding
+ * copies it unchanged), so a later trim on one variant stays local to it.
+ */
+export const VIDEO_CLIP_LOCAL_KEYS = new Set([
+  'id',
+  'originId',
+  'x',
+  'y',
+  'width',
+  'height',
+  'rotation',
+  'crop',
+  'focalPoint',
+  'fitMode',
+  'startMs',
+  'endMs',
+  'trimInMs',
+  'trimOutMs',
+  'speed',
+  'speedCurve',
+  'reverse',
+  'freezeAtMs',
+  'keyframes',
+  'beats',
+]);
+
+const sharedClipUpdates = (
+  updates: Partial<VideoClip>
+): Partial<VideoClip> => {
+  const out: Partial<VideoClip> = {};
+  for (const k of Object.keys(updates) as Array<keyof VideoClip>) {
+    if (!VIDEO_CLIP_LOCAL_KEYS.has(k)) (out as any)[k] = updates[k];
+  }
+  return out;
+};
+
+const isVideoOutput = (
+  out: DesignerOutput | VideoOutput
+): out is VideoOutput => 'tracks' in out;
+
+/**
+ * Patch one clip on the current output, then propagate the non-geometry,
+ * non-timing updates to clips carrying the same `originId` on the OTHER video
+ * outputs — the video-variant mirror of `applyLinked`. `fontSize` is re-fit
+ * through the same aspect-aware type basis image text uses. With
+ * `editFormatOnly` the propagation step is skipped (the "Edit format only"
+ * toggle), exactly like the image path.
+ */
+export const applyLinkedVideoClip = (
+  doc: DesignerDoc,
+  currentOutputIndex: number,
+  trackId: string,
+  clipId: string,
+  updates: Partial<VideoClip>,
+  editFormatOnly: boolean
+): { outputs: (DesignerOutput | VideoOutput)[]; affected: number[] } => {
+  const current = doc.outputs[currentOutputIndex] as VideoOutput;
+  const track = current.tracks.find((t) => t.id === trackId);
+  const clip = track?.clips.find((c) => c.id === clipId);
+  const originId = clip?.originId;
+
+  const shared = sharedClipUpdates(updates);
+  const propagate =
+    !editFormatOnly && !!originId && Object.keys(shared).length > 0;
+  const affected: number[] = [];
+
+  const outputs = doc.outputs.map((out, i) => {
+    if (!isVideoOutput(out)) return out;
+    if (i === currentOutputIndex) {
+      return {
+        ...out,
+        tracks: out.tracks.map((t) =>
+          t.id !== trackId
+            ? t
+            : {
+                ...t,
+                clips: t.clips.map((c) =>
+                  c.id === clipId ? ({ ...c, ...updates } as VideoClip) : c
+                ),
+              }
+        ),
+      };
+    }
+    if (!propagate) return out;
+
+    // A px fontSize authored against one canvas is wrong on another — re-fit
+    // through the shared type basis, same rule as image-mode linked text.
+    const scaled = scaledForOutput(
+      shared as Partial<DesignerElement>,
+      current,
+      out
+    ) as Partial<VideoClip>;
+
+    let changed = false;
+    const tracks = out.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) => {
+        if (c.originId && c.originId === originId) {
+          changed = true;
+          return { ...c, ...scaled } as VideoClip;
+        }
+        return c;
+      }),
+    }));
+    if (changed) affected.push(i);
+    return { ...out, tracks };
+  });
+
+  return { outputs, affected };
+};

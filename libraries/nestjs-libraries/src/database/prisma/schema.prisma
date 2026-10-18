@@ -74,6 +74,7 @@ model Organization {
   apiKeys              ApiKey[]
   roles                AppRole[]
   designs              Design[]
+  designVersions       DesignVersion[]
   designTemplates      DesignTemplate[]
   designTemplateFolders DesignTemplateFolder[]
   aiDesignerSessions   AiDesignerSession[]
@@ -142,6 +143,7 @@ model User {
   profile               UserProfile?
   sessions              Session[]
   designs               Design[]
+  designVersions        DesignVersion[]
   notificationReads     NotificationRead[]
   notificationPreference NotificationPreference?
   notificationDigestQueues NotificationDigestQueue[]
@@ -1840,11 +1842,37 @@ model Design {
   createdBy       User          @relation(fields: [createdById], references: [id])
   campaign        Campaign?     @relation(fields: [campaignId], references: [id])
   previewFile     File?         @relation(fields: [previewFileId], references: [id])
+  versions        DesignVersion[]
 
   @@index([organizationId])
   @@index([createdById])
   @@index([campaignId])
   @@index([deletedAt])
+}
+
+// Named/automatic snapshots of a Design's doc — the Designer's version history.
+// `doc` is a full DesignerDoc (image AND video modes); width/height snapshot
+// the design's canvas at save time. `auto` marks the safety snapshot the
+// server takes inside restore before overwriting the live doc.
+model DesignVersion {
+  id              String   @id @default(cuid())
+  designId        String
+  organizationId  String
+  name            String?
+  doc             Json
+  auto            Boolean  @default(false)
+  createdById     String
+  width           Int      @default(1080)
+  height          Int      @default(1080)
+  previewDataUrl  String?
+  createdAt       DateTime @default(now())
+
+  design          Design       @relation(fields: [designId], references: [id], onDelete: Cascade)
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy       User         @relation(fields: [createdById], references: [id])
+
+  @@index([designId])
+  @@index([organizationId])
 }
 
 // Design templates — system-seeded or org-saved — for the Templates panel

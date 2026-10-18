@@ -61,6 +61,45 @@ const RemoveOutputOpSchema = z.object({
   outputIndex: outputIndex,
 });
 
+// Pages (doc v8, image mode only). `pageNumber` is 0-based across the whole
+// output: 0 is page 1 (`output.children`), n ≥ 1 is `output.pages[n - 1]`.
+const pageNumber = z.number().int().min(0).max(1024);
+
+const AddPageOpSchema = z
+  .object({
+    op: z.literal('addPage'),
+    outputIndex: outputIndex,
+    name: z.string().max(200).optional(),
+    background: StrictDesignerBackgroundSchema.optional(),
+  })
+  .strict();
+
+const RemovePageOpSchema = z
+  .object({
+    op: z.literal('removePage'),
+    outputIndex: outputIndex,
+    // Page 1 (pageNumber 0) is the output itself and cannot be removed.
+    pageNumber: pageNumber,
+  })
+  .strict();
+
+const DuplicatePageOpSchema = z
+  .object({
+    op: z.literal('duplicatePage'),
+    outputIndex: outputIndex,
+    pageNumber: pageNumber,
+  })
+  .strict();
+
+const ReorderPageOpSchema = z
+  .object({
+    op: z.literal('reorderPage'),
+    outputIndex: outputIndex,
+    from: pageNumber,
+    to: pageNumber,
+  })
+  .strict();
+
 const AddOutputOpSchema = z.object({
   op: z.literal('addOutput'),
   preset: AddOutputPresetSchema,
@@ -139,6 +178,10 @@ export const DesignerDocOpSchema = z.discriminatedUnion('op', [
   AddOutputOpSchema,
   ResizeOutputOpSchema,
   SetOutputBackgroundOpSchema,
+  AddPageOpSchema,
+  RemovePageOpSchema,
+  DuplicatePageOpSchema,
+  ReorderPageOpSchema,
   AddElementOpSchema,
   UpdateElementOpSchema,
   RemoveElementOpSchema,
@@ -148,10 +191,16 @@ export const DesignerDocOpSchema = z.discriminatedUnion('op', [
 
 export type DesignerDocOp = z.infer<typeof DesignerDocOpSchema>;
 
+// Element- and page-level ops that only make sense on image outputs.
+// addOutput/resizeOutput are deliberately NOT here: both are video-aware
+// (see DesignerDocService._applyOp — a video doc gets a cloned+reflowed
+// VideoOutput variant), so mode gating happens per-branch, not per-op.
 export const IMAGE_ONLY_OPS = new Set([
-  'addOutput',
-  'resizeOutput',
   'setOutputBackground',
+  'addPage',
+  'removePage',
+  'duplicatePage',
+  'reorderPage',
   'addElement',
   'updateElement',
   'removeElement',

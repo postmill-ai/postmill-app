@@ -201,4 +201,62 @@ describe('DesignerDoc schema versions', () => {
     );
     expect(DesignerDocStrictSchema.safeParse(doc).success).toBe(false);
   });
+
+  it('accepts additional pages on an image output through both parsers (v8)', () => {
+    const doc = blank();
+    doc.outputs[0].pages = [
+      {
+        id: 'pg-1',
+        name: 'Slide 2',
+        background: { type: 'color', color: '#101010' },
+        children: [element({ type: 'text', text: 'Second page', fontSize: 24 })],
+      },
+      { id: 'pg-2', children: [] },
+    ];
+    expect(DesignerDocStrictSchema.safeParse(doc).success).toBe(true);
+    expect(DesignerDocLenientSchema.safeParse(doc).success).toBe(true);
+  });
+
+  it('loads a v7 document with pages intact, without rewriting it', () => {
+    // Pages were introduced in v8, but migrateDoc is pass-through: a doc that
+    // already carries them keeps them untouched (only `version` defaults).
+    const doc = blank();
+    doc.version = 7;
+    doc.outputs[0].pages = [{ id: 'pg-1', children: [element({ type: 'shape', shape: 'rect' })] }];
+    const migrated = migrateDoc(structuredClone(doc));
+    expect(migrated.version).toBe(7);
+    expect((migrated.outputs[0] as any).pages).toHaveLength(1);
+    expect(DesignerDocStrictSchema.safeParse(migrated).success).toBe(true);
+  });
+
+  it('bounds pages per output', () => {
+    const doc = blank();
+    doc.outputs[0].pages = Array.from({ length: 25 }, (_, i) => ({
+      id: `pg-${i}`,
+      children: [],
+    }));
+    expect(DesignerDocStrictSchema.safeParse(doc).success).toBe(false);
+  });
+
+  it('rejects pages on video outputs, in BOTH parsers', () => {
+    const doc: Record<string, any> = {
+      version: 8,
+      mode: 'video',
+      outputs: [
+        {
+          id: 'out-1',
+          formatId: 'tiktok',
+          name: 'TikTok',
+          width: 1080,
+          height: 1920,
+          fps: 30,
+          durationMs: 10000,
+          tracks: [],
+          pages: [{ id: 'pg-1', children: [] }],
+        },
+      ],
+    };
+    expect(DesignerDocStrictSchema.safeParse(doc).success).toBe(false);
+    expect(DesignerDocLenientSchema.safeParse(doc).success).toBe(false);
+  });
 });

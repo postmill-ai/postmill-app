@@ -7,6 +7,7 @@ export class DesignRepository {
     private readonly _design: PrismaRepository<'design'>,
     private readonly _designTemplate: PrismaRepository<'designTemplate'>,
     private readonly _designTemplateFolder: PrismaRepository<'designTemplateFolder'>,
+    private readonly _designVersion: PrismaRepository<'designVersion'>,
     private readonly _file: PrismaRepository<'file'>
   ) {}
 
@@ -58,6 +59,75 @@ export class DesignRepository {
       where: { id, organizationId: orgId },
       data: { deletedAt: new Date() },
     });
+  }
+
+  // ── DesignVersion operations ────────────────────────────────────────────
+
+  createVersion(data: {
+    designId: string;
+    organizationId: string;
+    name?: string;
+    doc: any;
+    auto: boolean;
+    createdById: string;
+    width: number;
+    height: number;
+    previewDataUrl?: string;
+  }) {
+    return this._designVersion.model.designVersion.create({ data });
+  }
+
+  /**
+   * Metadata listing — the `doc` column (a full DesignerDoc, megabytes on a
+   * heavy design) is deliberately NOT selected; the panel only needs name,
+   * auto flag, thumb and timestamps. The full row loads via findVersion.
+   */
+  listVersions(orgId: string, designId: string) {
+    return this._designVersion.model.designVersion.findMany({
+      where: { designId, organizationId: orgId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        auto: true,
+        width: true,
+        height: true,
+        previewDataUrl: true,
+        createdAt: true,
+        createdById: true,
+      },
+    });
+  }
+
+  findVersion(orgId: string, designId: string, versionId: string) {
+    return this._designVersion.model.designVersion.findFirst({
+      where: { id: versionId, designId, organizationId: orgId },
+    });
+  }
+
+  deleteVersion(orgId: string, designId: string, versionId: string) {
+    return this._designVersion.model.designVersion.deleteMany({
+      where: { id: versionId, designId, organizationId: orgId },
+    });
+  }
+
+  /**
+   * Count-cap retention, enforced at insert: keep the newest `keep` rows of
+   * one class (named/auto) per design, delete the overflow. Two-step because
+   * deleteMany can't express "all but the newest N".
+   */
+  async trimVersions(designId: string, auto: boolean, keep: number) {
+    const rows = await this._designVersion.model.designVersion.findMany({
+      where: { designId, auto },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+      skip: keep,
+    });
+    if (!rows.length) return 0;
+    const r = await this._designVersion.model.designVersion.deleteMany({
+      where: { id: { in: rows.map((v) => v.id) } },
+    });
+    return r.count;
   }
 
   // DesignTemplate methods

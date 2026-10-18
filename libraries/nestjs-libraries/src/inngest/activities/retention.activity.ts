@@ -62,6 +62,12 @@ export class RetentionActivity {
       )
     );
 
+    await this._safe('softDeletedDesignVersions', counts, async () =>
+      this._retentionRepository.purgeSoftDeletedDesignVersions(
+        before(this._days('SOFT_DELETE_RETENTION_DAYS', 30))
+      )
+    );
+
     await this._safe('aiDesignerSessions', counts, async () =>
       this._retentionRepository.purgeAiDesignerSessionsOlderThan(
         before(this._days('AI_DESIGNER_SESSION_RETENTION_DAYS', 90))

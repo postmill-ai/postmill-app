@@ -103,3 +103,44 @@ describe('RetentionRepository — AI Designer session purge intermediates', () =
     expect(prisma.design.findMany).not.toHaveBeenCalled();
   });
 });
+
+describe('RetentionRepository — design version purge', () => {
+  it('hard-deletes versions of designs soft-deleted past the window, batched', async () => {
+    const prisma = {
+      designVersion: {
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce([{ id: 'v1' }, { id: 'v2' }])
+          .mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 2 }),
+      },
+    };
+    const repo = new RetentionRepository(prisma as any);
+    const cutoff = new Date('2026-09-01T00:00:00Z');
+
+    const purged = await repo.purgeSoftDeletedDesignVersions(cutoff);
+
+    expect(purged).toBe(2);
+    expect(prisma.designVersion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { design: { deletedAt: { not: null, lt: cutoff } } },
+      })
+    );
+    expect(prisma.designVersion.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ['v1', 'v2'] } },
+    });
+  });
+
+  it('is a no-op when nothing matches', async () => {
+    const prisma = {
+      designVersion: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn(),
+      },
+    };
+    const repo = new RetentionRepository(prisma as any);
+
+    expect(await repo.purgeSoftDeletedDesignVersions(new Date())).toBe(0);
+    expect(prisma.designVersion.deleteMany).not.toHaveBeenCalled();
+  });
+});

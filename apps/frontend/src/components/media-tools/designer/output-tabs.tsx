@@ -7,6 +7,7 @@ import {
   CHANNEL_PRESETS,
   type ChannelPreset,
 } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import { pageChildren, pageCount } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 
 interface OutputTabsProps {
   store: any;
@@ -157,11 +158,12 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
   const t = useT();
   const doc = store((s: any) => s.doc);
   const currentOutput = store((s: any) => s.currentOutput);
+  const currentPage = store((s: any) => s.currentPage ?? 0);
   const outputs: any[] = doc.outputs;
   const mode: 'image' | 'video' = doc.mode || 'image';
 
   const activeOriginIds = new Set(
-    (outputs[currentOutput]?.children || []).filter((c: any) => c?.originId).map((c: any) => c.originId)
+    (pageChildren(outputs[currentOutput], currentPage) || []).filter((c: any) => c?.originId).map((c: any) => c.originId)
   );
 
   const linkedUpdateFlash: Record<number, number> = store((s: any) => s.linkedUpdateFlash) || {};
@@ -325,6 +327,14 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
               <span className="text-[9px] text-textColor/50 leading-none">
                 {output.width}×{output.height}
               </span>
+              {mode === 'image' && pageCount(output) > 1 && (
+                <span
+                  className="absolute bottom-1 right-1 rounded-sm bg-designerAccent/15 text-btnPrimaryAccent text-[8px] leading-none px-1 py-0.5"
+                  title={t('designer_pages_count', '{{count}} pages', { count: pageCount(output) })}
+                >
+                  {pageCount(output)}p
+                </span>
+              )}
             </button>
             <div className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center gap-0.5 z-10">
               <button
@@ -428,7 +438,8 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
         )}
       </div>
 
-      {mode === 'image' && (
+      {/* Add-format is available in BOTH modes now: image docs seed linked
+          element copies, video docs clone+reflow a full timeline variant. */}
       <div className="relative shrink-0">
         <button
           ref={addBtnRef}
@@ -454,9 +465,12 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           className="bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl overflow-hidden w-72 p-3"
         >
           <div className="text-[12px] font-medium text-textColor mb-2">
-            {t('designer_add_formats_heading', 'Add Formats')}
+            {mode === 'video'
+              ? t('designer_add_video_format_heading', 'Add Video Format')
+              : t('designer_add_formats_heading', 'Add Formats')}
           </div>
 
+          {mode === 'image' && (
           <button
             onClick={() => {
               setPendingFormats(
@@ -471,12 +485,15 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           >
             {t('designer_recommended_set_description', 'Recommended set (IG Post + Story + Linked + X)')}
           </button>
+          )}
 
           <div className="max-h-52 overflow-y-auto space-y-0.5">
             {Object.entries(CHANNEL_GROUPS).map(
               ([key, group]) => {
                 if (group.presets.length === 0) return null;
-                if (group.mode === 'video') return null;
+                // Video docs clone timeline variants — only video-category
+                // presets fit; image docs keep the image preset groups.
+                if (mode === 'video' ? group.mode !== 'video' : group.mode === 'video') return null;
                 return (
                   <div key={key}>
                     <div className="text-[10px] font-semibold text-textColor/30 uppercase tracking-wider px-1 py-1">
@@ -565,7 +582,6 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           )}
         </PortalPopover>
       </div>
-      )}
 
       <PortalPopover
         anchorEl={showResize ? popoverAnchor : null}

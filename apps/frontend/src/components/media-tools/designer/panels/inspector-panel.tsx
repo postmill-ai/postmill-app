@@ -13,6 +13,7 @@ import { AdjustmentInspector } from './adjustment-inspector';
 import { EffectsList } from './effects-list';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement } from '../designer.store';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 
 interface InspectorProps {
   store: any;
@@ -33,7 +34,7 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
 
   const selected: DesignerElement[] = useMemo(
     () =>
-      isVideoMode ? [] : (doc.outputs[currentOutput]?.children || []).filter(
+      isVideoMode ? [] : pageChildren(doc.outputs[currentOutput] as any, store.getState().currentPage).filter(
         (c: DesignerElement) => selectedIds.includes(c.id),
       ),
     [doc, currentOutput, selectedIds, isVideoMode],

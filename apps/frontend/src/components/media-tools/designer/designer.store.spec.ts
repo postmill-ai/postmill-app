@@ -1110,3 +1110,238 @@ describe('track lock / hide, markers, and timeline view prefs', () => {
     expect(store.getState().historyIndex).toBe(historyBefore);
   });
 });
+
+describe('multi-page outputs (doc v8)', () => {
+  const addTextEl = (store: ReturnType<typeof createDesignerStore>, text: string) =>
+    store.getState().addElement({
+      id: '',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 30,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      text,
+    });
+
+  it('adds, selects and removes pages, with history', () => {
+    const store = createDesignerStore();
+    const out = () => store.getState().doc.outputs[0] as any;
+
+    store.getState().addPage();
+    expect(out().pages).toHaveLength(1);
+    expect(store.getState().currentPage).toBe(1);
+
+    // Edits on page 2 stay local to the page — page 1 is untouched.
+    addTextEl(store, 'Page two copy');
+    expect(out().pages[0].children).toHaveLength(1);
+    expect(out().children).toHaveLength(0);
+
+    store.getState().setCurrentPage(0);
+    addTextEl(store, 'Page one copy');
+    expect(out().children).toHaveLength(1);
+
+    store.getState().removePage(1);
+    expect(out().pages).toBeUndefined();
+    expect(store.getState().currentPage).toBe(0);
+
+    store.getState().undo(); // undo removePage
+    expect(out().pages).toHaveLength(1);
+    expect(out().pages[0].children[0].text).toBe('Page two copy');
+  });
+
+  it('duplicatePage clones content with fresh ids', () => {
+    const store = createDesignerStore();
+    addTextEl(store, 'Original');
+    const sourceId = (store.getState().doc.outputs[0] as any).children[0].id;
+
+    store.getState().duplicatePage(0);
+    const out = store.getState().doc.outputs[0] as any;
+    expect(out.pages).toHaveLength(1);
+    expect(out.pages[0].children[0].text).toBe('Original');
+    expect(out.pages[0].children[0].id).not.toBe(sourceId);
+    expect(store.getState().currentPage).toBe(1);
+  });
+
+  it('reorderPage moves page 1 into the extras', () => {
+    const store = createDesignerStore();
+    addTextEl(store, 'First');
+    store.getState().addPage('Second');
+
+    store.getState().reorderPage(0, 1);
+    const out = store.getState().doc.outputs[0] as any;
+    expect(out.children).toHaveLength(0);
+    expect(out.pages[0].children[0].text).toBe('First');
+    // The page pointer is index-stable: it followed nothing (page 2 was
+    // viewed, and only the MOVED page would have been followed).
+    expect(store.getState().currentPage).toBe(1);
+  });
+
+  it('renamePage only touches extras; page 1 keeps the output name', () => {
+    const store = createDesignerStore();
+    store.getState().addPage();
+    store.getState().renamePage(1, 'Cover variant');
+    expect((store.getState().doc.outputs[0] as any).pages[0].name).toBe('Cover variant');
+    store.getState().renamePage(0, 'Nope');
+    expect((store.getState().doc.outputs[0] as any).name).not.toBe('Nope');
+  });
+
+  it('clamps currentPage when outputs change under it', () => {
+    const store = createDesignerStore();
+    store.getState().addPage();
+    store.getState().addPage();
+    store.getState().setCurrentPage(2);
+    expect(store.getState().currentPage).toBe(2);
+
+    // Undo past the addPage history entries shrinks the page list — the page
+    // pointer must clamp rather than address a ghost page.
+    store.getState().undo();
+    store.getState().undo();
+    expect(store.getState().currentPage).toBe(0);
+
+    // Switching outputs always lands on page 1.
+    store.getState().addOutput({ formatId: 'custom', name: 'B', width: 500, height: 500 });
+    expect(store.getState().currentOutput).toBe(1);
+    expect(store.getState().currentPage).toBe(0);
+  });
+
+  it('refuses pages in video mode', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addPage();
+    expect((store.getState().doc.outputs[0] as any).pages).toBeUndefined();
+    expect(store.getState().currentPage).toBe(0);
+  });
+
+  it('page-2 edits do not propagate across outputs (page-1-only linking)', () => {
+    const store = createDesignerStore();
+    addTextEl(store, 'Linked');
+    store.getState().addOutput({ formatId: 'custom', name: 'B', width: 500, height: 500 });
+    // Back on output 0, add page 2 and edit there.
+    store.getState().setCurrentOutput(0);
+    store.getState().addPage();
+    store.getState().setCurrentPage(1);
+    store.getState().addElement({
+      id: '',
+      type: 'shape',
+      shape: 'rect',
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+    });
+    const outs = store.getState().doc.outputs as any[];
+    // Page 2's new element did NOT seed a linked copy into output 1.
+    expect(outs[1].children).toHaveLength(1); // only the page-1 seeded copy
+    expect(outs[0].pages[0].children).toHaveLength(1);
+  });
+});
+
+describe('video output variants (add-format for video mode)', () => {
+  const videoStoreWithContent = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const vo = () => store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+    const trackId = vo().tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'bg', startMs: 0, endMs: 8000, src: 'https://example.com/bg.mp4',
+    } as never);
+    store.getState().addTrack(0, 'text');
+    const textTrack = vo().tracks.find((t) => t.type === 'text')!;
+    store.getState().addClip(0, textTrack.id, {
+      id: 'title', startMs: 500, endMs: 4000, text: 'Headline',
+      x: 460, y: 900, width: 1000, height: 140, fontSize: 64,
+    } as never);
+    return store;
+  };
+  const out = (store: ReturnType<typeof createDesignerStore>, i: number) =>
+    store.getState().doc.outputs[i] as import('./designer.store').VideoOutput;
+
+  it('addOutput clones the timeline with fresh ids, shared originIds, unchanged timing', () => {
+    const store = videoStoreWithContent();
+    store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
+
+    const doc = store.getState().doc;
+    expect(doc.outputs).toHaveLength(2);
+    expect(store.getState().currentOutput).toBe(1);
+
+    const v0 = out(store, 0);
+    const v1 = out(store, 1);
+    expect(v1).toMatchObject({ width: 1080, height: 1920, formatId: 'custom-tall', fps: v0.fps, durationMs: v0.durationMs });
+    expect(v1.tracks).toHaveLength(v0.tracks.length);
+
+    // Fresh ids; shared originId (backfilled on the source too).
+    const srcTitle = v0.tracks.find((t) => t.type === 'text')!.clips[0];
+    const copyTitle = v1.tracks.find((t) => t.type === 'text')!.clips[0];
+    expect(copyTitle.id).not.toBe(srcTitle.id);
+    expect(copyTitle.originId).toBeTruthy();
+    expect(copyTitle.originId).toBe(srcTitle.originId);
+    expect(copyTitle.startMs).toBe(srcTitle.startMs);
+    expect(copyTitle.endMs).toBe(srcTitle.endMs);
+    expect(copyTitle.text).toBe('Headline');
+    // Geometry reflowed onto the tall canvas (not a verbatim copy).
+    expect(copyTitle.y).not.toBe(srcTitle.y);
+
+    // Undo removes the variant and restores the pointer.
+    store.getState().undo();
+    expect(store.getState().doc.outputs).toHaveLength(1);
+  });
+
+  it('resizeOutput reflows a video output in place (ids preserved)', () => {
+    const store = videoStoreWithContent();
+    const before = out(store, 0);
+    const titleId = before.tracks.find((t) => t.type === 'text')!.clips[0].id;
+
+    store.getState().resizeOutput(0, 1080, 1920, 'custom-tall', 'Tall');
+
+    const after = out(store, 0);
+    expect(after).toMatchObject({ width: 1080, height: 1920, name: 'Tall' });
+    const title = after.tracks.find((t) => t.type === 'text')!.clips[0];
+    expect(title.id).toBe(titleId);
+    expect(title.y).not.toBe(900);
+    expect(after.durationMs).toBe(before.durationMs);
+  });
+
+  it('content edits propagate to the sibling variant clip; geometry stays local', () => {
+    const store = videoStoreWithContent();
+    store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
+    const v0 = out(store, 0);
+    const v1 = out(store, 1);
+    const t0 = v0.tracks.find((t) => t.type === 'text')!.clips[0];
+    const t1 = v1.tracks.find((t) => t.type === 'text')!.clips[0];
+
+    // Edit the VARIANT (current output after addOutput).
+    store.getState().updateClip(1, v1.tracks.find((t) => t.type === 'text')!.id, t1.id, {
+      text: 'Edited',
+      x: 999,
+    } as never);
+
+    const after0 = out(store, 0).tracks.find((t) => t.type === 'text')!.clips[0];
+    const after1 = out(store, 1).tracks.find((t) => t.type === 'text')!.clips[0];
+    expect(after0.text).toBe('Edited'); // content propagated
+    expect(after0.x).toBe(t0.x); // geometry stayed local
+    expect(after1.x).toBe(999);
+  });
+
+  it('editFormatOnly keeps content edits local too', () => {
+    const store = videoStoreWithContent();
+    store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
+    const v1 = out(store, 1);
+    const t1 = v1.tracks.find((t) => t.type === 'text')!.clips[0];
+
+    store.getState().setEditFormatOnly(true);
+    store.getState().updateClip(1, v1.tracks.find((t) => t.type === 'text')!.id, t1.id, {
+      text: 'Local only',
+    } as never);
+
+    const after0 = out(store, 0).tracks.find((t) => t.type === 'text')!.clips[0];
+    expect(after0.text).toBe('Headline');
+  });
+});
