@@ -45,9 +45,12 @@ interface TemplatesPanelProps {
   onClose?: () => void;
   /** Resolves false to abort applying (unsaved-changes guard). */
   guard?: () => Promise<boolean>;
+  /** Hide the "Save current as template" button (e.g. the start modal, where
+   *  there is no design worth templating yet). Defaults to shown. */
+  showSaveCurrent?: boolean;
 }
 
-export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard }) => {
+export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard, showSaveCurrent = true }) => {
   const fetch = useFetch();
   const user = useUser();
   const toaster = useToaster();
@@ -259,12 +262,14 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
 
   return (
     <div className="flex flex-col gap-3">
-      <button
-        onClick={saveAsTemplate}
-        className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
-      >
-        {t('templates_panel_save_current_as_template', 'Save current as template')}
-      </button>
+      {showSaveCurrent && (
+        <button
+          onClick={saveAsTemplate}
+          className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
+        >
+          {t('templates_panel_save_current_as_template', 'Save current as template')}
+        </button>
+      )}
 
       <TemplateFolderTree
         folders={folders ?? []}
@@ -340,9 +345,13 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
                         ) : (
                           template.isSystem ? '◧' : '▣'
                         )}
-                        {templateModeOf(template) === 'video' && (
+                        {templateModeOf(template) === 'video' ? (
                           <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
-                            {t('templates_panel_video_badge', 'Video')}
+                            {t('templates_panel_video_badge', 'VIDEO')}
+                          </span>
+                        ) : (
+                          <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
+                            {t('templates_panel_image_badge', 'IMAGE')}
                           </span>
                         )}
                         {!template.isSystem && (

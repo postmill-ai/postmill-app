@@ -219,6 +219,10 @@ export const Designer: FC<DesignerProps> = ({
   const decision = useDecisionModal();
   const [showSafeZones, setShowSafeZones] = useState(false);
   const [showRulers, setShowRulers] = useState(true);
+  // Pages-bar visibility override: null = never toggled (auto — hidden for
+  // single-page designs, shown for multi-page), true/false = the user's
+  // explicit choice, persisted per org and adopted in the effect below.
+  const [pagesBarOverride, setPagesBarOverride] = useState<boolean | null>(null);
   // Default the inspector collapsed on mobile so it doesn't cover the canvas
   // (≤1025px = the repo `mobile` breakpoint). Desktop stays expanded.
   const [inspectorCollapsed, setInspectorCollapsed] = useState(
@@ -390,6 +394,39 @@ export const Designer: FC<DesignerProps> = ({
   const setActiveTool = store((s) => s.setActiveTool);
   const setToolOption = store((s) => s.setToolOption);
   const currentOutput = store((s) => s.currentOutput);
+  // Extra pages on the active image output drive the Pages bar's auto-visibility.
+  const activeOutputPageCount = store((s) => {
+    const out = s.doc.outputs[s.currentOutput] as any;
+    return out && 'children' in out ? (out.pages?.length ?? 0) : 0;
+  });
+
+  // Adopt the stored per-org Pages-bar override after mount — reading
+  // localStorage during render would hydrate-mismatch. Guarded like
+  // use-floating-panel-state: a malformed value falls back to auto (null).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`designer-pages-bar-${user?.orgId}`);
+      const parsed = raw === null ? null : JSON.parse(raw);
+      setPagesBarOverride(typeof parsed === 'boolean' ? parsed : null);
+    } catch {
+      setPagesBarOverride(null);
+    }
+  }, [user?.orgId]);
+
+  // Effective Pages-bar visibility (image mode only): the explicit override
+  // wins; otherwise auto-visible only for multi-page designs.
+  const showPagesBar = docMode === 'image' && (pagesBarOverride ?? activeOutputPageCount > 0);
+  const onTogglePagesBar = useCallback(() => {
+    setPagesBarOverride(() => {
+      const next = !showPagesBar;
+      try {
+        localStorage.setItem(`designer-pages-bar-${user?.orgId}`, JSON.stringify(next));
+      } catch {
+        // Private mode / quota exceeded — the toggle still works this session.
+      }
+      return next;
+    });
+  }, [showPagesBar, user?.orgId]);
   const selectedIds = store((s) => s.selectedIds);
   const selectedClip = store((s) => s.selectedClip);
   const brandEnforcement = store((s) => s.brandEnforcement);
@@ -1083,6 +1120,7 @@ export const Designer: FC<DesignerProps> = ({
     () => ({
       showSafeZones,
       showRulers,
+      showPagesBar,
       aiActive,
       mediaOperationAvailable,
       mediaToolAvailable,
@@ -1188,6 +1226,7 @@ export const Designer: FC<DesignerProps> = ({
       onToggleInspector: () => setInspectorCollapsed((c) => !c),
       onToggleSafeZones: () => setShowSafeZones((v) => !v),
       onToggleRulers: () => setShowRulers((v) => !v),
+      onTogglePagesBar,
       onToggleSnap: () => {
         const st = store.getState();
         st.setSnapEnabled(!st.snapEnabled);
@@ -1265,6 +1304,8 @@ export const Designer: FC<DesignerProps> = ({
     [
       showSafeZones,
       showRulers,
+      showPagesBar,
+      onTogglePagesBar,
       aiActive,
       mediaOperationAvailable,
       mediaToolAvailable,
@@ -1611,7 +1652,7 @@ export const Designer: FC<DesignerProps> = ({
             )}
           </div>
           {docMode === 'video' && <VideoTimeline store={store} sendTimelineAwareness={collabData.sendTimelineAwareness} />}
-          <PagesPanel store={store} />
+          <PagesPanel store={store} visible={showPagesBar} />
           <OutputTabs store={store} />
         </div>
       </div>

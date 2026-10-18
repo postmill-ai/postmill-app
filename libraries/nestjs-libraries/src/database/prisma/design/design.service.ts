@@ -27,6 +27,7 @@ export class DesignService {
       designs: designs.map((design) => ({
         ...design,
         previewUrl: (design as any).previewFile?.path ?? design.previewDataUrl ?? null,
+        mode: (design.doc as any)?.mode === 'video' ? 'video' : 'image',
       })),
       total,
       page,

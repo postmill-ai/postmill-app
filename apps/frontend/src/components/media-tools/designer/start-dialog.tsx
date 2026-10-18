@@ -111,7 +111,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-2xl border border-studioBorder bg-newBgColorInner shadow-2xl"
+        className="w-full max-w-2xl lg:max-w-4xl 2xl:max-w-5xl max-h-[88vh] overflow-y-auto rounded-2xl border border-studioBorder bg-newBgColorInner shadow-2xl"
       >
         {step === 'home' && (
           <div className="p-6">
@@ -158,7 +158,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
               {tab === 'my-designs' ? (
                 <MyDesignsPanel onOpen={openDesign} />
               ) : (
-                <TemplatesPanel store={store} onClose={onDone} />
+                <TemplatesPanel store={store} onClose={onDone} showSaveCurrent={false} />
               )}
             </div>
           </div>

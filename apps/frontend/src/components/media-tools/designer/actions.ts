@@ -61,6 +61,8 @@ export interface DesignerActionCtx {
   // live UI toggle values (designer-local)
   showSafeZones: boolean;
   showRulers: boolean;
+  /** Effective Pages-bar visibility (image mode only). */
+  showPagesBar: boolean;
   aiActive: boolean;
   // Per-operation media-tool availability (the single status signal). Optimistic/fail-open:
   // returns true while loading or on a status outage, so a hiccup never greys every tool.
@@ -97,6 +99,7 @@ export interface DesignerActionCtx {
   onToggleInspector: () => void;
   onToggleSafeZones: () => void;
   onToggleRulers: () => void;
+  onTogglePagesBar: () => void;
   onToggleSnap: () => void;
   onFitToScreen: () => void;
   onActualSize: () => void;
@@ -388,6 +391,7 @@ export const useDesignerActions = (
       { id: 'actual-size', label: 'Actual Size (100%)', menu: 'view', group: 'zoom', keywords: ['actual', '100', 'reset zoom'], run: ctx.onActualSize },
       { id: 'view-safe-zones', label: 'Safe Zones', menu: 'view', group: 'overlay', keywords: ['safe zones'], checked: () => ctx.showSafeZones, run: ctx.onToggleSafeZones },
       { id: 'view-rulers', label: 'Rulers', menu: 'view', group: 'overlay', keywords: ['rulers'], checked: () => ctx.showRulers, run: ctx.onToggleRulers },
+      { id: 'view-pages', label: 'Pages', menu: 'view', group: 'overlay', keywords: ['pages'], checked: () => ctx.showPagesBar, enabled: () => !isVideoDoc(), run: ctx.onTogglePagesBar },
       // The rulers you could read but never pull a guide out of, and the grid
       // that didn't exist.
       { id: 'view-grid', label: 'Grid', menu: 'view', group: 'overlay', keywords: ['grid'], checked: () => store.getState().showGrid, run: () => { const st = store.getState(); st.setShowGrid(!st.showGrid); } },

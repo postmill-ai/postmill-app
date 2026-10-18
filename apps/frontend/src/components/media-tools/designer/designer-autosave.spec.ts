@@ -206,6 +206,72 @@ describe('createDesignAutosave', () => {
     expect(store.getState().designId).toBeNull();
   });
 
+  it('does not create for a name-only change on a blank doc', async () => {
+    const store = createDesignerStore();
+    const fetchMock = vi.fn();
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    // A rename marks the store dirty, so without the blank gate this save
+    // would POST a design whose canvas was never touched.
+    store.getState().setDesignName('Renamed but blank');
+    autosave.save(store.getState().doc);
+    await flush();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(store.getState().isSaving).toBe(false);
+    expect(store.getState().designId).toBeNull();
+  });
+
+  it('creates on the first real content change', async () => {
+    const store = createDesignerStore();
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/media/designs') return Promise.resolve(okJson({ id: 'design-content' }));
+      return Promise.resolve(okJson({}));
+    });
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    store.getState().setDesignName('Renamed but blank');
+    autosave.save(store.getState().doc);
+    await flush();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    addText(store, 'First real content');
+    autosave.save(store.getState().doc);
+    await flush();
+
+    expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(1);
+    expect(store.getState().designId).toBe('design-content');
+  });
+
+  it('still PUTs a blank doc that has an existing designId', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-existing');
+    const fetchMock = vi.fn(() => Promise.resolve(okJson({})));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    // The user deleted every element of a saved design — the blank result
+    // must persist, so the blank gate only applies before a designId exists.
+    store.getState().setDoc(store.getState().doc);
+    autosave.save(store.getState().doc);
+    await flush();
+
+    expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(0);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-existing')).toHaveLength(1);
+    expect(store.getState().isDirty).toBe(false);
+  });
+
   it('still creates when the preview upload fails', async () => {
     const store = createDesignerStore(800, 600);
     const fetchMock = vi.fn((url: string) => {

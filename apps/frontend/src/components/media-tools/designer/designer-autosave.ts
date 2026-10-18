@@ -1,4 +1,5 @@
 import type { DesignerDoc, createDesignerStore } from './designer.store';
+import { isBlankDoc } from './designer-doc-blank';
 
 type DesignerStoreApi = ReturnType<typeof createDesignerStore>;
 
@@ -56,7 +57,9 @@ export interface DesignAutosave {
   /**
    * Debounced-doc entry point. First edit on a brand-new design POSTs it once
    * (there is no id for the PUT cycle yet); afterwards every call PUTs. A
-   * pristine doc (not dirty) is never persisted.
+   * pristine doc (not dirty) is never persisted, and neither is a dirty but
+   * still-blank doc with no designId yet (never POST a create for an
+   * untouched canvas).
    */
   save: (sentDoc: DesignerDoc) => void;
   /**
@@ -197,6 +200,11 @@ export const createDesignAutosave = ({
   const save = (sentDoc: DesignerDoc) => {
     const state = store.getState();
     if (!state.isDirty) return;
+    // Never mint a design row for an untouched canvas: with no designId yet a
+    // save would POST a create, so a dirty-but-blank doc (e.g. a rename of a
+    // canvas the user never drew on) is skipped. An existing design is
+    // unaffected — deleting all content must still persist.
+    if (!state.designId && isBlankDoc(sentDoc)) return;
     if (!state.designId) {
       // First-edit autosave. The brand-compliance check stays manual-save-only
       // — autosave never blocks on it. When the create lands its id in the

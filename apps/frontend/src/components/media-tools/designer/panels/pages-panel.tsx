@@ -22,11 +22,14 @@ import { renderOutputThumbnail } from '../export-dialog';
 
 interface PagesPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;
+  /** View ▸ Pages visibility (image mode only) — hidden by default, toggled
+   *  per org, auto-visible when the active output has extra pages. */
+  visible: boolean;
 }
 
 const THUMB_H = 64;
 
-export const PagesPanel: FC<PagesPanelProps> = ({ store }) => {
+export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
   const t = useT();
   const doc = store((s) => s.doc);
   const currentOutput = store((s) => s.currentOutput);
@@ -84,7 +87,7 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pageKey IS the doc-derived dep; output/doc are read for the render inputs it summarizes.
   }, [pageKey, currentOutput, count]);
 
-  if (!output || doc.mode !== 'image' || !('children' in output)) return null;
+  if (!visible || !output || doc.mode !== 'image' || !('children' in output)) return null;
 
   const nameOf = (i: number) =>
     (i > 0 && output.pages?.[i - 1]?.name) ||
