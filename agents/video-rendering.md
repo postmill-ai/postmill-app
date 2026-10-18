@@ -184,15 +184,23 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
    - **Parallel frame capture** (`ChromiumFrameCaptureService.captureFrames`): when
      `totalFrames > PARALLEL_CAPTURE_MIN_FRAMES` (300), capture runs on N pages inside
      ONE Chromium instance — N = `getCapturePageCount()` = `VIDEO_RENDER_CAPTURE_PAGES`
-     if set (1 forces sequential), else **1 — parallel is opt-in while a multi-page stall
-     (one stride completes, then the CDP socket dies) is investigated**. Hard cap
-     `MAX_CAPTURE_PAGES` (8). Page i renders the frames where `frameIndex % N === i`;
-     files are written under their GLOBAL index (`frame-%05d.png`), so the ffmpeg image2
-     pattern sees one contiguous sequence. Each page navigates/preloads independently
-     (per-document caches in the frame-renderer script make page state isolated by
-     construction); screenshots serialize within a page while the evaluate+screenshot
-     pipelines overlap across pages. `onProgress` reports a GLOBAL completed count
-     (monotonic). MEMORY: every page loads all clip media, so peak RSS roughly
+     if set (1 forces sequential), else **the conservative default
+     `min(2, max(1, floor(cpus/2)))`** (parallel re-enabled after the stall hardening
+     below). Hard cap `MAX_CAPTURE_PAGES` (8). Page i renders the frames where
+     `frameIndex % N === i`; files are written under their GLOBAL index
+     (`frame-%05d.png`), so the ffmpeg image2 pattern sees one contiguous sequence.
+     Page setup (navigation + initial preload) runs SEQUENTIALLY so N pages never
+     spike RSS at once — that setup spike was the suspected OOM behind the old
+     multi-page stall — and parallel pages preload videos LAZILY (`preload({lazyVideos})`;
+     the frame-renderer script's per-frame cache fetches on demand), while images stay
+     eager. Only the strides overlap: screenshots serialize within a page while the
+     evaluate+screenshot pipelines overlap across pages. Fail-fast hardening: wedged
+     video seeks resolve after a 5s timeout instead of hanging a stride
+     (`seekVideo`), each frame's evaluate+screenshot runs under a per-frame watchdog
+     (`VIDEO_RENDER_FRAME_TIMEOUT_MS`, default 30s), and a browser `disconnected` /
+     page `error` (crash) listener rejects all in-flight strides immediately instead
+     of burning the whole render budget. `onProgress` reports a GLOBAL completed
+     count (monotonic). MEMORY: every page loads all clip media, so peak RSS roughly
      multiplies by N — the render pod is cgroup-capped (default 4 CPU / 8g).
    - **Real render progress** (`design-render/render-progress.ts` +
      `render-progress-throttle.ts`): the capture loop's `onProgress` is wired through
@@ -260,7 +268,8 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
 | `VIDEO_RENDER_CONCURRENCY` | `3` | Inngest function concurrency cap |
 | `VIDEO_RENDER_PODMAN_ENABLED` | off | truthy → container path |
 | `VIDEO_RENDER_TIMEOUT_MS` | `120000` | Render wall-clock floor (both paths); scaled up with frame count |
-| `VIDEO_RENDER_CAPTURE_PAGES` | `1` (sequential; parallel opt-in while a stall is investigated) | Parallel capture pages (one browser) when frames > 300; `1` = force sequential; hard cap 8. Passed through to the render container. |
+| `VIDEO_RENDER_CAPTURE_PAGES` | `min(2, cpus/2)` when frames > 300 | Parallel capture pages (one browser); `1` = force sequential (rollback); hard cap 8. Passed through to the render container. |
+| `VIDEO_RENDER_FRAME_TIMEOUT_MS` | `30000` | Per-frame capture watchdog (evaluate+screenshot); a wedged frame fails the render fast. Passed through to the render container. |
 | `VIDEO_RENDER_PODMAN_BIN` | `podman` | Binary |
 | `VIDEO_RENDER_IMAGE` | `localhost/postmill-render:latest` | Worker image |
 | `VIDEO_RENDER_POD` | `postmill-render` | Shared pod (aggregate cgroup) |

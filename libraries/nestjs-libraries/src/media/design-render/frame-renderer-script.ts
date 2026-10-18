@@ -115,11 +115,25 @@ ${stripExportsNamespace(transitionsSource())}
     const target = Math.max(0, timeSec);
     if (Math.abs(video.currentTime - target) > 0.033) {
       await new Promise((resolve) => {
-        const onSeeked = () => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
           video.removeEventListener('seeked', onSeeked);
           resolve(undefined);
         };
+        const onSeeked = () => done();
         video.addEventListener('seeked', onSeeked);
+        // Safety fallback (mirrors getVideo's 5s load fallback): a wedged seek
+        // that never fires 'seeked' must not hang this page's stride forever —
+        // after the timeout the frame draws whatever the video's currentTime
+        // happens to be.
+        setTimeout(() => {
+          if (!settled && window.console && console.warn) {
+            console.warn('seekVideo: seeked timeout after 5000ms, target=' + target);
+          }
+          done();
+        }, 5000);
         video.currentTime = target;
       });
     }
@@ -506,15 +520,23 @@ ${stripExportsNamespace(transitionsSource())}
     ctx.restore();
   }
 
-  async function preload() {
+  async function preload(options) {
+    // lazyVideos (set by the capture service under parallel capture) skips the
+    // eager video warmup: N pages each loading EVERY clip's video at once is the
+    // setup-time RSS spike that OOM-killed the render browser. getVideo's
+    // per-frame cache fetches on demand, so a skipped video simply loads on the
+    // first frame that draws it. Images stay eager — they are small and many
+    // frames need the same one.
+    const lazyVideos = !!(options && options.lazyVideos);
     const promises = [];
     for (const track of output.tracks) {
       if (track.type === 'audio' || track.hidden) continue;
       for (const clip of track.clips) {
         if (!clip.src) continue;
         const isVideo = clip.type === 'video' || /\\.(mp4|webm|mov|mkv|avi)(\\?.*)?$/i.test(clip.src);
-        if (isVideo) promises.push(getVideo(clip.src).catch(() => null));
-        else promises.push(loadImage(clip.src).catch(() => null));
+        if (isVideo) {
+          if (!lazyVideos) promises.push(getVideo(clip.src).catch(() => null));
+        } else promises.push(loadImage(clip.src).catch(() => null));
       }
     }
     await Promise.all(promises);

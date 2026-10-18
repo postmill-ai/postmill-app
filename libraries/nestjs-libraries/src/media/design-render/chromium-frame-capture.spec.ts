@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as os from 'os';
 import * as path from 'path';
 import { ChromiumFrameCaptureService, FrameCaptureProgress } from './chromium-frame-capture.service';
 
@@ -16,6 +17,8 @@ interface FakePage {
   evaluate: ReturnType<typeof vi.fn>;
   $: ReturnType<typeof vi.fn>;
   goto: ReturnType<typeof vi.fn>;
+  on: ReturnType<typeof vi.fn>;
+  off: ReturnType<typeof vi.fn>;
 }
 
 const pages: FakePage[] = [];
@@ -35,6 +38,8 @@ function makeFakePage(index: number): FakePage {
     waitForNetworkIdle: vi.fn(async () => {}),
     waitForFunction: vi.fn(async () => {}),
     goto: vi.fn(async () => {}),
+    on: vi.fn(),
+    off: vi.fn(),
     evaluate: vi.fn(async (_fn: unknown, arg?: unknown) => {
       if (typeof arg === 'number') page.renderedTimes.push(arg);
     }),
@@ -58,23 +63,37 @@ const output = (durationMs: number): any => ({
 
 describe('ChromiumFrameCaptureService parallel capture', () => {
   let service: ChromiumFrameCaptureService;
+  /** Browser event handlers registered by the service, keyed by event name. */
+  let browserHandlers: Record<string, Array<(...args: any[]) => void>>;
+  /** Per-test hook to instrument a page right after creation. */
+  let customizePage: (page: FakePage) => void;
 
   beforeEach(() => {
     pages.length = 0;
+    browserHandlers = {};
+    customizePage = () => {};
     launch.mockReset();
     launch.mockImplementation(async () => ({
       newPage: async () => {
         const page = makeFakePage(pages.length);
+        customizePage(page);
         pages.push(page);
         return page;
       },
       close: vi.fn(async () => {}),
+      on: vi.fn((event: string, handler: (...args: any[]) => void) => {
+        (browserHandlers[event] ||= []).push(handler);
+      }),
+      off: vi.fn((event: string, handler: (...args: any[]) => void) => {
+        browserHandlers[event] = (browserHandlers[event] || []).filter((h) => h !== handler);
+      }),
     }));
     service = new ChromiumFrameCaptureService();
   });
 
   afterEach(() => {
     delete process.env.VIDEO_RENDER_CAPTURE_PAGES;
+    delete process.env.VIDEO_RENDER_FRAME_TIMEOUT_MS;
   });
 
   it('captures sequentially on one page for short compositions', async () => {
@@ -158,11 +177,107 @@ describe('ChromiumFrameCaptureService parallel capture', () => {
     expect(progress.every((p) => p.total === 360)).toBe(true);
   });
 
-  it('auto mode caps pages at min(3, parallelism) for long compositions', async () => {
+  it('auto mode picks the conservative default min(2, floor(cpus/2)) for long compositions', async () => {
     delete process.env.VIDEO_RENDER_CAPTURE_PAGES;
     await service.captureFrames(output(12000), 30, '/tmp/frames');
-    expect(pages.length).toBeGreaterThanOrEqual(1);
-    expect(pages.length).toBeLessThanOrEqual(3);
+    const expectedPages = Math.min(2, Math.max(1, Math.floor(os.cpus().length / 2)));
+    expect(pages).toHaveLength(expectedPages);
     expect(pages.flatMap((p) => p.shots)).toHaveLength(360);
+  });
+
+  it('sets pages up SEQUENTIALLY — the next page is not set up while the previous one loads', async () => {
+    process.env.VIDEO_RENDER_CAPTURE_PAGES = '2';
+    // Gate page 0's setup at the frame-API wait; page 1's setup must not start.
+    let releaseSetup!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseSetup = resolve;
+    });
+    customizePage = (page) => {
+      if (page.index === 0) {
+        page.waitForFunction.mockImplementationOnce(async () => {
+          await gate;
+        });
+      }
+    };
+
+    const capturing = service.captureFrames(output(12000), 30, '/tmp/frames');
+    await vi.waitFor(() => expect(pages).toHaveLength(2));
+    await vi.waitFor(() => expect(pages[0].setViewport).toHaveBeenCalled());
+    // Give a wrongly-parallel implementation a chance to start page 1's setup.
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(pages[1].setViewport).not.toHaveBeenCalled();
+
+    releaseSetup();
+    await capturing;
+    expect(pages[1].setViewport).toHaveBeenCalled();
+    expect(pages.flatMap((p) => p.shots)).toHaveLength(360);
+  });
+
+  it('rejects a wedged frame with the per-frame watchdog, not the outer render budget', async () => {
+    process.env.VIDEO_RENDER_CAPTURE_PAGES = '2';
+    process.env.VIDEO_RENDER_FRAME_TIMEOUT_MS = '50';
+    // Page 1's renderFrame evaluate never resolves — a wedged CDP call.
+    customizePage = (page) => {
+      if (page.index === 1) {
+        const original = page.evaluate.getMockImplementation();
+        page.evaluate.mockImplementation(async (fn: unknown, arg?: unknown) => {
+          if (typeof arg === 'number') return new Promise(() => {});
+          return original?.(fn, arg);
+        });
+      }
+    };
+
+    // Page 1's stride starts at global index 1 → frame 2.
+    await expect(
+      service.captureFrames(output(12000), 30, '/tmp/frames'),
+    ).rejects.toThrow(/Frame 2 capture timed out after 50ms/);
+  });
+
+  it('rejects in-flight strides when the browser disconnects mid-capture, then cleans up listeners', async () => {
+    process.env.VIDEO_RENDER_CAPTURE_PAGES = '2';
+    customizePage = (page) => {
+      const original = page.evaluate.getMockImplementation();
+      page.evaluate.mockImplementation(async (fn: unknown, arg?: unknown) => {
+        if (typeof arg === 'number') return new Promise(() => {});
+        return original?.(fn, arg);
+      });
+    };
+
+    const capturing = service.captureFrames(output(12000), 30, '/tmp/frames');
+    const assertion = expect(capturing).rejects.toThrow(/disconnected mid-capture/);
+
+    // Both strides must be parked on their first frame before the socket dies.
+    await vi.waitFor(() => expect(pages).toHaveLength(2));
+    await vi.waitFor(() => expect(browserHandlers['disconnected'] ?? []).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    browserHandlers['disconnected'][0]();
+
+    await assertion;
+    // The disconnect listener is removed once capture settles.
+    expect(browserHandlers['disconnected'] ?? []).toHaveLength(0);
+  });
+
+  it('rejects in-flight strides when a page crashes mid-capture', async () => {
+    process.env.VIDEO_RENDER_CAPTURE_PAGES = '2';
+    let crashPage!: (err: Error) => void;
+    customizePage = (page) => {
+      const original = page.evaluate.getMockImplementation();
+      page.evaluate.mockImplementation(async (fn: unknown, arg?: unknown) => {
+        if (typeof arg === 'number') return new Promise(() => {});
+        return original?.(fn, arg);
+      });
+      page.on.mockImplementation((event: string, handler: (err: Error) => void) => {
+        if (event === 'error') crashPage = handler;
+      });
+    };
+
+    const capturing = service.captureFrames(output(12000), 30, '/tmp/frames');
+    const assertion = expect(capturing).rejects.toThrow(/page crashed mid-capture/);
+
+    await vi.waitFor(() => expect(pages).toHaveLength(2));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    crashPage(new Error('boom'));
+
+    await assertion;
   });
 });

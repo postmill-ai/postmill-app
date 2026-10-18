@@ -2,6 +2,7 @@
 // process.env per call (not cached) so they can be tuned without a rebuild, following the
 // existing direct-process.env convention in this codebase.
 
+import * as os from 'os';
 
 function intEnv(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -43,11 +44,15 @@ export const MAX_CAPTURE_PAGES = 8;
  * Page i takes frames where frameIndex % N === i; file naming stays global, so the
  * ffmpeg image2 pattern is unaffected.
  *
- * `VIDEO_RENDER_CAPTURE_PAGES` pins the count (1 = force sequential). DEFAULT IS 1
- * (sequential): the parallel path currently stalls — with N>1 exactly one page's
- * stride completes before the browser's CDP socket dies mid-capture (media preload
- * contention across pages is the suspect). Keep sequential until that is fixed;
- * parallel remains available for debugging via the env var.
+ * `VIDEO_RENDER_CAPTURE_PAGES` pins the count (1 = force sequential) and always
+ * wins when set. When unset the default is `min(2, max(1, floor(cpus/2)))` —
+ * parallel capture is re-enabled with a conservative cap after the stall
+ * hardening: page setup (goto + initial preload) runs SEQUENTIALLY so N pages
+ * no longer spike RSS at once, video preload is lazy under parallel capture
+ * (fetched on demand per frame), wedged video seeks time out instead of
+ * hanging a stride, each frame's evaluate+screenshot runs under a per-frame
+ * watchdog (see getFrameTimeoutMs), and a browser disconnect / target crash
+ * fails the capture fast instead of burning the whole render budget.
  *
  * MEMORY: N pages each load every clip of the composition, so peak RSS roughly
  * multiplies by N — and the render pod is cgroup-capped (default 4 CPU / 8g, see
@@ -63,7 +68,16 @@ export function getCapturePageCount(totalFrames: number): number {
       return Math.min(parsed, MAX_CAPTURE_PAGES);
     }
   }
-  return 1;
+  return Math.min(2, Math.max(1, Math.floor(os.cpus().length / 2)));
+}
+
+/**
+ * Per-frame watchdog for capture: one frame's evaluate+screenshot may never take
+ * longer than this. A wedged CDP call otherwise hangs its page's stride until the
+ * outer render budget (getRenderTimeoutMs) aborts the whole job.
+ */
+export function getFrameTimeoutMs(): number {
+  return intEnv('VIDEO_RENDER_FRAME_TIMEOUT_MS', 30000);
 }
 
 export interface PodmanRenderConfig {

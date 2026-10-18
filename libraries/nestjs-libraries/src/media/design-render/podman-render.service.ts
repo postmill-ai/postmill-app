@@ -127,7 +127,7 @@ export class PodmanRenderService {
 
   private passthroughEnv(): string[] {
     const out: string[] = [];
-    for (const key of ['NEXT_PUBLIC_BACKEND_URL', 'FRONTEND_URL', 'SSRF_ALLOWED_PRIVATE_CIDRS', 'VIDEO_RENDER_CAPTURE_PAGES']) {
+    for (const key of ['NEXT_PUBLIC_BACKEND_URL', 'FRONTEND_URL', 'SSRF_ALLOWED_PRIVATE_CIDRS', 'VIDEO_RENDER_CAPTURE_PAGES', 'VIDEO_RENDER_FRAME_TIMEOUT_MS']) {
       const val = process.env[key];
       if (val) out.push('-e', `${key}=${val}`);
     }

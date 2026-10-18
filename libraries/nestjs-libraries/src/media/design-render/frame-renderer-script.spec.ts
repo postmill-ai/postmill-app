@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { escapeForScriptTag, FRAME_RENDERER_SCRIPT } from './frame-renderer-script';
 import { interpolateClipKeyframes } from '../designer-doc/keyframes';
 import { sourceTimeForPlayhead } from '../designer-doc/speed-curve';
@@ -393,5 +393,153 @@ describe('FRAME_RENDERER_SCRIPT — transitions and hidden tracks', () => {
     const api = win.__FRAME_API as { renderFrame: (ms: number) => Promise<void> };
     // Inside the wipe window (800-1000) and the blur window (600-900).
     await expect(api.renderFrame(850)).resolves.toBeUndefined();
+  });
+});
+
+describe('FRAME_RENDERER_SCRIPT — video capture hardening', () => {
+  const stubContext = () =>
+    new Proxy(
+      {},
+      {
+        get: (_t, prop) => {
+          if (prop === 'canvas') return { width: 10, height: 10 };
+          return () => undefined;
+        },
+        set: () => true,
+      }
+    );
+
+  // A video element whose load succeeds (src assignment fires onloadeddata on a
+  // microtask, like a fast cache hit). Seeking only fires 'seeked' when
+  // `seekedOnSet` is on — off is the wedge that used to hang a capture stride
+  // forever.
+  class FakeVideo {
+    style: Record<string, string> = {};
+    muted = false;
+    playsInline = false;
+    crossOrigin = '';
+    seekedOnSet = false;
+    onloadeddata: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    listeners: Record<string, Array<() => void>> = {};
+    private _src = '';
+    private _currentTime = 0;
+    get src() {
+      return this._src;
+    }
+    set src(url: string) {
+      this._src = url;
+      queueMicrotask(() => this.onloadeddata?.());
+    }
+    get currentTime() {
+      return this._currentTime;
+    }
+    set currentTime(t: number) {
+      this._currentTime = t;
+      if (this.seekedOnSet) {
+        queueMicrotask(() => (this.listeners['seeked'] || []).forEach((fn) => fn()));
+      }
+    }
+    addEventListener(name: string, fn: () => void) {
+      (this.listeners[name] ||= []).push(fn);
+    }
+    removeEventListener(name: string, fn: () => void) {
+      this.listeners[name] = (this.listeners[name] || []).filter((f) => f !== fn);
+    }
+  }
+
+  const runWithVideo = (seekedOnSet = false) => {
+    const videos: FakeVideo[] = [];
+    const canvas = { width: 0, height: 0, getContext: () => stubContext() };
+    const win: Record<string, unknown> = {
+      __DATA: {
+        output: {
+          id: 'o',
+          width: 100,
+          height: 100,
+          fps: 30,
+          durationMs: 1000,
+          background: '#000000',
+          tracks: [
+            {
+              id: 'tv',
+              type: 'video',
+              clips: [
+                {
+                  id: 'v',
+                  type: 'video',
+                  src: 'https://example.test/clip.mp4',
+                  startMs: 0,
+                  endMs: 1000,
+                  x: 0, y: 0, width: 50, height: 50,
+                },
+              ],
+            },
+          ],
+        },
+        baseUrl: 'https://example.test',
+      },
+    };
+    const doc = {
+      getElementById: () => canvas,
+      body: { appendChild: () => {} },
+      createElement: (tag: string) => {
+        if (tag === 'video') {
+          const video = new FakeVideo();
+          video.seekedOnSet = seekedOnSet;
+          videos.push(video);
+          return video;
+        }
+        return { width: 0, height: 0, getContext: () => stubContext() };
+      },
+    };
+    const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
+    fn(win, doc, class {});
+    return {
+      api: win.__FRAME_API as {
+        preload: (options?: { lazyVideos?: boolean }) => Promise<void>;
+        renderFrame: (ms: number) => Promise<void>;
+      },
+      videos,
+    };
+  };
+
+  it('seekVideo resolves after a 5s timeout when seeked never fires', async () => {
+    vi.useFakeTimers();
+    try {
+      const { api, videos } = runWithVideo();
+      let settled = false;
+      const p = api.renderFrame(500).then(() => {
+        settled = true;
+      });
+
+      // Let the microtask-driven load land so the frame parks inside seekVideo.
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      expect(videos).toHaveLength(1);
+      expect(videos[0].currentTime).toBe(0.5); // the seek was attempted
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(settled).toBe(false); // still parked just before the timeout
+      await vi.advanceTimersByTimeAsync(1);
+      await p; // resolves via the timeout, without a 'seeked' event
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('preload skips eager video warmup under lazyVideos, stays eager by default', async () => {
+    const eager = runWithVideo();
+    await eager.api.preload();
+    expect(eager.videos).toHaveLength(1);
+
+    const lazy = runWithVideo(true);
+    await lazy.api.preload({ lazyVideos: true });
+    expect(lazy.videos).toHaveLength(0);
+
+    // A lazily-skipped video still loads on demand when a frame draws it.
+    await lazy.api.renderFrame(500);
+    expect(lazy.videos).toHaveLength(1);
   });
 });

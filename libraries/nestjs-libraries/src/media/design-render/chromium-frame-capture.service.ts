@@ -4,7 +4,7 @@ import * as path from 'path';
 import { FRAME_RENDERER_SCRIPT, escapeForScriptTag } from './frame-renderer-script';
 import { buildFramePage, fontLinksForOutput } from './frame-page';
 import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
-import { getCapturePageCount } from './render-config';
+import { getCapturePageCount, getFrameTimeoutMs } from './render-config';
 import type { VideoOutput } from './design-render.types';
 
 export interface FrameCaptureProgress {
@@ -90,9 +90,13 @@ export class ChromiumFrameCaptureService {
    * Long renders capture on N pages inside ONE browser (see getCapturePageCount):
    * page i renders the frames where frameIndex % N === i. Per-page state is
    * isolated by construction (the frame-renderer script keeps its media caches
-   * per document), so each page navigates/preloads independently. Screenshots
-   * stay serialized within a page; the evaluate+screenshot pipelines overlap
-   * across pages.
+   * per document). Page setup (navigation + initial preload) runs SEQUENTIALLY
+   * so N pages never spike memory at once — that setup-time RSS spike was the
+   * suspected OOM behind the multi-page stall; only the strides overlap.
+   * Screenshots stay serialized within a page; the evaluate+screenshot pipelines
+   * overlap across pages. Every frame runs under a per-frame watchdog
+   * (getFrameTimeoutMs) and a browser-disconnect / page-crash listener rejects
+   * in-flight strides fast.
    *
    * `scale` multiplies the output resolution: the viewport and the page's frame
    * canvas run at canvas×scale (the renderer script reads `renderScale` off the
@@ -132,29 +136,72 @@ export class ChromiumFrameCaptureService {
 
     try {
       const pageCount = getCapturePageCount(totalFrames);
+
+      // Fail-fast channel: a dead browser (OOM kill in the cgroup-capped render
+      // pod, renderer crash) must reject the in-flight strides immediately
+      // instead of hanging until the outer render budget aborts the whole job.
+      // The noop catch pre-handles the rejection for the moments no stride is
+      // racing it (e.g. the browser.close() in finally); each Promise.race
+      // below still sees it.
+      let rejectCrashed: (err: Error) => void = () => {};
+      const crashed = new Promise<never>((_, reject) => {
+        rejectCrashed = reject;
+      });
+      crashed.catch(() => {});
+      const onDisconnected = () =>
+        rejectCrashed(
+          new Error(
+            'Chromium disconnected mid-capture — the browser process died (likely OOM in the render container)',
+          ),
+        );
+      // A crashed page surfaces as the page 'error' event (puppeteer 25 has no
+      // browser-level targetcrashed event) — one per capture page.
+      const pageCrashHandlers = new Map<Page, (err: Error) => void>();
+      browser.on('disconnected', onDisconnected);
+
       const pages: Page[] = [];
-      for (let i = 0; i < pageCount; i++) {
-        pages.push(await browser.newPage());
-      }
-      await Promise.all(
-        pages.map((page) => this.setupFramePage(page, output, width, height, fps, routeOptions, scale)),
-      );
-
-      // Global completed-count keeps onProgress monotonic across pages: consumers
-      // (render progress channel) want "how many frames are done", not per-page cursors.
-      let completed = 0;
-      const reportProgress = () => {
-        completed++;
-        if (onProgress) {
-          onProgress({ frame: completed, total: totalFrames });
+      try {
+        for (let i = 0; i < pageCount; i++) {
+          const page = await browser.newPage();
+          const onPageError = (err: Error) =>
+            rejectCrashed(
+              new Error(`Chromium page crashed mid-capture: ${err.message}`),
+            );
+          page.on('error', onPageError);
+          pageCrashHandlers.set(page, onPageError);
+          pages.push(page);
         }
-      };
+        // Setup runs SEQUENTIALLY: N pages doing goto(networkidle0) + media
+        // preload at the same moment multiplies peak RSS by N inside the
+        // cgroup-capped pod and was the suspected OOM behind the parallel
+        // stall. One page at a time keeps the spike to a single page's worth;
+        // only the strides below overlap. Parallel pages also skip the eager
+        // video warmup (lazyVideos) — videos load on demand per frame.
+        for (const page of pages) {
+          await this.setupFramePage(page, output, width, height, fps, routeOptions, scale, pageCount > 1);
+        }
 
-      await Promise.all(
-        pages.map((page, pageIndex) =>
-          this.captureFrameStride(page, pageIndex, pageCount, totalFrames, fps, durationMs, frameDir, reportProgress),
-        ),
-      );
+        // Global completed-count keeps onProgress monotonic across pages: consumers
+        // (render progress channel) want "how many frames are done", not per-page cursors.
+        let completed = 0;
+        const reportProgress = () => {
+          completed++;
+          if (onProgress) {
+            onProgress({ frame: completed, total: totalFrames });
+          }
+        };
+
+        await Promise.all(
+          pages.map((page, pageIndex) =>
+            this.captureFrameStride(page, pageIndex, pageCount, totalFrames, fps, durationMs, frameDir, reportProgress, crashed),
+          ),
+        );
+      } finally {
+        browser.off('disconnected', onDisconnected);
+        for (const [page, handler] of pageCrashHandlers) {
+          page.off('error', handler);
+        }
+      }
 
       this._logger.log(
         `Captured ${totalFrames} frames (${width}x${height} @ ${fps}fps, ${pageCount} page${pageCount === 1 ? '' : 's'})`,
@@ -174,6 +221,7 @@ export class ChromiumFrameCaptureService {
     fps: number,
     routeOptions: RenderRouteOptions | undefined,
     scale: number,
+    lazyVideos: boolean,
   ): Promise<void> {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
 
@@ -218,7 +266,11 @@ export class ChromiumFrameCaptureService {
     );
 
     // Preload images/videos so frame rendering is not stalled by network.
-    await page.evaluate(() => (window as any).__FRAME_API.preload());
+    // Under parallel capture videos load lazily instead (see preload()).
+    await page.evaluate(
+      (lazy: boolean) => (window as any).__FRAME_API.preload({ lazyVideos: lazy }),
+      lazyVideos,
+    );
   }
 
   /**
@@ -226,6 +278,11 @@ export class ChromiumFrameCaptureService {
    * `pageIndex, pageIndex + pageCount, …`. Frames are written under their GLOBAL
    * index (`frame-%05d.png`), so per-page files interleave into one contiguous
    * sequence for the encoder.
+   *
+   * Each frame's evaluate+screenshot runs under a per-frame watchdog
+   * (getFrameTimeoutMs) and races the shared `crashed` rejection, so a wedged
+   * CDP call or a dead browser fails the stride fast instead of hanging until
+   * the outer render budget burns out.
    */
   private async captureFrameStride(
     page: Page,
@@ -236,25 +293,64 @@ export class ChromiumFrameCaptureService {
     durationMs: number,
     frameDir: string,
     reportProgress: () => void,
+    crashed: Promise<never>,
   ): Promise<void> {
     const canvas = await page.$('#frame-canvas');
     if (!canvas) {
       throw new Error('Frame canvas disappeared during capture');
     }
+    const frameTimeoutMs = getFrameTimeoutMs();
     for (let i = pageIndex; i < totalFrames; i += pageCount) {
       const timeMs = Math.min((i * 1000) / fps, durationMs);
-      await page.evaluate(
-        (t: number) => (window as any).__FRAME_API.renderFrame(t),
-        timeMs,
-      );
-
-      const framePath = path.join(
-        frameDir,
-        `frame-${String(i + 1).padStart(5, '0')}.png`,
-      );
-      await canvas.screenshot({ path: framePath, type: 'png' });
+      await Promise.race([
+        this.captureOneFrame(page, canvas, i, timeMs, frameDir, frameTimeoutMs),
+        crashed,
+      ]);
 
       reportProgress();
+    }
+  }
+
+  /** Render one frame in the page and screenshot the canvas, bounded by `timeoutMs`. */
+  private async captureOneFrame(
+    page: Page,
+    canvas: { screenshot: (opts: { path: string; type: 'png' }) => Promise<unknown> },
+    frameIndex: number,
+    timeMs: number,
+    frameDir: string,
+    timeoutMs: number,
+  ): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `Frame ${frameIndex + 1} capture timed out after ${timeoutMs}ms ` +
+                '(VIDEO_RENDER_FRAME_TIMEOUT_MS) — the page is wedged, aborting the render',
+            ),
+          ),
+        timeoutMs,
+      );
+    });
+    try {
+      await Promise.race([
+        (async () => {
+          await page.evaluate(
+            (t: number) => (window as any).__FRAME_API.renderFrame(t),
+            timeMs,
+          );
+
+          const framePath = path.join(
+            frameDir,
+            `frame-${String(frameIndex + 1).padStart(5, '0')}.png`,
+          );
+          await canvas.screenshot({ path: framePath, type: 'png' });
+        })(),
+        timeout,
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 }
