@@ -166,13 +166,27 @@ export class DesignRepository {
     });
   }
 
-  // Preview-regen maintenance scan. Org-owned templates only: a system
-  // template is shared across orgs, so an org-scoped maintenance run must not
-  // rewrite its thumbnail.
+  // Preview-regen maintenance scan. Org-owned templates plus system templates:
+  // system rows are shared, but the regen only ever ADDS a missing thumbnail
+  // (or re-renders a video-mode one) — it never touches name/category/doc, so
+  // letting any org's maintenance run repair them is safe and fixes the dark
+  // empty tiles every org sees in the Templates tab.
   findTemplatesForPreviewRegen(orgId: string) {
     return this._designTemplate.model.designTemplate.findMany({
-      where: { deletedAt: null, organizationId: orgId },
-      select: { id: true, doc: true, thumbnailFileId: true },
+      where: {
+        deletedAt: null,
+        OR: [{ organizationId: orgId }, { isSystem: true }],
+      },
+      select: { id: true, organizationId: true, doc: true, thumbnailFileId: true },
+    });
+  }
+
+  // Minimal write for shared (system) templates during preview regen: sets
+  // only the thumbnail, bypassing the org-scoped updateTemplate guard.
+  setTemplateThumbnail(id: string, thumbnailFileId: string) {
+    return this._designTemplate.model.designTemplate.update({
+      where: { id },
+      data: { thumbnailFileId },
     });
   }
 

@@ -27,6 +27,7 @@ describe('DesignService', () => {
     update: ReturnType<typeof vi.fn>;
     createTemplate: ReturnType<typeof vi.fn>;
     updateTemplate: ReturnType<typeof vi.fn>;
+    setTemplateThumbnail: ReturnType<typeof vi.fn>;
     findById: ReturnType<typeof vi.fn>;
     findTemplateForOrg: ReturnType<typeof vi.fn>;
     findByOrg: ReturnType<typeof vi.fn>;
@@ -64,6 +65,7 @@ describe('DesignService', () => {
       update: vi.fn(),
       createTemplate: vi.fn(),
       updateTemplate: vi.fn(),
+      setTemplateThumbnail: vi.fn(),
       findById: vi.fn(),
       findTemplateForOrg: vi.fn(),
       findByOrg: vi.fn(),
@@ -928,8 +930,11 @@ describe('DesignService', () => {
         { id: 'd4', doc: blankDoc, previewFileId: null, previewDataUrl: null },
       ]);
       repository.findTemplatesForPreviewRegen.mockResolvedValue([
-        { id: 't1', doc: imageDoc, thumbnailFileId: null },
-        { id: 't2', doc: imageDoc, thumbnailFileId: 'keep-thumb' },
+        { id: 't1', organizationId: 'org-1', doc: imageDoc, thumbnailFileId: null },
+        { id: 't2', organizationId: 'org-1', doc: imageDoc, thumbnailFileId: 'keep-thumb' },
+        // System template (shared, organizationId null) with no thumbnail →
+        // regen via the minimal unscoped thumbnail write.
+        { id: 't3', organizationId: null, doc: imageDoc, thumbnailFileId: null },
       ]);
     });
 
@@ -953,9 +958,11 @@ describe('DesignService', () => {
         'org-1',
         expect.objectContaining({ thumbnailFileId: 'new-file' })
       );
+      expect(repository.setTemplateThumbnail).toHaveBeenCalledTimes(1);
+      expect(repository.setTemplateThumbnail).toHaveBeenCalledWith('t3', 'new-file');
       expect(result).toEqual({
         designs: { scanned: 4, regenerated: 2, skipped: 2, failed: 0 },
-        templates: { scanned: 2, regenerated: 1, skipped: 1, failed: 0 },
+        templates: { scanned: 3, regenerated: 2, skipped: 1, failed: 0 },
       });
       // The replaced stored preview file is trashed.
       expect(fileService.softDelete).toHaveBeenCalledWith('old-file', 'org-1');
@@ -969,7 +976,7 @@ describe('DesignService', () => {
       const result = await service.regenPreviews('org-1');
 
       expect(result.designs.failed + result.templates.failed).toBe(1);
-      expect(result.designs.regenerated + result.templates.regenerated).toBe(2);
+      expect(result.designs.regenerated + result.templates.regenerated).toBe(3);
     });
   });
 });

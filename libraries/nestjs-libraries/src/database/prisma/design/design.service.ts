@@ -498,7 +498,10 @@ export class DesignService {
     const templateStats = await run(
       templates,
       (row) => !row.thumbnailFileId || (row.doc as any)?.mode === 'video',
-      (row, fileId) => this._designRepository.updateTemplate(row.id, orgId, { thumbnailFileId: fileId }),
+      (row, fileId) =>
+        row.organizationId === orgId
+          ? this._designRepository.updateTemplate(row.id, orgId, { thumbnailFileId: fileId })
+          : this._designRepository.setTemplateThumbnail(row.id, fileId),
       (row) => row.thumbnailFileId
     );
     return { designs: designStats, templates: templateStats };
