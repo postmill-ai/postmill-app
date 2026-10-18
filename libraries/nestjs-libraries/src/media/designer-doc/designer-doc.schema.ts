@@ -837,6 +837,13 @@ export interface VideoOutput {
   durationMs: number;
   tracks: VideoTrack[];
   markers?: VideoMarker[];
+  /**
+   * Canvas background (optional-additive on v7). The frame renderer paints it
+   * under the tracks (color/gradient/image/texture); absent = the renderer's
+   * black base. Stamped by the AI image→video conversion so a color/gradient
+   * page background survives the mode flip.
+   */
+  bg?: DesignerBackground;
 }
 
 export interface DesignerPageContent {
@@ -1811,6 +1818,7 @@ const { strict: StrictVideoOutputSchema, lenient: LenientVideoOutputSchema } =
       durationMs: strictNum(0, MAX_VIDEO_DURATION_MS),
       tracks: z.array(StrictVideoTrackSchema).max(MAX_TRACKS),
       markers: z.array(StrictVideoMarkerSchema).max(200).optional(),
+      bg: StrictDesignerBackgroundSchema.optional(),
     },
     {
       ...videoOutputCommon,
@@ -1820,6 +1828,7 @@ const { strict: StrictVideoOutputSchema, lenient: LenientVideoOutputSchema } =
       durationMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 10000),
       tracks: z.array(LenientVideoTrackSchema).max(MAX_TRACKS),
       markers: z.array(LenientVideoMarkerSchema).max(200).optional(),
+      bg: LenientDesignerBackgroundSchema.optional(),
     }
   );
 

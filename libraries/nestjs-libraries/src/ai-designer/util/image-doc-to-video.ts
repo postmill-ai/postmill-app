@@ -5,20 +5,20 @@
  * loop renders and judges PNG pages); only at delivery is each composed
  * `DesignerOutput` converted here into a `VideoOutput` so the saved Design is
  * video-mode — "Edit in Designer" opens the timeline and export rides the
- * existing render-video path. No schema change: the result is a plain v7
- * video doc built from existing clip fields.
+ * existing render-video path.
  *
  * Mapping rules (all deterministic — no LLM involvement):
- * - Canvas dims, fps and duration come from the output's `CHANNEL_PRESETS`
- *   entry (video presets carry `fps`/`maxDurationMs`), clamped to the same
- *   bounds `validateVideoComposition` enforces (dims 1..MAX_DIMENSION, fps
- *   1..240, ≤MAX_TRACKS tracks, ≤MAX_CLIPS_PER_TRACK clips per track) and to
- *   the shared `MAX_VIDEO_DURATION_MS` ceiling.
+ * - Canvas dims and fps come from the output's `CHANNEL_PRESETS` entry
+ *   (video presets carry `fps`/`maxDurationMs`), clamped to the same bounds
+ *   `validateVideoComposition` enforces (dims 1..MAX_DIMENSION, fps 1..240,
+ *   ≤MAX_TRACKS tracks, ≤MAX_CLIPS_PER_TRACK clips per track) and to the
+ *   shared `MAX_VIDEO_DURATION_MS` ceiling. Duration defaults to
+ *   DEFAULT_DURATION_MS with the preset's `maxDurationMs` acting only as a
+ *   ceiling — it is a hard cap, so a 60 s cap must not become a 60 s default.
  * - An image background and every image element become full-duration `image`
  *   clips with a slow-zoom (Ken Burns) keyframe pair.
- * - A color/gradient background becomes a full-canvas `rect` shape clip
- *   (VideoOutput has no background field); a gradient degrades to its first
- *   stop's color.
+ * - A color/gradient background is carried onto the VideoOutput's `bg`,
+ *   which the frame renderer and the editor canvas already paint.
  * - Text elements become `text` clips with a fade transition in.
  * - Shape elements become `shape` clips carrying the same geometry fields.
  * - Types with no clip counterpart (icon/path/raster/group/fill/adjustment/
@@ -45,8 +45,12 @@ import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/soci
 /** Mirrors MAX_FPS in media/design-render/video-render.service.ts. */
 const MAX_FPS = 240;
 const DEFAULT_FPS = 30;
-/** Duration for outputs whose formatId has no preset (expanded/custom formats). */
-const DEFAULT_DURATION_MS = 5000;
+/**
+ * Default session duration. Matches the lenient schema default
+ * (designer-doc.schema.ts) and the render fallback (video-render.service.ts);
+ * a preset's `maxDurationMs` only ever LOWERS this (it is a hard cap).
+ */
+const DEFAULT_DURATION_MS = 10_000;
 /** Text clips fade in over this window. */
 const TEXT_TRANSITION_IN_MS = 400;
 /** Ken Burns end scale for full-duration image clips. */
@@ -128,7 +132,7 @@ export function imageOutputToVideo(
   );
   const fps = clamp(Math.round(preset?.fps ?? DEFAULT_FPS), 1, MAX_FPS);
   const durationMs = clamp(
-    Math.round(preset?.maxDurationMs ?? DEFAULT_DURATION_MS),
+    Math.min(preset?.maxDurationMs ?? DEFAULT_DURATION_MS, DEFAULT_DURATION_MS),
     100,
     MAX_VIDEO_DURATION_MS
   );
@@ -138,8 +142,11 @@ export function imageOutputToVideo(
   const children = (output.children ?? []).filter(isVisible);
 
   // Background: an image background becomes the bottom-most full-canvas image
-  // clip; a color/gradient background becomes a full-canvas rect shape clip.
+  // clip (the Ken Burns zoom supplies the motion); a color/gradient background
+  // rides on the output's `bg`, painted by every renderer, so a gradient keeps
+  // its stops instead of degrading to the first stop's flat-color rect.
   const bg = output.bg;
+  let videoBg: VideoOutput['bg'];
   if (bg?.type === 'image' && (bg.src || bg.fileId)) {
     const clip: VideoClip = {
       ...baseClip({ x: 0, y: 0, width, height, rotation: 0, opacity: 1 }, durationMs),
@@ -151,21 +158,11 @@ export function imageOutputToVideo(
       ...(bg.naturalHeight ? { naturalHeight: bg.naturalHeight } : {}),
     };
     tracks.push({ id: genId(), type: 'image', clips: [withKenBurns(clip, kenBurns)] });
+  } else if (bg?.type === 'gradient' && bg.gradient) {
+    videoBg = { type: 'gradient', gradient: bg.gradient };
   } else {
-    const color =
-      bg?.type === 'gradient'
-        ? bg.gradient?.stops?.[0]?.color
-        : bg?.type === 'color'
-          ? bg.color
-          : output.background;
-    if (color) {
-      const clip: VideoClip = {
-        ...baseClip({ x: 0, y: 0, width, height, rotation: 0, opacity: 1 }, durationMs),
-        shape: 'rect',
-        fill: color,
-      };
-      tracks.push({ id: genId(), type: 'shape', clips: [clip] });
-    }
+    const color = bg?.type === 'color' ? bg.color : output.background;
+    if (color) videoBg = { type: 'color', color };
   }
 
   const imageClips: VideoClip[] = [];
@@ -244,6 +241,7 @@ export function imageOutputToVideo(
     fps,
     durationMs,
     tracks,
+    ...(videoBg ? { bg: videoBg } : {}),
   };
 }
 

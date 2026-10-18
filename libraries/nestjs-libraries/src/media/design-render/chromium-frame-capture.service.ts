@@ -30,7 +30,7 @@ function renderBaseUrl(): string {
  *  downloads audio host-side through safeFetch). */
 export function collectCompositionMediaUrls(output: VideoOutput): string[] {
   const urls: string[] = [];
-  const bg = (output as any)?.bg;
+  const bg = output.bg;
   if (bg?.type === 'image' && bg.src) urls.push(bg.src);
   for (const track of (output as any)?.tracks || []) {
     if (track?.type === 'audio') continue;

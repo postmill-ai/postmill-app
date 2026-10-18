@@ -6,6 +6,7 @@ import {
 import type {
   DesignerDoc,
   DesignerOutput,
+  VideoOutput,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { StrictVideoOutputSchema } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import {
@@ -13,6 +14,7 @@ import {
   MAX_VIDEO_DURATION_MS,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import type { ChannelPreset } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 
 const makeOutput = (
   overrides: Partial<DesignerOutput> = {}
@@ -28,14 +30,35 @@ const makeOutput = (
 });
 
 describe('imageOutputToVideo', () => {
-  it('takes canvas dims, fps and duration from the channel preset', () => {
+  it('takes canvas dims and fps from the channel preset, duration defaults to 10 s under the preset cap', () => {
     const vo = imageOutputToVideo(makeOutput());
     const preset = CHANNEL_PRESETS.find((p) => p.id === 'reel')!;
     expect(vo.width).toBe(preset.width);
     expect(vo.height).toBe(preset.height);
     expect(vo.fps).toBe(preset.fps);
-    expect(vo.durationMs).toBe(preset.maxDurationMs);
+    // maxDurationMs (60000) is a hard cap, not the default session length.
+    expect(vo.durationMs).toBe(10000);
     expect(vo.durationMs).toBeLessThanOrEqual(MAX_VIDEO_DURATION_MS);
+  });
+
+  it('lets a preset duration cap below the 10 s default bind', () => {
+    const tiny: ChannelPreset = {
+      id: 'tiny-cap-video',
+      name: 'Tiny Cap Video',
+      width: 100,
+      height: 100,
+      category: 'video',
+      provider: null,
+      fps: 30,
+      maxDurationMs: 4000,
+    };
+    CHANNEL_PRESETS.push(tiny);
+    try {
+      const vo = imageOutputToVideo(makeOutput({ formatId: 'tiny-cap-video' }));
+      expect(vo.durationMs).toBe(4000);
+    } finally {
+      CHANNEL_PRESETS.splice(CHANNEL_PRESETS.indexOf(tiny), 1);
+    }
   });
 
   it('falls back to the output dims and defaults for unknown formats', () => {
@@ -45,19 +68,30 @@ describe('imageOutputToVideo', () => {
     expect(vo.width).toBe(700);
     expect(vo.height).toBe(500);
     expect(vo.fps).toBe(30);
-    expect(vo.durationMs).toBe(5000);
+    expect(vo.durationMs).toBe(10000);
   });
 
-  it('maps a color background to a full-canvas rect shape clip', () => {
+  it('carries a color background onto the video output bg instead of a rect clip', () => {
     const vo = imageOutputToVideo(makeOutput({ background: '#ff0000' }));
-    expect(vo.tracks[0].type).toBe('shape');
-    const clip = vo.tracks[0].clips[0];
-    expect(clip.shape).toBe('rect');
-    expect(clip.fill).toBe('#ff0000');
-    expect(clip.width).toBe(vo.width);
-    expect(clip.height).toBe(vo.height);
-    expect(clip.startMs).toBe(0);
-    expect(clip.endMs).toBe(vo.durationMs);
+    expect(vo.bg).toEqual({ type: 'color', color: '#ff0000' });
+    // No flat-color rect shape clip is injected for the background.
+    expect(vo.tracks).toHaveLength(0);
+  });
+
+  it('carries a gradient background onto bg with its stops preserved', () => {
+    const gradient = {
+      type: 'linear' as const,
+      angle: 45,
+      stops: [
+        { offset: 0, color: '#ff0000' },
+        { offset: 0.5, color: '#00ff00' },
+        { offset: 1, color: '#0000ff' },
+      ],
+    };
+    const vo = imageOutputToVideo(makeOutput({ bg: { type: 'gradient', gradient } }));
+    expect(vo.bg).toEqual({ type: 'gradient', gradient });
+    expect(vo.bg?.type === 'gradient' && vo.bg.gradient?.stops).toHaveLength(3);
+    expect(vo.tracks).toHaveLength(0);
   });
 
   it('maps an image background to a bottom-most full-canvas image clip', () => {
@@ -133,19 +167,20 @@ describe('imageOutputToVideo', () => {
     );
 
     const types = vo.tracks.map((t) => t.type);
-    // Color background shape track first, then imagery, shapes, text on top.
-    expect(types).toEqual(['shape', 'image', 'shape', 'text']);
+    // The color background rides on bg; imagery, shapes, text follow bottom-up.
+    expect(vo.bg).toEqual({ type: 'color', color: '#112233' });
+    expect(types).toEqual(['image', 'shape', 'text']);
 
-    const imageClip = vo.tracks[1].clips[0];
+    const imageClip = vo.tracks[0].clips[0];
     expect(imageClip.src).toBe('https://cdn.example.com/a.png');
     expect(imageClip.fileId).toBe('file-a');
     expect(imageClip.endMs).toBe(vo.durationMs);
 
-    const shapeClip = vo.tracks[2].clips[0];
+    const shapeClip = vo.tracks[1].clips[0];
     expect(shapeClip.shape).toBe('star');
     expect(shapeClip.sides).toBe(5);
 
-    const textClip = vo.tracks[3].clips[0];
+    const textClip = vo.tracks[2].clips[0];
     expect(textClip.text).toBe('Hello video');
     expect(textClip.fontFamily).toBe('Inter');
     expect(textClip.transitionIn).toEqual({ type: 'fade', durationMs: 400 });
@@ -170,10 +205,9 @@ describe('imageOutputToVideo', () => {
         ] as DesignerOutput['children'],
       })
     );
-    // Only the color-background shape clip survives.
-    expect(vo.tracks).toHaveLength(1);
-    expect(vo.tracks[0].clips).toHaveLength(1);
-    expect(vo.tracks[0].clips[0].shape).toBe('rect');
+    // Nothing survives as a clip; the color background rides on bg.
+    expect(vo.tracks).toHaveLength(0);
+    expect(vo.bg).toEqual({ type: 'color', color: '#112233' });
   });
 
   it('omits Ken Burns keyframes when disabled', () => {
@@ -257,6 +291,12 @@ describe('imageOutputToVideo', () => {
     );
     const parsed = StrictVideoOutputSchema.safeParse(vo);
     expect(parsed.success, JSON.stringify(parsed.success ? {} : parsed.error.issues)).toBe(true);
+    // The strict schema declares bg, so validation keeps it rather than
+    // rejecting the key or stripping it.
+    expect(parsed.success && (parsed.data as VideoOutput).bg).toEqual({
+      type: 'color',
+      color: '#112233',
+    });
   });
 });
 

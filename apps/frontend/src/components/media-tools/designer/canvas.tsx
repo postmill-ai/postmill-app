@@ -1654,7 +1654,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             y={0}
             width={output.width}
             height={output.height}
-            fill={bg?.type === 'gradient' ? undefined : bg?.color || pageOutput?.background || '#ffffff'}
+            fill={bg?.type === 'gradient' ? undefined : bg?.color || pageOutput?.background || (isVideo ? '#000000' : '#ffffff')}
             {...bgGrad}
             shadowColor="rgba(0,0,0,0.3)"
             shadowBlur={20}
@@ -1690,7 +1690,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
                   y={0}
                   width={output.width}
                   height={output.height}
-                  fill={bg?.type === 'gradient' ? undefined : bg?.color || pageOutput?.background || '#ffffff'}
+                  fill={bg?.type === 'gradient' ? undefined : bg?.color || pageOutput?.background || (isVideo ? '#000000' : '#ffffff')}
                   {...bgGrad}
                   listening={false}
                 />

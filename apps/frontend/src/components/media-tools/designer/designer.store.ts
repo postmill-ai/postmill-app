@@ -392,7 +392,9 @@ const createEmptyDoc = (width = 1080, height = 1080, attribution?: DesignerAttri
         width,
         height,
         fps: preset?.fps ?? 30,
-        durationMs: preset?.maxDurationMs ?? 10000,
+        // The preset's maxDurationMs is a hard cap, not a default — new
+        // timelines start at 10 s, lowered only when the cap is tighter.
+        durationMs: Math.min(preset?.maxDurationMs ?? 10000, 10000),
         tracks: [{ id: trackId, type: 'video', clips: [] }],
       }],
       attribution,
@@ -1656,7 +1658,9 @@ export const createDesignerStore = (
             width: source.width,
             height: source.height,
             fps: preset?.fps ?? 30,
-            durationMs: preset?.maxDurationMs ?? 10000,
+            // Hard cap only — the mode flip starts the timeline at 10 s unless
+            // the preset's maxDurationMs is tighter.
+            durationMs: Math.min(preset?.maxDurationMs ?? 10000, 10000),
             tracks: [{ id: trackId, type: 'video', clips: [] }],
           };
           set({ doc: { ...doc, mode: 'video', outputs: [vo] }, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, currentPage: 0, isDirty: true });
