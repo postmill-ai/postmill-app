@@ -7,6 +7,7 @@ import { GradientEditor, gradientCss } from '../controls/gradient-editor';
 import { useMediaPicker } from '../../use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerBackground, DesignerGradient, DesignerOutput, DesignerTexture, VideoOutput } from '../designer.store';
+import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 
 interface CanvasInspectorProps {
   store: any;
@@ -482,7 +483,7 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
           <Slider
             label={t('designer_label_seconds', 'Seconds')}
             min={1}
-            max={60}
+            max={MAX_VIDEO_DURATION_MS / 1000}
             step={1}
             value={Math.round(((out as VideoOutput).durationMs ?? 10000) / 1000)}
             onChange={(n) => store.getState().setVideoDuration(currentOutput, n * 1000)}
