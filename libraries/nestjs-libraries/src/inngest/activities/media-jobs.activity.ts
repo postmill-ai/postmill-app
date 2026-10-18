@@ -68,6 +68,8 @@ export class MediaJobsActivity {
             composition.durationMs || 10000,
             input.fps || composition.fps || 30,
             typeof input.scale === 'number' && input.scale > 0 ? input.scale : 1,
+            composition.width || 0,
+            composition.height || 0,
           );
         }
       } catch {

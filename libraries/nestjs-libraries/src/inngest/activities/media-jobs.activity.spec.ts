@@ -262,8 +262,9 @@ describe('MediaJobsActivity', () => {
 
   it('keeps a stuck processing job alive while it is still within the payload-derived budget', async () => {
     const now = Date.now();
-    // 60s @ 30fps → 270s budget (+ 60s grace): a 200s-old job is still inside it,
-    // even though it is past the bare 120s env floor.
+    // 60s @ 30fps, no dims in the payload (1 MP fallback) → 450s budget (+ 60s
+    // grace): a 200s-old job is still inside it, even though it is past the bare
+    // 120s env floor.
     redisMock.get.mockResolvedValueOnce(
       JSON.stringify({ organizationId: 'org-1', composition: { durationMs: 60_000, fps: 30 } }),
     );

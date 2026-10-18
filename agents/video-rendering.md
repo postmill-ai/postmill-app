@@ -178,11 +178,16 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      `PodmanRenderService.run(workDir, spec, renderTimeoutMs)`.
    - In-process fallback: `FfmpegVideoEncoderService` (+ `ChromiumFrameCaptureService`)
      under `withTimeout(renderTimeoutMs)`.
-   - `renderTimeoutMs` = `max(getRenderTimeoutMs(), frames * 150ms)` where
-     `frames = ceil(durationMs/1000 * fps)` — the capture loop spends ~150 ms/frame
-     (evaluate + PNG screenshot), so the env floor alone cannot fit long compositions.
+   - `renderTimeoutMs` = `max(getRenderTimeoutMs(), ceil(frames * 250ms * megapixels * scale²))`
+     where `frames = ceil(durationMs/1000 * fps)` and `megapixels =
+     (width * height)/1e6` of the unscaled canvas (1 MP fallback when unknown) —
+     the capture loop's per-frame cost scales with frame area (~250 ms/MP/frame,
+     calibrated on the prod host: ~480 ms/frame at 1080×1920 vs ~280 ms/frame at
+     1080×1080, single page), so the env floor alone cannot fit long or
+     high-resolution compositions.
    - **Parallel frame capture** (`ChromiumFrameCaptureService.captureFrames`): when
-     `totalFrames > PARALLEL_CAPTURE_MIN_FRAMES` (300), capture runs on N pages inside
+     `totalFrames > PARALLEL_CAPTURE_MIN_FRAMES` (150 — 5 s @ 30 fps, so a typical
+     10 s social video parallelizes), capture runs on N pages inside
      ONE Chromium instance — N = `getCapturePageCount()` = `VIDEO_RENDER_CAPTURE_PAGES`
      if set (1 forces sequential), else **the conservative default
      `min(2, max(1, floor(cpus/2)))`** (parallel re-enabled after the stall hardening
@@ -238,8 +243,12 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
 
 - `libraries/nestjs-libraries/src/media/design-render/podman-render.service.ts`
   (`PodmanRenderService`): writes `<workdir>/job.json`, runs
-  `podman run --rm` with the workdir mounted and cgroup caps (cpus/memory), in a shared
-  pod for an aggregate cap.
+  `podman run --rm --name postmill-render-<jobId>-<suffix>` with the workdir
+  mounted and cgroup caps (cpus/memory), in a shared pod for an aggregate cap.
+  On wall-clock timeout the podman CLI client is SIGKILLed AND the named
+  container is best-effort `podman kill`ed before the error is thrown —
+  otherwise the detached container keeps running and the caller's workdir
+  cleanup yanks /work from under it (late ENOENT + a spurious second error).
 - **Container entrypoint:** `apps/backend/src/media-render-worker.ts` — a DI-light CLI
   (`node media-render-worker.js /work/job.json`), no Nest bootstrap; instantiates
   `FfmpegVideoEncoderService`/`ChromiumFrameCaptureService` directly for `design` and
@@ -267,8 +276,8 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
 |---|---|---|
 | `VIDEO_RENDER_CONCURRENCY` | `3` | Inngest function concurrency cap |
 | `VIDEO_RENDER_PODMAN_ENABLED` | off | truthy → container path |
-| `VIDEO_RENDER_TIMEOUT_MS` | `120000` | Render wall-clock floor (both paths); scaled up with frame count |
-| `VIDEO_RENDER_CAPTURE_PAGES` | `min(2, cpus/2)` when frames > 300 | Parallel capture pages (one browser); `1` = force sequential (rollback); hard cap 8. Passed through to the render container. |
+| `VIDEO_RENDER_TIMEOUT_MS` | `120000` | Render wall-clock floor (both paths); scaled up with frame count × frame pixel area (250 ms/MP/frame) |
+| `VIDEO_RENDER_CAPTURE_PAGES` | `min(2, cpus/2)` when frames > 150 | Parallel capture pages (one browser); `1` = force sequential (rollback); hard cap 8. Passed through to the render container. |
 | `VIDEO_RENDER_FRAME_TIMEOUT_MS` | `30000` | Per-frame capture watchdog (evaluate+screenshot); a wedged frame fails the render fast. Passed through to the render container. |
 | `VIDEO_RENDER_PODMAN_BIN` | `podman` | Binary |
 | `VIDEO_RENDER_IMAGE` | `localhost/postmill-render:latest` | Worker image |

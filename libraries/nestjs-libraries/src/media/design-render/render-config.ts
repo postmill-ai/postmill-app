@@ -33,8 +33,13 @@ export function getRenderTimeoutMs(): number {
 /**
  * Below this frame count capture stays sequential: standing up extra Chromium
  * pages (navigation + full media preload each) costs more than it saves.
+ * 150 = 5 s @ 30 fps — a 10 s social video (300 frames) is exactly the case
+ * that needs parallelism most, and the old 300 threshold kept it sequential.
+ * The memory risk that motivated the high threshold is addressed by the PR #172
+ * hardening: page setup runs sequentially, parallel pages preload videos lazily,
+ * and wedged frames/seeks fail fast under watchdogs.
  */
-export const PARALLEL_CAPTURE_MIN_FRAMES = 300;
+export const PARALLEL_CAPTURE_MIN_FRAMES = 150;
 
 /** Hard ceiling on capture pages regardless of env — each page loads ALL clip media. */
 export const MAX_CAPTURE_PAGES = 8;

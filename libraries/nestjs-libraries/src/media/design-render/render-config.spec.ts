@@ -50,6 +50,13 @@ describe('render-config (2.3 network isolation)', () => {
   describe('getCapturePageCount (parallel frame capture)', () => {
     const MANY_FRAMES = PARALLEL_CAPTURE_MIN_FRAMES + 100;
 
+    it('threshold is 150 frames (5s @ 30fps), so a typical 10s social video captures in parallel', () => {
+      expect(PARALLEL_CAPTURE_MIN_FRAMES).toBe(150);
+      delete process.env.VIDEO_RENDER_CAPTURE_PAGES;
+      expect(getCapturePageCount(150)).toBe(1);
+      expect(getCapturePageCount(300)).toBe(2);
+    });
+
     it('stays sequential at or below the frame threshold, regardless of env', () => {
       expect(getCapturePageCount(PARALLEL_CAPTURE_MIN_FRAMES)).toBe(1);
       expect(getCapturePageCount(10)).toBe(1);

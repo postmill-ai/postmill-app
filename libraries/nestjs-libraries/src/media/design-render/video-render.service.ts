@@ -54,30 +54,43 @@ export const TEMPLATE_PREVIEW_SCALE = 0.5;
 export const NO_CREDIT = 'none';
 
 /**
- * Per-frame wall-clock budget for scaling the render timeout. The capture loop
- * (chromium-frame-capture.service.ts) does one page.evaluate + one PNG screenshot
- * per frame — ~150 ms/frame at 1080p on a single page. A 180 s @ 30 fps composition
- * is 5400 frames ≈ 810 s sequential, which blows past the 120 s default, so the
- * budget scales with frames (parallel capture spreads it across pages; the budget
- * stays conservative either way). The budget is further multiplied by scale² — a 2×
- * export rasterizes and PNG-encodes 4× the pixels per frame. Exported for unit
- * testing.
+ * Per-frame wall-clock budget per megapixel for scaling the render timeout. The
+ * capture loop (chromium-frame-capture.service.ts) does one page.evaluate + one
+ * PNG screenshot per frame, and its cost scales with frame area, not just frame
+ * count. Measured on the production host (single capture page): ~480 ms/frame at
+ * 1080×1920 (2.07 MP) vs ~280 ms/frame at 1080×1080 (1.17 MP) — i.e. ~230–250 ms
+ * per megapixel per frame, so the budget is calibrated at 250 ms/MP. A flat
+ * per-frame budget under-provisions tall social formats (a 10 s 1080×1920 @ 30 fps
+ * Reel needs ~145 s to capture against the 120 s env floor — observed in
+ * production). Parallel capture spreads the work across pages; the budget stays
+ * conservative either way. Exported for unit testing.
  */
-export const PER_FRAME_CAPTURE_BUDGET_MS = 150;
+export const PER_FRAME_MP_CAPTURE_BUDGET_MS = 250;
+
+/** Fallback frame area when the composition's dimensions are unavailable (~1080×1080 class). */
+const FALLBACK_FRAME_MEGAPIXELS = 1;
 
 /**
- * Wall-clock budget for one render: max(env floor, frames × per-frame budget × scale²).
- * scale² because a 2× export rasterizes and PNG-encodes 4× the pixels per frame.
+ * Wall-clock budget for one render:
+ * max(env floor, ceil(frames × 250ms × megapixels × scale²)).
+ * megapixels = (width × height) / 1e6 of the UNSCALED canvas; scale² because a 2×
+ * export rasterizes and PNG-encodes 4× the pixels per frame.
  */
 export function computeRenderTimeoutMs(
   durationMs: number,
   fps: number,
   scale = 1,
+  width = 0,
+  height = 0,
 ): number {
   const frames = Math.max(1, Math.ceil((durationMs / 1000) * fps));
+  const megapixels =
+    Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+      ? (width * height) / 1e6
+      : FALLBACK_FRAME_MEGAPIXELS;
   return Math.max(
     getRenderTimeoutMs(),
-    Math.ceil(frames * PER_FRAME_CAPTURE_BUDGET_MS * scale * scale),
+    Math.ceil(frames * PER_FRAME_MP_CAPTURE_BUDGET_MS * megapixels * scale * scale),
   );
 }
 
@@ -452,11 +465,19 @@ export class VideoRenderService {
         renderToken,
       };
 
-      // Scale the wall-clock budget with the frame count (see
-      // PER_FRAME_CAPTURE_BUDGET_MS): the env floor alone cannot fit a long
-      // composition's sequential frame captures, and the per-frame budget
-      // scales with pixel area (scale²). Applies to both render paths.
-      const renderTimeoutMs = computeRenderTimeoutMs(durationMs, fps, scale);
+      // Scale the wall-clock budget with the frame count AND the frame's pixel
+      // area (see PER_FRAME_MP_CAPTURE_BUDGET_MS): the env floor alone cannot fit
+      // a long or high-resolution composition's sequential frame captures
+      // (a 10 s 1080×1920 @ 30 fps export needs ~145 s to capture), and the
+      // per-frame cost scales with pixel area (scale² for the multiplier).
+      // Applies to both render paths.
+      const renderTimeoutMs = computeRenderTimeoutMs(
+        durationMs,
+        fps,
+        scale,
+        composition.width || 0,
+        composition.height || 0,
+      );
 
       let videoPath: string;
       let thumbnailPath: string;

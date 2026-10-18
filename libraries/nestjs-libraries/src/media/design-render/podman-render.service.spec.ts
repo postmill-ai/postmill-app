@@ -18,10 +18,16 @@ vi.mock('child_process', () => ({
       on: (event: string, cb: (arg?: any) => void) => {
         handlers[event] = cb;
       },
-      kill: () => {},
+      // SIGKILL (e.g. the exec timeout) terminates the process asynchronously.
+      kill: () => {
+        process.nextTick(() => handlers.close && handlers.close(null));
+      },
     };
     const code = shared.codes.shift() ?? 0;
-    process.nextTick(() => handlers.close && handlers.close(code));
+    // Sentinel -1: the process hangs — only the kill() above ever closes it.
+    if (code !== -1) {
+      process.nextTick(() => handlers.close && handlers.close(code));
+    }
     return proc as any;
   }),
 }));
@@ -90,6 +96,8 @@ describe('PodmanRenderService', () => {
     const runArgs = argv[2];
     expect(runArgs[0]).toBe('run');
     expect(runArgs).toContain('--rm');
+    expect(runArgs).toContain('--name');
+    expect(runArgs[runArgs.indexOf('--name') + 1]).toMatch(/^postmill-render-/);
     expect(runArgs).toContain('--pod');
     expect(runArgs).toContain('postmill-render');
     // No per-container cpu/memory limits when the aggregate pod is in use.
@@ -134,6 +142,27 @@ describe('PodmanRenderService', () => {
     const svc = new PodmanRenderService();
 
     await expect(svc.run(workDir, designSpec)).rejects.toThrow(/exited 1/);
+    fs.rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('kills the named container when the run times out, then throws', async () => {
+    shared.codes.push(0, -1); // pod exists -> ok; run -> hangs until SIGKILLed
+    const workDir = makeWorkDir();
+    const svc = new PodmanRenderService();
+
+    await expect(svc.run(workDir, designSpec, 20)).rejects.toThrow(
+      /timed out after 20ms/,
+    );
+
+    const runArgs = shared.calls.find((c) => c.args[0] === 'run')!.args;
+    expect(runArgs).toContain('--rm');
+    const name = runArgs[runArgs.indexOf('--name') + 1];
+    expect(name).toMatch(/^postmill-render-/);
+    // The detached container is killed by name before the timeout error is
+    // thrown, so the caller's workdir cleanup can't yank /work from under it
+    // (the late ENOENT + spurious second "exited 1" from production).
+    const killCall = shared.calls.find((c) => c.args[0] === 'kill');
+    expect(killCall?.args).toEqual(['kill', name]);
     fs.rmSync(workDir, { recursive: true, force: true });
   });
 });

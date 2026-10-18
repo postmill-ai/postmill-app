@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { spawn } from 'child_process';
+import { randomBytes } from 'crypto';
 import {
   getPodmanRenderConfig,
   getRenderConcurrency,
@@ -28,6 +29,14 @@ export class PodmanRenderService {
    * input files there); this writes `job.json`, runs the container with the workdir mounted
    * at /work, and leaves the artifact(s) under `workDir/out`. Throws on non-zero exit/timeout.
    * `timeoutMs` overrides the default wall-clock cap (callers scale it with frame count).
+   *
+   * The container gets a deterministic-per-job name (`--name`) so a timeout can
+   * kill it: SIGKILLing the podman CLI client leaves the container running
+   * detached, and the caller's workdir cleanup would yank /work from under it —
+   * the worker's final artifact copy then crashes ENOENT and the container exits
+   * 1, producing a second spurious error after the timeout (observed in
+   * production). On timeout we best-effort `podman kill <name>` before throwing;
+   * `--rm` then removes the killed container.
    */
   async run(workDir: string, spec: RenderJobSpec, timeoutMs?: number): Promise<void> {
     const cfg = getPodmanRenderConfig();
@@ -43,7 +52,8 @@ export class PodmanRenderService {
 
     await this.ensurePool(cfg);
 
-    const args = ['run', '--rm'];
+    const name = this.containerName(workDir);
+    const args = ['run', '--rm', '--name', name];
     if (this.poolEnsured && !this.splitMode) {
       // Aggregate cap lives on the shared pod cgroup; the pod owns networking.
       args.push('--pod', cfg.pod);
@@ -70,11 +80,29 @@ export class PodmanRenderService {
 
     const res = await this.exec(cfg.bin, args, budgetMs);
     if (res.timedOut) {
+      // Best-effort: the detached container may still be capturing; kill it so
+      // it is gone (via --rm) before the caller deletes the workdir.
+      try {
+        await this.exec(cfg.bin, ['kill', name], 10000);
+      } catch {
+        /* never mask the timeout error */
+      }
       throw new Error(`Podman render timed out after ${budgetMs}ms`);
     }
     if (res.code !== 0) {
       throw new Error(`Podman render exited ${res.code}: ${res.stderr.slice(-800)}`);
     }
+  }
+
+  /**
+   * Deterministic-per-job container name (`postmill-render-<jobId>-<suffix>`; the
+   * workdir basename IS the job id for both design and merge renders). The short
+   * random suffix keeps a retried job from colliding with a still-running
+   * container of a previous attempt.
+   */
+  private containerName(workDir: string): string {
+    const base = path.basename(workDir).replace(/[^a-zA-Z0-9_.-]/g, '-');
+    return `postmill-render-${base}-${randomBytes(3).toString('hex')}`;
   }
 
   /** Idempotently create the shared resource pool (aggregate cgroup cap). */

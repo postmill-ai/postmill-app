@@ -557,19 +557,39 @@ describe('VideoRenderService', () => {
   describe('computeRenderTimeoutMs', () => {
     it('scales with frames at 1× and with the pixel area at 2×', async () => {
       const { computeRenderTimeoutMs } = await import('./video-render.service');
-      // 60s@30fps: 1800 frames × 150ms = 270s — above the 120s env floor.
-      const base = computeRenderTimeoutMs(60000, 30, 1);
+      // 60s@30fps 1080×1080: 1800 frames × 250ms × 1.1664 MP = 524.88s — above
+      // the 120s env floor.
+      const base = computeRenderTimeoutMs(60000, 30, 1, 1080, 1080);
       // Same duration at 60fps and 2× scale: 2× frames × 4× pixels = 8×.
-      const scaled = computeRenderTimeoutMs(60000, 60, 2);
-      expect(base).toBe(1800 * 150);
+      const scaled = computeRenderTimeoutMs(60000, 60, 2, 1080, 1080);
+      expect(base).toBe(Math.ceil(1800 * 250 * 1.1664));
       expect(scaled).toBe(8 * base);
+    });
+
+    it('budgets a 10s 1080×1920 @ 30fps Reel export past its ~145s measured capture', async () => {
+      const { computeRenderTimeoutMs } = await import('./video-render.service');
+      // 300 frames × 250ms × 2.0736 MP = 155.52s — the production failure this
+      // fixes (120s env floor SIGKILLed the podman client mid-capture).
+      expect(computeRenderTimeoutMs(10000, 30, 1, 1080, 1920)).toBe(155520);
     });
 
     it('never goes below the env floor for tiny compositions', async () => {
       const { computeRenderTimeoutMs } = await import('./video-render.service');
-      expect(computeRenderTimeoutMs(1000, 24, 0.5)).toBeGreaterThanOrEqual(
+      expect(computeRenderTimeoutMs(1000, 24, 0.5, 540, 540)).toBeGreaterThanOrEqual(
         120_000,
       );
+    });
+
+    it('keeps a small 540×540 composition at the env floor', async () => {
+      const { computeRenderTimeoutMs } = await import('./video-render.service');
+      // 300 frames × 250ms × 0.2916 MP ≈ 21.9s → floor wins.
+      expect(computeRenderTimeoutMs(10000, 30, 1, 540, 540)).toBe(120_000);
+    });
+
+    it('falls back to a 1 MP frame when dimensions are unknown', async () => {
+      const { computeRenderTimeoutMs } = await import('./video-render.service');
+      // 60s@30fps: 1800 frames × 250ms × 1 MP (fallback) = 450s.
+      expect(computeRenderTimeoutMs(60000, 30, 1)).toBe(1800 * 250);
     });
   });
 
