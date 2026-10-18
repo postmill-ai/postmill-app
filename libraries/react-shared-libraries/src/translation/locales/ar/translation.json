@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "مقطع النص المنسق {{index}} يستخدم خطًا غير مطابق للعلامة التجارية {{font}}",
   "designer_add_format_aria": "إضافة تنسيق",
   "designer_add_formats_heading": "إضافة تنسيقات",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "إضافة {{count}} تنسيق",
   "designer_admin_override_allow_export": "تجاوز المسؤول — السماح بالتصدير",
   "designer_all_files_root": "جميع الملفات (الجذر)",

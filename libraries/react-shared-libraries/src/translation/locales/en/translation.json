@@ -3369,6 +3369,7 @@
   "designer_brand_violation_rich_text_font": "rich-text run {{index}} uses off-brand font {{font}}",
   "designer_add_format_aria": "Add format",
   "designer_add_formats_heading": "Add Formats",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "Add {{count}} format",
   "designer_admin_override_allow_export": "Admin override — allow export",
   "designer_all_files_root": "All Files (root)",

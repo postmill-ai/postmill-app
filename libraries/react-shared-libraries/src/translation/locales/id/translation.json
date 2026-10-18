@@ -3369,6 +3369,7 @@
   "designer_brand_violation_rich_text_font": "segmen rich-text {{index}} menggunakan font di luar merek {{font}}",
   "designer_add_format_aria": "Tambah format",
   "designer_add_formats_heading": "Tambah format",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "Tambah {{count}} format",
   "designer_admin_override_allow_export": "Penggantian admin — izinkan ekspor",
   "designer_all_files_root": "Semua file (root)",

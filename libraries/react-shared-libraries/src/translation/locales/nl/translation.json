@@ -3369,6 +3369,7 @@
   "designer_brand_violation_rich_text_font": "opgemaakt tekstdeel {{index}} gebruikt een lettertype buiten de huisstijl: {{font}}",
   "designer_add_format_aria": "Formaat toevoegen",
   "designer_add_formats_heading": "Formaten toevoegen",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "{{count}} formaat toevoegen",
   "designer_admin_override_allow_export": "Beheerdersoverride — export toestaan",
   "designer_all_files_root": "Alle bestanden (hoofdmap)",

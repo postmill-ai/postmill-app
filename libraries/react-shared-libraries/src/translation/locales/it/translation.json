@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "il blocco di testo formattato {{index}} usa un font non conforme al brand {{font}}",
   "designer_add_format_aria": "Aggiungi formato",
   "designer_add_formats_heading": "Aggiungi formati",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "Aggiungi {{count}} formato",
   "designer_admin_override_allow_export": "Override amministratore — consenti esportazione",
   "designer_all_files_root": "Tutti i file (radice)",

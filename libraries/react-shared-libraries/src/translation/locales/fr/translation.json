@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "le passage de texte enrichi {{index}} utilise une police hors charte {{font}}",
   "designer_add_format_aria": "Ajouter un format",
   "designer_add_formats_heading": "Ajouter des formats",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "Ajouter {{count}} format",
   "designer_admin_override_allow_export": "Dérogation admin — autoriser l'export",
   "designer_all_files_root": "Tous les fichiers (racine)",

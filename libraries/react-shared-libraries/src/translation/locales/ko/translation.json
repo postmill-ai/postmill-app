@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "리치 텍스트 구간 {{index}}이(가) 브랜드에 맞지 않는 글꼴 {{font}}을(를) 사용합니다",
   "designer_add_format_aria": "포맷 추가",
   "designer_add_formats_heading": "포맷 추가",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "{{count}}개 포맷 추가",
   "designer_admin_override_allow_export": "관리자 재정의 — 내보내기 허용",
   "designer_all_files_root": "모든 파일 (루트)",

@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "trecho de texto formatado {{index}} usa fonte fora da marca {{font}}",
   "designer_add_format_aria": "Adicionar formato",
   "designer_add_formats_heading": "Adicionar Formatos",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "Adicionar {{count}} formato",
   "designer_admin_override_allow_export": "Substituição do administrador — permitir exportação",
   "designer_all_files_root": "Todos os Arquivos (raiz)",

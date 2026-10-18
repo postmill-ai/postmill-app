@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "富文本片段 {{index}} 使用了不符合品牌规范的字体 {{font}}",
   "designer_add_format_aria": "添加格式",
   "designer_add_formats_heading": "添加格式",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "添加 {{count}} 个格式",
   "designer_admin_override_allow_export": "管理员覆盖 — 允许导出",
   "designer_all_files_root": "所有文件（根目录）",

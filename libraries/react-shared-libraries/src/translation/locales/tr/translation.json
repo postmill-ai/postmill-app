@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "{{index}} numaralı zengin metin bölümü marka dışı yazı tipi {{font}} kullanıyor",
   "designer_add_format_aria": "Format ekle",
   "designer_add_formats_heading": "Format Ekle",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "{{count}} format ekle",
   "designer_admin_override_allow_export": "Yönetici geçersiz kılma — dışa aktarmaya izin ver",
   "designer_all_files_root": "Tüm Dosyalar (kök)",

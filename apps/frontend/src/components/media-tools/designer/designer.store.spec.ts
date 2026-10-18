@@ -1,6 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { createDesignerStore, migrateDoc, type DesignerStore } from './designer.store';
+
+/**
+ * Focal detection is an async vision call; the store only consumes its
+ * promise. Default to a never-resolving promise (jsdom's Image never fires
+ * onload, so this mirrors the unmocked behavior) — focal tests set
+ * `focalMock.result` per case. A plain factory function (not vi.fn) so
+ * restoreAllMocks in other describes can't neuter the default.
+ */
+const focalMock = vi.hoisted(() => ({
+  result: null as { x: number; y: number } | null,
+}));
+vi.mock('./reflow', () => ({
+  detectFocalPoint: (src: string) => {
+    void src;
+    return focalMock.result
+      ? Promise.resolve(focalMock.result)
+      : new Promise<{ x: number; y: number }>(() => {});
+  },
+}));
 import {
   disposeAllBuffers,
   getBuffer,
@@ -1241,6 +1260,126 @@ describe('multi-page outputs (doc v8)', () => {
     // Page 2's new element did NOT seed a linked copy into output 1.
     expect(outs[1].children).toHaveLength(1); // only the page-1 seeded copy
     expect(outs[0].pages[0].children).toHaveLength(1);
+  });
+});
+
+describe('multi-page resize, variants, and focal detection', () => {
+  afterEach(() => {
+    focalMock.result = null;
+  });
+
+  // Bottom-right anchored shape: reflow pins it to the new canvas corner, so
+  // a stale (un-reflowed) element is trivially distinguishable.
+  const addAnchoredShape = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().addElement({
+      id: '',
+      type: 'shape',
+      shape: 'rect',
+      x: 800,
+      y: 880,
+      width: 100,
+      height: 100,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      anchor: 'bottom-right',
+    });
+
+  it('resizeOutput reflows pages 2+ onto the new canvas (not stale coordinates)', () => {
+    const store = createDesignerStore(1080, 1080);
+    addAnchoredShape(store); // page 1
+    store.getState().addPage(); // lands on page 2
+    addAnchoredShape(store); // same geometry on page 2
+
+    store.getState().resizeOutput(0, 1080, 1920, 'custom-tall', 'Tall');
+
+    const out = store.getState().doc.outputs[0] as any;
+    expect(out.width).toBe(1080);
+    expect(out.height).toBe(1920);
+    const p1 = out.children[0];
+    const p2 = out.pages[0].children[0];
+    // The page-2 element is NOT sitting on the old square canvas's (800, 880).
+    expect(p2.y).not.toBe(880);
+    // Both pages reflowed through the same anchor logic.
+    expect(p2.x).toBe(p1.x);
+    expect(p2.y).toBe(p1.y);
+    expect(p2.width).toBe(p1.width);
+    expect(p2.height).toBe(p1.height);
+    // Bottom-right anchor: pinned near the new canvas corner (inset by the
+    // canvas margin), not left at the old square's coordinates.
+    expect(p1.x + p1.width).toBeGreaterThan(1080 * 0.9);
+    expect(p1.y + p1.height).toBeGreaterThan(1920 * 0.9);
+  });
+
+  it('addOutput carries pages 2+ into the variant, reflowed with fresh ids and originIds', () => {
+    const store = createDesignerStore(1080, 1080);
+    addAnchoredShape(store);
+    store.getState().addPage();
+    addAnchoredShape(store);
+    const srcOut = store.getState().doc.outputs[0] as any;
+    const srcP2 = srcOut.pages[0].children[0];
+
+    store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
+
+    const variant = store.getState().doc.outputs[1] as any;
+    expect(variant.children).toHaveLength(1); // page 1 seeded, as before
+    expect(variant.pages).toHaveLength(1); // page 2 came along
+    expect(variant.pages[0].children).toHaveLength(1);
+    const v1 = variant.children[0];
+    const v2 = variant.pages[0].children[0];
+    // Reflowed onto the tall canvas, exactly like the page-1 seed.
+    expect(v2.y).not.toBe(880);
+    expect(v2.x).toBe(v1.x);
+    expect(v2.y).toBe(v1.y);
+    // duplicatePageAt-style: fresh id AND fresh originId — page-2+ edits stay
+    // local, so the clone must not read as linked to the source page.
+    expect(v2.id).not.toBe(srcP2.id);
+    expect(v2.originId).toBeTruthy();
+    expect(v2.originId).not.toBe(srcP2.originId);
+    // The source output is untouched.
+    expect((store.getState().doc.outputs[0] as any).pages[0].children[0].id).toBe(srcP2.id);
+  });
+
+  it('image inserted on page 2 gets its focal point on THAT page, even after switching pages', async () => {
+    focalMock.result = { x: 0.25, y: 0.75 };
+    const store = createDesignerStore();
+    store.getState().addPage(); // currentPage = 1
+
+    store.getState().addElement({
+      id: '', type: 'image', x: 0, y: 0, width: 100, height: 100,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+      src: 'https://example.com/page-two.png',
+    });
+    // The user switches back to page 1 before detection resolves — the write
+    // must still land on page 2, where the element was inserted.
+    store.getState().setCurrentPage(0);
+
+    await new Promise((r) => setTimeout(r, 0));
+
+    const out = store.getState().doc.outputs[0] as any;
+    expect(out.children).toHaveLength(0);
+    expect(out.pages[0].children).toHaveLength(1);
+    expect(out.pages[0].children[0].focalPoint).toEqual({ x: 0.25, y: 0.75 });
+  });
+
+  it('page-1 image insert still propagates the focal point to linked copies on other outputs', async () => {
+    focalMock.result = { x: 0.4, y: 0.6 };
+    const store = createDesignerStore(1080, 1080);
+    store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
+    store.getState().setCurrentOutput(0);
+
+    store.getState().addElement({
+      id: '', type: 'image', x: 0, y: 0, width: 200, height: 200,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+      src: 'https://example.com/hero.png',
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+
+    const outs = store.getState().doc.outputs as any[];
+    expect(outs[0].children[0].focalPoint).toEqual({ x: 0.4, y: 0.6 });
+    expect(outs[1].children[0].focalPoint).toEqual({ x: 0.4, y: 0.6 });
   });
 });
 

@@ -444,6 +444,55 @@ export const createDesignerStore = (
       const max = out && 'children' in out ? pageCount(out) - 1 : 0;
       return Math.max(0, Math.min(page, max));
     };
+    /**
+     * Async focal-point attach for a freshly inserted image. `pageIndex` is
+     * recorded AT INSERT TIME — detection resolves later, and the user may
+     * have switched pages by then; the write must still land on the page the
+     * element was inserted on. `copyIds` (page-1 inserts only) propagates the
+     * focal point to the linked copies seeded on the other outputs.
+     */
+    const attachFocalPoint = (
+      id: string,
+      src: string,
+      pageIndex: number,
+      copyIds?: Map<number, string>
+    ) => {
+      detectFocalPoint(src, fetch).then((fp) => {
+        const state = get();
+        const source = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
+        if (!source || !('children' in source)) return;
+        // Stale guard: the element must still be on its page with the same src.
+        const sourceEl = pageChildren(source, pageIndex).find((c) => c.id === id);
+        if (!sourceEl || sourceEl.src !== src) return;
+        if (pageIndex > 0 || !copyIds) {
+          // Page-2+ inserts exist on their page only — no linked copies.
+          const outs = [...state.doc.outputs];
+          outs[state.currentOutput] = withPageChildren(
+            source,
+            pageIndex,
+            pageChildren(source, pageIndex).map((c) =>
+              c.id === id ? { ...c, focalPoint: fp } : c
+            )
+          );
+          set({ doc: { ...state.doc, outputs: outs }, isDirty: true });
+          return;
+        }
+        const nextOutputs = state.doc.outputs.map((out, i) => {
+          const target = out as DesignerOutput;
+          const targetId = i === state.currentOutput ? id : copyIds.get(i);
+          if (!targetId) return out;
+          return {
+            ...out,
+            children: target.children.map((c) =>
+              c.id === targetId ? { ...c, focalPoint: fp } : c
+            ),
+          };
+        });
+        set({ doc: { ...state.doc, outputs: nextOutputs }, isDirty: true });
+      }).catch(() => {
+        // Non-fatal: center fallback is already in place.
+      });
+    };
     return {
       doc: initialDoc,
       selectedIds: [],
@@ -518,6 +567,9 @@ export const createDesignerStore = (
             selectedIds: [baseEl.id],
           });
           get().pushHistory();
+          if (baseEl.type === 'image' && baseEl.src) {
+            attachFocalPoint(baseEl.id, baseEl.src, currentPage);
+          }
           return;
         }
         const copyIds = new Map<number, string>();
@@ -534,28 +586,7 @@ export const createDesignerStore = (
         get().pushHistory();
 
         if (baseEl.type === 'image' && baseEl.src) {
-          const addedId = baseEl.id;
-          const addedSrc = baseEl.src;
-          detectFocalPoint(addedSrc, fetch).then((fp) => {
-            const state = get();
-            const source = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
-            const sourceEl = source?.children.find((c) => c.id === addedId);
-            if (!sourceEl || sourceEl.src !== addedSrc) return;
-            const nextOutputs = state.doc.outputs.map((out, i) => {
-              const target = out as DesignerOutput;
-              const targetId = i === state.currentOutput ? addedId : copyIds.get(i);
-              if (!targetId) return out;
-              return {
-                ...out,
-                children: target.children.map((c) =>
-                  c.id === targetId ? { ...c, focalPoint: fp } : c
-                ),
-              };
-            });
-            set({ doc: { ...state.doc, outputs: nextOutputs }, isDirty: true });
-          }).catch(() => {
-            // Non-fatal: center fallback is already in place.
-          });
+          attachFocalPoint(baseEl.id, baseEl.src, 0, copyIds);
         }
       },
 
@@ -1156,14 +1187,28 @@ export const createDesignerStore = (
         }
         const source = doc.outputs[currentOutput] as DesignerOutput;
         const sourceChildren = source.children.map((el) => (el.originId ? el : { ...el, originId: genId() }));
+        const targetBasis = { ...preset, id: '', background: '#fff', children: [] } as DesignerOutput;
         const groupBoxes = computeGroupBoxes(sourceChildren);
         const children = sourceChildren.map((el) =>
-          seedCopy(el, source, { ...preset, id: '', background: '#fff', children: [] } as DesignerOutput, el.originId as string, el.groupId ? groupBoxes.get(el.groupId) : undefined),
+          seedCopy(el, source, targetBasis, el.originId as string, el.groupId ? groupBoxes.get(el.groupId) : undefined),
         );
+        // Pages 2+ come along too: fresh element ids AND fresh originIds —
+        // per-page edits are deliberately local (duplicatePageAt semantics,
+        // designer-doc.pages.ts) — each child reflowed onto the new canvas.
+        const pages = source.pages?.map((page) => {
+          const pageBoxes = computeGroupBoxes(page.children);
+          return {
+            ...page,
+            id: genId(),
+            children: page.children.map((el) =>
+              seedCopy(el, source, targetBasis, genId(), el.groupId ? pageBoxes.get(el.groupId) : undefined)),
+          };
+        });
         const newOutput: DesignerOutput = {
           id: genId(), formatId: preset.formatId, name: preset.name,
           width: preset.width, height: preset.height,
           background: source.background, bg: source.bg, children,
+          ...(pages?.length ? { pages } : {}),
         };
         const outs = doc.outputs.map((o, i) => (i === currentOutput ? { ...o, children: sourceChildren } : o)) as DesignerOutput[];
         outs.push(newOutput);
@@ -1204,6 +1249,16 @@ export const createDesignerStore = (
         const resized: DesignerOutput = { ...imgOut, width, height, formatId: formatId ?? imgOut.formatId, name: name ?? imgOut.name };
         const groupBoxes = computeGroupBoxes(imgOut.children);
         resized.children = imgOut.children.map((el) => seedCopy(el, imgOut, resized, el.originId || el.id, el.groupId ? groupBoxes.get(el.groupId) : undefined));
+        // Pages 2+ carry elements in the OLD canvas coordinates — reflow them
+        // too, or a resize leaves every extra page laid out for the old size.
+        resized.pages = imgOut.pages?.map((page) => {
+          const pageBoxes = computeGroupBoxes(page.children);
+          return {
+            ...page,
+            children: page.children.map((el) =>
+              seedCopy(el, imgOut, resized, el.originId || el.id, el.groupId ? pageBoxes.get(el.groupId) : undefined)),
+          };
+        });
         const outs = [...doc.outputs]; outs[index] = resized;
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();

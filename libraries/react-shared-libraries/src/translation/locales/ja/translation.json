@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "リッチテキストの範囲 {{index}} がブランド外のフォント {{font}} を使用しています",
   "designer_add_format_aria": "フォーマットを追加",
   "designer_add_formats_heading": "フォーマットを追加",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "{{count}}件のフォーマットを追加",
   "designer_admin_override_allow_export": "管理者オーバーライド — エクスポートを許可",
   "designer_all_files_root": "すべてのファイル（ルート）",

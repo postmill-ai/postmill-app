@@ -4,6 +4,11 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  // Shared components (e.g. react-shared-libraries/form/button.tsx) have no
+  // `React` binding and the base tsconfig sets no jsx mode — if the react
+  // plugin's transform ever misses a file, esbuild's automatic runtime keeps
+  // the suite from failing with "React is not defined".
+  esbuild: { jsx: 'automatic' },
   resolve: {
     alias: {
       '@postmill-ai/helpers': path.resolve(__dirname, '../../libraries/helpers/src'),

@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "Rich-Text-Abschnitt {{index}} verwendet markenfremde Schriftart {{font}}",
   "designer_add_format_aria": "Format hinzufügen",
   "designer_add_formats_heading": "Formate hinzufügen",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "{{count}} Format hinzufügen",
   "designer_admin_override_allow_export": "Admin-Übersteuerung — Export erlauben",
   "designer_all_files_root": "Alle Dateien (Stammverzeichnis)",

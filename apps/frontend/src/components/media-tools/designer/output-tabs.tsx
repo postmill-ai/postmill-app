@@ -592,9 +592,9 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
               />
               <button
                 onClick={handleAddCustom}
-                className="h-7 px-2 rounded-sm text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80 shrink-0"
+                className="h-7 px-2 rounded-sm text-[11px] border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10 shrink-0"
               >
-                {t('add', 'Add')}
+                {t('designer_add_custom_size', 'Add custom size')}
               </button>
             </div>
           </div>

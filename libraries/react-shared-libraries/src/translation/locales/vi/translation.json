@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "đoạn văn bản định dạng {{index}} dùng phông chữ {{font}} không đúng thương hiệu",
   "designer_add_format_aria": "Thêm định dạng",
   "designer_add_formats_heading": "Thêm định dạng",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "Thêm {{count}} định dạng",
   "designer_admin_override_allow_export": "Ghi đè quản trị viên — cho phép xuất",
   "designer_all_files_root": "Tất cả tệp (gốc)",

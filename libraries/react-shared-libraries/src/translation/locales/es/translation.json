@@ -3356,6 +3356,7 @@
   "designer_brand_violation_rich_text_font": "el fragmento de texto enriquecido {{index}} usa una fuente fuera de marca {{font}}",
   "designer_add_format_aria": "Añadir formato",
   "designer_add_formats_heading": "Añadir formatos",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "Añadir {{count}} formato",
   "designer_admin_override_allow_export": "Anulación de administrador: permitir exportación",
   "designer_all_files_root": "Todos los archivos (raíz)",

@@ -3371,6 +3371,7 @@
   "designer_brand_violation_rich_text_font": "fragment tekstu sformatowanego {{index}} używa czcionki spoza marki {{font}}",
   "designer_add_format_aria": "Dodaj format",
   "designer_add_formats_heading": "Dodaj formaty",
+  "designer_add_custom_size": "Add custom size",
   "designer_add_n_formats": "Dodaj formaty: {{count}}",
   "designer_admin_override_allow_export": "Nadpisanie administratora — zezwól na eksport",
   "designer_all_files_root": "Wszystkie pliki (katalog główny)",
