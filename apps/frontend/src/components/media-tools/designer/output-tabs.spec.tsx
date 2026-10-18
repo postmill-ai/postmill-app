@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { computePopoverPlacement, OutputTabs } from './output-tabs';
+import { computePopoverLeft, computePopoverPlacement, OutputTabs } from './output-tabs';
 import { createDesignerStore } from './designer.store';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
@@ -10,6 +10,33 @@ vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
     (_k: string, d: string, vars?: Record<string, unknown>) =>
       vars ? d.replace(/\{\{(\w+)\}\}/g, (_m, k) => String(vars[k])) : d,
 }));
+
+describe('computePopoverLeft', () => {
+  it('right-aligns the popover edge to the anchor edge using the POPOVER width', () => {
+    // Regression: the old math used the anchor's own width (40px "+" button),
+    // pushing the 288px panel ~250px past the right viewport edge.
+    // Anchor right edge at 1000, 288px popover, 1200 viewport → left = 712.
+    expect(computePopoverLeft({ left: 960, right: 1000 }, 288, 1200, 'right')).toBe(712);
+  });
+
+  it('clamps inside the viewport when the anchor hugs the right edge', () => {
+    // Anchor at the very right of a 1905px viewport.
+    expect(computePopoverLeft({ left: 1865, right: 1905 }, 288, 1905, 'right')).toBe(1609);
+  });
+
+  it('left-aligns at the anchor and clamps overflow', () => {
+    expect(computePopoverLeft({ left: 100, right: 140 }, 288, 1200, 'left')).toBe(100);
+    expect(computePopoverLeft({ left: 1100, right: 1140 }, 288, 1200, 'left')).toBe(904);
+  });
+
+  it('respects the gap floor on tiny viewports', () => {
+    expect(computePopoverLeft({ left: 0, right: 30 }, 288, 200, 'left')).toBe(8);
+  });
+
+  it('falls back to 280 when the popover has not measured yet', () => {
+    expect(computePopoverLeft({ left: 960, right: 1000 }, 0, 1200, 'right')).toBe(720);
+  });
+});
 
 describe('computePopoverPlacement', () => {
   it('opens above when there is plenty of room', () => {

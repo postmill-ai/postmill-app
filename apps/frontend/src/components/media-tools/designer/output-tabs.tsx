@@ -82,6 +82,25 @@ export const computePopoverPlacement = (
     : { side: 'below', maxHeight: Math.max(120, below) };
 };
 
+/**
+ * Horizontal placement: 'right' aligns the popover's right edge with the
+ * anchor's right edge — using the POPOVER's width, not the anchor's (the old
+ * math subtracted the anchor's 40px width, throwing the 288px panel ~250px
+ * past the right viewport edge and its Add button off-screen). Either way the
+ * result is clamped inside the viewport.
+ */
+export const computePopoverLeft = (
+  anchor: { left: number; right: number },
+  popoverWidth: number,
+  viewportWidth: number,
+  align: 'left' | 'right',
+  gap = 8
+): number => {
+  const w = popoverWidth || 280;
+  const raw = align === 'right' ? anchor.right - w : anchor.left;
+  return Math.max(gap, Math.min(raw, viewportWidth - w - gap));
+};
+
 const PortalPopover: React.FC<PortalPopoverProps> = ({
   anchorEl,
   open,
@@ -98,16 +117,26 @@ const PortalPopover: React.FC<PortalPopoverProps> = ({
 
     const updatePos = () => {
       const r = anchorEl.getBoundingClientRect();
-      const left =
-        align === 'right' ? r.right - (r.width || 280) : r.left;
+      const left = computePopoverLeft(
+        { left: r.left, right: r.right },
+        ref.current?.offsetWidth || 280,
+        window.innerWidth,
+        align
+      );
       setPos({ left, top: r.top, bottom: r.bottom });
     };
 
     const raf = requestAnimationFrame(updatePos);
+    // Content can resize the panel after first paint (images, async lists) —
+    // re-measure so the right-align stays pinned to the anchor.
+    const ro =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updatePos) : null;
+    if (ref.current) ro?.observe(ref.current);
     window.addEventListener('scroll', updatePos, true);
     window.addEventListener('resize', updatePos);
     return () => {
       cancelAnimationFrame(raf);
+      ro?.disconnect();
       window.removeEventListener('scroll', updatePos, true);
       window.removeEventListener('resize', updatePos);
     };
