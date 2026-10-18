@@ -403,6 +403,7 @@ Set any of these to `true` or `1` to disable the corresponding subsystem during 
 | `MULTIPART_UPLOAD_RETENTION_DAYS` | `7` | Retention for abandoned multipart uploads |
 | `MASTRA_TRACE_RETENTION_DAYS` | `30` | Retention for Mastra traces/scorers |
 | `SOFT_DELETE_RETENTION_DAYS` | `30` | Hard-purge window for soft-deleted posts/files |
+| `BLANK_DESIGN_RETENTION_DAYS` | `1` | Days an untouched, content-free `Untitled Design` is kept before the retention sweep soft-deletes it (with its preview file) |
 | `IP_RETENTION_DAYS` | `90` | Null `User`/`Session` IP and agent after this window |
 | `AI_DESIGNER_SESSION_RETENTION_DAYS` | `90` | Retention for AI Designer chat sessions |
 

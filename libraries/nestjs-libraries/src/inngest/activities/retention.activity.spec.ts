@@ -11,6 +11,7 @@ function makeRepository() {
     purgeSoftDeletedPosts: vi.fn().mockResolvedValue(2),
     purgeSoftDeletedFiles: vi.fn().mockResolvedValue(2),
     purgeSoftDeletedDesignVersions: vi.fn().mockResolvedValue(2),
+    purgeBlankDesigns: vi.fn().mockResolvedValue(2),
     purgeAiDesignerSessionsOlderThan: vi.fn().mockResolvedValue(2),
     nullUserIpAgentOlderThan: vi.fn().mockResolvedValue(2),
     nullSessionIpAgentOlderThan: vi.fn().mockResolvedValue(2),
@@ -41,6 +42,9 @@ describe('RetentionActivity', () => {
     // Design versions of soft-deleted designs ride the same window.
     expect(repository.purgeSoftDeletedDesignVersions).toHaveBeenCalledTimes(1);
     expect(counts.softDeletedDesignVersions).toBe(2);
+    // Blank-canvas purge: 24h-untouched 'Untitled Design' rows.
+    expect(repository.purgeBlankDesigns).toHaveBeenCalledTimes(1);
+    expect(counts.blankDesigns).toBe(2);
   });
 
   it('is non-fatal: one prune throwing does not abort the rest', async () => {

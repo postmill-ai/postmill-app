@@ -131,6 +131,19 @@ export class DesignController {
     return { success: true };
   }
 
+  /**
+   * Maintenance: regenerate server-side previews for the caller's org —
+   * designs whose preview is missing or whose doc is video-mode (the client
+   * live-stage snapshot is a black frame), same for template thumbnails.
+   * Bounded and fail-soft per item; returns per-kind counts.
+   */
+  @Post('/maintenance/regen-previews')
+  @CheckPolicies([AuthorizationActions.Update, Sections.MEDIA])
+  @RequirePermission('media', 'update')
+  async regenPreviews(@GetOrgFromRequest() org: Organization) {
+    return this._designService.regenPreviews(org.id);
+  }
+
   // ── Version history ─────────────────────────────────────────────────────
 
   @Get('/:id/versions')
@@ -441,8 +454,24 @@ export class DesignTemplateController {
   @Get('/')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
-  async list(@GetOrgFromRequest() org: Organization) {
-    return this._designService.listTemplates(org.id);
+  async list(
+    @GetOrgFromRequest() org: Organization,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    // No params = the historical plain-array response (older clients and other
+    // callers depend on the shape). Either param present = one bounded page.
+    if (page === undefined && limit === undefined) {
+      return this._designService.listTemplates(org.id);
+    }
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+    const safePage = Number.isFinite(pageNum) && pageNum >= 1 ? Math.floor(pageNum) : 1;
+    const safeLimit =
+      Number.isFinite(limitNum) && limitNum >= 1
+        ? Math.min(100, Math.floor(limitNum))
+        : 24;
+    return this._designService.listTemplates(org.id, safePage, safeLimit);
   }
 
   @Get('/:id')

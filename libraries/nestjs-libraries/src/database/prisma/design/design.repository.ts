@@ -61,6 +61,15 @@ export class DesignRepository {
     });
   }
 
+  // Preview-regen maintenance scan: every live design of the org with just the
+  // fields the selection rule reads (see DesignService.regenPreviews).
+  findDesignsForPreviewRegen(orgId: string) {
+    return this._design.model.design.findMany({
+      where: { organizationId: orgId, deletedAt: null },
+      select: { id: true, doc: true, previewFileId: true, previewDataUrl: true },
+    });
+  }
+
   // ── DesignVersion operations ────────────────────────────────────────────
 
   createVersion(data: {
@@ -131,14 +140,39 @@ export class DesignRepository {
   }
 
   // DesignTemplate methods
-  findTemplatesByOrg(orgId: string) {
+  // No page/limit = the historical full list (callers that group/bucket the
+  // whole gallery in memory). Both present = one page plus a count via
+  // countTemplatesByOrg.
+  findTemplatesByOrg(orgId: string, page?: number, limit?: number) {
     return this._designTemplate.model.designTemplate.findMany({
       where: {
         deletedAt: null,
         OR: [{ organizationId: orgId }, { isSystem: true }],
       },
       orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
+      ...(page !== undefined && limit !== undefined
+        ? { skip: (page - 1) * limit, take: limit }
+        : {}),
       include: { thumbnailFile: { select: { path: true } } },
+    });
+  }
+
+  countTemplatesByOrg(orgId: string) {
+    return this._designTemplate.model.designTemplate.count({
+      where: {
+        deletedAt: null,
+        OR: [{ organizationId: orgId }, { isSystem: true }],
+      },
+    });
+  }
+
+  // Preview-regen maintenance scan. Org-owned templates only: a system
+  // template is shared across orgs, so an org-scoped maintenance run must not
+  // rewrite its thumbnail.
+  findTemplatesForPreviewRegen(orgId: string) {
+    return this._designTemplate.model.designTemplate.findMany({
+      where: { deletedAt: null, organizationId: orgId },
+      select: { id: true, doc: true, thumbnailFileId: true },
     });
   }
 

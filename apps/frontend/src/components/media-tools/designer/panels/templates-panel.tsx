@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useMemo, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
@@ -50,6 +50,15 @@ interface TemplatesPanelProps {
   showSaveCurrent?: boolean;
 }
 
+interface TemplatePage {
+  templates: DesignTemplate[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+const PAGE_LIMIT = 24;
+
 export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard, showSaveCurrent = true }) => {
   const fetch = useFetch();
   const user = useUser();
@@ -58,15 +67,52 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   const decision = useDecisionModal();
   const t = useT();
 
+  // Page 1 stays on SWR (cache + revalidate-on-focus); pages 2+ accumulate in
+  // local state behind "Load more" (same pattern as my-designs-panel).
   const { data, error, isLoading, mutate } = useSWR(
     `design-templates-${user.orgId}`,
     async () => {
-      const res = await fetch('/media/design-templates');
+      const res = await fetch(`/media/design-templates?page=1&limit=${PAGE_LIMIT}`);
       if (!res.ok) throw new Error('Failed to load templates');
-      return res.json() as Promise<DesignTemplate[]>;
+      return res.json() as Promise<TemplatePage>;
     },
     { keepPreviousData: true }
   );
+
+  const [extraTemplates, setExtraTemplates] = useState<DesignTemplate[]>([]);
+  const [page, setPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // A paged list is only meaningful for the org it was fetched under — a
+  // different org starts back at page 1.
+  useEffect(() => {
+    setExtraTemplates([]);
+    setPage(1);
+  }, [user.orgId]);
+
+  const templates: DesignTemplate[] = useMemo(() => {
+    const seen = new Map<string, DesignTemplate>();
+    for (const template of [...(data?.templates || []), ...extraTemplates]) {
+      seen.set(template.id, template);
+    }
+    return [...seen.values()];
+  }, [data, extraTemplates]);
+  const total: number = data?.total ?? templates.length;
+  const hasMore = templates.length < total;
+
+  const loadMore = useCallback(async () => {
+    setLoadingMore(true);
+    try {
+      const next = page + 1;
+      const res = await fetch(`/media/design-templates?page=${next}&limit=${PAGE_LIMIT}`);
+      if (!res.ok) return;
+      const json = (await res.json()) as TemplatePage;
+      setExtraTemplates((cur) => [...cur, ...((json?.templates || []) as DesignTemplate[])]);
+      setPage(next);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [fetch, page]);
 
   const { data: folders, mutate: mutateFolders } = useTemplateFolders(user?.orgId);
   const [selection, setSelection] = useState<FolderSelection>(null);
@@ -75,10 +121,10 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   // Folders organize (org templates only); the phase-1 category sections and
   // filter chips then group/filter inside the current folder view.
   const folderTemplates = useMemo(
-    () => filterTemplatesByFolder(data ?? [], selection),
-    [data, selection]
+    () => filterTemplatesByFolder(templates, selection),
+    [templates, selection]
   );
-  const unfiledCount = useMemo(() => unfiledTemplates(data ?? []).length, [data]);
+  const unfiledCount = useMemo(() => unfiledTemplates(templates).length, [templates]);
 
   // Sections drive both the filter chips and the grouped grid.
   const sections = useMemo(() => groupTemplatesByCategory(folderTemplates), [folderTemplates]);
@@ -93,10 +139,10 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   // shouldn't shrink the vocabulary of existing category names.
   const categoryLabels = useMemo(
     () =>
-      groupTemplatesByCategory(data ?? [])
+      groupTemplatesByCategory(templates)
         .map((s) => s.label)
         .filter((label): label is string => !!label),
-    [data]
+    [templates]
   );
 
   const applyTemplate = useCallback(async (template: DesignTemplate) => {
@@ -184,6 +230,10 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
         });
         if (res.ok) {
           toaster.show(t('templates_panel_template_updated', 'Template updated'), 'success');
+          // A rename/category change shifts the sort order, so the accumulated
+          // pages are stale — drop them and refetch from page 1.
+          setExtraTemplates([]);
+          setPage(1);
           mutate();
           return true;
         }
@@ -204,6 +254,8 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
         const data = await res.json();
         state.setTemplateId(data.id);
         toaster.show(t('templates_panel_saved_as_template', 'Saved as template'), 'success');
+        setExtraTemplates([]);
+        setPage(1);
         mutate();
         return true;
       }
@@ -223,7 +275,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     // default is 'Video' for video docs, else the historical default (current
     // output format, else 'custom').
     const currentCategory = state.templateId
-      ? data?.find((template) => template.id === state.templateId)?.category?.trim()
+      ? templates.find((template) => template.id === state.templateId)?.category?.trim()
       : undefined;
     const fallbackCategory =
       state.doc.mode === 'video'
@@ -248,7 +300,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
         />
       ),
     });
-  }, [store, data, modal, categoryLabels, persistTemplate, t]);
+  }, [store, templates, modal, categoryLabels, persistTemplate, t]);
 
   // Section labels: the video bucket and the uncategorized bucket get
   // translated chrome labels; everything else is user/seed data shown as-is.
@@ -277,14 +329,20 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
         selection={selection}
         onSelect={setSelection}
         onRefresh={() => mutateFolders()}
-        onTemplateMoved={() => mutate()}
+        onTemplateMoved={() => {
+          // A move changes folderId, which the accumulated pages snapshot —
+          // drop them and refetch from page 1.
+          setExtraTemplates([]);
+          setPage(1);
+          mutate();
+        }}
       />
 
       {isLoading && !data ? (
         <PanelSkeletonGrid count={4} />
       ) : error && !data ? (
         (toaster.show(t('templates_panel_couldnt_load_templates', "Couldn't load templates"), 'warning'), <PanelError message={t('templates_panel_couldnt_load_templates', "Couldn't load templates")} onRetry={() => mutate()} />)
-      ) : !data?.length ? (
+      ) : !templates.length ? (
         <div className="text-[12px] text-newTextColor/60 text-center py-4">
           {t('templates_panel_no_templates_yet', 'No templates yet')}
         </div>
@@ -407,6 +465,20 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
                 </div>
               </section>
             ))
+          )}
+          {hasMore && (
+            <div className="flex justify-center mt-1">
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-[18px] py-[9px] rounded-[8px] border border-newTableBorder bg-newBgColorInner text-[13px] text-textColor hover:bg-boxHover transition-colors disabled:opacity-60"
+              >
+                {loadingMore
+                  ? t('loading', 'Loading...')
+                  : t('templates_panel_load_more', 'Load more')}
+              </button>
+            </div>
           )}
         </>
       )}

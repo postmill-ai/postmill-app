@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { collectDocFileIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
+import { isBlankDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-blank';
 
 /**
  * RetentionRepository — encapsulated data access for the retention sweep.
@@ -119,6 +120,60 @@ export class RetentionRepository {
         where: { id: { in: rows.map((v) => v.id) } },
       });
       total += r.count;
+      if (rows.length < RetentionRepository.BATCH) break;
+    }
+    return total;
+  }
+
+  /**
+   * Soft-delete saved BLANK canvases: never-customized 'Untitled Design' rows
+   * (the autosave gate can still write one when a save races the gate) whose
+   * doc is content-free (isBlankDoc) and that have been untouched for the
+   * window. Their preview files are soft-deleted too — the design row is the
+   * only referrer, same orphan-cleanup rule as the save path's
+   * _cleanupReplacedFile. Soft (not hard) delete keeps the sweep recoverable;
+   * the existing soft-delete purges reclaim the rows later.
+   *
+   * Candidate rows that survive a batch are non-blank, so the scan pages with
+   * `skip` over the already-examined non-blank rows (blank ones drop out of
+   * the result set as they are soft-deleted).
+   */
+  async purgeBlankDesigns(cutoff: Date): Promise<number> {
+    let total = 0;
+    let examined = 0;
+    for (let i = 0; i < RetentionRepository.MAX_BATCHES; i++) {
+      const rows = await this._prisma.design.findMany({
+        where: {
+          deletedAt: null,
+          name: 'Untitled Design',
+          updatedAt: { lt: cutoff },
+        },
+        select: { id: true, doc: true, previewFileId: true },
+        orderBy: { updatedAt: 'asc' },
+        skip: examined,
+        take: RetentionRepository.BATCH,
+      });
+      if (!rows.length) break;
+      const blank = rows.filter((row) => isBlankDoc(row.doc as any));
+      examined += rows.length - blank.length;
+      if (blank.length) {
+        const ids = blank.map((row) => row.id);
+        const fileIds = blank
+          .map((row) => row.previewFileId)
+          .filter((id): id is string => !!id);
+        const now = new Date();
+        await this._prisma.design.updateMany({
+          where: { id: { in: ids }, deletedAt: null },
+          data: { deletedAt: now },
+        });
+        if (fileIds.length) {
+          await this._prisma.file.updateMany({
+            where: { id: { in: fileIds }, deletedAt: null },
+            data: { deletedAt: now },
+          });
+        }
+        total += ids.length;
+      }
       if (rows.length < RetentionRepository.BATCH) break;
     }
     return total;

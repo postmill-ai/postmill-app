@@ -51,6 +51,7 @@ describe('DesignController', () => {
     updateFolder: ReturnType<typeof vi.fn>;
     deleteFolder: ReturnType<typeof vi.fn>;
     moveTemplate: ReturnType<typeof vi.fn>;
+    regenPreviews: ReturnType<typeof vi.fn>;
   };
   let fileService: {
     getFileById: ReturnType<typeof vi.fn>;
@@ -79,6 +80,7 @@ describe('DesignController', () => {
       updateFolder: vi.fn(),
       deleteFolder: vi.fn(),
       moveTemplate: vi.fn(),
+      regenPreviews: vi.fn(),
     };
     fileService = {
       getFileById: vi.fn(),
@@ -387,12 +389,47 @@ describe('DesignController', () => {
   });
 
   describe('GET /media/design-templates', () => {
-    it('lists templates scoped to the org', async () => {
+    it('lists templates scoped to the org (legacy plain-array shape, no params)', async () => {
       const templates = [{ id: 't1' }];
       designService.listTemplates.mockResolvedValue(templates);
 
       expect(await templateController.list(org)).toBe(templates);
       expect(designService.listTemplates).toHaveBeenCalledWith('org-1');
+    });
+
+    it('passes page/limit through and returns the envelope when paginating', async () => {
+      const envelope = { templates: [{ id: 't1' }], total: 1, page: 2, limit: 24 };
+      designService.listTemplates.mockResolvedValue(envelope);
+
+      expect(await templateController.list(org, '2', '24')).toBe(envelope);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 2, 24);
+    });
+
+    it('clamps out-of-range pagination params', async () => {
+      designService.listTemplates.mockResolvedValue({ templates: [], total: 0, page: 1, limit: 100 });
+
+      await templateController.list(org, '0', '99999');
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 100);
+
+      await templateController.list(org, 'abc', undefined);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24);
+    });
+  });
+
+  describe('POST /media/designs/maintenance/regen-previews', () => {
+    it('is gated on media:update and delegates to the service', async () => {
+      expect(
+        Reflect.getMetadata(REQUIRE_PERMISSION_KEY, DesignController.prototype.regenPreviews)
+      ).toEqual({ resource: 'media', action: 'update' });
+
+      const result = {
+        designs: { scanned: 3, regenerated: 2, skipped: 1, failed: 0 },
+        templates: { scanned: 1, regenerated: 1, skipped: 0, failed: 0 },
+      };
+      designService.regenPreviews.mockResolvedValue(result);
+
+      expect(await controller.regenPreviews(org)).toBe(result);
+      expect(designService.regenPreviews).toHaveBeenCalledWith('org-1');
     });
   });
 

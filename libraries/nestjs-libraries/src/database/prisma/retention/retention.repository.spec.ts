@@ -144,3 +144,102 @@ describe('RetentionRepository — design version purge', () => {
     expect(prisma.designVersion.deleteMany).not.toHaveBeenCalled();
   });
 });
+
+describe('RetentionRepository — blank design purge', () => {
+  const makeBlankPrisma = () => ({
+    design: {
+      findMany: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    file: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+  });
+
+  it('soft-deletes only blank untouched "Untitled Design" rows and their preview files', async () => {
+    const prisma = makeBlankPrisma();
+    const cutoff = new Date('2026-10-17T00:00:00Z');
+    prisma.design.findMany.mockResolvedValueOnce([
+      // Blank image canvas → purged (with its preview file).
+      {
+        id: 'd1',
+        doc: { mode: 'image', outputs: [{ children: [], pages: [{ children: [] }] }] },
+        previewFileId: 'f1',
+      },
+      // Blank video canvas (clip-less tracks) → purged, no preview file.
+      {
+        id: 'd2',
+        doc: { mode: 'video', outputs: [{ tracks: [{ clips: [] }] }] },
+        previewFileId: null,
+      },
+      // Content on page 2 → NOT blank, survives.
+      {
+        id: 'd3',
+        doc: { mode: 'image', outputs: [{ children: [], pages: [{ children: [{ type: 'text' }] }] }] },
+        previewFileId: 'f3',
+      },
+      // Video with a clip → survives.
+      {
+        id: 'd4',
+        doc: { mode: 'video', outputs: [{ tracks: [{ clips: [{ id: 'c1' }] }] }] },
+        previewFileId: 'f4',
+      },
+    ]).mockResolvedValue([]);
+    const repo = new RetentionRepository(prisma as any);
+
+    const purged = await repo.purgeBlankDesigns(cutoff);
+
+    expect(purged).toBe(2);
+    // Candidate filter: live rows, default name, untouched past the window.
+    expect(prisma.design.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          deletedAt: null,
+          name: 'Untitled Design',
+          updatedAt: { lt: cutoff },
+        },
+      })
+    );
+    const designUpdate = prisma.design.updateMany.mock.calls[0][0];
+    expect(designUpdate.where.id.in.sort()).toEqual(['d1', 'd2']);
+    expect(designUpdate.where.deletedAt).toBeNull();
+    expect(designUpdate.data.deletedAt).toBeInstanceOf(Date);
+    // Only the purged designs' preview files are trashed (f3/f4 survive).
+    const fileUpdate = prisma.file.updateMany.mock.calls[0][0];
+    expect(fileUpdate.where.id.in).toEqual(['f1']);
+    expect(fileUpdate.where.deletedAt).toBeNull();
+  });
+
+  it('pages past examined non-blank rows with skip', async () => {
+    const prisma = makeBlankPrisma();
+    const full = Array.from({ length: 500 }, (_, i) => ({
+      id: `keep-${i}`,
+      doc: { mode: 'image', outputs: [{ children: [{ type: 'text' }] }] },
+      previewFileId: null,
+    }));
+    prisma.design.findMany
+      .mockResolvedValueOnce(full)
+      .mockResolvedValueOnce([
+        { id: 'blank-1', doc: { mode: 'image', outputs: [{ children: [] }] }, previewFileId: null },
+      ])
+      .mockResolvedValue([]);
+    const repo = new RetentionRepository(prisma as any);
+
+    const purged = await repo.purgeBlankDesigns(new Date());
+
+    expect(purged).toBe(1);
+    expect(prisma.design.findMany).toHaveBeenCalledTimes(2);
+    // Second fetch skips the 500 already-examined non-blank rows.
+    expect(prisma.design.findMany.mock.calls[1][0].skip).toBe(500);
+  });
+
+  it('is a no-op when no candidates match', async () => {
+    const prisma = makeBlankPrisma();
+    prisma.design.findMany.mockResolvedValue([]);
+    const repo = new RetentionRepository(prisma as any);
+
+    expect(await repo.purgeBlankDesigns(new Date())).toBe(0);
+    expect(prisma.design.updateMany).not.toHaveBeenCalled();
+    expect(prisma.file.updateMany).not.toHaveBeenCalled();
+  });
+});

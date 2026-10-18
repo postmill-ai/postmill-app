@@ -3,15 +3,28 @@ import { DesignRepository } from '@postmill-ai/nestjs-libraries/database/prisma/
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
+import { isBlankDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-blank';
 
 @Injectable()
 export class DesignService {
   private readonly _logger = new Logger(DesignService.name);
 
+  /**
+   * Best-effort throttle for server-side video preview regen: at most one
+   * render per design per window. In-memory only — a restart loses the state
+   * (acceptable: the next save just renders again), and the map is cleared if
+   * it ever grows past a bound so long-lived processes don't accumulate ids.
+   */
+  private static readonly PREVIEW_REGEN_THROTTLE_MS = 60_000;
+  private static readonly PREVIEW_REGEN_MAP_CAP = 10_000;
+  private readonly _previewRegenAt = new Map<string, number>();
+
   constructor(
     private readonly _designRepository: DesignRepository,
     private readonly _designerDocService: DesignerDocService,
     private readonly _fileService: FileService,
+    private readonly _designPreviewService: DesignPreviewService,
   ) {}
 
   async getDesign(orgId: string, id: string) {
@@ -57,6 +70,16 @@ export class DesignService {
         width: firstOutput.width,
         height: firstOutput.height,
       };
+      if (validatedDoc.mode === 'video') {
+        // A client live-stage snapshot of a video doc is an unpainted black
+        // frame — render the poster server-side instead. Creates are never
+        // throttled.
+        const regenId = await this._renderVideoPreview(orgId, validatedDoc);
+        if (regenId) {
+          await this._cleanupReplacedFile(orgId, data.previewFileId, regenId);
+          payload.previewFileId = regenId;
+        }
+      }
     }
     return this._designRepository.create(payload);
   }
@@ -86,6 +109,15 @@ export class DesignService {
         width: firstOutput.width,
         height: firstOutput.height,
       };
+      if (validatedDoc.mode === 'video' && this._previewRegenDue(id)) {
+        const regenId = await this._renderVideoPreview(orgId, validatedDoc);
+        if (regenId) {
+          // Supersede both the client's snapshot file (below) and the stored
+          // preview (the previous-row lookup + cleanup further down).
+          await this._cleanupReplacedFile(orgId, data.previewFileId, regenId);
+          payload.previewFileId = regenId;
+        }
+      }
     }
     // Only look up the previous row when this write moves the preview pointer.
     const previous = payload.previewFileId !== undefined
@@ -188,9 +220,18 @@ export class DesignService {
     return { success: true };
   }
 
-  async listTemplates(orgId: string) {
-    const templates = await this._designRepository.findTemplatesByOrg(orgId);
-    return templates.map((t) => ({
+  async listTemplates(orgId: string, page?: number, limit?: number) {
+    // Backward compatible: no pagination params = the historical plain array
+    // (other callers depend on the shape). Both present = one page wrapped in
+    // { templates, total, page, limit }.
+    const paginated = page !== undefined && limit !== undefined;
+    const [templates, total] = paginated
+      ? await Promise.all([
+          this._designRepository.findTemplatesByOrg(orgId, page, limit),
+          this._designRepository.countTemplatesByOrg(orgId),
+        ])
+      : ([await this._designRepository.findTemplatesByOrg(orgId), undefined] as const);
+    const mapped = templates.map((t) => ({
       ...t,
       // The gallery list is chrome: it reads the mode (badge, uncategorized
       // bucketing, cross-mode confirm) but never the document — shipping every
@@ -199,6 +240,9 @@ export class DesignService {
       doc: { mode: (t.doc as any)?.mode ?? 'image' },
       thumbnail: (t as any).thumbnailFile?.path ?? null,
     }));
+    return paginated
+      ? { templates: mapped, total: total as number, page: page as number, limit: limit as number }
+      : mapped;
   }
 
   async getTemplate(orgId: string, id: string) {
@@ -350,6 +394,114 @@ export class DesignService {
     if (!file) {
       throw new BadRequestException('Invalid preview/thumbnail file');
     }
+  }
+
+  /**
+   * Render + upload a server-side video preview. NEVER throws: a render or
+   * upload failure logs and returns null, so the save keeps whatever preview
+   * the client supplied.
+   */
+  private async _renderVideoPreview(
+    orgId: string,
+    doc: DesignerDoc
+  ): Promise<string | null> {
+    try {
+      const buffer = await this._designPreviewService.renderPreviewBuffer(doc, { orgId });
+      return await this._designPreviewService.uploadPreview(orgId, buffer);
+    } catch (err) {
+      this._logger.warn(
+        `Server-side video preview regen failed; keeping the client preview: ${(err as Error)?.message}`
+      );
+      return null;
+    }
+  }
+
+  private _previewRegenDue(designId: string): boolean {
+    if (this._previewRegenAt.size >= DesignService.PREVIEW_REGEN_MAP_CAP) {
+      this._previewRegenAt.clear();
+    }
+    const now = Date.now();
+    const last = this._previewRegenAt.get(designId);
+    // Mark the ATTEMPT, not the success — a failing renderer must not be
+    // hammered on every autosave either.
+    if (last !== undefined && now - last < DesignService.PREVIEW_REGEN_THROTTLE_MS) {
+      return false;
+    }
+    this._previewRegenAt.set(designId, now);
+    return true;
+  }
+
+  /**
+   * Maintenance sweep: regenerate server-side previews for the org's designs
+   * and templates whose preview is missing (designs: both previewFileId and
+   * previewDataUrl null; templates: thumbnailFileId null) OR whose doc is
+   * video-mode (the client snapshot is a black stage). Blank docs are skipped
+   * — a blank canvas has nothing to render. Per-item failures are counted,
+   * never abort the run.
+   */
+  async regenPreviews(orgId: string) {
+    const [designs, templates] = await Promise.all([
+      this._designRepository.findDesignsForPreviewRegen(orgId),
+      this._designRepository.findTemplatesForPreviewRegen(orgId),
+    ]);
+
+    const run = async <T extends { id: string; doc: any }>(
+      rows: T[],
+      needsRegen: (row: T) => boolean,
+      apply: (row: T, fileId: string) => Promise<unknown>,
+      oldFileId: (row: T) => string | null | undefined
+    ) => {
+      const stats = { scanned: rows.length, regenerated: 0, skipped: 0, failed: 0 };
+      const queue = rows.filter((row) => {
+        if (isBlankDoc(row.doc)) {
+          stats.skipped++;
+          return false;
+        }
+        if (!needsRegen(row)) {
+          stats.skipped++;
+          return false;
+        }
+        return true;
+      });
+      // Small fixed concurrency: preview renders are CPU-heavy (node-canvas),
+      // so a wide fan-out would stall the API process.
+      const CONCURRENCY = 2;
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < queue.length) {
+          const row = queue[cursor++];
+          try {
+            const doc = this._designerDocService.validate(row.doc);
+            const buffer = await this._designPreviewService.renderPreviewBuffer(doc, { orgId });
+            const fileId = await this._designPreviewService.uploadPreview(orgId, buffer);
+            await apply(row, fileId);
+            await this._cleanupReplacedFile(orgId, oldFileId(row), fileId);
+            stats.regenerated++;
+          } catch (err) {
+            stats.failed++;
+            this._logger.warn(
+              `Preview regen failed for ${row.id}: ${(err as Error)?.message}`
+            );
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+      return stats;
+    };
+
+    const designStats = await run(
+      designs,
+      (row) => (!row.previewFileId && !row.previewDataUrl) || (row.doc as any)?.mode === 'video',
+      (row, fileId) => this._designRepository.update(row.id, orgId, { previewFileId: fileId }),
+      (row) => row.previewFileId
+    );
+    const templateStats = await run(
+      templates,
+      (row) => !row.thumbnailFileId || (row.doc as any)?.mode === 'video',
+      (row, fileId) => this._designRepository.updateTemplate(row.id, orgId, { thumbnailFileId: fileId }),
+      (row) => row.thumbnailFileId
+    );
+    return { designs: designStats, templates: templateStats };
   }
 
   // Autosave mints a fresh thumbnail File on every save; the replaced one

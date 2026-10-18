@@ -68,6 +68,12 @@ export class RetentionActivity {
       )
     );
 
+    await this._safe('blankDesigns', counts, async () =>
+      this._retentionRepository.purgeBlankDesigns(
+        before(this._days('BLANK_DESIGN_RETENTION_DAYS', 1))
+      )
+    );
+
     await this._safe('aiDesignerSessions', counts, async () =>
       this._retentionRepository.purgeAiDesignerSessionsOlderThan(
         before(this._days('AI_DESIGNER_SESSION_RETENTION_DAYS', 90))

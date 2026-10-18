@@ -211,3 +211,44 @@ describe('DesignRepository — design versions', () => {
     expect(model.designVersion.deleteMany).not.toHaveBeenCalled();
   });
 });
+
+describe('DesignRepository — templates pagination', () => {
+  it('findTemplatesByOrg without pagination returns the full list (no skip/take)', async () => {
+    const { repo, model } = makeRepo();
+    model.designTemplate.findMany.mockResolvedValue([]);
+
+    await repo.findTemplatesByOrg('org-1');
+
+    const args = model.designTemplate.findMany.mock.calls[0][0];
+    expect(args.where).toEqual({
+      deletedAt: null,
+      OR: [{ organizationId: 'org-1' }, { isSystem: true }],
+    });
+    expect(args).not.toHaveProperty('skip');
+    expect(args).not.toHaveProperty('take');
+  });
+
+  it('findTemplatesByOrg with page/limit applies skip/take', async () => {
+    const { repo, model } = makeRepo();
+    model.designTemplate.findMany.mockResolvedValue([]);
+
+    await repo.findTemplatesByOrg('org-1', 3, 24);
+
+    expect(model.designTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 48, take: 24 })
+    );
+  });
+
+  it('countTemplatesByOrg counts the same org/system scope as the list', async () => {
+    const { repo, model } = makeRepo();
+    model.designTemplate.count.mockResolvedValue(7);
+
+    expect(await repo.countTemplatesByOrg('org-1')).toBe(7);
+    expect(model.designTemplate.count).toHaveBeenCalledWith({
+      where: {
+        deletedAt: null,
+        OR: [{ organizationId: 'org-1' }, { isSystem: true }],
+      },
+    });
+  });
+});
