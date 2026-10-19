@@ -78,6 +78,10 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
   const { data: brands } = useBrands();
   const surface = useFullscreenSurface('rounded-[12px] overflow-hidden');
   const [mode, setMode] = useState<AiDesignerMode>('chat');
+  // Sessions are single-mode: image outputs OR video outputs. The user picks
+  // the output type first; only that list is shown (image is the common path,
+  // so it starts selected).
+  const [outputType, setOutputType] = useState<'image' | 'video'>('image');
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [customSizes, setCustomSizes] = useState<
     { id: string; width: number; height: number }[]
@@ -159,6 +163,16 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
     () => CHANNEL_PRESETS.filter((p) => p.category === 'video'),
     []
   );
+
+  // Switching the output type resets the format selection — a hidden stale
+  // selection from the other list must not leak into the start payload.
+  const selectOutputType = (next: 'image' | 'video') => {
+    if (next === outputType) return;
+    setOutputType(next);
+    setSelectedChannels([]);
+    setCustomSizes([]);
+    setShowCustomSizes(false);
+  };
 
   // Sessions are single-mode: image-only or video-only. A cross-mode toggle is
   // refused with an explanation (the server rejects mixed selections too).
@@ -423,12 +437,46 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
             </p>
           </div>
 
-          {/* Channels */}
+          {/* Output type — sessions are single-mode, so the user picks image
+              or video first and only that format list is shown. */}
+          <section className="space-y-2">
+            <h2 className="text-[14px] font-semibold text-textColor">
+              {t('output_type', 'Output type')}
+            </h2>
+            <div className="flex items-center gap-2 p-1 rounded-lg border border-studioBorder bg-newBgColorInner w-fit">
+              {(['image', 'video'] as const).map((ot) => (
+                <button
+                  key={ot}
+                  type="button"
+                  onClick={() => selectOutputType(ot)}
+                  aria-pressed={outputType === ot}
+                  className={`px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
+                    outputType === ot
+                      ? 'bg-designerAccent/20 text-textColor'
+                      : 'text-textColor/60 hover:text-textColor'
+                  }`}
+                >
+                  {ot === 'image'
+                    ? t('output_type_image', 'Image')
+                    : t('output_type_video', 'Video')}
+                </button>
+              ))}
+            </div>
+            <p className="text-[12px] text-textColor/60">
+              {t(
+                'output_type_hint',
+                'A session produces either images or a video — not both.'
+              )}
+            </p>
+          </section>
+
+          {/* Channels — image formats */}
+          {outputType === 'image' && (
           <section className="space-y-3">
             <div className="flex items-center gap-3">
               <div>
                 <h2 className="text-[14px] font-semibold text-textColor">
-                  {t('channels_formats', 'Channels / formats')}
+                  {t('channels_image', 'Channels / Image')}
                 </h2>
                 <p className="text-[12px] text-textColor/60">
                   {t(
@@ -479,28 +527,40 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
               </button>
             </div>
           </section>
+          )}
 
-          {/* Video formats — single-mode: selecting one refuses a mix with the
-              image formats above (and vice versa), enforced server-side too. */}
+          {/* Channels — video formats. Single-mode: the output-type switch above
+              clears the image selection, and the server rejects mixes too. */}
+          {outputType === 'video' && (
           <section className="space-y-3">
-            <div>
-              <h2 className="text-[14px] font-semibold text-textColor">
-                {t('video_formats', 'Video formats')}
-              </h2>
-              <p className="text-[12px] text-textColor/60">
-                {t(
-                  'video_formats_hint',
-                  'Delivered as a video draft you can animate and export in the Designer. Video sessions are video-only.'
-                )}
-              </p>
+            <div className="flex items-center gap-3">
+              <div>
+                <h2 className="text-[14px] font-semibold text-textColor">
+                  {t('channels_video', 'Channels / Video')}
+                </h2>
+                <p className="text-[12px] text-textColor/60">
+                  {t(
+                    'video_formats_hint',
+                    'Delivered as a video draft you can animate and export in the Designer. Video sessions are video-only.'
+                  )}
+                </p>
+              </div>
+              {selectedChannels.length > 0 && (
+                <span className="shrink-0 px-2 py-0.5 rounded-full bg-designerAccent/15 text-[11px] font-medium text-textColor tabular-nums">
+                  {t('n_selected_count', '{{count}} selected', {
+                    count: selectedChannels.length,
+                  })}
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {videoPresets.map(renderPresetCard)}
             </div>
           </section>
+          )}
 
-          {/* Custom sizes — revealed by the Custom sizes card in the grid above. */}
-          {showCustomSizes && (
+          {/* Custom sizes — revealed by the Custom sizes card in the image grid above. */}
+          {outputType === 'image' && showCustomSizes && (
           <section id="ai-designer-custom-sizes" className="space-y-3 rounded-xl border border-studioBorder bg-newBgColorInner/40 p-4">
             <div>
               <h2 className="text-[14px] font-semibold text-textColor">
