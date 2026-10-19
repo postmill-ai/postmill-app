@@ -435,8 +435,18 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
 }) => {
   const doc = store((s) => s.doc);
   const currentOutput = store((s) => s.currentOutput);
-  const playheadMs = store((s) => s.playheadMs);
   const [tick, setTick] = useState(0);
+
+  // The playhead moves per rAF tick during playback. Subscribing React to it
+  // re-rendered the whole overlay AND re-ran every playhead-keyed effect on
+  // each tick — including the continuous-redraw effect below, which tore down
+  // and re-created its rAF loop every frame. Instead the playhead is mirrored
+  // into a ref (no re-render), and the two repaint paths read it imperatively:
+  // the rAF loop while dynamic content animates, and a tick pushed from the
+  // store subscription when no loop is running (scrubbing, or playback of
+  // static-only content like a fading text clip).
+  const playheadRef = useRef(store.getState().playheadMs);
+  const rafActiveRef = useRef(false);
 
   const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
   const isVideo = doc.mode === 'video' && !!vo;
@@ -467,10 +477,27 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     };
   }, [redrawLayer]);
 
+  // Mirror the playhead into the ref without re-rendering. When no rAF loop is
+  // running (paused scrub, or playback whose clips have nothing per-frame to
+  // animate beyond props), a playhead move is the ONLY repaint trigger — push
+  // a tick for it. While the loop runs it already re-renders every frame and
+  // reads the ref, so a subscription-driven tick would just double the render.
+  useEffect(() => {
+    return store.subscribe((state, prev) => {
+      if (state.playheadMs === prev.playheadMs) return;
+      playheadRef.current = state.playheadMs;
+      if (!rafActiveRef.current) setTick((t) => t + 1);
+    });
+  }, [store]);
+
+  // Recomposed when the doc (tracks) or the repaint tick moves — the playhead
+  // itself is read imperatively so a per-frame playhead update never re-keys
+  // this memo on its own.
   const clipsAtPlayhead = useMemo(() => {
     if (!isVideo || !vo) return [];
-    return composeClipsAtPlayhead(vo, playheadMs);
-  }, [isVideo, vo, playheadMs]);
+    return composeClipsAtPlayhead(vo, playheadRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVideo, vo, tick]);
 
   // Preload image sources for image clips.
   useEffect(() => {
@@ -483,7 +510,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
 
   // A continuous redraw is only needed when dynamic content (a video/sticker or a
   // CSS-filtered clip) sits under the playhead; text/image/caption/empty regions
-  // repaint from the playheadMs subscription, so the 60fps loop stays off then.
+  // repaint from the playhead subscription above, so the 60fps loop stays off then.
   const needsRaf = useMemo(
     () =>
       isVideo &&
@@ -503,8 +530,13 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   // props, which react-konva rightly treats as a no-op — without the explicit
   // repaint the artboard keeps whatever it last drew (blank until some
   // unrelated interaction, like selecting the clip, forced a draw).
+  //
+  // Deps deliberately EXCLUDE the playhead: it moves per frame during
+  // playback, and having it here tore the loop down and re-created it on
+  // every tick. The loop reads the playhead imperatively via playheadRef.
   useEffect(() => {
     if (!needsRaf) return;
+    rafActiveRef.current = true;
     let raf: number;
     const loop = () => {
       nodeRef.current?.getLayer()?.batchDraw();
@@ -512,8 +544,11 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [needsRaf, playheadMs]);
+    return () => {
+      rafActiveRef.current = false;
+      cancelAnimationFrame(raf);
+    };
+  }, [needsRaf]);
 
   // Seek/pause video elements so the held frame is rendered when paused.
   useEffect(() => {
@@ -522,10 +557,10 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
       // Include speed:0 (freeze) clips: sourceTimeForPlayhead resolves them to a
       // constant frame, so seeking shows the held frame instead of frame 0.
       if ((trackType === 'video' || trackType === 'sticker') && clip.src) {
-        seekVideo(clip, playheadMs);
+        seekVideo(clip, playheadRef.current);
       }
     }
-  }, [isVideo, clipsAtPlayhead, playheadMs]);
+  }, [isVideo, clipsAtPlayhead]);
 
   // Evict hidden <video> nodes for clips that no longer exist in the output.
   useEffect(() => {
@@ -569,12 +604,14 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     node.scaleX(1);
     node.scaleY(1);
 
-    const update = clipGeometryUpdate(clip, before, after, playheadMs);
+    const update = clipGeometryUpdate(clip, before, after, playheadRef.current);
     if (!update) return;
     store.getState().updateClip(currentOutput, trackId, clip.id, update);
   };
 
   if (!isVideo) return null;
+
+  const playheadMs = playheadRef.current;
 
   return (
     <>

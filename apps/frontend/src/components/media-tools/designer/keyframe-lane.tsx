@@ -141,9 +141,15 @@ export const KeyframeLane: FC<KeyframeLaneProps> = ({
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    // A lost mouseup (pointercancel, window blur mid-drag) ends the drag the
+    // same way — otherwise the gesture's listeners leak until the next drag.
+    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('blur', onUp);
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('blur', onUp);
     };
   }, [drag, clip, clipDurationMs, pixelsPerMs, store, selectedClip, t]);
 

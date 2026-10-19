@@ -130,9 +130,15 @@ function useKeyframeDrag(
     };
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
+    // A lost mouseup (pointercancel, window blur mid-drag) ends the drag the
+    // same way — otherwise the gesture's listeners leak until the next drag.
+    window.addEventListener('pointercancel', handleUp);
+    window.addEventListener('blur', handleUp);
     return () => {
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
+      window.removeEventListener('blur', handleUp);
     };
   }, [dragging, totalMs, onMove, onCommit, containerRef]);
 

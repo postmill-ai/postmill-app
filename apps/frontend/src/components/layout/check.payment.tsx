@@ -7,6 +7,7 @@ import { timer } from '@postmill-ai/helpers/utils/timer';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { acquireBlurMe } from '@postmill-ai/frontend/components/layout/blur-me';
 export const CheckPayment: FC<{
   check: string;
   /** The provider's own subscription ref from the return URL (PayPal appends `subscription_id`). */
@@ -33,17 +34,11 @@ export const CheckPaymentInner: FC<{
   const t = useT();
 
   useEffect(() => {
-    if (showLoader) {
-      document.querySelector('body')?.classList.add('overflow-hidden');
-      Array.from(document.querySelectorAll('.blurMe') || []).map((p) =>
-        p.classList.add('blur-xs', 'pointer-events-none')
-      );
-    } else {
-      document.querySelector('body')?.classList.remove('overflow-hidden');
-      Array.from(document.querySelectorAll('.blurMe') || []).map((p) =>
-        p.classList.remove('blur-xs', 'pointer-events-none')
-      );
-    }
+    if (!showLoader) return undefined;
+    // Shared owner with the modal manager (`blur-me.ts`) — the two effects
+    // used to add/remove the same classes independently and clobber each
+    // other, leaving the nav click-proof until a refresh.
+    return acquireBlurMe();
   }, [showLoader]);
 
   useEffect(() => {

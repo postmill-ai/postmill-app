@@ -23,6 +23,7 @@ import clsx from 'clsx';
 import { EventEmitter } from 'events';
 import i18next from '@postmill-ai/react/translation/i18next';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { acquireBlurMe } from '@postmill-ai/frontend/components/layout/blur-me';
 
 interface OpenModalInterface {
   title?: any;
@@ -365,19 +366,13 @@ export const ModalManagerInner: FC = () => {
     }))
   );
 
+  // The `.blurMe` dimming is owned by `blur-me.ts` and shared with the
+  // billing return loader — one writer per condition used to clobber the
+  // other and strand the nav in `pointer-events-none`.
   useEffect(() => {
-    if (modalManager.length > 0) {
-      document.querySelector('body')?.classList.add('overflow-hidden');
-      Array.from(document.querySelectorAll('.blurMe') || []).map((p) =>
-        p.classList.add('blur-xs', 'pointer-events-none')
-      );
-    } else {
-      document.querySelector('body')?.classList.remove('overflow-hidden');
-      Array.from(document.querySelectorAll('.blurMe') || []).map((p) =>
-        p.classList.remove('blur-xs', 'pointer-events-none')
-      );
-    }
-  }, [modalManager]);
+    if (modalManager.length === 0) return undefined;
+    return acquireBlurMe();
+  }, [modalManager.length]);
 
   if (modalManager.length === 0) {
     return null;

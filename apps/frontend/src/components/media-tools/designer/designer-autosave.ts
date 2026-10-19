@@ -80,20 +80,47 @@ export const createDesignAutosave = ({
   let createPromise: Promise<string> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retryAttempt = 0;
+  /**
+   * Retries are bounded: after this many CONSECUTIVE failures the pipeline
+   * pauses instead of hammering a down backend with a serialize + upload every
+   * ≤30s forever. The next real edit (doc or name moves on from the paused
+   * snapshot) re-arms it.
+   */
+  const MAX_CONSECUTIVE_FAILURES = 5;
+  let consecutiveFailures = 0;
+  let pausedOn: { doc: DesignerDoc; name: string } | null = null;
+  /**
+   * The last failed write's snapshot. A retry for the SAME doc reuses the
+   * already-uploaded preview instead of re-serializing the canvas and
+   * re-uploading an identical thumbnail on every backoff attempt (each of
+   * which also orphaned a File row until the next successful save).
+   */
+  let lastFailed: { doc: DesignerDoc; name: string; preview: PreviewUpload } | null = null;
 
   const clearRetry = () => {
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = null;
     retryAttempt = 0;
+    consecutiveFailures = 0;
+    lastFailed = null;
+    pausedOn = null;
   };
 
   /**
    * A failed autosave used to end at setSaving(false) — silent data loss the
    * header read as "Unsaved" forever. Surface it (`saveFailed`, the header's
-   * pill) and retry with exponential backoff until a write lands.
+   * pill) and retry with exponential backoff — bounded, see above: when the
+   * cap is hit the pill switches to "paused" until the next edit.
    */
   const scheduleRetry = () => {
-    store.getState().setSaveFailed(true);
+    const s = store.getState();
+    s.setSaveFailed(true);
+    consecutiveFailures += 1;
+    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      pausedOn = { doc: s.doc, name: s.designName };
+      s.setSaveRetryPaused(true);
+      return;
+    }
     if (retryTimer) return;
     const delay = Math.min(30000, 2000 * 2 ** retryAttempt);
     retryAttempt += 1;
@@ -103,6 +130,8 @@ export const createDesignAutosave = ({
       if (!s.isDirty) {
         s.setSaveFailed(false);
         retryAttempt = 0;
+        consecutiveFailures = 0;
+        lastFailed = null;
         return;
       }
       save(s.doc);
@@ -111,7 +140,9 @@ export const createDesignAutosave = ({
 
   const notePersisted = () => {
     clearRetry();
-    store.getState().setSaveFailed(false);
+    const s = store.getState();
+    s.setSaveFailed(false);
+    s.setSaveRetryPaused(false);
   };
 
   const ensureCreated = (): Promise<string> => {
@@ -125,10 +156,13 @@ export const createDesignAutosave = ({
         const sentName = s.designName;
         // Best-effort preview, identical fallback semantics to manual save:
         // upload wins, else base64, else nothing. A thumbnail failure must
-        // never sink the create, so degrade to no preview.
-        const { previewFileId, previewDataUrl } = await uploadPreview().catch(
-          () => ({}) as PreviewUpload
-        );
+        // never sink the create, so degrade to no preview. A retry of a failed
+        // create for the same doc + name reuses the preview it already
+        // uploaded rather than serializing the canvas again.
+        const { previewFileId, previewDataUrl } =
+          lastFailed && lastFailed.doc === sentDoc && lastFailed.name === sentName
+            ? lastFailed.preview
+            : await uploadPreview().catch(() => ({}) as PreviewUpload);
         const payload: Record<string, unknown> = {
           name: sentName,
           doc: sentDoc,
@@ -139,11 +173,20 @@ export const createDesignAutosave = ({
         // Only ship the base64 preview as a fallback when the upload failed,
         // to keep the save JSON small.
         else if (previewDataUrl) payload.previewDataUrl = previewDataUrl;
-        const res = await fetchFn('/media/designs', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error('Autosave create failed');
+        let res: Response;
+        try {
+          res = await fetchFn('/media/designs', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+        } catch (err) {
+          lastFailed = { doc: sentDoc, name: sentName, preview: { previewFileId, previewDataUrl } };
+          throw err;
+        }
+        if (!res.ok) {
+          lastFailed = { doc: sentDoc, name: sentName, preview: { previewFileId, previewDataUrl } };
+          throw new Error('Autosave create failed');
+        }
         const data = await res.json();
         // Another flow (template apply) may have landed an id while the POST
         // was in flight — never clobber it; this row just goes unreferenced.
@@ -174,25 +217,45 @@ export const createDesignAutosave = ({
     // referenced previews).
     let preview: PreviewUpload = {};
     if (store.getState().doc === sentDoc) {
-      preview = await uploadPreview();
-      // Re-check after the upload: an edit landed mid-flight, so the PUT
-      // must not carry the stale thumbnail — and the just-created File row
-      // would orphan, so trash it (same endpoint the file manager uses).
-      if (store.getState().doc !== sentDoc) {
-        if (preview.previewFileId) {
-          fetchFn(`/files/${preview.previewFileId}/trash`, { method: 'POST' }).catch(() => {});
+      if (lastFailed && lastFailed.doc === sentDoc) {
+        // A backoff retry for a doc whose preview already uploaded — reuse it
+        // instead of re-serializing the canvas and re-uploading an identical
+        // thumbnail on every attempt (the expensive half of a retry storm).
+        preview = lastFailed.preview;
+      } else {
+        preview = await uploadPreview();
+        // Re-check after the upload: an edit landed mid-flight, so the PUT
+        // must not carry the stale thumbnail — and the just-created File row
+        // would orphan, so trash it (same endpoint the file manager uses).
+        if (store.getState().doc !== sentDoc) {
+          if (preview.previewFileId) {
+            fetchFn(`/files/${preview.previewFileId}/trash`, { method: 'POST' }).catch(() => {});
+          }
+          preview = {};
         }
-        preview = {};
       }
     }
     // Read the name at send time, not at schedule time: a rename that landed
     // while the preview uploaded must ride along, or the library name would
     // lag the header (and a later markSaved would bury it — see save()).
     const sentName = store.getState().designName;
-    const res = await fetchFn(`/media/designs/${designId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ name: sentName, doc: sentDoc, ...preview }),
-    });
+    const body = JSON.stringify({ name: sentName, doc: sentDoc, ...preview });
+    let res: Response;
+    try {
+      res = await fetchFn(`/media/designs/${designId}`, {
+        method: 'PUT',
+        body,
+      });
+    } catch (err) {
+      lastFailed = { doc: sentDoc, name: sentName, preview };
+      throw err;
+    }
+    // A non-OK response is a failed write too — previously it fell through to
+    // markSaved and silently dropped the edits.
+    if (!res.ok) {
+      lastFailed = { doc: sentDoc, name: sentName, preview };
+      throw new Error('Autosave PUT failed');
+    }
     await res.json();
     return sentName;
   };
@@ -200,6 +263,15 @@ export const createDesignAutosave = ({
   const save = (sentDoc: DesignerDoc) => {
     const state = store.getState();
     if (!state.isDirty) return;
+    if (pausedOn) {
+      // Retries paused after repeated failures — only a real edit (doc or name
+      // moved on from the paused snapshot) re-arms the pipeline.
+      if (state.doc === pausedOn.doc && state.designName === pausedOn.name) return;
+      pausedOn = null;
+      consecutiveFailures = 0;
+      retryAttempt = 0;
+      state.setSaveRetryPaused(false);
+    }
     // Never mint a design row for an untouched canvas: with no designId yet a
     // save would POST a create, so a dirty-but-blank doc (e.g. a rename of a
     // canvas the user never drew on) is skipped. An existing design is

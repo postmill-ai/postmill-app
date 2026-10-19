@@ -1435,9 +1435,16 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     const onUp = () => setScrubbing(false);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    // A lost mouseup (pointer leaves the window, OS steals the pointer, window
+    // blurs mid-scrub) must also release the gesture, or the listeners leak
+    // until the next scrub.
+    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('blur', onUp);
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('blur', onUp);
       if (scrubRafRef.current !== null) cancelAnimationFrame(scrubRafRef.current);
       scrubRafRef.current = null;
     };
@@ -1787,11 +1794,25 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       store.getState().pushHistory();
     };
 
+    // A lost mouseup (pointer leaves the window, pointercancel, window blur
+    // mid-drag) ends the gesture where it stands: the cross-track drop needs a
+    // pointer position we no longer have, so it is skipped — but any geometry
+    // already written still lands as one history entry.
+    const handleCancel = () => {
+      setDragging(null);
+      setDragOverTrackId(null);
+      if (dragMovedRef.current) store.getState().pushHistory();
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointercancel', handleCancel);
+    window.addEventListener('blur', handleCancel);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleCancel);
+      window.removeEventListener('blur', handleCancel);
     };
   }, [dragging, isVideo, vo, pixelsPerMs, store, currentOutput]);
 
@@ -1865,13 +1886,23 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       }
       store.getState().setSelectedClips(marqueeHitClips(vo.tracks, rect, pixelsPerMs, MARQUEE_GEOM));
     };
+    // A lost mouseup abandons the marquee without touching the selection —
+    // there is no pointer position to finalize a rect from.
+    const onCancel = () => {
+      marqueeAnchorRef.current = null;
+      setMarquee(null);
+    };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     window.addEventListener('keydown', onKey);
+    window.addEventListener('pointercancel', onCancel);
+    window.addEventListener('blur', onCancel);
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('blur', onCancel);
     };
   }, [marqueeActive, isVideo, vo, pixelsPerMs, store, MARQUEE_GEOM]);
 
@@ -2268,9 +2299,15 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const onUp = () => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        window.removeEventListener('blur', onUp);
       };
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
+      // pointercancel / window blur are the lost-mouseup paths — without them
+      // the resize listeners leaked until the next splitter drag.
+      window.addEventListener('pointercancel', onUp);
+      window.addEventListener('blur', onUp);
     },
     [store],
   );

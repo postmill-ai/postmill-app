@@ -137,6 +137,22 @@ describe('full screen', () => {
     expect(root().className).toContain(COLLAPSED);
   });
 
+  it('resets when the expanded surface unmounts while another studio is still mounted (Designer-in-chat-modal)', () => {
+    // Two surfaces share the one boolean: the AI Designer chat stays mounted
+    // while the Designer opens expanded in a modal on top of it. Closing that
+    // modal must not leave `expanded` stuck — the chat's surface would keep
+    // covering the left rail until a refresh.
+    const chat = render(<Studio />);
+    const designer = render(<Studio />);
+    fireEvent.click(screen.getAllByRole('button')[0]);
+    expect(screen.getAllByTestId('root')[0].className).toContain('fixed inset-0');
+
+    designer.unmount();
+
+    expect(screen.getAllByTestId('root')[0].className).toContain(COLLAPSED);
+    chat.unmount();
+  });
+
   it('keeps every surface in step — the button and the root are separate consumers', () => {
     // They used to agree only because both read document.fullscreenElement;
     // without a shared store they would silently diverge.

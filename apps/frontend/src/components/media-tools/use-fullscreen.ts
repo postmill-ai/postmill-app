@@ -22,7 +22,11 @@ import { create } from 'zustand';
  * Single-surface assumption: one boolean for the whole app. Only one studio is
  * normally mounted at a time; the exception is the Designer opened in a modal
  * from the AI Designer chat, where collapsing the Designer also collapses the
- * chat behind it. Benign, and not worth an owner-id + context to avoid.
+ * chat behind it. Benign, and not worth an owner-id + context to avoid. The
+ * load-bearing invariant is the other direction: EVERY surface resets the flag
+ * on unmount (`useFullscreenSurface`), so a stuck `expanded=true` can never
+ * outlive the surface that set it — including the Designer closing inside the
+ * chat modal.
  */
 interface FullscreenState {
   expanded: boolean;

@@ -91,4 +91,43 @@ describe('CheckPayment', () => {
     expect(mockFetch).toHaveBeenCalledWith('/billing/check/uid-2');
     expect(mockModalOpen).toHaveBeenCalledWith(expect.objectContaining({ title: 'Invalid Payment' }));
   });
+
+  it('dims .blurMe chrome while the loader is up and releases it afterwards (never stranded)', async () => {
+    document.body.insertAdjacentHTML('beforeend', '<div data-testid="nav" class="blurMe"></div>');
+    const nav = document.querySelector('.blurMe')!;
+    mockFetch.mockImplementation(async () => ({ json: async () => ({ status: 2 }) }));
+    const { unmount } = render(
+      <CheckPayment check="uid-9" mutate={vi.fn()}>
+        <div>child</div>
+      </CheckPayment>,
+    );
+    await waitFor(() => {
+      expect(nav.classList.contains('blur-xs')).toBe(true);
+      expect(nav.classList.contains('pointer-events-none')).toBe(true);
+    });
+    // Loader resolved → children render and the classes come off.
+    await waitFor(() => expect(screen.getByText('child')).toBeTruthy());
+    await waitFor(() => {
+      expect(nav.classList.contains('blur-xs')).toBe(false);
+      expect(nav.classList.contains('pointer-events-none')).toBe(false);
+    });
+    unmount();
+    nav.remove();
+  });
+
+  it('releases the dimming if the component unmounts mid-load', async () => {
+    document.body.insertAdjacentHTML('beforeend', '<div data-testid="nav" class="blurMe"></div>');
+    const nav = document.querySelector('.blurMe')!;
+    mockFetch.mockImplementation(() => new Promise(() => {})); // never resolves
+    const { unmount } = render(
+      <CheckPayment check="uid-10" mutate={vi.fn()}>
+        <div>child</div>
+      </CheckPayment>,
+    );
+    await waitFor(() => expect(nav.classList.contains('pointer-events-none')).toBe(true));
+    unmount();
+    expect(nav.classList.contains('blur-xs')).toBe(false);
+    expect(nav.classList.contains('pointer-events-none')).toBe(false);
+    nav.remove();
+  });
 });

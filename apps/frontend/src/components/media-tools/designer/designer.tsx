@@ -370,6 +370,7 @@ export const Designer: FC<DesignerProps> = ({
   const isDirty = store((s) => s.isDirty);
   const isSaving = store((s) => s.isSaving);
   const saveFailed = store((s) => s.saveFailed);
+  const saveRetryPaused = store((s) => s.saveRetryPaused);
   // Narrow slices instead of the whole doc: a root-level `doc` subscription
   // re-rendered the entire app chrome on every edit. Anything that needs the
   // full doc reads it imperatively (store.getState()) or subscribes outside
@@ -1400,7 +1401,9 @@ export const Designer: FC<DesignerProps> = ({
           )}
           {!pixelOps.baking && saveFailed && (
             <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-dangerText">
-              {translate('designer_save_failed_retrying', 'Save failed — retrying')}
+              {saveRetryPaused
+                ? translate('designer_save_failed_paused', 'Save failed — will retry on next edit')
+                : translate('designer_save_failed_retrying', 'Save failed — retrying')}
             </span>
           )}
           {!pixelOps.baking && !saveFailed && isSaving && <span className="text-newTextColor/60">{translate('saving_ellipsis', 'Saving…')}</span>}

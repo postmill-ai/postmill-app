@@ -126,6 +126,8 @@ export interface DesignerState {
   isDirty: boolean; isSaving: boolean; lastSaved: Date | null;
   /** An autosave write failed and a backoff retry is pending — drives the header pill. */
   saveFailed: boolean;
+  /** Retries gave up after repeated failures; the next real edit re-arms them. */
+  saveRetryPaused: boolean;
   clipboard: DesignerElement[];
   editFormatOnly: boolean;
   brandEnforcement: boolean;
@@ -294,6 +296,7 @@ export interface DesignerActions {
   /** Jump straight to a history entry, as Photoshop's History panel does. */
   jumpToHistory: (index: number) => void;
   markSaved: () => void; setSaving: (saving: boolean) => void; setSaveFailed: (failed: boolean) => void;
+  setSaveRetryPaused: (paused: boolean) => void;
   reset: (width?: number, height?: number) => void;
   loadDesign: (doc: any, id: string, name: string, templateId?: string | null) => void;
   // video mode
@@ -507,7 +510,7 @@ export const createDesignerStore = (
       designId: null, designTemplateId: null, templateId: null,
       designName: 'Untitled Design',
       isDirty: false, isSaving: false, lastSaved: null,
-      saveFailed: false,
+      saveFailed: false, saveRetryPaused: false,
       editFormatOnly: false,
       brandEnforcement: false,
       brandAdminOverride: false,
@@ -1453,9 +1456,10 @@ export const createDesignerStore = (
         reconcileBuffersWithDoc(nextDoc);
       },
 
-      markSaved: () => set({ isDirty: false, isSaving: false, saveFailed: false, lastSaved: new Date(), savedHistoryIndex: get().historyIndex }),
+      markSaved: () => set({ isDirty: false, isSaving: false, saveFailed: false, saveRetryPaused: false, lastSaved: new Date(), savedHistoryIndex: get().historyIndex }),
       setSaving: (saving) => set({ isSaving: saving }),
       setSaveFailed: (failed) => set({ saveFailed: failed }),
+      setSaveRetryPaused: (paused) => set({ saveRetryPaused: paused }),
 
       reset: (w, h) => {
         const newDoc = createEmptyDoc(w, h);
@@ -1468,7 +1472,7 @@ export const createDesignerStore = (
           fitNonce: get().fitNonce + 1,
           history: [JSON.parse(JSON.stringify(newDoc))], historyLabels: ['New'], historyIndex: 0, savedHistoryIndex: 0,
           designId: null, designTemplateId: null, templateId: null,
-          designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null, saveFailed: false,
+          designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null, saveFailed: false, saveRetryPaused: false,
           editFormatOnly: false,
           brandEnforcement: false,
           brandAdminOverride: false,
@@ -1494,6 +1498,8 @@ export const createDesignerStore = (
           zoom: 1, viewportX: 0, viewportY: 0,
           fitNonce: get().fitNonce + 1,
           history: [JSON.parse(JSON.stringify(migrated))], historyLabels: ['Open'], historyIndex: 0, savedHistoryIndex: 0, isDirty: false,
+          // A paused/failed autosave belonged to the previous design.
+          saveFailed: false, saveRetryPaused: false,
           playheadMs: 0,
           selectedClip: null,
           selectedClips: [],

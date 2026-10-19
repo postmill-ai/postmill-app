@@ -397,6 +397,165 @@ describe('createDesignAutosave', () => {
   });
 });
 
+describe('createDesignAutosave retry bound', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  /** Store with an existing design and one dirty edit, ready to PUT. */
+  const dirtyStore = () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-x');
+    addText(store, 'Edit');
+    return store;
+  };
+
+  it('stops retrying after 5 consecutive failures and marks retries paused', async () => {
+    vi.useFakeTimers();
+    const store = dirtyStore();
+    const fetchMock = vi.fn().mockRejectedValue(new Error('backend down'));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({ previewFileId: 'file-1' } as PreviewUpload),
+    });
+
+    autosave.save(store.getState().doc);
+    // Initial attempt + backoff retries (2s, 4s, 8s, 16s) = 5 total, then pause.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(5);
+    expect(store.getState().saveFailed).toBe(true);
+    expect(store.getState().saveRetryPaused).toBe(true);
+    expect(store.getState().isDirty).toBe(true);
+
+    // No storm: advancing far past the 30s backoff cap schedules nothing more.
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(5);
+  });
+
+  it('does not re-upload the preview on retries of the same unchanged doc', async () => {
+    vi.useFakeTimers();
+    const store = dirtyStore();
+    const fetchMock = vi.fn().mockRejectedValue(new Error('backend down'));
+    const uploadPreview = vi.fn().mockResolvedValue({ previewFileId: 'file-1' } as PreviewUpload);
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(5);
+    // One upload for the first attempt; all four retries reused it…
+    expect(uploadPreview).toHaveBeenCalledTimes(1);
+    // …and every PUT carried that preview id.
+    for (const [, init] of callsTo(fetchMock, 'PUT', '/media/designs/design-x')) {
+      expect(JSON.parse((init as RequestInit).body as string).previewFileId).toBe('file-1');
+    }
+  });
+
+  it('treats a non-OK PUT as a failed write (retry + pill), not as a silent save', async () => {
+    vi.useFakeTimers();
+    const store = dirtyStore();
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: false, json: async () => ({}) } as Response));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({} as PreviewUpload),
+    });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.getState().isDirty).toBe(true);
+    expect(store.getState().saveFailed).toBe(true);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x').length).toBeGreaterThan(1);
+  });
+
+  it('re-arms on the next real edit after pausing, and ignores non-edits', async () => {
+    vi.useFakeTimers();
+    const store = dirtyStore();
+    const fetchMock = vi.fn().mockRejectedValue(new Error('backend down'));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({} as PreviewUpload),
+    });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(store.getState().saveRetryPaused).toBe(true);
+    const callsAtPause = callsTo(fetchMock, 'PUT', '/media/designs/design-x').length;
+
+    // The debounced effect re-firing for the SAME doc (e.g. an unrelated store
+    // write) must not re-arm — only a real edit does.
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(callsAtPause);
+    expect(store.getState().saveRetryPaused).toBe(true);
+
+    // A real edit re-arms: the autosave PUTs again (and fails fresh, so the
+    // backoff cycle restarts rather than staying paused).
+    addText(store, 'New edit after pause');
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState().saveRetryPaused).toBe(false);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x').length).toBeGreaterThan(callsAtPause);
+  });
+
+  it('recovers cleanly: a successful retry clears failed + paused and resets the backoff', async () => {
+    vi.useFakeTimers();
+    const store = dirtyStore();
+    let down = true;
+    const fetchMock = vi.fn(() =>
+      down ? Promise.reject(new Error('backend down')) : Promise.resolve(okJson({}))
+    );
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({} as PreviewUpload),
+    });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(store.getState().saveFailed).toBe(true);
+
+    // Backend recovers before the next retry.
+    down = false;
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(store.getState().saveFailed).toBe(false);
+    expect(store.getState().saveRetryPaused).toBe(false);
+    expect(store.getState().isDirty).toBe(false);
+
+    // The failure counter reset: a fresh outage gets the full 5 attempts again.
+    // (The first outage made 3 PUTs: initial, the failed 2s retry, the
+    // successful 4s retry.)
+    down = true;
+    addText(store, 'Second outage edit');
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(3 + 5);
+    expect(store.getState().saveRetryPaused).toBe(true);
+  });
+
+  it('bounds create-path retries the same way and reuses the create preview', async () => {
+    vi.useFakeTimers();
+    const store = createDesignerStore();
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: false, json: async () => ({}) } as Response));
+    const uploadPreview = vi.fn().mockResolvedValue({ previewFileId: 'file-c' } as PreviewUpload);
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
+
+    addText(store, 'Edit');
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(5);
+    expect(uploadPreview).toHaveBeenCalledTimes(1);
+    expect(store.getState().saveRetryPaused).toBe(true);
+    expect(store.getState().designId).toBeNull();
+  });
+});
+
 describe('createAutosaveSubscription', () => {
   afterEach(() => {
     vi.restoreAllMocks();
