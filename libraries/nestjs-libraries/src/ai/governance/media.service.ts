@@ -1407,6 +1407,10 @@ export class AiMediaService {
       warn: (message) => this._logger.warn(message),
       label,
       allowUnverifiedRemote: true,
+      // bria/flux edit models reject data: URIs ("image_url must be a valid
+      // HTTP or HTTPS URL") — a publicly reachable upload URL must pass
+      // through; only private/relative sources get inlined.
+      preferPublicUrl: true,
       maxInlineBytes: AiMediaService.MEDIA_EDIT_MAX_INLINE_BYTES,
     });
   }

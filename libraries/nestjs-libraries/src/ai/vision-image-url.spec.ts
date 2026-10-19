@@ -2,7 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import path from 'path';
 import os from 'os';
+import dns from 'node:dns/promises';
 import { loadVisionImageBytes, resolveVisionImageUrl } from './vision-image-url';
+
+vi.mock('node:dns/promises', () => ({
+  default: { lookup: vi.fn() },
+}));
+
+const mockPublicDns = () =>
+  vi.mocked(dns.lookup).mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+const mockPrivateDns = () =>
+  vi.mocked(dns.lookup).mockResolvedValue([{ address: '10.0.0.8', family: 4 }]);
 
 /**
  * The AI Designer's contact sheet rides memory as a `data:` URI instead of
@@ -121,5 +131,85 @@ describe('loadVisionImageBytes', () => {
     await expect(
       loadVisionImageBytes('https://example.com/sheet.png')
     ).resolves.toBeNull();
+  });
+});
+
+/**
+ * `preferPublicUrl` — the image-edit path (bg-remove/inpaint/outpaint via
+ * Replicate): those models validate inputs as strict http(s) URLs and reject
+ * data: URIs, so a genuinely public upload URL must pass through unchanged,
+ * while a private host still falls back to inlining.
+ */
+describe('resolveVisionImageUrl preferPublicUrl', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = path.join(os.tmpdir(), `vision-prefer-public-${Date.now()}`);
+    mkdirSync(tmpDir, { recursive: true });
+    vi.stubEnv('UPLOAD_DIRECTORY', tmpDir);
+    vi.stubEnv('SSRF_ALLOWED_PRIVATE_CIDRS', '');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.mocked(dns.lookup).mockReset();
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup failures
+    }
+  });
+
+  it('passes a publicly reachable local-upload URL through instead of inlining', async () => {
+    vi.stubEnv('FRONTEND_URL', 'https://app.example.com');
+    mockPublicDns();
+    writeFileSync(path.join(tmpDir, 'sheet.png'), Buffer.from('local-bytes'));
+    await expect(
+      resolveVisionImageUrl('https://app.example.com/uploads/sheet.png', {
+        preferPublicUrl: true,
+      })
+    ).resolves.toBe('https://app.example.com/uploads/sheet.png');
+  });
+
+  it('still inlines when the host resolves to a private address (provider cannot reach it)', async () => {
+    vi.stubEnv('FRONTEND_URL', 'https://intranet.example.com');
+    mockPrivateDns();
+    writeFileSync(path.join(tmpDir, 'sheet.png'), Buffer.from('local-bytes'));
+    const resolved = await resolveVisionImageUrl(
+      'https://intranet.example.com/uploads/sheet.png',
+      { preferPublicUrl: true }
+    );
+    expect(resolved).toMatch(/^data:image\//);
+  });
+
+  it('ignores SSRF_ALLOWED_PRIVATE_CIDRS — the opt-in never applies to the provider network', async () => {
+    vi.stubEnv('FRONTEND_URL', 'https://intranet.example.com');
+    vi.stubEnv('SSRF_ALLOWED_PRIVATE_CIDRS', '10.0.0.0/8');
+    mockPrivateDns();
+    writeFileSync(path.join(tmpDir, 'sheet.png'), Buffer.from('local-bytes'));
+    const resolved = await resolveVisionImageUrl(
+      'https://intranet.example.com/uploads/sheet.png',
+      { preferPublicUrl: true }
+    );
+    expect(resolved).toMatch(/^data:image\//);
+  });
+
+  it('passes a public non-local URL through as before', async () => {
+    mockPublicDns();
+    await expect(
+      resolveVisionImageUrl('https://cdn.example.com/sheet.png', {
+        preferPublicUrl: true,
+      })
+    ).resolves.toBe('https://cdn.example.com/sheet.png');
+  });
+
+  it('without preferPublicUrl a public local-upload URL keeps inlining (vision default)', async () => {
+    vi.stubEnv('FRONTEND_URL', 'https://app.example.com');
+    mockPublicDns();
+    writeFileSync(path.join(tmpDir, 'sheet.png'), Buffer.from('local-bytes'));
+    const resolved = await resolveVisionImageUrl(
+      'https://app.example.com/uploads/sheet.png'
+    );
+    expect(resolved).toMatch(/^data:image\//);
   });
 });

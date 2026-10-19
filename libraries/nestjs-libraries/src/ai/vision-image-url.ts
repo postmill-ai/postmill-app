@@ -1,6 +1,12 @@
 import { readFile, realpath, stat } from 'fs/promises';
 import path from 'path';
-import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
+import dns from 'node:dns/promises';
+import net from 'node:net';
+import {
+  isSafePublicHttpsUrl,
+  isBlockedIPv4,
+  isBlockedIPv6,
+} from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
 
 /**
@@ -32,6 +38,16 @@ export interface ResolveVisionImageOptions {
    * is the better judge.
    */
   allowUnverifiedRemote?: boolean;
+  /**
+   * `true` — a genuinely public HTTPS URL passes through BEFORE the
+   * local-inline branch. Replicate-style edit models validate their inputs
+   * strictly (bria rejects `data:` URIs with "image_url must be a valid HTTP
+   * or HTTPS URL"), so a URL the provider can reach must not be inlined. The
+   * check is deliberately stricter than `isSafePublicHttpsUrl`: the
+   * SSRF_ALLOWED_PRIVATE_CIDRS opt-in protects THIS process's fetches but says
+   * nothing about the provider's network — a private host is still inlined.
+   */
+  preferPublicUrl?: boolean;
 }
 
 /**
@@ -59,6 +75,7 @@ export async function resolveVisionImageUrl(
     label = 'Vision',
     maxInlineBytes = VISION_IMAGE_MAX_INLINE_BYTES,
     allowUnverifiedRemote = false,
+    preferPublicUrl = false,
   } = options;
 
   if (typeof url !== 'string' || !url.trim()) return null;
@@ -73,6 +90,10 @@ export async function resolveVisionImageUrl(
       warn(`${label}: inlined image too large (${bytes} bytes)`);
       return null;
     }
+    return url;
+  }
+
+  if (preferPublicUrl && (await isProviderReachableHttpsUrl(url))) {
     return url;
   }
 
@@ -141,6 +162,49 @@ export function isLocalStorageUrl(url: string): boolean {
     (!!frontendUrl && url.startsWith(`${frontendUrl}/uploads/`)) ||
     url.startsWith('/uploads/')
   );
+}
+
+/**
+ * Strict variant of `isSafePublicHttpsUrl` for URLs handed to an EXTERNAL
+ * provider: identical public-HTTPS/DNS rules, but WITHOUT the
+ * SSRF_ALLOWED_PRIVATE_CIDRS escape — that opt-in exists for fetches made by
+ * this process, and a provider on the public internet cannot reach a private
+ * host no matter what the admin allowlisted locally.
+ */
+export async function isProviderReachableHttpsUrl(value: unknown): Promise<boolean> {
+  if (typeof value !== 'string' || !value.trim()) return false;
+
+  const strictBlocked = (ip: string): boolean => {
+    const version = net.isIP(ip);
+    if (version === 4) return isBlockedIPv4(ip);
+    if (version === 6) {
+      const mapped = ip.toLowerCase().match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+      if (mapped) return isBlockedIPv4(mapped[1]);
+      return isBlockedIPv6(ip);
+    }
+    return true;
+  };
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:' || !parsed.hostname) return false;
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (hostname === 'localhost') return false;
+
+  if (net.isIP(hostname)) {
+    return !strictBlocked(hostname);
+  }
+  try {
+    const records = await dns.lookup(hostname, { all: true });
+    if (!records.length) return false;
+    return records.every((record) => !strictBlocked(record.address));
+  } catch {
+    return false;
+  }
 }
 
 /** Where local uploads live, absolute. */
