@@ -108,6 +108,21 @@ function scrubEvent(event: any): any {
   return event;
 }
 
+/**
+ * Client-gone noise: the socket closed mid-request, so nothing we return can
+ * reach anyone. Matches every shape this takes — body-parser's BadRequestError,
+ * raw http 'request.aborted'/ECONNABORTED/ECONNRESET, and node's plain
+ * `Error: Request aborted` (any exception type, any casing).
+ */
+export const isAbortedRequestEvent = (
+  original: { type?: string; code?: string } | undefined,
+  values: { type?: string; value?: string }[] | undefined
+): boolean =>
+  original?.type === 'request.aborted' ||
+  original?.code === 'ECONNABORTED' ||
+  original?.code === 'ECONNRESET' ||
+  !!values?.some((v) => /request aborted/i.test(v.value ?? ''));
+
 export const initializeSentry = (appName: string, allowLogs = false) => {
   if (process.env.DEV_DISABLE_SENTRY === 'true' || process.env.DEV_DISABLE_SENTRY === '1') {
     return null;
@@ -159,15 +174,7 @@ export const initializeSentry = (appName: string, allowLogs = false) => {
         const original = hint?.originalException as
           | { type?: string; code?: string }
           | undefined;
-        const isAbortedRequest =
-          original?.type === 'request.aborted' ||
-          original?.code === 'ECONNABORTED' ||
-          event.exception?.values?.some(
-            (v) =>
-              v.type === 'BadRequestError' &&
-              /request aborted/i.test(v.value ?? '')
-          );
-        if (isAbortedRequest) return null;
+        if (isAbortedRequestEvent(original, event.exception?.values)) return null;
         return scrubEvent(event);
       },
 
