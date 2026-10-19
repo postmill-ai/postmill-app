@@ -339,9 +339,14 @@ export function addMediaToTimeline(
     probe.then(({ durationMs, width: natW, height: natH }) => {
       const endMs = Math.min(durationMs, MAX_TIMELINE_DURATION_MS);
 
-      // Extend the output duration BEFORE adding the clip; addClip silently
-      // drops clips whose endMs exceeds the current duration.
-      store.getState().setVideoDuration(out, endMs);
+      // Extend — never shrink — the output duration BEFORE adding the clip;
+      // addClip silently drops clips whose endMs exceeds the current duration.
+      // A short drop onto a longer timeline must leave the existing duration
+      // (and every clip already on it) alone.
+      const before = (store.getState().doc.outputs[out] as VideoOutput).durationMs;
+      if (endMs > before) {
+        store.getState().setVideoDuration(out, endMs);
+      }
 
       const clipBase: Omit<VideoClip, 'startMs' | 'endMs' | 'id'> = {
         src: url,

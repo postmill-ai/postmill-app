@@ -73,6 +73,36 @@ describe('addMediaToTimeline — clip geometry', () => {
   });
 });
 
+describe('addMediaToTimeline — output duration', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('never shrinks the output duration when the drop is shorter than the timeline', async () => {
+    // Regression: a 5.11s music drop onto a 10s reel set durationMs to 5110,
+    // stranding every clip that ran past it.
+    stubVideoProbe({ duration: 5.11, videoWidth: 1080, videoHeight: 1080 });
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().setVideoDuration(0, 30000);
+
+    await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/short.mp4' });
+
+    const { vo, clip } = firstVideoClip(store);
+    expect(vo.durationMs).toBe(30000);
+    expect(clip!.endMs).toBe(5110);
+  });
+
+  it('still extends the output duration when the drop runs past it', async () => {
+    stubVideoProbe({ duration: 20, videoWidth: 1080, videoHeight: 1080 });
+    const store = createDesignerStore();
+
+    await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/long.mp4' });
+
+    const { vo, clip } = firstVideoClip(store);
+    expect(vo.durationMs).toBe(20000);
+    expect(clip!.endMs).toBe(20000);
+  });
+});
+
 describe('addImageClipToTimeline', () => {
   afterEach(() => vi.restoreAllMocks());
 
