@@ -42,7 +42,6 @@ import { GenerateSlideDto } from '@postmill-ai/nestjs-libraries/dtos/ai/generate
 import { GenerateVideoDto } from '@postmill-ai/backend/dtos/media/generate-video.dto';
 import { VideoFunctionDto } from '@postmill-ai/backend/dtos/media/video-function.dto';
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
-import { BadRequestException } from '@nestjs/common';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { AiDefaultsService, DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
