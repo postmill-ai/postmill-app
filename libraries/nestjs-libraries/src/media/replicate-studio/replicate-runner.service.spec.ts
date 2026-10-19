@@ -293,5 +293,72 @@ describe('ReplicateRunnerService', () => {
         }),
       );
     });
+
+    it('stores the PROVIDER version on the job row, not the community model hash (prod regression cmvfpl5mr001xsyaew7n678pg)', async () => {
+      mockSafeFetch.mockResolvedValue(
+        jsonResponse({ id: 'pred-9', status: 'starting' }),
+      );
+
+      await runner.runAsync(
+        'org1',
+        '',
+        {
+          modelId: 'arielreplicate/robust_video_matting',
+          versionId: '8cf61ea-model-hash',
+          input: { prompt: 'cat' },
+          operation: 'video',
+        },
+        { creditType: 'ai_videos' },
+      );
+
+      // The lifecycle defaults a missing version to 'v1' — the kernel reads
+      // this column as the PROVIDER version when polling (media/replicate@v1),
+      // so a model hash here made community-model jobs unresolvable.
+      const arg = mockLifecycle.createPendingJob.mock.calls[0][0];
+      expect(arg.version ?? 'v1').toBe('v1');
+      expect(arg.version).not.toBe('8cf61ea-model-hash');
+
+      // …while the model hash still reaches Replicate as the dispatch version.
+      const init = mockSafeFetch.mock.calls[0][1] as RequestInit;
+      expect(JSON.parse(init.body as string).version).toBe('8cf61ea-model-hash');
+    });
+  });
+
+  describe('getJob', () => {
+    const jobRow = (over: Record<string, unknown> = {}) => ({
+      id: 'job-1',
+      organizationId: 'org1',
+      operation: 'video',
+      status: 'failed',
+      artifactUrl: null,
+      error: 'NSFW content detected',
+      ...over,
+    });
+
+    it('returns the real failure reason for a failed job', async () => {
+      mockAiSettings.getMediaJobById.mockResolvedValue(jobRow());
+
+      const result = await runner.getJob('org1', 'job-1');
+
+      expect(result).toEqual({
+        status: 'failed',
+        result: null,
+        error: 'NSFW content detected',
+      });
+    });
+
+    it('returns the artifact urls and a null error for a completed job', async () => {
+      mockAiSettings.getMediaJobById.mockResolvedValue(
+        jobRow({ status: 'completed', artifactUrl: '/uploads/x.mp4', error: null }),
+      );
+
+      const result = await runner.getJob('org1', 'job-1');
+
+      expect(result).toEqual({
+        status: 'completed',
+        result: { kind: 'video', urls: ['/uploads/x.mp4'] },
+        error: null,
+      });
+    });
   });
 });

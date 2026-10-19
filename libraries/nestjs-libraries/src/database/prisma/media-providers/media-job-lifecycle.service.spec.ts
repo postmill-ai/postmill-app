@@ -228,6 +228,34 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
       );
     });
 
+    it('a job created without a version stores v1 and polls through the v1 adapter (replicate community-model regression)', async () => {
+      const { service, aiSettings, resolution, pollJob } = makeService();
+      // Replicate community-model jobs carry a model VERSION HASH at dispatch
+      // time; if that hash lands on the job row, resolveMedia looks up
+      // media/replicate@<hash> and the job can never complete (prod job
+      // cmvfpl5mr001xsyaew7n678pg).
+      const job = await service.createPendingJob({
+        organizationId: 'org-1',
+        userId: 'user-1',
+        provider: 'replicate',
+        operation: 'video',
+        model: 'arielreplicate/robust_video_matting',
+      });
+      expect(aiSettings.createMediaJob).toHaveBeenCalledWith(
+        expect.objectContaining({ version: 'v1' }),
+      );
+
+      await service.attachProviderJob(job.id, 'pred-1', 'org-1');
+      pollJob.mockResolvedValue({ status: 'pending' });
+
+      await service.processJob(job.id);
+
+      expect(resolution.resolveMedia).toHaveBeenCalledWith(
+        'replicate',
+        expect.objectContaining({ version: 'v1' }),
+      );
+    });
+
     it('treats transient poll errors as pending (retried next sweep)', async () => {
       const { service, jobs, pollJob } = makeService();
       jobs.set('job-1', makeJob());

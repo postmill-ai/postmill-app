@@ -44,6 +44,7 @@ function useReplicateJobPoll(jobId: string | null) {
       return (await res.json()) as {
         status: string;
         result: { kind: string; urls: string[] } | null;
+        error: string | null;
       };
     },
     { refreshInterval: 6000 }
@@ -92,25 +93,26 @@ export const CompactReplicate: FC<{
 
   const schema = selectedModel?.inputSchema as InputSchema | null | undefined;
 
-  // The dialog owns the prompt box: hide the schema's prompt-role fields in
-  // the DynamicForm and inject the prop value at generate time instead.
-  const promptFieldNames = useMemo(
+  // The dialog owns the prompt box: hide ALL prompt-role fields from the
+  // DynamicForm (they're driven, not user-edited here), but inject the prop
+  // value into the FIRST one in primary order only — a riffusion-style
+  // `prompt_b` keeps its schema default.
+  const promptFields = useMemo(
     () =>
-      classifySchema(schema, new Set(['mask']))
-        .primary.filter((f) => f.role === 'prompt')
-        .map((f) => f.name),
+      classifySchema(schema, new Set(['mask'])).primary.filter((f) => f.role === 'prompt'),
     [schema]
   );
-  const hiddenFields = useMemo(() => new Set(promptFieldNames), [promptFieldNames]);
+  const primaryPromptField = promptFields[0]?.name;
+  const hiddenFields = useMemo(() => new Set(promptFields.map((f) => f.name)), [promptFields]);
   useEffect(() => {
-    for (const name of promptFieldNames) updateFormField(name, prompt);
-  }, [promptFieldNames, prompt, updateFormField]);
+    if (primaryPromptField) updateFormField(primaryPromptField, prompt);
+  }, [primaryPromptField, prompt, updateFormField]);
 
   const missing = useMemo(() => {
     const merged = { ...formInput };
-    for (const name of promptFieldNames) merged[name] = prompt;
+    if (primaryPromptField) merged[primaryPromptField] = prompt;
     return selectedModel ? missingRequiredFields(schema, merged) : [];
-  }, [selectedModel, schema, formInput, promptFieldNames, prompt]);
+  }, [selectedModel, schema, formInput, primaryPromptField, prompt]);
 
   // Async runs poll the shared job endpoint to completion.
   const { data: jobData } = useReplicateJobPoll(jobId);
@@ -126,14 +128,15 @@ export const CompactReplicate: FC<{
     } else if (jobData.status === 'failed') {
       handledJobRef.current = jobId;
       setJobId(null);
-      fail(t('generation_failed', 'Generation failed'));
+      // The jobs endpoint carries the real failure reason — show it.
+      fail(jobData.error || t('generation_failed', 'Generation failed'));
     }
   }, [jobData, jobId, operation, onGenerated, fail, t]);
 
   const onGenerate = useCallback(async () => {
     if (!selectedModel || !categoryDef) return;
     const input = { ...formInput };
-    for (const name of promptFieldNames) input[name] = prompt;
+    if (primaryPromptField) input[primaryPromptField] = prompt;
     const absent = missingRequiredFields(schema, input);
     if (absent.length > 0) {
       fail(
@@ -188,7 +191,7 @@ export const CompactReplicate: FC<{
     } finally {
       setStarting(false);
     }
-  }, [selectedModel, categoryDef, formInput, promptFieldNames, prompt, schema, fetch, operation, onGenerated, fail, t]);
+  }, [selectedModel, categoryDef, formInput, primaryPromptField, prompt, schema, fetch, operation, onGenerated, fail, t]);
 
   if (!status) {
     return (
@@ -241,6 +244,15 @@ export const CompactReplicate: FC<{
 
       {categoryDef && <ModelPicker categoryKey={categoryDef.key} />}
       {categoryDef && selectedModel && <DynamicForm hiddenFields={hiddenFields} />}
+
+      {selectedModel && !primaryPromptField && (
+        <p className="text-[11px] text-amber-600">
+          {t(
+            'compact_replicate_no_prompt_field',
+            'This model has no prompt field — the dialog prompt is ignored.'
+          )}
+        </p>
+      )}
 
       {selectedModel && missing.length > 0 && (
         <p className="text-[11px] text-newTextColor/65">

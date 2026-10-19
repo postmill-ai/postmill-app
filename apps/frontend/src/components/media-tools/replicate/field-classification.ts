@@ -77,7 +77,10 @@ function roleFor(name: string, field: SchemaField): FieldRole | null {
   const lname = name.toLowerCase();
 
   if (lname === 'negative_prompt') return 'negative';
-  if (/(^|_)prompt$/.test(lname) || lname === 'text') return 'prompt';
+  // Letter-suffixed variants count too: riffusion-style schemas split the
+  // prompt across `prompt_a` / `prompt_b` — classifying only `*_prompt` misses
+  // them (the compact embed then had no prompt field to drive from the dialog).
+  if (/(^|_)prompt(_[a-z])?$/.test(lname) || lname === 'text') return 'prompt';
 
   if (isUriField(name, field)) return 'file';
 

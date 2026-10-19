@@ -63,6 +63,15 @@ const MODEL_DETAIL = {
   },
 };
 
+// Per-test override for the model detail (prompt_a/prompt_b schemas etc.).
+let modelDetail: typeof MODEL_DETAIL = MODEL_DETAIL;
+// Per-test override for the async job poll payload.
+let jobPayload: unknown = {
+  status: 'completed',
+  result: { kind: 'video', urls: ['/uploads/vid.mp4'] },
+  error: null,
+};
+
 const wrap = (ui: React.ReactElement) =>
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>{ui}</SWRConfig>
@@ -84,18 +93,20 @@ const pickModel = async (categoryKey: string) => {
 
 beforeEach(() => {
   useReplicateStore.getState().reset();
+  modelDetail = MODEL_DETAIL;
+  jobPayload = { status: 'completed', result: { kind: 'video', urls: ['/uploads/vid.mp4'] }, error: null };
   fetchMock.mockReset();
   fetchMock.mockImplementation((url: string) => {
     if (url.includes('/media/replicate/status')) return Promise.resolve(ok({ configured: true }));
     if (url.includes('/media/replicate/categories/')) return Promise.resolve(ok(MODELS));
     if (url.includes('/media/replicate/categories')) return Promise.resolve(ok(CATEGORIES));
-    if (url.includes('/media/replicate/models/')) return Promise.resolve(ok(MODEL_DETAIL));
+    if (url.includes('/media/replicate/models/')) return Promise.resolve(ok(modelDetail));
     if (url.includes('/media/replicate/run/sync')) {
       return Promise.resolve(ok({ status: 'succeeded', kind: 'image', urls: ['https://cdn.replicate/out.png'] }));
     }
     if (url.includes('/media/replicate/run/async')) return Promise.resolve(ok({ jobId: 'j1' }));
     if (url.includes('/media/replicate/jobs/')) {
-      return Promise.resolve(ok({ status: 'completed', result: { kind: 'video', urls: ['/uploads/vid.mp4'] } }));
+      return Promise.resolve(ok(jobPayload));
     }
     if (url.includes('/media/replicate/save-url')) {
       return Promise.resolve(ok({ id: 'file-1', path: '/uploads/out.png' }));
@@ -195,5 +206,68 @@ describe('CompactReplicate', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Replicate rate limited'));
     expect(onError).toHaveBeenCalledWith('Replicate rate limited');
     expect(onGenerated).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the real job error when an async run fails', async () => {
+    jobPayload = { status: 'failed', result: null, error: 'NSFW content detected' };
+    const onGenerated = vi.fn();
+    const onError = vi.fn();
+    wrap(
+      <CompactReplicate operation="video" prompt="a rocket" onGenerated={onGenerated} onError={onError} />
+    );
+    await pickModel('text-to-video');
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('NSFW content detected')
+    );
+    expect(onError).toHaveBeenCalledWith('NSFW content detected');
+    expect(onGenerated).not.toHaveBeenCalled();
+  });
+
+  it('injects the dialog prompt into prompt_a (not prompt_b, not schema defaults) for suffixed schemas', async () => {
+    // riffusion-style schema: the prompt is split across prompt_a / prompt_b,
+    // both carrying defaults that must not shadow the dialog prompt.
+    modelDetail = {
+      ...MODEL_DETAIL,
+      inputSchema: {
+        required: ['prompt_a'],
+        properties: {
+          prompt_a: { type: 'string', title: 'Prompt A', default: 'funky synth solo' },
+          prompt_b: { type: 'string', title: 'Prompt B', default: 'mellow outro' },
+          seed: { type: 'integer', title: 'Seed' },
+        },
+      },
+    };
+    wrap(<CompactReplicate operation="image" prompt="a cat" onGenerated={vi.fn()} />);
+    await pickModel('text-to-image');
+
+    // All prompt-role fields are hidden — they're driven by the dialog.
+    expect(screen.queryByText('Prompt A')).toBeNull();
+    expect(screen.queryByText('Prompt B')).toBeNull();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(callsTo('/media/replicate/run/sync')).toHaveLength(1));
+    const [, init] = callsTo('/media/replicate/run/sync')[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    // First prompt-role field in primary order gets the dialog prompt…
+    expect(body.input.prompt_a).toBe('a cat');
+    // …the rest keep their schema defaults.
+    expect(body.input.prompt_b).toBe('mellow outro');
+  });
+
+  it('notes when the model has no prompt field at all', async () => {
+    modelDetail = {
+      ...MODEL_DETAIL,
+      inputSchema: {
+        properties: {
+          seed: { type: 'integer', title: 'Seed' },
+        },
+      },
+    };
+    wrap(<CompactReplicate operation="image" prompt="a cat" onGenerated={vi.fn()} />);
+    await pickModel('text-to-image');
+    expect(
+      await screen.findByText('This model has no prompt field — the dialog prompt is ignored.')
+    ).toBeTruthy();
   });
 });

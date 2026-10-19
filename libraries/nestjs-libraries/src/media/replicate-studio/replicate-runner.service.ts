@@ -46,6 +46,9 @@ export interface GetJobResult {
     kind: 'image' | 'video' | 'audio';
     urls: string[];
   } | null;
+  // The real failure reason when status is 'failed' — the compact embeds
+  // surface this instead of a generic "Generation failed".
+  error: string | null;
 }
 
 @Injectable()
@@ -335,7 +338,11 @@ export class ReplicateRunnerService {
         provider: 'replicate',
         operation: params.operation,
         model: params.modelId,
-        version: params.versionId,
+        // NO version here: the job row's version is the PROVIDER version (the
+        // kernel resolves media/replicate@<version> with it when polling).
+        // Storing params.versionId — the community MODEL hash — made such jobs
+        // unresolvable ("Provider not found: media/replicate@8cf61ea…"). The
+        // model hash rides only as a _pickCall dispatch option below.
         inputJson: JSON.stringify(resolvedInput),
         folderId: params.folderId,
         creditType: opts?.creditType,
@@ -399,6 +406,7 @@ export class ReplicateRunnerService {
     return {
       status: job.status,
       result: job.status === 'completed' ? { kind, urls } : null,
+      error: job.error ?? null,
     };
   }
 
