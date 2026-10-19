@@ -144,7 +144,8 @@ export class CaptionService {
     }
 
     // Otherwise, fetch the URL (public URLs only).
-    const { safeFetch } = await import('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch');
+    // Relative specifier for the same reason as slide.service's _downloadImage.
+    const { safeFetch } = await import('../../dtos/webhooks/safe.fetch');
     const res = await safeFetch(videoUrl);
     if (!res.ok) throw new Error(`Video download failed (${res.status}): ${videoUrl}`);
     const buffer = Buffer.from(await res.arrayBuffer());

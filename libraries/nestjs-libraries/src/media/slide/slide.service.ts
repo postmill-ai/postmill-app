@@ -260,7 +260,11 @@ export class SlideService {
   }
 
   private async _downloadImage(url: string, destPath: string): Promise<void> {
-    const { safeFetch } = await import('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch');
+    // Relative specifier: tsc rewrites static import declarations to dist paths
+    // but leaves dynamic import() specifiers untouched, and the bare
+    // '@postmill-ai/nestjs-libraries/...' alias does not resolve in the built
+    // backend (POSTMILL-APP-1D follow-up).
+    const { safeFetch } = await import('../../dtos/webhooks/safe.fetch');
     const res = await safeFetch(url);
     if (!res.ok) throw new Error(`Image download failed (${res.status}): ${url}`);
     const buffer = Buffer.from(await res.arrayBuffer());
