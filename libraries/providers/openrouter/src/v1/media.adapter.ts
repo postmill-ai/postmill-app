@@ -12,6 +12,7 @@ import {
   SafeFetchPort,
   ProviderModule,
   mediaUpstreamError,
+  mediaUpstreamFromUnknown,
 } from '@postmill-ai/provider-kernel';
 
 // OpenRouter — same key as the OpenRouter LLM provider (registry id `openrouter`), reused via
@@ -71,11 +72,21 @@ export class OpenRouterMediaAdapter implements MediaProviderAdapter {
     for (const [k, v] of Object.entries(options?.input || {})) {
       if (v !== undefined && v !== '') input[k] = v;
     }
-    const res = await this._fetch(`${BASE}/images`, {
-      method: 'POST',
-      headers: this._headers(options),
-      body: JSON.stringify({ model, prompt, ...input }),
-    });
+    let res: Response;
+    try {
+      res = await this._fetch(`${BASE}/images`, {
+        method: 'POST',
+        headers: this._headers(options),
+        body: JSON.stringify({ model, prompt, ...input }),
+        // Slow image models (gpt-image-1 & co. routinely take 60s+) outrun the
+        // 30s default — same 120s allowance as the OpenAI adapter.
+        timeoutMs: 120_000,
+      });
+    } catch (err) {
+      // safeFetch timeouts / network failures → attributed ProviderUpstreamError
+      // (502 via the exception filter) instead of a bare Postmill 500.
+      throw mediaUpstreamFromUnknown(this, err, 'image');
+    }
     if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as OpenRouterImageResponse;
     const urls = (data.data || [])
@@ -113,23 +124,31 @@ export class OpenRouterMediaAdapter implements MediaProviderAdapter {
         `OpenRouter model ${model} does not accept image input through this adapter`,
       );
     }
-    const res = await this._fetch(`${BASE}/chat/completions`, {
-      method: 'POST',
-      headers: this._headers(options),
-      body: JSON.stringify({
-        model,
-        modalities: ['image', 'text'],
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: sourceUrl } },
-              { type: 'text', text: prompt },
-            ],
-          },
-        ],
-      }),
-    });
+    let res: Response;
+    try {
+      res = await this._fetch(`${BASE}/chat/completions`, {
+        method: 'POST',
+        headers: this._headers(options),
+        body: JSON.stringify({
+          model,
+          modalities: ['image', 'text'],
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: sourceUrl } },
+                { type: 'text', text: prompt },
+              ],
+            },
+          ],
+        }),
+        // Same 120s allowance as text-to-image — chat-completions image models
+        // are just as slow.
+        timeoutMs: 120_000,
+      });
+    } catch (err) {
+      throw mediaUpstreamFromUnknown(this, err, 'image');
+    }
     if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as OpenRouterChatImageResponse;
     const urls = (data.choices?.[0]?.message?.images || [])

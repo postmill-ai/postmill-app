@@ -245,6 +245,11 @@ export function upstreamErrorFromUnknown(
   if (e.name === 'AbortError' || e.name === 'TimeoutError') {
     return new ProviderUpstreamError(ctx, 'timeout', extractUpstreamDetail(e.message || ''));
   }
+  // safeFetch rethrows its abort as a plain Error ("safeFetch request timed
+  // out after Nms"), so the name check above misses it — match the message.
+  if (typeof e.message === 'string' && /request timed out after \d+\s?ms/i.test(e.message)) {
+    return new ProviderUpstreamError(ctx, 'timeout', extractUpstreamDetail(e.message));
+  }
   // undici / fetch network failure: TypeError("fetch failed") with a cause.
   if (e instanceof TypeError && /fetch failed|network|ECONN|ENOTFOUND|EAI_AGAIN/i.test(
     `${e.message} ${(e as any).cause?.code || ''}`,

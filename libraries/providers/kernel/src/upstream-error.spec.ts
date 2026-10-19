@@ -149,6 +149,14 @@ describe('upstreamErrorFromUnknown', () => {
     expect(upstreamErrorFromUnknown(aiCtx, net)!.kind).toBe('unavailable');
   });
 
+  it('maps a safeFetch plain-Error timeout message to timeout', () => {
+    // safeFetch rethrows its abort as a plain Error, so the name check misses it.
+    const err = new Error('safeFetch request timed out after 120000ms');
+    const out = upstreamErrorFromUnknown(aiCtx, err)!;
+    expect(out.kind).toBe('timeout');
+    expect(out.message).toBe('OpenAI did not answer in time: safeFetch request timed out after 120000ms');
+  });
+
   it('passes a ProviderUpstreamError through and returns null for anything else', () => {
     const own = new ProviderUpstreamError(aiCtx, 'auth', 'x', 401);
     expect(upstreamErrorFromUnknown(aiCtx, own)).toBe(own);

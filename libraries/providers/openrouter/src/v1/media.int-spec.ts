@@ -50,6 +50,24 @@ describe('openrouter media adapter (synchronous image)', () => {
     );
   });
 
+  it('allows 120s for slow image models and converts a safeFetch timeout into an attributed upstream error', async () => {
+    let seenTimeout: number | undefined;
+    const { ctx } = makeCtx((_url, init) => {
+      seenTimeout = init.timeoutMs;
+      throw new Error('safeFetch request timed out after 120000ms');
+    });
+    const adapter: any = openrouterMediaModule.create(ctx as any);
+
+    const err = await adapter
+      .generateImage('x', { apiKey: 'or-key', model: 'openai/gpt-image-1' })
+      .catch((e: unknown) => e);
+
+    expect(seenTimeout).toBe(120_000);
+    expect(err.name).toBe('ProviderUpstreamError');
+    expect(err.kind).toBe('timeout');
+    expect(err.message).toBe('OpenRouter did not answer in time: safeFetch request timed out after 120000ms');
+  });
+
   it('listModels filters to image-capable models; testConnection probes /models', async () => {
     const { recs, ctx } = makeCtx(() =>
       res({
