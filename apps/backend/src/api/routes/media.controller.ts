@@ -5,6 +5,7 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  Logger,
   Param,
   Post,
   Query,
@@ -53,6 +54,8 @@ import { MediaCapabilityFilter } from '@postmill-ai/backend/api/routes/media-cap
 @Controller('/media')
 @UseFilters(MediaCapabilityFilter)
 export class MediaController {
+  private readonly _logger = new Logger(MediaController.name);
+
   constructor(
     private _aiDefaults: AiDefaultsService,
     private _aiMediaService: AiMediaService,
@@ -193,11 +196,25 @@ export class MediaController {
   ) {
     try {
       let finalPrompt = prompt;
-      if (isPicturePrompt) {
-        finalPrompt = await this._aiDefaults.lowReasoningText(
-          org.id,
-          `Create a concise, vivid image-generation prompt from this idea: ${prompt}`
-        );
+      // The low-reasoning rewrite exists to expand terse ideas; a prompt that
+      // is already detailed only drifts off the user's specifics when
+      // rewritten, so it goes to the image model verbatim.
+      if (isPicturePrompt && prompt.length <= 120) {
+        try {
+          const rewritten = await this._aiDefaults.lowReasoningText(
+            org.id,
+            `Create a concise, vivid image-generation prompt from this idea: ${prompt}`
+          );
+          // Keep the original alongside the rewrite so details the LLM drops
+          // still reach the image model.
+          finalPrompt = `${rewritten}\nOriginal request: ${prompt}`;
+        } catch (err) {
+          // A missing/failing low-reasoning default must not fail the whole
+          // request — fall back to the user's prompt as-is.
+          this._logger.warn(
+            `Image prompt rewrite failed, using the original prompt: ${(err as Error).message}`
+          );
+        }
       }
       const url = await this._aiDefaults.textToImage(org.id, finalPrompt);
       const dataUrl = await this._aiMediaService.urlToBase64Image(url);

@@ -166,5 +166,41 @@ describe('MediaController — Designer AI-media routes', () => {
         name: 'generated-123.png',
       });
     });
+
+    it('rewrites a terse prompt but keeps the original request alongside', async () => {
+      const { controller, aiDefaults } = build();
+
+      await controller.generateImageFromText(org, { body: {} } as any, 'a cat');
+
+      expect(aiDefaults.lowReasoningText).toHaveBeenCalled();
+      expect(aiDefaults.textToImage).toHaveBeenCalledWith(
+        'org-1',
+        'a vivid cat\nOriginal request: a cat'
+      );
+    });
+
+    it('skips the rewrite when the prompt is already detailed', async () => {
+      const detailed =
+        'A ginger cat wearing a tiny knitted sweater, sitting on a windowsill in warm evening light, shallow depth of field, photorealistic, 85mm lens';
+      const { controller, aiDefaults } = build();
+
+      await controller.generateImageFromText(org, { body: {} } as any, detailed);
+
+      expect(aiDefaults.lowReasoningText).not.toHaveBeenCalled();
+      expect(aiDefaults.textToImage).toHaveBeenCalledWith('org-1', detailed);
+    });
+
+    it('falls back to the original prompt when the rewrite fails', async () => {
+      const { controller, aiDefaults } = build({
+        lowReasoningText: vi.fn().mockRejectedValue(new DefaultNotConfiguredError('low-reasoning')),
+      });
+
+      const res = await controller.generateImageFromText(org, { body: {} } as any, 'a cat');
+
+      expect(aiDefaults.textToImage).toHaveBeenCalledWith('org-1', 'a cat');
+      expect(res).toEqual(
+        expect.objectContaining({ id: 'file-1', name: 'generated-123.png' })
+      );
+    });
   });
 });

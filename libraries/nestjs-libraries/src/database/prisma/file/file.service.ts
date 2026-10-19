@@ -23,7 +23,10 @@ export interface ImportFromPathResult {
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif',
   'image/bmp', 'image/tiff', 'video/mp4',
-  'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg',
+  // Keep in lockstep with UPLOAD_ALLOWED_MIME_TYPES (helpers/upload-limits.client).
+  'video/webm', 'video/quicktime',
+  'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/webm',
+  'audio/x-m4a', 'audio/aac', 'audio/x-wav',
 ]);
 
 const MAX_IMPORT_SIZE = 512 * 1024 * 1024; // 512 MB

@@ -204,6 +204,150 @@ describe('ReplicateMediaAdapter.removeBackground model resolution', () => {
   });
 });
 
+describe('ReplicateMediaAdapter.removeBackground input field mapping', () => {
+  let fetchMock: ReturnType<typeof makeFetch>;
+  let adapter: ReplicateMediaAdapter;
+
+  beforeEach(() => {
+    fetchMock = makeFetch();
+    adapter = new ReplicateMediaAdapter(fetchMock as any);
+  });
+
+  it('sends image_url for bria/remove-background (its metadata-declared input field)', async () => {
+    await adapter.removeBackground('https://cdn.example.com/in.png', {
+      credentials: { apiKey: 'k' },
+      model: 'bria/remove-background',
+    });
+    const body = lastRequestBody(fetchMock);
+    expect(body.input.image_url).toBe('https://cdn.example.com/in.png');
+    expect(body.input.image).toBeUndefined();
+  });
+
+  it('keeps the image field for the 851-labs/background-remover default', async () => {
+    await adapter.removeBackground('https://cdn.example.com/in.png', {
+      credentials: { apiKey: 'k' },
+    });
+    expect(lastRequestBody(fetchMock).input).toEqual({ image: 'https://cdn.example.com/in.png' });
+  });
+
+  it('keeps the image field for an undeclared custom model', async () => {
+    await adapter.removeBackground('https://cdn.example.com/in.png', {
+      credentials: { apiKey: 'k' },
+      model: 'acme/custom-rembg',
+    });
+    expect(lastRequestBody(fetchMock).input).toEqual({ image: 'https://cdn.example.com/in.png' });
+  });
+
+  it('lets an explicit org tunable in options.input win over the mapping', async () => {
+    await adapter.removeBackground('https://cdn.example.com/in.png', {
+      credentials: { apiKey: 'k' },
+      model: 'bria/remove-background',
+      input: { image_url: 'https://cdn.example.com/override.png' },
+    });
+    expect(lastRequestBody(fetchMock).input.image_url).toBe('https://cdn.example.com/override.png');
+  });
+});
+
+describe('ReplicateMediaAdapter community-model 404 fallback', () => {
+  const versionHash = 'a'.repeat(64);
+
+  // /models/{slug}/predictions 404s for community models; the fallback is
+  // GET /models/{slug} → latest_version.id → POST /predictions with `version`.
+  const makeFallbackFetch = () => {
+    const fn = vi.fn().mockImplementation(async (url: string) => {
+      if (url === 'https://api.replicate.com/v1/models/meta/musicgen/predictions') {
+        return {
+          ok: false,
+          status: 404,
+          text: () => Promise.resolve('{"detail":"The requested resource could not be found."}'),
+        };
+      }
+      if (url === 'https://api.replicate.com/v1/models/meta/musicgen') {
+        return {
+          ok: true,
+          json: () => Promise.resolve({ latest_version: { id: versionHash } }),
+          text: () => Promise.resolve(''),
+        };
+      }
+      return {
+        ok: true,
+        json: () => Promise.resolve({ id: 'pred-community-1', status: 'starting' }),
+        text: () => Promise.resolve(''),
+      };
+    });
+    return fn;
+  };
+
+  it('falls back to the version-hash submission when the slug endpoint 404s', async () => {
+    const fetchMock = makeFallbackFetch();
+    const adapter = new ReplicateMediaAdapter(fetchMock as any);
+
+    const submission = await adapter.generateAudio('upbeat jazz', {
+      credentials: { apiKey: 'k' },
+      model: 'meta/musicgen',
+    });
+
+    expect(submission).toEqual({ jobId: 'pred-community-1' });
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
+      'https://api.replicate.com/v1/models/meta/musicgen/predictions',
+      'https://api.replicate.com/v1/models/meta/musicgen',
+      'https://api.replicate.com/v1/predictions',
+    ]);
+    const body = JSON.parse(fetchMock.mock.calls[2][1].body as string);
+    expect(body.version).toBe(versionHash);
+    expect(body.input.prompt).toBe('upbeat jazz');
+  });
+
+  it('keeps the fast path for official models (no version lookup when the slug POST succeeds)', async () => {
+    const fetchMock = makeFetch();
+    const adapter = new ReplicateMediaAdapter(fetchMock as any);
+
+    await adapter.generateAudio('upbeat jazz', {
+      credentials: { apiKey: 'k' },
+      model: 'official/music-model',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.replicate.com/v1/models/official/music-model/predictions'
+    );
+  });
+
+  it('does not fall back on non-404 errors', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: () => Promise.resolve('{"detail":"invalid input"}'),
+    });
+    const adapter = new ReplicateMediaAdapter(fetchMock as any);
+
+    await expect(
+      adapter.generateAudio('upbeat jazz', {
+        credentials: { apiKey: 'k' },
+        model: 'meta/musicgen',
+      })
+    ).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces the lookup error when the model is truly gone (404 on both legs)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: () => Promise.resolve('{"detail":"not found"}'),
+    });
+    const adapter = new ReplicateMediaAdapter(fetchMock as any);
+
+    await expect(
+      adapter.generateAudio('upbeat jazz', {
+        credentials: { apiKey: 'k' },
+        model: 'meta/gone',
+      })
+    ).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('ReplicateMediaAdapter.upscaleImage / inpaintImage model resolution', () => {
   let fetchMock: ReturnType<typeof makeFetch>;
   let adapter: ReplicateMediaAdapter;

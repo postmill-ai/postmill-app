@@ -296,6 +296,21 @@ export class AiMediaService {
     }
   }
 
+  // Capability check for an operation. The 'audio' operation is MUSIC
+  // generation, but openai/elevenlabs (and the other speech hubs) declare
+  // `audio: true` for speech TTS — routing a music prompt there speaks the
+  // prompt instead of composing. A TTS-flagged adapter is therefore never an
+  // audio-generation candidate (replicate/fal/suno/stability/minimax — the
+  // real music providers — all declare `tts: false`).
+  private _supportsOperation(
+    adapter: MediaProviderAdapter,
+    operation: MediaOperation,
+  ): boolean {
+    if (!adapter.capabilities[OPERATION_CAPABILITY[operation]]) return false;
+    if (operation === 'audio' && adapter.capabilities.tts) return false;
+    return true;
+  }
+
   // Resolve the org's configured default for a media operation, if any.
   // Falls back to the org's AI provider credentials when the default is an
   // AI-registered media adapter without a dedicated MediaProviderConfig row.
@@ -313,7 +328,6 @@ export class AiMediaService {
       return null;
     }
 
-    const capability = OPERATION_CAPABILITY[operation];
     const categories = category
       ? [category]
       : this._defaultCategoriesForOperation(operation, sourceUrl);
@@ -334,7 +348,7 @@ export class AiMediaService {
         credentials,
         orgId,
       });
-      if (!adapter || !adapter.capabilities[capability]) continue;
+      if (!adapter || !this._supportsOperation(adapter, operation)) continue;
 
       return {
         adapter,
@@ -606,6 +620,30 @@ export class AiMediaService {
           // keep the operation-level provider
         }
       }
+
+      // The slide pipeline needs THREE defaults (slide.service.generateSlide
+      // throws DefaultNotConfiguredError for each): image-slide frames,
+      // text-to-speech narration, and the high-reasoning script pass. Gate the
+      // tool on all three so the UI never offers Slideshow when the backend
+      // would 409 — and name the missing default in the reason.
+      if (category === 'image-slide' && entry.available && orgId && this._defaultsResolution) {
+        const missing: string[] = [];
+        try {
+          const [ttsDefault, reasoningDefault] = await Promise.all([
+            this._defaultsResolution.resolve('media', 'text-to-speech', orgId),
+            this._defaultsResolution.resolve('ai', 'high-reasoning', orgId),
+          ]);
+          if (!ttsDefault) missing.push('text-to-speech');
+          if (!reasoningDefault) missing.push('high-reasoning');
+        } catch {
+          // Resolution hiccup — leave the op-level availability; the generate
+          // path reports the real error.
+        }
+        if (missing.length > 0) {
+          entry.available = false;
+          entry.reason = `Slideshow also needs a ${missing.join(' and ')} default — configure it in Settings → Content.`;
+        }
+      }
       tools[category] = entry;
     }
 
@@ -776,7 +814,6 @@ export class AiMediaService {
     if (!orgId || !this._orgMediaProviderSettings) return [];
 
     const enabled = await this._safeGetEnabledProviders(orgId);
-    const capability = OPERATION_CAPABILITY[operation];
     const resolved: ResolvedMediaProvider[] = [];
 
     const defaultProvider = await this._resolveDefaultForOperation(
@@ -793,7 +830,7 @@ export class AiMediaService {
       if (defaultProvider && cfg.identifier === defaultProvider.adapter.identifier) continue;
 
       const adapter = this._resolveMediaAdapter(cfg.identifier);
-      if (!adapter || !adapter.capabilities[capability]) continue;
+      if (!adapter || !this._supportsOperation(adapter, operation)) continue;
 
       const ops = cfg.extraConfig.operations;
       if (ops && ops.length > 0 && !ops.includes(operation)) continue;
@@ -1354,14 +1391,38 @@ export class AiMediaService {
 
   // ── Image edits (synchronous) ──
 
+  // Inline cap for an image-edit input handed to an external provider as a
+  // data URI. Uploads cap images at 10 MB (base64 inflates ~4/3), and the
+  // upstream 50 MB prediction-body limit accommodates that comfortably — much
+  // larger than the vision critic's 2 MB prompt bound.
+  private static readonly MEDIA_EDIT_MAX_INLINE_BYTES = 20 * 1024 * 1024;
+
+  // The provider downloads image/mask URLs from ITS infrastructure, so a
+  // relative /uploads/... path or a private host is unfetchable — route every
+  // image-edit input through the same resolution the vision paths use (inline
+  // local uploads as data URIs, pass verified/reachable remotes through).
+  private _resolveEditImageUrl(url: string, label: string): Promise<string | null> {
+    return resolveVisionImageUrl(url, {
+      warn: (message) => this._logger.warn(message),
+      label,
+      allowUnverifiedRemote: true,
+      maxInlineBytes: AiMediaService.MEDIA_EDIT_MAX_INLINE_BYTES,
+    });
+  }
+
   async upscaleImage(imageUrl: string, options?: { orgId?: string; scale?: number }): Promise<string> {
+    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'upscaleImage');
+    if (!resolvedUrl) {
+      this._logger.warn('Upscale image URL unreadable — returning original');
+      return imageUrl;
+    }
     const candidates = await this._resolveForOperation(options?.orgId, 'upscale');
 
     for (const candidate of candidates) {
       if (!candidate.adapter.upscaleImage) continue;
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
-        const result = await candidate.adapter.upscaleImage(imageUrl, {
+        const result = await candidate.adapter.upscaleImage(resolvedUrl, {
           credentials: candidate.credentials,
           model: candidate.model,
           input: candidate.settings as MediaGenerateOptions['input'],
@@ -1387,6 +1448,10 @@ export class AiMediaService {
   }
 
   async removeBackground(imageUrl: string, options?: { orgId?: string }): Promise<string> {
+    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'removeBackground');
+    if (!resolvedUrl) {
+      throw new BadRequestException('The image could not be read for background removal.');
+    }
     const candidates = await this._resolveForOperation(options?.orgId, 'bg-remove');
 
     // A candidate that resolved (configured + credentialed) but failed upstream must
@@ -1398,7 +1463,7 @@ export class AiMediaService {
       if (!candidate.adapter.removeBackground) continue;
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
-        const result = await candidate.adapter.removeBackground(imageUrl, {
+        const result = await candidate.adapter.removeBackground(resolvedUrl, {
           credentials: candidate.credentials,
           model: candidate.model,
           input: candidate.settings as MediaGenerateOptions['input'],
@@ -1432,6 +1497,11 @@ export class AiMediaService {
     prompt: string,
     options?: { orgId?: string },
   ): Promise<string> {
+    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'inpaintImage');
+    const resolvedMaskUrl = await this._resolveEditImageUrl(maskUrl, 'inpaintImage mask');
+    if (!resolvedUrl || !resolvedMaskUrl) {
+      throw new BadRequestException('The image or mask could not be read for inpainting.');
+    }
     const candidates = await this._resolveForOperation(options?.orgId, 'inpaint');
 
     // Same taxonomy as removeBackground: a resolved candidate that failed upstream
@@ -1441,7 +1511,7 @@ export class AiMediaService {
       if (!candidate.adapter.inpaintImage) continue;
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
-        const result = await candidate.adapter.inpaintImage(imageUrl, maskUrl, prompt, {
+        const result = await candidate.adapter.inpaintImage(resolvedUrl, resolvedMaskUrl, prompt, {
           credentials: candidate.credentials,
           model: candidate.model,
           input: candidate.settings as MediaGenerateOptions['input'],
@@ -1475,6 +1545,10 @@ export class AiMediaService {
     prompt?: string,
     options?: { orgId?: string },
   ): Promise<string> {
+    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'outpaintImage');
+    if (!resolvedUrl) {
+      throw new BadRequestException('The image could not be read for expansion.');
+    }
     const candidates = await this._resolveForOperation(options?.orgId, 'outpaint');
 
     // Same taxonomy as removeBackground/inpaintImage: a resolved candidate that
@@ -1485,7 +1559,7 @@ export class AiMediaService {
       if (!candidate.adapter.outpaintImage) continue;
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
-        const result = await candidate.adapter.outpaintImage(imageUrl, mode, prompt, {
+        const result = await candidate.adapter.outpaintImage(resolvedUrl, mode, prompt, {
           credentials: candidate.credentials,
           model: candidate.model,
           input: candidate.settings as MediaGenerateOptions['input'],

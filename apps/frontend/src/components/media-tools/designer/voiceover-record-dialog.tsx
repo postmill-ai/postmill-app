@@ -6,7 +6,9 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 interface VoiceoverRecordDialogProps {
   onClose: () => void;
   /** Receives the recorded blob and its (normalized) MIME type; should upload
-   *  and land it on the timeline. The dialog closes itself on success. */
+   *  and land it on the timeline. The dialog closes only when the returned
+   *  promise resolves — a rejection keeps it open, shows the error, and the
+   *  recording stays intact for a retry. */
   onAdd: (blob: Blob, mimeType: string) => void | Promise<void>;
 }
 
@@ -68,6 +70,7 @@ export const VoiceoverRecordDialog: FC<VoiceoverRecordDialogProps> = ({
   const [deviceId, setDeviceId] = useState('');
   const [elapsedMs, setElapsedMs] = useState(0);
   const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const streamRef = useRef<MediaStream | null>(null);
@@ -270,13 +273,23 @@ export const VoiceoverRecordDialog: FC<VoiceoverRecordDialogProps> = ({
     const blob = blobRef.current;
     if (!blob || adding) return;
     setAdding(true);
+    setAddError(null);
     try {
       await onAdd(blob, mimeRef.current);
       onClose();
+    } catch (err) {
+      // Upload/landing failed — stay open with the recording intact so
+      // "Add to timeline" can be retried; closing would GC the blob.
+      if (mountedRef.current) {
+        setAddError(
+          (err as Error)?.message ||
+            t('designer_add_to_timeline_failed', 'Could not add the recording to the timeline.')
+        );
+      }
     } finally {
       if (mountedRef.current) setAdding(false);
     }
-  }, [adding, onAdd, onClose]);
+  }, [adding, onAdd, onClose, t]);
 
   const switchDevice = useCallback(
     (id: string) => {
@@ -398,6 +411,10 @@ export const VoiceoverRecordDialog: FC<VoiceoverRecordDialogProps> = ({
       {phase === 'review' && previewUrl && (
         // eslint-disable-next-line jsx-a11y/media-has-caption -- a voiceover preview has no caption track to offer
         <audio controls src={previewUrl} className="w-full" />
+      )}
+
+      {phase === 'review' && addError && (
+        <div className="text-[13px] text-amber-600">{addError}</div>
       )}
 
       <div className="flex justify-end gap-[8px] pt-[4px]">

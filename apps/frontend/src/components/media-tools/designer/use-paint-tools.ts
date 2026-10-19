@@ -34,6 +34,9 @@ import {
   snapToEdge,
   type SelectionMask,
 } from './selection-mask';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { readErrorMessage } from './read-error-message';
 
 /**
  * Wires the paint and selection tool groups to the Konva stage.
@@ -73,6 +76,8 @@ interface UsePaintToolsArgs {
 }
 
 export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintToolsArgs) => {
+  const toaster = useToaster();
+  const t = useT();
   // The mask lives in the store so the Select menu and the filter runner can
   // reach it; this hook is just one of its writers now.
   const selection = store((s: { selection: SelectionMask | null }) => s.selection);
@@ -590,7 +595,13 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl: el.src }),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        toaster.show(
+          await readErrorMessage(res, t('object_selection_failed', 'Object selection failed')),
+          'warning'
+        );
+        return;
+      }
       const data = await res.json();
       if (!data.url) return;
 
@@ -615,7 +626,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
         /* tainted canvas */
       }
     },
-    [store, fetchFn, docSize]
+    [store, fetchFn, docSize, toaster, t]
   );
 
   const clearSelection = useCallback(() => {

@@ -122,16 +122,51 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
         : {}),
     };
     // Slug → /models/{slug}/predictions (input only); hash → /predictions with `version` (2.5).
-    const url = isVersionHash(model)
-      ? `${BASE}/predictions`
-      : `${BASE}/models/${validateModelId(model)}/predictions`;
-    const res = await this._fetch(url, {
+    if (isVersionHash(model)) {
+      const res = await this._fetch(`${BASE}/predictions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ version: model, ...body }),
+      });
+      if (!res.ok) throw await mediaUpstreamError(this, res);
+      return (await res.json()) as ReplicatePredictionResponse;
+    }
+    const res = await this._fetch(`${BASE}/models/${validateModelId(model)}/predictions`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(isVersionHash(model) ? { version: model, ...body } : body),
+      body: JSON.stringify(body),
     });
+    if (res.status === 404) {
+      // /models/{slug}/predictions only accepts Replicate OFFICIAL models — a
+      // community model (e.g. meta/musicgen, the text-to-music catalog entry)
+      // 404s there. Resolve the latest version hash and submit via
+      // /predictions, the same shape ReplicateRunnerService uses.
+      const version = await this._resolveLatestVersionId(model, options);
+      const retry = await this._fetch(`${BASE}/predictions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ version, ...body }),
+      });
+      if (!retry.ok) throw await mediaUpstreamError(this, retry);
+      return (await retry.json()) as ReplicatePredictionResponse;
+    }
     if (!res.ok) throw await mediaUpstreamError(this, res);
     return (await res.json()) as ReplicatePredictionResponse;
+  }
+
+  // GET /v1/models/{slug} → latest_version.id, for the community-model fallback above.
+  private async _resolveLatestVersionId(
+    model: string,
+    options?: MediaCredentialOptions,
+  ): Promise<string> {
+    const res = await this._fetch(`${BASE}/models/${validateModelId(model)}`, {
+      headers: this._headers(options),
+    });
+    if (!res.ok) throw await mediaUpstreamError(this, res);
+    const data = (await res.json()) as { latest_version?: { id?: string } };
+    const id = data.latest_version?.id;
+    if (!id) throw new Error(`Replicate model ${model} has no latest version to run`);
+    return id;
   }
 
   // A blocking (`Prefer: wait`) create may still return `starting`/`processing` when the window
@@ -190,6 +225,23 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     if (model.includes('flux-kontext')) return 'input_image';
     if (model === 'black-forest-labs/flux-dev') return 'image';
     return null;
+  }
+
+  // Model → native image field for the models `metadata.mediaModels` declares
+  // under `image-bg-remove` (same declaration-guard discipline as
+  // `_i2iInputField`): bria/remove-background takes `image_url`,
+  // 851-labs/background-remover takes `image`. An undeclared/custom model keeps
+  // the historical `image` field rather than throwing — bg-remove predates the
+  // guard and custom versions rely on it. `options.input` still spreads last in
+  // `_createPrediction`, so an explicit org tunable wins.
+  private static _bgRemoveInputField(model: string): string {
+    const declared = (
+      (providerMetadata.mediaModels as Record<string, { id: string }[]> | undefined)?.[
+        'image-bg-remove'
+      ] ?? []
+    ).some((m) => m.id === model);
+    if (declared && model === 'bria/remove-background') return 'image_url';
+    return 'image';
   }
 
   async generateImage(prompt: string, options?: MediaGenerateOptions): Promise<MediaGenerationResult> {
@@ -329,9 +381,10 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   }
 
   async removeBackground(imageUrl: string, options?: MediaGenerateOptions): Promise<string> {
+    const model = options?.version || options?.model || DEFAULT_BG_REMOVE_MODEL;
     return this._createAndResolveUrl(
-      { ...options, version: options?.version || options?.model || DEFAULT_BG_REMOVE_MODEL },
-      { image: imageUrl },
+      { ...options, version: model },
+      { [ReplicateMediaAdapter._bgRemoveInputField(model)]: imageUrl },
     );
   }
 

@@ -253,6 +253,13 @@ export async function addVoiceoverToTimeline(
   return true;
 }
 
+export interface LandedClipRef {
+  outputIndex: number;
+  trackId: string;
+  clipId: string;
+  startMs: number;
+}
+
 /**
  * Land a video or audio artifact onto the current video timeline.
  *
@@ -262,11 +269,15 @@ export async function addVoiceoverToTimeline(
  * - Extends the output duration before adding the clip so long clips are not
  *   silently dropped.
  * - Caps clip end and duration at the store's MAX_VIDEO_DURATION_MS ceiling.
+ *
+ * Resolves with the landed clip's identity (the clip is inserted at
+ * `startMs: 0`, so callers that want the result visible must seek/select it),
+ * or null when addClip rejected the insert.
  */
 export function addMediaToTimeline(
   store: StoreApi,
   options: AddMediaToTimelineOptions
-): Promise<void> {
+): Promise<LandedClipRef | null> {
   const { type, url, fileId } = options;
 
   return new Promise((resolve, reject) => {
@@ -298,46 +309,53 @@ export function addMediaToTimeline(
         src: url,
         fileId,
       };
+      const id = `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-      if (type === 'audio') {
-        const clip: VideoClip = {
-          ...clipBase,
-          id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          startMs: 0,
-          endMs,
-          volume: 1,
-          fadeInMs: 0,
-          fadeOutMs: 0,
-        };
-        store.getState().addClip(out, track.id, clip);
-      } else {
-        // A clip with no geometry renders at the 1×1 fallback — a blank
-        // artboard. Fit the probed pixels to the canvas, centered, preserving
-        // aspect (same rule as image inserts).
-        const vo = store.getState().doc.outputs[out] as VideoOutput;
-        const fit =
-          natW && natH
-            ? fitWithin(natW, natH, vo.width, vo.height)
-            : { width: vo.width, height: vo.height };
-        const clip: VideoClip = {
-          ...clipBase,
-          id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          startMs: 0,
-          endMs,
-          x: Math.round((vo.width - fit.width) / 2),
-          y: Math.round((vo.height - fit.height) / 2),
-          width: fit.width,
-          height: fit.height,
-          naturalWidth: natW,
-          naturalHeight: natH,
-        };
-        store.getState().addClip(out, track.id, clip);
-      }
+      const clip: VideoClip =
+        type === 'audio'
+          ? {
+              ...clipBase,
+              id,
+              startMs: 0,
+              endMs,
+              volume: 1,
+              fadeInMs: 0,
+              fadeOutMs: 0,
+            }
+          : (() => {
+              // A clip with no geometry renders at the 1×1 fallback — a blank
+              // artboard. Fit the probed pixels to the canvas, centered,
+              // preserving aspect (same rule as image inserts).
+              const vo = store.getState().doc.outputs[out] as VideoOutput;
+              const fit =
+                natW && natH
+                  ? fitWithin(natW, natH, vo.width, vo.height)
+                  : { width: vo.width, height: vo.height };
+              return {
+                ...clipBase,
+                id,
+                startMs: 0,
+                endMs,
+                x: Math.round((vo.width - fit.width) / 2),
+                y: Math.round((vo.height - fit.height) / 2),
+                width: fit.width,
+                height: fit.height,
+                naturalWidth: natW,
+                naturalHeight: natH,
+              };
+            })();
+      store.getState().addClip(out, track.id, clip);
+
+      // addClip silently rejects clips past the output duration — confirm the
+      // landing before reporting success.
+      const landed = (store.getState().doc.outputs[out] as VideoOutput).tracks
+        .find((t) => t.id === track.id)
+        ?.clips.find((c) => c.id === id);
 
       // Note: setVideoDuration and addClip each push a history entry internally,
       // so no explicit pushHistory() is needed here (it would create a redundant
       // undo step for a single logical drop).
-      resolve();
+      resolve(landed ? { outputIndex: out, trackId: track.id, clipId: id, startMs: landed.startMs } : null);
     });
   });
 }

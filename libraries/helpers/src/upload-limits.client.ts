@@ -41,6 +41,12 @@ export const UPLOAD_ALLOWED_MIME_TYPES = new Set([
   'audio/mp4',
   'audio/wav',
   'audio/ogg',
+  // Safari voice recordings and M4A/MOV variants sniff to these; rejecting
+  // them dropped mic recordings at the upload pipe.
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/x-wav',
+  'video/quicktime',
 ]);
 
 export interface UploadLimitCheckFile {

@@ -35,6 +35,7 @@ import { getThumbnailDataUrl } from './designer';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 import { variantProviders, groupFilesByProvider } from './export-channels';
+import { readErrorMessage } from './read-error-message';
 
 const useFocusTrap = (containerRef: React.RefObject<HTMLElement | null>) => {
   useEffect(() => {
@@ -973,12 +974,15 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
           }),
         });
         if (!res.ok) {
-          toaster.show(
+          // Surface the server's real reason (402 billing / 400 validation /
+          // 409 { error }) instead of a bare "failed to enqueue".
+          const reason = await readErrorMessage(
+            res,
             t('designer_failed_to_enqueue_render_for_name', 'Failed to enqueue render for {{name}}', {
               name: composition.name || composition.formatId,
-            }),
-            'warning'
+            })
           );
+          toaster.show(reason, 'warning');
           continue;
         }
         const { id } = await res.json();

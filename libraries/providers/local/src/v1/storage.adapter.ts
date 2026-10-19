@@ -37,10 +37,19 @@ const LOCAL_STORAGE_ALLOWED_MIME = new Set<string>([
   'image/bmp',
   'image/tiff',
   'video/mp4',
+  // Keep in lockstep with UPLOAD_ALLOWED_MIME_TYPES (helpers/upload-limits.client):
+  // the upload pipe accepts these, and this adapter re-sniffs — a mismatch
+  // rejects the file at the storage layer after the pipe let it through.
+  'video/webm',
+  'audio/webm',
   'audio/mpeg',
   'audio/mp4',
   'audio/wav',
   'audio/ogg',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/x-wav',
+  'video/quicktime',
   'font/ttf',
   'font/otf',
   'font/woff2',

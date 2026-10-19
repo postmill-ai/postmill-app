@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   PipeTransform,
 } from '@nestjs/common';
 import { fromBuffer, fromFile } from './file-type.compat';
@@ -27,6 +28,8 @@ const resolveInsideTmp = (p: string): string | null => {
 
 @Injectable()
 export class CustomFileValidationPipe implements PipeTransform {
+  private readonly _logger = new Logger(CustomFileValidationPipe.name);
+
   async transform(value: any) {
     try {
       if (!value || typeof value !== 'object') {
@@ -45,10 +48,16 @@ export class CustomFileValidationPipe implements PipeTransform {
           : null;
 
       if (!detected) {
-        throw new BadRequestException('Invalid file upload.');
+        this._logger.warn('Upload rejected: no file type could be sniffed from the uploaded bytes');
+        throw new BadRequestException('Could not detect the file type.');
       }
-      if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
-        throw new BadRequestException('Unsupported file type.');
+      if (!ALLOWED_MIME_TYPES.has(detected.mime)) {
+        // Log the sniffed type (never the filename — no PII) so a rejected
+        // upload is diagnosable, and hand the detected mime to the client.
+        this._logger.warn(
+          `Upload rejected: detected type ${detected.mime} (.${detected.ext}) is not whitelisted`
+        );
+        throw new BadRequestException(`Unsupported file type (${detected.mime}).`);
       }
 
       if (!value.size && value.path) {

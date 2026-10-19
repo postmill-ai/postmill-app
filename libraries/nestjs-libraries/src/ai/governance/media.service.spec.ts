@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -804,6 +804,184 @@ describe('AiMediaService', () => {
 
       const result = await service.outpaintImage('img.png', 'zoom-1.5x', undefined, { orgId: 'org-1' });
       expect(result).toBe('https://x/expanded.png');
+    });
+  });
+
+  // ── Audio (music) candidate filtering ──
+
+  describe('generateAudio TTS exclusion', () => {
+    it('never routes a music prompt to a TTS-only adapter (audio:true + tts:true)', async () => {
+      // openai sorts before replicate in the candidate list — without the
+      // exclusion it would swallow the music prompt as speech.
+      const ttsOnly = makeAdapter('openai', { audio: true, tts: true });
+      const music = makeAdapter('replicate', { audio: true, tts: false });
+      const { service } = setup([ttsOnly, music]);
+
+      await service.generateAudio('epic orchestral score', { orgId: 'org-1' });
+
+      expect(ttsOnly.generateAudio).not.toHaveBeenCalled();
+      expect(music.generateAudio).toHaveBeenCalled();
+    });
+
+    it('is CapabilityNotAvailable when every audio provider is TTS-only', async () => {
+      const ttsOnly = makeAdapter('elevenlabs', { audio: true, tts: true });
+      const { service } = setup([ttsOnly]);
+
+      await expect(service.generateAudio('a jingle', { orgId: 'org-1' })).rejects.toThrow(
+        CapabilityNotAvailable,
+      );
+      expect(ttsOnly.generateAudio).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Tool status: slideshow gating ──
+
+  describe('getToolStatus image-slide gating', () => {
+    const slideDefaults = (overrides: Record<string, unknown> = {}) => ({
+      resolve: vi.fn().mockImplementation(async (domain: string, category: string) => {
+        const key = `${domain}/${category}`;
+        if (key in overrides) return overrides[key];
+        return null;
+      }),
+    });
+    const slideDefault = {
+      providerId: 'replicate',
+      version: 'v1',
+      model: 'black-forest-labs/flux-1.1-pro',
+      source: 'org',
+    };
+    const ttsDefault = { providerId: 'openai', version: 'v1', model: 'gpt-4o-mini-tts', source: 'org' };
+    const reasoningDefault = { providerId: 'openai', version: 'v1', model: 'gpt-4.1', source: 'auto' };
+
+    it('marks image-slide available when all three pipeline defaults resolve', async () => {
+      const adapter = makeAdapter('replicate', { image: true });
+      const defaultsResolution = slideDefaults({
+        'media/image-slide': slideDefault,
+        'media/text-to-speech': ttsDefault,
+        'ai/high-reasoning': reasoningDefault,
+      });
+      const { service } = setup([adapter], undefined, defaultsResolution);
+
+      const status = await service.getToolStatus('org-1');
+
+      expect(status.tools['image-slide'].available).toBe(true);
+    });
+
+    it('marks image-slide unavailable and names the missing text-to-speech default', async () => {
+      const adapter = makeAdapter('replicate', { image: true });
+      const defaultsResolution = slideDefaults({
+        'media/image-slide': slideDefault,
+        'ai/high-reasoning': reasoningDefault,
+      });
+      const { service } = setup([adapter], undefined, defaultsResolution);
+
+      const status = await service.getToolStatus('org-1');
+
+      expect(status.tools['image-slide'].available).toBe(false);
+      expect(status.tools['image-slide'].reason).toContain('text-to-speech');
+    });
+
+    it('marks image-slide unavailable and names the missing high-reasoning default', async () => {
+      const adapter = makeAdapter('replicate', { image: true });
+      const defaultsResolution = slideDefaults({
+        'media/image-slide': slideDefault,
+        'media/text-to-speech': ttsDefault,
+      });
+      const { service } = setup([adapter], undefined, defaultsResolution);
+
+      const status = await service.getToolStatus('org-1');
+
+      expect(status.tools['image-slide'].available).toBe(false);
+      expect(status.tools['image-slide'].reason).toContain('high-reasoning');
+    });
+  });
+
+  // ── Image edits: provider-reachable URLs ──
+
+  describe('image-edit URL resolution', () => {
+    let uploadDir: string;
+    let previousUploadDirectory: string | undefined;
+    let previousFrontendUrl: string | undefined;
+
+    beforeEach(() => {
+      previousUploadDirectory = process.env.UPLOAD_DIRECTORY;
+      previousFrontendUrl = process.env.FRONTEND_URL;
+      uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'edit-uploads-'));
+      process.env.UPLOAD_DIRECTORY = uploadDir;
+      process.env.FRONTEND_URL = 'http://localhost:4200';
+      // A 1x1 PNG so the type sniffer has something real to read.
+      fs.writeFileSync(
+        path.join(uploadDir, 'photo.png'),
+        Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+          'base64',
+        ),
+      );
+    });
+
+    afterEach(() => {
+      if (previousUploadDirectory === undefined) delete process.env.UPLOAD_DIRECTORY;
+      else process.env.UPLOAD_DIRECTORY = previousUploadDirectory;
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    });
+
+    it('inlines a local upload as a data URI before calling the bg-remove provider', async () => {
+      // Replicate downloads the image from ITS infrastructure — a
+      // localhost/uploads URL is unreachable and failed 100% of the time.
+      const adapter = makeAdapter('replicate', { bgRemove: true }, {
+        removeBackground: vi.fn().mockResolvedValue('https://x/nobg.png'),
+      });
+      const { service } = setup([adapter]);
+
+      await service.removeBackground('http://localhost:4200/uploads/photo.png', { orgId: 'org-1' });
+
+      const passed = (adapter.removeBackground as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(passed.startsWith('data:image/png;base64,')).toBe(true);
+      expect(passed).not.toContain('localhost');
+    });
+
+    it('inlines local image AND mask for inpaint', async () => {
+      const adapter = makeAdapter('replicate', { inpaint: true }, {
+        inpaintImage: vi.fn().mockResolvedValue('https://x/inpainted.png'),
+      });
+      const { service } = setup([adapter]);
+
+      await service.inpaintImage(
+        'http://localhost:4200/uploads/photo.png',
+        'http://localhost:4200/uploads/photo.png',
+        'fill sky',
+        { orgId: 'org-1' },
+      );
+
+      const calls = (adapter.inpaintImage as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(calls[0].startsWith('data:image/png;base64,')).toBe(true);
+      expect(calls[1].startsWith('data:image/png;base64,')).toBe(true);
+    });
+
+    it('passes a remote URL through unchanged', async () => {
+      const adapter = makeAdapter('replicate', { outpaint: true }, {
+        outpaintImage: vi.fn().mockResolvedValue('https://x/expanded.png'),
+      });
+      const { service } = setup([adapter]);
+
+      await service.outpaintImage('https://cdn.example.com/photo.png', 'zoom-2x', undefined, { orgId: 'org-1' });
+
+      expect((adapter.outpaintImage as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(
+        'https://cdn.example.com/photo.png',
+      );
+    });
+
+    it('rejects a local upload it cannot read instead of handing the provider a dead URL', async () => {
+      const adapter = makeAdapter('replicate', { bgRemove: true }, {
+        removeBackground: vi.fn().mockResolvedValue('https://x/nobg.png'),
+      });
+      const { service } = setup([adapter]);
+
+      await expect(
+        service.removeBackground('http://localhost:4200/uploads/missing.png', { orgId: 'org-1' }),
+      ).rejects.toThrow('could not be read');
+      expect(adapter.removeBackground).not.toHaveBeenCalled();
     });
   });
 

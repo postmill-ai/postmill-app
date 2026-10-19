@@ -40,10 +40,18 @@ const ALLOWED_MIME_TYPES = new Set<string>([
   'image/bmp',
   'image/tiff',
   'video/mp4',
+  // Keep in lockstep with UPLOAD_ALLOWED_MIME_TYPES (helpers/upload-limits.client):
+  // this adapter re-sniffs what the upload pipe already accepted.
+  'video/webm',
+  'audio/webm',
   'audio/mpeg',
   'audio/mp4',
   'audio/wav',
   'audio/ogg',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/x-wav',
+  'video/quicktime',
   'font/ttf',
   'font/otf',
   'font/woff2',

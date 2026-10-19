@@ -38,6 +38,20 @@ describe('checkUploadLimit', () => {
     ).toBe(false);
   });
 
+  it('accepts Safari/M4A voice-recording variants', () => {
+    for (const mimetype of [
+      'audio/x-m4a',
+      'audio/aac',
+      'audio/x-wav',
+      'video/quicktime',
+    ]) {
+      expect(
+        checkUploadLimit({ size: 2 * MB, mimetype }, limits).ok,
+        mimetype,
+      ).toBe(true);
+    }
+  });
+
   it('rejects unsupported document/archive MIME types', () => {
     for (const mimetype of [
       'application/pdf',

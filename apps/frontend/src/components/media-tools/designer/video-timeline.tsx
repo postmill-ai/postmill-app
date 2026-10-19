@@ -20,6 +20,7 @@ import {
 } from './segment-regenerate';
 import { Stepper } from './controls';
 import { addMediaToTimeline, addVoiceoverToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
+import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, canDropClipOnTrack } from './clip-geometry';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
 import { KeyframeLane } from './keyframe-lane';
@@ -794,7 +795,7 @@ const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSr
           imageUrl: useImage ? selectedImageSrc : undefined,
         }),
       });
-      if (!res.ok) throw new Error(t('video_generation_failed', 'Video generation failed'));
+      if (!res.ok) throw new Error(await readErrorMessage(res, t('video_generation_failed', 'Video generation failed')));
       const data = await res.json();
       await onResult('video', data === false ? false : data.id);
     } catch (e) {
@@ -859,7 +860,7 @@ const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
       });
-      if (!res.ok) throw new Error(t('music_generation_failed', 'Music generation failed'));
+      if (!res.ok) throw new Error(await readErrorMessage(res, t('music_generation_failed', 'Music generation failed')));
       const data = await res.json();
       await onResult('audio', data === false ? false : data.id);
     } catch (e) {
@@ -920,7 +921,7 @@ const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ script, imageUrl }),
       });
-      if (!res.ok) throw new Error(t('avatar_generation_failed', 'Avatar generation failed'));
+      if (!res.ok) throw new Error(await readErrorMessage(res, t('avatar_generation_failed', 'Avatar generation failed')));
       const data = await res.json();
       await onResult('video', data === false ? false : data.id);
     } catch (e) {
@@ -1001,7 +1002,7 @@ const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult })
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, imageUrls: imageUrls.length ? imageUrls : undefined }),
       });
-      if (!res.ok) throw new Error(t('slideshow_generation_failed', 'Slideshow generation failed'));
+      if (!res.ok) throw new Error(await readErrorMessage(res, t('slideshow_generation_failed', 'Slideshow generation failed')));
       const data = await res.json();
       await onResult('video', data === false ? false : data.id);
     } catch (e) {
@@ -2355,7 +2356,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           body: JSON.stringify({ text, voice: voiceId }),
         });
         if (!res.ok) {
-          toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
+          toaster.show(
+            await readErrorMessage(res, translate('voiceover_generation_failed', 'Voiceover generation failed')),
+            'warning'
+          );
           return;
         }
         const { id, path } = await res.json();
@@ -2376,33 +2380,31 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   );
 
   // Mic recording → upload as a visible media-library File (same as TTS
-  // output) → land via the shared helper.
+  // output) → land via the shared helper. A failure RETHROWS (with the
+  // server's real reason) instead of toast-and-return: the record dialog only
+  // closes on success, so the recording survives for a retry — closing the
+  // dialog would GC the MediaRecorder blob.
   const recordVoiceover = useCallback(
     async (blob: Blob, mimeType: string) => {
       if (!vo) return;
-      try {
-        const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
-        const form = new FormData();
-        form.append('file', blob, `voiceover-${Date.now()}.${ext}`);
-        const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
-        if (!uploadRes.ok) {
-          toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
-          return;
-        }
-        const uploaded = await uploadRes.json();
-        const landed = await addVoiceoverToTimeline(store, {
-          url: uploaded.path,
-          fileId: uploaded.id,
-        });
-        if (!mountedRef.current) return;
-        if (!landed) {
-          toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
-          return;
-        }
-        toaster.show(translate('voiceover_added_to_timeline', 'Voiceover added to timeline'), 'success');
-      } catch {
-        toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
+      const failure = translate('voiceover_generation_failed', 'Voiceover generation failed');
+      const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const form = new FormData();
+      form.append('file', blob, `voiceover-${Date.now()}.${ext}`);
+      const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
+      if (!uploadRes.ok) {
+        throw new Error(await readErrorMessage(uploadRes, failure));
       }
+      const uploaded = await uploadRes.json();
+      const landed = await addVoiceoverToTimeline(store, {
+        url: uploaded.path,
+        fileId: uploaded.id,
+      });
+      if (!landed) {
+        throw new Error(failure);
+      }
+      if (!mountedRef.current) return;
+      toaster.show(translate('voiceover_added_to_timeline', 'Voiceover added to timeline'), 'success');
     },
     [vo, store, fetch, toaster, translate]
   );
@@ -2599,12 +2601,26 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     type: 'video' | 'audio',
     idOrUrl: string | false
   ) => {
+    // Generated clips are inserted at startMs 0 while the canvas previews the
+    // playhead — after a land, seek to the clip and select it so the result is
+    // visibly on the canvas instead of looking like nothing happened.
+    const landAndReveal = async (url: string) => {
+      const landed = await addMediaToTimeline(store, { type, url });
+      if (landed) {
+        store.getState().setPlayhead(landed.startMs);
+        store.getState().setSelectedClip({
+          outputIndex: landed.outputIndex,
+          trackId: landed.trackId,
+          clipId: landed.clipId,
+        });
+      }
+    };
     if (idOrUrl === false) {
       toaster.show(translate('generation_was_blocked_or_returned_empty', 'Generation was blocked or returned empty.'), 'warning');
       return;
     }
     if (isArtifactPath(idOrUrl)) {
-      await addMediaToTimeline(store, { type, url: idOrUrl });
+      await landAndReveal(idOrUrl);
       return;
     }
     let polls = 0;
@@ -2628,7 +2644,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (artifactUrl === '__error__') return;
       if (!mountedRef.current) return;
       if (artifactUrl) {
-        await addMediaToTimeline(store, { type, url: artifactUrl });
+        await landAndReveal(artifactUrl);
         return;
       }
       polls++;
