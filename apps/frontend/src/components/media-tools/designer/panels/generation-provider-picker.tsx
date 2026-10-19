@@ -47,7 +47,12 @@ export function useGenerationProviderChoice(dialogKey: string): [string, (value:
   return [value, set];
 }
 
-export function useGenerationProviders(operation: CompactOperation) {
+// Operations the picker can query. `image|video|audio` embed compact studios;
+// `avatar` (video-tab embed) and `tts` (dropdown-only, no studios) are fetched
+// from the same endpoint.
+export type ProviderPickerOperation = CompactOperation | 'avatar' | 'tts';
+
+export function useGenerationProviders(operation: ProviderPickerOperation) {
   const fetch = useFetch();
   return useSWR<GenerationProvidersResponse>(
     `generation-providers:${operation}`,
@@ -63,17 +68,25 @@ export function useGenerationProviders(operation: CompactOperation) {
 }
 
 export const GenerationProviderPicker: FC<{
-  operation: CompactOperation;
+  operation: ProviderPickerOperation;
   dialogKey: string;
   value: string;
   onChange: (provider: string) => void;
-}> = ({ operation, dialogKey, value, onChange }) => {
+  // true (default): only providers with a registered compact studio are listed.
+  // Pass false for dropdown-only operations with no studios (TTS) — every
+  // provider the server returns is a valid pin for the generate call.
+  requireCompact?: boolean;
+}> = ({ operation, dialogKey, value, onChange, requireCompact = true }) => {
   const t = useT();
   const { data } = useGenerationProviders(operation);
 
   // The server already filters providers to the operation; we additionally
-  // keep only providers with a compact studio registered.
-  const providers = (data?.providers ?? []).filter((p) => hasCompactStudio(p.identifier, operation));
+  // keep only providers with a compact studio registered (unless opted out).
+  const providers = (data?.providers ?? []).filter(
+    (p) =>
+      !requireCompact ||
+      (operation !== 'tts' && hasCompactStudio(p.identifier, operation))
+  );
 
   // Nothing to choose → hide the row entirely (the dialog is byte-identical to
   // the default-only experience).

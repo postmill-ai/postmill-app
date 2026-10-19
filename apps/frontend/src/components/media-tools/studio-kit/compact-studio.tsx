@@ -17,6 +17,7 @@ import {
   type CompactStudioResult,
 } from './compact-registry';
 import { CompactReplicate } from '../replicate/compact-replicate';
+import { CompactHeyGen } from '../heygen/compact-heygen';
 import type { StudioFieldValue } from './types';
 
 export type { CompactStudioResult };
@@ -38,10 +39,20 @@ export interface CompactStudioProps {
 // back through onGenerated.
 export const CompactStudio: FC<CompactStudioProps> = (props) => {
   // Distinct component types — React remounts when the picker switches between
-  // the bespoke Replicate embed and a descriptor studio (keeps hook order safe).
+  // a bespoke embed and a descriptor studio (keeps hook order safe).
   if (props.provider === 'replicate') {
     return (
       <CompactReplicate
+        operation={props.operation}
+        prompt={props.prompt}
+        onGenerated={props.onGenerated}
+        onError={props.onError}
+      />
+    );
+  }
+  if (props.provider === 'heygen') {
+    return (
+      <CompactHeyGen
         operation={props.operation}
         prompt={props.prompt}
         onGenerated={props.onGenerated}

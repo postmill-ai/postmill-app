@@ -20,6 +20,7 @@ import {
 } from './segment-regenerate';
 import { Stepper } from './controls';
 import { addMediaToTimeline, addVoiceoverToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
+import { postTextToSpeech } from './text-to-speech';
 import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, canDropClipOnTrack } from './clip-geometry';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
@@ -962,7 +963,7 @@ interface AvatarDialogProps {
   onResult: (type: 'video' | 'audio', idOrUrl: string | false) => Promise<void>;
 }
 
-const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult }) => {
+export const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult }) => {
   const t = useT();
   const modals = useModals();
   const [script, setScript] = useState('');
@@ -973,6 +974,9 @@ const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc,
     onSelect: (item) => setImageUrl(item.url),
   });
   const [loading, setLoading] = useState(false);
+  // '' = org default avatar provider (legacy path); an explicit provider embeds
+  // its compact avatar studio, which owns generation inside the modal.
+  const [provider, setProvider] = useGenerationProviderChoice('avatar');
 
   const generate = useCallback(async () => {
     if (!script.trim()) {
@@ -997,6 +1001,16 @@ const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc,
     }
   }, [fetch, script, imageUrl, onResult, toaster, modals, t]);
 
+  const handleStudioGenerated = useCallback(
+    async (result: CompactStudioResult) => {
+      // Already-complete artifact — land it like a finished landOrPoll (the
+      // artifactUrl takes the no-poll path there).
+      modals.closeAll();
+      await onResult('video', result.artifactUrl);
+    },
+    [modals, onResult]
+  );
+
   return (
     <div className="flex flex-col gap-3 min-w-[280px]">
       <textarea
@@ -1005,32 +1019,51 @@ const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc,
         placeholder={t('enter_the_script_for_the_avatar', 'Enter the script for the avatar...')}
         className="w-full bg-newBgColor border border-studioBorder rounded-sm p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-hidden min-h-[80px]"
       />
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={portraitPicker.open}
-          className="px-2 py-1 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
-        >
-          {t('pick_portrait', 'Pick portrait')}
-        </button>
-        {selectedImageSrc && (
+      <GenerationProviderPicker
+        operation="avatar"
+        dialogKey="avatar"
+        value={provider}
+        onChange={setProvider}
+      />
+      {provider ? (
+        // Avatar studios are descriptor `video` tabs (script + portrait model);
+        // the dialog's script textarea drives the studio's prompt field.
+        <CompactStudio
+          provider={provider}
+          operation="video"
+          prompt={script}
+          onGenerated={handleStudioGenerated}
+        />
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={portraitPicker.open}
+              className="px-2 py-1 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            >
+              {t('pick_portrait', 'Pick portrait')}
+            </button>
+            {selectedImageSrc && (
+              <button
+                onClick={() => setImageUrl(selectedImageSrc)}
+                className="px-2 py-1 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+              >
+                {t('use_selected_image', 'Use selected image')}
+              </button>
+            )}
+          </div>
+          {imageUrl && (
+            <div className="text-[10px] text-textColor/60 truncate">{t('portrait_name', 'Portrait: {{name}}', { name: imageUrl.split('/').pop() })}</div>
+          )}
           <button
-            onClick={() => setImageUrl(selectedImageSrc)}
-            className="px-2 py-1 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            onClick={generate}
+            disabled={loading || !script.trim()}
+            className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {t('use_selected_image', 'Use selected image')}
+            {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
           </button>
-        )}
-      </div>
-      {imageUrl && (
-        <div className="text-[10px] text-textColor/60 truncate">{t('portrait_name', 'Portrait: {{name}}', { name: imageUrl.split('/').pop() })}</div>
+        </>
       )}
-      <button
-        onClick={generate}
-        disabled={loading || !script.trim()}
-        className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
-      </button>
       {portraitPicker.element}
     </div>
   );
@@ -2451,13 +2484,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   }, [clipMenu, handleFreezeFrame]);
 
   const generateVoiceover = useCallback(
-    async (text: string, voiceId: string, instructions?: string) => {
+    async (text: string, voiceId: string, instructions?: string, provider?: string) => {
       if (!vo) return;
       try {
-        const res = await fetch('/media/text-to-speech', {
-          method: 'POST',
-          body: JSON.stringify({ text, voice: voiceId, ...(instructions ? { instructions } : {}) }),
-        });
+        const res = await postTextToSpeech(fetch, { text, voiceId, instructions, provider });
         if (!res.ok) {
           toaster.show(
             await readErrorMessage(res, translate('voiceover_generation_failed', 'Voiceover generation failed')),

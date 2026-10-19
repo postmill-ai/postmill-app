@@ -140,19 +140,33 @@ function buildRegistry(): Record<string, CompactStudioEntry> {
 
 export const COMPACT_STUDIO_REGISTRY: Record<string, CompactStudioEntry> = buildRegistry();
 
-// Providers with a bespoke compact studio (no descriptor). Currently just
-// Replicate — its compact embeds the model-picker/dynamic-form flow.
-export const BESPOKE_COMPACT_PROVIDERS: readonly string[] = ['replicate'];
+// Providers with a bespoke compact studio (no descriptor). Currently Replicate
+// (model-picker/dynamic-form embed) and HeyGen (talking-photo avatar embed).
+export const BESPOKE_COMPACT_PROVIDERS: readonly string[] = ['replicate', 'heygen'];
+
+// The avatar dialog embeds descriptor studios via their `video` tabs — but only
+// when the tab is actually an avatar tool. Reel.Farm's video tab is a slideshow
+// generator whose prompt semantics ("describe your slideshow") clash with the
+// dialog's script textarea, so it is excluded even though it embeds technically.
+const AVATAR_COMPACT_EXCLUDE: readonly string[] = ['reelfarm'];
 
 /**
  * Does this provider have an embeddable studio for the given operation?
  * Descriptor providers need at least one non-`custom` tab for the operation
  * (custom panels like Deepgram's transcription UI are not embeddable).
+ * `'avatar'` maps onto the provider's `video` tabs (minus AVATAR_COMPACT_EXCLUDE).
  */
-export function hasCompactStudio(provider: string, operation?: CompactOperation): boolean {
+export function hasCompactStudio(
+  provider: string,
+  operation?: CompactOperation | 'avatar'
+): boolean {
   if (BESPOKE_COMPACT_PROVIDERS.includes(provider)) return true;
   const entry = COMPACT_STUDIO_REGISTRY[provider];
   if (!entry) return false;
   if (!operation) return entry.tabs.some(({ tab }) => !tab.custom);
+  if (operation === 'avatar') {
+    if (AVATAR_COMPACT_EXCLUDE.includes(provider)) return false;
+    return entry.tabs.some(({ tab }) => !tab.custom && tab.operation === 'video');
+  }
   return entry.tabs.some(({ tab }) => !tab.custom && tab.operation === operation);
 }

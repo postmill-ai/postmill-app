@@ -1,15 +1,19 @@
 'use client';
 
-import React, { FC, useState } from 'react';
+import React, { FC, useCallback, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import {
+  GenerationProviderPicker,
+  useGenerationProviderChoice,
+} from '@postmill-ai/frontend/components/media-tools/designer/panels/generation-provider-picker';
 import { useMediaVoices } from './use-media-voices';
 import { readErrorMessage } from './read-error-message';
 
 interface VoiceoverDialogProps {
   onClose: () => void;
-  onGenerate: (text: string, voiceId: string, instructions?: string) => void | Promise<void>;
+  onGenerate: (text: string, voiceId: string, instructions?: string, provider?: string) => void | Promise<void>;
 }
 
 const inputClass =
@@ -28,7 +32,15 @@ export const VoiceoverDialog: FC<VoiceoverDialogProps> = ({
   const [selectedVoice, setSelectedVoice] = useState('');
   const [generating, setGenerating] = useState(false);
   const [writing, setWriting] = useState(false);
-  const { data: voices, isLoading, error } = useMediaVoices();
+  // '' = org default TTS provider; a pinned provider is sent with the TTS call.
+  const [provider, setProvider] = useGenerationProviderChoice('voiceover');
+  const { data: voices, isLoading, error } = useMediaVoices(provider || undefined);
+
+  // Voice ids are provider-specific — a provider switch invalidates the pick.
+  const handleProviderChange = useCallback((next: string) => {
+    setProvider(next);
+    setSelectedVoice('');
+  }, [setProvider]);
 
   const canGenerate = text.trim().length > 0 && selectedVoice.length > 0;
   // No dedicated topic field entry? The script box's current content is the
@@ -66,7 +78,7 @@ export const VoiceoverDialog: FC<VoiceoverDialogProps> = ({
     if (!canGenerate || generating) return;
     setGenerating(true);
     try {
-      await onGenerate(text.trim(), selectedVoice, instructions.trim() || undefined);
+      await onGenerate(text.trim(), selectedVoice, instructions.trim() || undefined, provider || undefined);
       onClose();
     } finally {
       setGenerating(false);
@@ -108,6 +120,14 @@ export const VoiceoverDialog: FC<VoiceoverDialogProps> = ({
           </button>
         </div>
       </div>
+
+      <GenerationProviderPicker
+        operation="tts"
+        dialogKey="voiceover"
+        value={provider}
+        onChange={handleProviderChange}
+        requireCompact={false}
+      />
 
       <div>
         <label htmlFor="voiceover-voice" className="block text-[12px] text-newTextColor/70 mb-[6px]">
