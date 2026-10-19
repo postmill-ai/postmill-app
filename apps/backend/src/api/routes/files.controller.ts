@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  BadRequestException,
   HttpException,
   Logger,
   Param,
@@ -13,6 +14,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { UploadValidationError } from '@postmill-ai/provider-kernel';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
@@ -112,7 +114,15 @@ export class FilesController {
       const { adapter, configId } = await this._storageService.resolveAdapterForFolderWithConfigId(folderId, org.id);
       await this._storageService.assertWithinProviderQuota(adapter, org.id, file?.size || 0, configId);
       const originalName = file?.originalname || '';
-      const uploadedFile = await adapter.uploadFile(file);
+      const uploadedFile = await adapter.uploadFile(file).catch((err) => {
+        // Client sent a file we refuse (MIME sniff failed the allow-list) —
+        // that's a 400, not a 500. Mapping here also keeps it out of Sentry
+        // (the global filter ignores HttpExceptions).
+        if (err instanceof UploadValidationError) {
+          throw new BadRequestException(err.message);
+        }
+        throw err;
+      });
       try {
         return await this._fileService.saveFile(
           org.id,
@@ -159,7 +169,13 @@ export class FilesController {
     const { adapter, configId } = await this._storageService.resolveAdapterForFolderWithConfigId(folderId, org.id);
     await this._storageService.assertWithinProviderQuota(adapter, org.id, file?.size || 0, configId);
     const originalName = file.originalname;
-    const getFile = await adapter.uploadFile(file);
+    const getFile = await adapter.uploadFile(file).catch((err) => {
+      // Same mapping as uploadServer: rejected client files are 400s, not 500s.
+      if (err instanceof UploadValidationError) {
+        throw new BadRequestException(err.message);
+      }
+      throw err;
+    });
 
     if (preventSave) {
       const { path } = getFile;

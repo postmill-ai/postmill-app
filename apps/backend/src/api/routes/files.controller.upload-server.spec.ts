@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Organization } from '@prisma/client';
+import { BadRequestException } from '@nestjs/common';
+import { UploadValidationError } from '@postmill-ai/provider-kernel';
 
 const storageMock = {
   uploadFile: vi.fn(),
@@ -134,5 +136,48 @@ describe('FilesController — uploadServer temp file cleanup', () => {
     expect(unlinkSpy).not.toHaveBeenCalled();
 
     unlinkSpy.mockRestore();
+  });
+});
+
+describe('FilesController — upload validation errors map to 400', () => {
+  it('uploadServer maps UploadValidationError to BadRequestException and still unlinks the temp file', async () => {
+    storageSvcMock.assertWithinProviderQuota.mockResolvedValue(undefined);
+    storageMock.uploadFile.mockRejectedValue(new UploadValidationError('Unsupported file type.'));
+
+    const controller = makeController();
+    const file = {
+      originalname: 'notes.exe',
+      size: 100,
+      path: '/tmp/postmill-uploads/test123.png',
+    } as any;
+
+    const fs = await import('fs');
+    const unlinkSpy = vi.spyOn(fs.promises, 'unlink').mockResolvedValue(undefined);
+
+    await expect(controller.uploadServer(org, file, {})).rejects.toBeInstanceOf(BadRequestException);
+    expect(unlinkSpy).toHaveBeenCalledWith('/tmp/postmill-uploads/test123.png');
+
+    unlinkSpy.mockRestore();
+  });
+
+  it('uploadServer passes non-validation upload errors through untouched', async () => {
+    storageSvcMock.assertWithinProviderQuota.mockResolvedValue(undefined);
+    storageMock.uploadFile.mockRejectedValue(new Error('disk full'));
+
+    const controller = makeController();
+    const file = { originalname: 'test.png', size: 100 } as any;
+
+    await expect(controller.uploadServer(org, file, {})).rejects.toThrow('disk full');
+    await expect(controller.uploadServer(org, file, {})).rejects.not.toBeInstanceOf(BadRequestException);
+  });
+
+  it('uploadSimple maps UploadValidationError to BadRequestException', async () => {
+    storageSvcMock.assertWithinProviderQuota.mockResolvedValue(undefined);
+    storageMock.uploadFile.mockRejectedValue(new UploadValidationError('Unsupported file type.'));
+
+    const controller = makeController();
+    const file = { originalname: 'notes.txt', size: 100 } as any;
+
+    await expect(controller.uploadSimple(org, file, {} as any)).rejects.toBeInstanceOf(BadRequestException);
   });
 });

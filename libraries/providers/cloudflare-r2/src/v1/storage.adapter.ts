@@ -27,6 +27,7 @@ import {
   fromBuffer,
   fromFile,
   DetectedFileType,
+  UploadValidationError,
 } from '@postmill-ai/provider-kernel';
 
 const TYPE = 'CLOUDFLARE_R2';
@@ -208,7 +209,7 @@ export class R2Storage implements StorageCapability {
 
     const detected = await fromBuffer(body);
     if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
-      throw new Error('Unsupported file type.');
+      throw new UploadValidationError('Unsupported file type.');
     }
     const extension = detected.ext;
     const safeContentType = detected.mime;
@@ -239,10 +240,10 @@ export class R2Storage implements StorageCapability {
       } else if (file.path) {
         detected = await fromFile(file.path);
       } else {
-        throw new Error('Invalid file upload.');
+        throw new UploadValidationError('Invalid file upload.');
       }
       if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
-        throw new Error('Unsupported file type.');
+        throw new UploadValidationError('Unsupported file type.');
       }
       const id = randomBytes(8).toString('hex');
       const extension = detected.ext;
@@ -308,7 +309,7 @@ export class R2Storage implements StorageCapability {
     // bypass for arbitrary file types (magic-byte sniffing isn't possible at
     // create time, so gate on the extension→MIME allowlist here).
     if (!mimeType) {
-      throw new Error('Unsupported file type.');
+      throw new UploadValidationError('Unsupported file type.');
     }
     const randomFilename = this.generateRandomKey(fileName);
 

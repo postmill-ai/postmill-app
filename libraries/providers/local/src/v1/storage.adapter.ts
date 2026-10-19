@@ -21,6 +21,7 @@ import {
   parseDataUrl,
   fromBuffer,
   fromFile,
+  UploadValidationError,
 } from '@postmill-ai/provider-kernel';
 
 const TYPE = 'LOCAL';
@@ -185,7 +186,7 @@ export class LocalStorage implements StorageCapability {
 
     const detected = await fromBuffer(body);
     if (!detected || !LOCAL_STORAGE_ALLOWED_MIME.has(detected.mime)) {
-      throw new Error('Unsupported file type.');
+      throw new UploadValidationError('Unsupported file type.');
     }
     const findExtension = detected.ext;
 
@@ -219,11 +220,11 @@ export class LocalStorage implements StorageCapability {
         detected = (await fromFile(file.path)) as any;
         isBufferPath = false;
       } else {
-        throw new Error('Invalid file upload.');
+        throw new UploadValidationError('Invalid file upload.');
       }
 
       if (!detected || !LOCAL_STORAGE_ALLOWED_MIME.has(detected.mime)) {
-        throw new Error('Unsupported file type.');
+        throw new UploadValidationError('Unsupported file type.');
       }
       const safeExt = `.${detected.ext}`;
       const safeMime = detected.mime;

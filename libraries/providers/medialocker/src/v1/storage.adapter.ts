@@ -13,6 +13,7 @@ import {
   fromBuffer,
   fromFile,
   DetectedFileType,
+  UploadValidationError,
 } from '@postmill-ai/provider-kernel';
 
 const TYPE = 'MEDIALOCKER';
@@ -292,7 +293,7 @@ export class MediaLockerStorage implements StorageCapability {
 
     const detected = await fromBuffer(body);
     if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
-      throw new Error('Unsupported file type.');
+      throw new UploadValidationError('Unsupported file type.');
     }
     const extension = detected.ext;
     const safeContentType = detected.mime;
@@ -321,10 +322,10 @@ export class MediaLockerStorage implements StorageCapability {
         detected = await fromFile(file.path);
         body = await readFile(file.path);
       } else {
-        throw new Error('Invalid file upload.');
+        throw new UploadValidationError('Invalid file upload.');
       }
       if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
-        throw new Error('Unsupported file type.');
+        throw new UploadValidationError('Unsupported file type.');
       }
       const id = randomBytes(8).toString('hex');
       const extension = detected.ext;

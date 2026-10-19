@@ -66,3 +66,16 @@ export class ProviderManifestError extends Error {
     this.name = 'ProviderManifestError';
   }
 }
+
+/**
+ * Client-sent upload failed validation (unrecognized/unsupported MIME sniff, or
+ * a malformed multipart with neither buffer nor path). Storage adapters throw
+ * this instead of a plain Error so the API boundary can map it to a 400 — it is
+ * user input, not a server fault, and must not page Sentry as a 500.
+ */
+export class UploadValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UploadValidationError';
+  }
+}

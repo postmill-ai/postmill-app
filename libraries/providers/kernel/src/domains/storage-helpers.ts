@@ -13,6 +13,7 @@ import { CredentialField } from '../manifest';
 import { ProviderModule, ProviderRuntimeContext } from '../module';
 import { LoggerPort, SafeFetchPort } from '../ports';
 import { StorageCapability, StorageFileEntry } from './storage';
+import { UploadValidationError } from '../errors';
 
 // ── file-type compat shim ──────────────────────────────────────────────────
 // `file-type` renamed its named exports between v16 (`fromBuffer` / `fromFile`)
@@ -266,7 +267,7 @@ export class S3StorageBase implements StorageCapability {
 
     const detected = await fromBuffer(body);
     if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
-      throw new Error('Unsupported file type.');
+      throw new UploadValidationError('Unsupported file type.');
     }
     const extension = detected.ext;
     const safeContentType = detected.mime;
@@ -299,11 +300,11 @@ export class S3StorageBase implements StorageCapability {
       } else if (file.path) {
         detected = await fromFile(file.path);
       } else {
-        throw new Error('Invalid file upload.');
+        throw new UploadValidationError('Invalid file upload.');
       }
 
       if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
-        throw new Error('Unsupported file type.');
+        throw new UploadValidationError('Unsupported file type.');
       }
       const id = randomBytes(8).toString('hex');
       const extension = detected.ext;
