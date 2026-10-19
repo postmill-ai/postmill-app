@@ -1619,8 +1619,11 @@ export class AiMediaService {
       );
     }
     // Lazy require (not a top-level import) to avoid the circular boot-time require — see note at imports.
+    // Relative specifier on purpose: tsc's path-alias transform rewrites import declarations
+    // but NOT require() string literals, so the bare '@postmill-ai/nestjs-libraries/...'
+    // alias does not resolve in the built backend (the workspace link has no main/exports).
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { SlideService } = require('@postmill-ai/nestjs-libraries/media/slide/slide.service');
+    const { SlideService } = require('../../media/slide/slide.service');
     const slideService = this._moduleRef.get<SlideService>(SlideService, {
       strict: false,
     });
@@ -1646,8 +1649,9 @@ export class AiMediaService {
       );
     }
     // Lazy require (not a top-level import) to avoid the circular boot-time require — see note at imports.
+    // Relative specifier for the same reason as generateSlide above.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { CaptionService } = require('@postmill-ai/nestjs-libraries/media/caption/caption.service');
+    const { CaptionService } = require('../../media/caption/caption.service');
     const captionService = this._moduleRef.get<CaptionService>(CaptionService, {
       strict: false,
     });
