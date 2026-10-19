@@ -494,3 +494,93 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
     expect(lastRequestBody(fetchMock).input.outpaint).toBe('Right outpaint');
   });
 });
+
+
+describe('ReplicateMediaAdapter object outputs (named artifacts)', () => {
+  const fetchReturning = (body: unknown) =>
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(body),
+      text: () => Promise.resolve(JSON.stringify(body)),
+    });
+
+  const pollWith = async (output: unknown) => {
+    const fetchMock = fetchReturning({ id: 'pred-1', status: 'succeeded', output });
+    const adapter = new ReplicateMediaAdapter(fetchMock as any);
+    return adapter.pollJob('pred-1', { credentials: { apiKey: 'k' } });
+  };
+
+  it('picks the audio URL from a { audio, spectrogram } object (prod regression cmvfsa458000jsynvm3hc2380)', async () => {
+    // riffusion/riffusion succeeded but the job failed "Replicate prediction
+    // succeeded without output" — its output is an OBJECT (prediction
+    // 2er3whyxd9rga0d1argbx16ed0):
+    //   { audio: "https://replicate.delivery/.../gen_sound.wav",
+    //     spectrogram: "https://replicate.delivery/.../spectrogram.jpg" }
+    const result = await pollWith({
+      audio: 'https://replicate.delivery/gen_sound.wav',
+      spectrogram: 'https://replicate.delivery/spectrogram.jpg',
+    });
+    expect(result).toMatchObject({
+      status: 'completed',
+      artifactUrl: 'https://replicate.delivery/gen_sound.wav',
+    });
+  });
+
+  it('prefers the video key over thumbnails', async () => {
+    const result = await pollWith({
+      thumbnail: 'https://replicate.delivery/thumb.jpg',
+      video: 'https://replicate.delivery/out.mp4',
+    });
+    expect(result).toMatchObject({
+      status: 'completed',
+      artifactUrl: 'https://replicate.delivery/out.mp4',
+    });
+  });
+
+  it('falls back to a fuzzy key match, then the first string value', async () => {
+    const fuzzy = await pollWith({ output_url: 'https://replicate.delivery/a.wav', other: 42 });
+    expect(fuzzy).toMatchObject({ status: 'completed', artifactUrl: 'https://replicate.delivery/a.wav' });
+
+    const firstString = await pollWith({ whatever: 'https://replicate.delivery/b.png', count: 3 });
+    expect(firstString).toMatchObject({ status: 'completed', artifactUrl: 'https://replicate.delivery/b.png' });
+  });
+
+  it('keeps the "succeeded without output" failure for empty objects / no string values', async () => {
+    expect(await pollWith({})).toMatchObject({
+      status: 'failed',
+      error: 'Replicate prediction succeeded without output',
+    });
+    expect(await pollWith({ audio: '', count: 3 })).toMatchObject({
+      status: 'failed',
+      error: 'Replicate prediction succeeded without output',
+    });
+  });
+
+  it('keeps string and string[] outputs unchanged', async () => {
+    expect(await pollWith('https://replicate.delivery/single.png')).toMatchObject({
+      status: 'completed',
+      artifactUrl: 'https://replicate.delivery/single.png',
+    });
+    expect(
+      await pollWith(['https://replicate.delivery/first.png', 'https://replicate.delivery/second.png'])
+    ).toMatchObject({ status: 'completed', artifactUrl: 'https://replicate.delivery/first.png' });
+  });
+
+  it('resolves object outputs on the sync image path too (generateImage)', async () => {
+    const fetchMock = fetchReturning({
+      id: 'pred-1',
+      status: 'succeeded',
+      output: { image: 'https://replicate.delivery/out.png', mask: 'https://replicate.delivery/mask.png' },
+    });
+    const adapter = new ReplicateMediaAdapter(fetchMock as any);
+    const result = await adapter.generateImage('a cat', {
+      credentials: { apiKey: 'k' },
+      model: 'black-forest-labs/flux-1.1-pro',
+    });
+    expect(result).toMatchObject({
+      multi: false,
+      image: 'https://replicate.delivery/out.png',
+      images: ['https://replicate.delivery/out.png'],
+    });
+  });
+});

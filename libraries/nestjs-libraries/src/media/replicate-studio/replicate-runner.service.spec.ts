@@ -199,6 +199,32 @@ describe('ReplicateRunnerService', () => {
 
       expect(mockSafeFetch).not.toHaveBeenCalled();
     });
+
+    it('extracts the preferred URL from an object output (named artifacts)', async () => {
+      // riffusion-style output shape — the sync path must not drop it either.
+      mockSafeFetch.mockResolvedValue(
+        jsonResponse({
+          id: 'pred-obj',
+          status: 'succeeded',
+          output: {
+            spectrogram: 'https://rep/spectrogram.jpg',
+            audio: 'https://rep/gen_sound.wav',
+          },
+        }),
+      );
+
+      const result = await runner.runSync('org1', '', {
+        modelId: 'black-forest-labs/flux-dev',
+        input: { prompt: 'cat' },
+        operation: 'image',
+      });
+
+      expect(result).toMatchObject({
+        status: 'succeeded',
+        kind: 'image',
+        urls: ['https://rep/gen_sound.wav'],
+      });
+    });
   });
 
   describe('runAsync', () => {

@@ -22,7 +22,7 @@ const BASE = 'https://api.replicate.com/v1';
 interface ReplicatePrediction {
   id?: string;
   status?: string;
-  output?: string | string[] | null;
+  output?: string | string[] | Record<string, unknown> | null;
   error?: string;
 }
 
@@ -229,12 +229,28 @@ export class ReplicateRunnerService {
   }
 
   private _normalizeUrls(
-    output: string | string[] | null | undefined,
+    output: string | string[] | Record<string, unknown> | null | undefined,
   ): string[] {
     if (!output) return [];
     if (Array.isArray(output))
       return output.filter((u): u is string => typeof u === 'string');
-    return typeof output === 'string' ? [output] : [];
+    if (typeof output === 'string') return [output];
+    // Object outputs (named artifacts — e.g. riffusion's `{ audio, spectrogram }`).
+    // Same preference order as the provider adapter's firstOutputUrl: exact
+    // audio/video/image key → fuzzy key match → first non-empty string value.
+    // Duplicated deliberately: nestjs-libraries does not depend on
+    // @postmill-ai/provider-replicate (the kernel owns that package).
+    const entries = Object.entries(output).filter(
+      (e): e is [string, string] => typeof e[1] === 'string' && e[1].length > 0
+    );
+    for (const key of ['audio', 'video', 'image']) {
+      const hit = entries.find(([k]) => k === key);
+      if (hit) return [hit[1]];
+    }
+    const fuzzy = entries.find(([k]) => /audio|video|image|url|output|file/i.test(k));
+    if (fuzzy) return [fuzzy[1]];
+    const first = entries[0]?.[1];
+    return first ? [first] : [];
   }
 
   private async _withCredit<T>(

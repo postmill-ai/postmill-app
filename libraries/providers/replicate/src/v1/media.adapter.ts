@@ -54,7 +54,7 @@ const OUTPAINT_TOKENS: Record<OutpaintMode, string> = {
   bottom: 'Bottom outpaint',
 };
 
-type ReplicateOutput = string | string[] | undefined;
+type ReplicateOutput = string | string[] | Record<string, unknown> | undefined;
 
 interface ReplicatePredictionResponse {
   id?: string;
@@ -63,9 +63,28 @@ interface ReplicatePredictionResponse {
   error?: string;
 }
 
+// Outputs are usually a URL string or string[], but some models return an
+// OBJECT of named artifacts (riffusion: `{ audio, spectrogram }` — prod job
+// cmvfsa458000jsynvm3hc2380 failed "succeeded without output" on exactly that
+// shape). Object preference: exact `audio`/`video`/`image` key → any key
+// matching /audio|video|image|url|output|file/i → first non-empty string
+// value. One level deep; string/string[] behavior is unchanged.
 function firstOutputUrl(output: ReplicateOutput): string | undefined {
   if (Array.isArray(output)) return output.find((u) => typeof u === 'string');
-  return typeof output === 'string' ? output : undefined;
+  if (typeof output === 'string') return output;
+  if (output && typeof output === 'object') {
+    const entries = Object.entries(output).filter(
+      (e): e is [string, string] => typeof e[1] === 'string' && e[1].length > 0
+    );
+    for (const key of ['audio', 'video', 'image']) {
+      const hit = entries.find(([k]) => k === key);
+      if (hit) return hit[1];
+    }
+    const fuzzy = entries.find(([k]) => /audio|video|image|url|output|file/i.test(k));
+    if (fuzzy) return fuzzy[1];
+    return entries[0]?.[1];
+  }
+  return undefined;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -288,6 +307,12 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     }
     if (typeof output === 'string') {
       return { multi: false, image: output, images: [output], metadata: { provider: this.identifier, model } };
+    }
+    // Object outputs (named artifacts) resolve through the same preference
+    // helper the poll path uses.
+    const url = firstOutputUrl(output);
+    if (url) {
+      return { multi: false, image: url, images: [url], metadata: { provider: this.identifier, model } };
     }
     throw new Error(`Unexpected Replicate output format: ${JSON.stringify(output)}`);
   }
