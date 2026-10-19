@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAbortedRequestEvent } from './initialize.sentry';
+import { isAbortedRequestEvent } from './aborted-request';
 
 describe('isAbortedRequestEvent', () => {
   it('matches body-parser style BadRequestError', () => {
