@@ -164,4 +164,23 @@ describe('SlideService', () => {
 
     expect(result).toBe('/uploads/slide-output.mp4');
   });
+
+  it('decodes a data: URI image artifact locally instead of fetching it', async () => {
+    const { service, mocks } = makeService();
+    // OpenRouter returns the generated image inline — safeFetch (http/https
+    // only) blocked these and the whole slide job 500'd with "Blocked URL".
+    mocks.aiDefaults.textToImage.mockResolvedValue(
+      `data:image/png;base64,${Buffer.from('inline-png-bytes').toString('base64')}`,
+    );
+
+    const result = await service.generateSlide({ orgId: 'org-1', prompt: 'A friendly greeting' });
+
+    expect(mockSafeFetch).not.toHaveBeenCalled();
+    // The first writeFileSync after the audio write is the decoded image…
+    const imageWrite = mockWriteFileSync.mock.calls.find(
+      (call) => Buffer.isBuffer(call[1]) && call[1].toString() === 'inline-png-bytes',
+    );
+    expect(imageWrite).toBeTruthy();
+    expect(result).toBe('/uploads/slide-output.mp4');
+  });
 });

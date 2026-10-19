@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
+import { parseDataUrl } from '@postmill-ai/provider-kernel';
 import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
@@ -260,6 +261,14 @@ export class SlideService {
   }
 
   private async _downloadImage(url: string, destPath: string): Promise<void> {
+    // Media adapters may return the generated image inline as a data: URI
+    // (e.g. OpenRouter) instead of a hosted URL. safeFetch is an SSRF guard
+    // for http/https and rightfully blocks those — decode them locally.
+    const dataUrl = url.startsWith('data:') ? parseDataUrl(url) : null;
+    if (dataUrl) {
+      fs.writeFileSync(destPath, dataUrl.buffer);
+      return;
+    }
     // Relative specifier: tsc rewrites static import declarations to dist paths
     // but leaves dynamic import() specifiers untouched, and the bare
     // '@postmill-ai/nestjs-libraries/...' alias does not resolve in the built
