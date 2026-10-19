@@ -230,6 +230,16 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      loads), and the frontend `/api/uploads` serve route sends
      `Access-Control-Allow-Origin: *` (public no-auth bucket) so `crossOrigin='anonymous'`
      canvas draws are not tainted/blocked. Both are required for a render to see its clips.
+   - Fonts on the frame page: `buildFramePage` (`design-render/frame-page.ts`) injects
+     catalog `<link>`s + org `@font-face` rules (`fontLinksForOutput`) AND explicit
+     `document.fonts.load()` specs (`fontPreloadsForOutput`), awaited before
+     `__FRAME_API` is announced. `document.fonts.ready` alone is insufficient — the
+     faces load lazily on first canvas `fillText`, so the opening frame(s) painted a
+     fallback face and the real font popped in mid-video (prod-observed).
+   - Silent-audio fallback: a composition with no audible clips still exports an audio
+     stream — the encoder substitutes `-f lavfi -i anullsrc=cl=stereo:r=44100` for the
+     mixed WAV and always passes `-c:a aac|libopus -shortest` (never `-an`) for
+     mp4/webm, because players/platforms treat video-only files inconsistently.
    - Stores the artifact via `MediaJobLifecycleService.completeJobWithBuffer` (org
      storage, mime/metadata, thumbnail); on error marks the job `failed` (error truncated
      to 1000 chars), reports to Sentry (`subsystem: video-render`), and always removes
@@ -269,7 +279,11 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
   worker import it. Keep the two sides in lockstep when changing it.
 - **Image:** `docker/Containerfile.render` —
   `podman build -f docker/Containerfile.render -t localhost/postmill-render:latest .`
-  (app build + distro Chromium/FFmpeg + the worker CLI as ENTRYPOINT).
+  The prod deploy script (`ops/scripts/deploy-app.sh`) rebuilds the image automatically
+  whenever the deployed diff touches `libraries/nestjs-libraries/src/media/design-render/`,
+  `apps/backend/src/media-render-worker.ts`, or the Containerfile — a manual rebuild
+  after those changes is no longer needed (a stale image once kept serving pre-hardening
+  capture code and wedged renders that the merged code had already fixed).
 - The in-container Chromium resolves the render route/assets against `spec.baseUrl`
   (`NEXT_PUBLIC_BACKEND_URL`/`FRONTEND_URL`); `options.renderToken` comes from
   `mediaJobWebhookToken(jobId, orgId)` (`media/media-job-token.ts`).

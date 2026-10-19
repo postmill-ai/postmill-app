@@ -188,8 +188,16 @@ export class FfmpegVideoEncoderService {
           ]);
         }
       } else {
-        // 2. Mix audio if present.
+        // 2. Mix audio if present. When the composition has no audible clips
+        // there is nothing to mix — but the export still gets a SILENT stereo
+        // track (anullsrc) rather than `-an`: players and social platforms
+        // treat video-only files inconsistently (no duration, no mute toggle,
+        // occasional upload rejection), and editors like CapCut export silence
+        // the same way.
         const audioPath = await this.mixAudio(output, tmpDir, options.normalizeLoudness === true);
+        const audioInput = audioPath
+          ? ['-i', audioPath]
+          : ['-f', 'lavfi', '-i', 'anullsrc=cl=stereo:r=44100'];
 
         // 3. Encode final video.
         const isWebm = format === 'webm';
@@ -203,7 +211,7 @@ export class FfmpegVideoEncoderService {
           // after output options (-c:v/-pix_fmt/-t) makes ffmpeg parse those
           // as INPUT options for the wav and abort with "Error parsing
           // options for input file".
-          ...(audioPath ? ['-i', audioPath] : []),
+          ...audioInput,
           '-c:v',
           isWebm ? 'libvpx-vp9' : 'libx264',
           ...(isWebm
@@ -224,17 +232,13 @@ export class FfmpegVideoEncoderService {
           String(durationS),
         ];
 
-        if (audioPath) {
-          args.push(
-            '-c:a',
-            isWebm ? 'libopus' : 'aac',
-            '-b:a',
-            '128k',
-            '-shortest',
-          );
-        } else {
-          args.push('-an');
-        }
+        args.push(
+          '-c:a',
+          isWebm ? 'libopus' : 'aac',
+          '-b:a',
+          '128k',
+          '-shortest',
+        );
 
         args.push(videoPath);
         await runFfmpeg(args);

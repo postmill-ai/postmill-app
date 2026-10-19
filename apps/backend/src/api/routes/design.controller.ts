@@ -33,7 +33,7 @@ import {
   FRAME_RENDERER_SCRIPT,
   escapeForScriptTag,
 } from '@postmill-ai/nestjs-libraries/media/design-render/frame-renderer-script';
-import { buildFramePage, fontLinksForOutput } from '@postmill-ai/nestjs-libraries/media/design-render/frame-page';
+import { buildFramePage, fontLinksForOutput, fontPreloadsForOutput } from '@postmill-ai/nestjs-libraries/media/design-render/frame-page';
 import { RenderDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/render.design.dto';
 import { TextOutlinesDto } from '@postmill-ai/nestjs-libraries/dtos/design/text-outlines.dto';
 import { textToOutlines } from '@postmill-ai/nestjs-libraries/media/design-render/text-outlines';
@@ -735,6 +735,7 @@ export class DesignRenderFrameController {
       script: FRAME_RENDERER_SCRIPT,
       initialFrame,
       fontLinks: fontLinksForOutput(output, customFonts),
+      fontPreloads: fontPreloadsForOutput(output, customFonts),
     });
 
     // The frame page pulls clip media cross-origin (uploads/CDN hosts) into a

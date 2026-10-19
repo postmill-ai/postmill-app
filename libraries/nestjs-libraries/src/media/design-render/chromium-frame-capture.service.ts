@@ -3,7 +3,7 @@ import puppeteer, { Browser, Page } from 'puppeteer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { FRAME_RENDERER_SCRIPT, escapeForScriptTag } from './frame-renderer-script';
-import { buildFramePage, fontLinksForOutput } from './frame-page';
+import { buildFramePage, fontLinksForOutput, fontPreloadsForOutput } from './frame-page';
 import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { getCapturePageCount, getFrameTimeoutMs } from './render-config';
 import type { VideoOutput } from './design-render.types';
@@ -288,6 +288,7 @@ export class ChromiumFrameCaptureService {
         // linked here; org custom fonts reach the frame page through the
         // render-frame route (the path real renders take) instead.
         fontLinks: fontLinksForOutput(output),
+        fontPreloads: fontPreloadsForOutput(output),
       });
 
       // puppeteer 25: setContent() no longer accepts networkidle0; load +

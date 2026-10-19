@@ -53,8 +53,10 @@ const DEFAULT_FPS = 30;
 const DEFAULT_DURATION_MS = 10_000;
 /** Text clips fade in over this window. */
 const TEXT_TRANSITION_IN_MS = 400;
-/** Ken Burns end scale for full-duration image clips. */
-const KEN_BURNS_ZOOM = 1.08;
+/** Ken Burns end scale for full-duration image clips. 1.08 read as "no motion"
+ *  at social-video glance speed — 1.15 is clearly perceptible without feeling
+ *  like a zoom effect. */
+const KEN_BURNS_ZOOM = 1.15;
 
 export interface ImageToVideoOptions {
   /** Set false to emit static image clips without the slow-zoom keyframes. */

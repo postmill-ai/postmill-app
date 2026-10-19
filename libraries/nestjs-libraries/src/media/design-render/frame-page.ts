@@ -86,9 +86,10 @@ const cssStringSafe = (value: string): string =>
  *
  * The frame page runs in Chromium, which loads WOFF2 as happily as TTF/OTF —
  * the server-side WOFF2 limitation (node-canvas, outline extraction) does not
- * apply here, so custom fonts are injected whatever their format. The rules go
- * through `document.fonts.ready`, which `buildFramePage` awaits before
- * announcing the frame API, so no frame paints in a fallback face.
+ * apply here, so custom fonts are injected whatever their format. The faces
+ * load lazily on first use, so `buildFramePage` also emits explicit
+ * `document.fonts.load()` calls (`fontPreloadsForOutput`) and awaits them
+ * before announcing the frame API — no frame paints in a fallback face.
  */
 export const fontLinksForOutput = (
   output: unknown,
@@ -122,6 +123,40 @@ export const fontLinksForOutput = (
   return faces.length ? `${links}<style>${faces.join('')}</style>` : links;
 };
 
+/**
+ * `document.fonts.load()` spec strings for every face the composition paints
+ * with. `document.fonts.ready` alone is NOT enough to keep the first frame
+ * honest: @font-face rules load lazily on first USE, and the frame renderer's
+ * first use is a canvas `fillText` during frame 1 — so without an explicit
+ * load the opening frame(s) paint in the fallback face and the real font pops
+ * in mid-video (seen in prod as a serif first frame under an Anton title).
+ */
+export const fontPreloadsForOutput = (
+  output: unknown,
+  customFonts: FrameCustomFont[] = [],
+): string[] => {
+  const specs: string[] = [];
+  const push = (family: string, weight: unknown, italic = false): void => {
+    const safeFamily = cssStringSafe(family);
+    const w = typeof weight === 'number' && Number.isFinite(weight) ? Math.round(weight) : 400;
+    if (!safeFamily) return;
+    specs.push(`${italic ? 'italic ' : ''}${w} 16px "${safeFamily}"`);
+  };
+  for (const [family, weights] of fontsUsedInOutput(output)) {
+    for (const weight of catalogWeights(family, [...weights])) {
+      push(family, weight);
+    }
+  }
+  const usedFamilies = fontFamiliesUsedInOutput(output);
+  for (const f of customFonts) {
+    if (!f || typeof f.family !== 'string' || !usedFamilies.has(f.family)) continue;
+    for (const weight of f.weights?.length ? f.weights : [400]) {
+      push(f.family, weight, f.italic);
+    }
+  }
+  return specs;
+};
+
 export interface FramePageOptions {
   /** The composition, already escaped for a script tag. */
   outputLiteral: string;
@@ -135,15 +170,18 @@ export interface FramePageOptions {
   initialFrame?: number;
   /** Font `<link>`/`<style>` tags — pass `fontLinksForOutput(output, customFonts)`. */
   fontLinks: string;
+  /** `document.fonts.load()` specs — pass `fontPreloadsForOutput(output, customFonts)`. */
+  fontPreloads?: string[];
 }
 
 /**
  * Build the page.
  *
- * `document.fonts.ready` is awaited before `__FRAME_API` is announced, which is
- * what the capture loop waits on — so no frame can be drawn in a fallback face
- * that the next frame draws correctly, which would have been visible as a font
- * POP mid-video.
+ * Every used face is explicitly `document.fonts.load()`ed and
+ * `document.fonts.ready` is awaited before `__FRAME_API` is announced, which
+ * is what the capture loop waits on — so no frame can be drawn in a fallback
+ * face that the next frame draws correctly, which would have been visible as
+ * a font POP mid-video.
  */
 export const buildFramePage = (options: FramePageOptions): string => `<!DOCTYPE html>
 <html>
@@ -166,8 +204,16 @@ export const buildFramePage = (options: FramePageOptions): string => `<!DOCTYPE 
       // Announce the API only once the faces are in, so the capture loop can
       // never start on a frame rendered in a fallback font.
       window.__FRAME_API = undefined;
+      // Explicit loads FIRST: the <link>/@font-face faces load lazily on first
+      // use, and document.fonts.ready resolves while they are still unloaded —
+      // the first canvas fillText would otherwise paint a fallback face and
+      // the real font would pop in a few frames later.
+      var fontSpecs = ${JSON.stringify(options.fontPreloads ?? [])};
+      var loads = (document.fonts && document.fonts.load)
+        ? fontSpecs.map(function (spec) { return document.fonts.load(spec).catch(function () {}); })
+        : [];
       var ready = (document.fonts && document.fonts.ready) || Promise.resolve();
-      ready.catch(function () {}).then(function () {
+      Promise.all(loads).catch(function () {}).then(function () { return ready; }).catch(function () {}).then(function () {
         window.__FRAME_API = api;
         ${
           options.initialFrame != null

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildFramePage, fontLinksForOutput, fontsUsedInOutput } from './frame-page';
+import { buildFramePage, fontLinksForOutput, fontPreloadsForOutput, fontsUsedInOutput } from './frame-page';
 import { FRAME_RENDERER_SCRIPT } from './frame-renderer-script';
 import { cssFilterForToken, parseDesignerFilterToken } from './filter-tokens';
 import {
@@ -74,6 +74,62 @@ describe('buildFramePage', () => {
       fontLinks: '',
     });
     expect(preview).toContain('api.renderFrame(12)');
+  });
+
+  it('explicitly loads every used face BEFORE announcing the API', () => {
+    // document.fonts.ready alone resolves while <link> faces are still lazy —
+    // the first canvas fillText painted a fallback face (prod: a serif first
+    // frame under an Anton title). The preloads must run before the announce.
+    const preloadPage = buildFramePage({
+      outputLiteral: '{}',
+      baseUrlLiteral: '"http://x"',
+      baseUrl: 'http://x',
+      script: 'window.__FRAME_API = {preload:function(){},renderFrame:function(){}};',
+      fontLinks: fontLinksForOutput(output),
+      fontPreloads: fontPreloadsForOutput(output),
+    });
+    expect(preloadPage).toContain('document.fonts.load');
+    expect(preloadPage).toContain('400 16px \\"Bebas Neue\\"');
+    expect(preloadPage.indexOf('document.fonts.load')).toBeLessThan(
+      preloadPage.indexOf('window.__FRAME_API = api')
+    );
+  });
+});
+
+describe('fontPreloadsForOutput', () => {
+  it('emits a load spec per catalog family and resolved weight', () => {
+    const specs = fontPreloadsForOutput({ tracks: [{ clips: output.clips }] });
+    expect(specs).toContain('400 16px "Bebas Neue"');
+    expect(specs).toContain('700 16px "Montserrat"');
+    expect(specs).toContain('400 16px "Montserrat"');
+  });
+
+  it('includes org custom fonts the composition names, honoring italic', () => {
+    const specs = fontPreloadsForOutput(
+      { clips: [{ fontFamily: 'Scripto' }] },
+      [{ family: 'Scripto', path: '/uploads/org1/scripto.ttf', italic: true }]
+    );
+    expect(specs).toEqual(['italic 400 16px "Scripto"']);
+  });
+
+  it('strips breakout characters from a hostile family name', () => {
+    const specs = fontPreloadsForOutput(
+      { clips: [{ fontFamily: 'Evil"</script><script>alert(1)</script>' }] },
+      [
+        {
+          family: 'Evil"</script><script>alert(1)</script>',
+          path: '/uploads/x.ttf',
+        },
+      ]
+    );
+    for (const spec of specs) {
+      expect(spec).not.toMatch(/[<>]/);
+      expect(spec).not.toContain('</script>');
+    }
+  });
+
+  it('emits nothing when the composition uses no fonts', () => {
+    expect(fontPreloadsForOutput({ clips: [{ type: 'image' }] }, [])).toEqual([]);
   });
 });
 
