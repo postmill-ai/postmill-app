@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { BadRequestException } from '@nestjs/common';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -114,6 +115,7 @@ interface TestSetup {
   orgSettings: {
     getEnabledProviders: ReturnType<typeof vi.fn>;
     getConfigForProvider: ReturnType<typeof vi.fn>;
+    isProviderEnabledForOperation: ReturnType<typeof vi.fn>;
   };
   lifecycle: {
     createPendingJob: ReturnType<typeof vi.fn>;
@@ -148,6 +150,7 @@ function setup(
       storageProviderId: null,
       storageRootFolderId: null,
     })),
+    isProviderEnabledForOperation: vi.fn().mockResolvedValue(true),
   };
   const lifecycle = {
     createPendingJob: vi.fn().mockResolvedValue({ id: 'tracked-job-1' }),
@@ -592,6 +595,96 @@ describe('AiMediaService', () => {
 
       const result = await service.textToSpeech('hello', { orgId: 'org-1' });
       expect(result.toString()).toBe('raw');
+    });
+  });
+
+  describe('textToSpeech provider pin', () => {
+    const ttsAdapter = (id: string, result: unknown = Buffer.from(`${id}-audio`)) =>
+      makeAdapter(id, { tts: true }, {
+        textToSpeech: vi.fn().mockResolvedValue(result),
+      });
+
+    it('attempts only the pinned provider', async () => {
+      const elevenlabs = ttsAdapter('elevenlabs');
+      const openai = ttsAdapter('openai');
+      const { service, orgSettings } = setup([elevenlabs, openai]);
+
+      const result = await service.textToSpeech('hello', { orgId: 'org-1', provider: 'openai' });
+
+      expect(result.toString()).toBe('openai-audio');
+      expect(openai.textToSpeech).toHaveBeenCalledTimes(1);
+      expect(elevenlabs.textToSpeech).not.toHaveBeenCalled();
+      expect(orgSettings.isProviderEnabledForOperation).toHaveBeenCalledWith('org-1', 'openai', 'tts');
+      expect(mockCreateMediaJob).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'openai', operation: 'tts' }),
+      );
+    });
+
+    it('rejects an unknown provider with a 400', async () => {
+      const { service } = setup([]);
+      await expect(
+        service.textToSpeech('hello', { orgId: 'org-1', provider: 'nope' }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.textToSpeech('hello', { orgId: 'org-1', provider: 'nope' }),
+      ).rejects.toThrow('Unknown media provider "nope"');
+    });
+
+    it('rejects a provider without the tts capability with a 400', async () => {
+      const imageOnly = makeAdapter('replicate', { image: true });
+      const { service } = setup([imageOnly]);
+      await expect(
+        service.textToSpeech('hello', { orgId: 'org-1', provider: 'replicate' }),
+      ).rejects.toThrow('does not support tts');
+    });
+
+    it('rejects a provider disabled for the org with a 400', async () => {
+      const elevenlabs = ttsAdapter('elevenlabs');
+      const { service, orgSettings } = setup([elevenlabs]);
+      orgSettings.isProviderEnabledForOperation.mockResolvedValue(false);
+
+      await expect(
+        service.textToSpeech('hello', { orgId: 'org-1', provider: 'elevenlabs' }),
+      ).rejects.toThrow('not enabled for this organization');
+      expect(elevenlabs.textToSpeech).not.toHaveBeenCalled();
+    });
+
+    it('rejects an enabled provider with no credentials with a 400', async () => {
+      const elevenlabs = ttsAdapter('elevenlabs');
+      const { service, orgSettings } = setup([elevenlabs]);
+      orgSettings.getConfigForProvider.mockResolvedValue(null);
+
+      await expect(
+        service.textToSpeech('hello', { orgId: 'org-1', provider: 'elevenlabs' }),
+      ).rejects.toThrow('not configured for this organization');
+      expect(elevenlabs.textToSpeech).not.toHaveBeenCalled();
+    });
+
+    it('propagates a pinned failure without falling back to another provider', async () => {
+      const elevenlabs = makeAdapter('elevenlabs', { tts: true }, {
+        textToSpeech: vi.fn().mockRejectedValue(new Error('elevenlabs down')),
+      });
+      const openai = ttsAdapter('openai');
+      const { service } = setup([elevenlabs, openai]);
+
+      await expect(
+        service.textToSpeech('hello', { orgId: 'org-1', provider: 'elevenlabs' }),
+      ).rejects.toThrow('elevenlabs down');
+      expect(openai.textToSpeech).not.toHaveBeenCalled();
+    });
+
+    it('still falls back across candidates when no provider is pinned', async () => {
+      const elevenlabs = makeAdapter('elevenlabs', { tts: true }, {
+        textToSpeech: vi.fn().mockRejectedValue(new Error('elevenlabs down')),
+      });
+      const openai = ttsAdapter('openai');
+      const { service } = setup([elevenlabs, openai]);
+
+      const result = await service.textToSpeech('hello', { orgId: 'org-1' });
+
+      expect(result.toString()).toBe('openai-audio');
+      expect(elevenlabs.textToSpeech).toHaveBeenCalled();
+      expect(openai.textToSpeech).toHaveBeenCalled();
     });
   });
 
@@ -1192,6 +1285,126 @@ describe('AiMediaService', () => {
       const summary = await service.getMediaProviderSummary('org-1');
       expect(summary.find((e) => e.operation === 'image')!.available).toBe(false);
       expect(summary.find((e) => e.operation === 'upscale')!.available).toBe(true);
+    });
+  });
+
+  describe('listGenerationProviders', () => {
+    it('filters candidates by operation capability (a video-only provider is not listed for image)', async () => {
+      const openai = makeAdapter('openai', { image: true });
+      const runway = makeAdapter('runway', { video: true });
+      const { service } = setup([openai, runway]);
+
+      const imageList = await service.listGenerationProviders('org-1', 'image');
+      const videoList = await service.listGenerationProviders('org-1', 'video');
+
+      expect(imageList.providers.map((p) => p.identifier)).toEqual(['openai']);
+      expect(videoList.providers.map((p) => p.identifier)).toEqual(['runway']);
+    });
+
+    it('maps each candidate to identifier + display name and leaks nothing else', async () => {
+      const openai = makeAdapter('openai', { image: true }, { name: 'OpenAI' });
+      const { service } = setup([openai]);
+
+      const result = await service.listGenerationProviders('org-1', 'image');
+
+      expect(result.providers).toEqual([{ identifier: 'openai', name: 'OpenAI' }]);
+      expect(JSON.stringify(result)).not.toContain('openai-key');
+    });
+
+    it('excludes providers that are not enabled for the org', async () => {
+      const openai = makeAdapter('openai', { image: true });
+      const disabled = makeAdapter('replicate', { image: true });
+      // Only openai comes back from getEnabledProviders — replicate's row is off.
+      const { service } = setup([openai, disabled], ['openai']);
+
+      const result = await service.listGenerationProviders('org-1', 'image');
+
+      expect(result.providers.map((p) => p.identifier)).toEqual(['openai']);
+    });
+
+    it('excludes enabled providers whose credentials resolve empty', async () => {
+      const openai = makeAdapter('openai', { image: true });
+      const replicate = makeAdapter('replicate', { image: true });
+      const { service, orgSettings } = setup([openai, replicate]);
+      orgSettings.getConfigForProvider.mockImplementation(async (_orgId: string, id: string) => ({
+        credentials: id === 'replicate' ? {} : { apiKey: `${id}-key` },
+        storageProviderId: null,
+        storageRootFolderId: null,
+      }));
+
+      const result = await service.listGenerationProviders('org-1', 'image');
+
+      expect(result.providers.map((p) => p.identifier)).toEqual(['openai']);
+    });
+
+    it('honours extraConfig.operations gating', async () => {
+      const replicate = makeAdapter('replicate', { image: true, upscale: true });
+      const { service, orgSettings } = setup([replicate]);
+      orgSettings.getEnabledProviders.mockResolvedValue([
+        {
+          identifier: 'replicate',
+          storageProviderId: null,
+          storageRootFolderId: null,
+          extraConfig: { operations: ['upscale'] },
+        },
+      ]);
+
+      const result = await service.listGenerationProviders('org-1', 'image');
+
+      expect(result.providers).toEqual([]);
+    });
+
+    it('never lists a TTS-flagged adapter for the audio (music) operation', async () => {
+      const speechHub = makeAdapter('openai', { audio: true, tts: true });
+      const music = makeAdapter('suno', { audio: true, tts: false });
+      const { service } = setup([speechHub, music]);
+
+      const result = await service.listGenerationProviders('org-1', 'audio');
+
+      expect(result.providers.map((p) => p.identifier)).toEqual(['suno']);
+    });
+
+    it('returns the org resolved default (providerId + model) for the operation category', async () => {
+      const openai = makeAdapter('openai', { image: true });
+      const defaultsResolution = {
+        resolve: vi.fn().mockResolvedValue({
+          providerId: 'openai',
+          version: 'v1',
+          model: 'gpt-image-1',
+          source: 'org',
+        }),
+      };
+      const { service } = setup([openai], undefined, defaultsResolution);
+
+      const result = await service.listGenerationProviders('org-1', 'image');
+
+      expect(result.default).toEqual({ providerId: 'openai', model: 'gpt-image-1' });
+      // image with no sourceUrl resolves the text-to-image category.
+      expect(defaultsResolution.resolve).toHaveBeenCalledWith('media', 'text-to-image', 'org-1');
+    });
+
+    it('maps a model-less resolved default to model: null', async () => {
+      const openai = makeAdapter('openai', { tts: true });
+      const defaultsResolution = {
+        resolve: vi.fn().mockResolvedValue({ providerId: 'openai', version: 'v1', source: 'auto' }),
+      };
+      const { service } = setup([openai], undefined, defaultsResolution);
+
+      const result = await service.listGenerationProviders('org-1', 'tts');
+
+      expect(result.default).toEqual({ providerId: 'openai', model: null });
+      expect(defaultsResolution.resolve).toHaveBeenCalledWith('media', 'text-to-speech', 'org-1');
+    });
+
+    it('returns default: null when nothing is configured', async () => {
+      const openai = makeAdapter('openai', { image: true });
+      const defaultsResolution = { resolve: vi.fn().mockResolvedValue(null) };
+      const { service } = setup([openai], undefined, defaultsResolution);
+
+      const result = await service.listGenerationProviders('org-1', 'image');
+
+      expect(result.default).toBeNull();
+      expect(result.providers.map((p) => p.identifier)).toEqual(['openai']);
     });
   });
 

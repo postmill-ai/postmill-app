@@ -34,7 +34,10 @@ import type { SlideService } from '@postmill-ai/nestjs-libraries/media/slide/sli
 import type { CaptionService } from '@postmill-ai/nestjs-libraries/media/caption/caption.service';
 import { BudgetExceeded, CapabilityNotAvailable } from './errors';
 import { parseFontMetadata } from '@postmill-ai/nestjs-libraries/media/designer-doc/font-metadata';
-import type { MediaOperation } from '@postmill-ai/nestjs-libraries/ai/governance/media-operation.types';
+import type {
+  GenerationOperation,
+  MediaOperation,
+} from '@postmill-ai/nestjs-libraries/ai/governance/media-operation.types';
 import {
   AI_MEDIA_CATEGORIES,
   MEDIA_CATEGORY_OPERATION,
@@ -650,6 +653,50 @@ export class AiMediaService {
     return { operations, tools };
   }
 
+  // Read-level view backing the Designer genAI modals' provider picker: which
+  // enabled + credentialed providers could serve a generation type, plus the org's
+  // resolved default for it. `providers` comes from the SAME candidate machinery
+  // the generate paths use (`_resolveForOperation`, called exactly as
+  // generateImageResult/generateVideo/generateAudio/generateAvatar/textToSpeech
+  // call it — no sourceUrl/category), so the picker can never offer a provider the
+  // generate call would skip. Identifier + display name only, never credentials.
+  async listGenerationProviders(
+    orgId: string,
+    operation: GenerationOperation,
+  ): Promise<{
+    providers: { identifier: string; name: string }[];
+    default: { providerId: string; model: string | null } | null;
+  }> {
+    const candidates = await this._resolveForOperation(orgId, operation);
+    const providers = candidates.map((candidate) => ({
+      identifier: candidate.adapter.identifier,
+      name: candidate.adapter.name,
+    }));
+
+    // Best-effort display detail (same source as getToolStatus' per-category
+    // read): the org's resolved default for the operation's category. Never
+    // gates the provider list.
+    let resolvedDefault: { providerId: string; model: string | null } | null = null;
+    if (this._defaultsResolution) {
+      const [category] = this._defaultCategoriesForOperation(operation);
+      try {
+        const resolved = category
+          ? await this._defaultsResolution.resolve('media', category, orgId)
+          : null;
+        if (resolved) {
+          resolvedDefault = {
+            providerId: resolved.providerId,
+            model: resolved.model ?? null,
+          };
+        }
+      } catch {
+        // Resolution hiccup — leave default null; the list still renders.
+      }
+    }
+
+    return { providers, default: resolvedDefault };
+  }
+
   // ── Controller-delegated media utilities (A-20) ──
 
   async getVideoOptions(orgId: string): Promise<Record<string, { available: boolean }>> {
@@ -777,7 +824,7 @@ export class AiMediaService {
 
   async textToSpeechAndSave(
     text: string,
-    options: { orgId: string; voice?: string; instructions?: string },
+    options: { orgId: string; voice?: string; instructions?: string; provider?: string },
   ): Promise<{ id: string; path: string; name: string }> {
     if (!this._storageService || !this._fileService) {
       throw new Error('Storage/file services are not available');
@@ -850,6 +897,57 @@ export class AiMediaService {
       resolved.push({ adapter: pinned, credentials: full.credentials, version: full.version });
     }
     return resolved;
+  }
+
+  // Resolve a caller-pinned provider to a single candidate, validating it the way
+  // the candidate machinery would: known adapter, capability for the operation,
+  // org-enabled (`isProviderEnabledForOperation` — the same enforcement point the
+  // studio generate path uses, incl. the extraConfig.operations allowlist), and
+  // credentialed (own media row or the AI-row fallback). Anything less is a 400:
+  // the pin is explicit user intent, so silently substituting another provider
+  // would bill a key the user didn't pick.
+  private async _resolvePinnedForOperation(
+    orgId: string | undefined,
+    operation: MediaOperation,
+    provider: string,
+  ): Promise<ResolvedMediaProvider> {
+    const adapter = this._resolveMediaAdapter(provider);
+    if (!adapter) {
+      throw new BadRequestException(`Unknown media provider "${provider}".`);
+    }
+    if (!this._supportsOperation(adapter, operation)) {
+      throw new BadRequestException(
+        `Media provider "${provider}" does not support ${operation}.`,
+      );
+    }
+    const enabled =
+      orgId && this._orgMediaProviderSettings
+        ? await this._orgMediaProviderSettings
+            .isProviderEnabledForOperation(orgId, provider, operation)
+            .catch(() => false)
+        : false;
+    if (!enabled) {
+      throw new BadRequestException(
+        `Media provider "${provider}" is not enabled for this organization.`,
+      );
+    }
+    // Version-pinned credential resolution, mirroring _resolveForOperation's loop.
+    const full = await this._orgMediaProviderSettings!
+      .getConfigForProvider(orgId!, provider)
+      .catch(() => null);
+    const credentials = await this._credentialsForMediaProvider(orgId!, provider, full?.version);
+    if (!credentials || Object.keys(credentials).length === 0) {
+      throw new BadRequestException(
+        `Media provider "${provider}" is not configured for this organization.`,
+      );
+    }
+    const pinned =
+      this._resolveMediaAdapter(provider, {
+        version: full?.version ?? 'v1',
+        credentials,
+        orgId,
+      }) ?? adapter;
+    return { adapter: pinned, credentials, version: full?.version ?? 'v1' };
   }
 
   // ── @reaatech/media-pipeline-mcp-cost — per-call cost ledger (§2.4/§6.4) ──
@@ -1266,9 +1364,15 @@ export class AiMediaService {
 
   async textToSpeech(
     text: string,
-    options?: { voice?: string; instructions?: string; orgId?: string; userId?: string },
+    options?: { voice?: string; instructions?: string; orgId?: string; userId?: string; provider?: string },
   ): Promise<Buffer> {
-    const candidates = await this._resolveForOperation(options?.orgId, 'tts');
+    // An explicit provider pin narrows the candidate list to that one provider:
+    // exactly one attempt, no fallback — the user chose it, and silently
+    // substituting another provider would bill a key they didn't pick.
+    const pinned = !!options?.provider;
+    const candidates = pinned
+      ? [await this._resolvePinnedForOperation(options?.orgId, 'tts', options!.provider!)]
+      : await this._resolveForOperation(options?.orgId, 'tts');
 
     for (const candidate of candidates) {
       if (!candidate.adapter.textToSpeech) continue;
@@ -1290,6 +1394,7 @@ export class AiMediaService {
         if (Buffer.isBuffer(result)) return result;
         if (typeof result === 'string') return Buffer.from(result, 'base64');
       } catch (err) {
+        if (pinned) throw err;
         this._logger.warn(
           `Media provider ${candidate.adapter.identifier} TTS failed: ${(err as Error).message} — trying next`,
         );

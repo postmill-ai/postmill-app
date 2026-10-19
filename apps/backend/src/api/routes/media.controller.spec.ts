@@ -242,11 +242,56 @@ describe('MediaController — Designer AI-media routes', () => {
       expect(res).toEqual({ id: 'f1', path: '/u/f1.mp3', name: 'voiceover-1.mp3' });
     });
 
+    it('threads an optional provider pin through to the service', async () => {
+      const { controller, aiMediaService } = build();
+      aiMediaService.textToSpeechAndSave = vi.fn().mockResolvedValue({ id: 'f1', path: '/u/f1.mp3', name: 'voiceover-1.mp3' });
+
+      await controller.textToSpeech(org, 'hello world', 'coral', undefined, 'elevenlabs');
+
+      expect(aiMediaService.textToSpeechAndSave).toHaveBeenCalledWith('hello world', {
+        orgId: 'org-1',
+        voice: 'coral',
+        instructions: undefined,
+        provider: 'elevenlabs',
+      });
+    });
+
     it('rejects an empty script', async () => {
       const { controller } = build();
       await expect(controller.textToSpeech(org, '   ')).rejects.toMatchObject({
         status: HttpStatus.BAD_REQUEST,
       });
+    });
+  });
+
+  describe('generation-providers', () => {
+    it('delegates a valid operation to the service and returns its shape', async () => {
+      const { controller, aiMediaService } = build();
+      aiMediaService.listGenerationProviders = vi.fn().mockResolvedValue({
+        providers: [{ identifier: 'openai', name: 'OpenAI' }],
+        default: { providerId: 'openai', model: 'gpt-image-1' },
+      });
+
+      const res = await controller.listGenerationProviders(org, 'image');
+
+      expect(aiMediaService.listGenerationProviders).toHaveBeenCalledWith('org-1', 'image');
+      expect(res).toEqual({
+        providers: [{ identifier: 'openai', name: 'OpenAI' }],
+        default: { providerId: 'openai', model: 'gpt-image-1' },
+      });
+    });
+
+    it('rejects a missing or unknown operation with a 400', async () => {
+      const { controller, aiMediaService } = build();
+      aiMediaService.listGenerationProviders = vi.fn();
+
+      await expect(controller.listGenerationProviders(org, undefined)).rejects.toMatchObject({
+        status: HttpStatus.BAD_REQUEST,
+      });
+      await expect(controller.listGenerationProviders(org, 'stt')).rejects.toMatchObject({
+        status: HttpStatus.BAD_REQUEST,
+      });
+      expect(aiMediaService.listGenerationProviders).not.toHaveBeenCalled();
     });
   });
 });

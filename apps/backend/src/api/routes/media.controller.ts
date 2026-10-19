@@ -47,6 +47,10 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 import { AiDefaultsService, DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
 import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
+import {
+  GENERATION_OPERATIONS,
+  GenerationOperation,
+} from '@postmill-ai/nestjs-libraries/ai/governance/media-operation.types';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { UseFilters } from '@nestjs/common';
 import { MediaCapabilityFilter } from '@postmill-ai/backend/api/routes/media-capability.filter';
@@ -125,6 +129,31 @@ export class MediaController {
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   async getToolStatus(@GetOrgFromRequest() org: Organization) {
     return this._aiMediaService.getToolStatus(org.id);
+  }
+
+  /**
+   * Provider/model picker data for the Designer genAI modals: which enabled +
+   * credentialed providers may serve a generation type, plus the org's resolved
+   * default for it (rendered as `Default (<providerId>/<model>)`). Read-level and
+   * reachable by non-admin designers — same guard family as the generate endpoints
+   * it feeds, never `media-config:manage`.
+   */
+  @Get('/generation-providers')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async listGenerationProviders(
+    @GetOrgFromRequest() org: Organization,
+    @Query('operation') operation?: string,
+  ) {
+    if (!operation || !(GENERATION_OPERATIONS as readonly string[]).includes(operation)) {
+      throw new BadRequestException(
+        `operation must be one of: ${GENERATION_OPERATIONS.join(', ')}`
+      );
+    }
+    return this._aiMediaService.listGenerationProviders(
+      org.id,
+      operation as GenerationOperation
+    );
   }
 
   /**
@@ -504,11 +533,12 @@ export class MediaController {
     @Body('text') text: string,
     @Body('voice') voice?: string,
     @Body('instructions') instructions?: string,
+    @Body('provider') provider?: string,
   ) {
     if (!text?.trim()) {
       throw new BadRequestException('Text is required');
     }
-    return this._aiMediaService.textToSpeechAndSave(text, { orgId: org.id, voice, instructions });
+    return this._aiMediaService.textToSpeechAndSave(text, { orgId: org.id, voice, instructions, provider });
   }
 
   /**

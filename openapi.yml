@@ -3092,6 +3092,26 @@ paths:
                 type: object
       tags:
         - Media
+  /media/generation-providers:
+    get:
+      operationId: MediaController_listGenerationProviders
+      parameters:
+        - name: operation
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      summary: |-
+        Provider/model picker data for the Designer genAI modals: which enabled +
+        credentialed providers may serve a generation type, plus the org's resolved
+        default for it (rendered as `Default (<providerId>/<model>)`). Read-level and
+        reachable by non-admin designers — same guard family as the generate endpoints
+        it feeds, never `media-config:manage`.
+      tags:
+        - Media
   /media/icons/resolve:
     get:
       operationId: MediaController_resolveIcon

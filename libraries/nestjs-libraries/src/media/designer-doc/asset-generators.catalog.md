@@ -12,7 +12,8 @@
 | Upscale image | `AiMediaService.upscaleImage` | Sync | `{ url: string }` | `{ url: string }` |
 | Inpaint image | `AiMediaService.inpaintImage` | Sync | `{ url: string, mask: string, prompt: string }` | `{ url: string }` |
 | Detect focal point | `AiMediaService.detectFocalPoint` | Sync | `{ url: string }` | `{ x: number, y: number }` |
-| Text → speech | `AiMediaService.textToSpeech` | Sync | `{ text: string, voiceId?: string }` | Audio bytes / URL; ingest via `FileService.importFromUrl`. |
+| Text → speech | `POST /media/text-to-speech` (`AiMediaService.textToSpeech`) | Sync | `{ text: string, voice?: string, instructions?: string, provider?: string }` — optional `provider` pins the candidate list to that one TTS provider (unknown/disabled/non-`tts` → 400, single attempt, no fallback) | `{ id, path, name }` — a `/files` audio row. |
+| Provider picker data for a genAI modal | `GET /media/generation-providers?operation=image\|video\|audio\|avatar\|tts` | Sync | `operation` query param (400 otherwise) | `{ providers: [{ identifier, name }], default: { providerId, model } \| null }` — enabled+credentialed candidates plus the org's resolved default. |
 | Text → video | `MediaStudioService.generate` (studio kit) | Async (webhook-first, poll fallback) | `{ provider, operation:'video', model?, prompt, input? }` | `AIMediaJob` id; poll `/media/studio/:provider/jobs`. |
 | Image → video | `MediaStudioService.generate` | Async | `{ provider, operation:'video', model?, mediaInputs:{image:fileId}, input? }` | `AIMediaJob` id |
 | Audio → video / talking video | `MediaStudioService.generate` (avatar studios) | Async | `{ provider, operation:'video', mediaInputs:{audio?:fileId, image?:fileId} }` | `AIMediaJob` id |

@@ -20,3 +20,8 @@ export type MediaOperation =
   | 'caption'
   | 'video-bg'
   | 'video-upscale';
+
+// The generative subset a Designer genAI modal can offer a provider/model picker
+// for — the only values `GET /media/generation-providers?operation=` accepts.
+export const GENERATION_OPERATIONS = ['image', 'video', 'audio', 'avatar', 'tts'] as const;
+export type GenerationOperation = (typeof GENERATION_OPERATIONS)[number];
