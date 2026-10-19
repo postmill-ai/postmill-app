@@ -233,6 +233,13 @@ export class SlideService {
     }
 
     // Encode slideshow: images at 30fps + mixed audio, padded to total duration.
+    // Two hard-won ffmpeg behaviors here:
+    // - Frame synthesis MUST be the fps filter, not the `-r` output option: the
+    //   concat demuxer emits one sparse packet per slide image, and `-r` only
+    //   retimes those packets — the video truncates after the first slide.
+    // - No `-shortest`: the mixed narration ends before the slideshow does (each
+    //   slide is held for max(audio, min)), and `-shortest` would cut the video
+    //   to the audio length. `-t` is the exact master-timeline bound.
     await runFfmpeg([
       '-y',
       '-f',
@@ -243,19 +250,18 @@ export class SlideService {
       concatPath,
       '-i',
       mixedAudioPath,
+      '-vf',
+      'fps=30',
       '-c:v',
       'libx264',
       '-pix_fmt',
       'yuv420p',
-      '-r',
-      '30',
       '-t',
       totalDuration.toFixed(3),
       '-c:a',
       'aac',
       '-b:a',
       '128k',
-      '-shortest',
       outputPath,
     ]);
   }
