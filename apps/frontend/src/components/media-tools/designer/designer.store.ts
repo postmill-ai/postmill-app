@@ -1601,7 +1601,7 @@ export const createDesignerStore = (
       },
 
       // Returns whether the write landed — a rejected update (unknown clip,
-      // out-of-range geometry) must not become an empty undo step.
+      // degenerate timing) must not become an empty undo step.
       updateClipSilent: (outputIndex, trackId, clipId, updates) => {
         const { doc, editFormatOnly, linkedUpdateFlash } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
@@ -1609,11 +1609,21 @@ export const createDesignerStore = (
         const track = vo.tracks.find((t) => t.id === trackId);
         const clip = track?.clips.find((c) => c.id === clipId);
         if (!clip) return false;
-        const nextStart = updates.startMs ?? clip.startMs;
-        const nextEnd = updates.endMs ?? clip.endMs;
-        // Explicit duration cap: reject updates that would push the clip beyond the output duration.
-        if (nextEnd > vo.durationMs || nextStart >= vo.durationMs || nextEnd <= nextStart) {
-          return false;
+        let patched = updates;
+        // The range check applies only when timing is actually being edited —
+        // a clip left out of bounds by a duration shrink must stay editable
+        // (filters, scale, position…), or the whole inspector goes dead.
+        // In-range edits clamp rather than reject, so a drag past the end
+        // lands at the boundary instead of doing nothing.
+        if (updates.startMs !== undefined || updates.endMs !== undefined) {
+          const nextStart = Math.max(0, Math.min(vo.durationMs, updates.startMs ?? clip.startMs));
+          const nextEnd = Math.max(0, Math.min(vo.durationMs, updates.endMs ?? clip.endMs));
+          // A zero/negative-length clip is the one timing state still rejected.
+          if (nextEnd <= nextStart) return false;
+          // Both ends are written back clamped: editing the timing of a clip
+          // whose other end was left out of bounds (duration shrink) heals it
+          // instead of failing on the stale value forever.
+          patched = { ...updates, startMs: nextStart, endMs: nextEnd };
         }
         // Linked-by-default across video variants: content/style updates
         // propagate to same-originId clips on the other outputs; geometry and
@@ -1623,7 +1633,7 @@ export const createDesignerStore = (
           outputIndex,
           trackId,
           clipId,
-          updates,
+          patched,
           editFormatOnly
         );
         if (affected.length) {

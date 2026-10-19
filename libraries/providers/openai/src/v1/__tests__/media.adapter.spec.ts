@@ -110,3 +110,73 @@ describe('OpenaiMediaAdapter.generateImage aspect mapping', () => {
     expect(lastRequestBody(fetchMock).quality).toBe('low');
   });
 });
+
+describe('OpenaiMediaAdapter TTS', () => {
+  // TTS reads the body as an ArrayBuffer, not JSON.
+  const makeTtsFetch = () =>
+    vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(new Uint8Array([1, 2, 3]).buffer),
+      text: () => Promise.resolve(''),
+    });
+
+  it('lists the gpt-4o-mini-tts voices (ballad, coral) alongside the tts-1 set', async () => {
+    const adapter = new OpenaiMediaAdapter(makeTtsFetch() as any);
+    const voices = await adapter.listVoices();
+    const ids = voices.map((v) => v.id);
+    for (const id of ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer', 'sage', 'ash', 'ballad', 'coral']) {
+      expect(ids).toContain(id);
+    }
+    expect(voices).toHaveLength(10);
+  });
+
+  it('sends instructions only for gpt-4o-mini-tts', async () => {
+    const fetchMock = makeTtsFetch();
+    const adapter = new OpenaiMediaAdapter(fetchMock as any);
+
+    await adapter.textToSpeech('hello', {
+      credentials: { apiKey: 'k' },
+      model: 'gpt-4o-mini-tts',
+      instructions: 'Speak warmly and slowly',
+    });
+    expect(lastRequestBody(fetchMock).instructions).toBe('Speak warmly and slowly');
+
+    // tts-1 rejects the unknown field upstream — never send it there.
+    await adapter.textToSpeech('hello', {
+      credentials: { apiKey: 'k' },
+      model: 'tts-1',
+      instructions: 'Speak warmly and slowly',
+    });
+    expect(lastRequestBody(fetchMock)).not.toHaveProperty('instructions');
+
+    await adapter.textToSpeech('hello', {
+      credentials: { apiKey: 'k' },
+      model: 'tts-1-hd',
+      instructions: 'Speak warmly and slowly',
+    });
+    expect(lastRequestBody(fetchMock)).not.toHaveProperty('instructions');
+  });
+
+  it('reads instructions from the studio descriptor input too', async () => {
+    const fetchMock = makeTtsFetch();
+    const adapter = new OpenaiMediaAdapter(fetchMock as any);
+
+    await adapter.textToSpeech('hello', {
+      credentials: { apiKey: 'k' },
+      model: 'gpt-4o-mini-tts',
+      input: { instructions: 'Cheerful' },
+    });
+    expect(lastRequestBody(fetchMock).instructions).toBe('Cheerful');
+  });
+
+  it('omits instructions entirely when none are given', async () => {
+    const fetchMock = makeTtsFetch();
+    const adapter = new OpenaiMediaAdapter(fetchMock as any);
+
+    await adapter.textToSpeech('hello', {
+      credentials: { apiKey: 'k' },
+      model: 'gpt-4o-mini-tts',
+    });
+    expect(lastRequestBody(fetchMock)).not.toHaveProperty('instructions');
+  });
+});

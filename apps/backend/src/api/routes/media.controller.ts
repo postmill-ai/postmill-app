@@ -40,6 +40,7 @@ import { VideoSegmentTransformService } from '@postmill-ai/nestjs-libraries/medi
 import { GenerateAvatarDto } from '@postmill-ai/nestjs-libraries/dtos/ai/generate-avatar.dto';
 import { GenerateSlideDto } from '@postmill-ai/nestjs-libraries/dtos/ai/generate-slide.dto';
 import { GenerateVideoDto } from '@postmill-ai/backend/dtos/media/generate-video.dto';
+import { VoiceoverScriptDto } from '@postmill-ai/nestjs-libraries/dtos/ai/voiceover-script.dto';
 import { VideoFunctionDto } from '@postmill-ai/backend/dtos/media/video-function.dto';
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
@@ -502,11 +503,39 @@ export class MediaController {
     @GetOrgFromRequest() org: Organization,
     @Body('text') text: string,
     @Body('voice') voice?: string,
+    @Body('instructions') instructions?: string,
   ) {
     if (!text?.trim()) {
       throw new BadRequestException('Text is required');
     }
-    return this._aiMediaService.textToSpeechAndSave(text, { orgId: org.id, voice });
+    return this._aiMediaService.textToSpeechAndSave(text, { orgId: org.id, voice, instructions });
+  }
+
+  /**
+   * Short spoken voiceover script for a topic, written by the org's
+   * low-reasoning default — the Voiceover dialog's "Write script with AI"
+   * button. The result lands in the dialog's textarea for the user to edit
+   * before the (separately billed) TTS call.
+   */
+  @Post('/voiceover-script')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async voiceoverScript(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: VoiceoverScriptDto,
+  ) {
+    try {
+      const script = await this._aiDefaults.lowReasoningText(
+        org.id,
+        `Write a short voiceover script (2-4 spoken sentences, no headings, no stage directions, plain words meant to be read aloud) about: ${body.topic}`
+      );
+      return { script: script.trim() };
+    } catch (err) {
+      if (err instanceof DefaultNotConfiguredError) {
+        throw new HttpException({ error: err.message, category: err.category }, HttpStatus.CONFLICT);
+      }
+      throw err;
+    }
   }
 
   @Post('/speech-to-text')

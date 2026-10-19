@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createDesignerStore } from './designer.store';
-import { addImageClipToTimeline, addMediaToTimeline, addVoiceoverToTimeline } from './add-media-to-timeline';
+import { addImageClipToTimeline, addMediaToTimeline, addVoiceoverToTimeline, regenerateVoiceoverClip } from './add-media-to-timeline';
 import { DEFAULT_CLIP_MS } from './add-text';
 import type { VideoOutput } from './designer.store';
 
@@ -290,5 +290,118 @@ describe('addVoiceoverToTimeline — shared TTS/recording landing', () => {
     const audioTracks = vo.tracks.filter((t) => t.type === 'audio');
     expect(audioTracks).toHaveLength(1);
     expect(audioTracks[0].clips).toHaveLength(2);
+  });
+});
+
+describe('voiceover metadata + regenerateVoiceoverClip', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const stubAudioProbe = (durationSec: number | null) => {
+    const original = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string, ...rest: any[]) => {
+      const el = original(tag, ...(rest as []));
+      if (tag === 'audio') {
+        if (durationSec !== null) {
+          Object.defineProperty(el, 'duration', { value: durationSec });
+          Object.defineProperty(el, 'src', {
+            set: () => setTimeout(() => el.onloadedmetadata?.(new Event('loadedmetadata')), 0),
+          });
+        } else {
+          Object.defineProperty(el, 'src', {
+            set: () => setTimeout(() => el.onerror?.(new Event('error')), 0),
+          });
+        }
+      }
+      return el;
+    });
+  };
+
+  const seedVoiceoverClip = async (store: ReturnType<typeof createDesignerStore>) => {
+    store.getState().setMode('video');
+    await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/tts-1.mp3',
+      fileId: 'file-1',
+      durationMs: 3000,
+      voiceover: { script: 'hello world', voice: 'alloy' },
+    });
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const track = vo.tracks.find((t) => t.type === 'audio')!;
+    return { vo, track, clip: track.clips[0] };
+  };
+
+  it('persists the script + voice on the landed clip', async () => {
+    const store = createDesignerStore();
+    const { clip } = await seedVoiceoverClip(store);
+    expect(clip.voiceover).toEqual({ script: 'hello world', voice: 'alloy' });
+  });
+
+  it('leaves mic recordings (no metadata) without the field', async () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/mic.webm',
+      fileId: 'file-mic',
+      durationMs: 2000,
+    });
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const clip = vo.tracks.find((t) => t.type === 'audio')!.clips[0];
+    expect(clip.voiceover).toBeUndefined();
+  });
+
+  it('swaps src/fileId in place, keeps the timeline start, re-probes the end', async () => {
+    const store = createDesignerStore();
+    const { track, clip } = await seedVoiceoverClip(store);
+    stubAudioProbe(5.25); // the new render is longer
+
+    const ok = await regenerateVoiceoverClip(
+      store,
+      { outputIndex: 0, trackId: track.id, clipId: clip.id },
+      {
+        url: 'https://example.com/tts-2.mp3',
+        fileId: 'file-2',
+        voiceover: { script: 'hello world', voice: 'coral' },
+      }
+    );
+
+    expect(ok).toBe(true);
+    const after = (store.getState().doc.outputs[0] as VideoOutput).tracks
+      .find((t) => t.id === track.id)!
+      .clips.find((c) => c.id === clip.id)!;
+    expect(after.id).toBe(clip.id);
+    expect(after.startMs).toBe(clip.startMs);
+    expect(after.src).toBe('https://example.com/tts-2.mp3');
+    expect(after.fileId).toBe('file-2');
+    expect(after.endMs).toBe(clip.startMs + 5250);
+    expect(after.voiceover).toEqual({ script: 'hello world', voice: 'coral' });
+  });
+
+  it('clamps the re-probed end at the output duration', async () => {
+    const store = createDesignerStore();
+    const { vo, track, clip } = await seedVoiceoverClip(store);
+    stubAudioProbe(3600); // far past the output duration
+
+    const ok = await regenerateVoiceoverClip(
+      store,
+      { outputIndex: 0, trackId: track.id, clipId: clip.id },
+      { url: 'https://example.com/long.mp3', fileId: 'file-3' }
+    );
+
+    expect(ok).toBe(true);
+    const after = (store.getState().doc.outputs[0] as VideoOutput).tracks
+      .find((t) => t.id === track.id)!
+      .clips.find((c) => c.id === clip.id)!;
+    expect(after.endMs).toBe(vo.durationMs);
+  });
+
+  it('returns false for a clip that no longer exists', async () => {
+    const store = createDesignerStore();
+    const { track } = await seedVoiceoverClip(store);
+
+    const ok = await regenerateVoiceoverClip(
+      store,
+      { outputIndex: 0, trackId: track.id, clipId: 'gone' },
+      { url: 'https://example.com/x.mp3', durationMs: 1000 }
+    );
+    expect(ok).toBe(false);
   });
 });

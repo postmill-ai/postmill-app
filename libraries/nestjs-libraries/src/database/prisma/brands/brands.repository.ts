@@ -149,8 +149,15 @@ export class BrandsRepository {
     organizationId: string,
     font: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean; serverRender?: boolean }
   ) {
-    const brand = await this.getDefaultBrand(organizationId) || await this.getFirstBrand(organizationId);
-    if (!brand) return [];
+    let brand = await this.getDefaultBrand(organizationId) || await this.getFirstBrand(organizationId);
+    if (!brand) {
+      // Fonts live on the org's default profile — an org with zero profiles
+      // used to get a silent no-op here (the upload "succeeded" and vanished).
+      // Create the default profile, named like the AI-settings upsert does.
+      brand = await this._aiBrandProfile.model.aIBrandProfile.create({
+        data: { organizationId, name: 'Default Brand', isDefault: true },
+      });
+    }
     // Identity is (family, weight, italic), not the row. Re-uploading a weight
     // used to append a second entry for it, and which of the two the renderers
     // picked depended on iteration order — the new file replaces the old one.

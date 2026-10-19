@@ -182,12 +182,18 @@ describe('video clip undo history', () => {
     expect(clip.volume).toBeUndefined(); // the whole gesture reverts at once
   });
 
-  it('a rejected updateClip (out-of-range geometry) pushes no empty entry', () => {
-    const { store, out, trackId } = videoStoreWithClip();
+  it('an out-of-range endMs is clamped (not rejected); a degenerate update pushes no empty entry', () => {
+    const { store, out, trackId, vo } = videoStoreWithClip();
     const before = store.getState().historyIndex;
-    // endMs beyond the 10s output duration is rejected by the 60s-cap guard.
+    // endMs beyond the 10s output duration clamps to the duration — the
+    // inspector must stay live for out-of-bounds clips.
     store.getState().updateClip(out, trackId, 'c1', { endMs: 99000 });
-    expect(store.getState().historyIndex).toBe(before);
+    expect(store.getState().historyIndex).toBe(before + 1);
+    expect(vo().tracks[0].clips[0].endMs).toBe(vo().durationMs);
+
+    // A zero-length clip is still rejected, and must not leave an undo step.
+    store.getState().updateClip(out, trackId, 'c1', { startMs: 5000, endMs: 5000 });
+    expect(store.getState().historyIndex).toBe(before + 1);
   });
 
   it('setTrackGain and setTrackAutoDuck are undoable', () => {

@@ -1484,3 +1484,86 @@ describe('video output variants (add-format for video mode)', () => {
     expect(after0.text).toBe('Headline');
   });
 });
+
+describe('updateClipSilent timing rules', () => {
+  const videoStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    return store;
+  };
+  const vo = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+  const seedClip = (store: ReturnType<typeof createDesignerStore>) => {
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'c1', startMs: 1000, endMs: 4000, src: 'https://example.com/v.mp4',
+    } as never);
+    return trackId;
+  };
+
+  it('non-timing updates land even when the clip is out of bounds (dead-inspector repro)', () => {
+    const store = videoStore();
+    const trackId = seedClip(store);
+    // Shrink the output so the clip now ends past the duration.
+    store.getState().setVideoDuration(0, 2000);
+
+    // Every one of these used to be silently rejected.
+    expect(store.getState().updateClipSilent(0, trackId, 'c1', { filters: ['grayscale'] })).toBe(true);
+    expect(store.getState().updateClipSilent(0, trackId, 'c1', { opacity: 0.5 })).toBe(true);
+    expect(store.getState().updateClipSilent(0, trackId, 'c1', { x: 40, width: 320 })).toBe(true);
+
+    const clip = vo(store).tracks[0].clips[0];
+    expect(clip.filters).toEqual(['grayscale']);
+    expect(clip.opacity).toBe(0.5);
+    expect(clip.x).toBe(40);
+    expect(clip.width).toBe(320);
+  });
+
+  it('clamps out-of-range timing edits instead of rejecting them', () => {
+    const store = videoStore();
+    const trackId = seedClip(store);
+    const durationMs = vo(store).durationMs;
+
+    expect(
+      store.getState().updateClipSilent(0, trackId, 'c1', { endMs: durationMs + 5000 })
+    ).toBe(true);
+    expect(vo(store).tracks[0].clips[0].endMs).toBe(durationMs);
+
+    expect(store.getState().updateClipSilent(0, trackId, 'c1', { startMs: -500 })).toBe(true);
+    expect(vo(store).tracks[0].clips[0].startMs).toBe(0);
+  });
+
+  it('clamps the untouched end of an out-of-bounds clip when timing is edited', () => {
+    const store = videoStore();
+    const trackId = seedClip(store);
+    store.getState().setVideoDuration(0, 2000); // clip is now 1000–4000 in a 2000ms output
+
+    // A drag of the start must not die on the clip's stale end.
+    expect(store.getState().updateClipSilent(0, trackId, 'c1', { startMs: 500 })).toBe(true);
+    const clip = vo(store).tracks[0].clips[0];
+    expect(clip.startMs).toBe(500);
+    expect(clip.endMs).toBe(2000);
+  });
+
+  it('still rejects a degenerate (zero-length) clip', () => {
+    const store = videoStore();
+    const trackId = seedClip(store);
+
+    expect(
+      store.getState().updateClipSilent(0, trackId, 'c1', { startMs: 3000, endMs: 3000 })
+    ).toBe(false);
+    expect(
+      store.getState().updateClipSilent(0, trackId, 'c1', { startMs: 3500, endMs: 3000 })
+    ).toBe(false);
+    // …and no empty undo step is pushed by updateClip.
+    const historyBefore = store.getState().history.length;
+    store.getState().updateClip(0, trackId, 'c1', { startMs: 3000, endMs: 3000 });
+    expect(store.getState().history.length).toBe(historyBefore);
+  });
+
+  it('still rejects updates for an unknown clip', () => {
+    const store = videoStore();
+    const trackId = seedClip(store);
+    expect(store.getState().updateClipSilent(0, trackId, 'nope', { opacity: 0.5 })).toBe(false);
+  });
+});

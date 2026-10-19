@@ -291,6 +291,8 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
 
   async listVoices(_options?: MediaGenerateOptions): Promise<Array<{ id: string; label: string; previewUrl?: string }>> {
     // OpenAI TTS voices are a fixed catalog; no list endpoint exists.
+    // ballad/coral ship with gpt-4o-mini-tts; the tts-1 family rejects them
+    // upstream, and the caller picks the model — the catalog is the union.
     return [
       { id: 'alloy', label: 'Alloy' },
       { id: 'echo', label: 'Echo' },
@@ -300,6 +302,8 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
       { id: 'shimmer', label: 'Shimmer' },
       { id: 'sage', label: 'Sage' },
       { id: 'ash', label: 'Ash' },
+      { id: 'ballad', label: 'Ballad' },
+      { id: 'coral', label: 'Coral' },
     ];
   }
 
@@ -312,6 +316,9 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
     const voice = (typeof input.voice === 'string' && input.voice) || options?.voice || 'alloy';
     const responseFormat =
       (typeof input.response_format === 'string' && input.response_format) || options?.format || 'mp3';
+    const model = options?.model || 'tts-1';
+    const instructions =
+      (typeof input.instructions === 'string' && input.instructions) || options?.instructions || '';
 
     const res = await this._fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
@@ -320,11 +327,14 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: options?.model || 'tts-1',
+        model,
         input: text,
         voice,
         response_format: responseFormat,
         ...(input.speed !== undefined ? { speed: Number(input.speed) } : {}),
+        // `instructions` is gpt-4o-mini-tts-only — tts-1/tts-1-hd 400 on the
+        // unknown field, so it is sent for exactly that model.
+        ...(model === 'gpt-4o-mini-tts' && instructions ? { instructions } : {}),
       }),
     });
 

@@ -137,4 +137,57 @@ describe('BrandsRepository — tenant isolation', () => {
       });
     });
   });
+
+  describe('addCustomFont', () => {
+    const font = {
+      family: 'Acme Sans',
+      fileId: 'file-1',
+      path: 'http://localhost/uploads/acme.ttf',
+      weights: [400],
+    };
+
+    it('appends the font to the org default brand profile', async () => {
+      const { repo, model } = makeRepo();
+      model.aIBrandProfile.findFirst.mockResolvedValue({
+        id: 'brand-1',
+        organizationId: 'org-1',
+        isDefault: true,
+        customFonts: [],
+      });
+      model.aIBrandProfile.update.mockResolvedValue({});
+
+      const result = await repo.addCustomFont('org-1', font);
+
+      expect(model.aIBrandProfile.create).not.toHaveBeenCalled();
+      expect(model.aIBrandProfile.update).toHaveBeenCalledWith({
+        where: { id: 'brand-1', organizationId: 'org-1' },
+        data: { customFonts: [font] },
+      });
+      expect(result).toEqual([font]);
+    });
+
+    it('auto-creates the default brand profile when the org has none (upload must not vanish)', async () => {
+      const { repo, model } = makeRepo();
+      // No default and no first brand — the pre-fix path silently returned [].
+      model.aIBrandProfile.findFirst.mockResolvedValue(null);
+      model.aIBrandProfile.create.mockResolvedValue({
+        id: 'brand-new',
+        organizationId: 'org-1',
+        isDefault: true,
+        customFonts: [],
+      });
+      model.aIBrandProfile.update.mockResolvedValue({});
+
+      const result = await repo.addCustomFont('org-1', font);
+
+      expect(model.aIBrandProfile.create).toHaveBeenCalledWith({
+        data: { organizationId: 'org-1', name: 'Default Brand', isDefault: true },
+      });
+      expect(model.aIBrandProfile.update).toHaveBeenCalledWith({
+        where: { id: 'brand-new', organizationId: 'org-1' },
+        data: { customFonts: [font] },
+      });
+      expect(result).toEqual([font]);
+    });
+  });
 });

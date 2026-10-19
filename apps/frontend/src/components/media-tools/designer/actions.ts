@@ -268,6 +268,40 @@ export const useDesignerActions = (
       addTextTo(store as never);
     };
 
+    // ── Video clip filters ─────────────────────────────────────────────────
+    // The pixel filters below are gated on an image-mode element selection
+    // (selectedIds), which a video document never has — so in video mode the
+    // whole Filter menu was dead. A selected CLIP takes the same six filter
+    // tokens the clip inspector writes; this bridges the menu to them.
+    const selectedVideoClip = () => {
+      const st = store.getState();
+      if (st.doc.mode !== 'video' || !st.selectedClip) return null;
+      const sel = st.selectedClip;
+      const vo = st.doc.outputs[sel.outputIndex] as any;
+      const clip = vo?.tracks
+        ?.find((t: any) => t.id === sel.trackId)
+        ?.clips?.find((c: any) => c.id === sel.clipId);
+      return clip ? { sel, clip } : null;
+    };
+    const clipHasFilter = (prefix: string) => {
+      const found = selectedVideoClip();
+      if (!found) return false;
+      return ((found.clip.filters || []) as string[]).some(
+        (f) => f === prefix || f.startsWith(prefix + ':')
+      );
+    };
+    const toggleClipFilter = (prefix: string, token: string) => {
+      const found = selectedVideoClip();
+      if (!found) return;
+      const filters = (found.clip.filters || []) as string[];
+      const rest = filters.filter((f) => !(f === prefix || f.startsWith(prefix + ':')));
+      // Untouched by the filter-out → the prefix was absent: toggle ON.
+      const next = rest.length === filters.length ? [...rest, token] : rest;
+      store
+        .getState()
+        .updateClip(found.sel.outputIndex, found.sel.trackId, found.sel.clipId, { filters: next });
+    };
+
     // One builder for every shape kind, shared with the drag-to-draw tools so
     // a menu-inserted star carries the same defaults a drawn one does.
     const insertShape = (toolId: string, size: { width: number; height: number }) => {
@@ -383,6 +417,27 @@ export const useDesignerActions = (
           run: () => ctx.onFilter(f.id),
         }))
       ),
+      // Clip-aware parallel path (video mode): the six tokens the clip
+      // inspector writes, toggled on the selected clip. Values are the
+      // canonical "on" settings — fine-tuning stays on the inspector sliders.
+      ...([
+        ['grayscale', 'Grayscale', 'grayscale'],
+        ['sepia', 'Sepia', 'sepia'],
+        ['blur', 'Blur', 'blur:2'],
+        ['brightness', 'Brightness', 'brightness:1.2'],
+        ['contrast', 'Contrast', 'contrast:1.25'],
+        ['saturate', 'Saturate', 'saturate:1.4'],
+      ] as const).map(([prefix, label, token]) => ({
+        id: `clip-filter-${prefix}`,
+        label,
+        menu: 'filter' as const,
+        submenu: 'Clip',
+        group: 'clip',
+        keywords: ['filter', 'clip', label.toLowerCase()],
+        enabled: () => !!selectedVideoClip(),
+        checked: () => clipHasFilter(prefix),
+        run: () => toggleClipFilter(prefix, token),
+      })),
 
       // ---------------- View ----------------
       { id: 'zoom-in', label: 'Zoom In', menu: 'view', group: 'zoom', shortcut: '⌘+', keywords: ['zoom in'], run: () => { const st = store.getState(); st.setZoom(st.zoom * 1.2); } },

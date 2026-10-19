@@ -208,6 +208,11 @@ export interface AddVoiceoverOptions {
   fileId?: string;
   /** Known duration (skips the metadata probe). */
   durationMs?: number;
+  /**
+   * TTS provenance — persisted on the clip so the inspector can re-voice or
+   * re-script it in place later. Absent for mic recordings.
+   */
+  voiceover?: { script: string; voice: string };
 }
 
 /**
@@ -248,9 +253,42 @@ export async function addVoiceoverToTimeline(
     volume: 1,
     fadeInMs: 0,
     fadeOutMs: 0,
+    voiceover: options.voiceover,
   };
   current.addClip(out, track.id, clip);
   return true;
+}
+
+/**
+ * Swap a voiceover clip's audio in place after a re-render (new voice / new
+ * script): same clip id, same track, same timeline start — only `src`/`fileId`
+ * and the end (re-probed like the original landing, clamped to the output
+ * duration) change. Returns false when the clip is gone or the swap was
+ * rejected by the store's timing rules.
+ */
+export async function regenerateVoiceoverClip(
+  store: StoreApi,
+  ref: { outputIndex: number; trackId: string; clipId: string },
+  options: { url: string; fileId?: string; durationMs?: number; voiceover?: { script: string; voice: string } }
+): Promise<boolean> {
+  const state = store.getState();
+  if (state.doc.mode !== 'video') return false;
+  const vo = state.doc.outputs[ref.outputIndex] as VideoOutput | undefined;
+  const clip = vo?.tracks
+    .find((t) => t.id === ref.trackId)
+    ?.clips.find((c) => c.id === ref.clipId);
+  if (!vo || !clip) return false;
+
+  const probedMs = options.durationMs ?? (await probeAudioDuration(options.url));
+  const endMs = Math.min(clip.startMs + probedMs, vo.durationMs);
+  const landed = store.getState().updateClipSilent(ref.outputIndex, ref.trackId, ref.clipId, {
+    src: options.url,
+    fileId: options.fileId,
+    endMs,
+    ...(options.voiceover ? { voiceover: options.voiceover } : {}),
+  });
+  if (landed) store.getState().pushHistory();
+  return landed;
 }
 
 export interface LandedClipRef {

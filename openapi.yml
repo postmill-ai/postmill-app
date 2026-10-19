@@ -3432,6 +3432,26 @@ paths:
           description: ""
       tags:
         - Media
+  /media/voiceover-script:
+    post:
+      operationId: MediaController_voiceoverScript
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoiceoverScriptDto"
+      responses:
+        "201":
+          description: ""
+      summary: |-
+        Short spoken voiceover script for a topic, written by the org's
+        low-reasoning default — the Voiceover dialog's "Write script with AI"
+        button. The result lands in the dialog's textarea for the user to edit
+        before the (separately billed) TTS call.
+      tags:
+        - Media
   /media/speech-to-text:
     post:
       operationId: MediaController_speechToText
@@ -10897,6 +10917,13 @@ components:
             format: uri
       required:
         - prompt
+    VoiceoverScriptDto:
+      type: object
+      properties:
+        topic:
+          type: string
+      required:
+        - topic
     DetectFocalPointDto:
       type: object
       properties:

@@ -759,6 +759,12 @@ export interface VideoClip {
    */
   beats?: number[];
   /**
+   * TTS provenance for a voiceover clip: the script and voice it was generated
+   * with. Carried so the inspector can re-voice or re-script the clip in place
+   * (optional-additive — mic recordings and pre-existing clips have none).
+   */
+  voiceover?: { script: string; voice: string };
+  /**
    * Shape clips (doc v5). A shape track's clips carry the same geometry the
    * shape ELEMENTS use, so both renderers trace them through the shared
    * `shape-geometry` helper rather than reimplementing the maths.
@@ -1614,6 +1620,14 @@ const clipCommon = {
     })
     .optional(),
   text: z.string().max(MAX_TEXT_LEN).optional(),
+  // TTS provenance (script + voice) for voiceover clips — additive, so docs
+  // saved before the field existed keep validating unchanged.
+  voiceover: z
+    .object({
+      script: z.string().max(MAX_TEXT_LEN),
+      voice: z.string().max(200),
+    })
+    .optional(),
   fontFamily: z.string().max(200).optional(),
   fill: ColorSchema.optional(),
   reverse: z.boolean().optional(),

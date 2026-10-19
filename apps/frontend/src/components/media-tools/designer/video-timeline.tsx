@@ -2348,12 +2348,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   }, [clipMenu, handleFreezeFrame]);
 
   const generateVoiceover = useCallback(
-    async (text: string, voiceId: string) => {
+    async (text: string, voiceId: string, instructions?: string) => {
       if (!vo) return;
       try {
         const res = await fetch('/media/text-to-speech', {
           method: 'POST',
-          body: JSON.stringify({ text, voice: voiceId }),
+          body: JSON.stringify({ text, voice: voiceId, ...(instructions ? { instructions } : {}) }),
         });
         if (!res.ok) {
           toaster.show(
@@ -2364,8 +2364,13 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         }
         const { id, path } = await res.json();
         // Landing (probe → audio track → clip at the playhead) is shared with
-        // the mic-recording dialog — see addVoiceoverToTimeline.
-        const landed = await addVoiceoverToTimeline(store, { url: path, fileId: id });
+        // the mic-recording dialog — see addVoiceoverToTimeline. The script +
+        // voice ride on the clip so the inspector can re-voice it in place.
+        const landed = await addVoiceoverToTimeline(store, {
+          url: path,
+          fileId: id,
+          voiceover: { script: text, voice: voiceId },
+        });
         if (!mountedRef.current) return;
         if (!landed) {
           toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');

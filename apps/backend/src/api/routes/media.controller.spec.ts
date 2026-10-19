@@ -203,4 +203,50 @@ describe('MediaController — Designer AI-media routes', () => {
       );
     });
   });
+
+  describe('voiceover-script', () => {
+    it('writes a script with the org low-reasoning default and returns { script }', async () => {
+      const { controller, aiDefaults } = build();
+
+      const res = await controller.voiceoverScript(org, { topic: 'our spring sale' } as any);
+
+      expect(aiDefaults.lowReasoningText).toHaveBeenCalledWith(
+        'org-1',
+        expect.stringContaining('our spring sale')
+      );
+      expect(res).toEqual({ script: 'a vivid cat' });
+    });
+
+    it('maps DefaultNotConfiguredError to HTTP 409 CONFLICT', async () => {
+      const { controller } = build({
+        lowReasoningText: vi.fn().mockRejectedValue(new DefaultNotConfiguredError('low-reasoning')),
+      });
+      await expect(
+        controller.voiceoverScript(org, { topic: 'x' } as any)
+      ).rejects.toMatchObject({ status: HttpStatus.CONFLICT });
+    });
+  });
+
+  describe('text-to-speech', () => {
+    it('threads voice and instructions through to the service', async () => {
+      const { controller, aiMediaService } = build();
+      aiMediaService.textToSpeechAndSave = vi.fn().mockResolvedValue({ id: 'f1', path: '/u/f1.mp3', name: 'voiceover-1.mp3' });
+
+      const res = await controller.textToSpeech(org, 'hello world', 'coral', 'warm and slow');
+
+      expect(aiMediaService.textToSpeechAndSave).toHaveBeenCalledWith('hello world', {
+        orgId: 'org-1',
+        voice: 'coral',
+        instructions: 'warm and slow',
+      });
+      expect(res).toEqual({ id: 'f1', path: '/u/f1.mp3', name: 'voiceover-1.mp3' });
+    });
+
+    it('rejects an empty script', async () => {
+      const { controller } = build();
+      await expect(controller.textToSpeech(org, '   ')).rejects.toMatchObject({
+        status: HttpStatus.BAD_REQUEST,
+      });
+    });
+  });
 });

@@ -94,6 +94,13 @@ export interface MediaGenerateOptions extends MediaCredentialOptions {
   sourceUrl?: string;
   voice?: string;
   voiceId?: string;
+  /**
+   * Free-form delivery instructions for TTS models that accept them
+   * (gpt-4o-mini-tts `instructions`). Adapters on models without the concept
+   * silently ignore it — never forward it to an endpoint that rejects unknown
+   * fields (tts-1 / tts-1-hd).
+   */
+  instructions?: string;
   format?: string;
   mimeType?: string;
   scale?: number;

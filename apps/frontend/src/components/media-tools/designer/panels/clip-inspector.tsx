@@ -38,6 +38,12 @@ import {
   toggleClipLook,
 } from '../clip-look-presets';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { FontFamilyPicker } from './font-family-picker';
+import { VoiceoverClipSection } from './voiceover-clip-section';
+
+// Same weight ladder the image-mode text panel offers.
+const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
 
 interface ClipInspectorProps {
   store: any;
@@ -361,8 +367,10 @@ const KeyframePropRow: FC<{
 export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trackId, clipId }) => {
   // Named `translate` (not `t`) — this component already uses `t` as a `.find()` callback var.
   const translate = useT();
+  const toaster = useToaster();
   const doc = store((s: any) => s.doc);
   const hasKeyframeClipboard = store((s: any) => !!s.keyframeClipboard?.length);
+  const brandEnforcement = store((s: any) => s.brandEnforcement);
   const vo = doc.outputs[outputIndex];
 
   const clip: VideoClip | undefined = useMemo(() => {
@@ -386,9 +394,19 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
 
   const updateClip = useCallback(
     (updates: Partial<VideoClip>) => {
-      store.getState().updateClip(outputIndex, trackId, clipId, updates);
+      const st = store.getState();
+      // A rejected write used to vanish silently — the inspector looked alive
+      // but nothing landed. Say so.
+      if (!st.updateClipSilent(outputIndex, trackId, clipId, updates)) {
+        toaster.show(
+          translate('designer_clip_update_rejected', 'That clip change could not be applied'),
+          'warning'
+        );
+        return;
+      }
+      st.pushHistory();
     },
-    [store, outputIndex, trackId, clipId],
+    [store, outputIndex, trackId, clipId, toaster, translate],
   );
 
   // Continuous controls (sliders, keyframe drags) write silently per tick and
@@ -808,6 +826,18 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         />
       </div>
 
+      {/* Voiceover re-voice — only clips that landed from the TTS dialog
+          carry the provenance this needs. */}
+      {clipTrackType === 'audio' && clip.voiceover && (
+        <VoiceoverClipSection
+          store={store}
+          outputIndex={outputIndex}
+          trackId={trackId}
+          clipId={clipId}
+          clip={clip}
+        />
+      )}
+
       {/* Speed / Reverse / Freeze */}
       <div className="pt-1 border-t border-studioBorder space-y-2">
         <div className="text-[11px] text-textColor/50">{translate('designer_label_speed', 'Speed')}</div>
@@ -1085,6 +1115,68 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           onCommit={commitClip}
         />
       </div>
+
+      {/* Text clip content + typography — the fields add-text seeds
+          (text/fontFamily/fontSize/fontWeight/fill) finally editable. The
+          family picker is the shared one (custom org fonts included). */}
+      {clipTrackType === 'text' && (
+        <div className="pt-1 border-t border-studioBorder space-y-2">
+          <div className="text-[11px] text-textColor/50">{translate('designer_label_text', 'Text')}</div>
+          <textarea
+            value={clip.text || ''}
+            onChange={(e) => updateClip({ text: e.target.value })}
+            rows={3}
+            aria-label={translate('designer_label_text_content', 'Text content')}
+            className="w-full px-2 py-1.5 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden resize-y"
+          />
+          <FontFamilyPicker
+            value={clip.fontFamily || 'Inter'}
+            brandEnforcement={brandEnforcement}
+            onPick={(family) => updateClip({ fontFamily: family })}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <Stepper
+              label={translate('size', 'Size')}
+              min={1}
+              value={Math.round(clip.fontSize ?? 32)}
+              onChange={(n) => updateClip({ fontSize: n })}
+            />
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] text-textColor/70">{translate('designer_label_weight', 'Weight')}</span>
+              <select
+                aria-label={translate('designer_label_weight', 'Weight')}
+                value={clip.fontWeight ?? 400}
+                onChange={(e) => updateClip({ fontWeight: parseInt(e.target.value, 10) })}
+                className="h-[26px] px-1.5 rounded-md bg-newBgColor border border-studioBorder text-[11px] text-textColor outline-hidden"
+              >
+                {FONT_WEIGHTS.map((w) => (
+                  <option key={w} value={w}>
+                    {w}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <ColorSwatch
+            label={translate('color', 'Color')}
+            value={clip.fill || '#000000'}
+            onChange={(hex) => updateClip({ fill: hex })}
+          />
+        </div>
+      )}
+
+      {/* Caption typography — the family was hardcoded at creation
+          (captionClipDefaults); same shared picker as text clips. */}
+      {clipTrackType === 'caption' && (
+        <div className="pt-1 border-t border-studioBorder space-y-2">
+          <div className="text-[11px] text-textColor/50">{translate('designer_label_font_family', 'Font family')}</div>
+          <FontFamilyPicker
+            value={clip.fontFamily || 'Arial'}
+            brandEnforcement={brandEnforcement}
+            onPick={(family) => updateClip({ fontFamily: family })}
+          />
+        </div>
+      )}
 
       {/* Text animation presets */}
       {clipTrackType === 'text' && (

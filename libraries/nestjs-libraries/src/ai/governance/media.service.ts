@@ -777,7 +777,7 @@ export class AiMediaService {
 
   async textToSpeechAndSave(
     text: string,
-    options: { orgId: string; voice?: string },
+    options: { orgId: string; voice?: string; instructions?: string },
   ): Promise<{ id: string; path: string; name: string }> {
     if (!this._storageService || !this._fileService) {
       throw new Error('Storage/file services are not available');
@@ -1266,7 +1266,7 @@ export class AiMediaService {
 
   async textToSpeech(
     text: string,
-    options?: { voice?: string; orgId?: string; userId?: string },
+    options?: { voice?: string; instructions?: string; orgId?: string; userId?: string },
   ): Promise<Buffer> {
     const candidates = await this._resolveForOperation(options?.orgId, 'tts');
 
@@ -1279,6 +1279,7 @@ export class AiMediaService {
           model: candidate.model,
           input: candidate.settings as MediaGenerateOptions['input'],
           voice: options?.voice,
+          instructions: options?.instructions,
         });
         await this._persistJob({
           operation: 'tts',

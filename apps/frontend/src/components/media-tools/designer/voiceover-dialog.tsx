@@ -2,11 +2,14 @@
 
 import React, { FC, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useMediaVoices } from './use-media-voices';
+import { readErrorMessage } from './read-error-message';
 
 interface VoiceoverDialogProps {
   onClose: () => void;
-  onGenerate: (text: string, voiceId: string) => void | Promise<void>;
+  onGenerate: (text: string, voiceId: string, instructions?: string) => void | Promise<void>;
 }
 
 const inputClass =
@@ -17,18 +20,53 @@ export const VoiceoverDialog: FC<VoiceoverDialogProps> = ({
   onGenerate,
 }) => {
   const t = useT();
+  const toaster = useToaster();
+  const fetch = useFetch();
   const [text, setText] = useState('');
+  const [topic, setTopic] = useState('');
+  const [instructions, setInstructions] = useState('');
   const [selectedVoice, setSelectedVoice] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [writing, setWriting] = useState(false);
   const { data: voices, isLoading, error } = useMediaVoices();
 
   const canGenerate = text.trim().length > 0 && selectedVoice.length > 0;
+  // No dedicated topic field entry? The script box's current content is the
+  // best topic the dialog has — a rewrite of what the user started.
+  const canWrite = (topic.trim() || text.trim()).length > 0;
+
+  const handleWriteScript = async () => {
+    if (!canWrite || writing) return;
+    setWriting(true);
+    try {
+      const res = await fetch('/media/voiceover-script', {
+        method: 'POST',
+        body: JSON.stringify({ topic: topic.trim() || text.trim() }),
+      });
+      if (!res.ok) {
+        toaster.show(
+          await readErrorMessage(res, t('designer_voiceover_script_failed', 'Could not write a script')),
+          'warning'
+        );
+        return;
+      }
+      const body = await res.json();
+      if (typeof body?.script === 'string' && body.script.trim()) {
+        // Fills the textarea — the user edits before the TTS call is made.
+        setText(body.script.trim());
+      }
+    } catch {
+      toaster.show(t('designer_voiceover_script_failed', 'Could not write a script'), 'warning');
+    } finally {
+      setWriting(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!canGenerate || generating) return;
     setGenerating(true);
     try {
-      await onGenerate(text.trim(), selectedVoice);
+      await onGenerate(text.trim(), selectedVoice, instructions.trim() || undefined);
       onClose();
     } finally {
       setGenerating(false);
@@ -51,6 +89,24 @@ export const VoiceoverDialog: FC<VoiceoverDialogProps> = ({
           rows={4}
           className={`${inputClass} resize-y min-h-[88px]`}
         />
+        <div className="flex gap-[8px] mt-[8px]">
+          <input
+            type="text"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            placeholder={t('designer_voiceover_topic_placeholder', 'Topic (or use the script above)…')}
+            aria-label={t('designer_voiceover_topic_label', 'Script topic')}
+            className={`${inputClass} flex-1`}
+          />
+          <button
+            type="button"
+            onClick={handleWriteScript}
+            disabled={!canWrite || writing}
+            className="px-[12px] py-[8px] rounded-[8px] text-[13px] border border-[#2B5CD3]/40 text-[#2B5CD3] hover:bg-[#2B5CD3]/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+          >
+            {writing ? t('designer_writing_ellipsis', 'Writing…') : t('designer_write_script_with_ai', 'Write script with AI')}
+          </button>
+        </div>
       </div>
 
       <div>
@@ -82,6 +138,20 @@ export const VoiceoverDialog: FC<VoiceoverDialogProps> = ({
             ))}
           </select>
         )}
+      </div>
+
+      <div>
+        <label htmlFor="voiceover-tone" className="block text-[12px] text-newTextColor/70 mb-[6px]">
+          {t('designer_voiceover_tone_label', 'Tone / style (optional)')}
+        </label>
+        <input
+          id="voiceover-tone"
+          type="text"
+          value={instructions}
+          onChange={(e) => setInstructions(e.target.value)}
+          placeholder={t('designer_voiceover_tone_placeholder', 'e.g. warm and conversational, energetic…')}
+          className={inputClass}
+        />
       </div>
 
       <div className="flex justify-end gap-[8px] pt-[4px]">
