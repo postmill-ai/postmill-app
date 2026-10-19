@@ -17,16 +17,19 @@ import {
 } from './use-geometry-nonce';
 
 /**
- * Regression: dragging a styled / adjusted image moved the Transformer frame
- * and the hit region but left the BITMAP frozen at the pre-drag position.
+ * Drag-tracking of cached wrappers (the "bitmap stays behind" defect).
  *
- * The cached wrappers (StyledLayer, AdjustmentScope) Konva-`cache()` an
- * ancestor of the draggable node and deliberately exclude geometry from their
- * cache keys, so Konva — which never repaints a cached node when a descendant
- * moves — kept drawing the stale buffer forever; nothing invalidated on
- * dragEnd. The fix folds a commit-only `geometryNonce` into the cache keys:
- * per drag frame the key is stable (the perf design the keys exist for), and
- * on commit each wrapper's own effect re-caches once.
+ * The cached wrappers (StyledLayer, AdjustmentScope, MaskedLayer, LayerGroup)
+ * Konva-`cache()` an ancestor of the draggable node, and Konva never repaints
+ * a cached node when a descendant moves. Their keys used to exclude geometry
+ * entirely, so a styled/masked/adjusted image's bitmap stayed at the pre-drag
+ * position for the WHOLE drag and only snapped into place on drop.
+ *
+ * The fix folds each layer's OWN geometry into the key of every wrapper that
+ * buffers it. Mid-gesture the ephemeral store writes re-render per rAF frame,
+ * so the dragged element's wrappers re-rasterise with it — while every other
+ * layer's key (and buffer) is untouched. The gesture-commit `geometryNonce`
+ * bump still turns all keys over once on dragEnd/transformEnd.
  *
  * These run a real Konva render (jsdom ships node-canvas via vitest) and watch
  * the cache canvas's identity: a re-cache produces a NEW canvas, a stable key
@@ -58,6 +61,16 @@ const styledImage = {
       spread: 0,
     },
   ],
+} as unknown as DesignerElement;
+
+const otherStyledImage = {
+  ...styledImage,
+  id: 'img-2',
+  src: 'https://cdn.example.com/other.png',
+  x: 300,
+  y: 300,
+  width: 80,
+  height: 80,
 } as unknown as DesignerElement;
 
 const plainImage = {
@@ -122,7 +135,7 @@ const cacheCanvas = (node: Konva.Node): unknown =>
     }
   )._cache?.get('canvas')?.scene?._canvas ?? null;
 
-/** The nearest cached ancestor of the dragged node — the frozen bitmap. */
+/** The nearest cached ancestor of the dragged node — the buffered bitmap. */
 const cachedAncestor = (id: string): Konva.Node => {
   const node = stageRef!.findOne('#' + id);
   expect(node, `node #${id} should exist`).toBeTruthy();
@@ -133,34 +146,52 @@ const cachedAncestor = (id: string): Konva.Node => {
   return ancestor!;
 };
 
-describe('gesture-commit cache refresh', () => {
-  it('StyledLayer keeps its buffer per drag frame and re-caches once on commit', async () => {
+describe('drag-tracking cache refresh', () => {
+  it('the dragged element’s StyledLayer re-rasterises per frame; other layers stay cached', async () => {
     const cacheSpy = vi.spyOn(Konva.Group.prototype, 'cache');
     const callsOn = (node: Konva.Node) =>
       cacheSpy.mock.contexts.filter((ctx) => ctx === node).length;
 
-    await renderTree([styledImage], 0);
-    const styled = cachedAncestor('img-1');
-    const before = cacheCanvas(styled);
-    expect(before).not.toBeNull();
-    const mountCalls = callsOn(styled);
-    expect(mountCalls).toBeGreaterThan(0);
+    await renderTree([styledImage, otherStyledImage], 0);
+    const dragged = cachedAncestor('img-1');
+    const bystander = cachedAncestor('img-2');
+    expect(dragged).not.toBe(bystander);
+    const draggedBefore = cacheCanvas(dragged);
+    const bystanderBefore = cacheCanvas(bystander);
+    expect(draggedBefore).not.toBeNull();
+    const draggedMount = callsOn(dragged);
+    const bystanderMount = callsOn(bystander);
 
-    // Drag frames: the element moves in the store on every rAF tick, but the
-    // cache key excludes geometry, so the wrapper must NOT re-rasterise.
-    await renderTree([{ ...styledImage, x: 40, y: 12 } as DesignerElement], 0);
-    await renderTree([{ ...styledImage, x: 96, y: 30 } as DesignerElement], 0);
-    expect(callsOn(styled)).toBe(mountCalls);
-    expect(cacheCanvas(styled)).toBe(before);
+    // Two drag frames: the dragged element moves in the store per rAF tick.
+    // Its own wrapper must track (new buffer each frame) — the bitmap follows
+    // the frame — while the unmoved layer's wrapper keeps its buffer.
+    await renderTree(
+      [{ ...styledImage, x: 40, y: 12 } as DesignerElement, otherStyledImage],
+      0
+    );
+    expect(callsOn(dragged)).toBe(draggedMount + 1);
+    expect(cacheCanvas(dragged)).not.toBe(draggedBefore);
 
-    // Commit (dragEnd): the nonce bump turns the key over exactly once and the
-    // buffer rebuilds at the committed position.
-    await renderTree([{ ...styledImage, x: 96, y: 30 } as DesignerElement], 1);
-    expect(callsOn(styled)).toBe(mountCalls + 1);
-    expect(cacheCanvas(styled)).not.toBe(before);
+    const midDrag = cacheCanvas(dragged);
+    await renderTree(
+      [{ ...styledImage, x: 96, y: 30 } as DesignerElement, otherStyledImage],
+      0
+    );
+    expect(callsOn(dragged)).toBe(draggedMount + 2);
+    expect(cacheCanvas(dragged)).not.toBe(midDrag);
+
+    expect(callsOn(bystander)).toBe(bystanderMount);
+    expect(cacheCanvas(bystander)).toBe(bystanderBefore);
+
+    // Commit (dragEnd): the nonce bump turns the key over once more.
+    await renderTree(
+      [{ ...styledImage, x: 96, y: 30 } as DesignerElement, otherStyledImage],
+      1
+    );
+    expect(callsOn(dragged)).toBe(draggedMount + 3);
   });
 
-  it('AdjustmentScope re-caches on commit, not per drag frame', async () => {
+  it('AdjustmentScope re-caches as its folded layer moves, not just on commit', async () => {
     const cacheSpy = vi.spyOn(Konva.Group.prototype, 'cache');
     const callsOn = (node: Konva.Node) =>
       cacheSpy.mock.contexts.filter((ctx) => ctx === node).length;
@@ -172,22 +203,40 @@ describe('gesture-commit cache refresh', () => {
     expect(before).not.toBeNull();
     const mountCalls = callsOn(scope);
 
+    // A drag frame under an adjustment layer: the scope's bitmap must track
+    // the layer it buffers, or the image visibly lags its frame until drop.
     await renderTree([{ ...plainImage, x: 64, y: 48 } as DesignerElement, brightnessAdj], 0);
-    expect(callsOn(scope)).toBe(mountCalls);
-    expect(cacheCanvas(scope)).toBe(before);
-
-    await renderTree([{ ...plainImage, x: 64, y: 48 } as DesignerElement, brightnessAdj], 1);
     expect(callsOn(scope)).toBe(mountCalls + 1);
     expect(cacheCanvas(scope)).not.toBe(before);
+
+    await renderTree([{ ...plainImage, x: 64, y: 48 } as DesignerElement, brightnessAdj], 1);
+    expect(callsOn(scope)).toBe(mountCalls + 2);
+  });
+
+  it('a wrapper whose contents did NOT move keeps its buffer across the commit bump only', async () => {
+    // Sanity on the other direction: with no geometry change and no nonce
+    // bump, a plain re-render must not re-rasterise anything.
+    const cacheSpy = vi.spyOn(Konva.Group.prototype, 'cache');
+    const callsOn = (node: Konva.Node) =>
+      cacheSpy.mock.contexts.filter((ctx) => ctx === node).length;
+
+    await renderTree([styledImage], 0);
+    const styled = cachedAncestor('img-1');
+    const before = cacheCanvas(styled);
+    const mountCalls = callsOn(styled);
+
+    await renderTree([styledImage], 0);
+    expect(callsOn(styled)).toBe(mountCalls);
+    expect(cacheCanvas(styled)).toBe(before);
   });
 });
 
 /**
- * The follow-up: geometry also commits through the STORE alone — Inspector
- * X/Y/W/H inputs, arrow-key nudges, align/distribute, undo — with no Konva
- * drag/transform events, so the gesture-commit bump never fired and the
- * cached bitmap stayed frozen at the old position. `useGeometryNonce`
- * subscribes to store geometry and applies a trailing debounced bump.
+ * Store-driven geometry commits (Inspector X/Y/W/H inputs, arrow-key nudges,
+ * align/distribute, undo — no Konva drag/transform events). The wrappers'
+ * keys carry their layers' geometry, so these refresh the moved element's
+ * buffer on the very next render; the `useGeometryNonce` subscription remains
+ * as the debounced backstop and the commit-bump path for gestures.
  */
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -242,68 +291,39 @@ describe('store-driven geometry commits (no Konva gesture)', () => {
     expect(geometrySignature(store.getState())).not.toBe(before);
   });
 
-  it('refreshes the cached wrapper after the debounce window', async () => {
+  it('refreshes the moved element’s wrapper on the next render — no debounce wait', async () => {
     const store = storeWithImage();
     await renderWithStore(store);
     const styled = cachedAncestor('img-1');
     const before = cacheCanvas(styled);
 
-    // The Inspector's X input: a plain store write, no drag events.
+    // The Inspector's X input: a plain store write, no drag events. The
+    // element's own key carries its geometry, so the buffer rebuilds with
+    // the render — the user sees the layer where they put it, immediately.
     await act(async () => {
       store.getState().updateElement('img-1', { x: 500 });
-    });
-    // Debounced: nothing has re-rasterised yet.
-    expect(cacheCanvas(styled)).toBe(before);
-
-    await act(async () => {
-      await sleep(GEOMETRY_CACHE_DEBOUNCE_MS + 150);
     });
     expect(cacheCanvas(styled)).not.toBe(before);
   });
 
-  it('collapses rapid successive store changes into one refresh', async () => {
-    const cacheSpy = vi.spyOn(Konva.Group.prototype, 'cache');
-    const callsOn = (node: Konva.Node) =>
-      cacheSpy.mock.contexts.filter((ctx) => ctx === node).length;
-
-    const store = storeWithImage();
-    await renderWithStore(store);
-    const styled = cachedAncestor('img-1');
-    const mountCalls = callsOn(styled);
-
-    // An arrow-key nudge burst: five commits, each inside the debounce window.
-    for (let i = 1; i <= 5; i++) {
-      await act(async () => {
-        store.getState().updateElement('img-1', { x: 500 + i * 10 });
-        await sleep(60);
-      });
-    }
-    expect(callsOn(styled)).toBe(mountCalls);
-
-    await act(async () => {
-      await sleep(GEOMETRY_CACHE_DEBOUNCE_MS + 150);
-    });
-    expect(callsOn(styled)).toBe(mountCalls + 1);
-  });
-
-  it('does not rasterise mid-gesture; the commit bump is immediate and absorbs the debounce', async () => {
+  it('mid-gesture frames re-rasterise through the key while the nonce stays put; the commit bump turns it once', async () => {
     const store = storeWithImage();
     await renderWithStore(store);
     const styled = cachedAncestor('img-1');
     const before = cacheCanvas(styled);
     const nonceAtStart = hookApi!.geometryNonce;
 
-    // Konva dragstart → noteGestureStart.
+    // Konva dragstart → noteGestureStart. A drag frame writes the store:
+    // the dragged element's wrapper tracks through its key, but the debounced
+    // nonce must NOT fire mid-gesture (it would re-rasterise EVERY wrapper).
     act(() => hookApi!.noteGestureStart());
-    // A drag frame writes the store, then a long pause with the mouse still
-    // down — longer than the debounce — must NOT re-rasterise.
     await act(async () => {
       store.getState().updateElement('img-1', { x: 220 });
     });
+    expect(cacheCanvas(styled)).not.toBe(before);
     await act(async () => {
       await sleep(GEOMETRY_CACHE_DEBOUNCE_MS + 150);
     });
-    expect(cacheCanvas(styled)).toBe(before);
     expect(hookApi!.geometryNonce).toBe(nonceAtStart);
 
     // dragEnd: final store write + immediate bump, exactly as handleDragEnd
@@ -314,7 +334,6 @@ describe('store-driven geometry commits (no Konva gesture)', () => {
       hookApi!.bumpGeometryNow();
     });
     expect(hookApi!.geometryNonce).toBe(nonceAtStart + 1);
-    expect(cacheCanvas(styled)).not.toBe(before);
 
     // No trailing second refresh from the absorbed debounce.
     await act(async () => {

@@ -52,13 +52,15 @@ describe('buildResizePatch', () => {
   });
 
   it('floors the box so an element cannot be scaled to nothing', () => {
+    // Corner drag: the floor applies proportionally (see the clamp suite
+    // below), so the ratio survives — 2:1 floored is 20×10, not 10×10.
     const patch = buildResizePatch(
       { type: 'shape' } as DesignerElement,
       node({ scaleX: 0.001, scaleY: 0.001 }),
       'top-left'
     );
-    expect(patch.width).toBe(MIN_ELEMENT_SIZE);
     expect(patch.height).toBe(MIN_ELEMENT_SIZE);
+    expect(patch.width).toBeCloseTo(20);
   });
 
   it('scales fontSize with the box when text is dragged by a corner', () => {
@@ -247,6 +249,142 @@ describe('bakeElementTransform (Line-backed shapes)', () => {
     expect(patch.width).toBe(300);
     expect(patch.height).toBe(80);
     expect(writeBackSize).toBe(true);
+  });
+});
+
+describe('MIN_ELEMENT_SIZE clamp', () => {
+  it('clamps proportionally when a corner drag crosses the floor on one axis first', () => {
+    // 200×100 scaled by 0.08 → 16×8: height crosses the 10px floor while
+    // width is still above it. Clamping the axes independently bakes 16×10 —
+    // the box flattens from 2:1 to 1.6:1 on that frame and the distortion
+    // persists. The proportional clamp lifts BOTH axes by the same limited
+    // factor, so the most-violated axis lands on the floor and the ratio
+    // survives: 20×10.
+    const patch = buildResizePatch(
+      { type: 'shape' } as DesignerElement,
+      node({ scaleX: 0.08, scaleY: 0.08 }),
+      'bottom-right'
+    );
+    expect(patch.height).toBe(MIN_ELEMENT_SIZE);
+    expect(patch.width).toBeCloseTo(20);
+    expect(patch.width / patch.height).toBeCloseTo(2);
+  });
+
+  it('keeps the ratio for a multi-select scale-down across the floor', () => {
+    // Same gesture through the star path (points-bbox base): a wide star must
+    // not flatten when the group is scaled past the floor.
+    const star = {
+      type: 'shape',
+      shape: 'star',
+      width: 200,
+      height: 100,
+    } as unknown as DesignerElement;
+    const { patch } = bakeElementTransform(
+      star,
+      node({ scaleX: 0.06, scaleY: 0.06 }),
+      'bottom-right'
+    );
+    expect(patch.height).toBe(MIN_ELEMENT_SIZE);
+    expect(patch.width).toBeCloseTo(20);
+  });
+
+  it('still clamps only the dragged axis for side handles', () => {
+    // A side-handle drag intentionally changes one axis; lifting the other to
+    // keep ratio would re-wrap text the user did not ask to resize.
+    const patch = buildResizePatch(
+      { type: 'shape' } as DesignerElement,
+      node({ scaleX: 0.01, scaleY: 1 }),
+      'middle-right'
+    );
+    expect(patch.width).toBe(MIN_ELEMENT_SIZE);
+    expect(patch.height).toBe(100);
+  });
+});
+
+describe('bakeElementTransform (flipped elements)', () => {
+  /**
+   * Konva's Transformer rewrites the node through Transform.decompose() on
+   * every frame, and decompose normalises the matrix: scaleX always comes out
+   * ≥ 0 and a flipX (scaleX: -1) is re-expressed as rotation + 180° with a
+   * NEGATIVE scaleY. Baked raw, the first transform frame of a flipped
+   * element clamped its height to the MIN floor (height * -1 → 10px) and
+   * jumped its rotation by half a turn.
+   *
+   * The fixtures below pass node geometry exactly as decompose reports it for
+   * a flipX element: scaleX = gesture magnitude, scaleY = -magnitude,
+   * rotation = stored + 180.
+   */
+  const flippedStar = {
+    type: 'shape',
+    shape: 'star',
+    width: 200,
+    height: 100,
+    flipX: true,
+  } as unknown as DesignerElement;
+
+  it('folds a decomposed flipX back into the document representation on resize', () => {
+    const { patch } = bakeElementTransform(
+      flippedStar,
+      node({ scaleX: 1.2, scaleY: -1.2, rotation: 180 }),
+      'bottom-right'
+    );
+    expect(patch.width).toBeCloseTo(240);
+    expect(patch.height).toBeCloseTo(120);
+    expect(patch.rotation).toBe(0);
+  });
+
+  it('preserves width/height through a pure rotation of a flipped star', () => {
+    // Rotater drag of 45° on the flipped star: decompose reports the rotation
+    // in degrees, sign-negative (-135° ≡ 225°), with scaleY -1. Baked raw
+    // this stored rotation -135 and height 10.
+    const { patch } = bakeElementTransform(
+      flippedStar,
+      node({ scaleX: 1, scaleY: -1, rotation: -135 }),
+      'rotater'
+    );
+    expect(patch.width).toBe(200);
+    expect(patch.height).toBe(100);
+    expect(patch.rotation).toBe(45);
+  });
+
+  it('normalises rotation into [0, 360)', () => {
+    const { patch } = bakeElementTransform(
+      flippedStar,
+      node({ scaleX: 1, scaleY: -1, rotation: 90 }),
+      'rotater'
+    );
+    expect(patch.rotation).toBe(270);
+  });
+
+  it('folds a flipY back without a rotation shift', () => {
+    // flipY alone: the first column keeps its angle, so decompose reports the
+    // stored rotation; only scaleY carries the flip sign.
+    const flipYStar = { ...flippedStar, flipX: false, flipY: true } as DesignerElement;
+    const { patch } = bakeElementTransform(
+      flipYStar,
+      node({ scaleX: 1.2, scaleY: -1.2, rotation: 30 }),
+      'bottom-right'
+    );
+    expect(patch.width).toBeCloseTo(240);
+    expect(patch.height).toBeCloseTo(120);
+    expect(patch.rotation).toBe(30);
+  });
+
+  it('leaves unflipped elements on the raw node numbers', () => {
+    const star = {
+      type: 'shape',
+      shape: 'star',
+      width: 200,
+      height: 100,
+    } as unknown as DesignerElement;
+    const { patch } = bakeElementTransform(
+      star,
+      node({ scaleX: 1.2, scaleY: 1.2, rotation: 30 }),
+      'bottom-right'
+    );
+    expect(patch.width).toBeCloseTo(240);
+    expect(patch.height).toBeCloseTo(120);
+    expect(patch.rotation).toBe(30);
   });
 });
 

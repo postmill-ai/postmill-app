@@ -17,13 +17,13 @@ export const GEOMETRY_CACHE_DEBOUNCE_MS = 280;
  * Fingerprint of every element's geometry in the current output.
  *
  * The cached Konva wrappers (StyledLayer / AdjustmentScope / MaskedLayer /
- * LayerGroup) key their caches on everything EXCEPT geometry, so Konva never
- * repaints them when a descendant moves. Gesture commits (dragEnd /
- * transformEnd) bump the nonce immediately, but geometry also changes through
- * the store alone — the Inspector's X/Y/W/H inputs, arrow-key nudges,
- * align/distribute, undo — and those left the cached bitmap frozen at its old
- * position. The subscription below diffs this fingerprint on every store
- * change and schedules a trailing refresh.
+ * LayerGroup) key their caches on the geometry of exactly the layers they
+ * buffer, so a wrapper whose contents moved re-rasterises on the very next
+ * render — including per rAF frame for the element being dragged. This
+ * signature is the BACKSTOP for that: gesture commits (dragEnd /
+ * transformEnd) bump the nonce immediately, and any other geometry change
+ * the per-layer keys somehow miss (a future field, a bulk doc replace)
+ * still refreshes on a trailing debounce instead of staying frozen.
  */
 export const geometrySignature = (state: DesignerStore): string => {
   const out = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
@@ -45,10 +45,12 @@ export const geometrySignature = (state: DesignerStore): string => {
  *     gesture's commit repaints in the same frame, with no debounce latency.
  *  2. The store subscription — any OTHER committed geometry change (Inspector
  *     inputs, nudges, align/distribute, undo) refreshes on a trailing debounce.
- *  3. Per drag frame: nothing. The rAF-throttled store writes keep resetting
- *     the debounce, and even if a pause lets the timer fire mid-gesture, the
- *     gesture flag skips it — re-rasterising an effects stack per frame is
- *     the cost the cache keys exist to avoid.
+ *  3. Per drag frame — the wrappers' own keys now carry their layers'
+ *     geometry, so the DRAGGED element's wrappers re-rasterise with each
+ *     rAF-throttled ephemeral write while every other layer's buffer stays
+ *     cached. The debounce below still skips mid-gesture: its nonce bump
+ *     would turn ALL wrappers' keys over at once, which is the
+ *     re-rasterise-everything cost the keys are designed to avoid.
  */
 export const useGeometryNonce = (store: DesignerStoreHook) => {
   const [geometryNonce, setGeometryNonce] = useState(0);

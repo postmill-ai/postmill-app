@@ -101,11 +101,32 @@ export const buildResizePatch = (
   node: NodeGeometry,
   anchor: string | null | undefined
 ): ResizePatch => {
+  const rawWidth = node.width * node.scaleX;
+  const rawHeight = node.height * node.scaleY;
+  let width = Math.max(rawWidth, MIN_ELEMENT_SIZE);
+  let height = Math.max(rawHeight, MIN_ELEMENT_SIZE);
+  // A corner drag scales both axes together, so clamping each axis
+  // independently breaks the ratio the moment one axis crosses the floor
+  // first — a wide box flattens on that frame and the multi-select gesture
+  // keeps the distortion. Lift both axes by the same limited factor instead:
+  // the most-violated axis lands exactly on the floor and the ratio survives.
+  // Side-handle drags keep the independent clamp — there the other axis is
+  // deliberately untouched.
+  if (
+    axisForAnchor(anchor) === 'both' &&
+    rawWidth > 0 &&
+    rawHeight > 0 &&
+    (rawWidth < MIN_ELEMENT_SIZE || rawHeight < MIN_ELEMENT_SIZE)
+  ) {
+    const lift = Math.max(MIN_ELEMENT_SIZE / rawWidth, MIN_ELEMENT_SIZE / rawHeight);
+    width = rawWidth * lift;
+    height = rawHeight * lift;
+  }
   const patch: ResizePatch = {
     x: node.x,
     y: node.y,
-    width: Math.max(node.width * node.scaleX, MIN_ELEMENT_SIZE),
-    height: Math.max(node.height * node.scaleY, MIN_ELEMENT_SIZE),
+    width,
+    height,
     rotation: node.rotation,
   };
 
@@ -151,6 +172,8 @@ export const bakeElementTransform = (
     | 'warp'
     | 'width'
     | 'height'
+    | 'flipX'
+    | 'flipY'
     | 'fontSize'
     | 'richText'
     | 'textPath'
@@ -160,12 +183,27 @@ export const bakeElementTransform = (
   anchor: string | null | undefined
 ): BakedTransform => {
   const pointsBBox = usesPointsBoundingBox(el);
+  // Konva's Transformer rewrites the node through Transform.decompose() on
+  // every frame, and decompose normalises the matrix: scaleX always comes out
+  // ≥ 0 and a flipX (stored as scaleX: -1) is re-expressed as rotation + 180°
+  // with a NEGATIVE scaleY (a flipY keeps the rotation and also carries its
+  // sign on scaleY). Baked raw, the first transform frame of a flipped
+  // element clamped its height to the MIN floor and jumped its rotation by
+  // half a turn. Fold the decomposition back into the document's
+  // representation — flip flags on the element, positive scale — here.
+  const flipSign = (el.flipX ? -1 : 1) * (el.flipY ? -1 : 1);
+  const rotation = el.flipX
+    ? (((node.rotation - 180) % 360) + 360) % 360
+    : node.rotation;
   const patch = buildResizePatch(
     el,
     {
       ...node,
       width: pointsBBox ? el.width : node.width,
       height: pointsBBox ? el.height : node.height,
+      scaleX: Math.abs(node.scaleX),
+      scaleY: node.scaleY * flipSign,
+      rotation,
     },
     anchor
   );

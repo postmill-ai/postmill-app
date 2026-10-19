@@ -52,16 +52,19 @@ describe('styledLeafCacheKey', () => {
     // StyledLeaf passes no src for non-image layers, so `image` stays null
     // and nothing forces a re-cache for them.
     expect(styledLeafCacheKey(shape, null)).toBe(styledLeafCacheKey(shape, null));
-    expect(styledLeafCacheKey(shape, null)).toBe('shape-1:pending');
+    expect(styledLeafCacheKey(shape, null)).toBe('shape-1:pending:0,0,200,200,0,0,0');
   });
 
-  it('ignores per-frame geometry but turns over on a gesture-commit bump', () => {
-    // Mid-drag the element's x/y change every frame: the key must NOT follow
-    // (re-rasterising the effects stack per frame is the cost the cache
-    // avoids). On commit the canvas bumps the geometry generation once, and
-    // the key turns over so the styled buffer rebuilds at the final position.
+  it('turns over when the element’s own geometry changes — and on a commit bump', () => {
+    // Mid-drag the element's x/y change every rAF frame and the key MUST
+    // follow for the dragged element: its styled buffer is cached in scene
+    // space, so a key that ignored geometry kept painting the bitmap at the
+    // pre-drag position until drop. Only the dragged element's key turns
+    // over — every other layer's buffer stays cached. On commit the canvas
+    // also bumps the geometry generation, which still turns the key over.
     const moved = { ...styledImage, x: 640, y: 480 } as DesignerElement;
-    expect(styledLeafCacheKey(moved, null, 3)).toBe(styledLeafCacheKey(styledImage, null, 3));
+    expect(styledLeafCacheKey(moved, null, 3)).not.toBe(styledLeafCacheKey(styledImage, null, 3));
+    expect(styledLeafCacheKey(styledImage, null, 3)).toBe(styledLeafCacheKey(styledImage, null, 3));
     expect(styledLeafCacheKey(styledImage, null, 4)).not.toBe(
       styledLeafCacheKey(styledImage, null, 3)
     );

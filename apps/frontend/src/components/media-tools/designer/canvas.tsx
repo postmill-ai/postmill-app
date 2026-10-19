@@ -1054,13 +1054,20 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       computeSnap(e.target);
       if (rafIdRef.current) return;
       rafIdRef.current = requestAnimationFrame(() => {
-        const node = e.target;
-        const id = node.id();
-        if (id) {
-          // Gesture-scoped write: current output only, no cross-output
-          // applyLinked per frame. dragEnd re-commits through updateElement.
-          updateElementEphemeral(id, { x: node.x(), y: node.y() });
-        }
+        // Gesture-scoped write: current output only, no cross-output
+        // applyLinked per frame. dragEnd re-commits through updateElement.
+        // Every attached node is written, not just the drag target: the
+        // Transformer moves the whole multi-selection together, and each
+        // moved element's own cached wrappers key off its store geometry —
+        // a member left unwritten keeps its styled bitmap frozen until drop.
+        const trNodes = transformerRef.current?.nodes() || [];
+        const nodes = trNodes.length > 1 ? trNodes : [e.target];
+        nodes.forEach((node) => {
+          const id = node.id();
+          if (id) {
+            updateElementEphemeral(id, { x: node.x(), y: node.y() });
+          }
+        });
         rafIdRef.current = null;
       });
     },

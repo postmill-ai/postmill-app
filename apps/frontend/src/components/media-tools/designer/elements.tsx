@@ -20,6 +20,7 @@ import { measureLineWidth, applyTextTransform, justifyLineWords } from '@postmil
 import {
   pointsForShape,
   flattenPoints,
+  starPoints,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
 import { tracePathNodes } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-geometry';
 import { warpedOutline } from '@postmill-ai/nestjs-libraries/media/designer-doc/warp';
@@ -279,12 +280,15 @@ const bitmapLayersKey = (
  * The key therefore covers: the backdrop (as before), the ids of every folded
  * layer (an insert/delete/reorder under the adjustment rebuilds the cache),
  * and each bitmap layer's src + readiness (load and Replace both rebuild).
- * Geometry is deliberately NOT part of the key — re-rasterising a filtered
- * scope on every drag frame is the cost the debounced filter cache exists to
- * avoid. What IS folded in is `geometryGen`, a nonce the canvas bumps only
- * when a drag/transform gesture commits: Konva never repaints a cached node
- * for a moved descendant, so the scope's bitmap otherwise stayed frozen at
- * the pre-drag position while the hit region tracked the pointer.
+ * It also covers every folded layer's GEOMETRY: Konva never repaints a cached
+ * node for a moved descendant, so without it the scope's bitmap sat at the
+ * pre-drag position for the whole gesture. This is still not "re-rasterise on
+ * every frame" in the problematic sense — only scopes whose folded layers
+ * actually moved turn their key over, which mid-gesture is the scope holding
+ * the dragged element, and the store writes that drive it are rAF-throttled.
+ * `geometryGen` is the gesture-commit nonce, which keeps the commit-time
+ * rebuild guaranteed even if a future path moves a layer without touching
+ * its geometry fields.
  */
 export const adjustmentScopeCacheKey = (
   backdropKey: string | number | undefined,
@@ -292,7 +296,8 @@ export const adjustmentScopeCacheKey = (
   isReady: (src: string) => boolean = (src) => imageCache.has(src),
   geometryGen?: string | number
 ): string =>
-  `${backdropKey ?? ''}::${bitmapLayersKey(els, isReady)}${geometryGen != null ? `::g${geometryGen}` : ''}`;
+  `${backdropKey ?? ''}::${bitmapLayersKey(els, isReady)}` +
+  `::${els.map(leafGeometryKey).join(',')}${geometryGen != null ? `::g${geometryGen}` : ''}`;
 
 // Convert a DesignerGradient into Konva gradient props for a w×h box.
 export const gradientFillProps = (
@@ -504,6 +509,74 @@ interface ImageNodeProps {
   interactive: boolean;
 }
 
+/**
+ * Clip path for a shape mask, in the masked element's local box space.
+ *
+ * The server renderer (`design-render.service.ts` traceMask) is the contract
+ * this has to match, because the mask a user sees on the canvas must be the
+ * mask in the export. The star used to be hand-rolled here as a CIRCULAR star
+ * from `min(w, h) / 2` while the server traces the SHARED `starPoints`
+ * generator — ellipse-inscribed, stretched with the box — so a non-square
+ * image masked by a star clipped to a different shape on screen than in the
+ * PDF. The star (and every other branch) now traces exactly what the server
+ * traces.
+ */
+export const shapeMaskClipFunc = (
+  mask: { shape?: string; cornerRadius?: number },
+  width: number,
+  height: number
+) => {
+  const shape = mask.shape || 'ellipse';
+  return (ctx: any) => {
+    const w = width;
+    const h = height;
+    if (shape === 'ellipse') {
+      ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+    } else if (shape === 'rounded-rect') {
+      const r = mask.cornerRadius || 8;
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.arcTo(w, 0, w, h, r);
+      ctx.arcTo(w, h, 0, h, r);
+      ctx.arcTo(0, h, 0, 0, r);
+      ctx.arcTo(0, 0, w, 0, r);
+      ctx.closePath();
+    } else if (shape === 'triangle') {
+      ctx.beginPath();
+      ctx.moveTo(w / 2, 0);
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+    } else if (shape === 'star') {
+      const pts = starPoints(w, h);
+      ctx.beginPath();
+      pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.closePath();
+    } else if (shape === 'hexagon') {
+      const cx = w / 2;
+      const cy = h / 2;
+      const r = Math.min(w, h) / 2;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i - Math.PI / 6;
+        const px = cx + Math.cos(angle) * r;
+        const py = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    } else if (shape === 'heart') {
+      const cw = w;
+      const ch = h;
+      ctx.beginPath();
+      ctx.moveTo(cw / 2, ch * 0.75);
+      ctx.bezierCurveTo(cw * 0.1, ch * 0.4, cw * 0.1, ch * 0.05, cw / 2, ch * 0.25);
+      ctx.bezierCurveTo(cw * 0.9, ch * 0.05, cw * 0.9, ch * 0.4, cw / 2, ch * 0.75);
+      ctx.closePath();
+    }
+  };
+};
+
 const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, interactive }) => {
   const loaded = useLoadedImage(element.src);
   // A raster layer draws from its live paint buffer while it is being edited —
@@ -618,65 +691,7 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, inter
   }, [textMask, element.width, element.height]);
 
   const clipFunc = shapeMask
-    ? (ctx: any) => {
-        const w = element.width;
-        const h = element.height;
-        const shape = shapeMask.shape || 'ellipse';
-        if (shape === 'ellipse') {
-          ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
-        } else if (shape === 'rounded-rect') {
-          const r = shapeMask.cornerRadius || 8;
-          ctx.beginPath();
-          ctx.moveTo(r, 0);
-          ctx.arcTo(w, 0, w, h, r);
-          ctx.arcTo(w, h, 0, h, r);
-          ctx.arcTo(0, h, 0, 0, r);
-          ctx.arcTo(0, 0, w, 0, r);
-          ctx.closePath();
-        } else if (shape === 'triangle') {
-          ctx.beginPath();
-          ctx.moveTo(w / 2, 0);
-          ctx.lineTo(w, h);
-          ctx.lineTo(0, h);
-          ctx.closePath();
-        } else if (shape === 'star') {
-          const cx = w / 2;
-          const cy = h / 2;
-          const outerR = Math.min(w, h) / 2;
-          const innerR = outerR * 0.5;
-          ctx.beginPath();
-          for (let i = 0; i < 10; i++) {
-            const angle = (Math.PI / 5) * i - Math.PI / 2;
-            const r = i % 2 === 0 ? outerR : innerR;
-            const px = cx + Math.cos(angle) * r;
-            const py = cy + Math.sin(angle) * r;
-            if (i === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
-          }
-          ctx.closePath();
-        } else if (shape === 'hexagon') {
-          const cx = w / 2;
-          const cy = h / 2;
-          const r = Math.min(w, h) / 2;
-          ctx.beginPath();
-          for (let i = 0; i < 6; i++) {
-            const angle = (Math.PI / 3) * i - Math.PI / 6;
-            const px = cx + Math.cos(angle) * r;
-            const py = cy + Math.sin(angle) * r;
-            if (i === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
-          }
-          ctx.closePath();
-        } else if (shape === 'heart') {
-          const cw = w;
-          const ch = h;
-          ctx.beginPath();
-          ctx.moveTo(cw / 2, ch * 0.75);
-          ctx.bezierCurveTo(cw * 0.1, ch * 0.4, cw * 0.1, ch * 0.05, cw / 2, ch * 0.25);
-          ctx.bezierCurveTo(cw * 0.9, ch * 0.05, cw * 0.9, ch * 0.4, cw / 2, ch * 0.75);
-          ctx.closePath();
-        }
-      }
+    ? shapeMaskClipFunc(shapeMask, element.width, element.height)
     : undefined;
 
   return (
@@ -902,12 +917,26 @@ const MaskedLeaf: FC<{
     <MaskedLayer
       element={element}
       mask={stencil}
-      cacheKey={`${element.maskSrc ?? ''}:${geometryNonce ?? 0}`}
+      cacheKey={`${element.maskSrc ?? ''}:${leafGeometryKey(element)}:${geometryNonce ?? 0}`}
     >
       {children}
     </MaskedLayer>
   );
 };
+
+/**
+ * One layer's geometry as a cache-key fragment.
+ *
+ * Folded into a layer's OWN wrapper keys (and into the key of any cached
+ * scope that folds the layer in), so a wrapper re-rasterises when the layer
+ * it buffers actually moves — and only then. During a drag the ephemeral
+ * store writes re-render per rAF frame, so the dragged element's own cached
+ * wrappers track the frame live while every other layer's key (and buffer)
+ * stays put. Mirrors `geometrySignature` in use-geometry-nonce.ts.
+ */
+const leafGeometryKey = (el: DesignerElement): string =>
+  `${el.x},${el.y},${el.width},${el.height},${el.rotation ?? 0}` +
+  `,${el.flipX ? 1 : 0},${el.flipY ? 1 : 0}`;
 
 /**
  * The StyledLayer cache key for a leaf.
@@ -919,17 +948,22 @@ const MaskedLeaf: FC<{
  * the filter-cache fix at ImageNode). Folding the load state into the key
  * forces a re-cache the moment the bitmap lands.
  *
- * `geometryGen` is the gesture-commit nonce (see `geometryNonce` on
- * `CanvasElements`): the styled buffer is cached in scene space, so a
- * committed move/resize must rebuild it once — per-frame geometry stays out
- * of the key for the same perf reason as the adjustment scope's.
+ * The layer's own geometry IS part of the key: the styled buffer is cached in
+ * scene space, so a buffer keyed without it kept painting at the pre-drag
+ * position for the whole gesture and only snapped on drop. Because only the
+ * dragged element's geometry changes mid-gesture, only ITS wrapper
+ * re-rasterises per (rAF-throttled) frame — the cost the keys exist to avoid
+ * was re-rasterising EVERY styled layer on every frame, which this does not
+ * do. `geometryGen` is the gesture-commit nonce (see `geometryNonce` on
+ * `CanvasElements`), which still turns the key over once on commit.
  */
 export const styledLeafCacheKey = (
   element: DesignerElement,
   image: HTMLImageElement | null,
   geometryGen?: string | number
 ): string =>
-  `${element.id}:${image ? 'ready' : 'pending'}${geometryGen != null ? `:${geometryGen}` : ''}`;
+  `${element.id}:${image ? 'ready' : 'pending'}:${leafGeometryKey(element)}` +
+  `${geometryGen != null ? `:${geometryGen}` : ''}`;
 
 /**
  * Wraps a leaf in its layer effects, if it has any.
@@ -1630,6 +1664,7 @@ export const CanvasElements: FC<ElementsProps> = ({
         if (el.hidden) return acc;
 
         if (el.type === 'group') {
+          const leaves = collectVisibleLeaves(node.children);
           return [
             ...acc,
             {
@@ -1637,12 +1672,15 @@ export const CanvasElements: FC<ElementsProps> = ({
                 <LayerGroup
                   key={el.id}
                   element={el}
-                  cacheKey={`${node.children.length}:${geometryNonce ?? 0}`}
+                  // A cached group freezes its composite too: the key tracks
+                  // the geometry of every visible leaf inside it, so a dragged
+                  // member's group re-rasterises with it — and only that group.
+                  cacheKey={`${node.children.length}:${leaves.map(leafGeometryKey).join(',')}:${geometryNonce ?? 0}`}
                 >
                   {renderNodes(node.children)}
                 </LayerGroup>
               ),
-              els: collectVisibleLeaves(node.children),
+              els: leaves,
             },
           ];
         }

@@ -106,11 +106,16 @@ describe('adjustmentScopeCacheKey', () => {
     );
   });
 
-  it('does NOT change when folded layers move mid-gesture (perf design)', () => {
+  it('changes when a folded layer moves — the scope’s bitmap must track its layers', () => {
     // The prod fixture's styled image dragged across the canvas: x/y move per
-    // drag frame and must not re-rasterise the filtered scope.
+    // rAF-throttled drag frame, and the scope holding the DRAGGED layer must
+    // re-rasterise with it — Konva never repaints a cached node for a moved
+    // descendant, so a key that ignored geometry left the bitmap frozen at
+    // the pre-drag position until drop. Scopes whose folded layers did NOT
+    // move keep their key (see the stability test above), so this is not a
+    // re-rasterise-everything-per-frame regime.
     const moved = { ...prodImage, x: 900, y: 640 } as DesignerElement;
-    expect(adjustmentScopeCacheKey('bg-pending', [prodImage], ready, 7)).toBe(
+    expect(adjustmentScopeCacheKey('bg-pending', [prodImage], ready, 7)).not.toBe(
       adjustmentScopeCacheKey('bg-pending', [moved], ready, 7)
     );
   });
