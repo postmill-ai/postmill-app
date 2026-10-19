@@ -133,7 +133,7 @@ describe('CustomFileValidationPipe', () => {
       size: 100,
     };
 
-    await expect(pipe.transform(value)).rejects.toThrow('Invalid file upload.');
+    await expect(pipe.transform(value)).rejects.toThrow('Could not detect the file type.');
   });
 
   it('cleans up temp file on validation error', async () => {

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -195,6 +196,9 @@ export class MediaController {
     isPicturePrompt = false
   ) {
     try {
+      if (typeof prompt !== 'string' || !prompt.trim()) {
+        throw new BadRequestException('prompt must be a non-empty string');
+      }
       let finalPrompt = prompt;
       // The low-reasoning rewrite exists to expand terse ideas; a prompt that
       // is already detailed only drifts off the user's specifics when
