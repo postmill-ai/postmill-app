@@ -92,6 +92,21 @@ Organizations can also connect channels with their own app keys, and direct-auth
 
 ---
 
+## 🎬 The Designer — a full image & video editor, built in
+
+A production-grade, layered editor inside your publishing workspace — no round-trips through Canva, Photoshop, or CapCut. People at home in professional design tools should feel at home here; people who aren't can start from a template or let the AI Designer drive.
+
+- **Image mode** — a Photoshop-style layered canvas: rich text, shapes, pen and path tools, brushes, gradients, marquee/lasso/object selections, crop, clone stamp, blend modes, and brand-kit colors and fonts surfaced while you work.
+- **Video mode** — a multi-track timeline (video, image, text, audio, captions) with trimming, splitting, transitions, keyframed motion (custom or one-click Ken Burns), speed ramps, reverse, freeze frames, filters and cinematic looks, fades, and volume envelopes — up to three minutes at 30 fps.
+- **AI generation without leaving the canvas** — generate images, video, music, voiceovers, and avatar clips from inside the editor. Each prompt dialog uses your organization's default model, or drops down to any configured provider — Replicate, OpenAI, OpenRouter, HeyGen, Runway, and more — with that provider's own settings embedded. Results land directly on the canvas or timeline.
+- **AI edit tools** — remove backgrounds, upscale, inpaint, expand images, auto-detect subjects, and replace images in place.
+- **Multi-format by design** — one editable file holds every channel variant (square post, portrait reel, story, and more), each with its own aspect ratio and layout. Export any variant to the media library, or attach the whole set to a multi-channel scheduled post.
+- **Templates** — save any design as a reusable, on-brand template for the team.
+
+Prefer to describe the design than draw it? The **AI Designer** drives the same production workflow through a conversational creative agent — see [46 built-in media tools](#-46-built-in-media-tools).
+
+---
+
 ## 📅 Visual publishing calendar
 
 Month, week, and day views of scheduled, published, draft, and failed posts across every channel. Filter by channel, open a post to review its content and performance, or drag it within the week view to reschedule. Times follow each user's timezone.
