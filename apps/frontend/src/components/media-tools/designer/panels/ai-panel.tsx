@@ -13,6 +13,7 @@ import {
   CompactStudio,
   type CompactStudioResult,
 } from '@postmill-ai/frontend/components/media-tools/studio-kit/compact-studio';
+import { addImageClipToTimeline } from '@postmill-ai/frontend/components/media-tools/designer/add-media-to-timeline';
 
 interface AiPanelProps {
   store: any;
@@ -106,6 +107,29 @@ export const AiPanel: FC<AiPanelProps> = ({ store, onClose }) => {
         const out = state.doc.outputs[state.currentOutput];
         const naturalWidth = img.naturalWidth || out.width;
         const naturalHeight = img.naturalHeight || out.height;
+
+        // addElement is a silent no-op in video mode (designer.store.ts) —
+        // land the image as a timeline clip instead, or the success toast
+        // would lie (prod: completed job, design JSON unchanged, no clip).
+        if (state.doc.mode === 'video') {
+          const clipId = addImageClipToTimeline(store, {
+            url: item.path,
+            fileId: item.id,
+            width: naturalWidth,
+            height: naturalHeight,
+          });
+          if (!clipId) {
+            toaster.show(
+              t('ai_panel_could_not_add_to_timeline', 'Could not add the image to the timeline'),
+              'warning'
+            );
+            return;
+          }
+          toaster.show(t('ai_panel_image_added_to_timeline', 'Image added to timeline'), 'success');
+          onClose?.();
+          return;
+        }
+
         const maxW = out.width * 0.9;
         const maxH = out.height * 0.9;
         const scale = Math.min(1, maxW / naturalWidth, maxH / naturalHeight);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 
@@ -10,8 +10,9 @@ vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
       vars ? fallback.replace(/\{\{(\w+)\}\}/g, (_m, k) => String(vars[k])) : fallback,
 }));
 
+const toastShow = vi.fn();
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
-  useToaster: () => ({ show: vi.fn() }),
+  useToaster: () => ({ show: toastShow }),
 }));
 
 vi.mock('@postmill-ai/frontend/components/layout/use-media-tools-status', () => ({
@@ -28,6 +29,15 @@ vi.mock('@postmill-ai/frontend/components/media-tools/use-media-picker', () => (
   useMediaPicker: () => ({ open: vi.fn(), element: null }),
 }));
 
+const addImageClipMock = vi.fn();
+vi.mock('@postmill-ai/frontend/components/media-tools/designer/add-media-to-timeline', () => ({
+  addMediaToTimeline: vi.fn(),
+  addVoiceoverToTimeline: vi.fn(),
+  probeAudioDuration: vi.fn(),
+  probeVideoMetadata: vi.fn(),
+  addImageClipToTimeline: (store: unknown, options: unknown) => addImageClipMock(store, options),
+}));
+
 const fetchMock = vi.fn();
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => fetchMock,
@@ -37,18 +47,37 @@ import { AiPanel } from './ai-panel';
 
 const ok = (body: unknown) => ({ ok: true, json: async () => body }) as Response;
 
+// jsdom never fires img.onload for real URLs — stub Image so the probed
+// natural size is deterministic and onload fires immediately.
+class MockImage {
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  naturalWidth = 400;
+  naturalHeight = 300;
+  set src(_v: string) {
+    setTimeout(() => this.onload?.(), 0);
+  }
+}
+
+beforeAll(() => vi.stubGlobal('Image', MockImage));
+afterAll(() => vi.unstubAllGlobals());
+
+const addElementMock = vi.fn();
+let docMode: 'image' | 'video' = 'image';
+let jobsPayload: unknown[] = [];
+
 const store = {
   getState: () => ({
-    doc: { outputs: [{ width: 100, height: 100 }] },
+    doc: { mode: docMode, outputs: [{ width: 100, height: 100 }] },
     currentOutput: 0,
-    addElement: vi.fn(),
+    addElement: addElementMock,
   }),
 };
 
-const renderPanel = () =>
+const renderPanel = (onClose?: () => void) =>
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <AiPanel store={store} />
+      <AiPanel store={store} onClose={onClose} />
     </SWRConfig>
   );
 
@@ -60,8 +89,19 @@ const typePrompt = async (text: string) => {
 const callsTo = (path: string) =>
   fetchMock.mock.calls.filter(([url]) => String(url).includes(path));
 
+const generateLegacyAndClick = async () => {
+  await typePrompt('a cat');
+  fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+  fireEvent.click(await screen.findByTitle('Click to add to canvas'));
+};
+
 beforeEach(() => {
   sessionStorage.clear();
+  docMode = 'image';
+  jobsPayload = [];
+  addElementMock.mockClear();
+  toastShow.mockClear();
+  addImageClipMock.mockReset().mockReturnValue('clip-1');
   fetchMock.mockReset();
   fetchMock.mockImplementation((url: string) => {
     if (url.includes('/media/generation-providers')) {
@@ -75,7 +115,7 @@ beforeEach(() => {
     if (url.includes('/media/studio/google/status')) {
       return Promise.resolve(ok({ configured: true, enabled: true }));
     }
-    if (url.includes('/media/studio/google/jobs')) return Promise.resolve(ok([]));
+    if (url.includes('/media/studio/google/jobs')) return Promise.resolve(ok(jobsPayload));
     if (url.includes('/media/generate-image-with-prompt')) {
       return Promise.resolve(ok({ id: 'f1', path: '/uploads/x.png', name: 'x' }));
     }
@@ -112,5 +152,88 @@ describe('AiPanel provider picker wiring', () => {
     expect(callsTo('/media/generate-image-with-prompt')).toHaveLength(0);
     const [, init] = callsTo('/media/studio/google/generate')[0];
     expect(JSON.parse((init as RequestInit).body as string).input.prompt).toBe('a cat');
+  });
+});
+
+describe('AiPanel video-mode landing (prod regression cmvft5lss0020synvehyb9hjd)', () => {
+  it('lands a legacy result as a timeline clip in video mode (addElement is a no-op there)', async () => {
+    docMode = 'video';
+    const onClose = vi.fn();
+    renderPanel(onClose);
+    await generateLegacyAndClick();
+
+    await waitFor(() =>
+      expect(addImageClipMock).toHaveBeenCalledWith(store, {
+        url: '/uploads/x.png',
+        fileId: 'f1',
+        width: 400,
+        height: 300,
+      })
+    );
+    expect(addElementMock).not.toHaveBeenCalled();
+    expect(toastShow).toHaveBeenCalledWith('Image added to timeline', 'success');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('lands a CompactStudioResult as a timeline clip in video mode', async () => {
+    docMode = 'video';
+    const onClose = vi.fn();
+    jobsPayload = [
+      {
+        id: 'job-1',
+        operation: 'image',
+        status: 'completed',
+        artifactUrl: '/uploads/cat.png',
+        fileId: 'file-9',
+        error: null,
+        createdAt: '2026-10-19T00:00:00.000Z',
+      },
+    ];
+    renderPanel(onClose);
+    await typePrompt('a cat');
+    const select = (await screen.findByLabelText('Provider:')) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'google' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+
+    await waitFor(() =>
+      expect(addImageClipMock).toHaveBeenCalledWith(store, {
+        url: '/uploads/cat.png',
+        fileId: 'file-9',
+        width: 400,
+        height: 300,
+      })
+    );
+    expect(toastShow).toHaveBeenCalledWith('Image added to timeline', 'success');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('warns instead of toasting success when the timeline cannot take the clip', async () => {
+    docMode = 'video';
+    addImageClipMock.mockReturnValue(null);
+    const onClose = vi.fn();
+    renderPanel(onClose);
+    await generateLegacyAndClick();
+
+    await waitFor(() =>
+      expect(toastShow).toHaveBeenCalledWith('Could not add the image to the timeline', 'warning')
+    );
+    expect(toastShow).not.toHaveBeenCalledWith('Image added to timeline', 'success');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('keeps the addElement path in image mode', async () => {
+    docMode = 'image';
+    const onClose = vi.fn();
+    renderPanel(onClose);
+    await generateLegacyAndClick();
+
+    await waitFor(() =>
+      expect(addElementMock).toHaveBeenCalledWith(
+        expect.objectContaining({ src: '/uploads/x.png', fileId: 'f1', naturalWidth: 400, naturalHeight: 300 })
+      )
+    );
+    expect(addImageClipMock).not.toHaveBeenCalled();
+    expect(toastShow).toHaveBeenCalledWith('Image added to canvas', 'success');
+    expect(onClose).toHaveBeenCalled();
   });
 });
