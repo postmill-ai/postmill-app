@@ -13,62 +13,11 @@ import { StudioLanding } from './studio-landing';
 import { RenderQueue } from './render-queue';
 import { useStudioStatus, useStudioJobs, useStudioGenerate } from './hooks';
 import { studioNs, studioTabKey, studioTabDescKey } from './i18n-keys';
+import { buildBody, defaultsFor, isFilled } from './studio-form-utils';
 import type {
-  FileFieldValue,
   StudioDescriptor,
   StudioFieldValue,
-  StudioGenerateBody,
-  StudioTab,
 } from './types';
-
-function defaultsFor(tab: StudioTab): Record<string, StudioFieldValue> {
-  const out: Record<string, StudioFieldValue> = {};
-  for (const f of tab.fields) {
-    if (f.type === 'select') {
-      if (f.default !== undefined) out[f.name] = f.default;
-      // A plain <select> visually shows its first option even when nothing is
-      // picked — seed it so the displayed value is actually submitted. Dynamic
-      // model comboboxes (source:'models') render an empty search box, so skip.
-      else if (f.source !== 'models' && f.options?.length) out[f.name] = f.options[0].value;
-    } else if (f.type === 'number') {
-      if (f.default !== undefined) out[f.name] = f.default;
-      // A range slider always shows a thumb (min when unset) — seed min so it's
-      // submitted; a plain number input renders empty, so only seed when ranged.
-      else if (f.min !== undefined && f.max !== undefined) out[f.name] = f.min;
-    } else if (f.type === 'toggle' && f.default !== undefined) {
-      out[f.name] = f.default;
-    }
-  }
-  return out;
-}
-
-function isFilled(value: StudioFieldValue): boolean {
-  if (value === undefined || value === '') return false;
-  if (typeof value === 'object') return !!(value.fileId || value.url);
-  return true;
-}
-
-function buildBody(tab: StudioTab, values: Record<string, StudioFieldValue>): StudioGenerateBody {
-  const input: Record<string, string | number | boolean> = {};
-  const mediaInputs: Record<string, string> = {};
-  for (const f of tab.fields) {
-    const v = values[f.name];
-    if (f.type === 'media') {
-      const fv = v as FileFieldValue | undefined;
-      if (fv?.fileId) mediaInputs[f.name] = fv.fileId;
-      else if (fv?.url) input[f.name] = fv.url;
-    } else if (v !== undefined && v !== '' && !(typeof v === 'number' && Number.isNaN(v))) {
-      input[f.name] = v as string | number | boolean;
-    }
-  }
-  const model = tab.model || (typeof values['model'] === 'string' ? (values['model'] as string) : undefined);
-  return {
-    operation: tab.operation,
-    model,
-    input,
-    mediaInputs: Object.keys(mediaInputs).length ? mediaInputs : undefined,
-  };
-}
 
 export function StudioShell({ descriptor }: { descriptor: StudioDescriptor }) {
   const { provider, title, tabs } = descriptor;

@@ -32,6 +32,14 @@ import {
   splitSpeedCurveForClip,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
+import {
+  GenerationProviderPicker,
+  useGenerationProviderChoice,
+} from '@postmill-ai/frontend/components/media-tools/designer/panels/generation-provider-picker';
+import {
+  CompactStudio,
+  type CompactStudioResult,
+} from '@postmill-ai/frontend/components/media-tools/studio-kit/compact-studio';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import {
@@ -772,12 +780,15 @@ interface AiVideoDialogProps {
   onResult: (type: 'video' | 'audio', idOrUrl: string | false) => Promise<void>;
 }
 
-const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult }) => {
+export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult }) => {
   const t = useT();
   const modals = useModals();
   const [prompt, setPrompt] = useState('');
   const [useImage, setUseImage] = useState(false);
   const [loading, setLoading] = useState(false);
+  // '' = org default provider (legacy path); an explicit provider embeds its
+  // compact studio, which owns generation inside the modal.
+  const [provider, setProvider] = useGenerationProviderChoice('video');
 
   const generate = useCallback(async () => {
     if (!prompt.trim()) {
@@ -805,6 +816,16 @@ const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSr
     }
   }, [fetch, prompt, useImage, selectedImageSrc, onResult, toaster, modals, t]);
 
+  const handleStudioGenerated = useCallback(
+    async (result: CompactStudioResult) => {
+      // Already-complete artifact — land it like a finished landOrPoll (the
+      // artifactUrl takes the no-poll path there).
+      modals.closeAll();
+      await onResult('video', result.artifactUrl);
+    },
+    [modals, onResult]
+  );
+
   return (
     <div className="flex flex-col gap-3 min-w-[280px]">
       <textarea
@@ -813,24 +834,41 @@ const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSr
         placeholder={t('describe_the_video_you_want_to_generate', 'Describe the video you want to generate...')}
         className="w-full bg-newBgColor border border-studioBorder rounded-sm p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-hidden min-h-[80px]"
       />
-      {selectedImageSrc && (
-        <label className="flex items-center gap-2 text-[11px] text-textColor cursor-pointer">
-          <input
-            type="checkbox"
-            checked={useImage}
-            onChange={(e) => setUseImage(e.target.checked)}
-            className="accent-designerAccent w-3 h-3"
-          />
-          {t('use_selected_image', 'Use selected image')}
-        </label>
+      <GenerationProviderPicker
+        operation="video"
+        dialogKey="video"
+        value={provider}
+        onChange={setProvider}
+      />
+      {provider ? (
+        <CompactStudio
+          provider={provider}
+          operation="video"
+          prompt={prompt}
+          onGenerated={handleStudioGenerated}
+        />
+      ) : (
+        <>
+          {selectedImageSrc && (
+            <label className="flex items-center gap-2 text-[11px] text-textColor cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useImage}
+                onChange={(e) => setUseImage(e.target.checked)}
+                className="accent-designerAccent w-3 h-3"
+              />
+              {t('use_selected_image', 'Use selected image')}
+            </label>
+          )}
+          <button
+            onClick={generate}
+            disabled={loading || !prompt.trim()}
+            className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
+          </button>
+        </>
       )}
-      <button
-        onClick={generate}
-        disabled={loading || !prompt.trim()}
-        className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
-      </button>
     </div>
   );
 };
@@ -841,11 +879,14 @@ interface MusicDialogProps {
   onResult: (type: 'video' | 'audio', idOrUrl: string | false) => Promise<void>;
 }
 
-const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) => {
+export const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) => {
   const t = useT();
   const modals = useModals();
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
+  // '' = org default provider (legacy path); an explicit provider embeds its
+  // compact studio, which owns generation inside the modal.
+  const [provider, setProvider] = useGenerationProviderChoice('audio');
 
   const generate = useCallback(async () => {
     if (!prompt.trim()) {
@@ -870,6 +911,16 @@ const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) => {
     }
   }, [fetch, prompt, onResult, toaster, modals, t]);
 
+  const handleStudioGenerated = useCallback(
+    async (result: CompactStudioResult) => {
+      // Already-complete artifact — land it like a finished landOrPoll (the
+      // artifactUrl takes the no-poll path there).
+      modals.closeAll();
+      await onResult('audio', result.artifactUrl);
+    },
+    [modals, onResult]
+  );
+
   return (
     <div className="flex flex-col gap-3 min-w-[280px]">
       <textarea
@@ -878,13 +929,28 @@ const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) => {
         placeholder={t('describe_the_music_you_want_to_generate', 'Describe the music you want to generate...')}
         className="w-full bg-newBgColor border border-studioBorder rounded-sm p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-hidden min-h-[80px]"
       />
-      <button
-        onClick={generate}
-        disabled={loading || !prompt.trim()}
-        className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
-      </button>
+      <GenerationProviderPicker
+        operation="audio"
+        dialogKey="audio"
+        value={provider}
+        onChange={setProvider}
+      />
+      {provider ? (
+        <CompactStudio
+          provider={provider}
+          operation="audio"
+          prompt={prompt}
+          onGenerated={handleStudioGenerated}
+        />
+      ) : (
+        <button
+          onClick={generate}
+          disabled={loading || !prompt.trim()}
+          className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
+        </button>
+      )}
     </div>
   );
 };

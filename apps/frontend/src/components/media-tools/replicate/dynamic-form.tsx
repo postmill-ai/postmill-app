@@ -284,7 +284,7 @@ function AdvancedFieldRow({ entry }: { entry: ClassifiedField }) {
 
 const ALWAYS_EXCLUDED = ['mask'];
 
-export function DynamicForm() {
+export function DynamicForm({ hiddenFields }: { hiddenFields?: Set<string> }) {
   const t = useT();
   const selectedModel = useReplicateStore((s) => s.selectedModel);
   const selectedCategory = useReplicateStore((s) => s.selectedCategory);
@@ -294,8 +294,11 @@ export function DynamicForm() {
     const set = new Set<string>(ALWAYS_EXCLUDED);
     // Inpaint drives image + mask via the dedicated mask editor.
     if (selectedCategory === 'inpaint') set.add('image');
+    // Embedded hosts (CompactReplicate) own some fields themselves — e.g. the
+    // dialog's prompt box drives the schema's prompt field.
+    for (const name of hiddenFields ?? []) set.add(name);
     return set;
-  }, [selectedCategory]);
+  }, [selectedCategory, hiddenFields]);
 
   const { primary, advanced } = useMemo(
     () => classifySchema(selectedModel?.inputSchema as unknown as InputSchema | null, excluded),

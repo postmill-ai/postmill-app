@@ -5,6 +5,14 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import {
+  GenerationProviderPicker,
+  useGenerationProviderChoice,
+} from '@postmill-ai/frontend/components/media-tools/designer/panels/generation-provider-picker';
+import {
+  CompactStudio,
+  type CompactStudioResult,
+} from '@postmill-ai/frontend/components/media-tools/studio-kit/compact-studio';
 
 interface AiPanelProps {
   store: any;
@@ -33,6 +41,9 @@ export const AiPanel: FC<AiPanelProps> = ({ store, onClose }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [results, setResults] = useState<GeneratedImage[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  // '' = org default provider (the legacy path below); an explicit provider
+  // embeds its compact studio, which owns generation instead.
+  const [provider, setProvider] = useGenerationProviderChoice('image');
 
   const inFlight = status === 'queued' || status === 'generating';
 
@@ -128,14 +139,27 @@ export const AiPanel: FC<AiPanelProps> = ({ store, onClose }) => {
     [store, toaster, t, onClose]
   );
 
+  const handleStudioGenerated = useCallback(
+    (result: CompactStudioResult) => {
+      // Land exactly like a legacy result: centered/scaled via handleAddToCanvas
+      // (which also dismisses the hosting modal through onClose).
+      handleAddToCanvas({
+        id: result.fileId,
+        path: result.artifactUrl,
+        name: result.artifactUrl.split('/').pop() || 'AI image',
+      });
+    },
+    [handleAddToCanvas]
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter' && !e.shiftKey && !provider) {
         e.preventDefault();
         handleGenerate();
       }
     },
-    [handleGenerate]
+    [handleGenerate, provider]
   );
 
   if (!textToImageAvailable) {
@@ -159,23 +183,40 @@ export const AiPanel: FC<AiPanelProps> = ({ store, onClose }) => {
           placeholder={t('ai_panel_describe_image_placeholder', 'Describe the image...')}
           className="flex-1 h-[36px] px-[10px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
         />
-        {inFlight ? (
-          <button
-            onClick={handleCancel}
-            className="px-[12px] h-[36px] rounded-[6px] border border-studioBorder text-textColor text-[13px] font-medium hover:bg-boxHover shrink-0"
-          >
-            {t('cancel', 'Cancel')}
-          </button>
-        ) : (
-          <button
-            onClick={handleGenerate}
-            disabled={!prompt.trim()}
-            className="px-[12px] h-[36px] rounded-[6px] bg-designerAccent text-white text-[13px] font-medium hover:bg-designerAccent/80 disabled:opacity-50 shrink-0"
-          >
-            {t('generate', 'Generate')}
-          </button>
-        )}
+        {!provider &&
+          (inFlight ? (
+            <button
+              onClick={handleCancel}
+              className="px-[12px] h-[36px] rounded-[6px] border border-studioBorder text-textColor text-[13px] font-medium hover:bg-boxHover shrink-0"
+            >
+              {t('cancel', 'Cancel')}
+            </button>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              disabled={!prompt.trim()}
+              className="px-[12px] h-[36px] rounded-[6px] bg-designerAccent text-white text-[13px] font-medium hover:bg-designerAccent/80 disabled:opacity-50 shrink-0"
+            >
+              {t('generate', 'Generate')}
+            </button>
+          ))}
       </div>
+
+      <GenerationProviderPicker
+        operation="image"
+        dialogKey="image"
+        value={provider}
+        onChange={setProvider}
+      />
+
+      {provider && (
+        <CompactStudio
+          provider={provider}
+          operation="image"
+          prompt={prompt}
+          onGenerated={handleStudioGenerated}
+        />
+      )}
 
       {status === 'queued' && (
         <div className="flex items-center justify-center gap-2 py-6 text-newTextColor/65 text-[13px]">

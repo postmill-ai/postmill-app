@@ -76,6 +76,7 @@ export default defineConfig({
       'src/components/media-tools/designer/panels/*.spec.{ts,tsx}',
       'src/components/media-tools/ai-designer/*.spec.{ts,tsx}',
       'src/components/media-tools/studio-kit/*.spec.{ts,tsx}',
+      'src/components/media-tools/replicate/*.spec.{ts,tsx}',
       'src/components/media-tools/*.spec.{ts,tsx}',
       'src/components/composer/picks.socials.component.spec.{ts,tsx}',
       'src/components/composer/manage.modal.spec.{ts,tsx}',
