@@ -19,12 +19,14 @@ import {
   MAX_ELEMENTS_PER_OUTPUT,
   MAX_FILTERS_PER_ELEMENT,
   MAX_FONT_SIZE,
+  MAX_INLINE_SRC_LEN,
   MAX_LAYER_STYLES,
   MAX_SMART_FILTERS,
   MAX_OPS_PER_REQUEST,
   MAX_OUTPUTS,
   MAX_PAGES_PER_OUTPUT,
   MAX_PATH_NODES,
+  MAX_SRC_LEN,
   MAX_TEXT_LEN,
   MAX_TRACKS,
   MAX_VIDEO_DURATION_MS,
@@ -70,11 +72,17 @@ export const ColorSchema = z.string().max(64);
 
 export const SrcSchema = z
   .string()
-  .max(2048)
   .refine(
     (s) =>
       s.startsWith('data:') || /^https?:\/\//.test(s) || isSvgMarkupSrc(s),
     'src must be a data: or http(s) URL, or raw SVG markup (icon elements only)'
+  )
+  .refine(
+    // Remote URLs stay tight; inline payloads (data: URLs, raw SVG markup on
+    // icon elements) get the larger budget from MAX_INLINE_SRC_LEN.
+    (s) =>
+      s.length <= (/^https?:\/\//.test(s) ? MAX_SRC_LEN : MAX_INLINE_SRC_LEN),
+    'src is too long'
   );
 
 export const DesignerFilterStringSchema = z
@@ -1576,7 +1584,20 @@ const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
     },
     {
       tMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
-      props: z.record(z.string(), z.number().finite()),
+      // A NaN prop serializes to null over JSON; lenient parse drops such
+      // entries (interpolation falls back to the clip's base value) instead
+      // of rejecting the whole document on every save.
+      props: z.preprocess(
+        (v) =>
+          v && typeof v === 'object' && !Array.isArray(v)
+            ? Object.fromEntries(
+                Object.entries(v as Record<string, unknown>).filter(
+                  ([, n]) => typeof n === 'number' && Number.isFinite(n)
+                )
+              )
+            : v,
+        z.record(z.string(), z.number().finite())
+      ),
       ease: EaseSchema.optional(),
     }
   );

@@ -1,5 +1,6 @@
 import type { DesignerDoc, createDesignerStore } from './designer.store';
 import { isBlankDoc } from './designer-doc-blank';
+import * as Sentry from '@sentry/nextjs';
 
 type DesignerStoreApi = ReturnType<typeof createDesignerStore>;
 
@@ -13,6 +14,50 @@ export interface DesignAutosaveDeps {
   fetchFn: (url: string, init?: RequestInit) => Promise<Response>;
   uploadPreview: () => Promise<PreviewUpload>;
 }
+
+/**
+ * A failed autosave used to throw a bare 'Autosave PUT failed' — the server's
+ * actual reason (e.g. the DesignerDoc validation issues on a 400) never
+ * reached anyone, so a design whose doc tripped a schema rule failed EVERY
+ * save forever with no way to find out why. Pull the message — and any
+ * validation issue paths — out of the response body and report it: the pill
+ * stays generic, but the console and Sentry now carry the cause.
+ */
+const autosaveError = async (
+  res: Response,
+  fallback: string
+): Promise<Error> => {
+  let message = fallback;
+  try {
+    const body = await res.json();
+    const base =
+      typeof body?.message === 'string' && body.message
+        ? body.message
+        : Array.isArray(body?.message)
+          ? body.message
+              .filter((m: unknown): m is string => typeof m === 'string')
+              .join(' ')
+          : typeof body?.error === 'string' && body.error
+            ? body.error
+            : fallback;
+    const issues = Array.isArray(body?.issues)
+      ? body.issues
+          .slice(0, 5)
+          .map(
+            (i: { path?: unknown; message?: unknown }) =>
+              `${Array.isArray(i?.path) ? i.path.join('.') : ''}: ${i?.message}`
+          )
+          .join('; ')
+      : '';
+    message = issues ? `${base} (${issues})` : base;
+  } catch {
+    // Non-JSON error body — keep the fallback.
+  }
+  const err = new Error(`${fallback}: ${res.status} ${message}`);
+  console.error(err.message);
+  Sentry.captureException(err);
+  return err;
+};
 
 /**
  * Autosave runs on a store subscription, not on render: a trailing debounce
@@ -185,7 +230,7 @@ export const createDesignAutosave = ({
         }
         if (!res.ok) {
           lastFailed = { doc: sentDoc, name: sentName, preview: { previewFileId, previewDataUrl } };
-          throw new Error('Autosave create failed');
+          throw await autosaveError(res, 'Autosave create failed');
         }
         const data = await res.json();
         // Another flow (template apply) may have landed an id while the POST
@@ -254,7 +299,7 @@ export const createDesignAutosave = ({
     // markSaved and silently dropped the edits.
     if (!res.ok) {
       lastFailed = { doc: sentDoc, name: sentName, preview };
-      throw new Error('Autosave PUT failed');
+      throw await autosaveError(res, 'Autosave PUT failed');
     }
     await res.json();
     return sentName;
@@ -276,7 +321,16 @@ export const createDesignAutosave = ({
     // save would POST a create, so a dirty-but-blank doc (e.g. a rename of a
     // canvas the user never drew on) is skipped. An existing design is
     // unaffected — deleting all content must still persist.
-    if (!state.designId && isBlankDoc(sentDoc)) return;
+    if (!state.designId && isBlankDoc(sentDoc)) {
+      // A retry that lands here (the create failed, then the canvas went
+      // blank) must not leave the failure pill stuck on "Save failed —
+      // retrying": nothing exists server-side to be out of sync with, and
+      // the gate swallows every later retry the same way.
+      clearRetry();
+      state.setSaveFailed(false);
+      state.setSaveRetryPaused(false);
+      return;
+    }
     if (!state.designId) {
       // First-edit autosave. The brand-compliance check stays manual-save-only
       // — autosave never blocks on it. When the create lands its id in the

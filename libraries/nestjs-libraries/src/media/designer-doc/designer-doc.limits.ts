@@ -70,6 +70,18 @@ export const MAX_PAGES_PER_OUTPUT = 20;
 export const MAX_TEXT_LEN = 20000;
 
 /**
+ * Maximum length of an element/clip `src` holding a remote http(s) URL.
+ */
+export const MAX_SRC_LEN = 2048;
+
+/**
+ * Maximum length of an inline `src` (data: URL or raw SVG markup on icon
+ * elements). An Iconify icon's markup is a few KB, so the shared URL cap used
+ * to reject every save of a design carrying a complex icon.
+ */
+export const MAX_INLINE_SRC_LEN = 262144;
+
+/**
  * Maximum bezier nodes on a `path` element. Generous for hand-drawn Pen work
  * (the Freeform Pen simplifies its trail before storing), while still bounding
  * how much geometry one element can force the renderer to trace.

@@ -12,6 +12,7 @@ import {
   MAX_DIMENSION,
   MAX_ELEMENTS_PER_OUTPUT,
   MAX_FONT_SIZE,
+  MAX_INLINE_SRC_LEN,
   MAX_VIDEO_DURATION_MS,
 } from './designer-doc.limits';
 
@@ -121,6 +122,20 @@ describe('DesignerDoc schema', () => {
     const parsed = DesignerDocLenientSchema.parse(migrateDoc(videoDocFixture));
     expect(parsed.mode).toBe('video');
     expect(parsed.outputs[0].tracks[0].clips[0].fontWeight).toBe(700);
+  });
+
+  it('drops non-finite keyframe props in lenient mode instead of rejecting the doc', () => {
+    // A NaN prop serializes to null over JSON — before this, one bad prop
+    // failed EVERY save of the design with an opaque 400.
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].tracks[0].clips[0].keyframes = [
+      { tMs: 0, props: { opacity: null, x: 10 } },
+      { tMs: 500, props: { opacity: 1 } },
+    ];
+    const parsed = DesignerDocLenientSchema.parse(migrateDoc(doc));
+    const keyframes = parsed.outputs[0].tracks[0].clips[0].keyframes!;
+    expect(keyframes[0].props).toEqual({ x: 10 });
+    expect(keyframes[1].props).toEqual({ opacity: 1 });
   });
 
   it('parses a valid image doc strictly', () => {
@@ -469,6 +484,21 @@ describe('primitive schemas', () => {
 
   it('rejects a src longer than 2048 chars', () => {
     expect(SrcSchema.safeParse('https://x/' + 'a'.repeat(2048)).success).toBe(false);
+  });
+
+  it('accepts an inline (data:/SVG-markup) src past the URL cap', () => {
+    expect(
+      SrcSchema.safeParse('data:image/svg+xml;base64,' + 'a'.repeat(10_000)).success
+    ).toBe(true);
+    expect(SrcSchema.safeParse('<path d="' + 'M0 0h1v1z'.repeat(1000) + '"/>').success).toBe(
+      true
+    );
+  });
+
+  it('rejects an inline src beyond the inline cap', () => {
+    expect(
+      SrcSchema.safeParse('data:image/png;base64,' + 'a'.repeat(MAX_INLINE_SRC_LEN)).success
+    ).toBe(false);
   });
 
   it('rejects a non-filter token', () => {

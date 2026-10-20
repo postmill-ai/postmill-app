@@ -554,6 +554,36 @@ describe('createDesignAutosave retry bound', () => {
     expect(store.getState().saveRetryPaused).toBe(true);
     expect(store.getState().designId).toBeNull();
   });
+
+  it('clears the failure pill when a retry lands on a now-blank, never-created design', async () => {
+    vi.useFakeTimers();
+    const store = createDesignerStore();
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: false, json: async () => ({}) } as Response));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({} as PreviewUpload),
+    });
+
+    addText(store, 'Edit');
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState().saveFailed).toBe(true);
+
+    // The user wipes the canvas before the retry fires: the doc is blank and
+    // the design was never created, so there is nothing server-side to be out
+    // of sync with — the pill must clear, not stick on "retrying" forever.
+    const ids = store
+      .getState()
+      .doc.outputs[0].children.map((c: { id: string }) => c.id);
+    store.getState().removeElements(ids);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(store.getState().saveFailed).toBe(false);
+    expect(store.getState().saveRetryPaused).toBe(false);
+    // Exactly one failed POST — the blank gate swallowed every retry.
+    expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(1);
+  });
 });
 
 describe('createAutosaveSubscription', () => {
