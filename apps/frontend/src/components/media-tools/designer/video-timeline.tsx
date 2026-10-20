@@ -24,6 +24,7 @@ import { postTextToSpeech } from './text-to-speech';
 import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, canDropClipOnTrack } from './clip-geometry';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
+import { directFetchForAbsoluteUrls, type WaveformFetch } from './waveform-fetch';
 import { KeyframeLane } from './keyframe-lane';
 import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
@@ -118,8 +119,6 @@ const audioContextSingleton =
   typeof window !== 'undefined'
     ? new (window.AudioContext || (window as any).webkitAudioContext)()
     : null;
-
-type WaveformFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 // Decode each audio source ONCE into a fixed high-resolution peak array, keyed by
 // src only (never by bar count). Trimming/zooming changes bar count continuously,
@@ -228,7 +227,10 @@ function useWaveform(
 const WaveformBars = React.memo(function WaveformBars({ src, width }: { src: string | undefined; width: number }) {
   const fetch = useFetch();
   const barCount = Math.max(6, Math.floor(width / 6));
-  const bars = useWaveform(src, barCount, fetch);
+  // Clip srcs are absolute URLs; useFetch would prefix the backend baseUrl onto
+  // them (CSP-blocked, no waveform) — see waveform-fetch.ts.
+  const waveformFetch = useMemo(() => directFetchForAbsoluteUrls(fetch), [fetch]);
+  const bars = useWaveform(src, barCount, waveformFetch);
   if (!bars) {
     return (
       <>
