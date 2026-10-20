@@ -26,6 +26,11 @@ vi.mock('@postmill-ai/nestjs-libraries/media/design-render/render-progress', () 
 
 vi.mock('@postmill-ai/nestjs-libraries/media/design-render/render-assets', () => ({
   resolveRenderAsset: vi.fn(),
+  isSafeRenderAssetJobId: (jobId: string) => /^[a-z0-9]{20,40}$/i.test(jobId),
+  safeRenderAssetFileName: (fileName: string) => {
+    const match = /^asset-(\d+)\.([a-z0-9]{1,16})$/.exec(fileName);
+    return match ? `asset-${match[1]}.${match[2]}` : null;
+  },
 }));
 
 import { BadRequestException, NotFoundException } from '@nestjs/common';
@@ -608,6 +613,7 @@ describe('DesignRenderFrameController render-progress route', () => {
 
 describe('DesignRenderFrameController render-asset route', () => {
   const frameController = new DesignRenderFrameController({} as any);
+  const jobId = 'clzrenderassetctrl0000001';
   const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-asset-route-'));
   const fixturePath = path.join(fixtureDir, 'asset-0.mp4');
   const fixtureBytes = Buffer.from('0123456789-video-bytes');
@@ -644,15 +650,30 @@ describe('DesignRenderFrameController render-asset route', () => {
     vi.mocked(resolveRenderAsset).mockReset();
   });
 
+  it('400s a malformed jobId or file name before touching the resolver (path-injection guard)', async () => {
+    for (const [badJobId, badFile] of [
+      ['../../etc', 'asset-0.mp4'],
+      ['job-1', 'asset-0.mp4'],
+      [jobId, '../manifest.json'],
+      [jobId, 'manifest.json'],
+      [jobId, 'asset-0.mp4/..'],
+    ] as const) {
+      const res = makeStreamRes();
+      await frameController.renderAsset(badJobId, badFile, 'tok', undefined, res);
+      expect(res.status).toHaveBeenCalledWith(400);
+    }
+    expect(resolveRenderAsset).not.toHaveBeenCalled();
+  });
+
   it('403s an invalid render token and 404s a missing asset', async () => {
     vi.mocked(resolveRenderAsset).mockResolvedValue({ status: 'forbidden' });
     let res = makeStreamRes();
-    await frameController.renderAsset('job-1', 'asset-0.mp4', 'bad', undefined, res);
+    await frameController.renderAsset(jobId, 'asset-0.mp4', 'bad', undefined, res);
     expect(res.status).toHaveBeenCalledWith(403);
 
     vi.mocked(resolveRenderAsset).mockResolvedValue({ status: 'not-found' });
     res = makeStreamRes();
-    await frameController.renderAsset('job-1', 'asset-9.mp4', 'tok', undefined, res);
+    await frameController.renderAsset(jobId, 'asset-9.mp4', 'tok', undefined, res);
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
@@ -666,9 +687,9 @@ describe('DesignRenderFrameController render-asset route', () => {
     const res = makeStreamRes();
     const body = readBody(res);
 
-    await frameController.renderAsset('job-1', 'asset-0.mp4', 'tok', undefined, res);
+    await frameController.renderAsset(jobId, 'asset-0.mp4', 'tok', undefined, res);
 
-    expect(resolveRenderAsset).toHaveBeenCalledWith('job-1', 'asset-0.mp4', 'tok');
+    expect(resolveRenderAsset).toHaveBeenCalledWith(jobId, 'asset-0.mp4', 'tok');
     expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'video/mp4');
     expect(res.setHeader).toHaveBeenCalledWith('Accept-Ranges', 'bytes');
     expect(res.setHeader).toHaveBeenCalledWith('Content-Length', fixtureBytes.byteLength);
@@ -685,7 +706,7 @@ describe('DesignRenderFrameController render-asset route', () => {
     const res = makeStreamRes();
     const body = readBody(res);
 
-    await frameController.renderAsset('job-1', 'asset-0.mp4', 'tok', 'bytes=2-5', res);
+    await frameController.renderAsset(jobId, 'asset-0.mp4', 'tok', 'bytes=2-5', res);
 
     expect(res.status).toHaveBeenCalledWith(206);
     expect(res.setHeader).toHaveBeenCalledWith(
@@ -705,7 +726,7 @@ describe('DesignRenderFrameController render-asset route', () => {
     });
     const res = makeStreamRes();
 
-    await frameController.renderAsset('job-1', 'asset-0.mp4', 'tok', 'bytes=9999-', res);
+    await frameController.renderAsset(jobId, 'asset-0.mp4', 'tok', 'bytes=9999-', res);
 
     expect(res.status).toHaveBeenCalledWith(416);
     expect(res.setHeader).toHaveBeenCalledWith(

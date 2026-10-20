@@ -217,9 +217,26 @@ export type RenderAssetResolution =
   | { status: 'ok'; filePath: string; contentType: string; size: number }
   | { status: 'forbidden' | 'not-found' };
 
-// Only the names preloadRenderMedia writes (asset-<i>.<ext>); anything else —
-// including the manifest and any traversal attempt — is a 404.
-const SAFE_ASSET_FILE_NAME = /^asset-\d+\.[a-z0-9]{1,16}$/;
+// Only the names preloadRenderMedia writes (asset-<i>.<ext>).
+const SAFE_ASSET_FILE_NAME = /^asset-(\d+)\.([a-z0-9]{1,16})$/;
+
+/**
+ * Validate a render-asset file name and REBUILD it from the strict regex
+ * captures, so the string used in path construction is provably free of path
+ * separators and parent refs (CodeQL js/path-injection needs the sanitization
+ * to dominate the path expression). Null for anything else — the manifest,
+ * traversal attempts, dotfiles.
+ */
+export function safeRenderAssetFileName(fileName: string): string | null {
+  const match = SAFE_ASSET_FILE_NAME.exec(fileName);
+  if (!match) return null;
+  return `asset-${match[1]}.${match[2]}`;
+}
+
+/** Render job ids are Prisma cuids; the route param feeds a filesystem path, so pin the alphabet. */
+export function isSafeRenderAssetJobId(jobId: string): boolean {
+  return /^[a-z0-9]{20,40}$/i.test(jobId);
+}
 
 /**
  * Token-gated resolution behind GET /media/designs/render-asset/:jobId/:file.
@@ -232,6 +249,12 @@ export async function resolveRenderAsset(
   fileName: string,
   token: string,
 ): Promise<RenderAssetResolution> {
+  // Sanitize BEFORE any path construction: both route params feed the on-disk
+  // path below. A format mismatch is a 404 (the controller 400s it first); the
+  // token check still precedes the existence check, so an invalid token never
+  // learns which names exist.
+  const safeName = safeRenderAssetFileName(fileName);
+  if (!safeName || !isSafeRenderAssetJobId(jobId)) return { status: 'not-found' };
   if (!token) return { status: 'forbidden' };
 
   const raw = await ioRedis.get(renderPayloadKey(jobId));
@@ -245,11 +268,11 @@ export async function resolveRenderAsset(
   if (!orgId || !verifyMediaJobWebhookToken(jobId, orgId, token)) {
     return { status: 'forbidden' };
   }
-  // Auth first, existence second: an invalid token never learns which names exist.
-  if (!SAFE_ASSET_FILE_NAME.test(fileName)) return { status: 'not-found' };
 
-  const assetsDir = path.join(renderWorkDir(jobId), RENDER_ASSETS_DIR);
-  const filePath = path.join(assetsDir, fileName);
+  const assetsDir = path.resolve(renderWorkDir(jobId), RENDER_ASSETS_DIR);
+  const filePath = path.resolve(assetsDir, safeName);
+  // Belt and braces: the rebuilt name cannot escape, but verify containment.
+  if (!filePath.startsWith(assetsDir + path.sep)) return { status: 'not-found' };
   let stat: fs.Stats;
   try {
     stat = fs.statSync(filePath);
@@ -263,13 +286,13 @@ export async function resolveRenderAsset(
     const manifest = JSON.parse(
       fs.readFileSync(path.join(assetsDir, RENDER_ASSET_MANIFEST), 'utf8'),
     );
-    if (typeof manifest?.[fileName] === 'string') {
-      contentType = manifest[fileName];
+    if (typeof manifest?.[safeName] === 'string') {
+      contentType = manifest[safeName];
     }
   } catch {
     /* fall back to the extension guess */
   }
-  if (!contentType) contentType = mimeByExt(fileName);
+  if (!contentType) contentType = mimeByExt(safeName);
 
   return { status: 'ok', filePath, contentType, size: stat.size };
 }

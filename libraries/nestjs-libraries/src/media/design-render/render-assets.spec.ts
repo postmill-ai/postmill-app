@@ -37,7 +37,7 @@ import { mediaJobWebhookToken } from '../media-job-token';
 
 const realFs = await vi.importActual<typeof import('fs')>('fs');
 
-const jobId = 'job-render-assets-spec';
+const jobId = 'clzrenderassetspec0000001';
 const orgId = 'org-1';
 
 function mockFetchOk(
@@ -362,6 +362,10 @@ describe('resolveRenderAsset (token gating)', () => {
         status: 'not-found',
       });
     }
+    // A non-cuid job id never reaches the filesystem either.
+    await expect(resolveRenderAsset('../../etc', 'asset-0.mp4', token)).resolves.toEqual({
+      status: 'not-found',
+    });
   });
 
   it('404s a well-formed name the preloader never wrote', async () => {

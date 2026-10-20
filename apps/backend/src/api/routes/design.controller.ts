@@ -55,7 +55,7 @@ import { ValidateDocDto } from '@postmill-ai/nestjs-libraries/dtos/design/valida
 import { ApplyOpsDto } from '@postmill-ai/nestjs-libraries/dtos/design/apply-ops.dto';
 import { RenderProgressDto } from '@postmill-ai/nestjs-libraries/dtos/design/render-progress.dto';
 import { reportRenderProgress, renderPayloadKey } from '@postmill-ai/nestjs-libraries/media/design-render/render-progress';
-import { resolveRenderAsset } from '@postmill-ai/nestjs-libraries/media/design-render/render-assets';
+import { resolveRenderAsset, isSafeRenderAssetJobId, safeRenderAssetFileName } from '@postmill-ai/nestjs-libraries/media/design-render/render-assets';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
@@ -679,7 +679,8 @@ export class DesignRenderFrameController {
    * URLs in the job payload. Single-range support: Chromium issues range
    * requests while seeking a <video>, and a 200-to-range fallback would make it
    * re-fetch whole clips. The throttle override keeps the global 600/h backstop
-   * from starving parallel capture pages on a clip-heavy render.
+   * from starving parallel capture pages on a clip-heavy render. Both route
+   * params are allowlist-validated (400) before they reach any path expression.
    */
   @Get('/render-asset/:jobId/:file')
   @Throttle({ default: { limit: 3600, ttl: 3600000 } })
@@ -691,6 +692,10 @@ export class DesignRenderFrameController {
     @Res() res?: Response,
   ): Promise<void> {
     if (!res) return;
+    if (!isSafeRenderAssetJobId(jobId) || !safeRenderAssetFileName(fileName)) {
+      res.status(400).send('Invalid render asset reference');
+      return;
+    }
     const asset = await resolveRenderAsset(jobId, fileName, token || '');
     if (asset.status !== 'ok') {
       res
