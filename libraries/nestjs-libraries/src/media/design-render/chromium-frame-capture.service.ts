@@ -227,7 +227,7 @@ export class ChromiumFrameCaptureService {
             );
           page.on('error', onPageError);
           pageCrashHandlers.set(page, onPageError);
-          await this.setupFramePage(page, output, width, height, fps, routeOptions, scale, pageCount > 1);
+          await this.setupFramePage(page, output, width, height, fps, routeOptions, scale);
           return page;
         };
 
