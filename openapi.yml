@@ -10940,8 +10940,6 @@ components:
           items:
             type: string
             format: uri
-      required:
-        - prompt
     VoiceoverScriptDto:
       type: object
       properties:

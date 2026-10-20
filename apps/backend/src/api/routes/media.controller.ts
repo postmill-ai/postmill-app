@@ -466,7 +466,18 @@ export class MediaController {
     @Body() body: GenerateSlideDto
   ) {
     try {
-      const result = await this._aiDefaults.imageSlide(org.id, body.prompt, body.imageUrls);
+      // Images-only slideshow: the LLM slide breakdown needs a topic, so
+      // substitute a default one — the supplied images ride along as the
+      // reference imagery for the generated frames.
+      const prompt =
+        body.prompt?.trim() ||
+        (body.imageUrls?.length
+          ? 'A short slideshow showcasing the provided images.'
+          : '');
+      if (!prompt) {
+        throw new BadRequestException('A prompt or at least one image is required');
+      }
+      const result = await this._aiDefaults.imageSlide(org.id, prompt, body.imageUrls);
       return { id: result, status: 'pending' };
     } catch (err) {
       if (err instanceof DefaultNotConfiguredError) {

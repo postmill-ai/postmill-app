@@ -3,7 +3,7 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ColorSwatch, Slider, Stepper } from '../controls';
 import type { VideoClip } from '../designer.store';
-import { TEXT_ANIMATION_PRESETS } from '../text-animation-presets';
+import { TEXT_ANIMATION_PRESETS, TEXT_ANIM_RELATIVE_PROPS, matchTextAnimationPreset } from '../text-animation-presets';
 import { GraphEditor, GRAPH_PROPS } from '../graph-editor';
 import { PROP_DOT_COLORS } from '../keyframe-props';
 import { SmartFilterList } from './smart-filter-list';
@@ -679,18 +679,43 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     if (clipTrackType !== 'text' || !clip) return;
     const preset = TEXT_ANIMATION_PRESETS.find((p) => p.name === presetName);
     if (!preset) return;
-    const baseX = clip.x ?? 0;
-    const baseY = clip.y ?? 0;
+    const base: Record<string, number> = {
+      x: clip.x ?? 0,
+      y: clip.y ?? 0,
+      rotation: clip.rotation ?? 0,
+    };
     const shifted = preset.keyframes?.map((kf) => ({
       ...kf,
-      props: {
-        ...kf.props,
-        x: kf.props.x !== undefined ? baseX + kf.props.x : undefined,
-        y: kf.props.y !== undefined ? baseY + kf.props.y : undefined,
-      },
+      props: Object.fromEntries(
+        Object.entries(kf.props).map(([key, value]) => [
+          key,
+          // Relative props ride on the clip's base transform; omitting a key
+          // the preset doesn't animate keeps it out of the keyframe lane.
+          TEXT_ANIM_RELATIVE_PROPS.has(key) ? (base[key] ?? 0) + value : value,
+        ])
+      ),
     })).filter((kf) => Object.keys(kf.props).length > 0);
     updateClip({ keyframes: shifted });
-  }, [clip, clipTrackType, updateClip]);
+    // Every preset animates only the first few hundred ms of the clip — with
+    // the playhead anywhere later, clicking a preset visibly did nothing.
+    // Seek to the clip start and play the animation window once.
+    store.getState().setPlayhead(clip.startMs);
+    const lastTMs = Math.max(...(preset.keyframes ?? []).map((kf) => kf.tMs));
+    window.dispatchEvent(
+      new CustomEvent('designer:preview-clip-animation', {
+        detail: { durationMs: Math.min(lastTMs + 600, 3000) },
+      })
+    );
+  }, [clip, clipTrackType, updateClip, store]);
+
+  // Which preset the clip's current keyframes match (drives the highlight).
+  const activeTextAnimation = useMemo(
+    () =>
+      clipTrackType === 'text' && clip
+        ? matchTextAnimationPreset(clip.keyframes, clip.x ?? 0, clip.y ?? 0, clip.rotation ?? 0)
+        : null,
+    [clip, clipTrackType]
+  );
 
   if (!clip) return null;
 
@@ -1189,15 +1214,23 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         <div className="pt-1 border-t border-studioBorder space-y-2">
           <div className="text-[11px] text-textColor/50">{translate('designer_text_animations', 'Text Animations')}</div>
           <div className="flex flex-wrap gap-1">
-            {TEXT_ANIMATION_PRESETS.map((preset) => (
-              <button
-                key={preset.name}
-                onClick={() => handleApplyTextAnimation(preset.name)}
-                className="px-2 py-1 rounded-sm text-[10px] border border-studioBorder text-textColor hover:border-designerAccent hover:bg-boxHover transition-all"
-              >
-                {translate(preset.nameKey, preset.name)}
-              </button>
-            ))}
+            {TEXT_ANIMATION_PRESETS.map((preset) => {
+              const active = activeTextAnimation === preset.name;
+              return (
+                <button
+                  key={preset.name}
+                  onClick={() => handleApplyTextAnimation(preset.name)}
+                  aria-pressed={active}
+                  className={`px-2 py-1 rounded-sm text-[10px] border transition-all ${
+                    active
+                      ? 'border-designerAccent bg-designerAccent/20 text-textColor'
+                      : 'border-studioBorder text-textColor hover:border-designerAccent hover:bg-boxHover'
+                  }`}
+                >
+                  {translate(preset.nameKey, preset.name)}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

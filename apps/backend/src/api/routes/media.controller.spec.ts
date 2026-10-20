@@ -7,7 +7,7 @@ vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: { get: vi.fn(), set: vi.fn(), keys: vi.fn(), del: vi.fn() },
 }));
 
-import { HttpStatus } from '@nestjs/common';
+import { BadRequestException, HttpStatus } from '@nestjs/common';
 import { MediaController } from './media.controller';
 // Import from the SAME module the controller catches against so `instanceof` holds.
 import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
@@ -113,6 +113,23 @@ describe('MediaController — Designer AI-media routes', () => {
       const res = await controller.generateSlide(org, { prompt: 'trip', imageUrls: ['https://x/1.png'] } as any);
       expect(aiDefaults.imageSlide).toHaveBeenCalledWith('org-1', 'trip', ['https://x/1.png']);
       expect(res).toEqual({ id: 'https://cdn/slide.mp4', status: 'pending' });
+    });
+
+    it('generate-slide substitutes a default topic for an images-only slideshow', async () => {
+      const { controller, aiDefaults } = build();
+      const res = await controller.generateSlide(org, { imageUrls: ['https://x/1.png'] } as any);
+      expect(aiDefaults.imageSlide).toHaveBeenCalledWith(
+        'org-1',
+        'A short slideshow showcasing the provided images.',
+        ['https://x/1.png'],
+      );
+      expect(res).toEqual({ id: 'https://cdn/slide.mp4', status: 'pending' });
+    });
+
+    it('generate-slide 400s when neither prompt nor images are given', async () => {
+      const { controller, aiDefaults } = build();
+      await expect(controller.generateSlide(org, {} as any)).rejects.toThrow(BadRequestException);
+      expect(aiDefaults.imageSlide).not.toHaveBeenCalled();
     });
 
     it('maps DefaultNotConfiguredError to HTTP 409 CONFLICT', async () => {

@@ -23,7 +23,7 @@
 
 # Postmill AI
 
-**Open-source, AI-native social media management and scheduling.**
+**Open-source, AI-native social media management, design and scheduling.**
 
 Postmill is a self-hostable social media scheduler for agencies and multi-brand teams: a visual publishing calendar, 45+ channels, 46 built-in media tools, and bring-your-own-key AI across 30 providers. Run it on infrastructure you control, and let every organization manage its own channels, brands, and AI keys. An open-source alternative to Buffer, Hootsuite, and Sprout Social.
 

@@ -27,6 +27,7 @@ import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } f
 import { KeyframeLane } from './keyframe-lane';
 import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
+import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import {
   sourceTimeForClipTime,
@@ -1089,7 +1090,7 @@ const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult })
   const [loading, setLoading] = useState(false);
 
   const generate = useCallback(async () => {
-    if (!prompt.trim()) {
+    if (!prompt.trim() && imageUrls.length === 0) {
       toaster.show(t('please_enter_a_prompt', 'Please enter a prompt'), 'warning');
       return;
     }
@@ -1144,7 +1145,14 @@ const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult })
       )}
       <button
         onClick={generate}
-        disabled={loading || !prompt.trim()}
+        // Images alone are enough — the backend substitutes a default topic
+        // when no prompt is given but reference images were supplied.
+        disabled={loading || (!prompt.trim() && imageUrls.length === 0)}
+        title={
+          !prompt.trim() && imageUrls.length === 0
+            ? t('slideshow_needs_prompt_or_images', 'Describe the slideshow or add images first')
+            : undefined
+        }
         className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
@@ -1412,6 +1420,45 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   // Guards the long-running poll loops (landOrPoll / runClipTransform) so they
   // stop touching the store / firing toasts after the timeline unmounts.
   const mountedRef = useRef(true);
+
+  // Applying a text-animation preset (clip inspector) asks for a one-shot
+  // preview over the animation window: play from the playhead the inspector
+  // just set to the clip start, then auto-pause. Without this the click looks
+  // dead — every preset animates only the clip's first few hundred ms.
+  const previewAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!isVideo) return;
+    const onPreview = (e: Event) => {
+      if (!vo) return;
+      if (previewAnimTimerRef.current) clearTimeout(previewAnimTimerRef.current);
+      previewRef.current?.pause();
+      if (!previewRef.current) {
+        previewRef.current = new VideoPreviewEngine(store);
+      }
+      const durationMs =
+        (e as CustomEvent<{ durationMs?: number }>).detail?.durationMs ?? 1500;
+      previewRef.current.play({
+        loop: false,
+        onTick: (ms) => {
+          setPlayhead(ms);
+        },
+        onEnd: () => {
+          setIsPlaying(false);
+        },
+      });
+      setIsPlaying(true);
+      previewAnimTimerRef.current = setTimeout(() => {
+        previewAnimTimerRef.current = null;
+        previewRef.current?.pause();
+        setIsPlaying(false);
+      }, durationMs);
+    };
+    window.addEventListener('designer:preview-clip-animation', onPreview);
+    return () => {
+      window.removeEventListener('designer:preview-clip-animation', onPreview);
+      if (previewAnimTimerRef.current) clearTimeout(previewAnimTimerRef.current);
+    };
+  }, [isVideo, vo, store, setPlayhead]);
 
   useEffect(() => {
     return () => {
@@ -3161,6 +3208,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         >
           ⛶
         </button>
+        <FullscreenButton className="w-6 h-6 flex items-center justify-center rounded-sm text-textColor/60 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent shrink-0" />
         <button
           onClick={handleZoomOut}
           className="w-6 h-6 flex items-center justify-center rounded-sm text-textColor/60 hover:text-textColor text-[13px]"
