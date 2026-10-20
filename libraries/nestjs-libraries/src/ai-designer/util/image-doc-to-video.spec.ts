@@ -9,6 +9,7 @@ import type {
   VideoOutput,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { StrictVideoOutputSchema } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
 import {
   MAX_CLIPS_PER_TRACK,
   MAX_VIDEO_DURATION_MS,
@@ -208,6 +209,118 @@ describe('imageOutputToVideo', () => {
     // Nothing survives as a clip; the color background rides on bg.
     expect(vo.tracks).toHaveLength(0);
     expect(vo.bg).toEqual({ type: 'color', color: '#112233' });
+  });
+
+  it('expands a CTA lockup symbol into shape + text clips, plate under label', () => {
+    const lockup: SymbolDefinition = {
+      id: 'lockup-cta',
+      name: 'CTA',
+      width: 300,
+      height: 90,
+      children: [
+        {
+          id: 'plate',
+          type: 'shape',
+          shape: 'rect',
+          x: 0,
+          y: 0,
+          width: 300,
+          height: 90,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+          fill: '#ff6600',
+          borderRadius: 45,
+        },
+        {
+          id: 'label',
+          type: 'text',
+          text: 'Shop now',
+          x: 0,
+          y: 20,
+          width: 300,
+          height: 50,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+          fontSize: 32,
+          fill: '#ffffff',
+        },
+      ] as SymbolDefinition['children'],
+    };
+    const doc: DesignerDoc = {
+      version: 7,
+      mode: 'image',
+      symbols: [lockup],
+      outputs: [
+        makeOutput({
+          children: [
+            {
+              id: 'cta',
+              type: 'symbol',
+              symbolId: 'lockup-cta',
+              symbolOverrides: { label: { text: 'Buy now' } },
+              x: 100,
+              y: 200,
+              width: 300,
+              height: 90,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+            },
+          ] as DesignerOutput['children'],
+        }),
+      ],
+    };
+
+    // The doc-level entry point threads doc.symbols through to the mapper.
+    const vo = imageDocToVideoDoc(doc).outputs[0] as VideoOutput;
+    const shapeTrack = vo.tracks.find((t) => t.type === 'shape')!;
+    const textTrack = vo.tracks.find((t) => t.type === 'text')!;
+
+    const plate = shapeTrack.clips[0];
+    expect(plate.shape).toBe('rect');
+    expect(plate.fill).toBe('#ff6600');
+    // The instance's box positions the expanded plate (scale 1 here).
+    expect(plate.x).toBe(100);
+    expect(plate.y).toBe(200);
+
+    const label = textTrack.clips[0];
+    // The instance's text override wins over the definition's authored copy.
+    expect(label.text).toBe('Buy now');
+    expect(label.y).toBe(220);
+
+    const parsed = StrictVideoOutputSchema.safeParse(vo);
+    expect(parsed.success, JSON.stringify(parsed.success ? {} : parsed.error.issues)).toBe(true);
+  });
+
+  it('maps group members linked by parentId, and drops members of a hidden group', () => {
+    const base = {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+    };
+    const vo = imageOutputToVideo(
+      makeOutput({
+        children: [
+          { ...base, id: 'g', type: 'group', hidden: false },
+          { ...base, id: 't1', type: 'text', hidden: false, text: 'member', parentId: 'g' },
+          { ...base, id: 'g2', type: 'group', hidden: true },
+          { ...base, id: 't2', type: 'text', hidden: false, text: 'ghost', parentId: 'g2' },
+        ] as DesignerOutput['children'],
+      })
+    );
+    // The group containers themselves still have no clip counterpart; the
+    // visible member lands, the hidden group's member goes with its group.
+    const textTrack = vo.tracks.find((t) => t.type === 'text')!;
+    expect(textTrack.clips.map((c) => c.text)).toEqual(['member']);
   });
 
   it('omits Ken Burns keyframes when disabled', () => {

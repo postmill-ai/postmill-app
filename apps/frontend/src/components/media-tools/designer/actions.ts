@@ -11,6 +11,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/filter-descriptors';
 import { layerActions } from './layer-actions';
 import { buildShapeElement } from './tool-draw';
+import { addShapeClipToTimeline } from './add-media-to-timeline';
 import {
   distribute,
   type DistributeMode,
@@ -303,9 +304,15 @@ export const useDesignerActions = (
     };
 
     // One builder for every shape kind, shared with the drag-to-draw tools so
-    // a menu-inserted star carries the same defaults a drawn one does.
+    // a menu-inserted star carries the same defaults a drawn one does. Dual-mode
+    // like Insert ▸ Text: an image doc gets an element, a video doc gets a
+    // shape clip on a shape track (add-media-to-timeline.ts).
     const insertShape = (toolId: string, size: { width: number; height: number }) => {
       const st = store.getState();
+      if (st.doc.mode === 'video') {
+        addShapeClipToTimeline(store, toolId, size);
+        return;
+      }
       const out = st.doc.outputs[st.currentOutput];
       st.addElement(
         buildShapeElement(toolId, {
@@ -382,22 +389,24 @@ export const useDesignerActions = (
       // ---------------- Edit ----------------
       { id: 'undo', label: 'Undo', menu: 'edit', shortcut: '⌘Z', keywords: ['undo'], enabled: () => store.getState().historyIndex > 0, run: () => store.getState().undo() },
       { id: 'redo', label: 'Redo', menu: 'edit', shortcut: '⇧⌘Z', keywords: ['redo'], enabled: () => { const s = store.getState(); return s.historyIndex < s.history.length - 1; }, run: () => store.getState().redo() },
-      { id: 'cut', label: 'Cut', menu: 'edit', group: 'clip', shortcut: '⌘X', keywords: ['cut'], enabled: () => live().hasSelection, run: () => store.getState().cutSelection() },
-      { id: 'copy', label: 'Copy', menu: 'edit', group: 'clip', shortcut: '⌘C', keywords: ['copy'], enabled: () => live().hasSelection, run: () => store.getState().copySelection() },
-      { id: 'paste', label: 'Paste', menu: 'edit', group: 'clip', shortcut: '⌘V', keywords: ['paste'], enabled: () => store.getState().clipboard.length > 0, run: () => store.getState().paste() },
-      { id: 'duplicate', label: 'Duplicate', menu: 'edit', group: 'clip', shortcut: '⌘J', keywords: ['duplicate'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.selectedIds.forEach((id) => st.duplicateElement(id)); } },
-      { id: 'delete', label: 'Delete', menu: 'edit', group: 'clip', keywords: ['delete', 'remove'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); [...st.selectedIds].forEach((id) => st.removeElement(id)); } },
+      { id: 'cut', label: 'Cut', menu: 'edit', group: 'clip', shortcut: '⌘X', keywords: ['cut'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => store.getState().cutSelection() },
+      { id: 'copy', label: 'Copy', menu: 'edit', group: 'clip', shortcut: '⌘C', keywords: ['copy'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => store.getState().copySelection() },
+      { id: 'paste', label: 'Paste', menu: 'edit', group: 'clip', shortcut: '⌘V', keywords: ['paste'], enabled: () => !isVideoDoc() && store.getState().clipboard.length > 0, run: () => store.getState().paste() },
+      { id: 'duplicate', label: 'Duplicate', menu: 'edit', group: 'clip', shortcut: '⌘J', keywords: ['duplicate'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); st.selectedIds.forEach((id) => st.duplicateElement(id)); } },
+      { id: 'delete', label: 'Delete', menu: 'edit', group: 'clip', keywords: ['delete', 'remove'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); [...st.selectedIds].forEach((id) => st.removeElement(id)); } },
       { id: 'fill', label: 'Fill…', menu: 'edit', group: 'pixels', shortcut: '⇧F5', keywords: ['fill', 'color', 'pattern'], enabled: () => ctx.canEditPixels(), run: () => ctx.onFill() },
       { id: 'stroke', label: 'Stroke…', menu: 'edit', group: 'pixels', keywords: ['stroke', 'outline', 'border'], enabled: () => ctx.canEditPixels(), run: () => ctx.onStroke() },
 
       // ---------------- Select ----------------
       // Photoshop's Select menu acts on the PIXEL selection; the two layer
       // commands that used to sit in Edit move here as All/Deselect Layers.
-      { id: 'select-all-pixels', label: 'All', menu: 'select', group: 'pixels', shortcut: '⌘A', keywords: ['select all', 'everything'], run: () => ctx.onSelectAll() },
-      { id: 'select-deselect', label: 'Deselect', menu: 'select', group: 'pixels', shortcut: '⌘D', keywords: ['deselect', 'none'], enabled: () => !!store.getState().selection, run: () => store.getState().setSelection(null) },
-      { id: 'select-reselect', label: 'Reselect', menu: 'select', group: 'pixels', shortcut: '⇧⌘D', keywords: ['reselect', 'restore'], enabled: () => !store.getState().selection && !!store.getState().lastSelection, run: () => { const st = store.getState(); if (st.lastSelection) st.setSelection(st.lastSelection); } },
-      { id: 'select-inverse', label: 'Inverse', menu: 'select', group: 'pixels', shortcut: '⇧⌘I', keywords: ['inverse', 'invert selection'], enabled: () => !!store.getState().selection, run: () => ctx.onSelectInverse() },
-      { id: 'select-all-layers', label: 'All Layers', menu: 'select', group: 'layers', shortcut: '⌥⌘A', keywords: ['select all layers'], run: () => { const st = store.getState(); const out = st.doc.outputs[st.currentOutput] as DesignerOutput; if ('children' in out) st.setSelectedIds(pageChildren(out, st.currentPage).filter((c) => !c.hidden).map((c) => c.id)); } },
+      // Pixel selection has no consumer in a video document (every pixel op is
+      // image-only), so the whole group is gated off there.
+      { id: 'select-all-pixels', label: 'All', menu: 'select', group: 'pixels', shortcut: '⌘A', keywords: ['select all', 'everything'], enabled: () => !isVideoDoc(), run: () => ctx.onSelectAll() },
+      { id: 'select-deselect', label: 'Deselect', menu: 'select', group: 'pixels', shortcut: '⌘D', keywords: ['deselect', 'none'], enabled: () => !isVideoDoc() && !!store.getState().selection, run: () => store.getState().setSelection(null) },
+      { id: 'select-reselect', label: 'Reselect', menu: 'select', group: 'pixels', shortcut: '⇧⌘D', keywords: ['reselect', 'restore'], enabled: () => !isVideoDoc() && !store.getState().selection && !!store.getState().lastSelection, run: () => { const st = store.getState(); if (st.lastSelection) st.setSelection(st.lastSelection); } },
+      { id: 'select-inverse', label: 'Inverse', menu: 'select', group: 'pixels', shortcut: '⇧⌘I', keywords: ['inverse', 'invert selection'], enabled: () => !isVideoDoc() && !!store.getState().selection, run: () => ctx.onSelectInverse() },
+      { id: 'select-all-layers', label: 'All Layers', menu: 'select', group: 'layers', shortcut: '⌥⌘A', keywords: ['select all layers'], enabled: () => !isVideoDoc(), run: () => { const st = store.getState(); const out = st.doc.outputs[st.currentOutput] as DesignerOutput; if ('children' in out) st.setSelectedIds(pageChildren(out, st.currentPage).filter((c) => !c.hidden).map((c) => c.id)); } },
       { id: 'select-deselect-layers', label: 'Deselect Layers', menu: 'select', group: 'layers', keywords: ['deselect layers'], enabled: () => live().hasSelection, run: () => store.getState().setSelectedIds([]) },
 
       // ---------------- Filter ----------------
@@ -458,12 +467,12 @@ export const useDesignerActions = (
       { id: 'insert-text', label: 'Text', menu: 'insert', keywords: ['text'], run: addText },
       // The Shape tool's whole palette, at a sensible default size — the menu
       // used to offer nothing but a rect.
-      { id: 'insert-shape', label: 'Rectangle', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'rectangle'], enabled: () => live().mode === 'image', run: () => insertShape('shape-rect', { width: 100, height: 100 }) },
-      { id: 'insert-ellipse', label: 'Ellipse', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'ellipse', 'circle', 'oval'], enabled: () => live().mode === 'image', run: () => insertShape('shape-ellipse', { width: 140, height: 100 }) },
-      { id: 'insert-triangle', label: 'Triangle', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'triangle'], enabled: () => live().mode === 'image', run: () => insertShape('shape-triangle', { width: 120, height: 100 }) },
-      { id: 'insert-polygon', label: 'Polygon', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'polygon', 'hexagon'], enabled: () => live().mode === 'image', run: () => insertShape('shape-polygon', { width: 120, height: 120 }) },
-      { id: 'insert-star', label: 'Star', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'star'], enabled: () => live().mode === 'image', run: () => insertShape('shape-star', { width: 140, height: 140 }) },
-      { id: 'insert-line', label: 'Line', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'line', 'rule'], enabled: () => live().mode === 'image', run: () => insertShape('shape-line', { width: 160, height: 0 }) },
+      { id: 'insert-shape', label: 'Rectangle', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'rectangle'], run: () => insertShape('shape-rect', { width: 100, height: 100 }) },
+      { id: 'insert-ellipse', label: 'Ellipse', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'ellipse', 'circle', 'oval'], run: () => insertShape('shape-ellipse', { width: 140, height: 100 }) },
+      { id: 'insert-triangle', label: 'Triangle', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'triangle'], run: () => insertShape('shape-triangle', { width: 120, height: 100 }) },
+      { id: 'insert-polygon', label: 'Polygon', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'polygon', 'hexagon'], run: () => insertShape('shape-polygon', { width: 120, height: 120 }) },
+      { id: 'insert-star', label: 'Star', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'star'], run: () => insertShape('shape-star', { width: 140, height: 140 }) },
+      { id: 'insert-line', label: 'Line', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'line', 'rule'], run: () => insertShape('shape-line', { width: 160, height: 0 }) },
       // Image-kind inserts work in both modes: in a video document the pick
       // lands on the timeline as an image clip (see designer.tsx onInsertMedia).
       { id: 'insert-image', label: 'Image…', menu: 'insert', keywords: ['image', 'photo'], run: () => ctx.onInsertMedia('image') },
@@ -479,26 +488,26 @@ export const useDesignerActions = (
       { id: 'canvas-properties', label: 'Canvas Properties…', menu: 'file', submenuPath: ['Format'], group: 'canvas', keywords: ['canvas', 'properties', 'size', 'background'], run: ctx.onCanvasProperties },
       // Distribute — align's missing half. Three or more, because the two
       // outermost define the span and never move.
-      { id: 'distribute-h-centers', label: 'Horizontal Centers', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'horizontal', 'spread'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('horizontal-centers') },
-      { id: 'distribute-v-centers', label: 'Vertical Centers', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'vertical', 'spread'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('vertical-centers') },
-      { id: 'distribute-h-gaps', label: 'Horizontal Spacing', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'spacing', 'gaps'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('horizontal-gaps') },
-      { id: 'distribute-v-gaps', label: 'Vertical Spacing', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'spacing', 'gaps'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('vertical-gaps') },
-      { id: 'align-left', label: 'Left', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align left'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ x: f.x })) },
-      { id: 'align-center-h', label: 'Center', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align center'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ x: f.x + (f.width - el.width) / 2 })) },
-      { id: 'align-right', label: 'Right', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align right'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ x: f.x + f.width - el.width })) },
-      { id: 'align-top', label: 'Top', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align top'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ y: f.y })) },
-      { id: 'align-middle', label: 'Middle', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align middle'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ y: f.y + (f.height - el.height) / 2 })) },
-      { id: 'align-bottom', label: 'Bottom', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align bottom'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ y: f.y + f.height - el.height })) },
+      { id: 'distribute-h-centers', label: 'Horizontal Centers', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'horizontal', 'spread'], enabled: () => !isVideoDoc() && store.getState().selectedIds.length >= 3, run: () => distributeSelected('horizontal-centers') },
+      { id: 'distribute-v-centers', label: 'Vertical Centers', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'vertical', 'spread'], enabled: () => !isVideoDoc() && store.getState().selectedIds.length >= 3, run: () => distributeSelected('vertical-centers') },
+      { id: 'distribute-h-gaps', label: 'Horizontal Spacing', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'spacing', 'gaps'], enabled: () => !isVideoDoc() && store.getState().selectedIds.length >= 3, run: () => distributeSelected('horizontal-gaps') },
+      { id: 'distribute-v-gaps', label: 'Vertical Spacing', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'spacing', 'gaps'], enabled: () => !isVideoDoc() && store.getState().selectedIds.length >= 3, run: () => distributeSelected('vertical-gaps') },
+      { id: 'align-left', label: 'Left', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align left'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => alignSelected((el, f) => ({ x: f.x })) },
+      { id: 'align-center-h', label: 'Center', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align center'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => alignSelected((el, f) => ({ x: f.x + (f.width - el.width) / 2 })) },
+      { id: 'align-right', label: 'Right', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align right'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => alignSelected((el, f) => ({ x: f.x + f.width - el.width })) },
+      { id: 'align-top', label: 'Top', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align top'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => alignSelected((el, f) => ({ y: f.y })) },
+      { id: 'align-middle', label: 'Middle', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align middle'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => alignSelected((el, f) => ({ y: f.y + (f.height - el.height) / 2 })) },
+      { id: 'align-bottom', label: 'Bottom', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align bottom'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => alignSelected((el, f) => ({ y: f.y + f.height - el.height })) },
       // ── Layer menu ────────────────────────────────────────────────────────
       // Group / Ungroup / Lock live here rather than on Format, matching
       // Photoshop and keeping one home per command (the ⌘K palette flattens
       // submenus, so duplicates there read as ambiguous).
       ...layerActions(store, live),
 
-      { id: 'bring-front', label: 'Bring to Front', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['front', 'order'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'front'); } },
-      { id: 'bring-forward', label: 'Bring Forward', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['forward', 'order'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'forward'); } },
-      { id: 'send-backward', label: 'Send Backward', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['backward', 'order'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'backward'); } },
-      { id: 'send-back', label: 'Send to Back', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['back', 'order'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'back'); } },
+      { id: 'bring-front', label: 'Bring to Front', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['front', 'order'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'front'); } },
+      { id: 'bring-forward', label: 'Bring Forward', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['forward', 'order'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'forward'); } },
+      { id: 'send-backward', label: 'Send Backward', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['backward', 'order'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'backward'); } },
+      { id: 'send-back', label: 'Send to Back', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['back', 'order'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'back'); } },
       { id: 'convert-mode', label: () => (store.getState().doc.mode === 'image' ? 'Convert to Video Mode' : 'Convert to Image Mode'), menu: 'file', submenuPath: ['Format'], group: 'mode', keywords: ['convert', 'video', 'image', 'mode'], run: ctx.onConvertMode },
 
       // ---------------- Options ----------------

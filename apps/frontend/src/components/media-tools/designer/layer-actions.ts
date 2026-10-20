@@ -131,8 +131,21 @@ export const layerActions = (
   };
 
   const canCombine = () => combinableElements(live().selectedEls).length === 2;
+  const isVideoDoc = () => store.getState().doc.mode === 'video';
 
-  return [
+  /**
+   * Image-only by construction: every action here writes ELEMENTS, and the
+   * store's element mutators (addElement/updateElement/addLayer/toggleClipped/
+   * reorder/groupSelection/…) are deliberate no-ops in a video document. Gate
+   * the whole menu so video mode shows honestly-disabled items instead of dead
+   * clicks — no video equivalents are intended; the timeline owns layers there.
+   */
+  const imageOnly = (a: DesignerAction): DesignerAction => ({
+    ...a,
+    enabled: () => !isVideoDoc() && (a.enabled ? a.enabled() : true),
+  });
+
+  const actions: DesignerAction[] = [
     // ── New ▸ ───────────────────────────────────────────────────────────────
     { id: 'layer-new-layer', label: 'Layer', menu: 'layer', submenuPath: ['New'], group: 'new', keywords: ['new', 'layer', 'empty'], run: () => store.getState().addLayer('fill', { name: 'Layer', fillStyle: { type: 'solid', color: '#ffffff00' } }) },
     { id: 'layer-new-background', label: 'Background from Layer', menu: 'layer', submenuPath: ['New'], group: 'new', keywords: ['background'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.reorder(selected(), 'back'); st.updateElements(selected(), { name: 'Background', locked: true }); } },
@@ -238,4 +251,9 @@ export const layerActions = (
 
     { id: 'layer-clip', label: 'Create Clipping Mask', menu: 'layer', group: 'visibility', shortcut: '⌥⌘G', keywords: ['clip', 'clipping', 'mask'], enabled: () => live().hasSelection, run: () => store.getState().toggleClipped(selected()) },
   ];
+
+  // The one exception: New ▸ Artboard calls addOutput, which has a real
+  // video-mode branch (designer.store.ts) cloning the timeline onto a new
+  // format — gating it would disable a working feature, not a dead one.
+  return actions.map((a) => (a.id === 'layer-new-artboard' ? a : imageOnly(a)));
 };

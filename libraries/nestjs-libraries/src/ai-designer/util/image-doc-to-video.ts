@@ -21,9 +21,16 @@
  *   which the frame renderer and the editor canvas already paint.
  * - Text elements become `text` clips with a fade transition in.
  * - Shape elements become `shape` clips carrying the same geometry fields.
- * - Types with no clip counterpart (icon/path/raster/group/fill/adjustment/
- *   symbol) are skipped — the delivered timeline is a starting point, not a
- *   pixel-exact port; the static PNG previews remain the delivery artifact.
+ * - `symbol` instances (the composer's CTA lockups are one) are expanded via
+ *   `expandSymbols` first — the caller threads `doc.symbols` through — so the
+ *   plate/label land as ordinary shape/text clips in definition order.
+ *   Groups are flat `parentId` links (layer-tree.ts), so their members are
+ *   already in `output.children`; what a group changes is visibility — a
+ *   member of a hidden group is dropped with it.
+ * - Types with no clip counterpart (icon/path/raster/fill/adjustment and the
+ *   group containers themselves) are skipped — the delivered timeline is a
+ *   starting point, not a pixel-exact port; the static PNG previews remain
+ *   the delivery artifact.
  */
 
 import type {
@@ -41,6 +48,11 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import {
+  expandSymbols,
+  type SymbolDefinition,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
+import { isEffectivelyHidden } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
 
 /** Mirrors MAX_FPS in media/design-render/video-render.service.ts. */
 const MAX_FPS = 240;
@@ -61,6 +73,12 @@ const KEN_BURNS_ZOOM = 1.15;
 export interface ImageToVideoOptions {
   /** Set false to emit static image clips without the slow-zoom keyframes. */
   kenBurns?: boolean;
+  /**
+   * The document's symbol definitions. Without them a `symbol` instance (the
+   * composer's CTA lockup is one) has no expansion source and is skipped, as
+   * before; with them its plate/label land as ordinary clips.
+   */
+  symbols?: SymbolDefinition[];
 }
 
 const clamp = (value: number, min: number, max: number) =>
@@ -114,7 +132,10 @@ const withKenBurns = (clip: VideoClip, enabled: boolean): VideoClip => {
   };
 };
 
-const isVisible = (el: DesignerElement) => !el.hidden;
+const isVisible =
+  (all: DesignerElement[]) =>
+  (el: DesignerElement) =>
+    !isEffectivelyHidden(all, el);
 
 /**
  * Convert one composed image output into a video output. Elements are grouped
@@ -141,7 +162,11 @@ export function imageOutputToVideo(
   const kenBurns = options.kenBurns !== false;
 
   const tracks: VideoTrack[] = [];
-  const children = (output.children ?? []).filter(isVisible);
+  // Expand symbol instances (CTA lockups) into their ordinary elements first,
+  // then drop the effectively hidden — own flag OR a hidden ancestor group.
+  // Expansion preserves list position, so the plate stays under its label.
+  const expanded = expandSymbols(output.children ?? [], options.symbols);
+  const children = expanded.filter(isVisible(expanded));
 
   // Background: an image background becomes the bottom-most full-canvas image
   // clip (the Ken Burns zoom supplies the motion); a color/gradient background
@@ -208,8 +233,8 @@ export function imageOutputToVideo(
       };
       textClips.push(clip);
     }
-    // icon/path/raster/group/fill/adjustment/symbol have no clip counterpart —
-    // skipped deliberately (see the module doc).
+    // icon/path/raster/fill/adjustment and the group containers themselves
+    // have no clip counterpart — skipped deliberately (see the module doc).
   }
 
   if (imageClips.length > 0) {
@@ -260,7 +285,9 @@ export function imageDocToVideoDoc(
     ...doc,
     mode: 'video',
     outputs: doc.outputs.map((out) =>
-      imageOutputToVideo(out as DesignerOutput, options)
+      // The doc owns the symbol definitions — without them a CTA lockup
+      // instance would be skipped instead of landing as plate + label clips.
+      imageOutputToVideo(out as DesignerOutput, { ...options, symbols: doc.symbols })
     ),
   };
 }

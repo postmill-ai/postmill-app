@@ -2,6 +2,7 @@ import type { createDesignerStore, VideoClip, VideoOutput, VideoTrack } from './
 import { fitWithin } from './panels/fit-within';
 import { probeImageNaturalSize } from './elements';
 import { DEFAULT_CLIP_MS } from './add-text';
+import { buildShapeClip } from './tool-draw';
 
 type StoreApi = ReturnType<typeof createDesignerStore>;
 
@@ -198,6 +199,52 @@ export function addImageClipToTimeline(
     });
   }
 
+  return landed.id;
+}
+
+/**
+ * Insert ▸ Shapes in a video document: drop a shape clip at the playhead on a
+ * `shape` track (created on demand) — the dual-mode twin of the image-mode
+ * `addElement(buildShapeElement(...))` path, mirroring how `addText` lands a
+ * text clip. Geometry/defaults come from the same `buildShapeClip` the
+ * drag-to-draw tools use, so a menu-inserted star matches a drawn one, and the
+ * canvas overlay already renders every field it carries.
+ *
+ * Returns the new clip's id, or null when the document can't take one.
+ */
+export function addShapeClipToTimeline(
+  store: StoreApi,
+  toolId: string,
+  size: { width: number; height: number }
+): string | null {
+  const state = store.getState();
+  if (state.doc.mode !== 'video') return null;
+
+  const out = state.currentOutput;
+  const track = findOrCreateTrack(store, out, 'shape');
+  if (!track) return null;
+
+  const vo = store.getState().doc.outputs[out] as VideoOutput;
+  const clip = buildShapeClip(
+    toolId,
+    {
+      x: Math.round(vo.width / 2 - size.width / 2),
+      y: Math.round(vo.height / 2 - size.height / 2),
+      width: size.width,
+      height: size.height,
+    },
+    state.playheadMs,
+    vo.durationMs
+  );
+  store.getState().addClip(out, track.id, clip);
+
+  // addClip assigns the id; read it back off the track it landed on (same
+  // pattern as addText). addTrack/addClip already pushed history.
+  const landed = (store.getState().doc.outputs[out] as VideoOutput).tracks
+    .find((t) => t.id === track.id)
+    ?.clips.at(-1);
+  if (!landed) return null;
+  store.getState().setSelectedClip({ outputIndex: out, trackId: track.id, clipId: landed.id });
   return landed.id;
 }
 
