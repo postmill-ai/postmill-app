@@ -320,6 +320,17 @@ export class FfmpegVideoEncoderService {
           downloadCache.set(url, filePath);
         }
 
+        // A video clip can be "audible" by config (volume > 0) while its
+        // source file carries no audio stream at all — referencing `[i:a]`
+        // for such an input aborts the whole mix with "Stream specifier ':a'
+        // ... matches no streams". Silence contributes nothing, so skip it.
+        if (!(await this.hasAudioStream(filePath))) {
+          this._logger.warn(
+            `Clip ${clip.id} has no audio stream in its source; skipping it in the mix`,
+          );
+          continue;
+        }
+
         const sourceDurationMs = await this.getAudioDurationMs(filePath);
         audioInputs.push({
           index: audioInputs.length,
@@ -526,9 +537,31 @@ export class FfmpegVideoEncoderService {
     return match?.[1] || 'bin';
   }
 
+  /**
+   * Probe a downloaded source for an audio stream. ffmpeg -i prints the
+   * stream table on stderr: a "Stream #... Audio" line means audible input.
+   * When ffmpeg ran but listed streams with no audio, the source is genuinely
+   * silent (resolve false). Anything unparseable (unreadable file, mocked
+   * probe in tests) keeps the previous behavior and lets the mix surface the
+   * real error (resolve true).
+   */
+  private hasAudioStream(filePath: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const binary = getFfmpegPath();
+      const proc = spawn(binary, ['-i', filePath], { stdio: 'pipe' });
+      let stderr = '';
+      proc.stderr?.on('data', (d) => {
+        stderr += d.toString();
+      });
+      proc.on('close', () => {
+        if (/Stream #.*Audio/.test(stderr)) return resolve(true);
+        resolve(!/Stream #/.test(stderr));
+      });
+    });
+  }
+
   private async getAudioDurationMs(filePath: string): Promise<number> {
     try {
-       
       const mm = await import('music-metadata');
       const meta = await mm.parseFile(filePath);
       const duration = meta.format.duration;

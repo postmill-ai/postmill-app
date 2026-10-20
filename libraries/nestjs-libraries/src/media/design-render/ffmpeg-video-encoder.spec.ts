@@ -310,4 +310,65 @@ describe('FfmpegVideoEncoderService.mixAudio loudness and hidden tracks', () => 
     // Not even downloaded — a hidden track is excluded everywhere.
     expect(download).not.toHaveBeenCalled();
   });
+
+  it('returns null (no audio at all) when every clip source is silent', async () => {
+    const service = new FfmpegVideoEncoderService();
+    vi.spyOn(service as any, 'getAudioDurationMs').mockResolvedValue(60000);
+    vi.spyOn(service as any, 'downloadAudio').mockResolvedValue('/tmp/fake.mp4');
+    vi.spyOn(service as any, 'hasAudioStream').mockResolvedValue(false);
+    const mixed = await service.mixAudio(output, '/tmp');
+    expect(mixed).toBeNull();
+  });
+
+  it('skips a no-audio-stream source instead of aborting the whole mix', async () => {
+    // Regression: a video clip with volume > 0 but no audio stream in its
+    // source made ffmpeg abort with "Stream specifier ':a' ... matches no
+    // streams", failing the render after all frames were already captured.
+    const twoClips = {
+      ...output,
+      tracks: [
+        {
+          type: 'video',
+          gain: 1,
+          clips: [
+            {
+              id: 'silent',
+              startMs: 0,
+              endMs: 6000,
+              src: 'https://example.com/uploads/silent.mp4',
+            },
+            {
+              id: 'audible',
+              startMs: 0,
+              endMs: 8000,
+              src: 'https://example.com/uploads/audible.mp4',
+            },
+          ],
+        },
+      ],
+    };
+    const service = new FfmpegVideoEncoderService();
+    vi.spyOn(service as any, 'getAudioDurationMs').mockResolvedValue(60000);
+    const download = vi
+      .spyOn(service as any, 'downloadAudio')
+      .mockResolvedValueOnce('/tmp/silent.mp4')
+      .mockResolvedValueOnce('/tmp/audible.mp4');
+    vi.spyOn(service as any, 'hasAudioStream').mockImplementation(
+      async (p: string) => p.includes('audible'),
+    );
+
+    const mixed = await service.mixAudio(twoClips, '/tmp');
+    expect(mixed).toBeTruthy();
+    expect(download).toHaveBeenCalledTimes(2);
+
+    const mixCall = [...spawnCalls].reverse().find((c) => c.args.includes('-filter_complex'));
+    expect(mixCall).toBeTruthy();
+    // Only the audible file is an input, so it is stream [0:a] in the graph.
+    const graph = mixCall!.args[mixCall!.args.indexOf('-filter_complex') + 1];
+    expect(graph).toContain('[0:a]');
+    const fileInputs = mixCall!.args.filter((a, i) => a === '-i' && mixCall!.args[i + 1]?.includes('.mp4'));
+    expect(fileInputs).toHaveLength(1);
+    expect(mixCall!.args).toContain('/tmp/audible.mp4');
+    expect(mixCall!.args).not.toContain('/tmp/silent.mp4');
+  });
 });
