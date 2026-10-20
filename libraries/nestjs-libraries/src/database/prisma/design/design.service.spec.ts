@@ -40,6 +40,7 @@ describe('DesignService', () => {
     getFolder: ReturnType<typeof vi.fn>;
     updateFolder: ReturnType<typeof vi.fn>;
     deleteFolder: ReturnType<typeof vi.fn>;
+    countFolderActiveContents: ReturnType<typeof vi.fn>;
     getFolderTree: ReturnType<typeof vi.fn>;
     moveTemplate: ReturnType<typeof vi.fn>;
     createVersion: ReturnType<typeof vi.fn>;
@@ -78,6 +79,7 @@ describe('DesignService', () => {
       getFolder: vi.fn(),
       updateFolder: vi.fn(),
       deleteFolder: vi.fn(),
+      countFolderActiveContents: vi.fn(),
       getFolderTree: vi.fn(),
       moveTemplate: vi.fn(),
       createVersion: vi.fn(),
@@ -414,8 +416,28 @@ describe('DesignService', () => {
       await expect(service.deleteFolder('org-1', 'nope')).rejects.toThrow(NotFoundException);
 
       repository.getFolder.mockResolvedValueOnce({ id: 'f1' });
+      repository.countFolderActiveContents.mockResolvedValue({ templates: 0, children: 0 });
       repository.deleteFolder.mockResolvedValue({ id: 'f1' });
       expect(await service.deleteFolder('org-1', 'f1')).toEqual({ id: 'f1' });
+    });
+
+    it('deleteFolder rejects a non-empty folder with a readable 400', async () => {
+      repository.getFolder.mockResolvedValueOnce({ id: 'f1' });
+      repository.countFolderActiveContents.mockResolvedValue({ templates: 2, children: 0 });
+
+      await expect(service.deleteFolder('org-1', 'f1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(repository.deleteFolder).not.toHaveBeenCalled();
+    });
+
+    it('deleteFolder with force unfiles contents instead of rejecting', async () => {
+      repository.getFolder.mockResolvedValueOnce({ id: 'f1' });
+      repository.deleteFolder.mockResolvedValue({ id: 'f1' });
+
+      expect(await service.deleteFolder('org-1', 'f1', true)).toEqual({ id: 'f1' });
+      // The emptiness check is skipped entirely in force mode.
+      expect(repository.countFolderActiveContents).not.toHaveBeenCalled();
     });
 
     it('moveTemplate moves an org-owned template into an owned folder', async () => {

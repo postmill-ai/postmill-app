@@ -435,8 +435,12 @@ export class DesignTemplateController {
   async deleteFolder(
     @GetOrgFromRequest() org: Organization,
     @Param('id') id: string,
+    // force=true unfiles the folder's contents instead of rejecting (the FKs
+    // are ON DELETE SET NULL); the default rejects a non-empty folder with a
+    // readable 400.
+    @Query('force') force?: string,
   ) {
-    await this._designService.deleteFolder(org.id, id);
+    await this._designService.deleteFolder(org.id, id, force === 'true');
     return { success: true };
   }
 

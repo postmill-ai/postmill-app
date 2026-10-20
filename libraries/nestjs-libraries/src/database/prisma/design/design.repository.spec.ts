@@ -24,6 +24,7 @@ function makeModel() {
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      count: vi.fn(),
     },
     designVersion: {
       create: vi.fn(),
@@ -88,48 +89,38 @@ describe('DesignRepository — template folders', () => {
     });
   });
 
-  it('deleteFolder succeeds when the folder holds only trashed templates', async () => {
+  it('deleteFolder deletes the row — the FKs unfile its contents', async () => {
+    // Both FKs (templates.folderId, folders.parentId) are ON DELETE SET NULL:
+    // deleting the row unfiles templates and re-parents children to root. The
+    // emptiness guard lives in the service.
     const { repo, model } = makeRepo();
-    model.designTemplateFolder.findUnique.mockResolvedValue({
-      id: 'f1',
-      _count: { children: 0 },
-    });
-    model.designTemplate.count.mockResolvedValue(0);
+    model.designTemplateFolder.findUnique.mockResolvedValue({ id: 'f1' });
     model.designTemplateFolder.delete.mockResolvedValue({ id: 'f1' });
 
     const result = await repo.deleteFolder('org-1', 'f1');
 
     expect(result).toEqual({ id: 'f1' });
-    expect(model.designTemplate.count).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          folderId: 'f1',
-          organizationId: 'org-1',
-          deletedAt: null,
-        }),
-      })
-    );
+    expect(model.designTemplateFolder.delete).toHaveBeenCalledWith({
+      where: { id: 'f1', organizationId: 'org-1' },
+    });
   });
 
-  it('deleteFolder throws when active templates or subfolders remain', async () => {
+  it('countFolderActiveContents counts live templates and child folders', async () => {
     const { repo, model } = makeRepo();
-    model.designTemplateFolder.findUnique.mockResolvedValue({
-      id: 'f2',
-      _count: { children: 0 },
-    });
     model.designTemplate.count.mockResolvedValue(2);
+    model.designTemplateFolder.count.mockResolvedValue(1);
 
-    await expect(repo.deleteFolder('org-1', 'f2')).rejects.toThrow('Folder is not empty');
-    expect(model.designTemplateFolder.delete).not.toHaveBeenCalled();
+    const result = await repo.countFolderActiveContents('org-1', 'f1');
 
-    model.designTemplate.count.mockResolvedValue(0);
-    model.designTemplateFolder.findUnique.mockResolvedValue({
-      id: 'f3',
-      _count: { children: 1 },
+    expect(result).toEqual({ templates: 2, children: 1 });
+    // Soft-deleted templates are excluded: a folder holding only trashed
+    // templates counts as empty.
+    expect(model.designTemplate.count).toHaveBeenCalledWith({
+      where: { folderId: 'f1', organizationId: 'org-1', deletedAt: null },
     });
-
-    await expect(repo.deleteFolder('org-1', 'f3')).rejects.toThrow('Folder is not empty');
-    expect(model.designTemplateFolder.delete).not.toHaveBeenCalled();
+    expect(model.designTemplateFolder.count).toHaveBeenCalledWith({
+      where: { parentId: 'f1', organizationId: 'org-1' },
+    });
   });
 
   it('deleteFolder returns null for a missing folder', async () => {

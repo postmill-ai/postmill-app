@@ -340,11 +340,22 @@ export class DesignService {
     return this._designRepository.updateFolder(orgId, id, data);
   }
 
-  async deleteFolder(orgId: string, id: string) {
+  async deleteFolder(orgId: string, id: string, force = false) {
     const folder = await this._designRepository.getFolder(orgId, id);
     if (!folder) {
       throw new NotFoundException('Folder not found');
     }
+    if (!force) {
+      const { templates, children } =
+        await this._designRepository.countFolderActiveContents(orgId, id);
+      if (templates > 0 || children > 0) {
+        // BadRequest (not a bare 500) so the message actually reaches the
+        // user's toast.
+        throw new BadRequestException('Folder is not empty');
+      }
+    }
+    // force: FKs are ON DELETE SET NULL — the row's templates unfile and its
+    // child folders re-parent to root; templates themselves are never deleted.
     return this._designRepository.deleteFolder(orgId, id);
   }
 

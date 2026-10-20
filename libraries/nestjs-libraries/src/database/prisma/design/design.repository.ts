@@ -261,27 +261,32 @@ export class DesignRepository {
   async deleteFolder(orgId: string, id: string) {
     const folder = await this._designTemplateFolder.model.designTemplateFolder.findUnique({
       where: { id, organizationId: orgId },
-      include: { _count: { select: { children: true } } },
     });
 
     if (!folder) {
       return null;
     }
 
-    // Exclude soft-deleted templates: a folder with only trashed templates is
-    // deletable. Deleting never touches the templates themselves — a folder
-    // with live templates is rejected instead.
-    const activeTemplates = await this._designTemplate.model.designTemplate.count({
-      where: { folderId: id, organizationId: orgId, deletedAt: null },
-    });
-
-    if (activeTemplates > 0 || folder._count.children > 0) {
-      throw new Error('Folder is not empty');
-    }
-
+    // The folderId/parentId FKs are ON DELETE SET NULL: deleting the row
+    // unfiles its templates and re-parents child folders to root. The
+    // emptiness decision lives in the service (see deleteFolder there).
     return this._designTemplateFolder.model.designTemplateFolder.delete({
       where: { id, organizationId: orgId },
     });
+  }
+
+  // Counts for the service's not-empty guard. Soft-deleted templates are
+  // excluded: a folder holding only trashed templates counts as empty.
+  async countFolderActiveContents(orgId: string, id: string) {
+    const [templates, children] = await Promise.all([
+      this._designTemplate.model.designTemplate.count({
+        where: { folderId: id, organizationId: orgId, deletedAt: null },
+      }),
+      this._designTemplateFolder.model.designTemplateFolder.count({
+        where: { parentId: id, organizationId: orgId },
+      }),
+    ]);
+    return { templates, children };
   }
 
   async getFolderTree(orgId: string) {
