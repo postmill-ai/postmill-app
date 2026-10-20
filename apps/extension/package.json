@@ -14,7 +14,7 @@
     "@vitejs/plugin-react": "^6.1.0",
     "dotenv-cli": "^8.0.0",
     "postcss": "^8.5.10",
-    "vite": "^8.2.2",
+    "vite": "^8.2.4",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.11"
   },
