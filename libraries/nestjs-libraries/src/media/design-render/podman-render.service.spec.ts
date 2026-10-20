@@ -6,6 +6,8 @@ import * as path from 'path';
 const shared = vi.hoisted(() => ({
   calls: [] as Array<{ bin: string; args: string[] }>,
   codes: [] as number[],
+  // stderr payloads, shifted in lockstep with codes (default '').
+  stderr: [] as string[],
 }));
 
 vi.mock('child_process', () => ({
@@ -14,7 +16,11 @@ vi.mock('child_process', () => ({
     const handlers: Record<string, (arg?: any) => void> = {};
     const proc = {
       stdout: { on: () => {} },
-      stderr: { on: () => {} },
+      stderr: {
+        on: (event: string, cb: (arg?: any) => void) => {
+          if (event === 'data') handlers.stderrData = cb;
+        },
+      },
       on: (event: string, cb: (arg?: any) => void) => {
         handlers[event] = cb;
       },
@@ -24,9 +30,13 @@ vi.mock('child_process', () => ({
       },
     };
     const code = shared.codes.shift() ?? 0;
+    const stderr = shared.stderr.shift() ?? '';
     // Sentinel -1: the process hangs — only the kill() above ever closes it.
     if (code !== -1) {
-      process.nextTick(() => handlers.close && handlers.close(code));
+      process.nextTick(() => {
+        if (stderr && handlers.stderrData) handlers.stderrData(stderr);
+        if (handlers.close) handlers.close(code);
+      });
     }
     return proc as any;
   }),
@@ -58,6 +68,7 @@ describe('PodmanRenderService', () => {
   beforeEach(() => {
     shared.calls.length = 0;
     shared.codes.length = 0;
+    shared.stderr.length = 0;
     delete process.env.VIDEO_RENDER_PODMAN_ENABLED;
     for (const k of [
       'VIDEO_RENDER_CPUS',
@@ -150,6 +161,49 @@ describe('PodmanRenderService', () => {
     const svc = new PodmanRenderService();
 
     await expect(svc.run(workDir, designSpec)).rejects.toThrow(/exited 1/);
+    fs.rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('surfaces the first Error line from stderr instead of a mid-token tail slice', async () => {
+    // Prod-shaped stderr: the thrown error line sits BEFORE a long stack
+    // trace, so a raw tail slice cut it off ("exited 1: ode_modules/…Page.js:832:20)").
+    const stderr =
+      'capture progress: frame 12/300\n' +
+      'Error: seekVideo: video element still wedged after 3 consecutive seeks and a reload\n' +
+      `    at seekVideo (/app/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:832:20)\n${'x'.repeat(2000)}`;
+    shared.codes.push(0, 1); // pod exists -> ok; run -> 1
+    shared.stderr.push('', stderr);
+    const workDir = makeWorkDir();
+    const svc = new PodmanRenderService();
+
+    await expect(svc.run(workDir, designSpec)).rejects.toThrow(
+      /^Podman render exited 1: Error: seekVideo: video element still wedged after 3 consecutive seeks and a reload$/,
+    );
+    fs.rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('falls back to the stderr tail when no Error line exists', async () => {
+    const tail = `podman said no: ${'y'.repeat(1000)}`;
+    shared.codes.push(0, 1); // pod exists -> ok; run -> 1
+    shared.stderr.push('', tail);
+    const workDir = makeWorkDir();
+    const svc = new PodmanRenderService();
+
+    await expect(svc.run(workDir, designSpec)).rejects.toThrow(
+      new RegExp(`^Podman render exited 1: ${'y'.repeat(800)}$`),
+    );
+    fs.rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('caps an over-long error line at 800 chars', async () => {
+    shared.codes.push(0, 1); // pod exists -> ok; run -> 1
+    shared.stderr.push('', `Error: ${'z'.repeat(2000)}`);
+    const workDir = makeWorkDir();
+    const svc = new PodmanRenderService();
+
+    await expect(svc.run(workDir, designSpec)).rejects.toThrow(
+      new RegExp(`^Podman render exited 1: Error: ${'z'.repeat(793)}$`),
+    );
     fs.rmSync(workDir, { recursive: true, force: true });
   });
 

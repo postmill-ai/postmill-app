@@ -96,7 +96,7 @@ export class PodmanRenderService {
       throw new Error(`Podman render timed out after ${budgetMs}ms`);
     }
     if (res.code !== 0) {
-      throw new Error(`Podman render exited ${res.code}: ${res.stderr.slice(-800)}`);
+      throw new Error(`Podman render exited ${res.code}: ${this.errorDetail(res.stderr)}`);
     }
   }
 
@@ -171,6 +171,25 @@ export class PodmanRenderService {
       if (val) out.push('-e', `${key}=${val}`);
     }
     return out;
+  }
+
+  /**
+   * The stderr detail for a failed render container. A raw tail-slice truncates
+   * mid-token and buries the actual error — a prod Sentry alert read
+   * "exited 1: ode_modules/puppeteer-core/lib/puppeteer/api/Page.js:832:20)",
+   * the tail of a stack trace with the real error line cut off. Surface the
+   * first stderr line that looks like a thrown error ("Error: …",
+   * "TimeoutError: …" — the worker's uncaught rejections print the error name
+   * first); fall back to the tail when no such line exists (a bare podman
+   * failure has none). Capped so the job row's 1000-char error column holds it.
+   */
+  private errorDetail(stderr: string): string {
+    const line = stderr
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => /^[A-Za-z]*Error(:| )/.test(l));
+    const detail = line || stderr.trim().slice(-800);
+    return detail.slice(0, 800);
   }
 
   private splitMemory(memory: string, split: number): string {
