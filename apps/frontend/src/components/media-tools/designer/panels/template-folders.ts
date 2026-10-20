@@ -65,3 +65,30 @@ export const findTemplateFolder = (
 /** Org templates not filed anywhere — the "Unfiled" row count. */
 export const unfiledTemplates = <T extends FolderedTemplate>(templates: T[]): T[] =>
   templates.filter((template) => !template.isSystem && !template.folderId);
+
+/** Flattens the tree into a depth-tagged list, for the move-to-folder picker. */
+export const collectTemplateFolders = (
+  folders: TemplateFolder[],
+  depth = 0
+): { id: string; name: string; depth: number; templateCount: number }[] => {
+  const result: { id: string; name: string; depth: number; templateCount: number }[] = [];
+  for (const folder of folders) {
+    result.push({
+      id: folder.id,
+      name: folder.name,
+      depth,
+      templateCount: folder._count?.templates || 0,
+    });
+    result.push(...collectTemplateFolders(folder.children || [], depth + 1));
+  }
+  return result;
+};
+
+/**
+ * The backend contract for `DELETE /media/design-templates/folders/:id` on a
+ * folder that still holds templates: 400 with `{message: 'Folder is not empty'}`
+ * (passing `?force=true` unfiles the contents instead). The UI offers the force
+ * path only for this exact failure.
+ */
+export const isFolderNotEmptyError = (status: number, message: string): boolean =>
+  status === 400 && /folder is not empty/i.test(message);

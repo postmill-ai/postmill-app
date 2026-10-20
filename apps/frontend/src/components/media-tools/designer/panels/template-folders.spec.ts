@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   UNFILED_FOLDER_KEY,
+  collectTemplateFolders,
   filterTemplatesByFolder,
   findTemplateFolder,
+  isFolderNotEmptyError,
   unfiledTemplates,
   type TemplateFolder,
 } from './template-folders';
@@ -83,5 +85,37 @@ describe('findTemplateFolder', () => {
   it('returns null for a missing id', () => {
     expect(findTemplateFolder(tree, 'gone')).toBeNull();
     expect(findTemplateFolder([], 'a')).toBeNull();
+  });
+});
+
+describe('collectTemplateFolders', () => {
+  it('flattens depth-first with depth tags and template counts', () => {
+    const tree = [folder('a', [folder('a-1', [], 2), folder('a-2', [folder('a-2-1', [], 5)], 1)], 3), folder('b', [], 4)];
+    expect(collectTemplateFolders(tree)).toEqual([
+      { id: 'a', name: 'a', depth: 0, templateCount: 3 },
+      { id: 'a-1', name: 'a-1', depth: 1, templateCount: 2 },
+      { id: 'a-2', name: 'a-2', depth: 1, templateCount: 1 },
+      { id: 'a-2-1', name: 'a-2-1', depth: 2, templateCount: 5 },
+      { id: 'b', name: 'b', depth: 0, templateCount: 4 },
+    ]);
+  });
+
+  it('tolerates a missing _count', () => {
+    const bare: TemplateFolder = { id: 'x', name: 'x', parentId: null, children: [] };
+    expect(collectTemplateFolders([bare])).toEqual([
+      { id: 'x', name: 'x', depth: 0, templateCount: 0 },
+    ]);
+  });
+});
+
+describe('isFolderNotEmptyError', () => {
+  it('matches the backend 400 contract', () => {
+    expect(isFolderNotEmptyError(400, 'Folder is not empty')).toBe(true);
+  });
+
+  it('rejects other statuses and messages', () => {
+    expect(isFolderNotEmptyError(404, 'Folder is not empty')).toBe(false);
+    expect(isFolderNotEmptyError(400, 'Validation failed')).toBe(false);
+    expect(isFolderNotEmptyError(500, '')).toBe(false);
   });
 });

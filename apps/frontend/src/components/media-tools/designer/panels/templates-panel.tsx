@@ -1,14 +1,17 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useModals, useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
+import { ContextMenu } from '@postmill-ai/frontend/components/ui/context-menu';
+import { useContextMenu } from '@postmill-ai/frontend/components/ui/use-context-menu';
 import type { DesignerDoc } from '../designer.store';
 import { getThumbnailDataUrl } from '../designer';
+import { readErrorMessage } from '../read-error-message';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import {
   ALL_CATEGORIES_KEY,
@@ -25,6 +28,7 @@ import {
   type FolderSelection,
 } from './template-folders';
 import { TemplateFolderTree, useTemplateFolders } from './template-folder-tree';
+import { MoveTemplateModal } from './move-template-modal';
 import { SaveTemplateModal } from './save-template-modal';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
@@ -117,6 +121,59 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   const { data: folders, mutate: mutateFolders } = useTemplateFolders(user?.orgId);
   const [selection, setSelection] = useState<FolderSelection>(null);
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORIES_KEY);
+  const { menu: cardMenu, openAt: openCardMenu, close: closeCardMenu } = useContextMenu<DesignTemplate>();
+
+  // A move changes folderId, which the accumulated pages snapshot — drop them
+  // and refetch from page 1.
+  const refreshTemplates = useCallback(() => {
+    setExtraTemplates([]);
+    setPage(1);
+    mutate();
+  }, [mutate]);
+
+  const systemCantBeFiled = useCallback(() => {
+    toaster.show(t('templates_panel_system_cant_be_filed', "System templates can't be filed"), 'warning');
+  }, [toaster, t]);
+
+  const moveTemplateToFolder = useCallback(async (template: DesignTemplate, folderId: string | null): Promise<boolean> => {
+    const res = await fetch(`/media/design-templates/${template.id}/move`, {
+      method: 'PUT',
+      body: JSON.stringify({ folderId }),
+    });
+    if (!res.ok) {
+      toaster.show(await readErrorMessage(res, t('template_folder_move_failed', 'Failed to move template')), 'warning');
+      return false;
+    }
+    toaster.show(t('template_folder_moved', 'Template moved'), 'success');
+    refreshTemplates();
+    mutateFolders();
+    return true;
+  }, [fetch, toaster, refreshTemplates, mutateFolders, t]);
+
+  const openMoveToFolder = useCallback((template: DesignTemplate) => {
+    // System templates are shared across orgs and never folder-able.
+    if (template.isSystem) {
+      systemCantBeFiled();
+      return;
+    }
+    modal.openModal({
+      title: t('templates_panel_move_to_folder', 'Move to folder'),
+      size: 420,
+      children: (close) => (
+        <MoveTemplateModal
+          templateName={template.name}
+          folders={folders ?? []}
+          currentFolderId={template.folderId}
+          onCancel={close}
+          onMove={async (folderId) => {
+            const moved = await moveTemplateToFolder(template, folderId);
+            if (moved) close();
+            return moved;
+          }}
+        />
+      ),
+    });
+  }, [modal, folders, moveTemplateToFolder, systemCantBeFiled, t]);
 
   // Folders organize (org templates only); the phase-1 category sections and
   // filter chips then group/filter inside the current folder view.
@@ -329,13 +386,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
         selection={selection}
         onSelect={setSelection}
         onRefresh={() => mutateFolders()}
-        onTemplateMoved={() => {
-          // A move changes folderId, which the accumulated pages snapshot —
-          // drop them and refetch from page 1.
-          setExtraTemplates([]);
-          setPage(1);
-          mutate();
-        }}
+        onTemplateMoved={refreshTemplates}
       />
 
       {isLoading && !data ? (
@@ -379,88 +430,14 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
                 </h3>
                 <div className="grid grid-cols-2 gap-2" role="list">
                   {section.templates.map((template) => (
-                    <div
+                    <TemplateCard
                       key={template.id}
-                      role="listitem"
-                      className="rounded-lg border border-studioBorder bg-newBgColorInner overflow-hidden group"
-                    >
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        aria-label={t('templates_panel_apply_template', 'Apply template {{name}}', { name: template.name })}
-                        onClick={() => applyTemplate(template)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            applyTemplate(template);
-                          }
-                        }}
-                        className="relative aspect-4/3 bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20 cursor-pointer hover:ring-2 hover:ring-designerAccent/60 focus-visible:ring-2 focus-visible:ring-designerAccent"
-                      >
-                        {template.thumbnail ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- server-rendered template thumbnail
-                          <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" />
-                        ) : (
-                          template.isSystem ? '◧' : '▣'
-                        )}
-                        {templateModeOf(template) === 'video' ? (
-                          <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
-                            {t('templates_panel_video_badge', 'VIDEO')}
-                          </span>
-                        ) : (
-                          <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
-                            {t('templates_panel_image_badge', 'IMAGE')}
-                          </span>
-                        )}
-                        {!template.isSystem && (
-                          // Drag handle — drop onto a folder row in the tree to
-                          // file the template (system templates are not folder-able).
-                          // Clicks/keys here must never bubble to the tile's
-                          // apply action; starting a drag takes precedence.
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            aria-label={t('templates_panel_drag_to_folder', 'Drag to a folder')}
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData('text/plain', template.id);
-                              e.dataTransfer.effectAllowed = 'move';
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => e.stopPropagation()}
-                            className="absolute top-1 end-1 px-1.5 py-0.5 rounded-sm bg-newBgColorInner/80 text-newTextColor/60 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-[11px] leading-none select-none"
-                          >
-                            ⠿
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-2">
-                        <button
-                          type="button"
-                          onClick={() => applyTemplate(template)}
-                          className="block w-full text-left text-[11px] text-textColor truncate cursor-pointer hover:underline"
-                        >
-                          {template.name}
-                        </button>
-                        <div className="flex items-center justify-between gap-1">
-                          <div className="text-[10px] text-newTextColor/60">
-                            {template.isSystem ? t('system', 'System') : t('templates_panel_org', 'Org')}
-                          </div>
-                          <span className="px-1.5 py-0.5 rounded-full bg-btnPrimary/15 text-btnPrimaryAccent text-[9px] font-[500] truncate max-w-[90px]">
-                            {template.category?.trim() ||
-                              (templateModeOf(template) === 'video'
-                                ? t('templates_panel_video_category', 'Video')
-                                : t('other', 'Other'))}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => applyTemplate(template)}
-                          className="mt-1 w-full px-2 py-1 rounded-sm text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80"
-                        >
-                          {t('apply', 'Apply')}
-                        </button>
-                      </div>
-                    </div>
+                      template={template}
+                      onApply={applyTemplate}
+                      onSystemFileAttempt={systemCantBeFiled}
+                      onMenu={openCardMenu}
+                      t={t}
+                    />
                   ))}
                 </div>
               </section>
@@ -482,6 +459,167 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
           )}
         </>
       )}
+
+      {cardMenu && (
+        <ContextMenu
+          x={cardMenu.x}
+          y={cardMenu.y}
+          onClose={closeCardMenu}
+          ariaLabel={t('templates_panel_template_actions', 'Template actions')}
+          items={[
+            {
+              label: t('templates_panel_move_to_folder_menu', 'Move to folder…'),
+              onClick: () => openMoveToFolder(cardMenu.target),
+            },
+          ]}
+        />
+      )}
+    </div>
+  );
+};
+
+const DRAG_THRESHOLD_PX = 5;
+
+const TemplateCard: FC<{
+  template: DesignTemplate;
+  onApply: (template: DesignTemplate) => void;
+  onSystemFileAttempt: () => void;
+  onMenu: (e: React.MouseEvent, template: DesignTemplate) => void;
+  t: ReturnType<typeof useT>;
+}> = ({ template, onApply, onSystemFileAttempt, onMenu, t }) => {
+  // Whole-card drag, same arming pattern as FileTile in the Files library:
+  // `draggable` only switches on after the pointer has travelled past a small
+  // threshold, so a plain click still applies the template. System templates
+  // arm too — their dragStart is vetoed with a toast, which is the only way to
+  // surface "can't be filed" (draggable=false would fail silently).
+  const [dragArmed, setDragArmed] = useState(false);
+  const pressPos = useRef<{ x: number; y: number } | null>(null);
+  // Firefox dispatches a click on the drag source after dragend; swallowing it
+  // in capture (before the card's apply buttons see it) keeps "drag to a
+  // folder" from also applying the template. Reset on pointerdown so a genuine
+  // later click is never eaten.
+  const justDragged = useRef(false);
+  const disarmDrag = useCallback(() => {
+    pressPos.current = null;
+    setDragArmed(false);
+  }, []);
+
+  return (
+    <div
+      role="listitem"
+      draggable={dragArmed}
+      onDragStart={(e) => {
+        if (template.isSystem) {
+          e.preventDefault();
+          disarmDrag();
+          onSystemFileAttempt();
+          return;
+        }
+        // The shared useFolderDropTarget hook reads the dragged id as text/plain.
+        e.dataTransfer.setData('text/plain', template.id);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      onDragEnd={() => {
+        justDragged.current = true;
+        disarmDrag();
+      }}
+      onPointerDown={(e) => {
+        if (e.button === 0) {
+          justDragged.current = false;
+          pressPos.current = { x: e.clientX, y: e.clientY };
+        }
+      }}
+      onPointerMove={(e) => {
+        const start = pressPos.current;
+        if (
+          start &&
+          !dragArmed &&
+          Math.hypot(e.clientX - start.x, e.clientY - start.y) >= DRAG_THRESHOLD_PX
+        ) {
+          setDragArmed(true);
+        }
+      }}
+      // A real HTML5 drag suppresses pointerup on the source (dragend handles
+      // the reset), so releasing here always means "no drag happened".
+      onPointerUp={disarmDrag}
+      onPointerCancel={() => {
+        pressPos.current = null;
+      }}
+      onClickCapture={(e) => {
+        if (justDragged.current) {
+          justDragged.current = false;
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+      onContextMenu={(e) => onMenu(e, template)}
+      className="rounded-lg border border-studioBorder bg-newBgColorInner overflow-hidden group select-none"
+    >
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={t('templates_panel_apply_template', 'Apply template {{name}}', { name: template.name })}
+        onClick={() => onApply(template)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onApply(template);
+          }
+        }}
+        className="relative aspect-4/3 bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20 cursor-pointer hover:ring-2 hover:ring-designerAccent/60 focus-visible:ring-2 focus-visible:ring-designerAccent"
+      >
+        {template.thumbnail ? (
+          // eslint-disable-next-line @next/next/no-img-element -- server-rendered template thumbnail
+          <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" draggable={false} />
+        ) : (
+          template.isSystem ? '◧' : '▣'
+        )}
+        {templateModeOf(template) === 'video' ? (
+          <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
+            {t('templates_panel_video_badge', 'VIDEO')}
+          </span>
+        ) : (
+          <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
+            {t('templates_panel_image_badge', 'IMAGE')}
+          </span>
+        )}
+        {!template.isSystem && (
+          // Discoverability hint for the whole-card drag (the card itself is
+          // the drag surface; drop onto a folder row in the tree to file).
+          <span
+            aria-hidden={true}
+            className="absolute top-1 end-1 px-1.5 py-0.5 rounded-sm bg-newBgColorInner/80 text-newTextColor/60 opacity-0 group-hover:opacity-100 transition-opacity text-[11px] leading-none"
+          >
+            ⠿
+          </span>
+        )}
+      </div>
+      <div className="p-2">
+        <button
+          type="button"
+          onClick={() => onApply(template)}
+          className="block w-full text-left text-[11px] text-textColor truncate cursor-pointer hover:underline"
+        >
+          {template.name}
+        </button>
+        <div className="flex items-center justify-between gap-1">
+          <div className="text-[10px] text-newTextColor/60">
+            {template.isSystem ? t('system', 'System') : t('templates_panel_org', 'Org')}
+          </div>
+          <span className="px-1.5 py-0.5 rounded-full bg-btnPrimary/15 text-btnPrimaryAccent text-[9px] font-[500] truncate max-w-[90px]">
+            {template.category?.trim() ||
+              (templateModeOf(template) === 'video'
+                ? t('templates_panel_video_category', 'Video')
+                : t('other', 'Other'))}
+          </span>
+        </div>
+        <button
+          onClick={() => onApply(template)}
+          className="mt-1 w-full px-2 py-1 rounded-sm text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80"
+        >
+          {t('apply', 'Apply')}
+        </button>
+      </div>
     </div>
   );
 };
