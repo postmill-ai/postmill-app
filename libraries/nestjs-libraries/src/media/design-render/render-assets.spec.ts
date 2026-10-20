@@ -3,7 +3,13 @@ import * as path from 'path';
 
 const mockSafeFetch = vi.hoisted(() => vi.fn());
 const mockRedis = vi.hoisted(() => ({ get: vi.fn() }));
-const mockFs = vi.hoisted(() => ({ mkdirSync: vi.fn(), writeFileSync: vi.fn() }));
+const mockExecFile = vi.hoisted(() => vi.fn());
+const mockFs = vi.hoisted(() => ({
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  renameSync: vi.fn(),
+  rmSync: vi.fn(),
+}));
 
 vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
   safeFetch: (...args: any[]) => mockSafeFetch(...args),
@@ -13,14 +19,21 @@ vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: { get: (...args: any[]) => mockRedis.get(...args) },
 }));
 
-// mkdirSync/writeFileSync are mocked so the cap tests never land 400 MB buffers
-// on disk; statSync/readFileSync stay real for resolveRenderAsset fixtures.
+vi.mock('child_process', () => ({
+  execFile: (...args: any[]) => mockExecFile(...args),
+}));
+
+// mkdirSync/writeFileSync/renameSync/rmSync are mocked so the cap tests never
+// land 400 MB buffers on disk; statSync/readFileSync stay real for
+// resolveRenderAsset fixtures (which use realFs from importActual).
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<any>();
   return {
     ...actual,
     mkdirSync: (...args: any[]) => mockFs.mkdirSync(...args),
     writeFileSync: (...args: any[]) => mockFs.writeFileSync(...args),
+    renameSync: (...args: any[]) => mockFs.renameSync(...args),
+    rmSync: (...args: any[]) => mockFs.rmSync(...args),
   };
 });
 
@@ -155,12 +168,26 @@ describe('preloadRenderMedia', () => {
   let token: string;
   const prev = process.env.NEXT_PUBLIC_BACKEND_URL;
 
+  const execFileOk = () =>
+    mockExecFile.mockImplementation((...args: any[]) => {
+      const callback = args[args.length - 1] as (
+        err: Error | null,
+        stdout: string,
+        stderr: string,
+      ) => void;
+      callback(null, '', '');
+    });
+
   beforeEach(() => {
     process.env.NEXT_PUBLIC_BACKEND_URL = 'https://api.example.com';
     token = mediaJobWebhookToken(jobId, orgId);
     mockSafeFetch.mockReset();
+    mockExecFile.mockReset();
+    execFileOk();
     mockFs.mkdirSync.mockClear();
     mockFs.writeFileSync.mockClear();
+    mockFs.renameSync.mockClear();
+    mockFs.rmSync.mockClear();
   });
 
   afterEach(() => {
@@ -216,6 +243,80 @@ describe('preloadRenderMedia', () => {
     expect(result.composition.tracks[1].clips[0].src).toBe('https://cdn.example.com/song.mp3');
     // Rewritten URLs are root-relative same-origin paths carrying the job token.
     expect(result.composition.bg.src).toMatch(/^\/media\/designs\/render-asset\/.+\?token=.+/);
+  });
+
+  it('remuxes a downloaded video asset to faststart (stream copy, atomic rename)', async () => {
+    const comp = compositionWith({ video: 'https://cdn.example.com/clip.mp4' });
+    mockSafeFetch.mockResolvedValue(mockFetchOk(Buffer.from('video-bytes'), 'video/mp4'));
+
+    const result = await preloadRenderMedia({ jobId, composition: comp, token });
+
+    expect(result.downloaded).toBe(1);
+    const assetsDir = path.join(renderWorkDir(jobId), 'assets');
+    const filePath = path.join(assetsDir, 'asset-0.mp4');
+    const tmpPath = path.join(assetsDir, 'asset-0.faststart-tmp.mp4');
+    expect(mockExecFile).toHaveBeenCalledTimes(1);
+    const [cmd, args, opts] = mockExecFile.mock.calls[0];
+    expect(cmd).toBe('ffmpeg');
+    expect(args).toEqual([
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-y',
+      '-i',
+      filePath,
+      '-c',
+      'copy',
+      '-movflags',
+      '+faststart',
+      tmpPath,
+    ]);
+    expect(opts).toMatchObject({ timeout: 60_000 });
+    // The remuxed temp atomically replaces the original download.
+    expect(mockFs.renameSync).toHaveBeenCalledWith(tmpPath, filePath);
+    expect(result.composition.tracks[0].clips[0].src).toBe(
+      renderAssetPath(jobId, 'asset-0.mp4', token),
+    );
+  });
+
+  it('keeps the original file (and the job alive) when the faststart remux fails', async () => {
+    const comp = compositionWith({ video: 'https://cdn.example.com/clip.mp4' });
+    mockSafeFetch.mockResolvedValue(mockFetchOk(Buffer.from('video-bytes'), 'video/mp4'));
+    mockExecFile.mockImplementation((...args: any[]) => {
+      const callback = args[args.length - 1] as (
+        err: Error | null,
+        stdout: string,
+        stderr: string,
+      ) => void;
+      callback(new Error('spawn ffmpeg ENOENT'), '', 'ffmpeg: not found');
+    });
+
+    const result = await preloadRenderMedia({ jobId, composition: comp, token });
+
+    // The download still lands and the src is still rewritten — the render
+    // degrades to the pre-faststart behavior instead of failing.
+    expect(result.downloaded).toBe(1);
+    expect(result.composition.tracks[0].clips[0].src).toBe(
+      renderAssetPath(jobId, 'asset-0.mp4', token),
+    );
+    expect(mockFs.renameSync).not.toHaveBeenCalled();
+    // The orphaned temp file is cleaned up best-effort.
+    const assetsDir = path.join(renderWorkDir(jobId), 'assets');
+    expect(mockFs.rmSync).toHaveBeenCalledWith(
+      path.join(assetsDir, 'asset-0.faststart-tmp.mp4'),
+      { force: true },
+    );
+  });
+
+  it('never remuxes a non-video asset', async () => {
+    const comp = compositionWith({ bg: 'https://cdn.example.com/bg.png' });
+    mockSafeFetch.mockResolvedValue(mockFetchOk(Buffer.from('png-bytes'), 'image/png'));
+
+    const result = await preloadRenderMedia({ jobId, composition: comp, token });
+
+    expect(result.downloaded).toBe(1);
+    expect(mockExecFile).not.toHaveBeenCalled();
+    expect(mockFs.renameSync).not.toHaveBeenCalled();
   });
 
   it('passes the composition through untouched when nothing is remote', async () => {

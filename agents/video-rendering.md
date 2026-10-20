@@ -250,7 +250,15 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      `spec.baseUrl`, the same mechanism as render-frame). Streaming the CDN from
      in-container Chromium had every discarded-buffer seek become a remote range
      request (~10 s/frame stalls → job timeouts). A download failure fails the job
-     fast — a required clip never renders black. The route
+     fast — a required clip never renders black. Downloaded mp4-family clips
+     (mp4/m4v/mov) are also remuxed to faststart in place
+     (`ffmpeg -c copy -movflags +faststart`, temp file + atomic rename): a clip
+     whose moov atom sits at the END of the file (typical of AI-generated mp4s,
+     e.g. the Replicate CDN's ftyp/free/mdat/moov box order) wedges Chromium's
+     `<video>` seek on its first frame and trips the seekVideo fail-fast. The
+     remux is best-effort — ffmpeg missing or a failed remux logs a warning and
+     keeps the ORIGINAL file (the render degrades to the pre-faststart behavior,
+     it does not fail). The route
      (`DesignRenderFrameController.renderAsset`) is token-gated like render-frame
      (same HMAC job token, org id from the payload), serves only `asset-N.ext`
      names the preloader wrote, and supports single byte-ranges (Chromium seeks
