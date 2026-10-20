@@ -53,13 +53,13 @@ function findOrCreateTrack(
 
 export function probeVideoMetadata(
   url: string
-): Promise<{ durationMs: number; width?: number; height?: number }> {
+): Promise<{ durationMs: number; width?: number; height?: number; probeFailed?: boolean }> {
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (ms: number, width?: number, height?: number) => {
+    const finish = (ms: number, width?: number, height?: number, probeFailed = false) => {
       if (settled) return;
       settled = true;
-      resolve({ durationMs: ms, width, height });
+      resolve({ durationMs: ms, width, height, probeFailed });
     };
 
     const probe = document.createElement('video');
@@ -70,9 +70,11 @@ export function probeVideoMetadata(
         probe.videoWidth || undefined,
         probe.videoHeight || undefined
       );
-    probe.onerror = () => finish(10000);
+    // Error/timeout land the clip with a 10s fallback — flag it so the caller
+    // can tell the user the duration is a guess instead of failing silently.
+    probe.onerror = () => finish(10000, undefined, undefined, true);
     probe.src = url;
-    window.setTimeout(() => finish(10000), 5000);
+    window.setTimeout(() => finish(10000, undefined, undefined, true), 5000);
   });
 }
 
@@ -296,6 +298,12 @@ export interface LandedClipRef {
   trackId: string;
   clipId: string;
   startMs: number;
+  /**
+   * The metadata probe failed or timed out and the clip landed with the 10s
+   * fallback duration — the caller should surface this (the probe itself is
+   * silent by design, so the drop never blocks on a dead URL).
+   */
+  probeFailed?: boolean;
 }
 
 /**
@@ -331,12 +339,12 @@ export function addMediaToTimeline(
       return;
     }
 
-    const probe: Promise<{ durationMs: number; width?: number; height?: number }> =
+    const probe: Promise<{ durationMs: number; width?: number; height?: number; probeFailed?: boolean }> =
       type === 'audio'
         ? probeAudioDuration(url).then((durationMs) => ({ durationMs }))
         : probeVideoMetadata(url);
 
-    probe.then(({ durationMs, width: natW, height: natH }) => {
+    probe.then(({ durationMs, width: natW, height: natH, probeFailed }) => {
       const endMs = Math.min(durationMs, MAX_TIMELINE_DURATION_MS);
 
       // Extend — never shrink — the output duration BEFORE adding the clip;
@@ -398,7 +406,7 @@ export function addMediaToTimeline(
       // Note: setVideoDuration and addClip each push a history entry internally,
       // so no explicit pushHistory() is needed here (it would create a redundant
       // undo step for a single logical drop).
-      resolve(landed ? { outputIndex: out, trackId: track.id, clipId: id, startMs: landed.startMs } : null);
+      resolve(landed ? { outputIndex: out, trackId: track.id, clipId: id, startMs: landed.startMs, probeFailed } : null);
     });
   });
 }

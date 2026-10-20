@@ -892,9 +892,18 @@ export const Designer: FC<DesignerProps> = ({
   useEffect(() => {
     if (!initialTimelineMedia || timelineInitRef.current) return;
     timelineInitRef.current = true;
-    addMediaToTimeline(store, initialTimelineMedia).catch(() => {
-      toaster.show(translate('could_not_add_media_to_timeline', 'Could not add media to timeline'), 'warning');
-    });
+    addMediaToTimeline(store, initialTimelineMedia)
+      .then((landed) => {
+        if (landed?.probeFailed) {
+          toaster.show(
+            translate('couldnt_read_video_metadata', "Couldn't read the video's metadata — placed with a default duration"),
+            'warning'
+          );
+        }
+      })
+      .catch(() => {
+        toaster.show(translate('could_not_add_media_to_timeline', 'Could not add media to timeline'), 'warning');
+      });
   }, [initialTimelineMedia, store, toaster, translate]);
 
   // --- Unsaved-changes guard shared by New / Open / Templates (D-7b) ---
@@ -1064,12 +1073,21 @@ export const Designer: FC<DesignerProps> = ({
               fileId: item.fileId,
               width: item.width,
               height: item.height,
-            }).catch(() => {
-              toaster.show(
-                translate('couldnt_add_to_timeline', "Couldn't add that to the timeline"),
-                'warning'
-              );
-            });
+            })
+              .then((landed) => {
+                if (landed?.probeFailed) {
+                  toaster.show(
+                    translate('couldnt_read_video_metadata', "Couldn't read the video's metadata — placed with a default duration"),
+                    'warning'
+                  );
+                }
+              })
+              .catch(() => {
+                toaster.show(
+                  translate('couldnt_add_to_timeline', "Couldn't add that to the timeline"),
+                  'warning'
+                );
+              });
             return;
           }
           if (isTimelineImage) {

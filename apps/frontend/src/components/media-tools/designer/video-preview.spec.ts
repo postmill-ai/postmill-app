@@ -457,3 +457,85 @@ describe('VideoPreviewEngine — hidden tracks', () => {
     engine.destroy();
   });
 });
+
+
+describe('VideoPreviewEngine — failed media demotion', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const stubMedia = () => {
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      value: vi.fn().mockResolvedValue(undefined),
+      configurable: true,
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+      value: vi.fn(),
+      configurable: true,
+    });
+  };
+
+  const audioStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'audio');
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const audioTrack = vo.tracks.find((t) => t.type === 'audio')!;
+    store.getState().addClip(0, audioTrack.id, {
+      id: 'a1',
+      startMs: 0,
+      endMs: 2000,
+      src: 'https://example.com/dead.mp3',
+    } as VideoClip);
+    return store;
+  };
+
+  it('logs and demotes a clip whose element errors, and stops driving it', () => {
+    stubMedia();
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const store = audioStore();
+    const engine = new VideoPreviewEngine(store);
+    engine.seek(1000);
+    const el = (engine as any).audioElements.get('a1') as HTMLAudioElement;
+    expect(el).toBeTruthy();
+
+    el.dispatchEvent(new Event('error'));
+
+    expect((engine as any).failedMedia.has('a1')).toBe(true);
+    // The log carries the clip id AND src — the two things needed to find the
+    // dead artifact.
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('a1'));
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('dead.mp3'));
+
+    // Demoted: the per-tick path no longer seeks or plays the dead element.
+    (el.play as ReturnType<typeof vi.fn>).mockClear();
+    engine.seek(1500);
+    expect(el.play).not.toHaveBeenCalled();
+    engine.destroy();
+  });
+
+  it('a sibling clip keeps playing after another clip errors', () => {
+    stubMedia();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const store = audioStore();
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const audioTrack = vo.tracks.find((t) => t.type === 'audio')!;
+    store.getState().addClip(0, audioTrack.id, {
+      id: 'a2',
+      startMs: 0,
+      endMs: 2000,
+      src: 'https://example.com/fine.mp3',
+    } as VideoClip);
+
+    const engine = new VideoPreviewEngine(store);
+    engine.seek(1000);
+    const dead = (engine as any).audioElements.get('a1') as HTMLAudioElement;
+    const fine = (engine as any).audioElements.get('a2') as HTMLAudioElement;
+    dead.dispatchEvent(new Event('error'));
+
+    (fine.play as ReturnType<typeof vi.fn>).mockClear();
+    engine.seek(1500);
+    expect(fine.play).toHaveBeenCalled();
+    engine.destroy();
+  });
+});

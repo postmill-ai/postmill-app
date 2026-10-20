@@ -45,8 +45,9 @@ describe('addMediaToTimeline — clip geometry', () => {
     stubVideoProbe({ duration: 7.32, videoWidth: 1080, videoHeight: 1920 });
     const store = createDesignerStore();
 
-    await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/v.mp4' });
+    const landed = await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/v.mp4' });
 
+    expect(landed!.probeFailed).toBe(false);
     const { vo, clip } = firstVideoClip(store);
     expect(clip).toBeDefined();
     // fitWithin(1080×1920 into 1080×1080): full height, proportional width.
@@ -62,10 +63,14 @@ describe('addMediaToTimeline — clip geometry', () => {
     stubVideoProbe(null);
     const store = createDesignerStore();
 
-    await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/broken.mp4' });
+    const landed = await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/broken.mp4' });
 
+    // The clip lands with the 10s fallback AND flags the probe failure so the
+    // caller can warn instead of the drop failing silently.
+    expect(landed!.probeFailed).toBe(true);
     const { vo, clip } = firstVideoClip(store);
     expect(clip).toBeDefined();
+    expect(clip!.endMs).toBe(10000);
     expect(clip!.width).toBe(vo.width);
     expect(clip!.height).toBe(vo.height);
     expect(clip!.x).toBe(0);

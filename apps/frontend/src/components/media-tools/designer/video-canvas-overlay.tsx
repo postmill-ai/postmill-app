@@ -16,6 +16,13 @@ import { canvasColor } from '@postmill-ai/nestjs-libraries/media/designer-doc/ca
 import { canvasCompositeFor } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
 import { clipGeometryUpdate, type ClipBox } from './clip-geometry';
 import { getBuffer } from './raster-layers';
+import {
+  isVideoSrc,
+  markVideoSrcErrored,
+  videoSrcErrored,
+  clearVideoSrcErrors,
+  resetVideoSrcErrors,
+} from './video-src';
 import { captionWordStates } from '@postmill-ai/nestjs-libraries/media/designer-doc/caption-styles';
 import {
   pointsForShape,
@@ -106,6 +113,15 @@ const getOrCreateVideo = (clip: VideoClip): HTMLVideoElement | null => {
   el.preload = 'auto';
   el.addEventListener('loadeddata', notifyFrameReady);
   el.addEventListener('seeked', notifyFrameReady);
+  // A video that can't load (404, CORS, bad codec) never fires loadeddata —
+  // without this it paints black forever. Record the failure (keyed by the
+  // src that failed, so a src swap clears it) and repaint so the clip's
+  // placeholder can be drawn instead of the dead element.
+  const failedSrc = clip.src;
+  el.addEventListener('error', () => {
+    markVideoSrcErrored(clip.id, failedSrc);
+    notifyFrameReady();
+  });
   el.style.position = 'fixed';
   el.style.left = '-10000px';
   el.style.top = '0';
@@ -135,6 +151,7 @@ const evictOverlayVideos = (liveClipIds: Set<string>) => {
       el.load();
       el.remove();
       videoElements.delete(id);
+      clearVideoSrcErrors(id);
     }
   });
 };
@@ -149,6 +166,7 @@ const clearOverlayMedia = () => {
   });
   videoElements.clear();
   imageElements.clear();
+  resetVideoSrcErrors();
 };
 
 const seekVideo = (clip: VideoClip, playheadMs: number) => {
@@ -220,14 +238,17 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
   // progress: `src` only catches up on commit, so drawing from it would lag a
   // whole stroke behind the cursor (same rule as raster ELEMENTS).
   const liveBuffer = getBuffer(clip.id);
-  const isVideoClip = /\.(mp4|webm|mov|mkv|avi|m4v)$/i.test(clip.src || '') && !clip.frames;
+  const isVideoClip = isVideoSrc(clip.src) && !clip.frames;
   const isSticker = !!clip.frames;
   const relativeMs = Math.max(0, playheadMs - clip.startMs);
   const stickerFrameUrl = isSticker ? getStickerFrameUrl(clip, relativeMs) : undefined;
+  // An errored clip draws the placeholder below, not the dead element — skip
+  // the element lookup so nothing tries to paint from it.
+  const clipErrored = isVideoClip && videoSrcErrored(clip);
   const source = liveBuffer
     ? (liveBuffer as unknown as HTMLImageElement)
     : isVideoClip
-      ? getOrCreateVideo(clip)
+      ? (clipErrored ? null : getOrCreateVideo(clip))
       : getOrCreateImage(stickerFrameUrl ?? clip.src);
   const filterString = useMemo(
     () => {
@@ -283,6 +304,33 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
       deleteCanvasStore(canvasId);
     };
   }, [canvasId]);
+
+  if (clipErrored) {
+    // A clip whose video element errored would paint black forever —
+    // indistinguishable from a black video frame. Draw an explicit dead-clip
+    // placeholder so a broken URL is visible on the artboard.
+    return (
+      <>
+        <KonvaRect
+          width={width}
+          height={height}
+          cornerRadius={8}
+          fill="#1f1f23"
+          listening={false}
+        />
+        <KonvaText
+          width={width}
+          height={height}
+          text="Video failed to load"
+          align="center"
+          verticalAlign="middle"
+          fontSize={13}
+          fill="#9ca3af"
+          listening={false}
+        />
+      </>
+    );
+  }
 
   if (!source) return null;
   // The clip's blend mode composites its OWN draw against what is already on

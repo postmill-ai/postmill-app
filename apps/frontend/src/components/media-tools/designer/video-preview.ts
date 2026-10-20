@@ -206,6 +206,10 @@ export class VideoPreviewEngine {
   private startPlayheadMs: number = 0;
   private videoElements: Map<string, HTMLVideoElement> = new Map();
   private audioElements: Map<string, HTMLAudioElement> = new Map();
+  // Clips whose element fired `error` (404, CORS, bad codec). Demoted out of
+  // the per-tick seek/play path so a dead clip can't keep the engine retrying
+  // it every frame while the rest of the timeline plays on.
+  private failedMedia: Set<string> = new Set();
 
   constructor(store: ReturnType<typeof import('./designer.store').createDesignerStore>) {
     this.store = store;
@@ -286,7 +290,7 @@ export class VideoPreviewEngine {
         const sourceTime = sourceTimeForPlayhead(clip, ms);
         if (sourceTime === null) continue;
 
-        if (track.type === 'video' && clip.src && (clip.speed == null || clip.speed > 0)) {
+        if (track.type === 'video' && clip.src && !this.failedMedia.has(clip.id) && (clip.speed == null || clip.speed > 0)) {
           const el = this.getOrCreateVideo(clip);
           if (el) {
             activeIds.add(clip.id);
@@ -313,7 +317,7 @@ export class VideoPreviewEngine {
           }
         }
 
-        if (track.type === 'audio' && clip.src && (clip.speed == null || clip.speed > 0)) {
+        if (track.type === 'audio' && clip.src && !this.failedMedia.has(clip.id) && (clip.speed == null || clip.speed > 0)) {
           const el = this.getOrCreateAudio(clip);
           if (el) {
             activeIds.add(clip.id);
@@ -367,6 +371,15 @@ export class VideoPreviewEngine {
     return clip.speed !== undefined && clip.speed > 0 ? clip.speed : null;
   }
 
+  // A media element that errors never becomes playable; demote the clip so the
+  // per-tick path stops seeking and retrying play() on it, and log enough to
+  // find the dead src.
+  private markMediaFailed(clip: VideoClip, el: HTMLMediaElement) {
+    console.error(`[video-preview] clip ${clip.id} failed to load: ${clip.src}`);
+    this.failedMedia.add(clip.id);
+    el.pause();
+  }
+
   private getOrCreateVideo(clip: VideoClip): HTMLVideoElement | null {
     if (!clip.src) return null;
     if (this.videoElements.has(clip.id)) {
@@ -380,6 +393,7 @@ export class VideoPreviewEngine {
 
     const el = document.createElement('video');
     el.src = clip.src;
+    el.addEventListener('error', () => this.markMediaFailed(clip, el));
     // Only mute when the volume is explicitly zeroed; an unset volume defaults to
     // 1 (audible), so the preview no longer silences default video audio. A
     // keyframed volume overrides this on the next tick (see seekMediaElements).
@@ -411,6 +425,7 @@ export class VideoPreviewEngine {
 
     const el = document.createElement('audio');
     el.src = clip.src;
+    el.addEventListener('error', () => this.markMediaFailed(clip, el));
     el.volume = clampVolume(volumeAtClipTime(clip, 0));
     const rate = this.initialRateFor(clip);
     if (rate !== null) {
@@ -442,5 +457,6 @@ export class VideoPreviewEngine {
     });
     this.videoElements.clear();
     this.audioElements.clear();
+    this.failedMedia.clear();
   }
 }

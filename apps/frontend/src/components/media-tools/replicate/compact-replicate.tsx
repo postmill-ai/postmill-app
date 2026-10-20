@@ -118,6 +118,25 @@ export const CompactReplicate: FC<{
   const { data: jobData } = useReplicateJobPoll(jobId);
   const handledJobRef = useRef<string | null>(null);
   useEffect(() => {
+    if (!jobId) return;
+    // Bound the poll: without it a wedged job spins the dialog forever. 20 min
+    // is deliberate — the legacy path caps at 200×3s=10min, but seedance/veo
+    // can legitimately take 10-15 min. On timeout the job may still finish
+    // server-side (it already lands in Files when it does), so say so instead
+    // of reporting a failure.
+    const guard = window.setTimeout(() => {
+      handledJobRef.current = jobId;
+      setJobId(null);
+      fail(
+        t(
+          'compact_replicate_generation_timeout',
+          'Generation is taking longer than expected — the job may still finish. Check the media library or jobs list shortly.'
+        )
+      );
+    }, 20 * 60 * 1000);
+    return () => window.clearTimeout(guard);
+  }, [jobId, fail, t]);
+  useEffect(() => {
     if (!jobId || !jobData || handledJobRef.current === jobId) return;
     if (jobData.status === 'completed' && jobData.result?.urls?.[0]) {
       handledJobRef.current = jobId;

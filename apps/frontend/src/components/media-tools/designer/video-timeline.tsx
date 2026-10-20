@@ -2744,6 +2744,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     // visibly on the canvas instead of looking like nothing happened.
     const landAndReveal = async (url: string) => {
       const landed = await addMediaToTimeline(store, { type, url });
+      if (landed?.probeFailed) {
+        toaster.show(
+          translate('couldnt_read_video_metadata', "Couldn't read the video's metadata — placed with a default duration"),
+          'warning'
+        );
+      }
       if (landed) {
         store.getState().setPlayhead(landed.startMs);
         store.getState().setSelectedClip({

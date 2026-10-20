@@ -5,6 +5,7 @@ import { act } from 'react';
 import Konva from 'konva';
 import { Stage, Layer } from 'react-konva';
 import { VideoCanvasOverlay } from './video-canvas-overlay';
+import { videoSrcErrored, resetVideoSrcErrors } from './video-src';
 import { createDesignerStore, type VideoOutput } from './designer.store';
 
 /**
@@ -34,6 +35,7 @@ afterEach(async () => {
   root = null;
   vi.restoreAllMocks();
   document.body.innerHTML = '';
+  resetVideoSrcErrors();
 });
 
 const videoStore = () => {
@@ -100,5 +102,55 @@ describe('video overlay paint invalidation', () => {
       video!.dispatchEvent(new Event('seeked'));
     });
     expect(spy.mock.calls.length).toBeGreaterThan(beforeSeek);
+  });
+
+  it('repaints and swaps to a failure placeholder when the video element errors', async () => {
+    // A video that can't load (404, CORS, bad codec) never fires loadeddata —
+    // without the error path it paints black forever.
+    const store = videoStore();
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const spy = vi
+      .spyOn(Konva.Layer.prototype, 'batchDraw')
+      .mockImplementation(function (this: Konva.Layer) {
+        return this;
+      });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={1080} height={1080}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={1080} height={1080} />
+          </Layer>
+        </Stage>
+      );
+    });
+
+    const video = document.querySelector('video');
+    expect(video).toBeTruthy();
+    expect(videoSrcErrored({ id: 'c1', src: 'https://example.com/a.mp4' })).toBe(false);
+
+    const beforeError = spy.mock.calls.length;
+    await act(async () => {
+      video!.dispatchEvent(new Event('error'));
+    });
+
+    // The error both repaints (so the placeholder appears) and records the
+    // clip as errored...
+    expect(spy.mock.calls.length).toBeGreaterThan(beforeError);
+    expect(videoSrcErrored({ id: 'c1', src: 'https://example.com/a.mp4' })).toBe(true);
+
+    // ...and the artboard shows the dead-clip placeholder instead of black.
+    const texts = Konva.stages
+      .flatMap((s) => s.find('Text'))
+      .map((n) => (n as Konva.Text).text());
+    expect(texts).toContain('Video failed to load');
+
+    // A src swap (regenerate) clears the error for the same clip id.
+    expect(videoSrcErrored({ id: 'c1', src: 'https://example.com/b.mp4?v=2' })).toBe(false);
   });
 });
