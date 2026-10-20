@@ -978,7 +978,8 @@ paths:
         URLs in the job payload. Single-range support: Chromium issues range
         requests while seeking a <video>, and a 200-to-range fallback would make it
         re-fetch whole clips. The throttle override keeps the global 600/h backstop
-        from starving parallel capture pages on a clip-heavy render.
+        from starving parallel capture pages on a clip-heavy render. Both route
+        params are allowlist-validated (400) before they reach any path expression.
       tags:
         - Design Render
   /media/designs/render-frame/{jobId}:
