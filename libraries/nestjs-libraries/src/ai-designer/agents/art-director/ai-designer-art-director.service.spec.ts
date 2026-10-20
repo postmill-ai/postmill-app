@@ -116,6 +116,44 @@ describe('AiDesignerArtDirectorService', () => {
     expect(content.plans[0].concept).toBe('A valid plan');
   });
 
+  it('logs the reason an invalid plan item was dropped', async () => {
+    const warn = vi.spyOn((service as any)._logger, 'warn');
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [{ concept: 'missing slots' }],
+    });
+
+    await handler(makeRequest(), 'org1');
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Art director received an invalid plan item; dropping it. Reason: "slots" is missing or not an array'
+      )
+    );
+  });
+
+  it('logs the schema-v2 issues when a plan item fails v2 validation', async () => {
+    const warn = vi.spyOn((service as any)._logger, 'warn');
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        {
+          concept: 'Bad slot style',
+          slots: [{ id: 'headline', style: { fontWeight: 'heavy' } }],
+        },
+      ],
+    });
+
+    await handler(makeRequest(), 'org1');
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('schema-v2 fields failed validation:')
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('slots.0.style.fontWeight:')
+    );
+  });
+
   it('never pads the response with duplicate plans when fewer than requested validate', async () => {
     const validPlan: DesignPlan = {
       variantId: 'orig',
@@ -278,7 +316,8 @@ describe('AiDesignerArtDirectorService', () => {
     expect(content.plans[0].styleId).toBe('neon');
   });
 
-  it('drops a plan whose styleId is not in the registry', async () => {
+  it('recovers a plan whose styleId is not in the registry instead of dropping it', async () => {
+    const warn = vi.spyOn((service as any)._logger, 'warn');
     model.generateObject.mockResolvedValue({
       type: 'plans',
       plans: [
@@ -299,9 +338,21 @@ describe('AiDesignerArtDirectorService', () => {
     const res = await handler(makeRequest(), 'org1');
     const content = JSON.parse(res.content);
 
+    // One hallucinated preset id must not wipe the plan (previously the whole
+    // batch fell back): the item is kept and its styleId catches to the
+    // default preset.
     expect(content.plans).toHaveLength(1);
-    expect(content.plans[0].fallback).toBe(true);
+    expect(content.plans[0].concept).toBe('A plan with a bogus style');
+    expect(content.plans[0].fallback).toBeUndefined();
     expect(content.plans[0].styleId).toBe('bold');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'unknown styleId "grunge-core"; recovering to default preset "bold"'
+      )
+    );
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('dropping it')
+    );
   });
 
   it('drops a plan with a malformed slot style override', async () => {

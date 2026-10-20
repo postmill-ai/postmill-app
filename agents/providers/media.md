@@ -119,7 +119,7 @@ node tools/codegen/generate-studio-descriptor-registry.mjs          # write mode
 node tools/codegen/generate-studio-descriptor-registry.mjs --check  # verify no drift
 ```
 
-Descriptor caveats: a descriptor that imports runtime values (custom panels) is skipped by the generator; orchestration categories (`image-focal-point`, `image-slide`, `video-caption`) declared in `metadata.ts` are preserved; live-`listModels` hubs and action-only providers are special-cased in the script's constant sets.
+Descriptor caveats: a descriptor that imports runtime values (custom panels) is skipped by the generator; orchestration categories (`image-focal-point`, `image-slide`, `video-caption`) declared in `metadata.ts` are preserved, and so is a hand-authored `mediaModels` catalog under an orchestration category (descriptors never generate one — e.g. OpenAI's Whisper ids under `video-caption`); live-`listModels` hubs and action-only providers are special-cased in the script's constant sets.
 
 ## 6. Bespoke-studio exceptions
 

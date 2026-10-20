@@ -579,4 +579,88 @@ describe('DefaultsResolutionService', () => {
       expect.stringContaining('No modelHints matched')
     );
   });
+
+  it('words the NULL-model stored default distinctly from a catalog miss', async () => {
+    // Legacy seeds stored a media default with model NULL for model-less
+    // categories; SQL NULL must not render as a literal 'null' model id.
+    const repository = makeRepository({
+      get: vi.fn().mockResolvedValue({
+        providerId: 'openai',
+        version: 'v1',
+        model: null,
+        settings: null,
+      }),
+    });
+    const aiSettings = makeAiSettings([
+      { identifier: 'openai', enabled: true, isConfigured: true, version: 'v1' },
+    ]);
+    const kernel = makeKernel({
+      get: vi.fn().mockReturnValue({
+        manifest: { status: 'active' },
+        create: () => ({
+          listModels: vi.fn().mockResolvedValue([{ id: 'gpt-4.1' }]),
+        }),
+      }),
+    });
+    service = new DefaultsResolutionService(
+      repository as any,
+      aiSettings as any,
+      makeMediaSettings() as any,
+      kernel as any,
+      makeRuntimeContextFactory() as any,
+    );
+    const warn = vi
+      .spyOn((service as any)._logger, 'warn')
+      .mockImplementation(() => undefined);
+
+    const result = await service.resolve('ai', 'low-reasoning', 'org-1');
+
+    expect(result?.source).toBe('auto');
+    expect(result?.model).toBe('gpt-4.1');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('names no model')
+    );
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('"null"'));
+  });
+
+  it('renders the stored model id when it is missing from the catalog', async () => {
+    const repository = makeRepository({
+      get: vi.fn().mockResolvedValue({
+        providerId: 'openai',
+        version: 'v1',
+        model: 'gpt-retired',
+        settings: null,
+      }),
+    });
+    const aiSettings = makeAiSettings([
+      { identifier: 'openai', enabled: true, isConfigured: true, version: 'v1' },
+    ]);
+    const kernel = makeKernel({
+      get: vi.fn().mockReturnValue({
+        manifest: { status: 'active' },
+        create: () => ({
+          listModels: vi.fn().mockResolvedValue([{ id: 'gpt-4.1' }]),
+        }),
+      }),
+    });
+    service = new DefaultsResolutionService(
+      repository as any,
+      aiSettings as any,
+      makeMediaSettings() as any,
+      kernel as any,
+      makeRuntimeContextFactory() as any,
+    );
+    const warn = vi
+      .spyOn((service as any)._logger, 'warn')
+      .mockImplementation(() => undefined);
+
+    const result = await service.resolve('ai', 'low-reasoning', 'org-1');
+
+    expect(result?.source).toBe('auto');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'model "gpt-retired" (org org-1, category low-reasoning) is not in the provider catalog'
+      )
+    );
+  });
 });

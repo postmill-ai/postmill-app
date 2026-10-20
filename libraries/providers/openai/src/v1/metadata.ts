@@ -654,6 +654,20 @@ export const metadata: ProviderMetadata = {
           }
         ]
       }
+    ],
+    "video-caption": [
+      {
+        "id": "whisper-1",
+        "label": "Whisper-1"
+      },
+      {
+        "id": "gpt-4o-mini-transcribe",
+        "label": "GPT-4o mini Transcribe"
+      },
+      {
+        "id": "gpt-4o-transcribe",
+        "label": "GPT-4o Transcribe"
+      }
     ]
   },
   "website": "https://openai.com",

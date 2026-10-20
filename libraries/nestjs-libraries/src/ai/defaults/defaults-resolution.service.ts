@@ -81,11 +81,20 @@ export class DefaultsResolutionService {
         }
         // The org explicitly stored this default but the provider's (live)
         // catalog no longer lists the model — falling through silently swaps
-        // their pick for an auto-selection, so leave a trace.
-        this._logger.warn(
-          `Stored ${domain} default ${row.providerId}@${resolvedVersion} model "${row.model}" ` +
-            `(org ${orgId}, category ${category}) is not in the provider catalog — auto-picking instead.`,
-        );
+        // their pick for an auto-selection, so leave a trace. A NULL model
+        // (legacy seed of a model-less category) is worded distinctly so SQL
+        // NULL is not confused with a literal 'null' model id.
+        if (row.model == null) {
+          this._logger.warn(
+            `Stored ${domain} default ${row.providerId}@${resolvedVersion} ` +
+              `(org ${orgId}, category ${category}) names no model — auto-picking instead.`,
+          );
+        } else {
+          this._logger.warn(
+            `Stored ${domain} default ${row.providerId}@${resolvedVersion} model "${row.model}" ` +
+              `(org ${orgId}, category ${category}) is not in the provider catalog — auto-picking instead.`,
+          );
+        }
       }
     }
 

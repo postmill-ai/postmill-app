@@ -313,6 +313,15 @@ function reconcileMetadata(providerId, existing, catalog) {
     }
   }
 
+  // Descriptors never generate models for orchestration categories, so a
+  // hand-authored static catalog there (e.g. OpenAI's Whisper ids under
+  // video-caption) must survive regeneration instead of being dropped.
+  for (const cat of ORCHESTRATION_CATEGORIES) {
+    if (!mergedMediaModels[cat] && existing.mediaModels?.[cat]?.length) {
+      mergedMediaModels[cat] = existing.mediaModels[cat];
+    }
+  }
+
   // Snapshot-backed direct providers (e.g. Replicate) have no descriptor but do
   // carry a committed mediaModels catalog. Preserve it rather than clearing it.
   const hasGeneratedModels = Object.keys(mergedMediaModels).length > 0;

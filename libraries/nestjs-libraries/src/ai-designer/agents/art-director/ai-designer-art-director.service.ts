@@ -735,13 +735,14 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
 
     const validPlans: DesignPlan[] = [];
     for (const item of result.plans) {
-      if (this._isValidPlanItem(item)) {
+      const dropReason = this._isValidPlanItem(item);
+      if (!dropReason) {
         validPlans.push(item as DesignPlan);
       } else {
         // Drop invalid items rather than replacing them with identical
         // fallback plans — fewer real plans beats duplicate filler.
         this._logger.warn(
-          'Art director received an invalid plan item; dropping it.'
+          `Art director received an invalid plan item; dropping it. Reason: ${dropReason}`
         );
       }
     }
@@ -1468,37 +1469,68 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
     return lines;
   }
 
-  private _isValidPlanItem(item: unknown): boolean {
+  /**
+   * Returns null when the item is a usable plan, otherwise the reason it was
+   * dropped — logged by the caller so a dropped batch is diagnosable.
+   */
+  private _isValidPlanItem(item: unknown): string | null {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      return false;
+      return 'item is not a plain object';
     }
     const candidate = item as Record<string, unknown>;
 
     if (typeof candidate.concept !== 'string') {
-      return false;
+      return '"concept" is missing or not a string';
     }
     if (!Array.isArray(candidate.slots)) {
-      return false;
+      return '"slots" is missing or not an array';
     }
     for (const slot of candidate.slots) {
       if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
-        return false;
+        return 'a slot entry is not a plain object';
       }
       if (typeof (slot as Record<string, unknown>).id !== 'string') {
-        return false;
+        return 'a slot entry is missing its "id" string';
       }
     }
     if ('assetNeeds' in candidate && !Array.isArray(candidate.assetNeeds)) {
-      return false;
+      return '"assetNeeds" is present but not an array';
     }
 
     // Schema-v2 fields (styleId, slot style overrides, channelLayouts): a
     // malformed value drops this plan only, never the batch.
-    if (!DesignPlanV2FieldsSchema.safeParse(candidate).success) {
-      return false;
+    const parsed = DesignPlanV2FieldsSchema.safeParse(candidate);
+    if (!parsed.success) {
+      const styleIdIssues = parsed.error.issues.filter(
+        (issue) => issue.path[0] === 'styleId'
+      );
+      const otherIssues = parsed.error.issues.filter(
+        (issue) => issue.path[0] !== 'styleId'
+      );
+      if (otherIssues.length === 0) {
+        // An unknown styleId is recoverable: the conductor force-overrides
+        // styleId from brief.styleId and the composer falls back to the
+        // default preset, so one hallucinated preset id must not wipe the
+        // batch. Catch it to the default at item level; everything else in
+        // the schema stays strict.
+        this._logger.warn(
+          `Art director plan item declared an unknown styleId ${JSON.stringify(
+            candidate.styleId
+          )}; recovering to default preset "${DEFAULT_STYLE_ID}".`
+        );
+        candidate.styleId = DEFAULT_STYLE_ID;
+        return null;
+      }
+      const detail = otherIssues
+        .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+        .join('; ');
+      const styleIdNote = styleIdIssues.length
+        ? `; styleId=${JSON.stringify(candidate.styleId)}`
+        : '';
+      return `schema-v2 fields failed validation: ${detail}${styleIdNote}`;
     }
 
-    return true;
+    return null;
   }
 
   private _designPlanSchema(): Record<string, unknown> {

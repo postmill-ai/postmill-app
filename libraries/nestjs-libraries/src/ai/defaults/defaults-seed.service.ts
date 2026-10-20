@@ -44,6 +44,23 @@ export class DefaultsSeedService {
     const resolved = await this._resolution.resolve(domain, category, orgId);
     if (!resolved || resolved.source !== 'auto') return;
 
+    // A model-bearing provider whose auto-pick produced no model would be
+    // stored as a NULL-model row that can never resolve — the stored-model
+    // catalog check fails on every read and warns forever. Action providers
+    // are model-less by design (their NULL model resolves fine), so only
+    // those may seed without a model.
+    if (!resolved.model) {
+      const candidates = await this._resolution.candidates(domain, category, orgId);
+      const kind = candidates.find((c) => c.providerId === resolved.providerId)
+        ?.metadata.kind;
+      if (kind !== 'action') {
+        this._logger.debug(
+          `Skipping seed for ${domain}/${category} (org ${orgId}): auto-pick resolved ${resolved.providerId}@${resolved.version} with no model.`,
+        );
+        return;
+      }
+    }
+
     try {
       await this._repository.upsert(orgId, domain, category, {
         providerId: resolved.providerId,
