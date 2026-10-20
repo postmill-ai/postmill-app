@@ -65,6 +65,19 @@ ${stripExportsNamespace(transitionsSource())}
 
   const imageCache = new Map();
   const videoCache = new Map();
+  // Wedge bookkeeping for seekVideo: consecutive wedged seeks per element, and
+  // the elements that already had their ONE reload.
+  const videoWedges = new Map();
+  const videoReloaded = new WeakSet();
+
+  // Both timeouts stay at 5000ms: a legitimate seek CAN take seconds when the
+  // CDN range re-fetch is merely slow, and halving it would false-positive
+  // slow-but-healthy seeks into pointless reloads. The wedge streak
+  // (3 x SEEK_TIMEOUT_MS) plus one reload still fails a frame in well under
+  // the 30s frame watchdog (VIDEO_RENDER_FRAME_TIMEOUT_MS).
+  const VIDEO_LOAD_FALLBACK_MS = 5000;
+  const SEEK_TIMEOUT_MS = 5000;
+  const WEDGE_RELOAD_THRESHOLD = 3;
 
   function resolveUrl(src) {
     if (!src) return src;
@@ -94,6 +107,11 @@ ${stripExportsNamespace(transitionsSource())}
     if (videoCache.has(url)) return videoCache.get(url);
     const video = document.createElement('video');
     video.crossOrigin = 'anonymous';
+    // Buffer the whole clip up front. The default ('metadata') lets the
+    // browser discard the buffer under memory pressure; every seek then
+    // re-fetches a CDN range, and a slow re-fetch wedges the seek — the
+    // 10s/frame render stall this page now fails fast on.
+    video.preload = 'auto';
     video.src = url;
     video.muted = true;
     video.playsInline = true;
@@ -105,38 +123,85 @@ ${stripExportsNamespace(transitionsSource())}
       video.onloadeddata = () => resolve(video);
       video.onerror = (e) => reject(new Error('Video load failed: ' + url));
       // safety fallback
-      setTimeout(() => resolve(video), 5000);
+      setTimeout(() => resolve(video), VIDEO_LOAD_FALLBACK_MS);
     });
     videoCache.set(url, ready);
     return ready;
   }
 
+  // One seek attempt: resolves true when 'seeked' lands, false when it wedges.
+  // A wedged seek must not hang this page's stride forever — after the timeout
+  // the frame draws whatever the video's currentTime happens to be.
+  function attemptSeek(video, target) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (ok) => {
+        if (settled) return;
+        settled = true;
+        video.removeEventListener('seeked', onSeeked);
+        resolve(ok);
+      };
+      const onSeeked = () => done(true);
+      video.addEventListener('seeked', onSeeked);
+      setTimeout(() => {
+        if (!settled && window.console && console.warn) {
+          console.warn('seekVideo: seeked timeout after ' + SEEK_TIMEOUT_MS + 'ms, target=' + target);
+        }
+        done(false);
+      }, SEEK_TIMEOUT_MS);
+      video.currentTime = target;
+    });
+  }
+
+  function waitForLoaded(video) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        video.removeEventListener('loadeddata', onLoaded);
+        resolve(undefined);
+      };
+      const onLoaded = () => done();
+      video.addEventListener('loadeddata', onLoaded);
+      setTimeout(done, VIDEO_LOAD_FALLBACK_MS);
+    });
+  }
+
+  async function reloadAndReseek(video, target) {
+    videoReloaded.add(video);
+    if (window.console && console.warn) {
+      console.warn('seekVideo: reloading wedged video element, target=' + target);
+    }
+    video.load();
+    await waitForLoaded(video);
+    return attemptSeek(video, target);
+  }
+
   async function seekVideo(video, timeSec) {
     const target = Math.max(0, timeSec);
-    if (Math.abs(video.currentTime - target) > 0.033) {
-      await new Promise((resolve) => {
-        let settled = false;
-        const done = () => {
-          if (settled) return;
-          settled = true;
-          video.removeEventListener('seeked', onSeeked);
-          resolve(undefined);
-        };
-        const onSeeked = () => done();
-        video.addEventListener('seeked', onSeeked);
-        // Safety fallback (mirrors getVideo's 5s load fallback): a wedged seek
-        // that never fires 'seeked' must not hang this page's stride forever —
-        // after the timeout the frame draws whatever the video's currentTime
-        // happens to be.
-        setTimeout(() => {
-          if (!settled && window.console && console.warn) {
-            console.warn('seekVideo: seeked timeout after 5000ms, target=' + target);
-          }
-          done();
-        }, 5000);
-        video.currentTime = target;
-      });
+    if (Math.abs(video.currentTime - target) <= 0.033) return;
+    if (await attemptSeek(video, target)) {
+      // A clean seek proves the element recovered — reset the wedge streak.
+      videoWedges.delete(video);
+      return;
     }
+    // A wedged seek silently draws stale pixels. Tolerate a few in a row
+    // (transient CDN slowness), then reload the element ONCE and reseek; if it
+    // still wedges, the element is unrecoverable in-page — throw so the frame
+    // (and render) fails fast instead of every remaining frame burning
+    // SEEK_TIMEOUT_MS on stale pixels until the job timeout.
+    const wedges = (videoWedges.get(video) || 0) + 1;
+    videoWedges.set(video, wedges);
+    if (wedges < WEDGE_RELOAD_THRESHOLD) return;
+    if (!videoReloaded.has(video) && (await reloadAndReseek(video, target))) {
+      videoWedges.delete(video);
+      return;
+    }
+    throw new Error(
+      'seekVideo: video element still wedged after ' + wedges +
+        ' consecutive seeks and a reload (target=' + target + ')'
+    );
   }
 
   // Mirrors parseDesignerFilterToken + cssFilterForToken (filter-tokens.ts),

@@ -89,6 +89,10 @@ describe('PodmanRenderService', () => {
       '4',
       '--memory',
       '8g',
+      // Zero swap allowance (memory-swap is the memory+swap total on cgroup
+      // v2): a render pod cannot push the host into swap thrash.
+      '--memory-swap',
+      '8g',
       '--network',
       'bridge',
     ]);
@@ -131,6 +135,10 @@ describe('PodmanRenderService', () => {
     expect(runArgs).toContain('--cpus');
     // 4 CPU total / 4 concurrency = 1.00 per container
     expect(runArgs[runArgs.indexOf('--cpus') + 1]).toBe('1.00');
+    // 8g total / 4 concurrency = 2g per container, and memory-swap pinned to
+    // the same value so the degraded path also gets zero swap allowance.
+    expect(runArgs[runArgs.indexOf('--memory') + 1]).toBe('2g');
+    expect(runArgs[runArgs.indexOf('--memory-swap') + 1]).toBe('2g');
     expect(runArgs).toContain('--network');
     fs.rmSync(workDir, { recursive: true, force: true });
     delete process.env.VIDEO_RENDER_CONCURRENCY;

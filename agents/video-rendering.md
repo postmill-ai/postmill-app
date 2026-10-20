@@ -206,14 +206,22 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      N > 1 — the post-#172 production wedge — and is the likely mechanism behind
      the original #152 "one stride completes" stall). Fail-fast hardening: wedged
      video seeks resolve after a 5s timeout instead of hanging a stride
-     (`seekVideo`), each frame's render+readback runs under a per-frame watchdog
+     (`seekVideo`) — but a wedged element that KEEPS timing out is no longer
+     tolerated forever: consecutive wedged seeks are counted per element, after
+     3 the element is reloaded once (`video.load()` + reseek), and a seek that
+     still wedges after the reload THROWS so the render aborts fast instead of
+     drawing stale frames at 10s/frame until the job timeout (clip videos also
+     load with `preload='auto'` so the browser does not discard the buffer
+     under memory pressure). Each frame's render+readback runs under a per-frame watchdog
      (`VIDEO_RENDER_FRAME_TIMEOUT_MS`, default 30s), a wedged frame is retried
      ONCE on a freshly set-up page before the render aborts, and a browser
      `disconnected` / page `error` (crash) listener rejects all in-flight strides
      immediately instead of burning the whole render budget. `onProgress` reports
      a GLOBAL completed count (monotonic). MEMORY: every page loads all clip
      media, so peak RSS roughly multiplies by N — the render pod is cgroup-capped
-     (default 4 CPU / 8g).
+     (default 4 CPU / 8g, with `--memory-swap` pinned to the memory limit so the
+     render pod gets ZERO swap allowance and cannot push the host into swap
+     thrash; the degraded per-container split path pins it likewise).
    - **Real render progress** (`design-render/render-progress.ts` +
      `render-progress-throttle.ts`): the capture loop's `onProgress` is wired through
      `FfmpegVideoEncoderService` (`VideoEncodeOptions.onProgress`) to a throttled

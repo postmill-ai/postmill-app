@@ -60,11 +60,17 @@ export class PodmanRenderService {
     } else {
       // Degraded: per-container even-split caps + per-container network.
       const split = Math.max(1, getRenderConcurrency());
+      const splitMem = this.splitMemory(cfg.memory, split);
       args.push(
         '--cpus',
         (cfg.cpus / split).toFixed(2),
         '--memory',
-        this.splitMemory(cfg.memory, split),
+        splitMem,
+        // memory-swap is the memory+swap TOTAL (cgroup v2), so equal to
+        // --memory means zero swap: a runaway render cannot push the host
+        // into swap thrash.
+        '--memory-swap',
+        splitMem,
         '--network',
         cfg.network,
       );
@@ -125,6 +131,11 @@ export class PodmanRenderService {
         '--cpus',
         String(cfg.cpus),
         '--memory',
+        cfg.memory,
+        // memory-swap is the memory+swap TOTAL (cgroup v2), so equal to
+        // --memory means zero swap for the pod cgroup — render jobs cannot
+        // push the host into swap thrash.
+        '--memory-swap',
         cfg.memory,
         '--network',
         cfg.network,

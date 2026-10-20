@@ -412,13 +412,17 @@ describe('FRAME_RENDERER_SCRIPT — video capture hardening', () => {
   // A video element whose load succeeds (src assignment fires onloadeddata on a
   // microtask, like a fast cache hit). Seeking only fires 'seeked' when
   // `seekedOnSet` is on — off is the wedge that used to hang a capture stride
-  // forever.
+  // forever. `seekedOnLoad` models what a reload does to the wedge (null =
+  // reload changes nothing).
   class FakeVideo {
     style: Record<string, string> = {};
     muted = false;
     playsInline = false;
     crossOrigin = '';
+    preload = '';
     seekedOnSet = false;
+    seekedOnLoad: boolean | null = null;
+    loadCalls = 0;
     onloadeddata: (() => void) | null = null;
     onerror: (() => void) | null = null;
     listeners: Record<string, Array<() => void>> = {};
@@ -429,7 +433,20 @@ describe('FRAME_RENDERER_SCRIPT — video capture hardening', () => {
     }
     set src(url: string) {
       this._src = url;
-      queueMicrotask(() => this.onloadeddata?.());
+      this.fireLoaded();
+    }
+    load() {
+      this.loadCalls++;
+      // A real load() rewinds to the start and re-fires loadeddata.
+      this._currentTime = 0;
+      if (this.seekedOnLoad !== null) this.seekedOnSet = this.seekedOnLoad;
+      this.fireLoaded();
+    }
+    private fireLoaded() {
+      queueMicrotask(() => {
+        this.onloadeddata?.();
+        (this.listeners['loadeddata'] || []).forEach((fn) => fn());
+      });
     }
     get currentTime() {
       return this._currentTime;
@@ -541,5 +558,111 @@ describe('FRAME_RENDERER_SCRIPT — video capture hardening', () => {
     // A lazily-skipped video still loads on demand when a frame draws it.
     await lazy.api.renderFrame(500);
     expect(lazy.videos).toHaveLength(1);
+  });
+
+  it('sets preload=auto so the browser keeps the clip buffered', async () => {
+    // 'metadata' (the default) lets the browser discard the buffer under
+    // memory pressure; every seek then re-fetches a CDN range — the wedge
+    // pattern behind the 10s/frame render stall.
+    const { api, videos } = runWithVideo(true);
+    await api.preload();
+    expect(videos).toHaveLength(1);
+    expect(videos[0].preload).toBe('auto');
+  });
+
+  // Renders one frame, advancing fake time until it settles; returns the
+  // rejection (null on success). A wedged frame settles after SEEK_TIMEOUT_MS,
+  // a wedged reload+reseek after ~2x that.
+  const frameOutcome = async (
+    api: { renderFrame: (ms: number) => Promise<void> },
+    ms: number,
+  ): Promise<unknown> => {
+    let error: unknown = null;
+    let settled = false;
+    const p = api.renderFrame(ms).then(
+      () => {
+        settled = true;
+      },
+      (e) => {
+        settled = true;
+        error = e;
+      },
+    );
+    // Flush the microtask-driven load so the frame parks inside the seek.
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    for (let guard = 0; guard < 60 && !settled; guard++) {
+      await vi.advanceTimersByTimeAsync(1000);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    }
+    await p;
+    if (!settled) throw new Error('frame did not settle within 60s of fake time');
+    return error;
+  };
+
+  it('reloads a wedged video element ONCE after 3 consecutive wedged seeks, then recovers', async () => {
+    vi.useFakeTimers();
+    try {
+      const { api, videos } = runWithVideo();
+      expect(await frameOutcome(api, 100)).toBeNull(); // wedge 1
+      expect(await frameOutcome(api, 200)).toBeNull(); // wedge 2
+      expect(videos[0].loadCalls).toBe(0); // streak below the threshold — no reload yet
+
+      videos[0].seekedOnLoad = true; // the reload recovers the element
+      expect(await frameOutcome(api, 300)).toBeNull(); // wedge 3 → reload + reseek succeeds
+      expect(videos[0].loadCalls).toBe(1);
+
+      // Recovered: further frames seek cleanly with no second reload.
+      expect(await frameOutcome(api, 400)).toBeNull();
+      expect(videos[0].loadCalls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('throws when the element still wedges after its one reload — the frame fails fast', async () => {
+    vi.useFakeTimers();
+    try {
+      const { api, videos } = runWithVideo(); // seekedOnSet stays false: reload does NOT fix it
+      expect(await frameOutcome(api, 100)).toBeNull(); // wedge 1
+      expect(await frameOutcome(api, 200)).toBeNull(); // wedge 2
+
+      // Wedge 3 → reload + wedged reseek → the frame REJECTS instead of
+      // drawing stale pixels (the render then aborts/retries fast instead of
+      // burning 2x5s per remaining frame until the job timeout).
+      const err = await frameOutcome(api, 300);
+      expect(err).toBeInstanceOf(Error);
+      expect(String(err)).toContain('still wedged');
+      expect(videos[0].loadCalls).toBe(1);
+
+      // The one reload is never repeated: a later wedge throws straight away.
+      const err2 = await frameOutcome(api, 400);
+      expect(String(err2)).toContain('still wedged');
+      expect(videos[0].loadCalls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a clean seek resets the consecutive-wedge counter', async () => {
+    vi.useFakeTimers();
+    try {
+      const { api, videos } = runWithVideo();
+      expect(await frameOutcome(api, 100)).toBeNull(); // wedge 1
+      expect(await frameOutcome(api, 200)).toBeNull(); // wedge 2
+
+      videos[0].seekedOnSet = true;
+      expect(await frameOutcome(api, 300)).toBeNull(); // clean seek → streak reset
+
+      videos[0].seekedOnSet = false;
+      expect(await frameOutcome(api, 400)).toBeNull(); // wedge 1 again...
+      expect(await frameOutcome(api, 500)).toBeNull(); // ...wedge 2 — still NO reload
+      expect(videos[0].loadCalls).toBe(0);
+
+      videos[0].seekedOnLoad = true;
+      expect(await frameOutcome(api, 600)).toBeNull(); // wedge 3 → reload recovers
+      expect(videos[0].loadCalls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
