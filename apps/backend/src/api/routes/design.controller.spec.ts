@@ -524,7 +524,11 @@ describe('DesignController', () => {
       designService.deleteFolder.mockResolvedValue({ id: 'f1' });
 
       expect(await templateController.deleteFolder(org, 'f1')).toEqual({ success: true });
-      expect(designService.deleteFolder).toHaveBeenCalledWith('org-1', 'f1');
+      expect(designService.deleteFolder).toHaveBeenCalledWith('org-1', 'f1', false);
+
+      // force=true unfiles the folder's contents instead of rejecting.
+      expect(await templateController.deleteFolder(org, 'f1', 'true')).toEqual({ success: true });
+      expect(designService.deleteFolder).toHaveBeenLastCalledWith('org-1', 'f1', true);
     });
 
     it('PUT /media/design-templates/:id/move is gated on media:update and defaults to root', async () => {

@@ -44,6 +44,10 @@ export function useDragAutoScroll<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const pointerY = useRef<number | null>(null);
   const raf = useRef<number | null>(null);
+  // The rAF loop self-reschedules; hold the ticking function in a ref so it
+  // can requeue itself without a useCallback self-reference (react-compiler
+  // rejects those).
+  const tickRef = useRef<(() => void) | null>(null);
 
   const stop = useCallback(() => {
     pointerY.current = null;
@@ -53,25 +57,29 @@ export function useDragAutoScroll<T extends HTMLElement>() {
     }
   }, []);
 
-  const tick = useCallback(() => {
-    const el = ref.current;
-    if (!el || pointerY.current === null) {
-      raf.current = null;
-      return;
-    }
-    const rect = el.getBoundingClientRect();
-    const delta = dragScrollDelta(rect.top, rect.bottom, pointerY.current);
-    if (delta) el.scrollTop += delta;
-    raf.current = requestAnimationFrame(tick);
+  useEffect(() => {
+    tickRef.current = () => {
+      const el = ref.current;
+      if (!el || pointerY.current === null) {
+        raf.current = null;
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      const delta = dragScrollDelta(rect.top, rect.bottom, pointerY.current);
+      if (delta) el.scrollTop += delta;
+      raf.current = requestAnimationFrame(tickRef.current!);
+    };
+    return () => {
+      tickRef.current = null;
+    };
   }, []);
 
-  const onDragOver = useCallback(
-    (e: React.DragEvent) => {
-      pointerY.current = e.clientY;
-      if (raf.current === null) raf.current = requestAnimationFrame(tick);
-    },
-    [tick]
-  );
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    pointerY.current = e.clientY;
+    if (raf.current === null && tickRef.current) {
+      raf.current = requestAnimationFrame(tickRef.current);
+    }
+  }, []);
 
   const onDragLeave = useCallback(
     (e: React.DragEvent) => {
