@@ -1078,7 +1078,7 @@ interface SlideshowDialogProps {
   onResult: (type: 'video' | 'audio', idOrUrl: string | false) => Promise<void>;
 }
 
-const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult }) => {
+export const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult }) => {
   const t = useT();
   const modals = useModals();
   const [prompt, setPrompt] = useState('');

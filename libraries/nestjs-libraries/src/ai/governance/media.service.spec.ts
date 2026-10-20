@@ -596,6 +596,24 @@ describe('AiMediaService', () => {
       const result = await service.textToSpeech('hello', { orgId: 'org-1' });
       expect(result.toString()).toBe('raw');
     });
+
+    it('rethrows the provider error when a resolved candidate fails (no bogus "not available" 409)', async () => {
+      // Prod case (Postmill QA, generate-slide): the org's default OpenAI TTS
+      // provider resolved fine but the upstream call hit the safeFetch timeout —
+      // the caller must see the real error, not CapabilityNotAvailable claiming
+      // no TTS provider is configured (mirrors _startAsyncJob's lastError rethrow).
+      const adapter = makeAdapter('openai', { tts: true }, {
+        textToSpeech: vi.fn().mockRejectedValue(new Error('safeFetch request timed out after 30000ms')),
+      });
+      const { service } = setup([adapter]);
+
+      await expect(service.textToSpeech('hello', { orgId: 'org-1' })).rejects.toThrow(
+        'safeFetch request timed out after 30000ms',
+      );
+      await expect(service.textToSpeech('hello', { orgId: 'org-1' })).rejects.not.toThrow(
+        CapabilityNotAvailable,
+      );
+    });
   });
 
   describe('textToSpeech provider pin', () => {
@@ -943,29 +961,37 @@ describe('AiMediaService', () => {
       model: 'black-forest-labs/flux-1.1-pro',
       source: 'org',
     };
-    const ttsDefault = { providerId: 'openai', version: 'v1', model: 'gpt-4o-mini-tts', source: 'org' };
     const reasoningDefault = { providerId: 'openai', version: 'v1', model: 'gpt-4.1', source: 'auto' };
+    // The TTS leg of the slideshow gate follows the tts OPERATION availability
+    // (the same capability-driven resolution as POST /media/text-to-speech), so
+    // the fixture needs a TTS-capable adapter, not a 'media/text-to-speech'
+    // defaults-catalog row.
+    const ttsAdapter = () =>
+      makeAdapter('openai', { tts: true }, {
+        textToSpeech: vi.fn().mockResolvedValue(Buffer.from('audio')),
+      });
 
-    it('marks image-slide available when all three pipeline defaults resolve', async () => {
+    it('marks image-slide available when frames, TTS and reasoning all resolve', async () => {
       const adapter = makeAdapter('replicate', { image: true });
       const defaultsResolution = slideDefaults({
         'media/image-slide': slideDefault,
-        'media/text-to-speech': ttsDefault,
         'ai/high-reasoning': reasoningDefault,
       });
-      const { service } = setup([adapter], undefined, defaultsResolution);
+      const { service } = setup([adapter, ttsAdapter()], undefined, defaultsResolution);
 
       const status = await service.getToolStatus('org-1');
 
       expect(status.tools['image-slide'].available).toBe(true);
     });
 
-    it('marks image-slide unavailable and names the missing text-to-speech default', async () => {
+    it('marks image-slide unavailable and names the missing text-to-speech provider', async () => {
       const adapter = makeAdapter('replicate', { image: true });
       const defaultsResolution = slideDefaults({
         'media/image-slide': slideDefault,
         'ai/high-reasoning': reasoningDefault,
       });
+      // No TTS-capable adapter enabled → the tts operation is unavailable even
+      // though the image and reasoning defaults resolve.
       const { service } = setup([adapter], undefined, defaultsResolution);
 
       const status = await service.getToolStatus('org-1');
@@ -978,9 +1004,8 @@ describe('AiMediaService', () => {
       const adapter = makeAdapter('replicate', { image: true });
       const defaultsResolution = slideDefaults({
         'media/image-slide': slideDefault,
-        'media/text-to-speech': ttsDefault,
       });
-      const { service } = setup([adapter], undefined, defaultsResolution);
+      const { service } = setup([adapter, ttsAdapter()], undefined, defaultsResolution);
 
       const status = await service.getToolStatus('org-1');
 

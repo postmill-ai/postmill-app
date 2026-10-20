@@ -52,9 +52,6 @@ describe.skipIf(!FFMPEG)('SlideService — real ffmpeg pipeline', () => {
         if (category === 'image-slide') {
           return Promise.resolve({ providerId: 'openrouter', version: 'v1', model: 'm', source: 'stored' });
         }
-        if (category === 'text-to-speech') {
-          return Promise.resolve({ providerId: 'openai', version: 'v1', model: 'tts-1', source: 'stored' });
-        }
         if (category === 'high-reasoning') {
           return Promise.resolve({ providerId: 'openai', version: 'v1', model: 'o3-mini', source: 'stored' });
         }
@@ -69,6 +66,12 @@ describe.skipIf(!FFMPEG)('SlideService — real ffmpeg pipeline', () => {
         ]),
       ),
       textToImage: vi.fn().mockResolvedValue(`data:image/png;base64,${PNG_BASE64}`),
+    };
+    const aiMediaService = {
+      listGenerationProviders: vi.fn().mockResolvedValue({
+        providers: [{ identifier: 'openai', name: 'OpenAI' }],
+        default: { providerId: 'openai', model: 'tts-1' },
+      }),
       textToSpeech: vi.fn().mockResolvedValue(audioBuffer),
     };
     const lifecycle = {
@@ -81,7 +84,7 @@ describe.skipIf(!FFMPEG)('SlideService — real ffmpeg pipeline', () => {
       getJob: vi.fn().mockResolvedValue({ id: 'slide-pipeline-1', artifactUrl: '/uploads/pipeline.mp4', status: 'completed' }),
       failJob: vi.fn().mockResolvedValue(undefined),
     };
-    return new SlideService(defaultsResolution as never, aiDefaults as never, lifecycle as never);
+    return new SlideService(defaultsResolution as never, aiDefaults as never, aiMediaService as never, lifecycle as never);
   }
 
   it('assembles a valid multi-slide mp4 with h264 video and aac audio', async () => {

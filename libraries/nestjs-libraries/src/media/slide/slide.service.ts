@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import { parseDataUrl } from '@postmill-ai/provider-kernel';
 import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
 import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults.errors';
 
@@ -55,22 +56,29 @@ export class SlideService {
   constructor(
     private _defaultsResolution: DefaultsResolutionService,
     private _aiDefaults: AiDefaultsService,
+    private _aiMediaService: AiMediaService,
     private _lifecycle: MediaJobLifecycleService,
   ) {}
 
   async generateSlide(options: SlideGenerationOptions): Promise<string> {
     const { orgId, userId, prompt, imageUrls } = options;
 
-    // Resolve the three sub-defaults required by the pipeline.
-    const [frameDefault, ttsDefault, reasoningDefault] = await Promise.all([
+    // Resolve the sub-defaults required by the pipeline. The TTS availability
+    // check goes through the SAME capability-driven resolution as
+    // POST /media/text-to-speech (listGenerationProviders → _resolveForOperation):
+    // the defaults-catalog resolver is a stricter, metadata-category-based gate
+    // that can report "no TTS default" for an org whose TTS provider actually
+    // works (prod: generate-slide 409'd while /media/text-to-speech succeeded
+    // on the org's OpenAI default).
+    const [frameDefault, reasoningDefault, ttsProviders] = await Promise.all([
       this._defaultsResolution.resolve('media', 'image-slide', orgId),
-      this._defaultsResolution.resolve('media', 'text-to-speech', orgId),
       this._defaultsResolution.resolve('ai', 'high-reasoning', orgId),
+      this._aiMediaService.listGenerationProviders(orgId, 'tts'),
     ]);
 
     if (!frameDefault) throw new DefaultNotConfiguredError('image-slide');
-    if (!ttsDefault) throw new DefaultNotConfiguredError('text-to-speech');
     if (!reasoningDefault) throw new DefaultNotConfiguredError('high-reasoning');
+    if (!ttsProviders.providers.length) throw new DefaultNotConfiguredError('text-to-speech');
 
     // 1. Break the script into slides using the high-reasoning default.
     const slides = await this._buildSlides(orgId, prompt, imageUrls);
@@ -155,9 +163,12 @@ export class SlideService {
 
     for (let i = 0; i < slides.length; i++) {
       const slide = slides[i];
+      // Narration goes through the exact call POST /media/text-to-speech makes —
+      // no defaults-catalog pre-gate (the availability check above already ran
+      // through the same resolution), so the two endpoints can never disagree.
       const [imageUrl, audioBuffer] = await Promise.all([
         this._aiDefaults.textToImage(orgId, slide.imagePrompt),
-        this._aiDefaults.textToSpeech(orgId, slide.script),
+        this._aiMediaService.textToSpeech(slide.script, { orgId }),
       ]);
 
       const imagePath = path.join(tmpDir, `slide-${i}.jpg`);

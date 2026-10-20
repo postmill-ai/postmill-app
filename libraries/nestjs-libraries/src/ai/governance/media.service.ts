@@ -624,23 +624,25 @@ export class AiMediaService {
         }
       }
 
-      // The slide pipeline needs THREE defaults (slide.service.generateSlide
-      // throws DefaultNotConfiguredError for each): image-slide frames,
-      // text-to-speech narration, and the high-reasoning script pass. Gate the
-      // tool on all three so the UI never offers Slideshow when the backend
-      // would 409 — and name the missing default in the reason.
-      if (category === 'image-slide' && entry.available && orgId && this._defaultsResolution) {
+      // The slide pipeline needs frames (image-slide op), TTS narration and a
+      // high-reasoning script pass (slide.service.generateSlide throws
+      // DefaultNotConfiguredError for each). The TTS leg is gated on the tts
+      // OPERATION availability — the same capability-driven resolution the
+      // generate path and POST /media/text-to-speech use — never on the
+      // stricter defaults-catalog read. Gate the tool on all three so the UI
+      // never offers Slideshow when the backend would 409 — and name the
+      // missing piece in the reason.
+      if (category === 'image-slide' && entry.available && orgId) {
         const missing: string[] = [];
-        try {
-          const [ttsDefault, reasoningDefault] = await Promise.all([
-            this._defaultsResolution.resolve('media', 'text-to-speech', orgId),
-            this._defaultsResolution.resolve('ai', 'high-reasoning', orgId),
-          ]);
-          if (!ttsDefault) missing.push('text-to-speech');
-          if (!reasoningDefault) missing.push('high-reasoning');
-        } catch {
-          // Resolution hiccup — leave the op-level availability; the generate
-          // path reports the real error.
+        if (!operations.tts?.available) missing.push('text-to-speech');
+        if (this._defaultsResolution) {
+          try {
+            const reasoningDefault = await this._defaultsResolution.resolve('ai', 'high-reasoning', orgId);
+            if (!reasoningDefault) missing.push('high-reasoning');
+          } catch {
+            // Resolution hiccup — leave the op-level availability; the generate
+            // path reports the real error.
+          }
         }
         if (missing.length > 0) {
           entry.available = false;
@@ -1374,6 +1376,7 @@ export class AiMediaService {
       ? [await this._resolvePinnedForOperation(options?.orgId, 'tts', options!.provider!)]
       : await this._resolveForOperation(options?.orgId, 'tts');
 
+    let lastError: Error | undefined;
     for (const candidate of candidates) {
       if (!candidate.adapter.textToSpeech) continue;
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
@@ -1395,12 +1398,20 @@ export class AiMediaService {
         if (typeof result === 'string') return Buffer.from(result, 'base64');
       } catch (err) {
         if (pinned) throw err;
+        lastError = err as Error;
         this._logger.warn(
-          `Media provider ${candidate.adapter.identifier} TTS failed: ${(err as Error).message} — trying next`,
+          `Media provider ${candidate.adapter.identifier} TTS failed: ${lastError.message} — trying next`,
         );
       }
     }
 
+    // Candidates resolved but every CALL failed (e.g. an upstream timeout): the
+    // provider IS configured — rethrow the real error (mirrors _startAsyncJob)
+    // instead of misreporting it as "not available" (a 409 telling the user to
+    // configure a provider they already have).
+    if (lastError) {
+      throw lastError;
+    }
     throw new CapabilityNotAvailable(
       'Text-to-speech is not available. Configure a TTS-capable media provider (ElevenLabs or OpenAI) in Settings > Media.',
       'speech',

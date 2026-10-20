@@ -63,14 +63,6 @@ function makeService() {
       if (category === 'image-slide') {
         return Promise.resolve({ providerId: 'openai', version: 'v1', model: 'dall-e-3', source: 'stored' });
       }
-      if (category === 'text-to-speech') {
-        return Promise.resolve({
-          providerId: 'elevenlabs',
-          version: 'v1',
-          model: 'eleven_multilingual_v2',
-          source: 'stored',
-        });
-      }
       if (category === 'high-reasoning') {
         return Promise.resolve({ providerId: 'openai', version: 'v1', model: 'o3-mini', source: 'stored' });
       }
@@ -82,6 +74,15 @@ function makeService() {
       JSON.stringify([{ script: 'Hello world', imagePrompt: 'A friendly greeting' }]),
     ),
     textToImage: vi.fn().mockResolvedValue('https://cdn.example.com/slide.png'),
+  };
+  // The TTS leg resolves through the SAME capability machinery as
+  // POST /media/text-to-speech (listGenerationProviders → _resolveForOperation),
+  // not the defaults-catalog resolver.
+  const aiMediaService = {
+    listGenerationProviders: vi.fn().mockResolvedValue({
+      providers: [{ identifier: 'openai', name: 'OpenAI' }],
+      default: { providerId: 'openai', model: 'gpt-4o-mini-tts' },
+    }),
     textToSpeech: vi.fn().mockResolvedValue(Buffer.from('fake-mp3-bytes')),
   };
   const lifecycle = {
@@ -101,8 +102,8 @@ function makeService() {
   };
 
   return {
-    service: new SlideService(defaultsResolution as never, aiDefaults as never, lifecycle as never),
-    mocks: { defaultsResolution, aiDefaults, lifecycle },
+    service: new SlideService(defaultsResolution as never, aiDefaults as never, aiMediaService as never, lifecycle as never),
+    mocks: { defaultsResolution, aiDefaults, aiMediaService, lifecycle },
   };
 }
 
@@ -129,14 +130,53 @@ describe('SlideService', () => {
     );
   });
 
+  it('generates when only the endpoint-style TTS resolution finds a provider (the prod 409 path)', async () => {
+    // Postmill QA prod case: the org's OpenAI TTS default works via
+    // /media/text-to-speech (capability-driven resolution) even where the
+    // defaults-catalog read for 'text-to-speech' resolves nothing. The slide
+    // pipeline must not 409 in that state.
+    const { service, mocks } = makeService();
+    mocks.defaultsResolution.resolve.mockImplementation((_domain: string, category: string) => {
+      if (category === 'text-to-speech') return Promise.resolve(null);
+      if (category === 'image-slide') {
+        return Promise.resolve({ providerId: 'openai', version: 'v1', model: 'dall-e-3', source: 'stored' });
+      }
+      if (category === 'high-reasoning') {
+        return Promise.resolve({ providerId: 'openai', version: 'v1', model: 'o3-mini', source: 'stored' });
+      }
+      return Promise.resolve(null);
+    });
+    mocks.aiMediaService.listGenerationProviders.mockResolvedValue({
+      providers: [{ identifier: 'openai', name: 'OpenAI' }],
+      default: { providerId: 'openai', model: 'gpt-4o-mini-tts' },
+    });
+
+    const result = await service.generateSlide({ orgId: 'org-1', prompt: 'A friendly greeting' });
+
+    expect(result).toBe('/uploads/slide-output.mp4');
+    expect(mocks.aiMediaService.textToSpeech).toHaveBeenCalledWith('Hello world', { orgId: 'org-1' });
+  });
+
+  it('throws DefaultNotConfiguredError when no TTS-capable provider resolves', async () => {
+    const { service, mocks } = makeService();
+    mocks.aiMediaService.listGenerationProviders.mockResolvedValue({ providers: [], default: null });
+
+    await expect(service.generateSlide({ orgId: 'org-1', prompt: 'Test' })).rejects.toThrow(
+      'No default configured for category: text-to-speech',
+    );
+    expect(mocks.lifecycle.createPendingJob).not.toHaveBeenCalled();
+  });
+
   it('creates an AIMediaJob with operation slide that completes to a /files video artifact', async () => {
     const { service, mocks } = makeService();
 
     const result = await service.generateSlide({ orgId: 'org-1', prompt: 'A friendly greeting' });
 
     expect(mocks.defaultsResolution.resolve).toHaveBeenCalledWith('media', 'image-slide', 'org-1');
-    expect(mocks.defaultsResolution.resolve).toHaveBeenCalledWith('media', 'text-to-speech', 'org-1');
     expect(mocks.defaultsResolution.resolve).toHaveBeenCalledWith('ai', 'high-reasoning', 'org-1');
+    // The TTS gate is the endpoint's capability resolution, not the defaults catalog.
+    expect(mocks.aiMediaService.listGenerationProviders).toHaveBeenCalledWith('org-1', 'tts');
+    expect(mocks.defaultsResolution.resolve).not.toHaveBeenCalledWith('media', 'text-to-speech', 'org-1');
 
     expect(mocks.lifecycle.createPendingJob).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -150,7 +190,7 @@ describe('SlideService', () => {
 
     expect(mocks.aiDefaults.highReasoningText).toHaveBeenCalled();
     expect(mocks.aiDefaults.textToImage).toHaveBeenCalledWith('org-1', 'A friendly greeting');
-    expect(mocks.aiDefaults.textToSpeech).toHaveBeenCalledWith('org-1', 'Hello world');
+    expect(mocks.aiMediaService.textToSpeech).toHaveBeenCalledWith('Hello world', { orgId: 'org-1' });
 
     expect(mockSafeFetch).toHaveBeenCalledWith('https://cdn.example.com/slide.png');
     expect(mocks.lifecycle.completeJobWithBuffer).toHaveBeenCalled();
