@@ -261,7 +261,7 @@ describe('addVoiceoverToTimeline — shared TTS/recording landing', () => {
       durationMs: 4000,
     });
 
-    expect(landed).toBe(true);
+    expect(landed).toBe('playhead');
     const { track, clip } = firstAudioClip(store);
     expect(track).toBeDefined();
     expect(clip).toBeDefined();
@@ -294,12 +294,14 @@ describe('addVoiceoverToTimeline — shared TTS/recording landing', () => {
       durationMs: 5000,
     });
 
-    expect(landed).toBe(true);
+    expect(landed).toBe('playhead');
     const { clip } = firstAudioClip(store);
     expect(clip!.endMs).toBe(vo.durationMs);
   });
 
-  it('returns false when the playhead is at the very end', async () => {
+  it('relocates to the timeline start when the playhead is at the very end', async () => {
+    // Regression: playhead == durationMs used to return false — the generated
+    // file was orphaned and the caller toasted "Voiceover generation failed".
     const store = createDesignerStore();
     const vo = toVideoMode(store);
     store.getState().setPlayhead(vo.durationMs);
@@ -309,9 +311,63 @@ describe('addVoiceoverToTimeline — shared TTS/recording landing', () => {
       durationMs: 5000,
     });
 
-    expect(landed).toBe(false);
-    const { track } = firstAudioClip(store);
-    expect(track?.clips ?? []).toHaveLength(0);
+    expect(landed).toBe('relocated');
+    const { clip } = firstAudioClip(store);
+    expect(clip).toBeDefined();
+    expect(clip!.startMs).toBe(0);
+    expect(clip!.endMs).toBe(5000);
+  });
+
+  it('relocates after the last same-track clip when the whole clip fits there', async () => {
+    const store = createDesignerStore();
+    const vo = toVideoMode(store);
+
+    await addVoiceoverToTimeline(store, { url: 'https://example.com/a.webm', durationMs: 2000 });
+    store.getState().setPlayhead(vo.durationMs);
+
+    const landed = await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/b.webm',
+      durationMs: 3000,
+    });
+
+    expect(landed).toBe('relocated');
+    const track = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((t) => t.type === 'audio')!;
+    const second = track.clips.find((c) => c.src === 'https://example.com/b.webm')!;
+    expect(second.startMs).toBe(2000);
+    expect(second.endMs).toBe(5000);
+  });
+
+  it('clamps a clip longer than the whole output to the output length instead of failing', async () => {
+    const store = createDesignerStore();
+    const vo = toVideoMode(store);
+    store.getState().setPlayhead(vo.durationMs);
+
+    const landed = await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/long.webm',
+      durationMs: vo.durationMs * 3,
+    });
+
+    expect(landed).toBe('relocated');
+    const { clip } = firstAudioClip(store);
+    expect(clip!.startMs).toBe(0);
+    expect(clip!.endMs).toBe(vo.durationMs);
+  });
+
+  it('relocates when the playhead leaves less than the minimum clip length', async () => {
+    // addClip enforces a 100ms floor — 50ms of room would be silently dropped
+    // by the store even if the helper returned success.
+    const store = createDesignerStore();
+    const vo = toVideoMode(store);
+    store.getState().setPlayhead(vo.durationMs - 50);
+
+    const landed = await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/v.webm',
+      durationMs: 5000,
+    });
+
+    expect(landed).toBe('relocated');
+    const { clip } = firstAudioClip(store);
+    expect(clip!.startMs).toBe(0);
   });
 
   it('reuses an existing audio track', async () => {
@@ -426,6 +482,40 @@ describe('voiceover metadata + regenerateVoiceoverClip', () => {
       .find((t) => t.id === track.id)!
       .clips.find((c) => c.id === clip.id)!;
     expect(after.endMs).toBe(vo.durationMs);
+  });
+
+  it('heals a clip left out of bounds by a duration shrink instead of failing the swap', async () => {
+    // A clip whose start sits at/past the output end used to invert
+    // (min(start + probed, duration) <= start) and the regen was rejected —
+    // the freshly rendered file was orphaned with a "generation failed" toast.
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().setPlayhead(3000);
+    await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/tts-1.mp3',
+      fileId: 'file-1',
+      durationMs: 3000,
+      voiceover: { script: 'hello world', voice: 'alloy' },
+    });
+    const before = store.getState().doc.outputs[0] as VideoOutput;
+    const track = before.tracks.find((t) => t.type === 'audio')!;
+    const clip = track.clips[0];
+    // Shrink the output so the clip start (3000) is past the new end (1000).
+    store.getState().setVideoDuration(0, 1000);
+
+    const ok = await regenerateVoiceoverClip(
+      store,
+      { outputIndex: 0, trackId: track.id, clipId: clip.id },
+      { url: 'https://example.com/tts-2.mp3', fileId: 'file-2', durationMs: 500 }
+    );
+
+    expect(ok).toBe(true);
+    const after = (store.getState().doc.outputs[0] as VideoOutput).tracks
+      .find((t) => t.id === track.id)!
+      .clips.find((c) => c.id === clip.id)!;
+    expect(after.src).toBe('https://example.com/tts-2.mp3');
+    expect(after.startMs).toBeLessThan(after.endMs);
+    expect(after.endMs).toBe(1000);
   });
 
   it('returns false for a clip that no longer exists', async () => {

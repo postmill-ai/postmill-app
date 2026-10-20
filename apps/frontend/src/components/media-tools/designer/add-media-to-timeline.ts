@@ -266,18 +266,30 @@ export interface AddVoiceoverOptions {
 }
 
 /**
+ * Where the clip landed — callers toast differently when the playhead had no
+ * room and the clip was placed elsewhere (the user is watching the playhead).
+ */
+export type VoiceoverLanding = 'playhead' | 'relocated' | false;
+
+/**
  * Land a voiceover artifact (TTS output or a mic recording) on the timeline:
  * probe the real duration (with the probe's own fallback), find-or-create the
  * audio track, and clip it in at the playhead at full volume — identical for
  * the TTS dialog and the record dialog.
  *
- * Returns false when the document has no room (playhead at/past the end) or
- * the track could not be created. addTrack/addClip push their own history.
+ * The asset is already generated/uploaded by the time this runs, so it must
+ * NEVER be silently dropped: when there is no room at the playhead (playhead
+ * at/past the end, or under addClip's 100ms minimum from it), the clip is
+ * relocated — after the last same-track clip when it fits there whole,
+ * otherwise at 0 (a clip longer than the output is clamped to the output
+ * length). Returns 'playhead'/'relocated' so the caller can say where it
+ * went; false only for a truly impossible doc (not video mode, no track, or
+ * a sub-100ms output). addTrack/addClip push their own history.
  */
 export async function addVoiceoverToTimeline(
   store: StoreApi,
   options: AddVoiceoverOptions
-): Promise<boolean> {
+): Promise<VoiceoverLanding> {
   const state = store.getState();
   if (state.doc.mode !== 'video') return false;
 
@@ -290,9 +302,26 @@ export async function addVoiceoverToTimeline(
 
   const current = store.getState();
   const vo = current.doc.outputs[out] as VideoOutput;
-  const startMs = current.playheadMs;
-  const endMs = Math.min(startMs + probedMs, vo.durationMs);
-  if (endMs <= startMs) return false;
+  // addClip enforces a 100ms minimum clip length, so an output shorter than
+  // that is the only truly unplaceable state.
+  if (vo.durationMs < 100) return false;
+  // A clip longer than the whole output is clamped to the output, not dropped.
+  const clipLen = Math.min(probedMs, vo.durationMs);
+
+  let startMs = Math.max(0, Math.min(current.playheadMs, vo.durationMs));
+  let landing: Exclude<VoiceoverLanding, false> = 'playhead';
+  if (vo.durationMs - startMs < 100) {
+    // No room at the playhead. Prefer just after the last clip on the track
+    // when the full clip fits there; otherwise land at 0 (addClip permits
+    // same-track overlap — overlapping beats losing the generated asset).
+    const trackNow = (current.doc.outputs[out] as VideoOutput).tracks.find(
+      (t) => t.id === track.id
+    );
+    const lastEnd = Math.max(0, ...(trackNow?.clips ?? []).map((c) => c.endMs));
+    startMs = lastEnd + clipLen <= vo.durationMs ? lastEnd : 0;
+    landing = 'relocated';
+  }
+  const endMs = Math.min(startMs + clipLen, vo.durationMs);
 
   const clip: VideoClip = {
     id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -306,15 +335,17 @@ export async function addVoiceoverToTimeline(
     voiceover: options.voiceover,
   };
   current.addClip(out, track.id, clip);
-  return true;
+  return landing;
 }
 
 /**
  * Swap a voiceover clip's audio in place after a re-render (new voice / new
  * script): same clip id, same track, same timeline start — only `src`/`fileId`
  * and the end (re-probed like the original landing, clamped to the output
- * duration) change. Returns false when the clip is gone or the swap was
- * rejected by the store's timing rules.
+ * duration) change. A clip left out of bounds by a duration shrink (startMs at
+ * or past the output end) is pulled back inside instead of failing the swap.
+ * Returns false when the clip is gone or the swap was rejected by the store's
+ * timing rules.
  */
 export async function regenerateVoiceoverClip(
   store: StoreApi,
@@ -328,12 +359,17 @@ export async function regenerateVoiceoverClip(
     .find((t) => t.id === ref.trackId)
     ?.clips.find((c) => c.id === ref.clipId);
   if (!vo || !clip) return false;
+  if (vo.durationMs <= 0) return false;
 
   const probedMs = options.durationMs ?? (await probeAudioDuration(options.url));
-  const endMs = Math.min(clip.startMs + probedMs, vo.durationMs);
+  // Keep the clip's own start, but heal one a duration shrink left dangling at
+  // or past the output end (min(start + probed, duration) would invert there).
+  const startMs = Math.min(clip.startMs, vo.durationMs - 1);
+  const endMs = Math.min(startMs + probedMs, vo.durationMs);
   const landed = store.getState().updateClipSilent(ref.outputIndex, ref.trackId, ref.clipId, {
     src: options.url,
     fileId: options.fileId,
+    startMs,
     endMs,
     ...(options.voiceover ? { voiceover: options.voiceover } : {}),
   });

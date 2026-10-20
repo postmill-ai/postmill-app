@@ -2561,7 +2561,25 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         });
         if (!mountedRef.current) return;
         if (!landed) {
-          toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
+          // Generation SUCCEEDED and the file is in Files — only the timeline
+          // landing failed, so say that instead of "generation failed".
+          toaster.show(
+            translate(
+              'voiceover_generated_but_no_room',
+              'Voiceover generated, but there is no room on the timeline — the file is in your media library'
+            ),
+            'warning'
+          );
+          return;
+        }
+        if (landed === 'relocated') {
+          toaster.show(
+            translate(
+              'voiceover_relocated_no_room_at_playhead',
+              'No room at the playhead — the voiceover was placed where it fits'
+            ),
+            'success'
+          );
           return;
         }
         toaster.show(translate('voiceover_added_to_timeline', 'Voiceover added to timeline'), 'success');
@@ -2594,9 +2612,25 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         fileId: uploaded.id,
       });
       if (!landed) {
-        throw new Error(failure);
+        // The recording uploaded fine (it is in Files) — only the landing failed.
+        throw new Error(
+          translate(
+            'voiceover_generated_but_no_room',
+            'Voiceover generated, but there is no room on the timeline — the file is in your media library'
+          )
+        );
       }
       if (!mountedRef.current) return;
+      if (landed === 'relocated') {
+        toaster.show(
+          translate(
+            'voiceover_relocated_no_room_at_playhead',
+            'No room at the playhead — the voiceover was placed where it fits'
+          ),
+          'success'
+        );
+        return;
+      }
       toaster.show(translate('voiceover_added_to_timeline', 'Voiceover added to timeline'), 'success');
     },
     [vo, store, fetch, toaster, translate]

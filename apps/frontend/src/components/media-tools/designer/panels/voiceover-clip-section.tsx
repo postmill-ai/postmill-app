@@ -90,7 +90,15 @@ export const VoiceoverClipSection: FC<VoiceoverClipSectionProps> = ({
         }
       );
       if (!landed) {
-        toaster.show(t('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
+        // Regeneration SUCCEEDED and the file is in Files — only updating the
+        // clip failed (e.g. it was deleted mid-render), so say that.
+        toaster.show(
+          t(
+            'voiceover_regenerated_but_clip_gone',
+            'Voiceover regenerated, but the clip could not be updated — the new file is in your media library'
+          ),
+          'warning'
+        );
         return;
       }
       toaster.show(t('designer_voiceover_regenerated', 'Voiceover regenerated'), 'success');
