@@ -212,4 +212,37 @@ describe('resolveVisionImageUrl preferPublicUrl', () => {
     );
     expect(resolved).toMatch(/^data:image\//);
   });
+
+  it('publicizes a RELATIVE local-upload path instead of inlining a data URI', async () => {
+    // Regression (POSTMILL-APP-1H): the designer posts the element src as-is,
+    // which for an uploaded image is `/uploads/...` — a relative path cannot
+    // run the public passthrough and was inlined as a data: URI, which
+    // bria/remove-background rejects with "image_url must be a valid HTTP or
+    // HTTPS URL".
+    vi.stubEnv('FRONTEND_URL', 'https://app.example.com');
+    mockPublicDns();
+    writeFileSync(path.join(tmpDir, 'sheet.png'), Buffer.from('local-bytes'));
+    await expect(
+      resolveVisionImageUrl('/uploads/sheet.png', { preferPublicUrl: true })
+    ).resolves.toBe('https://app.example.com/uploads/sheet.png');
+  });
+
+  it('keeps inlining a relative path when FRONTEND_URL is not provider-reachable', async () => {
+    vi.stubEnv('FRONTEND_URL', 'https://intranet.example.com');
+    mockPrivateDns();
+    writeFileSync(path.join(tmpDir, 'sheet.png'), Buffer.from('local-bytes'));
+    const resolved = await resolveVisionImageUrl('/uploads/sheet.png', {
+      preferPublicUrl: true,
+    });
+    expect(resolved).toMatch(/^data:image\//);
+  });
+
+  it('keeps inlining a relative path when FRONTEND_URL is unset (self-hosted default)', async () => {
+    vi.stubEnv('FRONTEND_URL', '');
+    writeFileSync(path.join(tmpDir, 'sheet.png'), Buffer.from('local-bytes'));
+    const resolved = await resolveVisionImageUrl('/uploads/sheet.png', {
+      preferPublicUrl: true,
+    });
+    expect(resolved).toMatch(/^data:image\//);
+  });
 });

@@ -101,6 +101,21 @@ export async function resolveVisionImageUrl(
   // in, a self-hosted `https://…/uploads/…` can pass the public check and would
   // otherwise be handed to a provider that cannot reach it.
   if (isLocalStorageUrl(url)) {
+    // preferPublicUrl callers (image-edit providers such as bria) reject
+    // data: URIs outright. When this instance serves /uploads from a public
+    // HTTPS origin, hand the provider that URL instead of inlining — the
+    // strict reachability check keeps private/self-hosted installs on the
+    // inline path below.
+    if (preferPublicUrl) {
+      const key = uploadKeyFromUrl(url);
+      const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+      if (key && frontendUrl) {
+        const publicUrl = `${frontendUrl}/uploads/${key}`;
+        if (await isProviderReachableHttpsUrl(publicUrl)) {
+          return publicUrl;
+        }
+      }
+    }
     try {
       const buffer = await readLocalUpload(url);
       if (buffer.length > maxInlineBytes) {
