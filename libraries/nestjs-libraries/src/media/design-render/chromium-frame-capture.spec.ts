@@ -20,6 +20,7 @@ interface FakePage {
   waitForFunction: ReturnType<typeof vi.fn>;
   evaluate: ReturnType<typeof vi.fn>;
   goto: ReturnType<typeof vi.fn>;
+  bringToFront: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   off: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
@@ -41,6 +42,7 @@ function makeFakePage(index: number): FakePage {
     waitForNetworkIdle: vi.fn(async () => {}),
     waitForFunction: vi.fn(async () => {}),
     goto: vi.fn(async () => {}),
+    bringToFront: vi.fn(async () => {}),
     on: vi.fn(),
     off: vi.fn(),
     close: vi.fn(async () => {}),

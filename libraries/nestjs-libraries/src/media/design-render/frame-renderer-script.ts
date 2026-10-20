@@ -585,14 +585,17 @@ ${stripExportsNamespace(transitionsSource())}
     ctx.restore();
   }
 
-  async function preload(options) {
-    // lazyVideos (set by the capture service under parallel capture) skips the
-    // eager video warmup: N pages each loading EVERY clip's video at once is the
-    // setup-time RSS spike that OOM-killed the render browser. getVideo's
-    // per-frame cache fetches on demand, so a skipped video simply loads on the
-    // first frame that draws it. Images stay eager — they are small and many
-    // frames need the same one.
-    const lazyVideos = !!(options && options.lazyVideos);
+  async function preload() {
+    // Videos are warmed up EAGERLY here, on every capture page: page setup runs
+    // sequentially, and while a page is being set up it is the browser's
+    // front-most (visible) page — the only state in which a new media pipeline
+    // can be created. A <video> first created on a page that has been hidden
+    // for a while never fetches a single byte (the request parks inside
+    // Chromium's network stack: networkState=2, readyState=0 forever), so its
+    // first seek wedges — the clip-boundary render failure seekVideo now fails
+    // fast on. Seeks on an ALREADY-loaded element work fine while hidden, so
+    // warming every clip during setup removes the whole class. Sequential
+    // setup (see captureFrames) keeps the warmup RSS spike to one page.
     const promises = [];
     for (const track of output.tracks) {
       if (track.type === 'audio' || track.hidden) continue;
@@ -600,7 +603,7 @@ ${stripExportsNamespace(transitionsSource())}
         if (!clip.src) continue;
         const isVideo = clip.type === 'video' || /\\.(mp4|webm|mov|mkv|avi)(\\?.*)?$/i.test(clip.src);
         if (isVideo) {
-          if (!lazyVideos) promises.push(getVideo(clip.src).catch(() => null));
+          promises.push(getVideo(clip.src).catch(() => null));
         } else promises.push(loadImage(clip.src).catch(() => null));
       }
     }

@@ -190,10 +190,14 @@ export class ChromiumFrameCaptureService {
         // preload at the same moment multiplies peak RSS by N inside the
         // cgroup-capped pod and was the suspected OOM behind the parallel
         // stall. One page at a time keeps the spike to a single page's worth;
-        // only the strides below overlap. Parallel pages also skip the eager
-        // video warmup (lazyVideos) — videos load on demand per frame.
+        // only the strides below overlap. Sequential setup is ALSO what makes
+        // the eager video warmup safe: a page is front-most (visible) during
+        // its own setup, and a hidden headless page cannot create a media
+        // pipeline at all — a <video> first given a src while its page has
+        // been hidden for a while never fetches a byte, so lazy per-frame
+        // video creation wedged the render at every clip switch.
         for (const page of pages) {
-          await this.setupFramePage(page, output, width, height, fps, routeOptions, scale, pageCount > 1);
+          await this.setupFramePage(page, output, width, height, fps, routeOptions, scale);
         }
 
         // Global completed-count keeps onProgress monotonic across pages: consumers
@@ -257,7 +261,6 @@ export class ChromiumFrameCaptureService {
     fps: number,
     routeOptions: RenderRouteOptions | undefined,
     scale: number,
-    lazyVideos: boolean,
   ): Promise<void> {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
 
@@ -302,12 +305,11 @@ export class ChromiumFrameCaptureService {
       { timeout: 30000 },
     );
 
-    // Preload images/videos so frame rendering is not stalled by network.
-    // Under parallel capture videos load lazily instead (see preload()).
-    await page.evaluate(
-      (lazy: boolean) => (window as any).__FRAME_API.preload({ lazyVideos: lazy }),
-      lazyVideos,
-    );
+    // Eager media warmup: images AND videos load now, while this page is the
+    // browser's front-most (visible) page. A hidden headless page cannot
+    // create a media pipeline — the fetch parks indefinitely — so videos must
+    // NOT load lazily per frame (see preload() in frame-renderer-script.ts).
+    await page.evaluate(() => (window as any).__FRAME_API.preload());
   }
 
   /**
@@ -375,6 +377,12 @@ export class ChromiumFrameCaptureService {
     frameDir: string,
     timeoutMs: number,
   ): Promise<void> {
+    // Make this page the front-most (visible) one for the duration of its own
+    // frame. Hidden headless pages defer NEW network activity indefinitely —
+    // that includes media buffer re-fetches after a memory-pressure discard
+    // and the reload+reseek wedge recovery in the frame script. Cheap: one
+    // CDP call against a ~0.5s frame.
+    await page.bringToFront();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(

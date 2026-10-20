@@ -23,14 +23,17 @@
 //
 // Faststart remux: a downloaded mp4-family clip whose moov atom sits at the END
 // of the file (typical of AI-generated mp4s — the Replicate CDN writes
-// ftyp/free/mdat/moov) wedges Chromium's <video> seek in the frame-capture page:
-// the seek never completes and the render dies (the fail-fast in seekVideo
-// trips as "video element still wedged after 3 consecutive seeks and a
-// reload"). Downloaded video assets are therefore remuxed in place
-// (`ffmpeg -c copy -movflags +faststart` — a stream copy, no re-encode) so the
-// moov atom moves to the front. The remux is best-effort: ffmpeg missing or a
-// failed remux logs a warning and keeps the ORIGINAL file, degrading to the
-// pre-faststart behavior rather than failing the job.
+// ftyp/free/mdat/moov) forces Chromium's demuxer to fetch the tail before any
+// frame can decode, and every seek re-reads scattered ranges. The render-asset
+// route's single-range 206 support makes that merely wasteful, not fatal — but
+// on range-ignoring origins a moov-at-end clip stalls outright, so downloaded
+// video assets are remuxed in place (`ffmpeg -c copy -movflags +faststart` — a
+// stream copy, no re-encode) to move the moov atom to the front. The remux is
+// best-effort: ffmpeg missing or a failed remux logs a warning and keeps the
+// ORIGINAL file rather than failing the job. NOTE: the production "wedged
+// seek" render failures were ultimately traced to hidden capture pages being
+// unable to create media pipelines (see preload() in frame-renderer-script.ts)
+// — faststart is seek-efficiency hardening, not that fix.
 
 import { execFile } from 'child_process';
 import * as fs from 'fs';

@@ -514,7 +514,7 @@ describe('FRAME_RENDERER_SCRIPT — video capture hardening', () => {
     fn(win, doc, class {});
     return {
       api: win.__FRAME_API as {
-        preload: (options?: { lazyVideos?: boolean }) => Promise<void>;
+        preload: () => Promise<void>;
         renderFrame: (ms: number) => Promise<void>;
       },
       videos,
@@ -546,18 +546,13 @@ describe('FRAME_RENDERER_SCRIPT — video capture hardening', () => {
     }
   });
 
-  it('preload skips eager video warmup under lazyVideos, stays eager by default', async () => {
+  it('preload warms videos eagerly on every capture page', async () => {
+    // Hidden headless pages cannot create media pipelines at all (the fetch
+    // parks forever), so per-frame lazy video creation wedges at clip
+    // switches; warmup must happen during setup, while the page is visible.
     const eager = runWithVideo();
     await eager.api.preload();
     expect(eager.videos).toHaveLength(1);
-
-    const lazy = runWithVideo(true);
-    await lazy.api.preload({ lazyVideos: true });
-    expect(lazy.videos).toHaveLength(0);
-
-    // A lazily-skipped video still loads on demand when a frame draws it.
-    await lazy.api.renderFrame(500);
-    expect(lazy.videos).toHaveLength(1);
   });
 
   it('sets preload=auto so the browser keeps the clip buffered', async () => {

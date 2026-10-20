@@ -196,9 +196,18 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      (`frame-%05d.png`), so the ffmpeg image2 pattern sees one contiguous sequence.
      Page setup (navigation + initial preload) runs SEQUENTIALLY so N pages never
      spike RSS at once — that setup spike was the suspected OOM behind the old
-     multi-page stall — and parallel pages preload videos LAZILY (`preload({lazyVideos})`;
-     the frame-renderer script's per-frame cache fetches on demand), while images stay
-     eager. Frames leave the page as CANVAS READBACK: `renderFrame` +
+     multi-page stall. Videos AND images preload EAGERLY on every page: a hidden
+     headless page cannot create a media pipeline at all — a `<video>` first given
+     a src after its page has been hidden for a while never fetches a byte (the
+     request parks in Chromium's network stack; networkState=2, readyState=0
+     forever), so the old lazy per-frame video creation wedged the render at the
+     first clip switch (`seekVideo` fail-fast: "still wedged after 3 consecutive
+     seeks and a reload"). Setup is the one moment each page is guaranteed
+     front-most, and seeks on an ALREADY-loaded element work fine while hidden.
+     Belt-and-braces: `captureOneFrame` calls `page.bringToFront()` before each
+     frame's evaluate so buffer re-fetches after a memory-pressure discard and
+     the reload+reseek recovery path run on a visible page. Frames leave the
+     page as CANVAS READBACK: `renderFrame` +
      `canvas.toDataURL('image/png')` run in ONE `page.evaluate` and the PNG is
      written host-side — never `Page.captureScreenshot`, which is compositor-based
      and pends forever on `hidden` headless pages (in headless Chromium only the
