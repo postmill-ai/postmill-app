@@ -88,10 +88,6 @@ export class ReplicateCatalogService {
     return (await res.json()) as ReplicateModelApi;
   }
 
-  // Max models shown per category (curated allowlist is always kept; the
-  // Replicate collection fills the rest up to this cap, by popularity).
-  private static readonly CATEGORY_MODEL_CAP = 30;
-
   private _summaryFrom(modelId: string, data: ReplicateModelApi): ModelSummary {
     const [, name] = modelId.split('/');
     return {
@@ -106,30 +102,19 @@ export class ReplicateCatalogService {
     };
   }
 
-  // Fetch the models featured in a Replicate collection (best-effort). The model
-  // objects already carry owner/name/description/cover/run_count, so no per-model
-  // fetch is needed to build a summary.
-  private async _fetchCollection(slug: string, apiKey: string): Promise<ReplicateModelApi[]> {
-    const res = await safeFetch(`${BASE}/collections/${slug}`, {
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    });
-    if (!res.ok) {
-      throw new Error(`Replicate collection fetch failed for ${slug}: ${res.status}`);
-    }
-    const data = (await res.json()) as { models?: ReplicateModelApi[] };
-    return Array.isArray(data?.models) ? data.models : [];
-  }
-
   async listModels(categoryKey: string, orgId: string): Promise<ModelSummary[]> {
     const allowlist = MODEL_ALLOWLIST[categoryKey] || [];
     const category = CATEGORIES.find((c) => c.key === categoryKey);
 
-    // Local categories have no models; a category needs either a curated
-    // allowlist or a Replicate collection to surface anything.
+    // Local categories have no models, and only the curated allowlist is
+    // listed: the runner refuses anything outside it (`_assertModelAllowed`),
+    // so surfacing Replicate collection extras here produced a picker full of
+    // models that always fail with "Bad Request" at run time.
     if (category?.execution === 'local') return [];
-    if (allowlist.length === 0 && !category?.collectionSlug) return [];
+    if (allowlist.length === 0) return [];
 
-    const categoryCacheKey = `replicate:category:${categoryKey}`;
+    // v2: earlier lists merged collection extras — drop those cached entries.
+    const categoryCacheKey = `replicate:category:v2:${categoryKey}`;
     const cachedCategory = await this._redis.get(categoryCacheKey);
     if (cachedCategory) {
       return JSON.parse(cachedCategory);
@@ -137,10 +122,9 @@ export class ReplicateCatalogService {
 
     const apiKey = await this.getReplicateKey(orgId);
 
-    // Keep insertion order: curated allowlist first, then collection extras.
     const byId = new Map<string, ModelSummary>();
 
-    // 1) Curated allowlist — always included, in curated order.
+    // Curated allowlist, in curated order.
     for (const modelId of allowlist) {
       const cacheKey = `replicate:model:${modelId}`;
       try {
@@ -157,25 +141,6 @@ export class ReplicateCatalogService {
       } catch {
         const cached = await this._redis.get(cacheKey);
         if (cached) byId.set(modelId, JSON.parse(cached));
-      }
-    }
-
-    // 2) Replicate collection (what Replicate features) — merged in, badged by
-    //    warmth. Best-effort: a failed fetch still returns the allowlist.
-    if (category?.collectionSlug) {
-      try {
-        const models = await this._fetchCollection(category.collectionSlug, apiKey);
-        const extras = models
-          .filter((m) => m?.owner && m?.name)
-          .map((m) => ({ id: `${m.owner}/${m.name}`, m }))
-          .filter(({ id }) => !byId.has(id))
-          .sort((a, b) => (b.m.run_count || 0) - (a.m.run_count || 0));
-        for (const { id, m } of extras) {
-          if (byId.size >= ReplicateCatalogService.CATEGORY_MODEL_CAP) break;
-          byId.set(id, this._summaryFrom(id, m));
-        }
-      } catch {
-        // Collection is supplementary — ignore failures.
       }
     }
 

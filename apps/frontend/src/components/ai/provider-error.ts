@@ -106,7 +106,12 @@ export function providerErrorAdvice(t: Translate, pe: ProviderError): string {
     case 'rate_limit':
       return t('provider_error_rate_limit', 'The provider is rate-limiting requests. Try again shortly.');
     case 'invalid_request':
-      return t('provider_error_invalid_request', 'The provider rejected the request. Check the model and inputs.');
+      return pe.status === 404
+        ? t(
+            'provider_error_invalid_request_404',
+            'The model may not exist or this account may not have access to it — check the model name and the plan on the provider\'s side.'
+          )
+        : t('provider_error_invalid_request', 'The provider rejected the request. Check the model and inputs.');
     case 'timeout':
     case 'unavailable':
       return t('provider_error_unavailable', 'The provider is unavailable right now. Try again later.');

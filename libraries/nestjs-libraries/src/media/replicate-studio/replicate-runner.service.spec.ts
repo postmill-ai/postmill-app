@@ -120,7 +120,9 @@ describe('ReplicateRunnerService', () => {
       const body = JSON.parse(init.body as string);
       expect(body).not.toHaveProperty('version');
       expect(init.headers).toMatchObject({
-        Prefer: 'wait=60',
+        // Must stay under safeFetch's 30s budget — a longer hold is aborted
+        // client-side first, orphaning a running (billing) prediction.
+        Prefer: 'wait=25',
         Authorization: 'Bearer test-key',
       });
     });
@@ -291,14 +293,41 @@ describe('ReplicateRunnerService', () => {
       expect(mockLifecycle.createPendingJob).not.toHaveBeenCalled();
     });
 
+    it('fails the job row instead of orphaning it when the provider call throws', async () => {
+      // The job row is created before the provider call; a throw there (402
+      // billing, upstream outage, timeout) must not leave it 'pending' with
+      // no pending:// ref — the poller skips those and the frontend polls a
+      // job that can never resolve.
+      mockSafeFetch.mockRejectedValue(new Error('Replicate run failed: Insufficient credit'));
+
+      await expect(
+        runner.runAsync(
+          'org1',
+          '',
+          {
+            modelId: 'bytedance/seedance-1-pro',
+            versionId: 'v-1',
+            input: { prompt: 'cat' },
+            operation: 'video',
+          },
+          { creditType: 'ai_videos' },
+        ),
+      ).rejects.toThrow('Insufficient credit');
+
+      expect(mockLifecycle.failJob).toHaveBeenCalledWith(
+        { id: 'job-1' },
+        expect.stringContaining('Insufficient credit'),
+      );
+      expect(mockLifecycle.attachProviderJob).not.toHaveBeenCalled();
+    });
+
     it('creates a pending job with metadata', async () => {
       mockSafeFetch.mockResolvedValue(
         jsonResponse({ id: 'pred-3', status: 'starting' }),
       );
 
       await runner.runAsync(
-        'org1',
-        '',
+        'org1',        '',
         {
           modelId: 'black-forest-labs/flux-dev',
           input: { prompt: 'cat' },

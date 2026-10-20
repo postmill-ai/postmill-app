@@ -159,7 +159,10 @@ export class ReplicateRunnerService {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          ...(opts.wait ? { Prefer: `wait=60` } : {}),
+          // `Prefer: wait` must stay under safeFetch's 30s budget (25s): a
+          // 60s hold was aborted client-side first, orphaning a running —
+          // and billing — prediction with no job row to track it.
+          ...(opts.wait ? { Prefer: `wait=25` } : {}),
         },
         body: JSON.stringify({
           input,
@@ -188,7 +191,8 @@ export class ReplicateRunnerService {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        ...(opts.wait ? { Prefer: `wait=60` } : {}),
+        // See the warm-model branch: the hold must stay under safeFetch's 30s.
+        ...(opts.wait ? { Prefer: `wait=25` } : {}),
       },
       body: JSON.stringify({
         version: versionId,
@@ -367,11 +371,23 @@ export class ReplicateRunnerService {
 
       const webhook = this._lifecycle.webhookUrlFor(job.id, orgId);
 
-      const pred = await this._pickCall(params.modelId, resolvedInput, apiKey, orgId, {
-        wait: false,
-        webhookUrl: webhook || undefined,
-        versionId: params.versionId,
-      });
+      let pred: ReplicatePrediction;
+      try {
+        pred = await this._pickCall(params.modelId, resolvedInput, apiKey, orgId, {
+          wait: false,
+          webhookUrl: webhook || undefined,
+          versionId: params.versionId,
+        });
+      } catch (err) {
+        // The job row exists by now — a provider call that never returned a
+        // prediction (billing rejection, upstream outage, timeout) must not
+        // orphan it: without a `pending://` ref the poller skips it and it
+        // would sit 'pending' until the 24h timeout while the frontend keeps
+        // polling a job that can never resolve.
+        const message = (err as Error)?.message || 'Replicate run failed';
+        await this._lifecycle.failJob(job, message);
+        throw err;
+      }
 
       if (pred.status === 'failed' || pred.status === 'canceled' || !pred.id) {
         const errorMsg = pred.error || 'Replicate prediction failed without error';

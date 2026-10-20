@@ -38,6 +38,20 @@ describe('readErrorMessage', () => {
     ).resolves.toBe('real reason');
   });
 
+  it('prefers a specific message over a generic HTTP reason phrase', async () => {
+    // Nest's standard error body: { message: <specific>, error: <reason phrase> }.
+    await expect(
+      readErrorMessage(
+        res({
+          message: 'Model "acme/slow-video" is not allowed',
+          error: 'Bad Request',
+          statusCode: 400,
+        }),
+        'fallback'
+      )
+    ).resolves.toBe('Model "acme/slow-video" is not allowed');
+  });
+
   it('falls back when the body has nothing usable', async () => {
     await expect(readErrorMessage(res({}), 'fallback')).resolves.toBe('fallback');
     await expect(readErrorMessage(res('nope'), 'fallback')).resolves.toBe('fallback');

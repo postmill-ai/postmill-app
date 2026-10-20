@@ -12,8 +12,10 @@ import {
   SafeFetchPort,
   ProviderModule,
   mediaUpstreamError,
+  mediaUpstreamCtx,
   mediaUpstreamFailure,
   isTransientStatus,
+  ProviderUpstreamError,
 } from '@postmill-ai/provider-kernel';
 
 // Sora video models (sora-2 / sora-2-pro) on the async Videos API. The finished MP4 is auth-only
@@ -219,7 +221,23 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
       });
     }
 
-    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
+    if (!res.ok) {
+      // Sora video access is provisioned separately from the rest of the
+      // OpenAI API: a key without it earns a 404 ("The model `sora-2` does
+      // not exist or you do not have access to it") or 403. Say so plainly —
+      // the generic invalid_request advice ("check the model and inputs")
+      // sends the user debugging a request that can never succeed.
+      if (res.status === 404 || res.status === 403) {
+        throw new ProviderUpstreamError(
+          mediaUpstreamCtx(this, 'video'),
+          'invalid_request',
+          `This OpenAI account does not have access to the Sora video API (model \`${model}\`). Enable Sora on the OpenAI account (platform limits / usage tier) or pick another video provider in Settings → Media.`,
+          res.status,
+          false,
+        );
+      }
+      throw await mediaUpstreamError(this, res, 'video');
+    }
     const data = (await res.json()) as SoraJob;
     if (!data.id) throw new Error('Sora returned no job id');
     return { jobId: data.id, metadata: { provider: this.identifier, model } };

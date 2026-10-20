@@ -224,4 +224,19 @@ describe('openai media adapter — Sora Videos API', () => {
     const adapter: any = openaiMediaModule.create(ctx as any);
     await expect(adapter.generateImage('x', {})).rejects.toThrow('OpenAI API key is required');
   });
+
+  it('a 404 on /v1/videos spells out that the account lacks Sora access', async () => {
+    const { ctx } = makeCtx(() =>
+      json(
+        { error: { message: 'The model `sora-2` does not exist or you do not have access to it.' } },
+        false,
+        404,
+      ),
+    );
+    const adapter: any = openaiMediaModule.create(ctx as any);
+
+    await expect(
+      adapter.generateVideo('a dog skateboarding', { apiKey: 'sk-test', model: 'sora-2' }),
+    ).rejects.toThrow(/does not have access to the Sora video API/);
+  });
 });

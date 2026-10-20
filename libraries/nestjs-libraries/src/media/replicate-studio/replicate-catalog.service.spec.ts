@@ -105,7 +105,7 @@ describe('ReplicateCatalogService', () => {
       const result = await service.listModels('text-to-image', 'org1');
 
       // The 5 curated models came from the per-model cache — none were fetched.
-      // (The category collection is fetched separately, best-effort, for extras.)
+      // Only the curated allowlist is listed — no collection fetch happens.
       const modelFetches = mockSafeFetch.mock.calls.filter((c: any[]) =>
         String(c[0]).includes('/models/')
       );
@@ -122,7 +122,7 @@ describe('ReplicateCatalogService', () => {
       expect(result).toHaveLength(0);
       // Should not write category cache when any model failed
       expect(mockRedis.set).not.toHaveBeenCalledWith(
-        'replicate:category:text-to-image',
+        'replicate:category:v2:text-to-image',
         expect.any(String),
         expect.any(Number),
       );
@@ -143,7 +143,7 @@ describe('ReplicateCatalogService', () => {
       await service.listModels('text-to-image', 'org1');
 
       expect(mockRedis.set).toHaveBeenCalledWith(
-        'replicate:category:text-to-image',
+        'replicate:category:v2:text-to-image',
         expect.any(String),
         86400,
       );
@@ -153,6 +153,37 @@ describe('ReplicateCatalogService', () => {
       const result = await service.listModels('meme', 'org1');
       expect(result).toEqual([]);
       expect(mockSafeFetch).not.toHaveBeenCalled();
+    });
+
+    it('lists only allowlisted models — no collection extras the runner would reject', async () => {
+      // Regression: the picker used to merge in Replicate's live collection,
+      // but the runner refuses anything off the allowlist — ~26 of ~30 listed
+      // text-to-video models always failed with "Bad Request" at run time.
+      mockSafeFetch.mockImplementation(async (url: string) =>
+        jsonResponse({
+          owner: 'x',
+          name: String(url).split('/').pop(),
+          description: '',
+          cover_image_url: null,
+          run_count: 0,
+          latest_version: { id: 'v1' },
+        }),
+      );
+
+      const result = await service.listModels('text-to-video', 'org1');
+
+      expect(result.map((m) => m.id)).toEqual([
+        'google/veo-3',
+        'minimax/video-01',
+        'bytedance/seedance-1-pro',
+        'kwaivgi/kling-v2.1',
+      ]);
+      // Per-model fetches only — no /collections/ call.
+      expect(
+        mockSafeFetch.mock.calls.filter((c: any[]) =>
+          String(c[0]).includes('/collections/'),
+        ),
+      ).toHaveLength(0);
     });
   });
 
