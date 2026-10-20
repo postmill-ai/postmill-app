@@ -944,6 +944,43 @@ paths:
         keeps the global 600/h backstop from eating reports from a long render.
       tags:
         - Design Render
+  /media/designs/render-asset/{jobId}/{file}:
+    get:
+      operationId: DesignRenderFrameController_renderAsset
+      parameters:
+        - name: jobId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: file
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: token
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: range
+          required: true
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      summary: |-
+        Serves a render media asset pre-downloaded host-side into the job's workdir
+        (see design-render/render-assets.ts). Same HMAC job token as render-frame —
+        the render container carries no session, so the token rides the rewritten
+        URLs in the job payload. Single-range support: Chromium issues range
+        requests while seeking a <video>, and a 200-to-range fallback would make it
+        re-fetch whole clips. The throttle override keeps the global 600/h backstop
+        from starving parallel capture pages on a clip-heavy render.
+      tags:
+        - Design Render
   /media/designs/render-frame/{jobId}:
     get:
       operationId: DesignRenderFrameController_renderFrame

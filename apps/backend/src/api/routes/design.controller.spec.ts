@@ -24,6 +24,10 @@ vi.mock('@postmill-ai/nestjs-libraries/media/design-render/render-progress', () 
   renderPayloadKey: (jobId: string) => `video-render:payload:${jobId}`,
 }));
 
+vi.mock('@postmill-ai/nestjs-libraries/media/design-render/render-assets', () => ({
+  resolveRenderAsset: vi.fn(),
+}));
+
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
   DesignController,
@@ -31,6 +35,11 @@ import {
   DesignTemplateController,
 } from './design.controller';
 import { reportRenderProgress } from '@postmill-ai/nestjs-libraries/media/design-render/render-progress';
+import { resolveRenderAsset } from '@postmill-ai/nestjs-libraries/media/design-render/render-assets';
+import { PassThrough } from 'stream';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 const org = { id: 'org-1' } as any;
 const user = { id: 'user-1' } as any;
@@ -594,5 +603,114 @@ describe('DesignRenderFrameController render-progress route', () => {
     await frameController.renderProgress('job-1', 'tok', { frame: 1, total: 90 } as any, res);
 
     expect(res.status).toHaveBeenCalledWith(404);
+  });
+});
+
+describe('DesignRenderFrameController render-asset route', () => {
+  const frameController = new DesignRenderFrameController({} as any);
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-asset-route-'));
+  const fixturePath = path.join(fixtureDir, 'asset-0.mp4');
+  const fixtureBytes = Buffer.from('0123456789-video-bytes');
+  fs.writeFileSync(fixturePath, fixtureBytes);
+
+  const makeStreamRes = () => {
+    const stream = new PassThrough();
+    const res = Object.assign(stream, {
+      status: vi.fn(),
+      setHeader: vi.fn(),
+      send: vi.fn(),
+    }) as any;
+    res.status.mockReturnValue(res);
+    res.setHeader.mockReturnValue(res);
+    // pipe() calls res.end() when the source drains — call through so the
+    // PassThrough's readable side actually emits 'end' for readBody.
+    const realEnd = stream.end.bind(stream);
+    res.end = vi.fn((...args: any[]) => {
+      (realEnd as any)(...args);
+      return res;
+    });
+    return res as any;
+  };
+
+  const readBody = (res: PassThrough): Promise<Buffer> =>
+    new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    });
+
+  beforeEach(() => {
+    vi.mocked(resolveRenderAsset).mockReset();
+  });
+
+  it('403s an invalid render token and 404s a missing asset', async () => {
+    vi.mocked(resolveRenderAsset).mockResolvedValue({ status: 'forbidden' });
+    let res = makeStreamRes();
+    await frameController.renderAsset('job-1', 'asset-0.mp4', 'bad', undefined, res);
+    expect(res.status).toHaveBeenCalledWith(403);
+
+    vi.mocked(resolveRenderAsset).mockResolvedValue({ status: 'not-found' });
+    res = makeStreamRes();
+    await frameController.renderAsset('job-1', 'asset-9.mp4', 'tok', undefined, res);
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it('streams the asset with its manifest content-type and a full-body 200', async () => {
+    vi.mocked(resolveRenderAsset).mockResolvedValue({
+      status: 'ok',
+      filePath: fixturePath,
+      contentType: 'video/mp4',
+      size: fixtureBytes.byteLength,
+    });
+    const res = makeStreamRes();
+    const body = readBody(res);
+
+    await frameController.renderAsset('job-1', 'asset-0.mp4', 'tok', undefined, res);
+
+    expect(resolveRenderAsset).toHaveBeenCalledWith('job-1', 'asset-0.mp4', 'tok');
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'video/mp4');
+    expect(res.setHeader).toHaveBeenCalledWith('Accept-Ranges', 'bytes');
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Length', fixtureBytes.byteLength);
+    expect(await body).toEqual(fixtureBytes);
+  });
+
+  it('honours a single byte-range request with a 206 (Chromium seeks issue ranges)', async () => {
+    vi.mocked(resolveRenderAsset).mockResolvedValue({
+      status: 'ok',
+      filePath: fixturePath,
+      contentType: 'video/mp4',
+      size: fixtureBytes.byteLength,
+    });
+    const res = makeStreamRes();
+    const body = readBody(res);
+
+    await frameController.renderAsset('job-1', 'asset-0.mp4', 'tok', 'bytes=2-5', res);
+
+    expect(res.status).toHaveBeenCalledWith(206);
+    expect(res.setHeader).toHaveBeenCalledWith(
+      'Content-Range',
+      `bytes 2-5/${fixtureBytes.byteLength}`,
+    );
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Length', 4);
+    expect(await body).toEqual(fixtureBytes.subarray(2, 6));
+  });
+
+  it('416s an unsatisfiable range', async () => {
+    vi.mocked(resolveRenderAsset).mockResolvedValue({
+      status: 'ok',
+      filePath: fixturePath,
+      contentType: 'video/mp4',
+      size: fixtureBytes.byteLength,
+    });
+    const res = makeStreamRes();
+
+    await frameController.renderAsset('job-1', 'asset-0.mp4', 'tok', 'bytes=9999-', res);
+
+    expect(res.status).toHaveBeenCalledWith(416);
+    expect(res.setHeader).toHaveBeenCalledWith(
+      'Content-Range',
+      `bytes */${fixtureBytes.byteLength}`,
+    );
   });
 });

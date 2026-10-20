@@ -33,6 +33,13 @@ vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   },
 }));
 
+// The media preloader is unit-tested in render-assets.spec.ts; here it is mocked
+// so processVideoRender tests never hit the network. Default: nothing to rewrite.
+const renderAssets = vi.hoisted(() => ({ preloadRenderMedia: vi.fn() }));
+vi.mock('./render-assets', () => ({
+  preloadRenderMedia: (...args: any[]) => renderAssets.preloadRenderMedia(...args),
+}));
+
 describe('VideoRenderService', () => {
   let service: VideoRenderService;
   let lifecycle: MediaJobLifecycleService;
@@ -104,6 +111,9 @@ describe('VideoRenderService', () => {
     );
 
     vi.clearAllMocks();
+    renderAssets.preloadRenderMedia.mockImplementation(
+      async ({ composition }: any) => ({ composition, downloaded: 0, bytes: 0 }),
+    );
   });
 
   afterEach(() => {
@@ -260,6 +270,84 @@ describe('VideoRenderService', () => {
     );
 
     encoder.cleanup(tmpDir);
+  });
+
+  it('re-stores the payload with pre-downloaded local media URLs and renders the rewritten composition', async () => {
+    const composition = videoOutput(3000);
+    vi.mocked(ioRedis.get).mockResolvedValueOnce(
+      JSON.stringify({ organizationId: orgId, composition }),
+    );
+
+    const rewritten = {
+      ...composition,
+      tracks: [
+        {
+          ...composition.tracks[0],
+          clips: [
+            {
+              ...composition.tracks[0].clips[0],
+              src: '/media/designs/render-asset/job-1/asset-0.png?token=tok',
+            },
+          ],
+        },
+      ],
+    };
+    renderAssets.preloadRenderMedia.mockImplementationOnce(async () => ({
+      composition: rewritten,
+      downloaded: 1,
+      bytes: 1234,
+    }));
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-test-'));
+    const videoPath = path.join(tmpDir, 'output.mp4');
+    fs.writeFileSync(videoPath, Buffer.from('fake-video'));
+    vi.mocked(encoder.encode).mockResolvedValueOnce({
+      videoPath,
+      thumbnailPath: path.join(tmpDir, 'missing-thumb.jpg'),
+    });
+
+    await service.processVideoRender('job-1');
+
+    // The preloader ran with the original composition and the job's HMAC token.
+    expect(renderAssets.preloadRenderMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: 'job-1', composition, token: expect.any(String) }),
+    );
+    // The re-stored payload carries the rewritten (local) URLs, not the remote one.
+    const reStore = vi
+      .mocked(ioRedis.set)
+      .mock.calls.find((c) => c[0] === 'video-render:payload:job-1' && c[2] === 'EX');
+    expect(reStore).toBeDefined();
+    const storedPayload = JSON.parse(reStore![1] as string);
+    expect(storedPayload.composition.tracks[0].clips[0].src).toBe(
+      '/media/designs/render-asset/job-1/asset-0.png?token=tok',
+    );
+    expect(reStore![1]).not.toContain('https://example.com/image.png');
+    // The encoder receives the rewritten composition.
+    expect(encoder.encode).toHaveBeenCalledWith(rewritten, expect.anything());
+
+    encoder.cleanup(tmpDir);
+  });
+
+  it('fails the job fast when a required remote clip fails to download', async () => {
+    const composition = videoOutput(3000);
+    vi.mocked(ioRedis.get).mockResolvedValueOnce(
+      JSON.stringify({ organizationId: orgId, composition }),
+    );
+    renderAssets.preloadRenderMedia.mockRejectedValueOnce(
+      new Error('Render media download failed (503): https://example.com/image.png'),
+    );
+
+    await service.processVideoRender('job-1');
+
+    expect(encoder.encode).not.toHaveBeenCalled();
+    expect(aiSettings.updateMediaJob).toHaveBeenCalledWith(
+      orgId,
+      'job-1',
+      expect.objectContaining({
+        status: 'failed',
+        error: expect.stringContaining('Render media download failed (503)'),
+      }),
+    );
   });
 
   it('fails the job when no payload is found in Redis (genuinely missing, still pending)', async () => {

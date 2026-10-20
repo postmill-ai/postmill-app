@@ -24,6 +24,7 @@ import {
   MAX_CLIPS_PER_TRACK,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { capCompositionDuration } from '@postmill-ai/nestjs-libraries/media/designer-doc/composition-cap';
+import { preloadRenderMedia } from './render-assets';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
 import * as fs from 'fs';
@@ -430,33 +431,52 @@ export class VideoRenderService {
       // gated), which reads this same key — GETDEL alone left it 404ing. The
       // single-winner claim already happened; re-publishing does not weaken it.
       // The key is deleted again in the finally below.
-      await ioRedis.set(renderPayloadKey(jobId), raw, 'EX', RENDER_PAYLOAD_TTL_SECONDS);
       const input = JSON.parse(raw);
-
       const composition = input.composition || {};
+
+      // Pre-download remote visual media host-side (see render-assets.ts):
+      // streaming off-origin clip URLs in-container turned every Chromium seek
+      // into a CDN range request (10 s/frame stalls). The payload is re-stored
+      // AFTER the rewrite so the render-frame route AND the podman job.json
+      // both carry the token-gated local URLs. A download failure throws here —
+      // a required clip must fail the job fast, never render black.
+      const renderToken = mediaJobWebhookToken(jobId, job.organizationId);
+      const preloaded = await preloadRenderMedia({ jobId, composition, token: renderToken });
+      if (preloaded.downloaded > 0) {
+        this.logger.log(
+          `Render ${jobId}: pre-downloaded ${preloaded.downloaded} remote media asset(s), ${preloaded.bytes} bytes`,
+        );
+        input.composition = preloaded.composition;
+      }
+      await ioRedis.set(
+        renderPayloadKey(jobId),
+        JSON.stringify(input),
+        'EX',
+        RENDER_PAYLOAD_TTL_SECONDS,
+      );
+      const renderComposition = input.composition || {};
       const scale = typeof input.scale === 'number' && input.scale > 0 ? input.scale : 1;
-      const fps = input.fps || composition.fps || 30;
-      const durationMs = composition.durationMs || 10000;
+      const fps = input.fps || renderComposition.fps || 30;
+      const durationMs = renderComposition.durationMs || 10000;
       if (durationMs > MAX_DURATION_MS) {
         throw new Error(
           `Composition duration ${durationMs}ms exceeds the 180 s hard cap`,
         );
       }
       validateVideoComposition({
-        ...composition,
-        width: Math.round((composition.width || 0) * scale),
-        height: Math.round((composition.height || 0) * scale),
+        ...renderComposition,
+        width: Math.round((renderComposition.width || 0) * scale),
+        height: Math.round((renderComposition.height || 0) * scale),
         fps,
       });
 
       const format = ['webm', 'gif', 'webp-animated'].includes(input.format)
         ? input.format
         : 'mp4';
-      const renderToken = mediaJobWebhookToken(jobId, job.organizationId);
       const options = {
         fps,
         scale,
-        bitrateKbps: input.bitrateKbps || composition.bitrateKbps || 8000,
+        bitrateKbps: input.bitrateKbps || renderComposition.bitrateKbps || 8000,
         format: format as DesignRenderJobSpec['options']['format'],
         quality: input.quality,
         normalizeLoudness: input.normalizeLoudness === true,
@@ -475,8 +495,8 @@ export class VideoRenderService {
         durationMs,
         fps,
         scale,
-        composition.width || 0,
-        composition.height || 0,
+        renderComposition.width || 0,
+        renderComposition.height || 0,
       );
 
       let videoPath: string;
@@ -484,7 +504,7 @@ export class VideoRenderService {
       if (isPodmanRenderEnabled()) {
         workDir = renderWorkDir(jobId);
         fs.mkdirSync(workDir, { recursive: true });
-        const spec: DesignRenderJobSpec = { op: 'design', composition, options, baseUrl: baseUrl() };
+        const spec: DesignRenderJobSpec = { op: 'design', composition: renderComposition, options, baseUrl: baseUrl() };
         await this._podman.run(workDir, spec, renderTimeoutMs);
         videoPath = path.join(workDir, 'out', renderOutputName(format));
         thumbnailPath = path.join(workDir, 'out', 'thumbnail.jpg');
@@ -498,7 +518,7 @@ export class VideoRenderService {
         // The in-process encoder has no external timeout (only Podman enforces one);
         // cap its wall-clock so a pathological composition can't pin a worker forever.
         const result = await withTimeout(
-          this._encoder.encode(composition, {
+          this._encoder.encode(renderComposition, {
             ...options,
             onProgress: (p) => progress.report(p.frame, p.total),
           }),
@@ -532,8 +552,8 @@ export class VideoRenderService {
       // artifact into the folder the user picked in the export dialog.
       const isTemplatePreview = typeof input.templateId === 'string' && !!input.templateId;
       const metadata = {
-        width: Math.round((composition.width || 0) * scale),
-        height: Math.round((composition.height || 0) * scale),
+        width: Math.round((renderComposition.width || 0) * scale),
+        height: Math.round((renderComposition.height || 0) * scale),
         durationSeconds: durationMs / 1000,
         fps,
         provider: 'chromium-ffmpeg',
@@ -582,6 +602,10 @@ export class VideoRenderService {
         await this.releasePayload(jobId);
       }
       this.cleanupWorkDir(workDir);
+      // The pre-downloaded assets dir (render-assets.ts) is separate from the
+      // encoder tmpdir on the in-process path; it is the same dir as workDir on
+      // the podman path (cleanup is force:true — a second removal is a no-op).
+      this.cleanupWorkDir(renderWorkDir(jobId));
     }
   }
 

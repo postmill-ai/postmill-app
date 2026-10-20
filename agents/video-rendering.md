@@ -226,10 +226,28 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      payload/claim keys after the render concludes.
    - Cross-origin media: the frame page is served from the API origin but clip media
      typically lives on the app/uploads origin. The route sets a page-scoped CSP with
-     `media-src`/`img-src https:` (helmet's default `default-src 'self'` would block the
+     `media-src`/`img-src 'self' https:` (helmet's default `default-src 'self'` would block the
      loads), and the frontend `/api/uploads` serve route sends
      `Access-Control-Allow-Origin: *` (public no-auth bucket) so `crossOrigin='anonymous'`
      canvas draws are not tainted/blocked. Both are required for a render to see its clips.
+   - Remote visual media is pre-downloaded HOST-SIDE before frame capture
+     (`design-render/render-assets.ts`, `preloadRenderMedia`): `processVideoRender`
+     walks the composition (`collectCompositionMediaUrls`), downloads every
+     off-origin `https:` clip/image via `safeFetch` into
+     `renderWorkDir(jobId)/assets/` under the merge op's caps (500 MB/clip, 1 GB
+     total), and rewrites the srcs to root-relative
+     `/media/designs/render-asset/:jobId/:file?token=…` URLs BEFORE the render
+     payload is re-stored — so the render-frame route AND the podman job.json both
+     carry local URLs (the container reaches the host route over the pod bridge via
+     `spec.baseUrl`, the same mechanism as render-frame). Streaming the CDN from
+     in-container Chromium had every discarded-buffer seek become a remote range
+     request (~10 s/frame stalls → job timeouts). A download failure fails the job
+     fast — a required clip never renders black. The route
+     (`DesignRenderFrameController.renderAsset`) is token-gated like render-frame
+     (same HMAC job token, org id from the payload), serves only `asset-N.ext`
+     names the preloader wrote, and supports single byte-ranges (Chromium seeks
+     issue range requests). The frame page CSP keeps `https:` for legacy remote
+     URLs and adds `'self'` for these same-origin assets (dev backends serve http).
    - Fonts on the frame page: `buildFramePage` (`design-render/frame-page.ts`) injects
      catalog `<link>`s + org `@font-face` rules (`fontLinksForOutput`) AND explicit
      `document.fonts.load()` specs (`fontPreloadsForOutput`), awaited before
@@ -330,7 +348,10 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
 - Org-scope every status/artifact read (`getJob(orgId, jobId)` pattern); the Inngest
   entry points are job-id-only by necessity but must re-scope immediately.
 - Merge clips are resolved from storage **host-side** (`resolveClipsToFiles`) — storage
-  credentials never enter the render container.
+  credentials never enter the render container. Design-render remote visual media is
+  likewise pre-downloaded host-side (`render-assets.ts`) and served to the container
+  through the token-gated `render-asset` route — never hand the container a remote
+  clip URL to stream.
 - `VIDEO_RENDER_NETWORK=host` weakens container network isolation; treat as a security
   decision, not a convenience flag.
 - When touching the container contract (`render-job-spec.ts`, worker CLI), rebuild the

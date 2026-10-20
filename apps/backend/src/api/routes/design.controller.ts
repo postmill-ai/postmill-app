@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Logger,
   NotFoundException,
   Param,
@@ -54,10 +55,12 @@ import { ValidateDocDto } from '@postmill-ai/nestjs-libraries/dtos/design/valida
 import { ApplyOpsDto } from '@postmill-ai/nestjs-libraries/dtos/design/apply-ops.dto';
 import { RenderProgressDto } from '@postmill-ai/nestjs-libraries/dtos/design/render-progress.dto';
 import { reportRenderProgress, renderPayloadKey } from '@postmill-ai/nestjs-libraries/media/design-render/render-progress';
+import { resolveRenderAsset } from '@postmill-ai/nestjs-libraries/media/design-render/render-assets';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
 import type { Response } from 'express';
+import * as fs from 'fs';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import {
   mediaJobWebhookToken,
@@ -669,6 +672,56 @@ export class DesignRenderFrameController {
     res.status(204).end();
   }
 
+  /**
+   * Serves a render media asset pre-downloaded host-side into the job's workdir
+   * (see design-render/render-assets.ts). Same HMAC job token as render-frame —
+   * the render container carries no session, so the token rides the rewritten
+   * URLs in the job payload. Single-range support: Chromium issues range
+   * requests while seeking a <video>, and a 200-to-range fallback would make it
+   * re-fetch whole clips. The throttle override keeps the global 600/h backstop
+   * from starving parallel capture pages on a clip-heavy render.
+   */
+  @Get('/render-asset/:jobId/:file')
+  @Throttle({ default: { limit: 3600, ttl: 3600000 } })
+  async renderAsset(
+    @Param('jobId') jobId: string,
+    @Param('file') fileName: string,
+    @Query('token') token: string,
+    @Headers('range') range: string | undefined,
+    @Res() res?: Response,
+  ): Promise<void> {
+    if (!res) return;
+    const asset = await resolveRenderAsset(jobId, fileName, token || '');
+    if (asset.status !== 'ok') {
+      res
+        .status(asset.status === 'not-found' ? 404 : 403)
+        .send(asset.status === 'not-found' ? 'Render asset not found' : 'Invalid render token');
+      return;
+    }
+
+    res.setHeader('Content-Type', asset.contentType);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'no-store');
+
+    const match = range?.match(/^bytes=(\d+)-(\d*)$/);
+    if (match) {
+      const start = Number(match[1]);
+      const end = match[2] ? Math.min(Number(match[2]), asset.size - 1) : asset.size - 1;
+      if (start >= asset.size || end < start) {
+        res.status(416).setHeader('Content-Range', `bytes */${asset.size}`).end();
+        return;
+      }
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${asset.size}`);
+      res.setHeader('Content-Length', end - start + 1);
+      fs.createReadStream(asset.filePath, { start, end }).pipe(res);
+      return;
+    }
+
+    res.setHeader('Content-Length', asset.size);
+    fs.createReadStream(asset.filePath).pipe(res);
+  }
+
   @Get('/render-frame/:jobId')
   async renderFrame(
     @Param('jobId') jobId: string,
@@ -745,10 +798,13 @@ export class DesignRenderFrameController {
     // The frame page pulls clip media cross-origin (uploads/CDN hosts) into a
     // canvas, so helmet's default CSP (default-src 'self', no media-src) would
     // block the render. Replace it with a scoped policy for this page only.
+    // 'self' covers the pre-downloaded render assets (render-asset route,
+    // same-origin): in production they already match `https:`, but a dev
+    // backend serves the page over http, where `https:` would block them.
     res.setHeader(
       'Content-Security-Policy',
       "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; " +
-        "img-src https: data: blob:; media-src https: data: blob:; font-src https://fonts.gstatic.com https: data:; " +
+        "img-src 'self' https: data: blob:; media-src 'self' https: data: blob:; font-src https://fonts.gstatic.com https: data:; " +
         "connect-src https: 'self'; worker-src blob:",
     );
     res.setHeader('Content-Type', 'text/html');
