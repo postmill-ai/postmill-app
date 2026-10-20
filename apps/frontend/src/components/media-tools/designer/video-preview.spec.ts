@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { composeClipsAtPlayhead, findTransitionWindows, sourceTimeForPlayhead, VideoPreviewEngine } from './video-preview';
+import { composeClipsAtPlayhead, fadeGainAt, findTransitionWindows, sourceTimeForPlayhead, VideoPreviewEngine } from './video-preview';
 import { sourceTimeForPlayhead as sharedSourceTimeForPlayhead } from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
 import { createDesignerStore } from './designer.store';
 import type { VideoClip, VideoOutput, VideoTrack } from './designer.store';
@@ -457,7 +457,84 @@ describe('VideoPreviewEngine — hidden tracks', () => {
     engine.destroy();
   });
 });
+describe('fadeGainAt — preview mirrors the export afade ramps', () => {
+  it('is 1 for a clip without fades', () => {
+    expect(fadeGainAt(clip(), 0)).toBe(1);
+    expect(fadeGainAt(clip(), 2000)).toBe(1);
+  });
 
+  it('ramps up linearly over fadeInMs from the clip start', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, fadeInMs: 1000 });
+    expect(fadeGainAt(c, 0)).toBe(0);
+    expect(fadeGainAt(c, 500)).toBeCloseTo(0.5);
+    expect(fadeGainAt(c, 1000)).toBe(1);
+    expect(fadeGainAt(c, 3000)).toBe(1);
+  });
+
+  it('ramps down linearly over fadeOutMs toward the clip end', () => {
+    const c = clip({ startMs: 0, endMs: 4000, fadeOutMs: 1000 });
+    expect(fadeGainAt(c, 2000)).toBe(1);
+    expect(fadeGainAt(c, 3500)).toBeCloseTo(0.5);
+    expect(fadeGainAt(c, 4000)).toBe(0);
+  });
+
+  it('counts the freeze window toward the fade-out end (like getClipVisualState)', () => {
+    const c = clip({ startMs: 0, endMs: 4000, freezeAtMs: 1000, fadeOutMs: 1000 });
+    // Effective end is 5000 — at 4000 the fade has not started yet.
+    expect(fadeGainAt(c, 4000)).toBe(1);
+    expect(fadeGainAt(c, 4500)).toBeCloseTo(0.5);
+    expect(fadeGainAt(c, 5000)).toBe(0);
+  });
+});
+
+describe('VideoPreviewEngine — in-place src swap (regenerate)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('a regenerated clip keeps its id but the cached audio element follows the new src', () => {
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      value: vi.fn().mockResolvedValue(undefined),
+      configurable: true,
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+      value: vi.fn(),
+      configurable: true,
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'load', {
+      value: vi.fn(),
+      configurable: true,
+    });
+
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'audio');
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const audioTrack = vo.tracks.find((t) => t.type === 'audio')!;
+    store.getState().addClip(0, audioTrack.id, {
+      id: 'a1',
+      startMs: 0,
+      endMs: 2000,
+      src: 'https://example.com/take-1.mp3',
+    } as VideoClip);
+
+    const engine = new VideoPreviewEngine(store);
+    engine.seek(1000);
+    const el = (engine as any).audioElements.get('a1') as HTMLAudioElement;
+    expect(el.getAttribute('src')).toBe('https://example.com/take-1.mp3');
+
+    // Regenerate swaps the src in place, same clip id — and clears the
+    // demoted-media flag too, or a previously-failed clip would stay dead
+    // after a successful regenerate.
+    store.getState().updateClipSilent(0, audioTrack.id, 'a1', {
+      src: 'https://example.com/take-2.mp3',
+    });
+    engine.seek(1000);
+    expect((engine as any).audioElements.size).toBe(1);
+    expect(el.getAttribute('src')).toBe('https://example.com/take-2.mp3');
+    engine.destroy();
+  });
+});
 
 describe('VideoPreviewEngine — failed media demotion', () => {
   afterEach(() => {

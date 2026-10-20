@@ -2497,12 +2497,18 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         }
         const { id, path } = await res.json();
         // Landing (probe → audio track → clip at the playhead) is shared with
-        // the mic-recording dialog — see addVoiceoverToTimeline. The script +
-        // voice ride on the clip so the inspector can re-voice it in place.
+        // the mic-recording dialog — see addVoiceoverToTimeline. The script,
+        // voice, tone instructions and provider pin ride on the clip so the
+        // inspector can re-voice it in place with the same settings.
         const landed = await addVoiceoverToTimeline(store, {
           url: path,
           fileId: id,
-          voiceover: { script: text, voice: voiceId },
+          voiceover: {
+            script: text,
+            voice: voiceId,
+            ...(instructions ? { instructions } : {}),
+            ...(provider ? { provider } : {}),
+          },
         });
         if (!mountedRef.current) return;
         if (!landed) {

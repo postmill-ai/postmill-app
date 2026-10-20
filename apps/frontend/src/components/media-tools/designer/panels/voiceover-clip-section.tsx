@@ -8,6 +8,7 @@ import type { VideoClip } from '../designer.store';
 import { useMediaVoices } from '../use-media-voices';
 import { readErrorMessage } from '../read-error-message';
 import { regenerateVoiceoverClip } from '../add-media-to-timeline';
+import { postTextToSpeech } from '../text-to-speech';
 
 interface VoiceoverClipSectionProps {
   store: any;
@@ -21,8 +22,10 @@ interface VoiceoverClipSectionProps {
  * Re-voice / re-script a TTS voiceover clip in place. Only renders for clips
  * carrying `voiceover` provenance (written at landing — see
  * addVoiceoverToTimeline); mic recordings and pre-existing clips have none.
- * Regenerate re-calls TTS and swaps the clip's audio (`src`/`fileId`, end
- * re-probed) without touching its timeline position.
+ * Regenerate re-calls TTS with the SAME tone instructions and provider pin
+ * the original generation used (both editable here) and swaps the clip's
+ * audio (`src`/`fileId`, end re-probed) without touching its timeline
+ * position.
  */
 export const VoiceoverClipSection: FC<VoiceoverClipSectionProps> = ({
   store,
@@ -37,6 +40,7 @@ export const VoiceoverClipSection: FC<VoiceoverClipSectionProps> = ({
   const { data: voices, isLoading } = useMediaVoices();
   const [script, setScript] = useState(clip.voiceover?.script || '');
   const [voice, setVoice] = useState(clip.voiceover?.voice || '');
+  const [instructions, setInstructions] = useState(clip.voiceover?.instructions || '');
   const [regenerating, setRegenerating] = useState(false);
 
   // Follow the clip when the inspector switches targets (or an undo rewrites
@@ -44,19 +48,24 @@ export const VoiceoverClipSection: FC<VoiceoverClipSectionProps> = ({
   useEffect(() => {
     setScript(clip.voiceover?.script || '');
     setVoice(clip.voiceover?.voice || '');
-  }, [clipId, clip.voiceover?.script, clip.voiceover?.voice]);
+    setInstructions(clip.voiceover?.instructions || '');
+  }, [clipId, clip.voiceover?.script, clip.voiceover?.voice, clip.voiceover?.instructions]);
 
-  const canRegenerate =
-    script.trim().length > 0 && voice.length > 0 && !regenerating &&
-    (script.trim() !== (clip.voiceover?.script || '') || voice !== (clip.voiceover?.voice || ''));
+  // Same-input re-roll is allowed on purpose: TTS is non-deterministic, so
+  // regenerating without edits is a valid "try another take".
+  const canRegenerate = script.trim().length > 0 && voice.length > 0 && !regenerating;
 
   const regenerate = useCallback(async () => {
     if (!canRegenerate) return;
     setRegenerating(true);
     try {
-      const res = await fetch('/media/text-to-speech', {
-        method: 'POST',
-        body: JSON.stringify({ text: script.trim(), voice }),
+      const tone = instructions.trim();
+      const provider = clip.voiceover?.provider;
+      const res = await postTextToSpeech(fetch, {
+        text: script.trim(),
+        voiceId: voice,
+        ...(tone ? { instructions: tone } : {}),
+        ...(provider ? { provider } : {}),
       });
       if (!res.ok) {
         toaster.show(
@@ -69,7 +78,16 @@ export const VoiceoverClipSection: FC<VoiceoverClipSectionProps> = ({
       const landed = await regenerateVoiceoverClip(
         store,
         { outputIndex, trackId, clipId },
-        { url: path, fileId: id, voiceover: { script: script.trim(), voice } }
+        {
+          url: path,
+          fileId: id,
+          voiceover: {
+            script: script.trim(),
+            voice,
+            ...(tone ? { instructions: tone } : {}),
+            ...(provider ? { provider } : {}),
+          },
+        }
       );
       if (!landed) {
         toaster.show(t('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
@@ -81,7 +99,7 @@ export const VoiceoverClipSection: FC<VoiceoverClipSectionProps> = ({
     } finally {
       setRegenerating(false);
     }
-  }, [canRegenerate, fetch, script, voice, toaster, t, store, outputIndex, trackId, clipId]);
+  }, [canRegenerate, fetch, script, voice, instructions, clip.voiceover?.provider, toaster, t, store, outputIndex, trackId, clipId]);
 
   const selectClass =
     'w-full h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden';
@@ -119,6 +137,14 @@ export const VoiceoverClipSection: FC<VoiceoverClipSectionProps> = ({
           </option>
         ))}
       </select>
+      <input
+        type="text"
+        value={instructions}
+        onChange={(e) => setInstructions(e.target.value)}
+        placeholder={t('designer_voiceover_tone_placeholder', 'Tone / style, e.g. warm and conversational…')}
+        aria-label={t('designer_voiceover_tone_label', 'Tone / style')}
+        className={selectClass}
+      />
       <button
         type="button"
         disabled={!canRegenerate}

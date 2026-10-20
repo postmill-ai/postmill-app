@@ -172,6 +172,12 @@ export const VoiceoverDialog: FC<VoiceoverDialogProps> = ({
           placeholder={t('designer_voiceover_tone_placeholder', 'e.g. warm and conversational, energetic…')}
           className={inputClass}
         />
+        <p className="mt-[4px] text-[11px] text-newTextColor/50">
+          {t(
+            'designer_voiceover_tone_hint',
+            'Tone is applied by voices that support it (OpenAI: gpt-4o-mini-tts); other models ignore it.'
+          )}
+        </p>
       </div>
 
       <div className="flex justify-end gap-[8px] pt-[4px]">

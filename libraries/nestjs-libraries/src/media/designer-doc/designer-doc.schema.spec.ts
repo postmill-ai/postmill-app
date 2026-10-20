@@ -124,6 +124,25 @@ describe('DesignerDoc schema', () => {
     expect(parsed.outputs[0].tracks[0].clips[0].fontWeight).toBe(700);
   });
 
+  it('round-trips voiceover provenance with tone instructions and provider pin', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].tracks[0].clips[0].voiceover = {
+      script: 'Hello world',
+      voice: 'alloy',
+      instructions: 'warm and conversational',
+      provider: 'openai',
+    };
+    for (const schema of [DesignerDocLenientSchema, DesignerDocStrictSchema]) {
+      const parsed = schema.parse(migrateDoc(doc));
+      expect(parsed.outputs[0].tracks[0].clips[0].voiceover).toEqual({
+        script: 'Hello world',
+        voice: 'alloy',
+        instructions: 'warm and conversational',
+        provider: 'openai',
+      });
+    }
+  });
+
   it('drops non-finite keyframe props in lenient mode instead of rejecting the doc', () => {
     // A NaN prop serializes to null over JSON — before this, one bad prop
     // failed EVERY save of the design with an opaque 400.

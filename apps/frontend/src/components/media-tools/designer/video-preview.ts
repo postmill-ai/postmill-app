@@ -41,11 +41,30 @@ function applySpeed(el: HTMLMediaElement, speed: number) {
 
 /**
  * The one volume composition rule, mirrored by the server's mixer:
- * keyframed-or-base volume × track gain × duck gain, clamped — fades multiply
- * separately downstream (the export's afade filters), not folded in here.
+ * keyframed-or-base volume × track gain × duck gain, clamped. Fades multiply
+ * separately — see fadeGainAt (preview) and the export's afade filters.
  */
 function effectiveVolume(clip: VideoClip, localMs: number, trackGain: number, duckGain: number): number {
   return clampVolume(volumeAtClipTime(clip, Math.max(0, localMs)) * trackGain * duckGain);
+}
+
+/**
+ * Linear fade-in/out gain at a clip-local time, mirroring the export's
+ * `afade=t=in/out` semantics (see ffmpeg-video-encoder.service.ts): ramp up
+ * over fadeInMs from the clip start, ramp down over fadeOutMs toward the
+ * (freeze-inclusive) clip end. 1 outside both ramps. The preview used to
+ * ignore fades entirely — they were only audible in the exported mp4.
+ */
+export function fadeGainAt(clip: VideoClip, localMs: number): number {
+  const clipLenMs = getEffectiveClipEnd(clip) - clip.startMs;
+  let fade = 1;
+  if (clip.fadeInMs && clip.fadeInMs > 0 && localMs < clip.fadeInMs) {
+    fade = Math.min(fade, Math.max(0, localMs / clip.fadeInMs));
+  }
+  if (clip.fadeOutMs && clip.fadeOutMs > 0 && localMs > clipLenMs - clip.fadeOutMs) {
+    fade = Math.min(fade, Math.max(0, (clipLenMs - localMs) / clip.fadeOutMs));
+  }
+  return fade;
 }
 
 /**
@@ -308,7 +327,11 @@ export class VideoPreviewEngine {
             }
             // Keyframed (or base) volume per tick, same composition as the
             // audio path below — video-clip audio is mixed on the server too.
-            const v = effectiveVolume(clip, ms - clip.startMs, trackGain, duckGain);
+            // Fade ramps multiply on top, mirroring the export's afade.
+            const v = clampVolume(
+              effectiveVolume(clip, ms - clip.startMs, trackGain, duckGain) *
+                fadeGainAt(clip, ms - clip.startMs)
+            );
             el.volume = v;
             el.muted = v <= 0;
             if (el.paused) {
@@ -332,7 +355,10 @@ export class VideoPreviewEngine {
             if (Math.abs(el.currentTime - seekTime) > 0.1) {
               el.currentTime = seekTime;
             }
-            el.volume = effectiveVolume(clip, ms - clip.startMs, trackGain, duckGain);
+            el.volume = clampVolume(
+              effectiveVolume(clip, ms - clip.startMs, trackGain, duckGain) *
+                fadeGainAt(clip, ms - clip.startMs)
+            );
             if (el.paused) {
               el.play().catch(() => {});
             }
@@ -384,6 +410,15 @@ export class VideoPreviewEngine {
     if (!clip.src) return null;
     if (this.videoElements.has(clip.id)) {
       const el = this.videoElements.get(clip.id)!;
+      // An in-place regenerate (e.g. voiceover/segment re-render) keeps the
+      // clip id and swaps the src — the cached element must follow, or the
+      // preview keeps playing the old media forever. A previously-failed clip
+      // also leaves the demoted set: the new src gets a fresh chance.
+      if (el.getAttribute('src') !== clip.src) {
+        el.src = clip.src;
+        el.load();
+        this.failedMedia.delete(clip.id);
+      }
       const rate = this.initialRateFor(clip);
       if (rate !== null) {
         applySpeed(el, rate);
@@ -416,6 +451,14 @@ export class VideoPreviewEngine {
     if (!clip.src) return null;
     if (this.audioElements.has(clip.id)) {
       const el = this.audioElements.get(clip.id)!;
+      // Same src-swap rule as getOrCreateVideo: a regenerated voiceover keeps
+      // its clip id — without this the preview played the stale take. A new
+      // src also clears the demoted-media flag.
+      if (el.getAttribute('src') !== clip.src) {
+        el.src = clip.src;
+        el.load();
+        this.failedMedia.delete(clip.id);
+      }
       const rate = this.initialRateFor(clip);
       if (rate !== null) {
         applySpeed(el, rate);

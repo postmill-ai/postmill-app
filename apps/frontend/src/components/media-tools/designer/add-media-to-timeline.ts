@@ -212,9 +212,10 @@ export interface AddVoiceoverOptions {
   durationMs?: number;
   /**
    * TTS provenance — persisted on the clip so the inspector can re-voice or
-   * re-script it in place later. Absent for mic recordings.
+   * re-script it in place later (with the same tone instructions and provider
+   * pin the original generation used). Absent for mic recordings.
    */
-  voiceover?: { script: string; voice: string };
+  voiceover?: { script: string; voice: string; instructions?: string; provider?: string };
 }
 
 /**
@@ -271,7 +272,7 @@ export async function addVoiceoverToTimeline(
 export async function regenerateVoiceoverClip(
   store: StoreApi,
   ref: { outputIndex: number; trackId: string; clipId: string },
-  options: { url: string; fileId?: string; durationMs?: number; voiceover?: { script: string; voice: string } }
+  options: { url: string; fileId?: string; durationMs?: number; voiceover?: { script: string; voice: string; instructions?: string; provider?: string } }
 ): Promise<boolean> {
   const state = store.getState();
   if (state.doc.mode !== 'video') return false;
