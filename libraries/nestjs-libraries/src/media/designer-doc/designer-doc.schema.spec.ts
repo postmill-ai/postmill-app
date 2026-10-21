@@ -144,6 +144,28 @@ describe('DesignerDoc schema', () => {
     }
   });
 
+  it('round-trips a clip textReveal through BOTH parsers, and tolerates its absence', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].tracks[0].clips[0].textReveal = { mode: 'chars', durationMs: 880 };
+    for (const schema of [DesignerDocLenientSchema, DesignerDocStrictSchema]) {
+      const parsed = schema.parse(migrateDoc(doc));
+      expect(parsed.outputs[0].tracks[0].clips[0].textReveal).toEqual({
+        mode: 'chars',
+        durationMs: 880,
+      });
+    }
+    // Optional-additive: the fixture without the field keeps parsing.
+    expect(
+      DesignerDocStrictSchema.safeParse(migrateDoc(videoDocFixture)).success
+    ).toBe(true);
+  });
+
+  it('rejects an unknown textReveal mode in strict mode', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].tracks[0].clips[0].textReveal = { mode: 'glyphs' };
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(false);
+  });
+
   it('drops non-finite keyframe props in lenient mode instead of rejecting the doc', () => {
     // A NaN prop serializes to null over JSON — before this, one bad prop
     // failed EVERY save of the design with an opaque 400.

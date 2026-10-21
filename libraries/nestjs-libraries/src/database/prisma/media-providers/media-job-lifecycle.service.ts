@@ -10,6 +10,7 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { readResponseCapped } from '@postmill-ai/nestjs-libraries/utils/capped-stream';
+import { applyAudioOutroFade } from '@postmill-ai/nestjs-libraries/media/audio-outro-fade';
 
 // AIMediaJob has no dedicated provider-job-id column; while a job is pending the
 // provider's external reference is stored in `artifactUrl` under this scheme and is
@@ -527,7 +528,22 @@ export class MediaJobLifecycleService {
     metadata?: MediaArtifactMetadata;
     folderId?: string | null;
   }): Promise<StoredArtifact> {
-    const { buffer, mime } = await this._download(params.artifactUrl, params.metadata?.mime);
+    const downloaded = await this._download(params.artifactUrl, params.metadata?.mime);
+    let buffer = downloaded.buffer;
+    const mime = downloaded.mime;
+    if (params.operation === 'audio') {
+      // Generated music stops dead at the last sample (an audible end click) —
+      // bake a short outro fade into the stored bytes. Guarded twice over (the
+      // helper returns the original on failure AND here): a failed fade must
+      // never lose a paid artifact.
+      try {
+        buffer = await applyAudioOutroFade(buffer, mime, params.metadata?.durationSeconds);
+      } catch (err) {
+        this._logger.warn(
+          `Audio outro fade failed for job ${params.jobId}; storing the original: ${(err as Error).message}`,
+        );
+      }
+    }
     const metadata: Record<string, unknown> = {
       ...params.metadata,
       provider: params.metadata?.provider || params.provider,

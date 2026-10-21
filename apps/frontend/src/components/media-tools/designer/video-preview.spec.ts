@@ -148,6 +148,42 @@ describe('VideoPreviewEngine — muted tracks and looping', () => {
     engine.destroy();
   });
 
+  it('does not re-play an ENDED audio element under the playhead (end-of-track stutter)', () => {
+    // play() on an ended element restarts the track from 0 — while the playhead
+    // sits at/past the clip end that replays the tail as a crackle. The engine
+    // must skip play() while `ended` is set; a scrub back into the clip seeks
+    // (clearing `ended`) before any legitimate resume.
+    const play = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      value: play,
+      configurable: true,
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+      value: vi.fn(),
+      configurable: true,
+    });
+    const store = videoStoreWithAudio(false);
+    const engine = new VideoPreviewEngine(store);
+    engine.seek(1000);
+    const el = (engine as any).audioElements.get('a1') as HTMLAudioElement;
+    expect(el).toBeTruthy();
+    const callsAfterFirstSeek = play.mock.calls.length;
+
+    // The track runs out under the playhead — no restart while `ended`.
+    Object.defineProperty(el, 'ended', { value: true, configurable: true });
+    Object.defineProperty(el, 'paused', { value: true, configurable: true });
+    engine.seek(1000);
+    expect(play.mock.calls.length).toBe(callsAfterFirstSeek);
+
+    // Scrub back to the clip start: the drift seek clears `ended` on a real
+    // element, so simulate that and confirm the resume path still plays.
+    Object.defineProperty(el, 'ended', { value: false, configurable: true });
+    Object.defineProperty(el, 'paused', { value: true, configurable: true });
+    engine.seek(0);
+    expect(play.mock.calls.length).toBe(callsAfterFirstSeek + 1);
+    engine.destroy();
+  });
+
   it('loop playback wraps to 0 instead of ending', async () => {
     vi.useFakeTimers();
     const store = createDesignerStore();

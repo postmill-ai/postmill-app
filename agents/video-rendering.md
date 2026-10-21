@@ -102,6 +102,14 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      eased curve into `volume='<expr>':eval=frame` sampled at 100 ms steps
      (`design-render/volume-envelope.ts`) — fades stay separate downstream afade
      filters in both engines.
+   - Text clips can carry a progressive reveal (`clip.textReveal`, optional-additive):
+     the drawn string is sliced to a growing prefix (chars or words) as the playhead
+     crosses the clip — NOT a keyframe channel (keyframes animate numeric props
+     only). The maths live in ONE shared module, `media/designer-doc/text-reveal.ts`
+     (`applyTextReveal` / `textRevealProgress`); the preview overlay imports it and
+     the frame page is handed it as source (`textRevealSource()`, injected like
+     `keyframesSource`). The Typewriter preset (`text-animation-presets.ts`) writes
+     it at ~80 ms/char; a reveal preset clears the keyframe lanes and vice versa.
    - Speed (`clip.speed`) is pitch-preserving on both sides: the preview sets
      `playbackRate` with `preservesPitch`/`webkitPreservesPitch`, and the mixer's
      `atempo` is likewise pitch-preserving, so preview and export audio match.

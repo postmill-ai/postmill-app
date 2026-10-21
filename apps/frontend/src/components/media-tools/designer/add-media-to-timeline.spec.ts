@@ -261,6 +261,76 @@ describe('addMediaToTimeline — output duration', () => {
   });
 });
 
+describe('addMediaToTimeline — audio landing defaults', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Same probe stub as the video variant, for the audio element. */
+  const stubAudioProbe = (durationSec: number | null) => {
+    const original = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string, ...rest: any[]) => {
+      const el = original(tag, ...(rest as []));
+      if (tag === 'audio') {
+        if (durationSec !== null) {
+          Object.defineProperty(el, 'duration', { value: durationSec });
+          Object.defineProperty(el, 'src', {
+            set: () => setTimeout(() => el.onloadedmetadata?.(new Event('loadedmetadata')), 0),
+          });
+        } else {
+          Object.defineProperty(el, 'src', {
+            set: () => setTimeout(() => el.onerror?.(new Event('error')), 0),
+          });
+        }
+      }
+      return el;
+    });
+  };
+
+  const firstAudioClip = (store: ReturnType<typeof createDesignerStore>) => {
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const track = vo.tracks.find((t) => t.type === 'audio');
+    return { vo, track, clip: track?.clips[0] };
+  };
+
+  it('lands music with a short fade-in/out so the hard cut does not crackle', async () => {
+    stubAudioProbe(8);
+    const store = createDesignerStore();
+
+    const landed = await addMediaToTimeline(store, { type: 'audio', url: 'https://example.com/song.mp3' });
+
+    expect(landed).toBeTruthy();
+    const { clip } = firstAudioClip(store);
+    expect(clip!.fadeInMs).toBe(100);
+    expect(clip!.fadeOutMs).toBe(500);
+    expect(clip!.volume).toBe(1);
+  });
+
+  it('keeps the fades within the clip even at the shortest probed length', async () => {
+    stubAudioProbe(0.4); // probeAudioDuration floors at 1000ms
+    const store = createDesignerStore();
+
+    await addMediaToTimeline(store, { type: 'audio', url: 'https://example.com/blip.mp3' });
+
+    const { clip } = firstAudioClip(store);
+    expect(clip!.fadeInMs).toBe(100);
+    expect(clip!.fadeOutMs).toBe(500);
+    // The ramps never overlap: their sum stays inside the clip.
+    expect(clip!.fadeInMs! + clip!.fadeOutMs!).toBeLessThanOrEqual(
+      clip!.endMs - clip!.startMs
+    );
+  });
+
+  it('video clips keep their fade-free landing', async () => {
+    stubVideoProbe({ duration: 5, videoWidth: 1080, videoHeight: 1080 });
+    const store = createDesignerStore();
+
+    await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/v.mp4' });
+
+    const { clip } = firstVideoClip(store);
+    expect(clip!.fadeInMs).toBeUndefined();
+    expect(clip!.fadeOutMs).toBeUndefined();
+  });
+});
+
 describe('addImageClipToTimeline', () => {
   afterEach(() => vi.restoreAllMocks());
 

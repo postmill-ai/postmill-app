@@ -281,6 +281,80 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     expect(gcoWrites[0]).toBe('source-over');
     expect(gcoWrites).toContain('multiply');
   });
+
+  it('draws a textReveal clip as a growing prefix, via the SHARED module', async () => {
+    // Parity pin, same family as keyframes/speed-curve/transitions: the reveal
+    // slice must come from the injected designer-doc/text-reveal source.
+    expect(FRAME_RENDERER_SCRIPT).toContain('applyTextReveal');
+    expect(FRAME_RENDERER_SCRIPT).toContain('textRevealProgress');
+
+    const fillCalls: string[] = [];
+    const recordingContext = () => {
+      const ctx: Record<string, unknown> = {
+        canvas: { width: 10, height: 10 },
+        measureText: (s: string) => ({ width: (s || '').length * 10 }),
+        fillText: (s: string) => {
+          fillCalls.push(s);
+        },
+      };
+      return new Proxy(ctx, {
+        get: (t, prop) => {
+          if (prop in t) return t[prop as string];
+          return () => undefined;
+        },
+        set: (t, prop, value) => {
+          t[prop as string] = value;
+          return true;
+        },
+      });
+    };
+    const canvas = { width: 0, height: 0, getContext: () => recordingContext() };
+    const win: Record<string, unknown> = {
+      __DATA: {
+        output: {
+          id: 'o',
+          width: 100,
+          height: 100,
+          fps: 30,
+          durationMs: 1000,
+          background: '#000000',
+          tracks: [
+            {
+              id: 'tt',
+              type: 'text',
+              clips: [
+                {
+                  id: 'c',
+                  startMs: 0,
+                  endMs: 1000,
+                  text: '0123456789',
+                  x: 0, y: 0, width: 100, height: 40,
+                  // 10 chars over a 1000ms window → one char per 100ms.
+                  textReveal: { mode: 'chars', durationMs: 1000 },
+                },
+              ],
+            },
+          ],
+        },
+        baseUrl: 'https://example.test',
+      },
+    };
+    const doc = {
+      getElementById: () => canvas,
+      createElement: () => ({ width: 0, height: 0, getContext: () => recordingContext() }),
+    };
+    const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
+    fn(win, doc, class {});
+    const api = win.__FRAME_API as { renderFrame: (ms: number) => Promise<void> };
+
+    await api.renderFrame(350);
+    // Mid-reveal: only the 4-char prefix is wrapped/drawn.
+    expect(fillCalls).toEqual(['0123']);
+
+    await api.renderFrame(1000);
+    // Fully revealed by the window end.
+    expect(fillCalls[fillCalls.length - 1]).toBe('0123456789');
+  });
 });
 
 describe('FRAME_RENDERER_SCRIPT — transitions and hidden tracks', () => {

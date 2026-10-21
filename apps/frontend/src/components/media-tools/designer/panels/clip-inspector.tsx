@@ -3,7 +3,7 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ColorSwatch, Slider, Stepper } from '../controls';
 import type { VideoClip } from '../designer.store';
-import { TEXT_ANIMATION_PRESETS, TEXT_ANIM_RELATIVE_PROPS, matchTextAnimationPreset } from '../text-animation-presets';
+import { TEXT_ANIMATION_PRESETS, ANIMATION_TRACK_TYPES, buildTextAnimationUpdate, matchTextAnimationPreset } from '../text-animation-presets';
 import { GraphEditor, GRAPH_PROPS } from '../graph-editor';
 import { PROP_DOT_COLORS } from '../keyframe-props';
 import { SmartFilterList } from './smart-filter-list';
@@ -676,34 +676,26 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   }, [keyframes]);
 
   const handleApplyTextAnimation = useCallback((presetName: string) => {
-    if (clipTrackType !== 'text' || !clip) return;
+    if (!clip || !clipTrackType || !ANIMATION_TRACK_TYPES.has(clipTrackType)) return;
     const preset = TEXT_ANIMATION_PRESETS.find((p) => p.name === presetName);
     if (!preset) return;
-    const base: Record<string, number> = {
-      x: clip.x ?? 0,
-      y: clip.y ?? 0,
-      rotation: clip.rotation ?? 0,
-    };
-    const shifted = preset.keyframes?.map((kf) => ({
-      ...kf,
-      props: Object.fromEntries(
-        Object.entries(kf.props).map(([key, value]) => [
-          key,
-          // Relative props ride on the clip's base transform; omitting a key
-          // the preset doesn't animate keeps it out of the keyframe lane.
-          TEXT_ANIM_RELATIVE_PROPS.has(key) ? (base[key] ?? 0) + value : value,
-        ])
-      ),
-    })).filter((kf) => Object.keys(kf.props).length > 0);
-    updateClip({ keyframes: shifted });
+    // Reveal presets animate the text CONTENT — meaningless on a clip with
+    // none (the section already hides them there; this is the belt-and-braces).
+    if (preset.textReveal && clipTrackType !== 'text') return;
+    // One animation at a time: the builder clears the other channel (reveal ⇄
+    // keyframes) as part of the patch.
+    const update = buildTextAnimationUpdate(preset, clip);
+    updateClip(update);
     // Every preset animates only the first few hundred ms of the clip — with
     // the playhead anywhere later, clicking a preset visibly did nothing.
     // Seek to the clip start and play the animation window once.
     store.getState().setPlayhead(clip.startMs);
-    const lastTMs = Math.max(...(preset.keyframes ?? []).map((kf) => kf.tMs));
+    const animWindowMs = update.keyframes?.length
+      ? Math.max(...update.keyframes.map((kf) => kf.tMs))
+      : (update.textReveal?.durationMs ?? clip.endMs - clip.startMs);
     window.dispatchEvent(
       new CustomEvent('designer:preview-clip-animation', {
-        detail: { durationMs: Math.min(lastTMs + 600, 3000) },
+        detail: { durationMs: Math.min(animWindowMs + 600, 3000) },
       })
     );
   }, [clip, clipTrackType, updateClip, store]);
@@ -711,8 +703,8 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   // Which preset the clip's current keyframes match (drives the highlight).
   const activeTextAnimation = useMemo(
     () =>
-      clipTrackType === 'text' && clip
-        ? matchTextAnimationPreset(clip.keyframes, clip.x ?? 0, clip.y ?? 0, clip.rotation ?? 0)
+      clip && clipTrackType && ANIMATION_TRACK_TYPES.has(clipTrackType)
+        ? matchTextAnimationPreset(clip.keyframes, clip.x ?? 0, clip.y ?? 0, clip.rotation ?? 0, clip.textReveal)
         : null,
     [clip, clipTrackType]
   );
@@ -1209,12 +1201,20 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         </div>
       )}
 
-      {/* Text animation presets */}
-      {clipTrackType === 'text' && (
+      {/* Animation presets — keyframe presets apply to any visual clip (the
+          interpolation is clip-type-agnostic); the reveal presets (Typewriter)
+          stay text-only, and the section keeps its original label for text. */}
+      {clipTrackType && ANIMATION_TRACK_TYPES.has(clipTrackType) && (
         <div className="pt-1 border-t border-studioBorder space-y-2">
-          <div className="text-[11px] text-textColor/50">{translate('designer_text_animations', 'Text Animations')}</div>
+          <div className="text-[11px] text-textColor/50">
+            {clipTrackType === 'text'
+              ? translate('designer_text_animations', 'Text Animations')
+              : translate('designer_animations', 'Animations')}
+          </div>
           <div className="flex flex-wrap gap-1">
-            {TEXT_ANIMATION_PRESETS.map((preset) => {
+            {TEXT_ANIMATION_PRESETS.filter(
+              (preset) => !preset.textReveal || clipTrackType === 'text'
+            ).map((preset) => {
               const active = activeTextAnimation === preset.name;
               return (
                 <button

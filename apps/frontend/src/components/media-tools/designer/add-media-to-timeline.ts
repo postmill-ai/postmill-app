@@ -125,6 +125,12 @@ import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/desig
 // server render cap — see designer-doc.limits.ts).
 const MAX_TIMELINE_DURATION_MS = MAX_VIDEO_DURATION_MS;
 
+// Generated music stops dead at the last sample — a hard cut that plays back
+// as a click/crackle. Land audio clips with a short baked-in-feel fade so the
+// default timeline experience doesn't crackle; the user can still zero them.
+export const AUDIO_CLIP_FADE_IN_MS = 100;
+export const AUDIO_CLIP_FADE_OUT_MS = 500;
+
 /**
  * Pick the track an inserted clip lands on.
  *
@@ -573,8 +579,10 @@ export function addMediaToTimeline(
               startMs: 0,
               endMs,
               volume: 1,
-              fadeInMs: 0,
-              fadeOutMs: 0,
+              // Cap the fades at half the clip so a very short drop keeps
+              // audible body instead of being all ramp.
+              fadeInMs: Math.min(AUDIO_CLIP_FADE_IN_MS, Math.floor(endMs / 2)),
+              fadeOutMs: Math.min(AUDIO_CLIP_FADE_OUT_MS, Math.floor(endMs / 2)),
             }
           : (() => {
               // A clip with no geometry renders at the 1×1 fallback — a blank

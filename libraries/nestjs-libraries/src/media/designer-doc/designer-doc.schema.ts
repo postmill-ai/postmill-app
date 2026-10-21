@@ -248,6 +248,7 @@ export interface DesignerTextStroke {
 export type { DesignerPathNode } from './path-geometry';
 export type { KeyframeEase, EaseHandles, EasePreset } from './keyframes';
 export type { SpeedCurvePoint } from './speed-curve';
+export type { TextReveal, TextRevealMode } from './text-reveal';
 export type { MotionBlur } from './motion-blur';
 export type { StrokeStyle, ArrowHead, LineCap, LineJoin } from './stroke-style';
 export type { CaptionStyle, CaptionPreset } from './caption-styles';
@@ -257,6 +258,7 @@ import type { CaptionStyle } from './caption-styles';
 import type { StrokeStyle } from './stroke-style';
 import type { MotionBlur } from './motion-blur';
 import type { KeyframeEase } from './keyframes';
+import type { TextReveal } from './text-reveal';
 import type { DesignerPathNode } from './path-geometry';
 import type { SpeedCurvePoint } from './speed-curve';
 
@@ -736,6 +738,15 @@ export interface VideoClip {
      */
     ease?: KeyframeEase;
   }[];
+  /**
+   * Progressive text reveal for text clips (optional-additive): the drawn
+   * string is sliced to a growing prefix (chars or words) as the playhead
+   * crosses the clip — see `designer-doc/text-reveal`, the single
+   * implementation both renderers evaluate. Kept OUT of the keyframe lanes:
+   * keyframes animate numeric props only, so a text-content channel would be a
+   * second animation system the two renderers could drift on.
+   */
+  textReveal?: TextReveal;
   naturalWidth?: number;
   naturalHeight?: number;
   transitionIn?: ClipTransition;
@@ -1675,6 +1686,14 @@ const clipCommon = {
     .enum(['rect', 'ellipse', 'line', 'star', 'triangle', 'polygon'])
     .optional(),
   stroke: ColorSchema.optional(),
+  // Progressive text reveal (typewriter) — additive, one small closed shape
+  // with nothing worth a lenient variant (same rule as WarpSchema).
+  textReveal: z
+    .object({
+      mode: z.enum(['chars', 'words']),
+      durationMs: z.number().finite().min(0).max(MAX_VIDEO_DURATION_MS).optional(),
+    })
+    .optional(),
 };
 
 

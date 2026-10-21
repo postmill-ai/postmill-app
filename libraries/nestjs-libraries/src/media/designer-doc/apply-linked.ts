@@ -197,6 +197,9 @@ export const VIDEO_CLIP_LOCAL_KEYS = new Set([
   'reverse',
   'freezeAtMs',
   'keyframes',
+  // Same rule as keyframes: reveal state is timing-anchored animation, not
+  // content — a variant keeps its own.
+  'textReveal',
   'beats',
 ]);
 

@@ -24,6 +24,7 @@ import {
   resetVideoSrcErrors,
 } from './video-src';
 import { captionWordStates } from '@postmill-ai/nestjs-libraries/media/designer-doc/caption-styles';
+import { applyTextReveal } from '@postmill-ai/nestjs-libraries/media/designer-doc/text-reveal';
 import {
   pointsForShape,
   flattenPoints,
@@ -790,7 +791,15 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               y={props.y}
               width={props.width}
               height={props.height}
-              text={clip.text || ''}
+              // Progressive reveal (typewriter) — the shared helper the frame
+              // renderer is injected with, so preview and export slice the
+              // string identically.
+              text={applyTextReveal(
+                clip.text || '',
+                clip.textReveal,
+                Math.max(0, playheadMs - clip.startMs),
+                clip.endMs - clip.startMs
+              )}
               fontFamily={clip.fontFamily || 'Arial'}
               fontSize={clip.fontSize || 16}
               // Numeric weight straight through, the same as an element's text.

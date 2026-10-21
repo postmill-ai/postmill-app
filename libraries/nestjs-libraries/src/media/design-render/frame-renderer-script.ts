@@ -28,6 +28,7 @@ import { motionBlurSource } from '../designer-doc/motion-blur';
 import { captionStylesSource } from '../designer-doc/caption-styles';
 import { backgroundTextureSource } from '../designer-doc/background-texture';
 import { transitionsSource } from '../designer-doc/transitions';
+import { textRevealSource } from '../designer-doc/text-reveal';
 
 /**
  * The ...Source() helpers serialize functions with String(fn). The backend runs
@@ -50,6 +51,7 @@ ${stripExportsNamespace(motionBlurSource())}
 ${stripExportsNamespace(captionStylesSource())}
 ${stripExportsNamespace(backgroundTextureSource())}
 ${stripExportsNamespace(transitionsSource())}
+${stripExportsNamespace(textRevealSource())}
 
   const output = window.__DATA.output;
   const baseUrl = window.__DATA.baseUrl || '';
@@ -492,7 +494,15 @@ ${stripExportsNamespace(transitionsSource())}
   }
 
   function drawTextClip(ctx, clip, props) {
-    const text = clip.text || '';
+    // The reveal slice comes from the injected designer-doc/text-reveal source —
+    // the same implementation the preview overlay runs, so an exported frame
+    // shows exactly the prefix the canvas showed.
+    const text = applyTextReveal(
+      clip.text || '',
+      clip.textReveal,
+      Math.max(0, window.__CURRENT_TIME - clip.startMs),
+      clip.endMs - clip.startMs
+    );
     if (!text) return;
     ctx.save();
     ctx.globalAlpha = props.opacity;

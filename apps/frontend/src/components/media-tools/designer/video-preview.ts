@@ -359,7 +359,11 @@ export class VideoPreviewEngine {
               effectiveVolume(clip, ms - clip.startMs, trackGain, duckGain) *
                 fadeGainAt(clip, ms - clip.startMs)
             );
-            if (el.paused) {
+            if (el.paused && !el.ended) {
+              // play() on an ENDED element restarts the track from 0 — under a
+              // playhead sitting at/after the clip's end that is an end-of-track
+              // stutter. (A scrub back into the clip seeks above, which clears
+              // `ended`, so legitimate resumes still play.)
               el.play().catch(() => {});
             }
           }

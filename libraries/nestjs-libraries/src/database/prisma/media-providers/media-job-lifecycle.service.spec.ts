@@ -5,6 +5,15 @@ vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
   safeFetch: (url: string, init?: RequestInit) => mockSafeFetch(url, init),
 }));
 
+// The outro fade is unit-tested in audio-outro-fade.spec.ts; here it is mocked
+// (identity by default) so these specs pin only the WIRING: which operations
+// get faded, and that a fade failure never loses the artifact.
+const mockApplyAudioOutroFade = vi.fn((buffer: Buffer) => Promise.resolve(buffer));
+vi.mock('@postmill-ai/nestjs-libraries/media/audio-outro-fade', () => ({
+  applyAudioOutroFade: (buffer: Buffer, mime: string, durationSeconds?: number) =>
+    mockApplyAudioOutroFade(buffer, mime, durationSeconds),
+}));
+
 import { MediaJobLifecycleService } from './media-job-lifecycle.service';
 import { AIMediaJob } from '@prisma/client';
 
@@ -532,6 +541,57 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
       expect(results.filter((r) => r === 'failed')).toHaveLength(1);
       expect(results.filter((r) => r === 'skipped')).toHaveLength(1);
       expect(notificationService.notify).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('audio outro fade on completion (music crackle guard)', () => {
+    function audioCompletion(metadata?: Record<string, unknown>) {
+      const ctx = makeService();
+      ctx.jobs.set('job-1', makeJob({ provider: 'suno', operation: 'audio' }));
+      ctx.pollJob.mockResolvedValue({
+        status: 'completed',
+        artifactUrl: 'https://cdn.suno/track.mp3',
+        metadata: { mime: 'audio/mpeg', ...metadata },
+      });
+      mockSafeFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers({ 'content-type': 'audio/mpeg', 'content-length': '3' }),
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      });
+      return ctx;
+    }
+
+    it('fades the downloaded audio bytes BEFORE storing, threading the metadata duration', async () => {
+      const { service, storageAdapter } = audioCompletion({ durationSeconds: 5 });
+      mockApplyAudioOutroFade.mockResolvedValueOnce(Buffer.from('faded'));
+
+      expect(await service.processJob('job-1')).toBe('completed');
+
+      expect(mockApplyAudioOutroFade).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), 'audio/mpeg', 5);
+      // The FADED bytes are what land in tenant storage.
+      expect(storageAdapter.writeBuffer).toHaveBeenCalledWith(Buffer.from('faded'), 'audio/mpeg');
+    });
+
+    it('a failed fade never loses the artifact — the original bytes are stored', async () => {
+      const { service, storageAdapter } = audioCompletion();
+      mockApplyAudioOutroFade.mockRejectedValueOnce(new Error('ffmpeg exploded'));
+
+      expect(await service.processJob('job-1')).toBe('completed');
+      expect(storageAdapter.writeBuffer).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), 'audio/mpeg');
+    });
+
+    it('does not fade non-audio operations', async () => {
+      const { service, jobs, pollJob } = makeService();
+      jobs.set('job-1', makeJob());
+      pollJob.mockResolvedValue({ status: 'completed', artifactUrl: 'https://provider.example.com/out.mp4' });
+      mockSafeFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers({ 'content-type': 'video/mp4', 'content-length': '4' }),
+        arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+      });
+
+      expect(await service.processJob('job-1')).toBe('completed');
+      expect(mockApplyAudioOutroFade).not.toHaveBeenCalled();
     });
   });
 
