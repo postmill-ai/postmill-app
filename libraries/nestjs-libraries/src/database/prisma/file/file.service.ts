@@ -1,4 +1,4 @@
-import { HttpException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, Logger } from '@nestjs/common';
 import { FileRepository, mediaCategoryFromMime } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.repository';
 import { Organization } from '@prisma/client';
 import { SaveMediaInformationDto } from '@postmill-ai/nestjs-libraries/dtos/file/save.media.information.dto';
@@ -254,11 +254,22 @@ export class FileService {
     return this._fileRepository.updateFolder(org, id, data);
   }
 
-  async deleteFolder(org: string, id: string) {
+  async deleteFolder(org: string, id: string, force = false) {
     const folder = await this._fileRepository.getFolder(org, id);
     if (!folder) {
       throw new HttpException('Folder not found', 404);
     }
+    if (!force) {
+      const { files, children } =
+        await this._fileRepository.countFolderActiveContents(org, id);
+      if (files > 0 || children > 0) {
+        // BadRequest (not a bare 500) so the message actually reaches the
+        // user's toast.
+        throw new BadRequestException('Folder is not empty');
+      }
+    }
+    // force: FKs are ON DELETE SET NULL — the row's files unfile and its child
+    // folders re-parent to root; the files themselves are never deleted.
     return this._fileRepository.deleteFolder(org, id);
   }
 

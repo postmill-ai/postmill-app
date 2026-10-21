@@ -32,6 +32,7 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
   useModals: () => ({ openModal: vi.fn(), closeAll: vi.fn() }),
+  useDecisionModal: () => ({ open: vi.fn().mockResolvedValue(false) }),
 }));
 // The uploader pulls in Uppy, which is heavy and irrelevant here.
 vi.mock('@postmill-ai/frontend/components/files/file-uploader', () => ({

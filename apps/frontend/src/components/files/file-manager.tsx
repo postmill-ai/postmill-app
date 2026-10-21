@@ -18,12 +18,13 @@ import clsx from 'clsx';
 import { PageHeader } from '@postmill-ai/frontend/components/ui/page-header';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { ancestorsOf, childrenOf, resolveFolderPath, useFolderDropTarget, type FolderItem } from '@postmill-ai/frontend/components/files/folder.utils';
+import { ancestorsOf, childrenOf, resolveFolderPath, useFolderDelete, useFolderDropTarget, type FolderItem } from '@postmill-ai/frontend/components/files/folder.utils';
 import { FolderBreadcrumb } from '@postmill-ai/frontend/components/files/folder-breadcrumb';
 import { ContextMenu, type ContextMenuItem } from '@postmill-ai/frontend/components/ui/context-menu';
 import { useContextMenu } from '@postmill-ai/frontend/components/ui/use-context-menu';
 import { RenameDialog } from '@postmill-ai/frontend/components/files/rename-dialog';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { readErrorMessage } from '@postmill-ai/frontend/components/media-tools/designer/read-error-message';
 import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
 import { usePathname, useRouter } from 'next/navigation';
@@ -342,7 +343,7 @@ export const FileManager: FC<{
         body: JSON.stringify({ folderId }),
       });
       if (!res.ok) {
-        toaster.show(t('failed_to_move_file', 'Failed to move file'), 'warning');
+        toaster.show(await readErrorMessage(res, t('failed_to_move_file', 'Failed to move file')), 'warning');
         return;
       }
       toaster.show(t('file_moved_successfully', 'File moved successfully'), 'success');
@@ -441,22 +442,17 @@ export const FileManager: FC<{
     [fetch, refresh, toaster, t, detailsFile]
   );
 
+  // refresh() already revalidates files + folders, so the unfiled-contents
+  // refetch the force path needs is covered without onContentsUnfiled.
+  const deleteFolderById = useFolderDelete({
+    selectedFolderId,
+    onSelectFolder: handleFolderSelect,
+    onRefresh: refresh,
+  });
+
   const deleteFolder = useCallback(
-    async (folder: FolderItem) => {
-      const res = await fetch(`/files/folders/${folder.id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const text = await res.text();
-        toaster.show(
-          text || t('cannot_delete_non_empty_folder', 'Cannot delete non-empty folder'),
-          'warning'
-        );
-      } else {
-        toaster.show(t('folder_deleted', 'Folder deleted'), 'success');
-        if (selectedFolderId === folder.id) handleFolderSelect(null);
-      }
-      refresh();
-    },
-    [fetch, refresh, toaster, t, selectedFolderId, handleFolderSelect]
+    (folder: FolderItem) => deleteFolderById(folder.id),
+    [deleteFolderById]
   );
 
   const openInDesignerFromFile = useCallback(

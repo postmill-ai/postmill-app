@@ -9,7 +9,8 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { ContextMenu } from '@postmill-ai/frontend/components/ui/context-menu';
 import { useContextMenu } from '@postmill-ai/frontend/components/ui/use-context-menu';
 import { useLongPress } from '@postmill-ai/frontend/components/ui/use-long-press';
-import { findFolder, useFolderDropTarget, type FolderItem } from './folder.utils';
+import { readErrorMessage } from '@postmill-ai/frontend/components/media-tools/designer/read-error-message';
+import { findFolder, useFolderDelete, useFolderDropTarget, type FolderItem } from './folder.utils';
 
 export const FolderTree: FC<{
   folders: FolderItem[];
@@ -70,17 +71,12 @@ export const FolderTree: FC<{
     onRefresh();
   }, [renamingName, fetch, onRefresh]);
 
-  const handleDelete = useCallback(async (id: string) => {
-    const res = await fetch(`/files/folders/${id}`, { method: 'DELETE' });
-    if (!res.ok) {
-      const text = await res.text();
-      toaster.show(text || t('cannot_delete_non_empty_folder', 'Cannot delete non-empty folder'), 'warning');
-    } else {
-      toaster.show(t('folder_deleted', 'Folder deleted'), 'success');
-      if (selectedFolderId === id) onSelectFolder(null);
-    }
-    onRefresh();
-  }, [fetch, onRefresh, toaster, selectedFolderId, onSelectFolder, t]);
+  const handleDelete = useFolderDelete({
+    selectedFolderId,
+    onSelectFolder,
+    onRefresh,
+    onContentsUnfiled: onFileMoved,
+  });
 
   const moveFile = useCallback(async (fileId: string, targetFolderId: string | null) => {
     const res = await fetch(`/files/${fileId}/move`, {
@@ -89,7 +85,7 @@ export const FolderTree: FC<{
     });
 
     if (!res.ok) {
-      toaster.show(t('failed_to_move_file', 'Failed to move file'), 'warning');
+      toaster.show(await readErrorMessage(res, t('failed_to_move_file', 'Failed to move file')), 'warning');
       return;
     }
 

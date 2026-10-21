@@ -8,6 +8,7 @@ import clsx from 'clsx';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { ContextMenu } from '@postmill-ai/frontend/components/ui/context-menu';
 import { useContextMenu } from '@postmill-ai/frontend/components/ui/use-context-menu';
+import { useLongPress } from '@postmill-ai/frontend/components/ui/use-long-press';
 import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useFolderDropTarget } from '@postmill-ai/frontend/components/files/folder.utils';
 import { readErrorMessage } from '../read-error-message';
@@ -59,6 +60,10 @@ export const TemplateFolderTree: FC<{
   const [renamingName, setRenamingName] = useState('');
   const { menu, openAt: openMenu, close: closeMenu } = useContextMenu<string>();
   const decision = useDecisionModal();
+  // Touch equivalent of right-click (same wiring as the Files library tree).
+  const longPress = useLongPress<string>((point, folderId) =>
+    openMenu({ ...point, currentTarget: null, preventDefault: () => undefined }, folderId)
+  );
   const { ref: scrollRef, autoScrollProps } = useDragAutoScroll<HTMLDivElement>();
 
   const toggleCollapse = (id: string) => {
@@ -173,8 +178,9 @@ export const TemplateFolderTree: FC<{
             }
           }}
           onContextMenu={(e) => openMenu(e, folder.id)}
+          {...longPress.bind(folder.id)}
           {...dropProps(folder.id)}
-          style={{ paddingInlineStart: `${12 + depth * 16}px` }}
+          style={{ paddingInlineStart: `${12 + depth * 16}px`, WebkitTouchCallout: 'none' }}
         >
           <button
             onClick={(e) => { e.stopPropagation(); toggleCollapse(folder.id); }}
@@ -210,7 +216,10 @@ export const TemplateFolderTree: FC<{
             type="button"
             onClick={(e) => { e.stopPropagation(); handleDelete(folder.id); }}
             aria-label={t('delete_folder_named', 'Delete folder {{name}}', { name: folder.name })}
-            className="w-[16px] h-[16px] flex items-center justify-center rounded-[4px] text-newTextColor/60 hover:text-dangerText hover:bg-boxHover opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            // Hover/focus-only reveal hides delete entirely on touch — keep it
+            // visible at the mobile breakpoint, where long-press also opens the
+            // same actions via the context menu.
+            className="w-[16px] h-[16px] flex items-center justify-center rounded-[4px] text-newTextColor/60 hover:text-dangerText hover:bg-boxHover opacity-0 group-hover:opacity-100 focus-visible:opacity-100 mobile:opacity-100 transition-opacity"
           >
             <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
               <path d="M2 4H12M5.5 4V2.5C5.5 2.22386 5.72386 2 6 2H8C8.27614 2 8.5 2.22386 8.5 2.5V4M3.5 4L4.16667 11.5C4.16667 12.0523 4.61438 12.5 5.16667 12.5H8.83333C9.38562 12.5 9.83333 12.0523 9.83333 11.5L10.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />

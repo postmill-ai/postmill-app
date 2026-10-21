@@ -252,6 +252,40 @@ describe('FilesController', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // DELETE /folders/:id
+  // ---------------------------------------------------------------------------
+  describe('DELETE /folders/:id', () => {
+    it('is gated on media:delete and reports success; force=true unfiles contents', async () => {
+      expect(
+        Reflect.getMetadata(
+          REQUIRE_PERMISSION_KEY,
+          FilesController.prototype.deleteFolder
+        )
+      ).toEqual({ resource: 'media', action: 'delete' });
+
+      const controller = makeController();
+      mockDeleteFolder.mockResolvedValue({ id: 'f1' });
+
+      expect(await controller.deleteFolder(org, 'f1')).toEqual({ success: true });
+      expect(mockDeleteFolder).toHaveBeenCalledWith('org-1', 'f1', false);
+
+      // force=true unfiles the folder's contents instead of rejecting.
+      expect(await controller.deleteFolder(org, 'f1', 'true')).toEqual({ success: true });
+      expect(mockDeleteFolder).toHaveBeenLastCalledWith('org-1', 'f1', true);
+    });
+
+    it('propagates the service-level 400 for a non-empty folder', async () => {
+      const controller = makeController();
+      mockDeleteFolder.mockRejectedValue(new HttpException('Folder is not empty', 400));
+
+      await expect(controller.deleteFolder(org, 'f1')).rejects.toMatchObject({
+        status: 400,
+        message: 'Folder is not empty',
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // POST /import
   // ---------------------------------------------------------------------------
   describe('POST /import', () => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { BadRequestException } from '@nestjs/common';
 import { FileService } from './file.service';
 import { FileRepository } from './file.repository';
 
@@ -151,6 +152,82 @@ describe('FileService — purgeAiDesignerSessionFiles', () => {
 
     expect(purged).toBe(0);
     expect(model.file.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('FileService — deleteFolder', () => {
+  it('404s on a missing folder', async () => {
+    const { fileRepo, model } = makeRepo();
+    model.fileFolder.findFirst.mockResolvedValue(null);
+
+    const service = makeService(fileRepo);
+    await expect(service.deleteFolder('org-1', 'nope')).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(model.fileFolder.delete).not.toHaveBeenCalled();
+  });
+
+  it('deletes an empty folder', async () => {
+    const { fileRepo, model } = makeRepo();
+    model.fileFolder.findFirst.mockResolvedValue({ id: 'f1' });
+    model.file.count.mockResolvedValue(0);
+    model.fileFolder.count.mockResolvedValue(0);
+    model.fileFolder.findUnique.mockResolvedValue({ id: 'f1' });
+    model.fileFolder.delete.mockResolvedValue({ id: 'f1' });
+
+    const service = makeService(fileRepo);
+    expect(await service.deleteFolder('org-1', 'f1')).toEqual({ id: 'f1' });
+    expect(model.fileFolder.delete).toHaveBeenCalledWith({
+      where: { id: 'f1', organizationId: 'org-1' },
+    });
+  });
+
+  it('rejects a non-empty folder with a readable 400', async () => {
+    const { fileRepo, model } = makeRepo();
+    model.fileFolder.findFirst.mockResolvedValue({ id: 'f1' });
+    model.file.count.mockResolvedValue(2);
+    model.fileFolder.count.mockResolvedValue(0);
+
+    const service = makeService(fileRepo);
+    await expect(service.deleteFolder('org-1', 'f1')).rejects.toThrow(
+      BadRequestException
+    );
+    expect(model.fileFolder.delete).not.toHaveBeenCalled();
+  });
+
+  it('treats a folder holding only trashed files as empty', async () => {
+    const { fileRepo, model } = makeRepo();
+    model.fileFolder.findFirst.mockResolvedValue({ id: 'f1' });
+    // The count query filters deletedAt: null — only live files keep the
+    // folder non-empty.
+    model.file.count.mockResolvedValue(0);
+    model.fileFolder.count.mockResolvedValue(0);
+    model.fileFolder.findUnique.mockResolvedValue({ id: 'f1' });
+    model.fileFolder.delete.mockResolvedValue({ id: 'f1' });
+
+    const service = makeService(fileRepo);
+    await service.deleteFolder('org-1', 'f1');
+
+    expect(model.file.count).toHaveBeenCalledWith({
+      where: { folderId: 'f1', organizationId: 'org-1', deletedAt: null },
+    });
+    expect(model.fileFolder.delete).toHaveBeenCalled();
+  });
+
+  it('with force skips the emptiness check — the FKs unfile files and re-parent children', async () => {
+    const { fileRepo, model } = makeRepo();
+    model.fileFolder.findFirst.mockResolvedValue({ id: 'f1' });
+    model.fileFolder.findUnique.mockResolvedValue({ id: 'f1' });
+    model.fileFolder.delete.mockResolvedValue({ id: 'f1' });
+
+    const service = makeService(fileRepo);
+    expect(await service.deleteFolder('org-1', 'f1', true)).toEqual({ id: 'f1' });
+    // The emptiness check is skipped entirely in force mode.
+    expect(model.file.count).not.toHaveBeenCalled();
+    expect(model.fileFolder.count).not.toHaveBeenCalled();
+    expect(model.fileFolder.delete).toHaveBeenCalledWith({
+      where: { id: 'f1', organizationId: 'org-1' },
+    });
   });
 });
 

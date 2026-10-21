@@ -1,6 +1,12 @@
 'use client';
 
 import React, { useCallback, useRef, useState } from 'react';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
+import { readErrorMessage } from '@postmill-ai/frontend/components/media-tools/designer/read-error-message';
+import { isFolderNotEmptyError } from '@postmill-ai/frontend/components/media-tools/designer/panels/template-folders';
 
 /** Shape returned by `GET /files/folders` (a full nested tree, name-asc). */
 export type FolderItem = {
@@ -89,6 +95,67 @@ export function childrenOf(
 ): FolderItem[] {
   if (!selectedFolderId) return folders;
   return findFolder(folders, selectedFolderId)?.children ?? [];
+}
+
+/**
+ * Folder delete flow shared by the sidebar tree and the file list's folder
+ * context menu (the two `DELETE /files/folders/:id` callers). A non-empty
+ * folder 400s with "Folder is not empty"; the user gets one confirm to delete
+ * anyway via `?force=true`, which unfiles the files (they land in All Files)
+ * and re-parents subfolders to root — nothing is deleted but the folder.
+ */
+export function useFolderDelete(opts: {
+  selectedFolderId: string | null;
+  onSelectFolder: (id: string | null) => void;
+  onRefresh: () => void;
+  /** Force-deleting unfiles the folder's files — any file list is stale until refetched. */
+  onContentsUnfiled?: () => void;
+}) {
+  const fetch = useFetch();
+  const toaster = useToaster();
+  const t = useT();
+  const decision = useDecisionModal();
+  const { selectedFolderId, onSelectFolder, onRefresh, onContentsUnfiled } = opts;
+
+  return useCallback(
+    async (id: string) => {
+      let force = false;
+      let res = await fetch(`/files/folders/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const message = await readErrorMessage(
+          res,
+          t('cannot_delete_folder', 'Could not delete folder')
+        );
+        if (!isFolderNotEmptyError(res.status, message)) {
+          toaster.show(message, 'warning');
+          return;
+        }
+        const confirmed = await decision.open({
+          title: t('delete_folder', 'Delete folder'),
+          description: t(
+            'delete_folder_unfile_contents_all_files',
+            'Delete folder and move contents to All Files?'
+          ),
+          approveLabel: t('delete', 'Delete'),
+        });
+        if (!confirmed) return;
+        force = true;
+        res = await fetch(`/files/folders/${id}?force=true`, { method: 'DELETE' });
+        if (!res.ok) {
+          toaster.show(
+            await readErrorMessage(res, t('cannot_delete_folder', 'Could not delete folder')),
+            'warning'
+          );
+          return;
+        }
+      }
+      toaster.show(t('folder_deleted', 'Folder deleted'), 'success');
+      if (selectedFolderId === id) onSelectFolder(null);
+      onRefresh();
+      if (force) onContentsUnfiled?.();
+    },
+    [fetch, toaster, t, decision, selectedFolderId, onSelectFolder, onRefresh, onContentsUnfiled]
+  );
 }
 
 /**

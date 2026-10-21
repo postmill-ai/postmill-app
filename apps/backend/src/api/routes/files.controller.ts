@@ -293,11 +293,16 @@ export class FilesController {
   @Delete('/folders/:id')
   @CheckPolicies([AuthorizationActions.Delete, Sections.MEDIA])
   @RequirePermission('media', 'delete')
-  deleteFolder(
+  async deleteFolder(
     @GetOrgFromRequest() org: Organization,
-    @Param('id') id: string
+    @Param('id') id: string,
+    // force=true unfiles the folder's contents instead of rejecting (the FKs
+    // are ON DELETE SET NULL); the default rejects a non-empty folder with a
+    // readable 400.
+    @Query('force') force?: string
   ) {
-    return this._fileService.deleteFolder(org.id, id);
+    await this._fileService.deleteFolder(org.id, id, force === 'true');
+    return { success: true };
   }
 
   // ── File Management ────────────────────────────────────

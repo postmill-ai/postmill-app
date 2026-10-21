@@ -76,45 +76,47 @@ describe('FileRepository — metadata storage', () => {
   });
 });
 
-describe('FileRepository — deleteFolder soft-delete handling', () => {
-  it('succeeds when the folder contains only trashed files', async () => {
+describe('FileRepository — deleteFolder', () => {
+  it('deletes the row — the FKs unfile its contents', async () => {
+    // Both FKs (files.folderId, folders.parentId) are ON DELETE SET NULL:
+    // deleting the row unfiles files and re-parents children to root. The
+    // emptiness guard lives in the service.
     const { repo, model } = makeRepo();
-    model.fileFolder.findUnique.mockResolvedValue({
-      id: 'folder-1',
-      name: 'Trashable',
-      _count: { children: 0 },
-    });
-    model.file.count.mockResolvedValue(0);
-    model.fileFolder.delete.mockResolvedValue({ id: 'folder-1' });
+    model.fileFolder.findUnique.mockResolvedValue({ id: 'f1' });
+    model.fileFolder.delete.mockResolvedValue({ id: 'f1' });
 
-    const result = await repo.deleteFolder('org-1', 'folder-1');
+    const result = await repo.deleteFolder('org-1', 'f1');
 
-    expect(result).toEqual({ id: 'folder-1' });
-    expect(model.file.count).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          folderId: 'folder-1',
-          organizationId: 'org-1',
-          deletedAt: null,
-        }),
-      }),
-    );
+    expect(result).toEqual({ id: 'f1' });
     expect(model.fileFolder.delete).toHaveBeenCalledWith({
-      where: { id: 'folder-1', organizationId: 'org-1' },
+      where: { id: 'f1', organizationId: 'org-1' },
     });
   });
 
-  it('still throws when active (non-trashed) files remain', async () => {
+  it('returns null for a missing folder', async () => {
     const { repo, model } = makeRepo();
-    model.fileFolder.findUnique.mockResolvedValue({
-      id: 'folder-2',
-      name: 'Busy',
-      _count: { children: 0 },
-    });
-    model.file.count.mockResolvedValue(3);
+    model.fileFolder.findUnique.mockResolvedValue(null);
 
-    await expect(repo.deleteFolder('org-1', 'folder-2')).rejects.toThrow('Folder is not empty');
+    expect(await repo.deleteFolder('org-1', 'nope')).toBeNull();
     expect(model.fileFolder.delete).not.toHaveBeenCalled();
+  });
+
+  it('countFolderActiveContents counts live files and child folders', async () => {
+    const { repo, model } = makeRepo();
+    model.file.count.mockResolvedValue(2);
+    model.fileFolder.count.mockResolvedValue(1);
+
+    const result = await repo.countFolderActiveContents('org-1', 'f1');
+
+    expect(result).toEqual({ files: 2, children: 1 });
+    // Soft-deleted files are excluded: a folder holding only trashed files
+    // counts as empty.
+    expect(model.file.count).toHaveBeenCalledWith({
+      where: { folderId: 'f1', organizationId: 'org-1', deletedAt: null },
+    });
+    expect(model.fileFolder.count).toHaveBeenCalledWith({
+      where: { parentId: 'f1', organizationId: 'org-1' },
+    });
   });
 });
 

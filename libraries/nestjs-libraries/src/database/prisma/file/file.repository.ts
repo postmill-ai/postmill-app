@@ -516,25 +516,32 @@ export class FileRepository {
   async deleteFolder(org: string, id: string) {
     const folder = await this._fileFolder.model.fileFolder.findUnique({
       where: { id, organizationId: org },
-      include: { _count: { select: { children: true } } },
     });
 
     if (!folder) {
       return null;
     }
 
-    // Exclude soft-deleted files: a folder with only trashed files is deletable.
-    const activeFiles = await this._file.model.file.count({
-      where: { folderId: id, organizationId: org, deletedAt: null },
-    });
-
-    if (activeFiles > 0 || folder._count.children > 0) {
-      throw new Error('Folder is not empty');
-    }
-
+    // The folderId/parentId FKs are ON DELETE SET NULL: deleting the row
+    // unfiles its files and re-parents child folders to root. The emptiness
+    // decision lives in the service (see deleteFolder there).
     return this._fileFolder.model.fileFolder.delete({
       where: { id, organizationId: org },
     });
+  }
+
+  // Counts for the service's not-empty guard. Soft-deleted files are excluded:
+  // a folder holding only trashed files counts as empty.
+  async countFolderActiveContents(org: string, id: string) {
+    const [files, children] = await Promise.all([
+      this._file.model.file.count({
+        where: { folderId: id, organizationId: org, deletedAt: null },
+      }),
+      this._fileFolder.model.fileFolder.count({
+        where: { parentId: id, organizationId: org },
+      }),
+    ]);
+    return { files, children };
   }
 
   async getFolderTree(org: string) {
