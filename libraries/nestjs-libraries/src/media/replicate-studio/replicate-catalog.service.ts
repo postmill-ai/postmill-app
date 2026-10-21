@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
@@ -113,8 +114,11 @@ export class ReplicateCatalogService {
     if (category?.execution === 'local') return [];
     if (allowlist.length === 0) return [];
 
-    // v2: earlier lists merged collection extras — drop those cached entries.
-    const categoryCacheKey = `replicate:category:v2:${categoryKey}`;
+    // v3: key includes a hash of the curated allowlist, so editing the allowlist
+    // self-invalidates the 24h cache (a stale v2 key once served a retired model
+    // list for a full day after deploy).
+    const allowlistHash = createHash('sha1').update(allowlist.join(',')).digest('hex').slice(0, 8);
+    const categoryCacheKey = `replicate:category:v3:${allowlistHash}:${categoryKey}`;
     const cachedCategory = await this._redis.get(categoryCacheKey);
     if (cachedCategory) {
       return JSON.parse(cachedCategory);

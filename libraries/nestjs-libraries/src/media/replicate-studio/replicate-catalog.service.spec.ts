@@ -122,7 +122,7 @@ describe('ReplicateCatalogService', () => {
       expect(result).toHaveLength(0);
       // Should not write category cache when any model failed
       expect(mockRedis.set).not.toHaveBeenCalledWith(
-        'replicate:category:v2:text-to-image',
+        expect.stringMatching(/^replicate:category:v3:[0-9a-f]{8}:text-to-image$/),
         expect.any(String),
         expect.any(Number),
       );
@@ -143,7 +143,7 @@ describe('ReplicateCatalogService', () => {
       await service.listModels('text-to-image', 'org1');
 
       expect(mockRedis.set).toHaveBeenCalledWith(
-        'replicate:category:v2:text-to-image',
+        expect.stringMatching(/^replicate:category:v3:[0-9a-f]{8}:text-to-image$/),
         expect.any(String),
         86400,
       );
