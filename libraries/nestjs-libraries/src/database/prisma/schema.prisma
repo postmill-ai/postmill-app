@@ -1861,7 +1861,7 @@ model DesignVersion {
   name            String?
   doc             Json
   auto            Boolean  @default(false)
-  createdById     String
+  createdById     String?
   width           Int      @default(1080)
   height          Int      @default(1080)
   previewDataUrl  String?
@@ -1869,7 +1869,7 @@ model DesignVersion {
 
   design          Design       @relation(fields: [designId], references: [id], onDelete: Cascade)
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy       User         @relation(fields: [createdById], references: [id])
+  createdBy       User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([designId])
   @@index([organizationId])

@@ -130,7 +130,6 @@ describe('DeletionService', () => {
     }
 
     it.each([
-      ['designVersion', { createdById: 'u-1' }],
       ['federationGrant', { userId: 'u-1' }],
       ['design', { createdById: 'u-1' }],
       ['comments', { userId: 'u-1' }],
@@ -148,6 +147,12 @@ describe('DeletionService', () => {
       const userDeleteIdx = calls.findIndex((c) => c.op === 'user.delete');
       expect(idx).toBeGreaterThanOrEqual(0);
       expect(userDeleteIdx).toBeGreaterThan(idx);
+    });
+
+    it('never deletes DesignVersion rows — they SetNull and survive', async () => {
+      const { calls, done } = run();
+      await done;
+      expect(calls.filter((c) => c.op.startsWith('designVersion.'))).toEqual([]);
     });
   });
 });

@@ -87,10 +87,9 @@ export class DeletionService {
     // 2. Remove the user and their remaining personal rows in one transaction.
     await this._prisma.$transaction(async (tx) => {
       // Required-FK rows that would block the user delete (no cascade).
-      // (DesignTemplate has no creator FK — nothing to delete there.)
-      // DesignVersion.createdById is RESTRICT: versions this user saved on a
-      // TEAMMATE's design in a shared org survive the design delete below.
-      await tx.designVersion.deleteMany({ where: { createdById: userId } });
+      // (DesignTemplate has no creator FK — nothing to delete there.
+      //  DesignVersion.createdById is SetNull: versions this user saved on a
+      //  TEAMMATE's design are preserved, anonymized to createdById = null.)
       await tx.design.deleteMany({ where: { createdById: userId } });
       await tx.comments.deleteMany({ where: { userId } });
       await tx.postCommentRead.deleteMany({ where: { userId } });
@@ -106,13 +105,14 @@ export class DeletionService {
 
       // Every RESTRICT FK to User is cleared above: UserOrganization, Comments,
       // PostCommentRead, OAuthAuthorization, FederationGrant, ApiKey, Design,
-      // DesignVersion, AiDesignerSession. A new required User relation without
+      // AiDesignerSession. A new required User relation without
       // onDelete: Cascade MUST be added here, or account deletion 500s.
       // Cascade-marked children (Session, UserProfile, NotificationPreference,
       // NotificationDigestQueue, PushToken, NotificationRead, CommsUserLink)
       // drop with the user.
       // Optional FKs (AISpendLog/AISettingsAudit/AIMediaJob.userId,
-      // SocialComment.assigneeId) null out via their relation's default SetNull.
+      // SocialComment.assigneeId, DesignVersion.createdById) null out via
+      // their relation's SetNull.
       // Post.approvedById/createdById, Campaign/CampaignItem/CampaignNote
       // .createdById are plain scalars with no FK — left as dangling ids.
       await tx.user.delete({ where: { id: userId } });

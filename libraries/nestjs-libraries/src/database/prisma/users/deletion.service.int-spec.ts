@@ -25,11 +25,11 @@ describe('DeletionService.deleteUser (integration)', () => {
           { userId: member.id, organizationId: org.id },
         ],
       });
-      // The OWNER's design; the MEMBER saved a version of it (RESTRICT FK to member).
+      // The OWNER's design; the MEMBER saved a version of it (SetNull FK to member).
       const design = await prisma.design.create({
         data: { organizationId: org.id, name: 'Teammate design', doc: {}, createdById: owner.id },
       });
-      await prisma.designVersion.create({
+      const version = await prisma.designVersion.create({
         data: { designId: design.id, organizationId: org.id, doc: {}, createdById: member.id },
       });
       await prisma.federationGrant.create({
@@ -39,7 +39,11 @@ describe('DeletionService.deleteUser (integration)', () => {
       await expect(service.deleteUser(member.id)).resolves.toEqual({ id: member.id });
 
       expect(await prisma.user.findUnique({ where: { id: member.id } })).toBeNull();
-      expect(await prisma.designVersion.count({ where: { createdById: member.id } })).toBe(0);
+      // The version the member saved on the TEAMMATE's design is preserved,
+      // anonymized to createdById = null via the SetNull FK.
+      const saved = await prisma.designVersion.findUnique({ where: { id: version.id } });
+      expect(saved).not.toBeNull();
+      expect(saved!.createdById).toBeNull();
       expect(await prisma.federationGrant.count({ where: { userId: member.id } })).toBe(0);
       // Shared org and the teammate's design survive.
       expect(await prisma.organization.findUnique({ where: { id: org.id } })).not.toBeNull();
@@ -49,7 +53,8 @@ describe('DeletionService.deleteUser (integration)', () => {
       // The per-run DB is shared across int specs (test-db.int-spec asserts 0 users).
       const emails = ['owner@deletion.int', 'member@deletion.int'];
       const users = { user: { email: { in: emails } } };
-      await prisma.designVersion.deleteMany({ where: { createdBy: { email: { in: emails } } } });
+      // The saved version's createdById is null by now — scope by design, not creator.
+      await prisma.designVersion.deleteMany({ where: { design: { createdBy: { email: { in: emails } } } } });
       await prisma.design.deleteMany({ where: { createdBy: { email: { in: emails } } } });
       await prisma.federationGrant.deleteMany({ where: users });
       await prisma.userOrganization.deleteMany({ where: users });
