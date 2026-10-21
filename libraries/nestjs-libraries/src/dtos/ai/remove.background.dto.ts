@@ -1,7 +1,8 @@
-import { IsString, IsUrl } from 'class-validator';
+import { IsString } from 'class-validator';
+import { IsImageSource } from '@postmill-ai/nestjs-libraries/dtos/ai/image-source.validator';
 
 export class RemoveBackgroundDto {
   @IsString()
-  @IsUrl()
+  @IsImageSource()
   imageUrl: string;
 }

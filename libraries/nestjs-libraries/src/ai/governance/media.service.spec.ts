@@ -133,6 +133,7 @@ function setup(
   enabledIdentifiers?: string[],
   defaultsResolution?: { resolve: ReturnType<typeof vi.fn> },
   budget = new (BudgetService as never)(),
+  storage?: { getLocalAdapterForOrg: ReturnType<typeof vi.fn> },
 ): TestSetup & { service: AiMediaService; budget: BudgetService } {
   const map = new Map(adapters.map((a) => [a.identifier, a]));
   const enabled = (enabledIdentifiers ?? adapters.map((a) => a.identifier)).map((identifier) => ({
@@ -174,6 +175,7 @@ function setup(
     undefined as never,
     undefined as never,
     budget,
+    storage as never,
   );
 
   return { service, resolution, orgSettings, lifecycle, budget };
@@ -818,6 +820,82 @@ describe('AiMediaService', () => {
       await expect(service.removeBackground('https://x/img.png', { orgId: 'org-1' })).rejects.not.toThrow(
         CapabilityNotAvailable,
       );
+    });
+  });
+
+  describe('image-edit inputs arriving as data URIs (persist hop)', () => {
+    const tinyPngDataUri = `data:image/png;base64,${Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64')}`;
+    const mintedUrl = 'https://uploads.example.com/uploads/org-1/2026/10/21/abc.png';
+    const storageWith = (writeBuffer: ReturnType<typeof vi.fn>) => ({
+      getLocalAdapterForOrg: vi.fn().mockResolvedValue({ writeBuffer }),
+    });
+
+    it('persists a data-URI input and hands the provider the minted upload URL', async () => {
+      const writeBuffer = vi.fn().mockResolvedValue(mintedUrl);
+      const adapter = makeAdapter('replicate', { bgRemove: true }, {
+        removeBackground: vi.fn().mockResolvedValue('https://x/nobg.png'),
+      });
+      const { service } = setup([adapter], undefined, undefined, undefined, storageWith(writeBuffer));
+
+      const result = await service.removeBackground(tinyPngDataUri, { orgId: 'org-1' });
+      expect(result).toBe('https://x/nobg.png');
+      expect(writeBuffer).toHaveBeenCalledWith(expect.any(Buffer), 'image/png');
+      expect(adapter.removeBackground).toHaveBeenCalledWith(mintedUrl, expect.anything());
+    });
+
+    it('persists both image and mask for inpaint', async () => {
+      const writeBuffer = vi.fn()
+        .mockResolvedValueOnce('https://uploads.example.com/uploads/org-1/img.png')
+        .mockResolvedValueOnce('https://uploads.example.com/uploads/org-1/mask.png');
+      const adapter = makeAdapter('replicate', { inpaint: true }, {
+        inpaintImage: vi.fn().mockResolvedValue('https://x/inpainted.png'),
+      });
+      const { service } = setup([adapter], undefined, undefined, undefined, storageWith(writeBuffer));
+
+      await service.inpaintImage(tinyPngDataUri, tinyPngDataUri, 'fill sky', { orgId: 'org-1' });
+      expect(writeBuffer).toHaveBeenCalledTimes(2);
+      expect(adapter.inpaintImage).toHaveBeenCalledWith(
+        'https://uploads.example.com/uploads/org-1/img.png',
+        'https://uploads.example.com/uploads/org-1/mask.png',
+        'fill sky',
+        expect.anything(),
+      );
+    });
+
+    it('persists a data-URI sourceUrl for image-to-image generation', async () => {
+      const writeBuffer = vi.fn().mockResolvedValue(mintedUrl);
+      const adapter = makeAdapter('replicate', { image: true });
+      const { service } = setup([adapter], undefined, undefined, undefined, storageWith(writeBuffer));
+
+      await service.generateImage('make it pop', { orgId: 'org-1', sourceUrl: tinyPngDataUri });
+      expect(writeBuffer).toHaveBeenCalledWith(expect.any(Buffer), 'image/png');
+      expect(adapter.generateImage).toHaveBeenCalledWith(
+        'make it pop',
+        expect.objectContaining({ sourceUrl: mintedUrl }),
+      );
+    });
+
+    it('falls back to passing the data URI through when persistence fails', async () => {
+      const storage = { getLocalAdapterForOrg: vi.fn().mockRejectedValue(new Error('no storage')) };
+      const adapter = makeAdapter('replicate', { bgRemove: true }, {
+        removeBackground: vi.fn().mockResolvedValue('https://x/nobg.png'),
+      });
+      const { service } = setup([adapter], undefined, undefined, undefined, storage);
+
+      const result = await service.removeBackground(tinyPngDataUri, { orgId: 'org-1' });
+      expect(result).toBe('https://x/nobg.png');
+      expect(adapter.removeBackground).toHaveBeenCalledWith(tinyPngDataUri, expect.anything());
+    });
+
+    it('never attempts persistence without an orgId (no org scope, no candidates)', async () => {
+      const writeBuffer = vi.fn().mockResolvedValue(mintedUrl);
+      const adapter = makeAdapter('replicate', { bgRemove: true }, {
+        removeBackground: vi.fn().mockResolvedValue('https://x/nobg.png'),
+      });
+      const { service } = setup([adapter], undefined, undefined, undefined, storageWith(writeBuffer));
+
+      await expect(service.removeBackground(tinyPngDataUri)).rejects.toThrow(CapabilityNotAvailable);
+      expect(writeBuffer).not.toHaveBeenCalled();
     });
   });
 

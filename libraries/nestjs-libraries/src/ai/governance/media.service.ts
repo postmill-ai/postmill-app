@@ -1146,7 +1146,16 @@ export class AiMediaService {
     options?: { size?: string; aspect?: 'square' | 'wide' | 'tall'; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string; signal?: AbortSignal },
   ): Promise<MediaGenerationResult> {
     const size = options?.size || (options?.isVertical ? '1024x1536' : undefined);
-    const candidates = await this._resolveForOperation(options?.orgId, 'image', options?.sourceUrl);
+    // A data: URI source (image-to-image from a pasted/unsaved image) is
+    // persisted to org storage first — adapters hand sourceUrl to providers
+    // that reject inline data. Falls back to the raw value on any failure.
+    let sourceUrl = options?.sourceUrl;
+    if (sourceUrl && options?.orgId && this._storageService && /^data:image\//i.test(sourceUrl)) {
+      sourceUrl =
+        (await this._persistInlineEditInput(options.orgId, sourceUrl, 'generateImage sourceUrl')) ??
+        sourceUrl;
+    }
+    const candidates = await this._resolveForOperation(options?.orgId, 'image', sourceUrl);
 
     for (const candidate of candidates) {
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
@@ -1163,7 +1172,7 @@ export class AiMediaService {
           input: this._imageSettings(candidate.settings),
           size,
           aspect: options?.aspect,
-          sourceUrl: options?.sourceUrl,
+          sourceUrl,
         });
         const first = result.image || result.images?.[0];
         if (!first) throw new Error('adapter returned no image');
@@ -1518,7 +1527,17 @@ export class AiMediaService {
   // relative /uploads/... path or a private host is unfetchable — route every
   // image-edit input through the same resolution the vision paths use (inline
   // local uploads as data URIs, pass verified/reachable remotes through).
-  private _resolveEditImageUrl(url: string, label: string): Promise<string | null> {
+  private async _resolveEditImageUrl(url: string, label: string, orgId?: string): Promise<string | null> {
+    // A data: URI input (pasted image, canvas-drawn inpaint mask) is persisted
+    // to the org's storage first: strict edit models reject data: URIs outright
+    // (bria: "image_url must be a valid HTTP or HTTPS URL"), and the write
+    // yields a plain /uploads URL the normal resolution below can publicize or
+    // re-inline. No File row — transient edit inputs must not clutter the Files
+    // library. Any persist failure falls through to the previous pass-through.
+    if (orgId && this._storageService && /^data:image\//i.test(url)) {
+      const persisted = await this._persistInlineEditInput(orgId, url, label);
+      if (persisted) url = persisted;
+    }
     return resolveVisionImageUrl(url, {
       warn: (message) => this._logger.warn(message),
       label,
@@ -1531,8 +1550,30 @@ export class AiMediaService {
     });
   }
 
+  private async _persistInlineEditInput(orgId: string, dataUri: string, label: string): Promise<string | null> {
+    const match = dataUri.match(/^data:(image\/(?:png|jpe?g|webp));base64,(.+)$/i);
+    if (!match) return null;
+    // base64 inflates ~4/3, so a payload longer than this cannot decode under
+    // the cap — reject before allocating the buffer.
+    if (match[2].length > Math.floor((AiMediaService.MEDIA_EDIT_MAX_INLINE_BYTES / 3) * 4)) {
+      this._logger.warn(`${label}: inline image exceeds the edit-input size cap`);
+      return null;
+    }
+    try {
+      const buffer = Buffer.from(match[2], 'base64');
+      if (buffer.length > AiMediaService.MEDIA_EDIT_MAX_INLINE_BYTES) return null;
+      const storage = this._storageService;
+      if (!storage) return null;
+      const adapter = await storage.getLocalAdapterForOrg(orgId, true);
+      return await adapter.writeBuffer(buffer, match[1]);
+    } catch (err) {
+      this._logger.warn(`${label}: failed to persist inline image: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
   async upscaleImage(imageUrl: string, options?: { orgId?: string; scale?: number }): Promise<string> {
-    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'upscaleImage');
+    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'upscaleImage', options?.orgId);
     if (!resolvedUrl) {
       this._logger.warn('Upscale image URL unreadable — returning original');
       return imageUrl;
@@ -1569,7 +1610,7 @@ export class AiMediaService {
   }
 
   async removeBackground(imageUrl: string, options?: { orgId?: string }): Promise<string> {
-    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'removeBackground');
+    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'removeBackground', options?.orgId);
     if (!resolvedUrl) {
       throw new BadRequestException('The image could not be read for background removal.');
     }
@@ -1618,8 +1659,8 @@ export class AiMediaService {
     prompt: string,
     options?: { orgId?: string },
   ): Promise<string> {
-    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'inpaintImage');
-    const resolvedMaskUrl = await this._resolveEditImageUrl(maskUrl, 'inpaintImage mask');
+    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'inpaintImage', options?.orgId);
+    const resolvedMaskUrl = await this._resolveEditImageUrl(maskUrl, 'inpaintImage mask', options?.orgId);
     if (!resolvedUrl || !resolvedMaskUrl) {
       throw new BadRequestException('The image or mask could not be read for inpainting.');
     }
@@ -1666,7 +1707,7 @@ export class AiMediaService {
     prompt?: string,
     options?: { orgId?: string },
   ): Promise<string> {
-    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'outpaintImage');
+    const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'outpaintImage', options?.orgId);
     if (!resolvedUrl) {
       throw new BadRequestException('The image could not be read for expansion.');
     }

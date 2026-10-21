@@ -10839,7 +10839,6 @@ components:
       properties:
         imageUrl:
           type: string
-          format: uri
       required:
         - imageUrl
     InpaintImageDto:
@@ -10847,10 +10846,8 @@ components:
       properties:
         imageUrl:
           type: string
-          format: uri
         maskUrl:
           type: string
-          format: uri
         prompt:
           type: string
       required:
@@ -10862,7 +10859,6 @@ components:
       properties:
         imageUrl:
           type: string
-          format: uri
         mode:
           type: string
           enum:
@@ -10883,7 +10879,6 @@ components:
       properties:
         imageUrl:
           type: string
-          format: uri
         scale:
           type: number
           minimum: 1
@@ -10895,7 +10890,6 @@ components:
       properties:
         imageUrl:
           type: string
-          format: uri
         prompt:
           type: string
       required:

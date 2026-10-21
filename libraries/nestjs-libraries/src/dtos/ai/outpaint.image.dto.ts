@@ -1,9 +1,10 @@
-import { IsIn, IsOptional, IsString, IsUrl } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsImageSource } from '@postmill-ai/nestjs-libraries/dtos/ai/image-source.validator';
 import { OUTPAINT_MODES, type OutpaintMode } from '@postmill-ai/provider-kernel';
 
 export class OutpaintImageDto {
   @IsString()
-  @IsUrl()
+  @IsImageSource()
   imageUrl: string;
 
   // Canonical mode token (kernel `OutpaintMode`); the adapter maps it onto the
