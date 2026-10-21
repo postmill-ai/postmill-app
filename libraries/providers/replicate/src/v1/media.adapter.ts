@@ -199,8 +199,11 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
       return data;
     }
     if (!data.id) throw new Error('Replicate returned no prediction id');
-    for (let attempt = 0; attempt < 30; attempt++) {
-      await sleep(2000);
+    // 500ms granularity: most predictions finish inside the `Prefer: wait` window, so a coarse
+    // sleep was adding up to 2s of dead time after completion (rembg felt slow). 120 × 500ms
+    // keeps the same ~60s poll ceiling as before.
+    for (let attempt = 0; attempt < 120; attempt++) {
+      await sleep(500);
       const res = await this._fetch(`${BASE}/predictions/${data.id}`, {
         headers: this._headers(options),
       });
