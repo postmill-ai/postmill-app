@@ -683,6 +683,121 @@ describe('StorageService — adapter construction failures (POSTMILL-APP-W)', ()
   });
 });
 
+describe('StorageService — auto-mount on create', () => {
+  const s3Row = {
+    id: 's3-1',
+    organizationId: 'org-1',
+    type: StorageProviderType.S3,
+    version: 'v1',
+    name: 'My S3',
+    credentials: 'enc:{}',
+    region: 'us-east-1',
+    bucket: 'b',
+    endpoint: null,
+    publicUrl: null,
+    mounted: false,
+  };
+
+  it('mounts a non-LOCAL config after a successful connection test', async () => {
+    const repo = makeRepo({
+      create: vi.fn().mockResolvedValue(s3Row),
+      // testConnection → mount pre-check → mount re-read (now mounted).
+      findById: vi
+        .fn()
+        .mockResolvedValueOnce(s3Row)
+        .mockResolvedValueOnce(s3Row)
+        .mockResolvedValue({ ...s3Row, mounted: true }),
+      update: vi.fn().mockResolvedValue({ ...s3Row, mounted: true }),
+      findMountFolder: vi.fn().mockResolvedValue(null),
+      createMountFolder: vi.fn().mockResolvedValue({ id: 'folder-1' }),
+      updateHealthCheck: vi.fn(),
+    });
+    adapterMock.testConnection.mockResolvedValue({ ok: true });
+    const auditService = { create: vi.fn() } as unknown as AuditService;
+    const service = makeStorageService(repo, auditService);
+
+    const result = await service.createAndTestConfig('org-1', {
+      type: StorageProviderType.S3,
+      name: 'My S3',
+      credentials: { accessKeyId: 'key', secretAccessKey: 'secret' },
+    });
+
+    expect(repo.update).toHaveBeenCalledWith('org-1', 's3-1', { mounted: true });
+    expect(repo.createMountFolder).toHaveBeenCalledWith('org-1', 's3-1', 'My S3');
+    expect(result.mounted).toBe(true);
+    expect(result).not.toHaveProperty('credentials');
+    expect(repo.delete).not.toHaveBeenCalled();
+  });
+
+  it('reuses the existing mount-root folder when remounting', async () => {
+    const repo = makeRepo({
+      create: vi.fn().mockResolvedValue(s3Row),
+      findById: vi
+        .fn()
+        .mockResolvedValueOnce(s3Row)
+        .mockResolvedValueOnce(s3Row)
+        .mockResolvedValue({ ...s3Row, mounted: true }),
+      update: vi.fn().mockResolvedValue({ ...s3Row, mounted: true }),
+      findMountFolder: vi.fn().mockResolvedValue({ id: 'folder-1' }),
+      createMountFolder: vi.fn(),
+      updateHealthCheck: vi.fn(),
+    });
+    adapterMock.testConnection.mockResolvedValue({ ok: true });
+    const auditService = { create: vi.fn() } as unknown as AuditService;
+    const service = makeStorageService(repo, auditService);
+
+    await service.createAndTestConfig('org-1', {
+      type: StorageProviderType.S3,
+      name: 'My S3',
+    });
+
+    expect(repo.createMountFolder).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-mount a LOCAL config', async () => {
+    const localRow = { ...localConfig, mounted: false };
+    const repo = makeRepo({
+      create: vi.fn().mockResolvedValue(localRow),
+      findById: vi.fn().mockResolvedValue(localRow),
+      update: vi.fn(),
+      updateHealthCheck: vi.fn(),
+    });
+    adapterMock.testConnection.mockResolvedValue({ ok: true });
+    const auditService = { create: vi.fn() } as unknown as AuditService;
+    const service = makeStorageService(repo, auditService);
+
+    const result = await service.createAndTestConfig('org-1', {
+      type: StorageProviderType.LOCAL,
+      name: 'Local Storage',
+    });
+
+    expect(repo.update).not.toHaveBeenCalled();
+    expect(result.mounted).toBe(false);
+  });
+
+  it('a failed connection test still rolls back without mounting', async () => {
+    const repo = makeRepo({
+      create: vi.fn().mockResolvedValue(s3Row),
+      findById: vi.fn().mockResolvedValue(s3Row),
+      update: vi.fn(),
+      delete: vi.fn().mockResolvedValue(s3Row),
+    });
+    adapterMock.testConnection.mockResolvedValue({ ok: false, error: 'Access Denied' });
+    const auditService = { create: vi.fn() } as unknown as AuditService;
+    const service = makeStorageService(repo, auditService);
+
+    await expect(
+      service.createAndTestConfig('org-1', {
+        type: StorageProviderType.S3,
+        name: 'My S3',
+        credentials: { accessKeyId: 'key', secretAccessKey: 'secret' },
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(repo.delete).toHaveBeenCalledWith('org-1', 's3-1');
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+});
+
 describe('StorageService — getLocalAdapterForOrg', () => {
   it('synthesizes a virtual LOCAL adapter when no DB row exists and createIfMissing is false (default)', async () => {
     const repo = makeRepo({

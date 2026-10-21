@@ -159,7 +159,10 @@ Operators do not need to manage storage for individual orgs — org admins self-
 -> Storage. The four-panel interface provides:
 
 1. **Providers** — Cards showing type, mount status, last health check, usage percentage. Mount
-   and unmount buttons.
+   and unmount buttons. A non-LOCAL provider **mounts automatically** when it is created and its
+   connection test passes, so a saved config is live immediately; the Mount button is for configs
+   that were explicitly unmounted (or created before auto-mount existed). A provider stays mounted
+   until an org admin explicitly unmounts it.
 2. **Quota Status** — Usage meter with 80%+ amber warning and 100%+ red block.
 3. **Usage Breakdown** — Bytes used by folder and by provider (pie charts/tables).
 4. **Audit Log** — Paginated log of all storage operations: create, update, delete, mount,
@@ -175,6 +178,12 @@ From the Storage tab, an org admin can migrate files between providers:
 3. After a successful migration, files at the old location can be deleted.
 
 Migrations are recorded in the audit log.
+
+Moving a file (or a bulk selection) between folders in the Files library also migrates the bytes
+when the source and destination folders are served by different providers: the object is read from
+the source provider, written to the destination provider, the file record is repointed to the new
+path, and the source object is removed. Moving within the same provider only updates the folder
+assignment.
 
 ## Health tracking
 

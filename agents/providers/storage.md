@@ -133,6 +133,8 @@ Precedent: `migrations/20260714150606_add_medialocker_storage_type/migration.sql
 | `mounted`, `quotaBytes`, `defaultFolderId`, `accountFingerprint` | Mount/quota/folder binding; `@@unique([organizationId, accountFingerprint])` |
 | `lastHealthCheck`, `lastHealthError` | Written by `testConnection` flows |
 
+Mount semantics: `StorageService.createAndTestConfig` **auto-mounts** a non-LOCAL config once its connection test passes (same `mount()` flow as the UI's Mount button — `mounted: true` plus the mount-root `FileFolder`, audited); a failed test rolls the row back instead. LOCAL is the always-on base and is never mounted. A config then stays mounted until an explicit unmount — no health-check or other path flips the flag. The Mount/Unmount buttons in the settings UI remain for previously-unmounted configs and for taking a config offline.
+
 `StorageService.#buildAdapter` (`storage.service.ts:101`) decrypts `credentials` and calls `ProviderResolutionService.resolveStorage(providerId, { version, credentials, orgId, extras: { bucket, region, endpoint, publicUrl } })` — so the factory's `ctx.credentials` / `ctx.extras` map 1:1 to these columns. The kernel (`ProviderResolutionService`) is the sole resolution path.
 
 ## Registration (backend)

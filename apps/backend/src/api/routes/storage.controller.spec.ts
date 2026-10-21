@@ -109,10 +109,13 @@ describe('StorageController', () => {
 
   describe('createProvider', () => {
     it('delegates create+test+rollback to the service', async () => {
+      // Non-LOCAL configs come back mounted — the service auto-mounts after a
+      // successful connection test.
       serviceMock.createAndTestConfig.mockResolvedValue({
         id: 's3-1',
         name: 'My S3',
         type: 'S3',
+        mounted: true,
       });
       const controller = makeController();
 
@@ -125,6 +128,7 @@ describe('StorageController', () => {
       });
 
       expect(result.name).toBe('My S3');
+      expect(result.mounted).toBe(true);
       expect(serviceMock.createAndTestConfig).toHaveBeenCalledWith(
         'org-1',
         expect.objectContaining({ name: 'My S3', quotaBytes: undefined }),
@@ -166,8 +170,10 @@ describe('StorageController', () => {
 
   describe('updateProvider', () => {
     it('updates provider configuration', async () => {
+      // A created S3 config is auto-mounted now, so the stored row here is
+      // mounted — the entitled controller passes the BYO gate and updates.
       serviceMock.getProviderConfigs.mockResolvedValue([
-        { id: 's3-1', name: 'My S3', type: 'S3', mounted: false },
+        { id: 's3-1', name: 'My S3', type: 'S3', mounted: true },
       ]);
       serviceMock.updateConfig.mockResolvedValue({
         id: 's3-1',

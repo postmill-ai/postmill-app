@@ -253,6 +253,15 @@ export class StorageService {
       );
     }
 
+    // A proven non-LOCAL config is live immediately: run the standard mount
+    // flow (mounted flag + mount-root folder + audit) instead of leaving the
+    // customer to discover the Mount button. LOCAL is the always-on base
+    // provider and is never mounted. mount() returns the same sanitized,
+    // BigInt-stripped shape as below.
+    if (created.type !== StorageProviderType.LOCAL) {
+      return this.mount(created.id, orgId);
+    }
+
     return this.#stripBigInts(created);
   }
 
@@ -447,22 +456,6 @@ export class StorageService {
       createdAt: new Date(0),
       updatedAt: new Date(0),
     });
-  }
-
-  // Upload routing (#56): oldest mounted → local/first.
-  async getAdapterForOrg(orgId: string): Promise<IStorageAdapter | null> {
-    const mounted = (await this._storageRepository.findMountedByOrg(orgId))[0];
-    if (mounted) {
-      return this.#buildAdapter(mounted as StorageConfigRow);
-    }
-
-    const configs = await this._storageRepository.findByOrg(orgId);
-    if (configs.length > 0) {
-      const local = configs.find((c) => c.type === StorageProviderType.LOCAL);
-      return this.#buildAdapter((local || configs[0]) as StorageConfigRow);
-    }
-
-    return null;
   }
 
   // Enforce per-org local storage quota before a local write (#57).

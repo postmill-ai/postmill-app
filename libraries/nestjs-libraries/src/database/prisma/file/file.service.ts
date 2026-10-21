@@ -285,7 +285,75 @@ export class FileService {
       }
     }
 
-    return this._fileRepository.moveFile(org, fileId, folderId);
+    const source = await this._storageService.resolveAdapterForFolderWithConfigId(
+      file.folderId,
+      org
+    );
+    const destination =
+      await this._storageService.resolveAdapterForFolderWithConfigId(folderId, org);
+
+    if (source.configId === destination.configId) {
+      return this._fileRepository.moveFile(org, fileId, folderId);
+    }
+
+    return this.#migrateFileBytes(org, file, folderId, source, destination);
+  }
+
+  /**
+   * Cross-provider move: copy the bytes through the adapters and repoint the
+   * row. A read/write failure throws before any DB change, so the file stays
+   * in place; a failed source cleanup afterwards is warn-only (same trade-off
+   * as deleteFile — the row already points at the destination).
+   */
+  async #migrateFileBytes(
+    org: string,
+    file: { id: string; path: string },
+    folderId: string | null,
+    source: { adapter: IStorageAdapter; configId: string | null },
+    destination: { adapter: IStorageAdapter; configId: string | null }
+  ) {
+    let bytes: Buffer;
+    try {
+      bytes = await source.adapter.readFile(file.path);
+    } catch (err) {
+      throw new HttpException(
+        `Could not read the file from its current storage: ${(err as Error).message}`,
+        502
+      );
+    }
+
+    // Same destination-quota gate as the upload paths — a quota rejection
+    // (402/413) propagates before any write or DB change, so the file stays put.
+    await this._storageService.assertWithinProviderQuota(
+      destination.adapter,
+      org,
+      bytes.length,
+      destination.configId
+    );
+
+    // writeBuffer sniffs the MIME from the magic bytes itself — File.type is a
+    // category ('image'), not a MIME, so it is deliberately not passed along.
+    let newPath: string;
+    try {
+      newPath = await destination.adapter.writeBuffer(bytes);
+    } catch (err) {
+      throw new HttpException(
+        `Could not write the file to the destination storage: ${(err as Error).message}`,
+        502
+      );
+    }
+
+    const moved = await this._fileRepository.moveFileWithPath(org, file.id, folderId, newPath);
+
+    try {
+      await source.adapter.removeFile(file.path);
+    } catch (err) {
+      this._logger?.warn?.(
+        `Could not remove source storage object for file ${file.id}: ${(err as Error).message}`
+      );
+    }
+
+    return moved;
   }
 
   async bulkDelete(org: string, ids: string[]) {
@@ -299,7 +367,50 @@ export class FileService {
         throw new HttpException('Folder not found', 404);
       }
     }
-    return this._fileRepository.bulkMove(org, ids, folderId);
+    if (!ids.length) {
+      return this._fileRepository.bulkMove(org, ids, folderId);
+    }
+
+    // Every file lands on the same destination provider; resolve it once.
+    const destination =
+      await this._storageService.resolveAdapterForFolderWithConfigId(folderId, org);
+
+    // Files already on the destination provider take the batched cheap path;
+    // the rest get their bytes migrated one by one. Per-file failures are
+    // logged and skipped so one bad object doesn't block the rest — the
+    // response keeps the repository's `{ count }` shape (frontend ignores the
+    // body), counting only files that actually moved.
+    const cheapIds: string[] = [];
+    let migrated = 0;
+    for (const id of ids) {
+      const file = await this._fileRepository.getFileById(org, id);
+      if (!file) {
+        this._logger?.warn?.(`bulkMove: file ${id} not found, skipped`);
+        continue;
+      }
+      const source = await this._storageService.resolveAdapterForFolderWithConfigId(
+        file.folderId,
+        org
+      );
+      if (source.configId === destination.configId) {
+        cheapIds.push(id);
+        continue;
+      }
+      try {
+        await this.#migrateFileBytes(org, file, folderId, source, destination);
+        migrated++;
+      } catch (err) {
+        this._logger?.warn?.(
+          `bulkMove: could not move file ${id}: ${(err as Error).message}`
+        );
+      }
+    }
+
+    let moved = 0;
+    if (cheapIds.length) {
+      moved = (await this._fileRepository.bulkMove(org, cheapIds, folderId)).count;
+    }
+    return { count: moved + migrated };
   }
 
   searchFiles(org: string, query: string, folderId?: string) {

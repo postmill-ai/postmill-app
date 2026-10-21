@@ -572,6 +572,15 @@ export class FileRepository {
     });
   }
 
+  // Cross-provider moves relocate the bytes, so the row's `path` changes along
+  // with the folder.
+  moveFileWithPath(org: string, fileId: string, folderId: string | null, newPath: string) {
+    return this._file.model.file.update({
+      where: { id: fileId, organizationId: org },
+      data: { folderId, path: newPath },
+    });
+  }
+
   async bulkDelete(org: string, ids: string[]) {
     await this._file.model.file.updateMany({
       where: {
