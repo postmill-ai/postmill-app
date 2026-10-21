@@ -836,8 +836,11 @@ describe('video session delivery conversion', () => {
 
     const notes: string[] = [];
     await (conductor as any)._convertResultsToVideoDocs(
+      SESSION_ID,
       ctx,
+      makeEmitter(),
       [makeResult()],
+      [],
       notes,
       [1]
     );
@@ -863,8 +866,11 @@ describe('video session delivery conversion', () => {
 
     const notes: string[] = [];
     await (conductor as any)._convertResultsToVideoDocs(
+      SESSION_ID,
       ctx,
+      makeEmitter(),
       [makeResult()],
+      [],
       notes,
       [2]
     );
@@ -893,6 +899,45 @@ describe('video session delivery conversion', () => {
     expect(mediaCall[0].content.items[0].videoDraft).toBe(true);
     // Static PNG preview, not a <video> tile.
     expect(mediaCall[0].content.items[0].type).toBe('image');
+  });
+
+  it('credits the org video model in the closing line only when scenes were generated', async () => {
+    const { conductor, service } = makeConductor();
+    const emitter = makeEmitter();
+
+    await (conductor as any)._emitDelivery(
+      SESSION_ID,
+      ctx,
+      emitter,
+      [makeResult()],
+      [],
+      [1],
+      'video',
+      1
+    );
+    let closing = (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0].content?.md)
+      .filter(Boolean)
+      .join('\n');
+    expect(closing).toContain("organization's video model");
+    expect(closing).toContain('regenerate the video');
+
+    // Without a generated scene the claim must not appear.
+    (service.appendMessage as ReturnType<typeof vi.fn>).mockClear();
+    await (conductor as any)._emitDelivery(
+      SESSION_ID,
+      ctx,
+      emitter,
+      [makeResult()],
+      [],
+      [1],
+      'video'
+    );
+    closing = (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0].content?.md)
+      .filter(Boolean)
+      .join('\n');
+    expect(closing).not.toContain('video model');
   });
 
   it('leaves items unmarked for image sessions', async () => {

@@ -1248,6 +1248,50 @@ describe('DesignerDocService clip ops (video outputs)', () => {
     ).toThrow(BadRequestException);
   });
 
+  it('applies updateClip media-presentation patches (fitMode/volume/speed/fades)', () => {
+    const result = makeService().applyOps(videoDoc(), [
+      {
+        op: 'updateClip',
+        outputIndex: 0,
+        clipId: 'clip-2',
+        patch: {
+          fitMode: 'contain',
+          volume: 0.5,
+          speed: 1.5,
+          fadeInMs: 200,
+          fadeOutMs: 300,
+        },
+      },
+    ]);
+    const clip = (result.outputs[0] as any).tracks[1].clips[0];
+    expect(clip.fitMode).toBe('contain');
+    expect(clip.volume).toBe(0.5);
+    expect(clip.speed).toBe(1.5);
+    expect(clip.fadeInMs).toBe(200);
+    expect(clip.fadeOutMs).toBe(300);
+    // Timing untouched.
+    expect(clip.startMs).toBe(0);
+    expect(clip.endMs).toBe(10000);
+  });
+
+  it('rejects updateClip media-presentation values outside the clip bounds', () => {
+    expect(() =>
+      makeService().applyOps(videoDoc(), [
+        { op: 'updateClip', outputIndex: 0, clipId: 'clip-2', patch: { volume: 2 } },
+      ])
+    ).toThrow(BadRequestException);
+    expect(() =>
+      makeService().applyOps(videoDoc(), [
+        { op: 'updateClip', outputIndex: 0, clipId: 'clip-2', patch: { speed: 0 } },
+      ])
+    ).toThrow(BadRequestException);
+    expect(() =>
+      makeService().applyOps(videoDoc(), [
+        { op: 'updateClip', outputIndex: 0, clipId: 'clip-2', patch: { fitMode: 'stretch' } },
+      ])
+    ).toThrow(BadRequestException);
+  });
+
   it('applies replaceClipMedia on an image clip', () => {
     const result = makeService().applyOps(videoDoc(), [
       {

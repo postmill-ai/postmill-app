@@ -430,4 +430,144 @@ describe('imageDocToVideoDoc', () => {
     expect((videoDoc.outputs[1] as any).fps).toBe(30);
     expect((videoDoc.outputs[1] as any).tracks).toBeDefined();
   });
+
+  it('threads onDropped through to each converted output', () => {
+    const doc: DesignerDoc = {
+      version: 7,
+      mode: 'image',
+      outputs: [
+        makeOutput({
+          children: [
+            {
+              id: 'i1',
+              type: 'icon',
+              x: 0,
+              y: 0,
+              width: 24,
+              height: 24,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+            },
+          ] as DesignerOutput['children'],
+        }),
+        makeOutput({ id: 'out-2', formatId: 'landscape-video' }),
+      ],
+    };
+    const dropped: [string, string[]][] = [];
+    imageDocToVideoDoc(doc, {
+      onDropped: (formatId, types) => dropped.push([formatId, types]),
+    });
+    expect(dropped).toEqual([['reel', ['icon']]]);
+  });
+});
+
+describe('entrance staggering and element porting', () => {
+  const el = (
+    id: string,
+    type: string,
+    extra: Record<string, unknown> = {}
+  ) =>
+    ({
+      id,
+      type,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      ...extra,
+    }) as DesignerOutput['children'][number];
+
+  it('staggers text clip entrances (0, 350, 700…) and keeps full-length tails', () => {
+    const vo = imageOutputToVideo(
+      makeOutput({
+        children: [
+          el('t1', 'text', { text: 'one' }),
+          el('t2', 'text', { text: 'two' }),
+          el('t3', 'text', { text: 'three' }),
+        ],
+      })
+    );
+    const track = vo.tracks.find((t) => t.type === 'text')!;
+    expect(track.clips.map((c) => c.startMs)).toEqual([0, 350, 700]);
+    // Every clip still runs to the end of the timeline.
+    expect(track.clips.every((c) => c.endMs === vo.durationMs)).toBe(true);
+    // The fade-in survives the stagger.
+    expect(track.clips[1].transitionIn).toEqual({ type: 'fade', durationMs: 400 });
+  });
+
+  it('staggers shape clip entrances and gives shapes a fade-in', () => {
+    const vo = imageOutputToVideo(
+      makeOutput({
+        children: [
+          el('s1', 'shape', { shape: 'rect', fill: '#000000' }),
+          el('s2', 'shape', { shape: 'ellipse', fill: '#111111' }),
+        ],
+      })
+    );
+    const track = vo.tracks.find((t) => t.type === 'shape')!;
+    expect(track.clips.map((c) => c.startMs)).toEqual([0, 350]);
+    expect(track.clips[0].transitionIn).toEqual({ type: 'fade', durationMs: 300 });
+  });
+
+  it('caps the stagger so a late clip keeps on-screen time', () => {
+    const children = Array.from({ length: 40 }, (_, i) =>
+      el(`t${i}`, 'text', { text: `line ${i}` })
+    );
+    const vo = imageOutputToVideo(makeOutput({ children }));
+    const track = vo.tracks.find((t) => t.type === 'text')!;
+    for (const clip of track.clips) {
+      expect(clip.endMs - clip.startMs).toBeGreaterThanOrEqual(500);
+    }
+  });
+
+  it('ports raster elements onto a raster track without Ken Burns keyframes', () => {
+    const vo = imageOutputToVideo(
+      makeOutput({
+        children: [
+          el('r1', 'raster', { src: 'https://cdn.example.com/baked.png', fileId: 'rf1' }),
+        ],
+      })
+    );
+    const track = vo.tracks.find((t) => t.type === 'raster')!;
+    expect(track.clips[0].src).toBe('https://cdn.example.com/baked.png');
+    expect(track.clips[0].fileId).toBe('rf1');
+    expect(track.clips[0].keyframes).toBeUndefined();
+    const parsed = StrictVideoOutputSchema.safeParse(vo);
+    expect(parsed.success, JSON.stringify(parsed.success ? {} : parsed.error.issues)).toBe(true);
+  });
+
+  it('reports icon/path/fill/adjustment drops via onDropped instead of losing them silently', () => {
+    const dropped: [string, string[]][] = [];
+    const vo = imageOutputToVideo(
+      makeOutput({
+        children: [
+          el('i1', 'icon'),
+          el('p1', 'path'),
+          el('f1', 'fill'),
+          el('a1', 'adjustment'),
+          el('t1', 'text', { text: 'kept' }),
+        ],
+      }),
+      { onDropped: (formatId, types) => dropped.push([formatId, types]) }
+    );
+    expect(dropped).toEqual([['reel', ['icon', 'path', 'fill', 'adjustment']]]);
+    // The portable elements still land.
+    expect(vo.tracks.find((t) => t.type === 'text')!.clips).toHaveLength(1);
+  });
+
+  it('does not call onDropped when nothing was lost', () => {
+    const onDropped = () => {
+      throw new Error('must not be called');
+    };
+    imageOutputToVideo(
+      makeOutput({ children: [el('t1', 'text', { text: 'kept' })] }),
+      { onDropped }
+    );
+  });
 });

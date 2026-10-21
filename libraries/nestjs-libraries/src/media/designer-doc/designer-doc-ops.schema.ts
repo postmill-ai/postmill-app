@@ -194,8 +194,10 @@ const PlaceImageOpSchema = z
  * Whitelisted clip patch. Content (`text`), style (`fill`, `font*`),
  * geometry (`x`/`y`/`width`/`height` — the BASE box; keyframes are never
  * rewritten), `opacity` and timing (`startMs`/`endMs`, bounds-checked against
- * the output's `durationMs` at apply time). `src`/`fileId` are deliberately
- * absent — media swaps go through `replaceClipMedia`.
+ * the output's `durationMs` at apply time). Media presentation is patchable
+ * too — `fitMode`, audio (`volume`, `fadeInMs`/`fadeOutMs`) and `speed` —
+ * with the same bounds the clip schema itself enforces. `src`/`fileId` are
+ * deliberately absent — media swaps go through `replaceClipMedia`.
  */
 const UpdateClipPatchSchema = z
   .object({
@@ -211,6 +213,11 @@ const UpdateClipPatchSchema = z
     opacity: strictNum(0, 1).optional(),
     startMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
     endMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
+    fitMode: z.enum(['contain', 'cover', 'fill']).optional(),
+    fadeInMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
+    fadeOutMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
+    volume: strictNum(0, 1).optional(),
+    speed: strictNum(0.1, 10).optional(),
   })
   .strict();
 

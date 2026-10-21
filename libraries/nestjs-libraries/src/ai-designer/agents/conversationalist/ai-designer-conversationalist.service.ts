@@ -58,6 +58,8 @@ export interface DesignCatalogueEntry {
   formatNames?: string[];
   /** The plan concept this design was built from, when known. */
   concept?: string;
+  /** Video-mode design — it carries a regenerable scene-video clip. */
+  video?: boolean;
 }
 
 interface ClassificationResult {
@@ -203,7 +205,7 @@ export class AiDesignerConversationalistService implements OnModuleInit {
       '    "scope": "shared" | "format-only",',
       '    "targetOutputs": ["optional output/format ids"],',
       '    "targetSlots": ["optional slot ids"],',
-      '    "kind": "edit" | "imagery"',
+      '    "kind": "edit" | "imagery" | "media"',
       '  }',
       '}',
       '',
@@ -225,6 +227,7 @@ export class AiDesignerConversationalistService implements OnModuleInit {
       '',
       'For revise scope, use "shared" for changes that should apply to every output (copy, colors, overall layout) and "format-only" for changes that target specific formats or sizes.',
       'Set revision "kind" to "imagery" ONLY when the user clearly asks to replace, regenerate, or swap the background IMAGE itself — "change the background to a beach", "use a different photo", "regenerate the background image". A background COLOR or gradient change ("make the background blue", "darker background") is an ordinary "edit". Any other change (copy, size, position, colors, layout) is an "edit". When unsure, omit "kind" or use "edit".',
+      'Designs marked "video":true in the catalogue carry a generated scene video. For those, set "kind" to "media" when the user asks to regenerate, replace, or change the VIDEO itself or its subject/scene — "regenerate the video", "change the subject", "use different footage", "make the scene a beach at sunset". On a non-video design the same words stay "imagery" (background image) or "edit".',
       'When the user names a channel, size, or format ("only on Facebook", "the story version", "the square one"), set scope to "format-only" and put what they said into "targetOutputs" — one entry per format they named. Prefer the formatId from the design catalogue below when you can tell which one they mean; the plain word they used ("Facebook", "the story") also resolves, so ALWAYS populate it rather than leaving it empty.',
       '"targetDesignId" MUST be one of the designIds in the catalogue below, and you must be able to point at the catalogue entry that justifies it — the user named its ordinal ("variant 2", "the second one"), its concept, or a format only that design carries. If the message does not identify one, OMIT "targetDesignId" entirely; do not guess. Omitting it is correct and safe.',
       'If the user refers to "this one", "the first one", or similar without an id, prefer the first design in the catalogue.',
@@ -800,11 +803,11 @@ export class AiDesignerConversationalistService implements OnModuleInit {
       scope,
     };
 
-    // 'imagery' survives normalization only verbatim — anything else the
+    // 'imagery'/'media' survive normalization only verbatim — anything else the
     // classifier emitted (including a hallucinated value) degrades to the
     // default doc-op revise.
-    if (revision?.kind === 'imagery') {
-      normalized.kind = 'imagery';
+    if (revision?.kind === 'imagery' || revision?.kind === 'media') {
+      normalized.kind = revision.kind;
     }
     if (targetDesignId) {
       normalized.targetDesignId = targetDesignId;

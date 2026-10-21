@@ -1073,7 +1073,7 @@ describe('AiDesignerConversationalistService delivered state', () => {
     expect(res.revision.kind).toBe('imagery');
   });
 
-  it('drops a hallucinated revision kind — only "imagery" survives', async () => {
+  it('drops a hallucinated revision kind — only "imagery"/"media" survive', async () => {
     const res = await handle(
       makeDeliveredInput('make the headline bigger', {
         instruction: 'make the headline bigger',
@@ -1082,5 +1082,16 @@ describe('AiDesignerConversationalistService delivered state', () => {
     );
 
     expect(res.revision.kind).toBeUndefined();
+  });
+
+  it('passes a regenerate-the-video classification through as kind "media"', async () => {
+    const res = await handle(
+      makeDeliveredInput('regenerate the video with a beach scene', {
+        instruction: 'regenerate the video with a beach scene',
+        kind: 'media',
+      })
+    );
+
+    expect(res.revision.kind).toBe('media');
   });
 });

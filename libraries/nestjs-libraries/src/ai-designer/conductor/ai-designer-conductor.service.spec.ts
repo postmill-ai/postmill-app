@@ -7164,3 +7164,487 @@ describe('AiDesignerConductorService prompt fidelity (PR C)', () => {
     );
   });
 });
+
+describe('AiDesignerConductorService video scene generation + media revise', () => {
+  const makeVideoConductor = (
+    deps: {
+      service?: any;
+      designService?: any;
+      fileService?: any;
+      docService?: any;
+      aiDefaults?: any;
+      mediaJobs?: any;
+    } = {}
+  ) =>
+    new AiDesignerConductorService(
+      deps.service ?? ({
+        getSessionForUser: vi.fn().mockResolvedValue(null),
+        updateSession: vi.fn().mockResolvedValue(undefined),
+        appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+      } as any),
+      null as any,
+      null as any,
+      deps.designService ?? null,
+      null as any,
+      { checkStartBudget: vi.fn().mockResolvedValue({ allowed: true }) } as any,
+      deps.fileService ?? null,
+      null as any,
+      deps.docService ?? null,
+      null as any,
+      deps.aiDefaults,
+      deps.mediaJobs
+    );
+
+  // A converted video doc: box-less full-canvas background image clip + a text
+  // clip, exactly what imageDocToVideoDoc emits.
+  const convertedVideoDoc = () => ({
+    version: 7,
+    mode: 'video',
+    outputs: [
+      {
+        id: 'out-v1',
+        formatId: 'reel',
+        name: 'Instagram Reel (Video)',
+        width: 1080,
+        height: 1920,
+        fps: 30,
+        durationMs: 10000,
+        tracks: [
+          {
+            id: 'trk-img',
+            type: 'image',
+            clips: [
+              {
+                id: 'clip-bg',
+                startMs: 0,
+                endMs: 10000,
+                src: 'data:image/png;base64,AAAA',
+                fileId: 'file-bg',
+              },
+            ],
+          },
+          {
+            id: 'trk-text',
+            type: 'text',
+            clips: [
+              {
+                id: 'clip-t1',
+                startMs: 0,
+                endMs: 10000,
+                text: 'Headline',
+                x: 40,
+                y: 900,
+                width: 1000,
+                height: 140,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  const videoDocWithGeneratedClip = () => {
+    const doc = convertedVideoDoc() as any;
+    doc.outputs[0].tracks.splice(1, 0, {
+      id: 'trk-video',
+      type: 'video',
+      clips: [
+        {
+          id: 'clip-scene',
+          startMs: 0,
+          endMs: 10000,
+          x: 0,
+          y: 0,
+          width: 1080,
+          height: 1920,
+          fitMode: 'cover',
+          src: '/uploads/old-scene.mp4',
+          fileId: 'file-old-scene',
+        },
+      ],
+    });
+    return doc;
+  };
+
+  const makeResult = (i: number) =>
+    ({
+      designId: `design-${i}`,
+      variantId: `v${i}`,
+      outputPreviews: [],
+    } as any);
+
+  it('_isMediaRevision gates on video mode and media wording', () => {
+    const conductor = makeVideoConductor();
+    const videoDoc = convertedVideoDoc() as any;
+    const imageDoc = { mode: 'image', outputs: [] } as any;
+
+    expect(
+      (conductor as any)._isMediaRevision(
+        { instruction: 'regenerate the video', scope: 'shared', kind: 'media' },
+        videoDoc
+      )
+    ).toBe(true);
+    // Wording heuristic without a classifier kind.
+    expect(
+      (conductor as any)._isMediaRevision(
+        { instruction: 'change the subject of the video', scope: 'shared' },
+        videoDoc
+      )
+    ).toBe(true);
+    // Never on an image doc.
+    expect(
+      (conductor as any)._isMediaRevision(
+        { instruction: 'regenerate the video', scope: 'shared', kind: 'media' },
+        imageDoc
+      )
+    ).toBe(false);
+    // Background wording stays on the imagery/edit paths.
+    expect(
+      (conductor as any)._isMediaRevision(
+        { instruction: 'change the background scene color', scope: 'shared' },
+        videoDoc
+      )
+    ).toBe(false);
+    // An explicit edit kind is respected.
+    expect(
+      (conductor as any)._isMediaRevision(
+        { instruction: 'regenerate the video', scope: 'shared', kind: 'edit' },
+        videoDoc
+      )
+    ).toBe(false);
+  });
+
+  it('_videoSubjectClip prefers the generated scene video, then the background still', () => {
+    const conductor = makeVideoConductor();
+    const withVideo = videoDocWithGeneratedClip();
+    const subject = (conductor as any)._videoSubjectClip(withVideo.outputs[0]);
+    expect(subject.clip.id).toBe('clip-scene');
+    expect(subject.track.id).toBe('trk-video');
+
+    const stillOnly = convertedVideoDoc();
+    const still = (conductor as any)._videoSubjectClip((stillOnly as any).outputs[0]);
+    expect(still.clip.id).toBe('clip-bg');
+  });
+
+  it('_regenerateVideoMediaForRevise generates footage and swaps the subject clip via replaceClipMedia', async () => {
+    const aiDefaults = {
+      textToVideo: vi.fn().mockResolvedValue('https://cdn.example.com/new-scene.mp4'),
+      imageToVideo: vi.fn(),
+    };
+    const docService = new DesignerDocService();
+    const emitter = makeEmitter();
+    const conductor = makeVideoConductor({ aiDefaults, docService });
+    const doc = videoDocWithGeneratedClip();
+
+    const patched = await (conductor as any)._regenerateVideoMediaForRevise(
+      SESSION_ID,
+      ctx,
+      doc,
+      { instruction: 'change the subject to a beach at sunset', scope: 'shared' },
+      [{ variantId: 'v1', concept: 'summer promo' }],
+      emitter
+    );
+
+    expect(patched).not.toBeNull();
+    const clip = patched.outputs[0].tracks
+      .find((t: any) => t.id === 'trk-video')
+      .clips.find((c: any) => c.id === 'clip-scene');
+    expect(clip.src).toBe('https://cdn.example.com/new-scene.mp4');
+    // The still underneath is untouched — it stays the poster frame.
+    const bg = patched.outputs[0].tracks.find((t: any) => t.id === 'trk-img').clips[0];
+    expect(bg.fileId).toBe('file-bg');
+    // t2v is the regeneration path (the subject changed — the old frame is the
+    // wrong conditioning); i2v is only the no-t2v fallback.
+    expect(aiDefaults.textToVideo).toHaveBeenCalled();
+    expect(aiDefaults.imageToVideo).not.toHaveBeenCalled();
+  });
+
+  it('_regenerateVideoMediaForRevise answers honestly when there is no media target', async () => {
+    const aiDefaults = { textToVideo: vi.fn(), imageToVideo: vi.fn() };
+    const service = {
+      getSessionForUser: vi.fn(),
+      updateSession: vi.fn(),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const emitter = makeEmitter();
+    const conductor = makeVideoConductor({ aiDefaults, service });
+    const doc = convertedVideoDoc() as any;
+    doc.outputs[0].tracks = [doc.outputs[0].tracks[1]]; // text only
+
+    const patched = await (conductor as any)._regenerateVideoMediaForRevise(
+      SESSION_ID,
+      ctx,
+      doc,
+      { instruction: 'regenerate the video', scope: 'shared', kind: 'media' },
+      [],
+      emitter
+    );
+
+    expect(patched).toBeNull();
+    expect(aiDefaults.textToVideo).not.toHaveBeenCalled();
+    expect(service.appendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          text: expect.stringContaining("doesn't have a scene video"),
+        }),
+      })
+    );
+  });
+
+  it('_regenerateVideoMediaForRevise keeps the original when no video provider is configured', async () => {
+    const { DefaultNotConfiguredError } = await import(
+      '@postmill-ai/nestjs-libraries/ai/defaults/defaults.errors'
+    );
+    const aiDefaults = {
+      textToVideo: vi.fn().mockRejectedValue(new DefaultNotConfiguredError('text-to-video')),
+      imageToVideo: vi.fn().mockRejectedValue(new DefaultNotConfiguredError('image-to-video')),
+    };
+    const service = {
+      getSessionForUser: vi.fn(),
+      updateSession: vi.fn(),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const emitter = makeEmitter();
+    const conductor = makeVideoConductor({ aiDefaults, service });
+    const doc = videoDocWithGeneratedClip();
+
+    const patched = await (conductor as any)._regenerateVideoMediaForRevise(
+      SESSION_ID,
+      ctx,
+      doc,
+      { instruction: 'regenerate the video', scope: 'shared', kind: 'media' },
+      [],
+      emitter
+    );
+
+    expect(patched).toBeNull();
+    expect(service.appendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          text: expect.stringContaining('original video was kept'),
+        }),
+      })
+    );
+  });
+
+  it('_generateSceneVideos layers a generated clip above the background still and reports the count', async () => {
+    const aiDefaults = {
+      // i2v wins when the scene image resolves (data-URI src resolves
+      // synchronously, no DNS).
+      imageToVideo: vi.fn().mockResolvedValue('/uploads/scene.mp4'),
+      textToVideo: vi.fn(),
+    };
+    const docs = new Map<string, any>([['design-1', convertedVideoDoc()]]);
+    const designService = {
+      getDesign: vi.fn((orgId: string, id: string) =>
+        Promise.resolve({ doc: docs.get(id) })
+      ),
+      updateDesign: vi.fn().mockResolvedValue(undefined),
+    };
+    const emitter = makeEmitter();
+    const conductor = makeVideoConductor({ aiDefaults, designService });
+    const notes: string[] = [];
+
+    await (conductor as any)._generateSceneVideos(
+      SESSION_ID,
+      ctx,
+      emitter,
+      [makeResult(1)],
+      [{ variantId: 'v1', concept: 'summer promo' }],
+      notes,
+      [1]
+    );
+
+    expect(aiDefaults.imageToVideo).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.stringContaining('summer promo'),
+      'data:image/png;base64,AAAA'
+    );
+    const savedDoc = designService.updateDesign.mock.calls[0][2].doc;
+    const videoTrack = savedDoc.outputs[0].tracks.find((t: any) => t.type === 'video');
+    expect(videoTrack).toBeDefined();
+    expect(videoTrack.clips[0].src).toBe('/uploads/scene.mp4');
+    expect(videoTrack.clips[0].fitMode).toBe('cover');
+    expect(videoTrack.clips[0].endMs).toBe(10000);
+    // Directly above the background image track.
+    expect(savedDoc.outputs[0].tracks.map((t: any) => t.type)).toEqual([
+      'image',
+      'video',
+      'text',
+    ]);
+    expect((conductor as any)._sceneVideosGenerated.get(SESSION_ID)).toBe(1);
+    expect(notes).toHaveLength(0);
+  });
+
+  it('_generateSceneVideos awaits an async media job and links the library file', async () => {
+    const aiDefaults = {
+      imageToVideo: vi.fn().mockResolvedValue('job-1'),
+      textToVideo: vi.fn(),
+    };
+    const mediaJobs = {
+      processJob: vi.fn().mockResolvedValue('completed'),
+      getJob: vi.fn().mockResolvedValue({
+        id: 'job-1',
+        status: 'completed',
+        artifactUrl: '/uploads/scene-async.mp4',
+      }),
+    };
+    const fileService = {
+      getFileByPath: vi.fn().mockResolvedValue({ id: 'file-scene' }),
+    };
+    const docs = new Map<string, any>([['design-1', convertedVideoDoc()]]);
+    const designService = {
+      getDesign: vi.fn((orgId: string, id: string) =>
+        Promise.resolve({ doc: docs.get(id) })
+      ),
+      updateDesign: vi.fn().mockResolvedValue(undefined),
+    };
+    const emitter = makeEmitter();
+    const conductor = makeVideoConductor({
+      aiDefaults,
+      mediaJobs,
+      fileService,
+      designService,
+    });
+
+    await (conductor as any)._generateSceneVideos(
+      SESSION_ID,
+      ctx,
+      emitter,
+      [makeResult(1)],
+      [{ variantId: 'v1', concept: 'summer promo' }],
+      [],
+      [1]
+    );
+
+    const savedDoc = designService.updateDesign.mock.calls[0][2].doc;
+    const clip = savedDoc.outputs[0].tracks.find((t: any) => t.type === 'video').clips[0];
+    expect(clip.src).toBe('/uploads/scene-async.mp4');
+    expect(clip.fileId).toBe('file-scene');
+    expect(mediaJobs.processJob).toHaveBeenCalledWith('job-1');
+  });
+
+  it('_generateSceneVideos falls back cleanly when the org has no video provider', async () => {
+    const { DefaultNotConfiguredError } = await import(
+      '@postmill-ai/nestjs-libraries/ai/defaults/defaults.errors'
+    );
+    const aiDefaults = {
+      imageToVideo: vi.fn().mockRejectedValue(new DefaultNotConfiguredError('image-to-video')),
+      textToVideo: vi.fn().mockRejectedValue(new DefaultNotConfiguredError('text-to-video')),
+    };
+    const docs = new Map<string, any>([
+      ['design-1', convertedVideoDoc()],
+      ['design-2', convertedVideoDoc()],
+    ]);
+    const designService = {
+      getDesign: vi.fn((orgId: string, id: string) =>
+        Promise.resolve({ doc: docs.get(id) })
+      ),
+      updateDesign: vi.fn().mockResolvedValue(undefined),
+    };
+    const emitter = makeEmitter();
+    const conductor = makeVideoConductor({ aiDefaults, designService });
+    const notes: string[] = [];
+
+    await (conductor as any)._generateSceneVideos(
+      SESSION_ID,
+      ctx,
+      emitter,
+      [makeResult(1), makeResult(2)],
+      [{ variantId: 'v1', concept: 'a' }, { variantId: 'v2', concept: 'b' }],
+      notes,
+      [1, 2]
+    );
+
+    // The static conversion stands: no video track was inserted, and the
+    // second variant was never attempted (the miss is sticky per run).
+    expect(designService.updateDesign).not.toHaveBeenCalled();
+    expect(aiDefaults.textToVideo).toHaveBeenCalledTimes(1);
+    expect(notes.some((n) => n.includes('no video model is configured'))).toBe(true);
+  });
+
+  it('_generateSceneVideos caps generation at MAX_SCENE_VIDEOS_PER_RUN', async () => {
+    const aiDefaults = {
+      imageToVideo: vi.fn().mockResolvedValue('/uploads/scene.mp4'),
+      textToVideo: vi.fn(),
+    };
+    const docs = new Map<string, any>();
+    for (let i = 1; i <= 5; i++) docs.set(`design-${i}`, convertedVideoDoc());
+    const designService = {
+      getDesign: vi.fn((orgId: string, id: string) =>
+        Promise.resolve({ doc: docs.get(id) })
+      ),
+      updateDesign: vi.fn().mockResolvedValue(undefined),
+    };
+    const emitter = makeEmitter();
+    const conductor = makeVideoConductor({ aiDefaults, designService });
+    const notes: string[] = [];
+
+    await (conductor as any)._generateSceneVideos(
+      SESSION_ID,
+      ctx,
+      emitter,
+      [1, 2, 3, 4, 5].map(makeResult),
+      [1, 2, 3, 4, 5].map((i) => ({ variantId: `v${i}`, concept: `c${i}` })),
+      notes,
+      [1, 2, 3, 4, 5]
+    );
+
+    expect(aiDefaults.imageToVideo).toHaveBeenCalledTimes(3);
+    expect(designService.updateDesign).toHaveBeenCalledTimes(3);
+    expect((conductor as any)._sceneVideosGenerated.get(SESSION_ID)).toBe(3);
+    expect(notes.some((n) => n.includes('only the first 3'))).toBe(true);
+  });
+
+  it('_convertResultsToVideoDocs discloses element types with no clip counterpart', async () => {
+    const doc = {
+      version: 7,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-1',
+          formatId: 'reel',
+          width: 1080,
+          height: 1920,
+          children: [
+            {
+              id: 'i1',
+              type: 'icon',
+              x: 0,
+              y: 0,
+              width: 24,
+              height: 24,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+            },
+          ],
+        },
+      ],
+    };
+    const designService = {
+      getDesign: vi.fn().mockResolvedValue({ doc }),
+      updateDesign: vi.fn().mockResolvedValue(undefined),
+    };
+    const emitter = makeEmitter();
+    // No _aiDefaults — scene generation is skipped entirely.
+    const conductor = makeVideoConductor({ designService });
+    const notes: string[] = [];
+
+    await (conductor as any)._convertResultsToVideoDocs(
+      SESSION_ID,
+      ctx,
+      emitter,
+      [makeResult(1)],
+      [],
+      notes,
+      [1]
+    );
+
+    const savedDoc = designService.updateDesign.mock.calls[0][2].doc;
+    expect(savedDoc.mode).toBe('video');
+    expect(notes.some((n) => n.includes('icon'))).toBe(true);
+  });
+});

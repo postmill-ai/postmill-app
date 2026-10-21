@@ -2907,6 +2907,9 @@ export class AiDesignerComposerService implements OnModuleInit {
                   width: clip.width,
                   height: clip.height,
                   hasMedia: !!(clip.src || clip.fileId),
+                  fitMode: clip.fitMode,
+                  volume: clip.volume,
+                  speed: clip.speed,
                   transitionIn: clip.transitionIn?.type,
                   transitionOut: clip.transitionOut?.type,
                 })),
@@ -2956,7 +2959,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     const videoOpLines = [
       'This design is a VIDEO: each output is a timeline of tracks and clips (see the JSON). The element ops below do NOT apply — use the clip ops.',
       `Return ONLY a JSON array of ops. The main op is {"op":"updateClip","outputIndex":<n>,"clipId":"<existing clipId>","patch":{...}}.`,
-      'patch may set text, fill, fontFamily, fontSize, fontWeight, x, y, width, height, opacity (0-1), startMs, endMs. Timing must stay within [0, durationMs) and endMs after startMs. Never invent clip ids or patch keys; keyframes/animation curves cannot be edited — if the ask needs one, return [].',
+      'patch may set text, fill, fontFamily, fontSize, fontWeight, x, y, width, height, opacity (0-1), startMs, endMs, fitMode ("contain"|"cover"|"fill"), volume (0-1), fadeInMs, fadeOutMs, speed (0.1-10). Timing must stay within [0, durationMs) and endMs after startMs. Never invent clip ids or patch keys; keyframes/animation curves cannot be edited — if the ask needs one, return [].',
       'You may also emit {"op":"updateTransition","outputIndex":<n>,"clipId":"<id>","edge":"in"|"out","transition":{"type":"cut"|"fade"|"dissolve"|"slide"|"wipe"|"zoom"|"blur","durationMs":<n>,"direction":"left"|"right"|"up"|"down"}} — or "transition":null to remove one.',
       'To change an output\'s background, emit {"op":"setOutputBackground","outputIndex":<n>,"background":{"type":"color","color":"#rrggbb"}} — or {"type":"gradient","gradient":{"type":"linear","angle":<deg>,"stops":[{"color":"#rrggbb","offset":0},{"color":"#rrggbb","offset":1}]}}. Never use it on an output whose background is an image — image backgrounds are protected. Never swap a clip\'s media (src/fileId) — imagery replacements are handled outside this path.',
     ];
