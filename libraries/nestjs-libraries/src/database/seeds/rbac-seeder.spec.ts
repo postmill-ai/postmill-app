@@ -60,6 +60,21 @@ describe('RbacSeeder', () => {
     expect(ids).toContain('organization:manage');
   });
 
+  it('member has full media CRUD (create without update broke designer autosave) but no posts:delete', async () => {
+    await seeder.seed();
+    const ids = idsFor(prisma, 'member');
+    // POSTMILL-APP-1N: media:create without media:update let members create a
+    // design but never save it — every autosave PUT 403'd.
+    expect(ids).toContain('media:create');
+    expect(ids).toContain('media:read');
+    expect(ids).toContain('media:update');
+    expect(ids).toContain('media:delete');
+    expect(ids).not.toContain('media:manage');
+    // Posts asymmetry is intentional: members edit posts but cannot delete them.
+    expect(ids).toContain('posts:update');
+    expect(ids).not.toContain('posts:delete');
+  });
+
   it('reconciles: deletes any grant not in the role definition (sheds a stale admin→organization:manage)', async () => {
     await seeder.seed();
     const adminDelete = prisma.appRolePermission.deleteMany.mock.calls

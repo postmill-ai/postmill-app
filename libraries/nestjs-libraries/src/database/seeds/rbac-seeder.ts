@@ -14,7 +14,7 @@ const ROLES = [
   { key: 'owner', name: 'Owner', description: 'Full access to all resources and settings' },
   { key: 'admin', name: 'Admin', description: 'Full access except billing management and organization deletion' },
   { key: 'editor', name: 'Editor', description: 'Create and manage posts, media, channels, and comments; read analytics' },
-  { key: 'member', name: 'Member', description: 'Create and edit posts; read media, analytics, and comments' },
+  { key: 'member', name: 'Member', description: 'Create and edit posts and media; read analytics and comments' },
   { key: 'viewer', name: 'Viewer', description: 'Read-only access to all resources' },
 ] as const;
 
@@ -45,6 +45,13 @@ const ROLE_PERMISSIONS: Record<string, { resource: string; action: string }[]> =
     { resource: 'posts', action: 'update' },
     { resource: 'media', action: 'read' },
     { resource: 'media', action: 'create' },
+    // media:update/delete: create-without-update left members able to POST a
+    // design but unable to ever save it again — every autosave PUT 403'd
+    // (Sentry POSTMILL-APP-1N), and file moves/renames plus design/folder
+    // deletes were denied too. A member who can create media must be able to
+    // maintain it.
+    { resource: 'media', action: 'update' },
+    { resource: 'media', action: 'delete' },
     { resource: 'analytics', action: 'read' },
     { resource: 'comments', action: 'read' },
     { resource: 'brands', action: 'read' },
