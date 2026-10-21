@@ -54,3 +54,32 @@ setSocialFetchPorts({
   readOrFetch: (async () => Buffer.from('data')) as any,
   safeFetch: ((...args: any[]) => (globalThis.fetch as any)(...args)) as any,
 });
+
+// Unit tests must never hit real DNS: SSRF/reachability helpers (vision-image-url,
+// safe.fetch, webhook.url.validator) call `dns.lookup`, and a CI runner resolving a
+// junk host can take seconds — enough to time a spec out under coverage (v1.3.0 tag
+// run). This deterministic stub mirrors real resolution for the hosts specs use:
+// dotted names resolve to a public address, single-label names (e.g. `x`) don't
+// resolve, `localhost` is loopback, IP literals return themselves. Specs that
+// `vi.mock('node:dns/promises')` still get their own mock.
+import dnsPromises from 'node:dns/promises';
+import { isIP } from 'node:net';
+(dnsPromises as any).lookup = async (hostname: string, options?: any) => {
+  const host = String(hostname).replace(/^\[|\]$/g, '').toLowerCase();
+  const family = isIP(host);
+  let address: string;
+  if (family) {
+    address = host;
+  } else if (host === 'localhost' || host.endsWith('.localhost')) {
+    address = '127.0.0.1';
+  } else if (host.includes('.')) {
+    address = '93.184.215.14';
+  } else {
+    throw Object.assign(new Error(`getaddrinfo ENOTFOUND ${hostname}`), {
+      code: 'ENOTFOUND',
+      hostname,
+    });
+  }
+  const record = { address, family: isIP(address) };
+  return options?.all ? [record] : record;
+};
