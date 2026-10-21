@@ -10,7 +10,7 @@ import {
   ensureBuffer,
   getBuffer,
   commitBuffer,
-  seedBufferFromImage,
+  captureLayerPixels,
 } from './raster-layers';
 import {
   fullMask,
@@ -169,34 +169,17 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
    */
   const rasterizeLayer = useCallback(
     (el: DesignerElement): HTMLCanvasElement | null => {
-      const stage = sharedStageRef.current;
-      if (!stage) return null;
-      let node: ReturnType<typeof stage.findOne>;
-      try {
-        node = stage.findOne('#' + el.id);
-      } catch {
-        return null;
-      }
-      if (!node) return null;
-
-      let captured: HTMLCanvasElement | null = null;
-      try {
-        captured = node.toCanvas({ pixelRatio: 1 } as never) as HTMLCanvasElement;
-      } catch {
-        // A tainted canvas (cross-origin image without CORS) can't be read back.
-        return null;
-      }
+      const captured = captureLayerPixels(sharedStageRef.current, el);
       if (!captured) return null;
 
-      // Seed the buffer from the capture, then turn the layer into a raster one.
-      // `src` stays empty until the operation commits and uploads.
-      const buf = seedBufferFromImage(el.id, captured as never, el.width, el.height);
+      // The buffer is already seeded from the capture; now turn the layer into
+      // a raster one. `src` stays empty until the operation commits and uploads.
       store.getState().updateElement(el.id, {
         type: 'raster',
         src: undefined,
         fileId: undefined,
       });
-      return buf;
+      return captured;
     },
     [store]
   );

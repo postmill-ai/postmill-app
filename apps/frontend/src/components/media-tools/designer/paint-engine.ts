@@ -37,6 +37,43 @@ export const DEFAULT_PAINT: PaintSettings = {
 const STAMP_SPACING = 0.25;
 
 /**
+ * Clone Stamp offset for a stroke: the Alt-clicked SOURCE relative to the
+ * stroke's first paint point, so each stamp samples at dest + (anchor − start)
+ * — the Photoshop behaviour. Using the anchor alone samples at dest + anchor,
+ * which lands nowhere near where the user Alt-clicked. Undefined until both
+ * exist; `stamp` refuses to clone without it.
+ */
+export const cloneStrokeOffset = (
+  anchor: { x: number; y: number } | null,
+  strokeStart: { x: number; y: number } | null
+): { x: number; y: number } | undefined =>
+  anchor && strokeStart
+    ? { x: anchor.x - strokeStart.x, y: anchor.y - strokeStart.y }
+    : undefined;
+
+/**
+ * `stage.toCanvas` reads its rect in CONTAINER (screen) pixels — the stage's
+ * zoom/pan transform is already baked in — so asking for the document rect
+ * verbatim returns a mis-scaled, offset snapshot at any zoom ≠ 1. Convert a
+ * DOCUMENT-space rect into the arguments that reproduce it at document
+ * resolution; the same compensation layer-render.tsx applies for style
+ * surfaces (width × zoom in screen px, ÷ zoom again via pixelRatio).
+ */
+export const stageSnapshotArgs = (
+  stage: { x: number; y: number; scale: number },
+  doc: { width: number; height: number }
+): { x: number; y: number; width: number; height: number; pixelRatio: number } => {
+  const zoom = stage.scale || 1;
+  return {
+    x: stage.x,
+    y: stage.y,
+    width: doc.width * zoom,
+    height: doc.height * zoom,
+    pixelRatio: 1 / zoom,
+  };
+};
+
+/**
  * Interpolate a segment into evenly spaced stamp positions. Pointer events are
  * far too sparse to paint with directly: at speed they arrive tens of pixels
  * apart and a naive implementation draws a dotted line.

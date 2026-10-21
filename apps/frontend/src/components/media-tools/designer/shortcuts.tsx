@@ -22,6 +22,7 @@ const SHORTCUTS: { keys: string; label: string; labelKey: string }[] = [
   { keys: 'Space + drag', label: 'Pan canvas', labelKey: 'designer_pan_canvas' },
   { keys: 'Scroll', label: 'Zoom', labelKey: 'designer_zoom' },
   { keys: 'Shift / ⌘ + click', label: 'Add to selection', labelKey: 'designer_add_to_selection' },
+  { keys: 'Alt + click', label: 'Clone Stamp: set source', labelKey: 'designer_clone_stamp_set_source' },
   { keys: '⌘/Ctrl + K', label: 'Command palette', labelKey: 'designer_command_palette_lower' },
 ];
 

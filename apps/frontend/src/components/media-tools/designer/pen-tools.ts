@@ -24,7 +24,12 @@ export interface PenDraft {
 
 export const emptyDraft = (): PenDraft => ({ nodes: [], closed: false });
 
-/** How near the first anchor a click must land to close the path, in px. */
+/**
+ * How near the first anchor a click must land to close the path — in SCREEN
+ * px, so callers divide by the stage zoom before passing it down. In document
+ * px a constant 8 shrinks to ~3px of pointer travel at fit-to-screen zoom,
+ * which made anchors nearly impossible to hit.
+ */
 export const CLOSE_HIT_RADIUS = 8;
 
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
@@ -92,6 +97,14 @@ export const findNodeAt = (
   point: { x: number; y: number },
   radius = CLOSE_HIT_RADIUS
 ): number => nodes.findIndex((n) => dist(n, point) <= radius);
+
+/**
+ * ⌘Z / Backspace mid-draft removes the last anchor instead of touching the
+ * document — Photoshop's "step backward while drawing". Returns null once the
+ * last anchor is gone, which clears the draft.
+ */
+export const popDraftAnchor = (draft: PenDraft): PenDraft | null =>
+  draft.nodes.length <= 1 ? null : { ...draft, nodes: draft.nodes.slice(0, -1) };
 
 /**
  * Insert an anchor on the segment nearest `point` (Add Anchor Point). Uses the

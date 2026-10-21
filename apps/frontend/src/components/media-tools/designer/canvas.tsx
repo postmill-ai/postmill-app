@@ -54,6 +54,8 @@ import {
   deleteAnchorAt,
   convertAnchorAt,
   findNodeAt,
+  popDraftAnchor,
+  CLOSE_HIT_RADIUS,
 } from './pen-tools';
 import { tracePathNodes } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-geometry';
 import {
@@ -457,11 +459,29 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             store.getState().toolOptions[store.getState().activeTool] || {}
           );
           if (el) {
+            // addElement pushes history itself; a second push here stacked two
+            // identical snapshots and Undo took two clicks.
             store.getState().addElement(el);
-            store.getState().pushHistory();
           }
         }
         setPenDraft(null);
+        return;
+      }
+
+      // Mid-draft, ⌘Z / Ctrl+Z and Backspace/Delete edit the DRAFT — pop the
+      // last anchor — rather than undoing the document or deleting the
+      // selected element. The canvas container's own onKeyDown sees the same
+      // keys first (React dispatches before this window listener) and is
+      // guarded to leave them alone while a draft is open.
+      if (
+        penDraftRef.current &&
+        !isTypingTarget(e.target) &&
+        (e.key === 'Backspace' ||
+          e.key === 'Delete' ||
+          ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z'))
+      ) {
+        e.preventDefault();
+        setPenDraft((d) => (d ? popDraftAnchor(d) : d));
         return;
       }
 
@@ -509,6 +529,20 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   useEffect(() => {
     penDraftRef.current = penDraft;
   }, [penDraft]);
+
+  // Switching tools abandons an in-progress pen draft — otherwise the next
+  // click with the NEW tool would resume a path the user can no longer see
+  // being drawn. A store subscription rather than a setState-in-effect.
+  useEffect(() => {
+    let last = store.getState().activeTool;
+    return store.subscribe((s: { activeTool: string }) => {
+      if (s.activeTool === last) return;
+      last = s.activeTool;
+      setPenDraft(null);
+      freeformTrail.current = null;
+      penDragging.current = false;
+    });
+  }, [store]);
 
   // A paint stroke mutates the raster buffer in place, so the Konva image prop
   // keeps the same object identity and React alone won't trigger a repaint.
@@ -646,27 +680,43 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       if (effectiveTool.startsWith('pen') && pos) {
         const opts = store.getState().toolOptions[effectiveTool] || {};
         const target = penEditTarget;
+        // CLOSE_HIT_RADIUS is a SCREEN-px measure; the hit tests run in
+        // document space, so un-scale it — at fit-to-screen zoom a raw 8 doc px
+        // is ~3px of pointer travel and anchors are unhittable.
+        const hitRadius = CLOSE_HIT_RADIUS / (zoom || 1);
 
-        if (effectiveTool === 'pen-add-anchor' && target) {
-          const local = { x: pos.x - target.x, y: pos.y - target.y };
-          updateElement(target.id, refitPathElement(target, addAnchorAt(target.nodes || [], !!target.closed, local)));
-          pushHistory();
-          return;
-        }
-        if (effectiveTool === 'pen-delete-anchor' && target) {
-          const local = { x: pos.x - target.x, y: pos.y - target.y };
-          const idx = findNodeAt(target.nodes || [], local);
-          if (idx >= 0) {
-            updateElement(target.id, refitPathElement(target, deleteAnchorAt(target.nodes || [], idx)));
-            pushHistory();
+        // The anchor-editing pens need a selected path. Without this early
+        // return a click fell through to penClick below and "Delete Anchor
+        // Point" silently started adding anchors to a fresh draft.
+        if (
+          effectiveTool === 'pen-add-anchor' ||
+          effectiveTool === 'pen-delete-anchor' ||
+          effectiveTool === 'pen-convert-point'
+        ) {
+          if (!target) {
+            toaster.show(
+              t('designer_select_path_to_edit_anchors', 'Select a path first to edit its anchors'),
+              'warning'
+            );
+            return;
           }
-          return;
-        }
-        if (effectiveTool === 'pen-convert-point' && target) {
           const local = { x: pos.x - target.x, y: pos.y - target.y };
-          const idx = findNodeAt(target.nodes || [], local);
+          if (effectiveTool === 'pen-add-anchor') {
+            updateElement(target.id, refitPathElement(target, addAnchorAt(target.nodes || [], !!target.closed, local)));
+            pushHistory();
+            return;
+          }
+          const idx = findNodeAt(target.nodes || [], local, hitRadius);
           if (idx >= 0) {
-            updateElement(target.id, refitPathElement(target, convertAnchorAt(target.nodes || [], idx, !!target.closed)));
+            updateElement(
+              target.id,
+              refitPathElement(
+                target,
+                effectiveTool === 'pen-delete-anchor'
+                  ? deleteAnchorAt(target.nodes || [], idx)
+                  : convertAnchorAt(target.nodes || [], idx, !!target.closed)
+              )
+            );
             pushHistory();
           }
           return;
@@ -681,14 +731,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         // Read the draft from the ref, not the state variable: this callback is
         // memoised without `penDraft` in its deps, so the captured value would
         // be a stale null and every click would restart a one-anchor path.
-        const { draft, finished } = penClick(penDraftRef.current ?? emptyDraft(), pos);
+        const { draft, finished } = penClick(penDraftRef.current ?? emptyDraft(), pos, hitRadius);
         if (finished) {
           const finalDraft =
             effectiveTool === 'pen-curvature' ? curvatureFinish(draft) : draft;
           const el = buildPathElement(finalDraft, opts);
           if (el) {
+            // addElement already pushed history — no second push here.
             addElement(el);
-            pushHistory();
           }
           setPenDraft(null);
         } else {
@@ -760,6 +810,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       updateElement,
       pushHistory,
       paint,
+      toaster,
+      t,
+      zoom,
     ]
   );
 
@@ -846,8 +899,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           store.getState().toolOptions['pen-freeform'] || {}
         );
         if (el) {
+          // addElement already pushed history — no second push here.
           addElement(el);
-          pushHistory();
         }
       }
       return;
@@ -915,7 +968,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         } else {
           store.getState().addElement(buildShapeElement(effectiveTool, rect, opts));
         }
-        store.getState().pushHistory();
+        // addElement/addClip both push history themselves — a trailing push
+        // stacked an identical snapshot and Undo took two clicks.
         // Photoshop keeps the shape tool active after drawing; switching to
         // Move here would fight anyone laying out several shapes in a row.
       }
@@ -1304,6 +1358,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       if (editingTextId) return;
       const st = store.getState();
       const mod = e.ctrlKey || e.metaKey;
+      // While a pen draft is open these keys belong to the draft — the window
+      // handler pops the last anchor; here we only keep them off undo/delete.
+      if (
+        penDraftRef.current &&
+        (e.key === 'Delete' || e.key === 'Backspace' || (mod && e.key.toLowerCase() === 'z'))
+      ) {
+        e.preventDefault();
+        return;
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // A video document holds clips, not elements — removeElements is a
         // no-op there, so the Delete key goes through the clip path, exactly

@@ -1,5 +1,5 @@
 import type { DesignerAction } from './actions';
-import type { DesignerElement, DesignerLayerStyle } from './designer.store';
+import type { DesignerElement, DesignerLayerStyle, VideoTrack } from './designer.store';
 import type { BooleanOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-boolean';
 import { offsetElement, pathfinder, roundElementCorners } from './pathfinder';
 import {
@@ -136,9 +136,9 @@ export const layerActions = (
   /**
    * Image-only by construction: every action here writes ELEMENTS, and the
    * store's element mutators (addElement/updateElement/addLayer/toggleClipped/
-   * reorder/groupSelection/…) are deliberate no-ops in a video document. Gate
-   * the whole menu so video mode shows honestly-disabled items instead of dead
-   * clicks — no video equivalents are intended; the timeline owns layers there.
+   * reorder/groupSelection/…) are deliberate no-ops in a video document. In
+   * video mode the menu is replaced with track operations below instead of
+   * listing these as dead clicks — the timeline owns layers there.
    */
   const imageOnly = (a: DesignerAction): DesignerAction => ({
     ...a,
@@ -252,8 +252,41 @@ export const layerActions = (
     { id: 'layer-clip', label: 'Create Clipping Mask', menu: 'layer', group: 'visibility', shortcut: '⌥⌘G', keywords: ['clip', 'clipping', 'mask'], enabled: () => live().hasSelection, run: () => store.getState().toggleClipped(selected()) },
   ];
 
-  // The one exception: New ▸ Artboard calls addOutput, which has a real
+  // In a video document "layers" are timeline tracks and clips, and every
+  // element action above is a store no-op there — so instead of rendering ~45
+  // honestly-but-uselessly disabled items, the menu becomes the track
+  // operations the timeline's own + Track menu offers, plus the one surviving
+  // element-era item: New ▸ Artboard calls addOutput, which has a real
   // video-mode branch (designer.store.ts) cloning the timeline onto a new
-  // format — gating it would disable a working feature, not a dead one.
-  return actions.map((a) => (a.id === 'layer-new-artboard' ? a : imageOnly(a)));
+  // format.
+  if (isVideoDoc()) {
+    const newArtboard = actions.find((a) => a.id === 'layer-new-artboard');
+    const trackTypes: { type: VideoTrack['type']; label: string }[] = [
+      { type: 'video', label: 'Video Track' },
+      { type: 'image', label: 'Image Track' },
+      { type: 'text', label: 'Text Track' },
+      { type: 'audio', label: 'Audio Track' },
+      { type: 'caption', label: 'Caption Track' },
+      { type: 'sticker', label: 'Sticker Track' },
+    ];
+    return [
+      ...(newArtboard ? [newArtboard] : []),
+      ...trackTypes.map((tt) => ({
+        id: `layer-new-track-${tt.type}`,
+        label: tt.label,
+        menu: 'layer' as const,
+        submenuPath: ['New Track'],
+        group: 'track',
+        keywords: ['track', 'timeline', tt.type],
+        run: () => {
+          const st = store.getState();
+          st.addTrack(st.currentOutput, tt.type);
+        },
+      })),
+    ];
+  }
+
+  // Image mode: every action is live (subject to its own `enabled`), and New ▸
+  // Artboard works in both modes — it is returned ungated in the video branch.
+  return actions.map(imageOnly);
 };

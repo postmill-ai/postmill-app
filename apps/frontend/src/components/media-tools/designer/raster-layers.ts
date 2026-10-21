@@ -93,6 +93,41 @@ export const seedBufferFromImage = (
   return canvas;
 };
 
+/**
+ * Capture what an element currently draws on the stage and seed its buffer
+ * with those pixels — the first half of rasterizing in place. The caller owns
+ * the destructive part (rewriting the element to `type: 'raster'`). Returns
+ * null when the node is missing or the canvas is tainted (cross-origin image
+ * without CORS), so callers can refuse rather than blank the layer.
+ *
+ * Shared by the pixel-ops menu flow and the paint tools' first stroke on a
+ * selected `image` layer (the eraser in particular: painting a fresh empty
+ * layer instead would erase nothing the user can see).
+ */
+export const captureLayerPixels = (
+  stage: { findOne: (selector: string) => unknown } | null,
+  el: Pick<DesignerElement, 'id' | 'width' | 'height'>
+): HTMLCanvasElement | null => {
+  if (!stage) return null;
+  let node: { toCanvas: (config?: object) => HTMLCanvasElement } | undefined;
+  try {
+    node = stage.findOne('#' + el.id) as typeof node;
+  } catch {
+    return null;
+  }
+  if (!node) return null;
+
+  let captured: HTMLCanvasElement | null = null;
+  try {
+    captured = node.toCanvas({ pixelRatio: 1 });
+  } catch {
+    return null;
+  }
+  if (!captured) return null;
+
+  return seedBufferFromImage(el.id, captured as never, el.width, el.height);
+};
+
 export const disposeBuffer = (id: string): void => {
   bumpReseedToken(id);
   buffers.delete(id);

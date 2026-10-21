@@ -9,12 +9,15 @@ import {
   getBuffer,
   commitBuffer,
   buildRasterElement,
+  captureLayerPixels,
 } from './raster-layers';
 import {
   stamp,
   stampPositions,
   floodFill,
   hexToRgb,
+  cloneStrokeOffset,
+  stageSnapshotArgs,
   DEFAULT_PAINT,
   type PaintSettings,
   type PaintToolId,
@@ -100,6 +103,8 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
   const backdrop = useRef<HTMLCanvasElement | null>(null);
   /** Clone Stamp anchor, set with Alt-click. */
   const cloneAnchor = useRef<{ x: number; y: number } | null>(null);
+  /** First paint point of the in-flight Clone Stamp stroke — the offset pivot. */
+  const cloneStrokeStart = useRef<{ x: number; y: number } | null>(null);
   const selectionStart = useRef<{ x: number; y: number } | null>(null);
   const edgeField = useRef<{ edges: Uint8ClampedArray; w: number; h: number } | null>(null);
   /** Per-stroke selection stencil, in layer space, built once at stroke start. */
@@ -119,7 +124,9 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
         opacity: Number(o.opacity ?? 100) / 100,
         color: String(o.color ?? DEFAULT_PAINT.color),
         desaturate: o.mode === 'desaturate',
-        cloneOffset: cloneAnchor.current ?? undefined,
+        // The anchor is an absolute document point; the engine wants the
+        // stroke-relative offset (anchor − first paint point).
+        cloneOffset: cloneStrokeOffset(cloneAnchor.current, cloneStrokeStart.current),
       };
     },
     [store]
@@ -129,6 +136,11 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
    * Flatten everything under the active layer. Effect tools sample this rather
    * than the layer itself, which is empty until you paint on it — the cost of
    * keeping painting non-destructive.
+   *
+   * The stage's zoom/pan transform lives on the Stage node and `toCanvas` reads
+   * its rect in container pixels, so the compensation from `stageSnapshotArgs`
+   * is what keeps the snapshot in DOCUMENT pixels; without it every sampling
+   * tool reads a mis-scaled, offset copy of the canvas.
    */
   const snapshotBackdrop = useCallback(
     (excludeId: string | null): HTMLCanvasElement | null => {
@@ -144,13 +156,15 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
       }
       let canvas: HTMLCanvasElement | null = null;
       try {
-        canvas = stage.toCanvas({
-          x: 0,
-          y: 0,
-          width: output?.width ?? stage.width(),
-          height: output?.height ?? stage.height(),
-          pixelRatio: 1,
-        } as never);
+        canvas = stage.toCanvas(
+          stageSnapshotArgs(
+            { x: stage.x(), y: stage.y(), scale: stage.scaleX() },
+            {
+              width: output?.width ?? stage.width() / (stage.scaleX() || 1),
+              height: output?.height ?? stage.height() / (stage.scaleX() || 1),
+            }
+          ) as never
+        );
       } catch {
         canvas = null;
       }
@@ -176,7 +190,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
    * with — id and box are all it reads — which keeps one implementation of the
    * brush maths for both document kinds.
    */
-  const resolveRasterTarget = useCallback((): DesignerElement | null => {
+  const resolveRasterTarget = useCallback((toolId?: string): DesignerElement | null => {
     const state = store.getState();
     const w = output?.width ?? 1080;
     const h = output?.height ?? 1080;
@@ -272,6 +286,24 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     );
     if (selected) return selected;
 
+    // The eraser means "remove pixels I can see": on a selected IMAGE layer,
+    // painting a fresh empty raster above it erases nothing visible. Rasterize
+    // the image in place on the first stroke (capture + retype, the same
+    // machinery the Filter menu uses) and erase that. When the capture fails
+    // (tainted canvas), fall through to an empty layer rather than error.
+    if (toolId === 'eraser' && state.selectedIds.length === 1) {
+      const image = children.find(
+        (c: DesignerElement) => c.id === state.selectedIds[0] && c.type === 'image'
+      );
+      if (image) {
+        const captured = captureLayerPixels(stageRef.current, image);
+        if (captured) {
+          state.updateElement(image.id, { type: 'raster', src: undefined, fileId: undefined });
+          return { ...image, type: 'raster' };
+        }
+      }
+    }
+
     const before = new Set(children.map((c: DesignerElement) => c.id));
     state.addElement(buildRasterElement(w, h));
     const after =
@@ -279,7 +311,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     const created = after.find((c: DesignerElement) => !before.has(c.id));
     if (created) store.getState().setSelectedIds([created.id]);
     return created || null;
-  }, [store, output]);
+  }, [store, output, stageRef]);
 
   const beginPaint = useCallback(
     (toolId: string, point: { x: number; y: number }, evt: MouseEvent) => {
@@ -289,13 +321,17 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
         return;
       }
 
-      const target = resolveRasterTarget();
+      const target = resolveRasterTarget(toolId);
       if (!target) return;
       activeRasterId.current = target.id;
       const canvas = ensureBuffer(target);
       backdrop.current = snapshotBackdrop(target.id);
 
       const local = { x: point.x - target.x, y: point.y - target.y };
+      // The stroke's first paint point pivots the clone offset — record it
+      // BEFORE settings are read so the very first stamp already samples from
+      // the right place.
+      if (toolId === 'clone-stamp') cloneStrokeStart.current = { x: point.x, y: point.y };
       const settings = settingsFor(toolId);
 
       if (toolId === 'paint-bucket') {
@@ -416,6 +452,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     }
     painting.current = false;
     lastPoint.current = null;
+    cloneStrokeStart.current = null;
     const id = activeRasterId.current;
     backdrop.current = null;
     strokeMask.current = null;

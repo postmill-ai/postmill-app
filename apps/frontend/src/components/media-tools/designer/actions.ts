@@ -414,18 +414,31 @@ export const useDesignerActions = (
       // cannot drift; each family becomes a submenu, as Photoshop lays them out.
       { id: 'filter-last', label: ctx.lastFilterLabel, menu: 'filter', group: 'last', shortcut: '⌃⌘F', keywords: ['last filter', 'repeat'], enabled: () => ctx.hasLastFilter() && ctx.canEditPixels(), run: ctx.onLastFilter },
       { id: 'filter-flatten', label: 'Flatten Filters', menu: 'filter', group: 'last', keywords: ['flatten', 'rasterize', 'smart filters'], enabled: () => ctx.hasSmartFilters(), run: ctx.onFlattenFilters },
-      ...FILTER_FAMILY_ORDER.flatMap((family) =>
-        filtersInFamily(family).map((f) => ({
-          id: `filter-${f.id}`,
-          label: f.label,
-          menu: 'filter' as const,
-          submenuPath: [FILTER_FAMILY_LABELS[family]],
-          group: family,
-          keywords: ['filter', family, f.label.toLowerCase()],
-          enabled: () => ctx.canEditPixels(),
-          run: () => ctx.onFilter(f.id),
-        }))
-      ),
+      // With nothing selected the whole family list renders grey and reads as
+      // broken. In image mode, say what's missing instead — one enabled,
+      // explanatory item. (Video mode keeps the list plus the Clip submenu
+      // below; a selected clip is its target there, not an element.)
+      ...(!isVideoDoc() && !live().hasSelection
+        ? [{
+            id: 'filter-select-layer-hint',
+            label: 'Select a layer to apply filters',
+            menu: 'filter' as const,
+            group: 'hint',
+            keywords: ['filter', 'select', 'layer'],
+            run: () => {},
+          }]
+        : FILTER_FAMILY_ORDER.flatMap((family) =>
+            filtersInFamily(family).map((f) => ({
+              id: `filter-${f.id}`,
+              label: f.label,
+              menu: 'filter' as const,
+              submenuPath: [FILTER_FAMILY_LABELS[family]],
+              group: family,
+              keywords: ['filter', family, f.label.toLowerCase()],
+              enabled: () => ctx.canEditPixels(),
+              run: () => ctx.onFilter(f.id),
+            }))
+          )),
       // Clip-aware parallel path (video mode): the six tokens the clip
       // inspector writes, toggled on the selected clip. Values are the
       // canonical "on" settings — fine-tuning stays on the inspector sliders.

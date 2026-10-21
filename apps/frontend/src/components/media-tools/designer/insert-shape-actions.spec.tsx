@@ -10,8 +10,8 @@ import {
 /**
  * Insert ▸ Shapes and the Layer menu across the two document modes: shapes are
  * dual-mode (element in an image doc, shape clip at the playhead in a video
- * doc), while the element-mutating Layer actions are honestly disabled in a
- * video doc instead of dead-clicking into the store's no-op guards.
+ * doc), while the Layer menu swaps its element-mutating actions for track
+ * operations in a video doc instead of listing ~45 dead clicks.
  */
 
 const stubCtx = (): DesignerActionCtx =>
@@ -84,11 +84,13 @@ describe('Insert ▸ Shapes', () => {
 });
 
 describe('Layer menu — video mode gating', () => {
-  it('disables the element-mutating layer actions in a video document', () => {
+  it('replaces the element-mutating layer actions with track operations in a video document', () => {
     const store = createDesignerStore();
     store.getState().setMode('video');
     const { result } = renderHook(() => useDesignerActions(store, stubCtx()));
 
+    // Element mutators are store no-ops in a video doc, so rather than ~45
+    // disabled items the menu swaps to what works there: tracks.
     for (const id of [
       'layer-new-layer',
       'layer-new-group',
@@ -98,12 +100,19 @@ describe('Layer menu — video mode gating', () => {
       'layer-adj-brightness-contrast',
       'layer-clip',
     ]) {
-      expect(result.current.find((a) => a.id === id)!.enabled?.()).toBe(false);
+      expect(result.current.find((a) => a.id === id)).toBeUndefined();
     }
 
-    // New ▸ Artboard is the one exception: addOutput clones the timeline onto
-    // a new format in video mode, so it stays live.
-    expect(result.current.find((a) => a.id === 'layer-new-artboard')!.enabled?.()).not.toBe(false);
+    // New ▸ Artboard survives: addOutput clones the timeline onto a new format.
+    expect(result.current.find((a) => a.id === 'layer-new-artboard')).toBeDefined();
+
+    // New Track ▸ … mirrors the timeline's + Track menu and actually adds one.
+    const addAudio = result.current.find((a) => a.id === 'layer-new-track-audio');
+    expect(addAudio).toBeDefined();
+    expect(addAudio!.submenuPath).toEqual(['New Track']);
+    addAudio!.run();
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    expect(vo.tracks.some((t) => t.type === 'audio')).toBe(true);
   });
 
   it('keeps them enabled in an image document', () => {

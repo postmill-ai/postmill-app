@@ -283,6 +283,12 @@ export const ToolOptionsBar = React.memo(function ToolOptionsBar({ activeTool, o
           </label>
         ))
       )}
+
+      {activeTool === 'clone-stamp' && (
+        <span className="text-[12px] text-textColor/40 whitespace-nowrap">
+          {t('tool_opt_clone_stamp_hint', 'Alt-click to set source')}
+        </span>
+      )}
     </div>
   );
 });
