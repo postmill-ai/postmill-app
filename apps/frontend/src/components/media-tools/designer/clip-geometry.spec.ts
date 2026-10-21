@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { clipEdgeUpdate, clipGeometryUpdate, hasKeyframeAtPlayhead, canDropClipOnTrack, type ClipBox } from './clip-geometry';
-import type { VideoClip } from './designer.store';
+import { clipEdgeUpdate, clipGeometryUpdate, hasKeyframeAtPlayhead, canDropClipOnTrack, resolveClipPlacement, planTrackDrop, type ClipBox, type TrackDropMember } from './clip-geometry';
+import type { VideoClip, VideoTrack } from './designer.store';
 
 const clip = (over: Partial<VideoClip> = {}): VideoClip =>
   ({
@@ -228,5 +228,206 @@ describe('canDropClipOnTrack', () => {
     expect(canDropClipOnTrack('caption', 'video')).toBe(false);
     expect(canDropClipOnTrack('image', 'text')).toBe(false);
     expect(canDropClipOnTrack('text', 'caption')).toBe(false);
+  });
+});
+
+describe('resolveClipPlacement', () => {
+  const occupied = [
+    { startMs: 1000, endMs: 3000, clipId: 'a' },
+    { startMs: 6000, endMs: 9000, clipId: 'b' },
+  ];
+
+  it('returns the proposal unchanged when the window is free', () => {
+    expect(resolveClipPlacement(occupied, { startMs: 3000, endMs: 6000 })).toEqual({
+      startMs: 3000,
+      endMs: 6000,
+    });
+    expect(resolveClipPlacement([], { startMs: 500, endMs: 1500 })).toEqual({
+      startMs: 500,
+      endMs: 1500,
+    });
+  });
+
+  it('edge-touching intervals do not overlap', () => {
+    expect(resolveClipPlacement(occupied, { startMs: 0, endMs: 1000 })).toEqual({
+      startMs: 0,
+      endMs: 1000,
+    });
+    expect(resolveClipPlacement(occupied, { startMs: 9000, endMs: 12000 })).toEqual({
+      startMs: 9000,
+      endMs: 12000,
+    });
+  });
+
+  it('never treats the dragged clip itself as an obstacle', () => {
+    expect(
+      resolveClipPlacement(occupied, { startMs: 1000, endMs: 3000, clipId: 'a' })
+    ).toEqual({ startMs: 1000, endMs: 3000 });
+  });
+
+  it('snaps to the nearest free gap edge within the threshold', () => {
+    // 500ms clip overlapping a's head; flush BEFORE a (500–1000) is a 450ms shift.
+    expect(
+      resolveClipPlacement(occupied, { startMs: 950, endMs: 1450 }, 500)
+    ).toEqual({ startMs: 500, endMs: 1000 });
+    // Overlapping a's tail: a's end edge (3000) is the nearest free edge.
+    expect(
+      resolveClipPlacement(occupied, { startMs: 2900, endMs: 4900 }, 500)
+    ).toEqual({ startMs: 3000, endMs: 5000 });
+  });
+
+  it('rejects when the nearest free edge is beyond the snap threshold', () => {
+    // Dead center of clip a — 500ms to either edge, threshold 100.
+    expect(resolveClipPlacement(occupied, { startMs: 1500, endMs: 3500 }, 100)).toBeNull();
+  });
+
+  it('threshold 0 is the strict free-window test', () => {
+    expect(resolveClipPlacement(occupied, { startMs: 3000, endMs: 6000 }, 0)).not.toBeNull();
+    expect(resolveClipPlacement(occupied, { startMs: 3001, endMs: 6001 }, 0)).toBeNull();
+  });
+
+  it('skips candidates that would collide with another clip', () => {
+    // Gap between a and b is exactly 3000ms; a 4000ms clip cannot fit before b
+    // or after a — the only free window is past b.
+    expect(
+      resolveClipPlacement(occupied, { startMs: 2500, endMs: 6500 }, 10000)
+    ).toEqual({ startMs: 9000, endMs: 13000 });
+  });
+
+  it('skips candidates outside [0, maxEndMs]', () => {
+    // The a–b gap (3000–4000) is narrower than the 2000ms clip and the space
+    // past b runs over the 9500ms cap — every candidate is out.
+    const tight = [
+      { startMs: 1000, endMs: 3000, clipId: 'a' },
+      { startMs: 4000, endMs: 9000, clipId: 'b' },
+    ];
+    expect(
+      resolveClipPlacement(tight, { startMs: 1500, endMs: 3500 }, 10000, 9500)
+    ).toBeNull();
+    // And a free proposal that runs past the cap is rejected outright.
+    expect(resolveClipPlacement([], { startMs: 8000, endMs: 12000 }, 0, 10000)).toBeNull();
+  });
+
+  it('rejects degenerate intervals', () => {
+    expect(resolveClipPlacement(occupied, { startMs: 5000, endMs: 5000 })).toBeNull();
+    expect(resolveClipPlacement(occupied, { startMs: 6000, endMs: 5000 })).toBeNull();
+  });
+
+  it('handles unsorted and zero-length obstacle input', () => {
+    const messy = [
+      { startMs: 6000, endMs: 9000, clipId: 'b' },
+      { startMs: 2000, endMs: 2000, clipId: 'degenerate' },
+      { startMs: 1000, endMs: 3000, clipId: 'a' },
+    ];
+    expect(resolveClipPlacement(messy, { startMs: 3100, endMs: 5900 })).toEqual({
+      startMs: 3100,
+      endMs: 5900,
+    });
+  });
+});
+
+describe('planTrackDrop', () => {
+  const track = (id: string, type: VideoTrack['type'], clips: VideoTrack['clips'] = [], over: Partial<VideoTrack> = {}): VideoTrack =>
+    ({ id, type, clips, ...over }) as VideoTrack;
+  const member = (over: Partial<TrackDropMember> = {}): TrackDropMember => ({
+    trackId: 'v1',
+    clipId: 'c1',
+    origStart: 0,
+    origEnd: 2000,
+    startMs: 4000,
+    endMs: 6000,
+    ...over,
+  });
+  const opts = { snapThresholdMs: 500, maxEndMs: 20000 };
+
+  it('moves a single clip onto the hovered same-type track', () => {
+    const tracks = [track('v1', 'video'), track('v2', 'video')];
+    expect(planTrackDrop(tracks, [member()], 'v1', 'v2', opts)).toEqual([
+      { trackId: 'v1', clipId: 'c1', toTrackId: 'v2', startMs: 4000, endMs: 6000 },
+    ]);
+  });
+
+  it('returns null for a drop on the clip’s own track (delta 0)', () => {
+    const tracks = [track('v1', 'video'), track('v2', 'video')];
+    expect(planTrackDrop(tracks, [member()], 'v1', 'v1', opts)).toBeNull();
+  });
+
+  it('rejects type-mismatched and locked targets', () => {
+    const tracks = [track('v1', 'video'), track('a1', 'audio'), track('v2', 'video', [], { locked: true })];
+    expect(planTrackDrop(tracks, [member()], 'v1', 'a1', opts)).toBeNull();
+    expect(planTrackDrop(tracks, [member()], 'v1', 'v2', opts)).toBeNull();
+  });
+
+  it('collision-resolves the landing window on the target track', () => {
+    const tracks = [
+      track('v1', 'video'),
+      track('v2', 'video', [clip({ id: 'x', startMs: 3500, endMs: 6100 })]),
+    ];
+    // Proposed 4000–6000 sits inside x; both flush edges are >2000ms away —
+    // beyond the 500ms threshold → null (the drop reverts).
+    expect(planTrackDrop(tracks, [member()], 'v1', 'v2', opts)).toBeNull();
+    // Clipping x's head by 100ms: snapping flush BEFORE x is a 100ms shift.
+    const snug = [
+      track('v1', 'video'),
+      track('v2', 'video', [clip({ id: 'x', startMs: 5900, endMs: 8000 })]),
+    ];
+    expect(planTrackDrop(snug, [member()], 'v1', 'v2', opts)).toEqual([
+      { trackId: 'v1', clipId: 'c1', toTrackId: 'v2', startMs: 3900, endMs: 5900 },
+    ]);
+  });
+
+  it('Alt (allowOverlap) keeps the proposed window even over another clip', () => {
+    const tracks = [
+      track('v1', 'video'),
+      track('v2', 'video', [clip({ id: 'x', startMs: 4000, endMs: 6000 })]),
+    ];
+    expect(
+      planTrackDrop(tracks, [member()], 'v1', 'v2', { ...opts, allowOverlap: true })
+    ).toEqual([{ trackId: 'v1', clipId: 'c1', toTrackId: 'v2', startMs: 4000, endMs: 6000 }]);
+  });
+
+  it('applies one vertical delta to every group member', () => {
+    const tracks = [
+      track('v1', 'video'),
+      track('a1', 'audio'),
+      track('v2', 'video'),
+      track('a2', 'audio'),
+    ];
+    const members = [
+      member(),
+      member({ trackId: 'a1', clipId: 'c2', origStart: 1000, origEnd: 2500, startMs: 5000, endMs: 6500 }),
+    ];
+    // Dragging v1's clip onto v2 (delta +2) must land a1's member on a2.
+    expect(planTrackDrop(tracks, members, 'v1', 'v2', opts)).toEqual([
+      { trackId: 'v1', clipId: 'c1', toTrackId: 'v2', startMs: 4000, endMs: 6000 },
+      { trackId: 'a1', clipId: 'c2', toTrackId: 'a2', startMs: 5000, endMs: 6500 },
+    ]);
+  });
+
+  it('rejects the group when any member’s target row is missing or mismatched', () => {
+    const tracks = [track('v1', 'video'), track('a1', 'audio'), track('v2', 'video')];
+    const members = [member(), member({ trackId: 'a1', clipId: 'c2', startMs: 5000, endMs: 6500 })];
+    // Delta +2 from a1 lands past the last track — no row to receive it.
+    expect(planTrackDrop(tracks, members, 'v1', 'v2', opts)).toBeNull();
+    // Delta +1 from v1 puts the video member on an AUDIO track.
+    expect(planTrackDrop(tracks, members, 'v1', 'a1', opts)).toBeNull();
+  });
+
+  it('members moving onto each other’s vacated tracks do not block one another', () => {
+    const tracks = [
+      track('v1', 'video', [clip({ id: 'c1', startMs: 0, endMs: 2000 })]),
+      track('v2', 'video', [clip({ id: 'c2', startMs: 0, endMs: 2000 })]),
+      track('v3', 'video'),
+    ];
+    const members = [
+      member({ trackId: 'v1', clipId: 'c1', startMs: 0, endMs: 2000 }),
+      member({ trackId: 'v2', clipId: 'c2', startMs: 0, endMs: 2000 }),
+    ];
+    // Dragging v1's clip onto v2 (delta +1): c1 → v2 at the very window c2 is
+    // vacating, c2 → v3. Members are excluded from each other's obstacles.
+    expect(planTrackDrop(tracks, members, 'v1', 'v2', opts)).toEqual([
+      { trackId: 'v1', clipId: 'c1', toTrackId: 'v2', startMs: 0, endMs: 2000 },
+      { trackId: 'v2', clipId: 'c2', toTrackId: 'v3', startMs: 0, endMs: 2000 },
+    ]);
   });
 });

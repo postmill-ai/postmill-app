@@ -218,6 +218,22 @@ describe('addMediaToTimeline — clip geometry', () => {
 describe('addMediaToTimeline — output duration', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('lands a second video drop on a NEW track instead of stacking at t=0', async () => {
+    // Both drops land at the timeline start — the second must not pile on top
+    // of the first on the same track.
+    stubVideoProbe({ duration: 5, videoWidth: 1080, videoHeight: 1080 });
+    const store = createDesignerStore();
+
+    await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/a.mp4' });
+    await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/b.mp4' });
+
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const videoTracks = vo.tracks.filter((t) => t.type === 'video');
+    expect(videoTracks).toHaveLength(2);
+    expect(videoTracks[0].clips.map((c) => c.src)).toEqual(['https://example.com/a.mp4']);
+    expect(videoTracks[1].clips.map((c) => c.src)).toEqual(['https://example.com/b.mp4']);
+  });
+
   it('never shrinks the output duration when the drop is shorter than the timeline', async () => {
     // Regression: a 5.11s music drop onto a 10s reel set durationMs to 5110,
     // stranding every clip that ran past it.
@@ -325,17 +341,35 @@ describe('addImageClipToTimeline', () => {
     expect(clip!.naturalWidth).toBeUndefined();
   });
 
-  it('reuses an existing image track rather than adding a second one', () => {
+  it('reuses an existing image track when its window is free at the playhead', () => {
     const store = createDesignerStore();
     toVideoMode(store);
 
     addImageClipToTimeline(store, { url: 'https://example.com/a.png', width: 100, height: 100 });
+    // Move the playhead past the first clip so the window is free again.
+    store.getState().setPlayhead(DEFAULT_CLIP_MS + 1000);
     addImageClipToTimeline(store, { url: 'https://example.com/b.png', width: 100, height: 100 });
 
     const vo = store.getState().doc.outputs[0] as VideoOutput;
     const imageTracks = vo.tracks.filter((t) => t.type === 'image');
     expect(imageTracks).toHaveLength(1);
     expect(imageTracks[0].clips).toHaveLength(2);
+  });
+
+  it('creates a second image track when the first is occupied at the playhead', () => {
+    const store = createDesignerStore();
+    toVideoMode(store);
+
+    // Both inserts at playhead 0: stacking the second on top of the first is
+    // exactly the pile-up multi-track landing exists to prevent.
+    addImageClipToTimeline(store, { url: 'https://example.com/a.png', width: 100, height: 100 });
+    addImageClipToTimeline(store, { url: 'https://example.com/b.png', width: 100, height: 100 });
+
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const imageTracks = vo.tracks.filter((t) => t.type === 'image');
+    expect(imageTracks).toHaveLength(2);
+    expect(imageTracks[0].clips.map((c) => c.src)).toEqual(['https://example.com/a.png']);
+    expect(imageTracks[1].clips.map((c) => c.src)).toEqual(['https://example.com/b.png']);
   });
 });
 
@@ -507,17 +541,33 @@ describe('addVoiceoverToTimeline — shared TTS/recording landing', () => {
     expect(clip!.startMs).toBe(0);
   });
 
-  it('reuses an existing audio track', async () => {
+  it('reuses an existing audio track when its window is free at the playhead', async () => {
     const store = createDesignerStore();
     toVideoMode(store);
 
     await addVoiceoverToTimeline(store, { url: 'https://example.com/a.webm', durationMs: 1000 });
+    store.getState().setPlayhead(2000);
     await addVoiceoverToTimeline(store, { url: 'https://example.com/b.webm', durationMs: 1000 });
 
     const vo = store.getState().doc.outputs[0] as VideoOutput;
     const audioTracks = vo.tracks.filter((t) => t.type === 'audio');
     expect(audioTracks).toHaveLength(1);
     expect(audioTracks[0].clips).toHaveLength(2);
+  });
+
+  it('lands a second voiceover at the same playhead on a NEW audio track', async () => {
+    const store = createDesignerStore();
+    toVideoMode(store);
+
+    await addVoiceoverToTimeline(store, { url: 'https://example.com/a.webm', durationMs: 1000 });
+    const landed = await addVoiceoverToTimeline(store, { url: 'https://example.com/b.webm', durationMs: 1000 });
+
+    expect(landed).toBe('playhead');
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const audioTracks = vo.tracks.filter((t) => t.type === 'audio');
+    expect(audioTracks).toHaveLength(2);
+    expect(audioTracks[0].clips.map((c) => c.src)).toEqual(['https://example.com/a.webm']);
+    expect(audioTracks[1].clips.map((c) => c.src)).toEqual(['https://example.com/b.webm']);
   });
 });
 

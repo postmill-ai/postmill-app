@@ -85,6 +85,11 @@ export type {
   FillContents,
 };
 export { migrateDoc };
+
+/** Hard cap on timeline tracks per output — unbounded track creation (the
+ *  drag-below-creates-track gesture, landing on occupied tracks) would
+ *  otherwise grow the doc and the render graph without limit. */
+export const MAX_TRACKS = 40;
 export {
   pageChildren,
   pageCount,
@@ -304,6 +309,20 @@ export interface DesignerActions {
   removeTrack: (outputIndex: number, trackId: string) => void;
   addClip: (outputIndex: number, trackId: string, clip: VideoClip) => void;
   removeClip: (outputIndex: number, trackId: string, clipId: string) => void;
+  /**
+   * The timeline's cross-track drop: move clips onto other tracks — or onto a
+   * freshly appended track (`opts.newTrackType`, referenced by `toTrackId:
+   * null`) — as ONE history entry. Timings arrive already collision-resolved
+   * (clip-geometry `resolveClipPlacement`/`planTrackDrop`). Returns false —
+   * nothing moved, no history — when any move is illegal: unknown clip,
+   * type-mismatched or locked target, out-of-bounds timing, or the new track
+   * would exceed MAX_TRACKS. Selection refs follow the moved clips.
+   */
+  moveClips: (
+    outputIndex: number,
+    moves: { trackId: string; clipId: string; toTrackId: string | null; startMs: number; endMs: number }[],
+    opts?: { newTrackType?: VideoTrack['type'] }
+  ) => boolean;
   updateClip: (outputIndex: number, trackId: string, clipId: string, updates: Partial<VideoClip>) => void;
   // Same as updateClip but does NOT commit history — for continuous controls
   // (slider/drag), which push a single history entry on release instead, the
@@ -1514,6 +1533,7 @@ export const createDesignerStore = (
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
         if (!vo || doc.mode !== 'video') return;
+        if (vo.tracks.length >= MAX_TRACKS) return;
         const updated: VideoOutput = {
           ...vo,
           tracks: [...vo.tracks, { id: genId(), type, clips: [] }],
@@ -1563,6 +1583,67 @@ export const createDesignerStore = (
 
       removeClip: (outputIndex, trackId, clipId) => {
         get().removeClips(outputIndex, [{ trackId, clipId }]);
+      },
+
+      moveClips: (outputIndex, moves, opts) => {
+        const { doc, selectedClip, selectedClips } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video' || !moves.length) return false;
+
+        let tracks = vo.tracks;
+        let newTrackId: string | null = null;
+        if (opts?.newTrackType) {
+          if (tracks.length >= MAX_TRACKS) return false;
+          newTrackId = genId();
+          tracks = [...tracks, { id: newTrackId, type: opts.newTrackType, clips: [] }];
+        }
+
+        const byId = new Map(tracks.map((t) => [t.id, t] as const));
+        const pending: { clip: VideoClip; from: VideoTrack; to: VideoTrack; startMs: number; endMs: number }[] = [];
+        for (const m of moves) {
+          const from = byId.get(m.trackId);
+          const to = byId.get(m.toTrackId ?? newTrackId ?? '');
+          const clip = from?.clips.find((c) => c.id === m.clipId);
+          if (!from || !to || !clip || to.locked) return false;
+          // Same-type only — canDropClipOnTrack lives in clip-geometry.ts and
+          // is inlined here to keep the store free of a module cycle.
+          if (from.type !== to.type) return false;
+          if (m.startMs < 0 || m.endMs <= m.startMs || m.endMs > vo.durationMs) return false;
+          pending.push({ clip, from, to, startMs: m.startMs, endMs: m.endMs });
+        }
+
+        const moving = new Set(moves.map((m) => `${m.trackId}:${m.clipId}`));
+        const updated: VideoOutput = {
+          ...vo,
+          tracks: tracks.map((t) => {
+            const kept = t.clips.filter((c) => !moving.has(`${t.id}:${c.id}`));
+            const incoming = pending
+              .filter((p) => p.to.id === t.id)
+              .map((p) => ({ ...p.clip, startMs: p.startMs, endMs: p.endMs }));
+            return kept.length === t.clips.length && !incoming.length
+              ? t
+              : { ...t, clips: [...kept, ...incoming] };
+          }),
+        };
+        const outs = [...doc.outputs];
+        outs[outputIndex] = updated;
+
+        // Selection refs follow each clip to its new track.
+        const retarget = (r: { trackId: string; clipId: string }) => {
+          const mv = moves.find((m) => m.trackId === r.trackId && m.clipId === r.clipId);
+          return mv ? { ...r, trackId: mv.toTrackId ?? newTrackId! } : r;
+        };
+        set({
+          doc: { ...doc, outputs: outs },
+          isDirty: true,
+          selectedClips: selectedClips.map(retarget),
+          selectedClip:
+            selectedClip && selectedClip.outputIndex === outputIndex
+              ? { ...selectedClip, ...retarget(selectedClip) }
+              : selectedClip,
+        });
+        get().pushHistory('Move clip');
+        return true;
       },
 
       removeClips: (outputIndex, refs) => {

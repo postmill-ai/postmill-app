@@ -36,6 +36,146 @@ export const canDropClipOnTrack = (
   targetTrackType: VideoTrack['type'],
 ): boolean => clipTrackType === targetTrackType;
 
+/**
+ * Overlap-free placement on a track.
+ *
+ * Same-track overlap is legal in the document model (the renderer composites
+ * by startMs), but it is almost never what a drag or an insert MEANT — the
+ * clip vanishes behind another one. `resolveClipPlacement` takes the proposed
+ * interval and the track's existing clips and returns either the proposal
+ * unchanged (it fits), the nearest free gap edge when the shift stays within
+ * `snapThresholdMs`, or null (no room — the caller reverts or picks another
+ * track). Passing threshold 0 is the strict "is this window free" test, used
+ * by find-or-create-track landing.
+ *
+ * Intervals touching at an edge (`a.endMs === b.startMs`) do NOT overlap.
+ */
+export interface ClipInterval {
+  startMs: number;
+  endMs: number;
+  /** A clip is never its own obstacle: the dragged clip matches by id. */
+  clipId?: string;
+}
+
+export const resolveClipPlacement = (
+  clips: ClipInterval[],
+  proposed: ClipInterval,
+  snapThresholdMs = 0,
+  maxEndMs?: number
+): { startMs: number; endMs: number } | null => {
+  const duration = proposed.endMs - proposed.startMs;
+  if (duration <= 0) return null;
+  const obstacles = clips
+    .filter(
+      (c) =>
+        c.endMs > c.startMs &&
+        // Self-exclusion only when the proposal actually names a clip — two
+        // id-less intervals must still collide.
+        !(proposed.clipId !== undefined && c.clipId === proposed.clipId)
+    )
+    .sort((a, b) => a.startMs - b.startMs);
+  const collides = (startMs: number, endMs: number) =>
+    obstacles.some((c) => startMs < c.endMs && endMs > c.startMs);
+  const inBounds = (startMs: number, endMs: number) =>
+    startMs >= 0 && (maxEndMs === undefined || endMs <= maxEndMs);
+
+  if (!collides(proposed.startMs, proposed.endMs)) {
+    return inBounds(proposed.startMs, proposed.endMs)
+      ? { startMs: proposed.startMs, endMs: proposed.endMs }
+      : null;
+  }
+
+  // The proposal overlaps. Candidate placements sit flush against gap edges:
+  // right after or right before each obstacle, plus the timeline origin.
+  let best: { startMs: number; shift: number } | null = null;
+  for (const startMs of [
+    0,
+    ...obstacles.flatMap((c) => [c.endMs, c.startMs - duration]),
+  ]) {
+    const endMs = startMs + duration;
+    if (!inBounds(startMs, endMs) || collides(startMs, endMs)) continue;
+    const shift = Math.abs(startMs - proposed.startMs);
+    if (shift <= snapThresholdMs && (!best || shift < best.shift)) {
+      best = { startMs, shift };
+    }
+  }
+  return best ? { startMs: best.startMs, endMs: best.startMs + duration } : null;
+};
+
+/**
+ * A clip being dropped on another track: its mousedown geometry (`orig*`, for
+ * reverts) plus the CURRENT (already dragged) timing that the drop proposes.
+ */
+export interface TrackDropMember {
+  trackId: string;
+  clipId: string;
+  origStart: number;
+  origEnd: number;
+  startMs: number;
+  endMs: number;
+}
+
+export interface PlannedTrackMove {
+  trackId: string;
+  clipId: string;
+  toTrackId: string;
+  startMs: number;
+  endMs: number;
+}
+
+/**
+ * Plan a cross-track drop.
+ *
+ * The vertical delta from the dragged clip's track to the hovered track is
+ * applied to EVERY member (group drags move whole rows), so the plan is null
+ * when any member's target row does not exist, is locked, or is type-
+ * mismatched (`canDropClipOnTrack` — the renderers route by track type).
+ *
+ * Unless `allowOverlap` (Alt), each member's landing window is collision-
+ * resolved against its target track via `resolveClipPlacement`; a member with
+ * no room rejects the whole plan (the caller reverts the drag) rather than
+ * dropping half a group.
+ */
+export const planTrackDrop = (
+  tracks: VideoTrack[],
+  members: TrackDropMember[],
+  sourceTrackId: string,
+  hoveredTrackId: string,
+  opts: { snapThresholdMs: number; maxEndMs: number; allowOverlap?: boolean }
+): PlannedTrackMove[] | null => {
+  if (!members.length) return null;
+  const indexOf = new Map(tracks.map((t, i) => [t.id, i] as const));
+  const sourceIdx = indexOf.get(sourceTrackId);
+  const hoveredIdx = indexOf.get(hoveredTrackId);
+  if (sourceIdx === undefined || hoveredIdx === undefined) return null;
+  const delta = hoveredIdx - sourceIdx;
+  if (delta === 0) return null;
+
+  const memberIds = new Set(members.map((m) => m.clipId));
+  const moves: PlannedTrackMove[] = [];
+  for (const m of members) {
+    const srcTrack = tracks[indexOf.get(m.trackId) ?? -1];
+    const target = tracks[(indexOf.get(m.trackId) ?? -1) + delta];
+    if (!srcTrack || !target || target.locked) return null;
+    if (!canDropClipOnTrack(srcTrack.type, target.type)) return null;
+    let { startMs, endMs } = m;
+    if (!opts.allowOverlap) {
+      const resolved = resolveClipPlacement(
+        target.clips
+          .filter((c) => !memberIds.has(c.id))
+          .map((c) => ({ startMs: c.startMs, endMs: c.endMs, clipId: c.id })),
+        { startMs, endMs, clipId: m.clipId },
+        opts.snapThresholdMs,
+        opts.maxEndMs
+      );
+      if (!resolved) return null;
+      ({ startMs, endMs } = resolved);
+    }
+    moves.push({ trackId: m.trackId, clipId: m.clipId, toTrackId: target.id, startMs, endMs });
+  }
+  return moves;
+};
+
 export type ClipGeometry = Partial<
   Pick<VideoClip, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'keyframes'>
 >;

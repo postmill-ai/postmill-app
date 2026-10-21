@@ -63,14 +63,17 @@ describe('addMediaToTimeline', () => {
     expect(audio!.clips[0].src).toBe('https://x/song.mp3');
   });
 
-  it('reuses an existing track rather than stacking new ones', async () => {
+  it('lands a second audio drop on a NEW track rather than overlapping at t=0', async () => {
+    // Both drops target the same [0, duration] window — reusing the occupied
+    // track would stack the clips invisibly on top of each other.
     const store = videoStore();
     await land(store, { type: 'audio', url: 'https://x/a.mp3' });
     await land(store, { type: 'audio', url: 'https://x/b.mp3' });
 
     const audioTracks = tracks(store).filter((t) => t.type === 'audio');
-    expect(audioTracks).toHaveLength(1);
-    expect(audioTracks[0].clips).toHaveLength(2);
+    expect(audioTracks).toHaveLength(2);
+    expect(audioTracks[0].clips.map((c) => c.src)).toEqual(['https://x/a.mp3']);
+    expect(audioTracks[1].clips.map((c) => c.src)).toEqual(['https://x/b.mp3']);
   });
 
   it('gives the clip a real duration even when the probe never resolves', async () => {

@@ -2,6 +2,7 @@
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { VideoClip, VideoTrack, VideoOutput, DesignerElement, ClipTransition } from './designer.store';
+import { MAX_TRACKS } from './designer.store';
 import { VideoPreviewEngine } from './video-preview';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
@@ -22,7 +23,7 @@ import { Stepper } from './controls';
 import { addMediaToTimeline, addVoiceoverToTimeline, probeAudioDuration, probeVideoMetadata, pollMediaJobArtifact, JOB_MAX_POLLS, JOB_POLL_INTERVAL_MS, type JobPollOutcome } from './add-media-to-timeline';
 import { postTextToSpeech } from './text-to-speech';
 import { readErrorMessage } from './read-error-message';
-import { clipEdgeUpdate, canDropClipOnTrack } from './clip-geometry';
+import { clipEdgeUpdate, planTrackDrop, resolveClipPlacement } from './clip-geometry';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
 import { directFetchForAbsoluteUrls, type WaveformFetch } from './waveform-fetch';
 import { KeyframeLane } from './keyframe-lane';
@@ -594,6 +595,8 @@ const ClipRow = React.memo(function ClipRow({
 
 interface TrackRowProps {
   track: VideoTrack;
+  /** Disambiguated header label (custom name, or numbered among same-type tracks). */
+  label: string;
   pairs: { from: VideoClip; to: VideoClip }[];
   durationMs: number;
   totalPixels: number;
@@ -601,7 +604,6 @@ interface TrackRowProps {
   dragOver: boolean;
   isSelected: (trackId: string, clipId: string) => boolean;
   isPrimary: (trackId: string, clipId: string) => boolean;
-  trackTypeLabel: (type: VideoTrack['type']) => string;
   transitionLabel: (type: string) => string;
   translate: ReturnType<typeof useT>;
   dragMovedRef: { current: boolean };
@@ -629,6 +631,7 @@ interface TrackRowProps {
 
 const TrackRow = React.memo(function TrackRow({
   track,
+  label,
   pairs,
   durationMs,
   totalPixels,
@@ -636,7 +639,6 @@ const TrackRow = React.memo(function TrackRow({
   dragOver,
   isSelected,
   isPrimary,
-  trackTypeLabel,
   transitionLabel,
   translate,
   dragMovedRef,
@@ -666,9 +668,9 @@ const TrackRow = React.memo(function TrackRow({
         <span
           style={{ color: TRACK_COLORS[track.type] }}
           className={`truncate max-w-full ${track.name ? 'normal-case' : ''}`}
-          title={track.name || trackTypeLabel(track.type)}
+          title={label}
         >
-          {track.name || trackTypeLabel(track.type)}
+          {label}
           {track.type === 'audio' && track.muted ? ' \uD83D\uDD07' : ''}
         </span>
         <div className="flex items-center gap-1">
@@ -693,7 +695,7 @@ const TrackRow = React.memo(function TrackRow({
           <button
             className="text-[9px] text-textColor/40 hover:text-textColor"
             title={translate('track_settings', 'Track settings')}
-            aria-label={translate('track_settings_for', 'Track settings: {{name}}', { name: track.name || trackTypeLabel(track.type) })}
+            aria-label={translate('track_settings_for', 'Track settings: {{name}}', { name: label })}
             aria-haspopup="menu"
             onClick={(e) => {
               const rect = (e.target as HTMLElement).getBoundingClientRect();
@@ -1262,8 +1264,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     /**
      * Multi-clip move: when the dragged clip is part of a multi-selection, the
      * mousedown snapshot of EVERY selected clip (origStart/origEnd + track).
-     * Present only for 'move' drags with 2+ members; cross-track drop stays
-     * single-clip-only.
+     * Present only for 'move' drags with 2+ members. A member's `trackId` is
+     * its ORIGINAL track (clips never change track mid-drag); a cross-track
+     * drop applies the same vertical track delta to every member on mouseup.
      */
     group?: { trackId: string; clipId: string; origStart: number; origEnd: number }[];
   } | null>(null);
@@ -1301,6 +1304,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const [rulerMenu, setRulerMenu] = useState<{ x: number; y: number; ms: number; markerId: string | null } | null>(null);
   const captionFileRef = useRef<HTMLInputElement>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
+  // True while a dragged clip hovers the virtual row below the last track —
+  // dropping there creates a new track of the clip's type and lands on it.
+  const [dragOverNewTrack, setDragOverNewTrack] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<VideoPreviewEngine | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -1349,6 +1355,29 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     }
     return pairs;
   }, [isVideo, vo, sortedTrackClips]);
+
+  // Header labels: a custom name always wins; duplicate-type tracks get a
+  // running number ("Video 2", "Audio 2", …) so same-type rows stay
+  // distinguishable once multi-track timelines are the norm.
+  const trackLabels = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (!isVideo || !vo) return map;
+    const totals = new Map<VideoTrack['type'], number>();
+    for (const t of vo.tracks) totals.set(t.type, (totals.get(t.type) ?? 0) + 1);
+    const seen = new Map<VideoTrack['type'], number>();
+    for (const t of vo.tracks) {
+      if (t.name) {
+        map[t.id] = t.name;
+        continue;
+      }
+      seen.set(t.type, (seen.get(t.type) ?? 0) + 1);
+      map[t.id] =
+        (totals.get(t.type) ?? 0) > 1
+          ? `${trackTypeLabel(t.type)} ${seen.get(t.type)}`
+          : trackTypeLabel(t.type);
+    }
+    return map;
+  }, [isVideo, vo, trackTypeLabel]);
 
   // Warm the source-duration cache so the first edge drag already clamps.
   useEffect(() => {
@@ -1821,14 +1850,39 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   useEffect(() => {
     if (!dragging || !isVideo || !vo) return;
 
-    const trackAtY = (clientY: number): VideoTrack | undefined => {
-      if (!timelineRef.current) return undefined;
+    const trackIndexAtY = (clientY: number): number => {
+      if (!timelineRef.current) return -1;
       const rect = timelineRef.current.getBoundingClientRect();
       const tracksTop = rect.top + RULER_HEIGHT;
       const relY = clientY - tracksTop + (scrollRef.current?.scrollTop ?? 0);
-      const idx = Math.floor(relY / (TRACK_HEIGHT + TRACK_GAP));
-      if (idx < 0 || idx >= vo.tracks.length) return undefined;
-      return vo.tracks[idx];
+      return Math.floor(relY / (TRACK_HEIGHT + TRACK_GAP));
+    };
+    const trackAtY = (clientY: number): VideoTrack | undefined => {
+      const idx = trackIndexAtY(clientY);
+      return idx >= 0 && idx < vo.tracks.length ? vo.tracks[idx] : undefined;
+    };
+    // Exactly one virtual row below the last track is the "drop here to create
+    // a track" zone; further down is outside the affordance.
+    const isNewTrackZone = (clientY: number): boolean =>
+      vo.tracks.length < MAX_TRACKS && trackIndexAtY(clientY) === vo.tracks.length;
+
+    // The drop's proposed members: mousedown geometry (orig*, for reverts)
+    // plus the CURRENT dragged timing read off the live tracks.
+    const dropMembers = (tracks: VideoTrack[]) => {
+      const base = dragging.group ?? [
+        {
+          trackId: dragging.trackId,
+          clipId: dragging.clipId,
+          origStart: dragging.origStart,
+          origEnd: dragging.origEnd,
+        },
+      ];
+      return base.flatMap((m) => {
+        const clip = tracks
+          .find((t) => t.id === m.trackId)
+          ?.clips.find((c) => c.id === m.clipId);
+        return clip ? [{ ...m, startMs: clip.startMs, endMs: clip.endMs }] : [];
+      });
     };
 
     const snapEdges = (value: number, excludeClipId: string): number => {
@@ -1862,12 +1916,24 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
     const handleMouseMove = (e: MouseEvent) => {
       const hovered = trackAtY(e.clientY);
-      // Cross-track drop is single-clip only, and only onto a SAME-TYPE track —
-      // a video clip dropped on a caption track would render as a caption (the
-      // renderers route by track type), effectively vanishing from the export.
-      // A locked track refuses drops the same way it refuses drags.
-      const compatible = hovered && !hovered.locked && canDropClipOnTrack(dragging.trackType, hovered.type);
-      setDragOverTrackId(dragging.group || !compatible ? null : hovered.id);
+      // Drop affordances (move drags only). A cross-track target highlights
+      // when EVERY member of the (possibly grouped) drag can land one track-
+      // delta over — planTrackDrop with allowOverlap is the structural check;
+      // collision resolution itself happens at the drop. Below the last track
+      // the virtual new-track row lights up instead (single clips only).
+      const snapMs = SNAP_THRESHOLD_MS / pixelsPerMs;
+      const dropPlan =
+        dragging.edge === 'move' && hovered
+          ? planTrackDrop(vo.tracks, dropMembers(vo.tracks), dragging.trackId, hovered.id, {
+              snapThresholdMs: snapMs,
+              maxEndMs: vo.durationMs,
+              allowOverlap: true,
+            })
+          : null;
+      setDragOverTrackId(dropPlan && hovered ? hovered.id : null);
+      setDragOverNewTrack(
+        dragging.edge === 'move' && !dragging.group && !hovered && isNewTrackZone(e.clientY)
+      );
 
       // dx is measured from the gesture's mousedown and applied to the values
       // captured AT mousedown — folding it into the previously written value
@@ -1922,24 +1988,116 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
     const handleMouseUp = (e: MouseEvent) => {
       const hovered = trackAtY(e.clientY);
+      const newTrackZone = dragging.edge === 'move' && !dragging.group && isNewTrackZone(e.clientY);
+      const allowOverlap = e.altKey;
+      const snapMs = SNAP_THRESHOLD_MS / pixelsPerMs;
+      const state = store.getState();
+      const liveVo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
       setDragging(null);
       setDragOverTrackId(null);
-      if (
-        !dragging.group &&
-        hovered &&
-        !hovered.locked &&
-        hovered.id !== dragging.trackId &&
-        canDropClipOnTrack(dragging.trackType, hovered.type)
-      ) {
-        const clip = vo.tracks
-          .find((t) => t.id === dragging.trackId)
-          ?.clips.find((c) => c.id === dragging.clipId);
-        if (clip) {
-          store.getState().removeClip(currentOutput, dragging.trackId, dragging.clipId);
-          store.getState().addClip(currentOutput, hovered.id, clip);
+      setDragOverNewTrack(false);
+      if (!liveVo) return;
+
+      if (dragging.edge === 'move') {
+        const members = dropMembers(liveVo.tracks);
+        const memberIds = new Set(members.map((m) => m.clipId));
+        // Back the drag out to its mousedown geometry — used when the landing
+        // has no room, so a refused drop never leaves the clip half-moved.
+        const revert = () => {
+          for (const m of members) {
+            state.updateClipSilent(currentOutput, m.trackId, m.clipId, {
+              startMs: m.origStart,
+              endMs: m.origEnd,
+            });
+          }
+          state.pushHistory();
+          toaster.show(
+            translate('no_room_on_track_clip_overlaps', 'No room on that track — clip overlaps'),
+            'warning'
+          );
+        };
+
+        // 1. Drop below the last track: create a track of the clip's type and
+        //    land the clip on it — one history entry via moveClips.
+        if (newTrackZone) {
+          const moved = state.moveClips(
+            currentOutput,
+            members.map((m) => ({
+              trackId: m.trackId,
+              clipId: m.clipId,
+              toTrackId: null,
+              startMs: m.startMs,
+              endMs: m.endMs,
+            })),
+            { newTrackType: dragging.trackType }
+          );
+          if (!moved) revert();
+          return;
+        }
+
+        // 2. Cross-track drop (single or group): the vertical track delta
+        //    applies to every member; placements are collision-resolved unless
+        //    Alt asks for the overlap. No room → revert with an explanation.
+        if (hovered) {
+          const plan = planTrackDrop(liveVo.tracks, members, dragging.trackId, hovered.id, {
+            snapThresholdMs: snapMs,
+            maxEndMs: liveVo.durationMs,
+            allowOverlap,
+          });
+          if (plan) {
+            if (!state.moveClips(currentOutput, plan)) revert();
+            return;
+          }
+          const structural = planTrackDrop(liveVo.tracks, members, dragging.trackId, hovered.id, {
+            snapThresholdMs: snapMs,
+            maxEndMs: liveVo.durationMs,
+            allowOverlap: true,
+          });
+          if (structural && !allowOverlap) {
+            revert();
+            return;
+          }
+          // Not a legal cross-track target at all (same row, type mismatch,
+          // locked) — fall through: the drag was horizontal-only.
+        }
+
+        // 3. Same-track move: resolve overlaps the horizontal drag introduced
+        //    (members keep their mousedown overlap relative to each other).
+        if (!allowOverlap && dragMovedRef.current) {
+          const resolvedMoves: { trackId: string; clipId: string; startMs: number; endMs: number }[] = [];
+          let failed = false;
+          for (const m of members) {
+            if (m.startMs === m.origStart && m.endMs === m.origEnd) continue;
+            const obstacles = (liveVo.tracks.find((t) => t.id === m.trackId)?.clips ?? []).filter(
+              (c) => !memberIds.has(c.id)
+            );
+            const resolved = resolveClipPlacement(
+              obstacles,
+              { startMs: m.startMs, endMs: m.endMs, clipId: m.clipId },
+              snapMs,
+              liveVo.durationMs
+            );
+            if (!resolved) {
+              failed = true;
+              break;
+            }
+            if (resolved.startMs !== m.startMs || resolved.endMs !== m.endMs) {
+              resolvedMoves.push({ trackId: m.trackId, clipId: m.clipId, ...resolved });
+            }
+          }
+          if (failed) {
+            revert();
+            return;
+          }
+          for (const r of resolvedMoves) {
+            state.updateClipSilent(currentOutput, r.trackId, r.clipId, {
+              startMs: r.startMs,
+              endMs: r.endMs,
+            });
+          }
         }
       }
-      store.getState().pushHistory();
+      state.pushHistory();
     };
 
     // A lost mouseup (pointer leaves the window, pointercancel, window blur
@@ -1949,6 +2107,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     const handleCancel = () => {
       setDragging(null);
       setDragOverTrackId(null);
+      setDragOverNewTrack(false);
       if (dragMovedRef.current) store.getState().pushHistory();
     };
 
@@ -1962,7 +2121,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       window.removeEventListener('pointercancel', handleCancel);
       window.removeEventListener('blur', handleCancel);
     };
-  }, [dragging, isVideo, vo, pixelsPerMs, store, currentOutput]);
+  }, [dragging, isVideo, vo, pixelsPerMs, store, currentOutput, toaster, translate]);
 
   // Marquee (rubber-band) selection: mousedown on empty track area starts the
   // rect; clips/edges/ruler/buttons stopPropagation or are excluded by the
@@ -3450,6 +3609,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             <TrackRow
               key={track.id}
               track={track}
+              label={trackLabels[track.id] ?? trackTypeLabel(track.type)}
               pairs={sortedAdjacentPairs[track.id] || []}
               durationMs={vo.durationMs}
               totalPixels={totalPixels}
@@ -3457,7 +3617,6 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               dragOver={dragOverTrackId === track.id}
               isSelected={isSelected}
               isPrimary={isPrimary}
-              trackTypeLabel={trackTypeLabel}
               transitionLabel={transitionLabel}
               translate={translate}
               dragMovedRef={dragMovedRef}
@@ -3473,6 +3632,27 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               setTransitionPopover={setTransitionPopover}
             />
           ))}
+
+          {/* Virtual "new track" drop target — visible while a dragged clip
+              hovers just below the last track row; the drop creates the track. */}
+          {dragOverNewTrack && dragging && (
+            <div
+              className="flex items-stretch"
+              style={{ height: TRACK_HEIGHT + TRACK_GAP }}
+              aria-hidden={true}
+            >
+              <div
+                className="flex items-center justify-end px-2 text-[10px] font-medium uppercase tracking-wider shrink-0 border-r border-studioBorder/30 text-designerAccent"
+                style={{ width: LABEL_WIDTH }}
+              >
+                {translate('new_track_drop_indicator', '+ {{type}}', { type: trackTypeLabel(dragging.trackType) })}
+              </div>
+              <div
+                className="relative flex-1 self-center rounded-xs border border-dashed border-designerAccent/60 bg-designerAccent/10"
+                style={{ width: totalPixels + 40, height: TRACK_HEIGHT }}
+              />
+            </div>
+          )}
 
           {/* Keyframe lane — inside the same scroll container and on the same
               pixelsPerMs as the tracks, so alignment needs no syncing. */}
@@ -3535,7 +3715,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               return (
                 <div className="space-y-2">
                   <div className="text-[11px] font-medium text-textColor/60 mb-1 truncate max-w-[180px]">
-                    {track.name || trackTypeLabel(track.type)}
+                    {trackLabels[track.id] ?? trackTypeLabel(track.type)}
                   </div>
                   {track.type === 'audio' && (
                     <>

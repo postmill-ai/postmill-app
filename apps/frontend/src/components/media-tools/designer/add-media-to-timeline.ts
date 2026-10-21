@@ -3,6 +3,7 @@ import { fitWithin } from './panels/fit-within';
 import { probeImageNaturalSize } from './elements';
 import { DEFAULT_CLIP_MS } from './add-text';
 import { buildShapeClip } from './tool-draw';
+import { resolveClipPlacement } from './clip-geometry';
 
 type StoreApi = ReturnType<typeof createDesignerStore>;
 
@@ -124,20 +125,41 @@ import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/desig
 // server render cap — see designer-doc.limits.ts).
 const MAX_TIMELINE_DURATION_MS = MAX_VIDEO_DURATION_MS;
 
+/**
+ * Pick the track an inserted clip lands on.
+ *
+ * With a `window` (the clip's intended [startMs, endMs]), the first same-type
+ * track whose window is FREE wins — reusing the first track unconditionally
+ * piled every insert onto one row, stacking clips on top of each other. Only
+ * when every same-type track is occupied at the insertion point is a new
+ * track created (addTrack's MAX_TRACKS cap can refuse, yielding undefined).
+ * `resolveClipPlacement` with a 0 snap threshold doubles as the free-window
+ * test: any overlap there can only resolve by moving the clip, which an
+ * insert at the playhead must not do.
+ */
 function findOrCreateTrack(
   store: StoreApi,
   outputIndex: number,
-  type: VideoTrack['type']
+  type: VideoTrack['type'],
+  window?: { startMs: number; endMs: number }
 ): VideoTrack | undefined {
   const state = store.getState();
   const vo = state.doc.outputs[outputIndex] as VideoOutput;
   if (state.doc.mode !== 'video') return undefined;
 
-  let track = vo.tracks.find((t) => t.type === type);
+  const sameType = vo.tracks.filter((t) => t.type === type);
+  let track = window
+    ? sameType.find(
+        (t) => resolveClipPlacement(t.clips, window, 0, vo.durationMs) !== null
+      )
+    : sameType[0];
   if (!track) {
+    const beforeIds = new Set(sameType.map((t) => t.id));
     state.addTrack(outputIndex, type);
+    // The newly appended track is the one whose id did not exist before —
+    // re-finding by type alone could hand back an occupied track.
     track = (store.getState().doc.outputs[outputIndex] as VideoOutput).tracks.find(
-      (t) => t.type === type
+      (t) => t.type === type && !beforeIds.has(t.id)
     );
   }
   return track;
@@ -210,9 +232,6 @@ export function addImageClipToTimeline(
   if (state.doc.mode !== 'video') return null;
 
   const out = state.currentOutput;
-  const track = findOrCreateTrack(store, out, 'image');
-  if (!track) return null;
-
   const vo = store.getState().doc.outputs[out] as VideoOutput;
   const startMs = Math.max(0, Math.min(state.playheadMs, vo.durationMs - 100));
   const wantedEnd = startMs + DEFAULT_CLIP_MS;
@@ -225,6 +244,9 @@ export function addImageClipToTimeline(
   const durationMs = (store.getState().doc.outputs[out] as VideoOutput).durationMs;
   const endMs = Math.min(wantedEnd, durationMs);
   if (endMs <= startMs) return null;
+
+  const track = findOrCreateTrack(store, out, 'image', { startMs, endMs });
+  if (!track) return null;
 
   const fitBox = { maxW: vo.width * 0.8, maxH: vo.height * 0.8 };
   const geometryFor = (natW?: number, natH?: number) => {
@@ -314,9 +336,6 @@ export function addShapeClipToTimeline(
   if (state.doc.mode !== 'video') return null;
 
   const out = state.currentOutput;
-  const track = findOrCreateTrack(store, out, 'shape');
-  if (!track) return null;
-
   const vo = store.getState().doc.outputs[out] as VideoOutput;
   const clip = buildShapeClip(
     toolId,
@@ -329,6 +348,11 @@ export function addShapeClipToTimeline(
     state.playheadMs,
     vo.durationMs
   );
+  const track = findOrCreateTrack(store, out, 'shape', {
+    startMs: clip.startMs,
+    endMs: clip.endMs,
+  });
+  if (!track) return null;
   store.getState().addClip(out, track.id, clip);
 
   // addClip assigns the id; read it back off the track it landed on (same
@@ -371,11 +395,13 @@ export type VoiceoverLanding = 'playhead' | 'relocated' | false;
  * The asset is already generated/uploaded by the time this runs, so it must
  * NEVER be silently dropped: when there is no room at the playhead (playhead
  * at/past the end, or under addClip's 100ms minimum from it), the clip is
- * relocated — after the last same-track clip when it fits there whole,
- * otherwise at 0 (a clip longer than the output is clamped to the output
- * length). Returns 'playhead'/'relocated' so the caller can say where it
- * went; false only for a truly impossible doc (not video mode, no track, or
- * a sub-100ms output). addTrack/addClip push their own history.
+ * relocated — after the last audio clip when it fits there whole, otherwise
+ * at 0 (a clip longer than the output is clamped to the output length). The
+ * landing track is the first audio track whose window is free at the chosen
+ * point, created on demand when all of them are occupied (clips never stack
+ * on top of each other). Returns 'playhead'/'relocated' so the caller can say
+ * where it went; false only for a truly impossible doc (not video mode, no
+ * track, or a sub-100ms output). addTrack/addClip push their own history.
  */
 export async function addVoiceoverToTimeline(
   store: StoreApi,
@@ -385,9 +411,6 @@ export async function addVoiceoverToTimeline(
   if (state.doc.mode !== 'video') return false;
 
   const out = state.currentOutput;
-  const track = findOrCreateTrack(store, out, 'audio');
-  if (!track) return false;
-
   const probedMs =
     options.durationMs ?? (await probeAudioDuration(options.url));
 
@@ -402,17 +425,19 @@ export async function addVoiceoverToTimeline(
   let startMs = Math.max(0, Math.min(current.playheadMs, vo.durationMs));
   let landing: Exclude<VoiceoverLanding, false> = 'playhead';
   if (vo.durationMs - startMs < 100) {
-    // No room at the playhead. Prefer just after the last clip on the track
-    // when the full clip fits there; otherwise land at 0 (addClip permits
-    // same-track overlap — overlapping beats losing the generated asset).
-    const trackNow = (current.doc.outputs[out] as VideoOutput).tracks.find(
-      (t) => t.id === track.id
+    // No room at the playhead. Prefer just after the last audio clip when the
+    // full clip fits there; otherwise land at 0.
+    const lastEnd = Math.max(
+      0,
+      ...vo.tracks.filter((t) => t.type === 'audio').flatMap((t) => t.clips).map((c) => c.endMs)
     );
-    const lastEnd = Math.max(0, ...(trackNow?.clips ?? []).map((c) => c.endMs));
     startMs = lastEnd + clipLen <= vo.durationMs ? lastEnd : 0;
     landing = 'relocated';
   }
   const endMs = Math.min(startMs + clipLen, vo.durationMs);
+
+  const track = findOrCreateTrack(store, out, 'audio', { startMs, endMs });
+  if (!track) return false;
 
   const clip: VideoClip = {
     id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -508,11 +533,6 @@ export function addMediaToTimeline(
     }
 
     const out = store.getState().currentOutput;
-    const track = findOrCreateTrack(store, out, type);
-    if (!track) {
-      reject(new Error(`Could not create ${type} track`));
-      return;
-    }
 
     const probe: Promise<{ durationMs: number; width?: number; height?: number; probeFailed?: boolean }> =
       type === 'audio'
@@ -529,6 +549,14 @@ export function addMediaToTimeline(
       const before = (store.getState().doc.outputs[out] as VideoOutput).durationMs;
       if (endMs > before) {
         store.getState().setVideoDuration(out, endMs);
+      }
+
+      // Land on the first same-type track free at [0, endMs] — a fresh drop
+      // must not stack on top of a clip already sitting at the timeline start.
+      const track = findOrCreateTrack(store, out, type, { startMs: 0, endMs });
+      if (!track) {
+        reject(new Error(`Could not create ${type} track`));
+        return;
       }
 
       const clipBase: Omit<VideoClip, 'startMs' | 'endMs' | 'id'> = {

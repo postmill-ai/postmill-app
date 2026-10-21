@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { createDesignerStore, migrateDoc, type DesignerStore } from './designer.store';
+import { createDesignerStore, migrateDoc, MAX_TRACKS, type DesignerStore } from './designer.store';
 
 /**
  * Focal detection is an async vision call; the store only consumes its
@@ -604,6 +604,170 @@ describe('video track management', () => {
 
     store.getState().undo();
     expect(vo(store).tracks.find((t) => t.id === audio.id)!.muted).toBeUndefined();
+  });
+
+  it('addTrack refuses to grow past MAX_TRACKS', () => {
+    const store = videoStore();
+    for (let i = 0; i < MAX_TRACKS + 5; i++) store.getState().addTrack(0, 'video');
+    expect(vo(store).tracks).toHaveLength(MAX_TRACKS);
+  });
+});
+
+describe('moveClips — cross-track drop', () => {
+  const videoStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    return store;
+  };
+  const vo = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+  it('moves a clip onto another same-type track as ONE history entry', () => {
+    const store = videoStore();
+    const source = vo(store).tracks[0].id;
+    store.getState().addTrack(0, 'video');
+    const target = vo(store).tracks[1].id;
+    store.getState().addClip(0, source, {
+      id: 'c1', startMs: 0, endMs: 2000, src: 'v.mp4', x: 5, y: 6, width: 100, height: 80,
+    } as never);
+    const historyBefore = store.getState().history.length;
+
+    const moved = store.getState().moveClips(0, [
+      { trackId: source, clipId: 'c1', toTrackId: target, startMs: 4000, endMs: 6000 },
+    ]);
+
+    expect(moved).toBe(true);
+    expect(store.getState().history.length).toBe(historyBefore + 1);
+    expect(vo(store).tracks[0].clips).toHaveLength(0);
+    const landed = vo(store).tracks[1].clips[0];
+    expect(landed.id).toBe('c1');
+    expect(landed.startMs).toBe(4000);
+    expect(landed.endMs).toBe(6000);
+    expect(landed.x).toBe(5); // non-timing props ride along
+
+    store.getState().undo();
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+    expect(vo(store).tracks[1].clips).toHaveLength(0);
+  });
+
+  it('creates the target track when newTrackType is given, still one entry', () => {
+    const store = videoStore();
+    const source = vo(store).tracks[0].id;
+    store.getState().addClip(0, source, { id: 'c1', startMs: 1000, endMs: 3000 } as never);
+    const historyBefore = store.getState().history.length;
+
+    const moved = store.getState().moveClips(
+      0,
+      [{ trackId: source, clipId: 'c1', toTrackId: null, startMs: 1000, endMs: 3000 }],
+      { newTrackType: 'video' }
+    );
+
+    expect(moved).toBe(true);
+    expect(store.getState().history.length).toBe(historyBefore + 1);
+    expect(vo(store).tracks).toHaveLength(2);
+    expect(vo(store).tracks[1].type).toBe('video');
+    expect(vo(store).tracks[1].clips[0].id).toBe('c1');
+    expect(vo(store).tracks[0].clips).toHaveLength(0);
+
+    store.getState().undo();
+    expect(vo(store).tracks).toHaveLength(1);
+    expect(vo(store).tracks[0].clips[0].id).toBe('c1');
+  });
+
+  it('moves a whole group across tracks in one step and keeps the selection on the clips', () => {
+    const store = videoStore();
+    const v1 = vo(store).tracks[0].id;
+    store.getState().addTrack(0, 'video');
+    store.getState().addTrack(0, 'video');
+    const [_, v2, v3] = vo(store).tracks.map((t) => t.id);
+    store.getState().addClip(0, v1, { id: 'a', startMs: 0, endMs: 1000 } as never);
+    store.getState().addClip(0, v2, { id: 'b', startMs: 0, endMs: 1000 } as never);
+    store.getState().setSelectedClip({ outputIndex: 0, trackId: v1, clipId: 'a' });
+    store.getState().setSelectedClips([
+      { trackId: v1, clipId: 'a' },
+      { trackId: v2, clipId: 'b' },
+    ]);
+    const historyBefore = store.getState().history.length;
+
+    const moved = store.getState().moveClips(0, [
+      { trackId: v1, clipId: 'a', toTrackId: v2, startMs: 2000, endMs: 3000 },
+      { trackId: v2, clipId: 'b', toTrackId: v3, startMs: 2000, endMs: 3000 },
+    ]);
+
+    expect(moved).toBe(true);
+    expect(store.getState().history.length).toBe(historyBefore + 1);
+    expect(vo(store).tracks[0].clips).toHaveLength(0);
+    expect(vo(store).tracks[1].clips.map((c) => c.id)).toEqual(['a']);
+    expect(vo(store).tracks[2].clips.map((c) => c.id)).toEqual(['b']);
+    expect(store.getState().selectedClips).toEqual([
+      { trackId: v2, clipId: 'a' },
+      { trackId: v3, clipId: 'b' },
+    ]);
+    expect(store.getState().selectedClip?.trackId).toBe(v2);
+  });
+
+  it('rejects illegal moves without moving anything or pushing history', () => {
+    const store = videoStore();
+    const source = vo(store).tracks[0].id;
+    store.getState().addTrack(0, 'audio');
+    const audioId = vo(store).tracks[1].id;
+    store.getState().addClip(0, source, { id: 'c1', startMs: 0, endMs: 2000 } as never);
+    const historyBefore = store.getState().history.length;
+
+    // Type mismatch.
+    expect(
+      store.getState().moveClips(0, [
+        { trackId: source, clipId: 'c1', toTrackId: audioId, startMs: 0, endMs: 2000 },
+      ])
+    ).toBe(false);
+    // Unknown clip.
+    expect(
+      store.getState().moveClips(0, [
+        { trackId: source, clipId: 'gone', toTrackId: source, startMs: 0, endMs: 2000 },
+      ])
+    ).toBe(false);
+    // Past the output duration.
+    expect(
+      store.getState().moveClips(0, [
+        { trackId: source, clipId: 'c1', toTrackId: source, startMs: 0, endMs: vo(store).durationMs + 1 },
+      ])
+    ).toBe(false);
+
+    expect(store.getState().history.length).toBe(historyBefore);
+    expect(vo(store).tracks[0].clips.map((c) => c.id)).toEqual(['c1']);
+    expect(vo(store).tracks[1].clips).toHaveLength(0);
+  });
+
+  it('refuses a drop onto a locked track', () => {
+    const store = videoStore();
+    const source = vo(store).tracks[0].id;
+    store.getState().addTrack(0, 'video');
+    const target = vo(store).tracks[1].id;
+    store.getState().setTrackLocked(0, target, true);
+    store.getState().addClip(0, source, { id: 'c1', startMs: 0, endMs: 2000 } as never);
+
+    expect(
+      store.getState().moveClips(0, [
+        { trackId: source, clipId: 'c1', toTrackId: target, startMs: 0, endMs: 2000 },
+      ])
+    ).toBe(false);
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+  });
+
+  it('refuses to create a track past MAX_TRACKS', () => {
+    const store = videoStore();
+    const source = vo(store).tracks[0].id;
+    store.getState().addClip(0, source, { id: 'c1', startMs: 0, endMs: 2000 } as never);
+    for (let i = 0; i < MAX_TRACKS + 5; i++) store.getState().addTrack(0, 'video');
+    expect(vo(store).tracks).toHaveLength(MAX_TRACKS);
+
+    expect(
+      store.getState().moveClips(
+        0,
+        [{ trackId: source, clipId: 'c1', toTrackId: null, startMs: 0, endMs: 2000 }],
+        { newTrackType: 'video' }
+      )
+    ).toBe(false);
   });
 });
 
