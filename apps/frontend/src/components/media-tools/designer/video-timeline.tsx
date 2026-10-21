@@ -19,7 +19,7 @@ import {
   type SegmentWindow,
 } from './segment-regenerate';
 import { Stepper } from './controls';
-import { addMediaToTimeline, addVoiceoverToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
+import { addMediaToTimeline, addVoiceoverToTimeline, probeAudioDuration, probeVideoMetadata, pollMediaJobArtifact, JOB_MAX_POLLS, JOB_POLL_INTERVAL_MS, type JobPollOutcome } from './add-media-to-timeline';
 import { postTextToSpeech } from './text-to-speech';
 import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, canDropClipOnTrack } from './clip-geometry';
@@ -781,7 +781,7 @@ interface AiVideoDialogProps {
   fetch: ReturnType<typeof useFetch>;
   toaster: ReturnType<typeof useToaster>;
   selectedImageSrc?: string;
-  onResult: (type: 'video' | 'audio', idOrUrl: string | false) => Promise<void>;
+  onResult: (type: 'video' | 'audio', idOrUrl: string | false, fileId?: string) => Promise<void>;
 }
 
 export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult }) => {
@@ -825,7 +825,7 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
       // Already-complete artifact — land it like a finished landOrPoll (the
       // artifactUrl takes the no-poll path there).
       modals.closeAll();
-      await onResult('video', result.artifactUrl);
+      await onResult('video', result.artifactUrl, result.fileId || undefined);
     },
     [modals, onResult]
   );
@@ -880,7 +880,7 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
 interface MusicDialogProps {
   fetch: ReturnType<typeof useFetch>;
   toaster: ReturnType<typeof useToaster>;
-  onResult: (type: 'video' | 'audio', idOrUrl: string | false) => Promise<void>;
+  onResult: (type: 'video' | 'audio', idOrUrl: string | false, fileId?: string) => Promise<void>;
 }
 
 export const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) => {
@@ -920,7 +920,7 @@ export const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) 
       // Already-complete artifact — land it like a finished landOrPoll (the
       // artifactUrl takes the no-poll path there).
       modals.closeAll();
-      await onResult('audio', result.artifactUrl);
+      await onResult('audio', result.artifactUrl, result.fileId || undefined);
     },
     [modals, onResult]
   );
@@ -963,7 +963,7 @@ interface AvatarDialogProps {
   fetch: ReturnType<typeof useFetch>;
   toaster: ReturnType<typeof useToaster>;
   selectedImageSrc?: string;
-  onResult: (type: 'video' | 'audio', idOrUrl: string | false) => Promise<void>;
+  onResult: (type: 'video' | 'audio', idOrUrl: string | false, fileId?: string) => Promise<void>;
 }
 
 export const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult }) => {
@@ -1009,7 +1009,7 @@ export const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedIm
       // Already-complete artifact — land it like a finished landOrPoll (the
       // artifactUrl takes the no-poll path there).
       modals.closeAll();
-      await onResult('video', result.artifactUrl);
+      await onResult('video', result.artifactUrl, result.fileId || undefined);
     },
     [modals, onResult]
   );
@@ -1075,7 +1075,7 @@ export const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedIm
 interface SlideshowDialogProps {
   fetch: ReturnType<typeof useFetch>;
   toaster: ReturnType<typeof useToaster>;
-  onResult: (type: 'video' | 'audio', idOrUrl: string | false) => Promise<void>;
+  onResult: (type: 'video' | 'audio', idOrUrl: string | false, fileId?: string) => Promise<void>;
 }
 
 export const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult }) => {
@@ -2821,18 +2821,16 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     URL.revokeObjectURL(url);
   }, [vo, store]);
 
-  const POLL_INTERVAL_MS = 3000;
-  const MAX_POLLS = 200;
-
   const landOrPoll = useCallback(async (
     type: 'video' | 'audio',
-    idOrUrl: string | false
+    idOrUrl: string | false,
+    fileId?: string
   ) => {
     // Generated clips are inserted at startMs 0 while the canvas previews the
     // playhead — after a land, seek to the clip and select it so the result is
     // visibly on the canvas instead of looking like nothing happened.
-    const landAndReveal = async (url: string) => {
-      const landed = await addMediaToTimeline(store, { type, url });
+    const landAndReveal = async (url: string, landedFileId?: string) => {
+      const landed = await addMediaToTimeline(store, { type, url, fileId: landedFileId });
       if (landed?.probeFailed) {
         toaster.show(
           translate('couldnt_read_video_metadata', "Couldn't read the video's metadata — placed with a default duration"),
@@ -2846,6 +2844,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           trackId: landed.trackId,
           clipId: landed.clipId,
         });
+      } else {
+        // addClip rejected the insert — the asset itself is safe in Files (the
+        // job lifecycle landed it there), so say where it went instead of
+        // staying silent.
+        toaster.show(
+          translate('generated_clip_couldnt_be_placed', "The generated clip couldn't be placed on the timeline — find it in your media library."),
+          'warning'
+        );
       }
     };
     if (idOrUrl === false) {
@@ -2853,37 +2859,31 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       return;
     }
     if (isArtifactPath(idOrUrl)) {
-      await landAndReveal(idOrUrl);
+      await landAndReveal(idOrUrl, fileId);
       return;
     }
-    let polls = 0;
-    const check = async (): Promise<string | null> => {
-      const res = await fetch(`/media/jobs/${idOrUrl}`);
-      if (!res.ok) throw new Error(translate('failed_to_check_job_status', 'Failed to check job status'));
-      const job = await res.json();
-      if (job.status === 'completed') {
-        if (!job.artifactUrl) throw new Error(translate('job_completed_but_no_artifact', 'Job completed but no artifact'));
-        return job.artifactUrl;
-      }
-      if (job.status === 'failed') throw new Error(job.error || translate('generation_failed', 'Generation failed'));
-      return null;
-    };
-    while (polls < MAX_POLLS) {
-      if (!mountedRef.current) return; // timeline unmounted — stop polling
-      const artifactUrl = await check().catch((e) => {
-        if (mountedRef.current) toaster.show(e.message, 'warning');
-        return '__error__';
+    let outcome: JobPollOutcome;
+    try {
+      outcome = await pollMediaJobArtifact({
+        jobId: idOrUrl,
+        fetch,
+        isMounted: () => mountedRef.current,
+        messages: {
+          checkFailed: translate('failed_to_check_job_status', 'Failed to check job status'),
+          noArtifact: translate('job_completed_but_no_artifact', 'Job completed but no artifact'),
+          generationFailed: translate('generation_failed', 'Generation failed'),
+        },
       });
-      if (artifactUrl === '__error__') return;
-      if (!mountedRef.current) return;
-      if (artifactUrl) {
-        await landAndReveal(artifactUrl);
-        return;
-      }
-      polls++;
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    } catch (e) {
+      if (mountedRef.current) toaster.show((e as Error).message, 'warning');
+      return;
     }
-    if (mountedRef.current) toaster.show(translate('generation_timed_out', 'Generation timed out'), 'warning');
+    if (outcome.kind === 'unmounted') return;
+    if (outcome.kind === 'timeout') {
+      if (mountedRef.current) toaster.show(translate('generation_timed_out', 'Generation timed out'), 'warning');
+      return;
+    }
+    await landAndReveal(outcome.url, outcome.fileId ?? undefined);
   }, [fetch, store, toaster, translate]);
 
   const runClipTransform = useCallback(async (
@@ -2916,7 +2916,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         state.pushHistory();
       } else {
         let polls = 0;
-        while (polls < MAX_POLLS) {
+        while (polls < JOB_MAX_POLLS) {
           if (!mountedRef.current) return; // timeline unmounted — stop polling
           const jobRes = await fetch(`/media/jobs/${id}`);
           if (!jobRes.ok) throw new Error(translate('failed_to_check_transform_status', 'Failed to check transform status'));
@@ -2932,7 +2932,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           }
           if (job.status === 'failed') throw new Error(job.error || translate('transform_failed', 'Transform failed'));
           polls++;
-          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+          await new Promise((r) => setTimeout(r, JOB_POLL_INTERVAL_MS));
         }
       }
     } catch (e) {
@@ -3051,7 +3051,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         return;
       }
       let polls = 0;
-      while (polls < MAX_POLLS) {
+      while (polls < JOB_MAX_POLLS) {
         if (!mountedRef.current) return; // timeline unmounted — stop polling
         const jobRes = await fetch(`/media/jobs/${id}`);
         if (!jobRes.ok) throw new Error(translate('failed_to_check_transform_status', 'Failed to check transform status'));
@@ -3063,7 +3063,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         }
         if (job.status === 'failed') throw new Error(job.error || translate('transform_failed', 'Transform failed'));
         polls++;
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        await new Promise((r) => setTimeout(r, JOB_POLL_INTERVAL_MS));
       }
     } catch (e) {
       if (mountedRef.current) toaster.show((e as Error).message || translate('transform_failed', 'Transform failed'), 'warning');

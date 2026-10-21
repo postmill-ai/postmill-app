@@ -14,7 +14,10 @@ import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defa
 
 const org = { id: 'org-1' } as any;
 
-function build(defaultsOverride: Record<string, any> = {}) {
+function build(
+  defaultsOverride: Record<string, any> = {},
+  serviceOverride: Record<string, any> = {}
+) {
   const aiDefaults = {
     imageToImage: vi.fn().mockResolvedValue('https://cdn/out.png'),
     textToImage: vi.fn().mockResolvedValue('https://cdn/gen.png'),
@@ -35,17 +38,23 @@ function build(defaultsOverride: Record<string, any> = {}) {
       path: 'http://localhost/uploads/file-1.png',
       name: 'generated-123.png',
     }),
+    getJob: vi.fn(),
+    ...serviceOverride,
+  };
+  const fileService = {
+    getFilesByPaths: vi.fn().mockResolvedValue([]),
   };
   const controller = new MediaController(
     aiDefaults as any,
     aiMediaService as any,
     {} as any, // _defaultsResolution
-    {} as any, // _fileService
+    fileService as any, // _fileService
     {} as any, // _storageService
     {} as any, // _stockMediaService
-    {} as any // _brandsService
+    {} as any, // _brandsService
+    {} as any // _videoSegmentTransform
   );
-  return { controller, aiDefaults, aiMediaService };
+  return { controller, aiDefaults, aiMediaService, fileService };
 }
 
 afterEach(() => {
@@ -309,6 +318,65 @@ describe('MediaController — Designer AI-media routes', () => {
         status: HttpStatus.BAD_REQUEST,
       });
       expect(aiMediaService.listGenerationProviders).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getMediaJob', () => {
+    it('returns the landed File id for a completed job (retention-pin handoff)', async () => {
+      const { controller, aiMediaService, fileService } = build();
+      aiMediaService.getJob.mockResolvedValue({
+        id: 'job-1',
+        organizationId: 'org-1',
+        status: 'completed',
+        artifactUrl: '/uploads/video-job-1.mp4',
+        error: null,
+      });
+      fileService.getFilesByPaths.mockResolvedValue([
+        { id: 'file-9', path: '/uploads/video-job-1.mp4' },
+      ]);
+
+      const res = await controller.getMediaJob(org, 'job-1');
+
+      expect(fileService.getFilesByPaths).toHaveBeenCalledWith('org-1', [
+        '/uploads/video-job-1.mp4',
+      ]);
+      expect(res).toEqual({
+        id: 'job-1',
+        status: 'completed',
+        artifactUrl: '/uploads/video-job-1.mp4',
+        fileId: 'file-9',
+        error: null,
+      });
+    });
+
+    it('does not look up files for a pending job (fileId null)', async () => {
+      const { controller, aiMediaService, fileService } = build();
+      aiMediaService.getJob.mockResolvedValue({
+        id: 'job-2',
+        organizationId: 'org-1',
+        status: 'pending',
+        artifactUrl: 'pending://pred-1',
+        error: null,
+      });
+
+      const res = await controller.getMediaJob(org, 'job-2');
+
+      expect(fileService.getFilesByPaths).not.toHaveBeenCalled();
+      expect(res.fileId).toBeNull();
+    });
+
+    it('404s for another org’s job', async () => {
+      const { controller, aiMediaService } = build();
+      aiMediaService.getJob.mockResolvedValue({
+        id: 'job-3',
+        organizationId: 'org-OTHER',
+        status: 'completed',
+        artifactUrl: '/uploads/x.mp4',
+      });
+
+      await expect(controller.getMediaJob(org, 'job-3')).rejects.toMatchObject({
+        status: HttpStatus.NOT_FOUND,
+      });
     });
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeCtx, res } from '@postmill-ai/provider-kernel/testing/media-int-helpers';
-import { replicateMediaModule } from './media.adapter';
+import { replicateMediaModule, ReplicateMediaAdapter } from './media.adapter';
+import { metadata as providerMetadata } from './metadata';
 
 // Recorded-fixture integration test (plan B4) — no network. Replicate: video/audio/avatar
 // are async submit (POST /predictions → id) then poll (GET /predictions/{id} → status +
@@ -59,50 +60,129 @@ describe('replicate media adapter (async predictions)', () => {
     await expect(adapter.generateImage('x', {})).rejects.toThrow('API key is required');
   });
 
-  // NEEDS-LIVE-SMOKE-TEST
-  it('routes sourceUrl to video-to-video and includes video_url in the input', async () => {
+  it('routes a video source to the declared v2v model’s native `video` field', async () => {
     const { recs, ctx } = makeCtx(() => res({ id: 'pred-v2v', status: 'starting' }));
     const adapter: any = replicateMediaModule.create(ctx as any);
 
     const sub = await adapter.generateVideo('restyle this', {
       apiKey: 'replicate-key',
-      version: 'owner/video-to-video-model',
+      version: 'wan-video/wan-2.7-videoedit',
       sourceUrl: 'https://cdn.example.com/input.mp4',
     });
 
     expect(sub.jobId).toBe('pred-v2v');
     const r = recs[0];
     // 2.5 — a slug routes to the models endpoint (no `version` field in the body).
-    expect(r.url).toBe('https://api.replicate.com/v1/models/owner/video-to-video-model/predictions');
+    expect(r.url).toBe('https://api.replicate.com/v1/models/wan-video/wan-2.7-videoedit/predictions');
     const body = JSON.parse(r.body);
     expect(body.version).toBeUndefined();
+    // Verified against the live Replicate schema: wan-2.7-videoedit takes a
+    // required `video` uri input (NOT `video_url` — no allowlisted model
+    // accepts that name).
     expect(body.input).toEqual({
       prompt: 'restyle this',
-      video_url: 'https://cdn.example.com/input.mp4',
+      video: 'https://cdn.example.com/input.mp4',
     });
   });
 
-  // NEEDS-LIVE-SMOKE-TEST
-  it('routes options.input.video_url to video-to-video and preserves the field', async () => {
+  it('consumes options.input.video_url onto the native field instead of forwarding it', async () => {
     const { recs, ctx } = makeCtx(() => res({ id: 'pred-v2v-input', status: 'starting' }));
     const adapter: any = replicateMediaModule.create(ctx as any);
 
     const sub = await adapter.generateVideo('restyle this', {
       apiKey: 'replicate-key',
-      model: 'owner/video-to-video-model',
+      model: 'wan-video/wan-2.7-videoedit',
       input: { video_url: 'https://cdn.example.com/from-input.mp4', num_frames: 24 },
     });
 
     expect(sub.jobId).toBe('pred-v2v-input');
     const r = recs[0];
-    expect(r.url).toBe('https://api.replicate.com/v1/models/owner/video-to-video-model/predictions');
+    expect(r.url).toBe('https://api.replicate.com/v1/models/wan-video/wan-2.7-videoedit/predictions');
     const body = JSON.parse(r.body);
     expect(body.version).toBeUndefined();
     expect(body.input).toEqual({
       prompt: 'restyle this',
-      video_url: 'https://cdn.example.com/from-input.mp4',
+      video: 'https://cdn.example.com/from-input.mp4',
       num_frames: 24,
     });
+  });
+
+  // Per-model image-source field map, verified against the live Replicate
+  // schemas: minimax wants `first_frame_image`, seedance `image`, kling
+  // `start_image`. The old hardcoded `video_url` 422'd on every one of these.
+  it.each([
+    ['minimax/video-01', 'first_frame_image'],
+    ['bytedance/seedance-1-pro', 'image'],
+    ['kwaivgi/kling-v2.1', 'start_image'],
+  ])('maps an image source to %s’s native `%s` input', async (model, field) => {
+    const { recs, ctx } = makeCtx(() => res({ id: 'pred-i2v', status: 'starting' }));
+    const adapter: any = replicateMediaModule.create(ctx as any);
+
+    await adapter.generateVideo('animate this', {
+      apiKey: 'replicate-key',
+      model,
+      sourceUrl: 'https://cdn.example.com/frame.png',
+    });
+
+    const body = JSON.parse(recs[0].body);
+    expect(body.input).toEqual({
+      prompt: 'animate this',
+      [field]: 'https://cdn.example.com/frame.png',
+    });
+  });
+
+  it('throws for a source-driven call with a model that declares no source input', async () => {
+    const { ctx } = makeCtx(() => res({ id: 'pred-x', status: 'starting' }));
+    const adapter: any = replicateMediaModule.create(ctx as any);
+
+    await expect(
+      adapter.generateVideo('animate this', {
+        apiKey: 'replicate-key',
+        model: 'google/veo-3', // text-to-video only — no declared source field
+        sourceUrl: 'https://cdn.example.com/frame.png',
+      }),
+    ).rejects.toThrow(
+      'Replicate model google/veo-3 does not declare an image-to-video or video-to-video source input',
+    );
+    await expect(
+      adapter.generateVideo('animate this', {
+        apiKey: 'replicate-key',
+        model: 'owner/totally-unknown',
+        sourceUrl: 'https://cdn.example.com/frame.png',
+      }),
+    ).rejects.toThrow(
+      'Replicate model owner/totally-unknown does not declare an image-to-video or video-to-video source input',
+    );
+  });
+
+  it('rejects an explicit video source for an image-to-video-only model', async () => {
+    const { ctx } = makeCtx(() => res({ id: 'pred-x', status: 'starting' }));
+    const adapter: any = replicateMediaModule.create(ctx as any);
+
+    await expect(
+      adapter.generateVideo('restyle this', {
+        apiKey: 'replicate-key',
+        model: 'kwaivgi/kling-v2.1',
+        input: { video_url: 'https://cdn.example.com/input.mp4' },
+      }),
+    ).rejects.toThrow(
+      'Replicate model kwaivgi/kling-v2.1 does not accept a video source input (image-to-video only)',
+    );
+  });
+
+  it('knows a source field for every declared i2v/v2v catalog model', () => {
+    // Guard against catalog drift: a model added to a source-driven category
+    // without a field-map entry would throw at generation time (by design) —
+    // fail here instead, at test time.
+    const models = (providerMetadata.mediaModels as Record<string, { id: string }[]>);
+    for (const category of ['image-to-video', 'video-to-video']) {
+      for (const m of models[category] ?? []) {
+        expect(
+          (ReplicateMediaAdapter as any)._videoSourceInputField(m.id),
+          `${m.id} (${category}) has no source-field mapping`,
+        ).not.toBeNull();
+      }
+    }
   });
 
   it('rejects video-to-video without an explicit model/version', async () => {
@@ -114,7 +194,7 @@ describe('replicate media adapter (async predictions)', () => {
         apiKey: 'replicate-key',
         sourceUrl: 'https://cdn.example.com/input.mp4',
       }),
-    ).rejects.toThrow('Replicate video-to-video requires an explicit model/version');
+    ).rejects.toThrow('Replicate source-driven video generation requires an explicit model/version');
   });
 
   // NEEDS-LIVE-SMOKE-TEST

@@ -120,10 +120,10 @@ export const CompactReplicate: FC<{
   useEffect(() => {
     if (!jobId) return;
     // Bound the poll: without it a wedged job spins the dialog forever. 20 min
-    // is deliberate — the legacy path caps at 200×3s=10min, but seedance/veo
-    // can legitimately take 10-15 min. On timeout the job may still finish
-    // server-side (it already lands in Files when it does), so say so instead
-    // of reporting a failure.
+    // is deliberate — the designer timeline's landOrPoll caps at the same
+    // 20 min (400×3s), and seedance/veo can legitimately take 10-15 min. On
+    // timeout the job may still finish server-side (it already lands in Files
+    // when it does), so say so instead of reporting a failure.
     const guard = window.setTimeout(() => {
       handledJobRef.current = jobId;
       setJobId(null);

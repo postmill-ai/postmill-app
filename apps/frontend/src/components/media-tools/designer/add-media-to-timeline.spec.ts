@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createDesignerStore } from './designer.store';
-import { addImageClipToTimeline, addMediaToTimeline, addVoiceoverToTimeline, regenerateVoiceoverClip } from './add-media-to-timeline';
+import { addImageClipToTimeline, addMediaToTimeline, addVoiceoverToTimeline, regenerateVoiceoverClip, pollMediaJobArtifact } from './add-media-to-timeline';
 import { DEFAULT_CLIP_MS } from './add-text';
 import type { VideoOutput } from './designer.store';
 
@@ -38,8 +38,145 @@ const firstVideoClip = (store: ReturnType<typeof createDesignerStore>) => {
   return { vo, clip: track?.clips[0] };
 };
 
+describe('pollMediaJobArtifact — job-status polling resilience', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const messages = {
+    checkFailed: 'Failed to check job status',
+    noArtifact: 'Job completed but no artifact',
+    generationFailed: 'Generation failed',
+  };
+  const noSleep = () => Promise.resolve();
+  const okJob = (body: unknown) =>
+    ({ ok: true, status: 200, json: async () => body }) as Response;
+  const badJob = (status: number) =>
+    ({ ok: false, status, json: async () => ({}) }) as Response;
+
+  it('returns the artifact URL and file id on completion', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(okJob({ status: 'pending' }))
+      .mockResolvedValueOnce(
+        okJob({ status: 'completed', artifactUrl: '/uploads/v.mp4', fileId: 'file-9' })
+      );
+
+    const outcome = await pollMediaJobArtifact({
+      jobId: 'job-1',
+      fetch,
+      isMounted: () => true,
+      messages,
+      sleep: noSleep,
+    });
+
+    expect(outcome).toEqual({ kind: 'completed', url: '/uploads/v.mp4', fileId: 'file-9' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a transient 5xx instead of aborting the poll', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(badJob(503))
+      .mockResolvedValueOnce(badJob(502))
+      .mockResolvedValueOnce(
+        okJob({ status: 'completed', artifactUrl: '/uploads/v.mp4', fileId: null })
+      );
+
+    const outcome = await pollMediaJobArtifact({
+      jobId: 'job-1',
+      fetch,
+      isMounted: () => true,
+      messages,
+      sleep: noSleep,
+    });
+
+    expect(outcome).toEqual({ kind: 'completed', url: '/uploads/v.mp4', fileId: null });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('treats a network-level throw as transient too', async () => {
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(okJob({ status: 'completed', artifactUrl: '/uploads/v.mp4' }));
+
+    const outcome = await pollMediaJobArtifact({
+      jobId: 'job-1',
+      fetch,
+      isMounted: () => true,
+      messages,
+      sleep: noSleep,
+    });
+
+    expect(outcome).toMatchObject({ kind: 'completed', url: '/uploads/v.mp4' });
+  });
+
+  it('gives up after three transient failures in a row', async () => {
+    const fetch = vi.fn().mockResolvedValue(badJob(500));
+
+    await expect(
+      pollMediaJobArtifact({ jobId: 'job-1', fetch, isMounted: () => true, messages, sleep: noSleep })
+    ).rejects.toThrow('Failed to check job status');
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('a non-transient non-OK (404) aborts immediately', async () => {
+    const fetch = vi.fn().mockResolvedValue(badJob(404));
+
+    await expect(
+      pollMediaJobArtifact({ jobId: 'job-1', fetch, isMounted: () => true, messages, sleep: noSleep })
+    ).rejects.toThrow('Failed to check job status');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws the job's own error when the job failed", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(okJob({ status: 'failed', error: 'provider exploded' }));
+
+    await expect(
+      pollMediaJobArtifact({ jobId: 'job-1', fetch, isMounted: () => true, messages, sleep: noSleep })
+    ).rejects.toThrow('provider exploded');
+  });
+
+  it('throws when the job completes without an artifact', async () => {
+    const fetch = vi.fn().mockResolvedValue(okJob({ status: 'completed' }));
+
+    await expect(
+      pollMediaJobArtifact({ jobId: 'job-1', fetch, isMounted: () => true, messages, sleep: noSleep })
+    ).rejects.toThrow('Job completed but no artifact');
+  });
+
+  it('stops without erroring when the timeline unmounted', async () => {
+    const fetch = vi.fn().mockResolvedValue(okJob({ status: 'pending' }));
+
+    const outcome = await pollMediaJobArtifact({
+      jobId: 'job-1',
+      fetch,
+      isMounted: () => false,
+      messages,
+      sleep: noSleep,
+    });
+
+    expect(outcome).toEqual({ kind: 'unmounted' });
+  });
+});
+
 describe('addMediaToTimeline — clip geometry', () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it('carries the generation fileId onto the clip (retention purge keep-list)', async () => {
+    stubVideoProbe({ duration: 5, videoWidth: 1080, videoHeight: 1080 });
+    const store = createDesignerStore();
+
+    await addMediaToTimeline(store, {
+      type: 'video',
+      url: 'https://example.com/v.mp4',
+      fileId: 'file-gen-1',
+    });
+
+    const { clip } = firstVideoClip(store);
+    expect(clip!.fileId).toBe('file-gen-1');
+  });
 
   it('fits a portrait video into the canvas, centered and aspect-preserved', async () => {
     stubVideoProbe({ duration: 7.32, videoWidth: 1080, videoHeight: 1920 });

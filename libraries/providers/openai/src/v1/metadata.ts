@@ -17,10 +17,8 @@ export const metadata: ProviderMetadata = {
   "mediaCategories": [
     "image-focal-point",
     "image-slide",
-    "image-to-video",
     "text-to-image",
     "text-to-speech",
-    "text-to-video",
     "video-caption"
   ],
   "hasModelList": true,
@@ -48,108 +46,6 @@ export const metadata: ProviderMetadata = {
     ]
   },
   "mediaModels": {
-    "image-to-video": [
-      {
-        "id": "sora-2",
-        "label": "Sora 2",
-        "fields": [
-          {
-            "name": "size",
-            "type": "select",
-            "label": "Resolution",
-            "default": "1280x720",
-            "options": [
-              {
-                "value": "1280x720",
-                "label": "Landscape 1280×720"
-              },
-              {
-                "value": "720x1280",
-                "label": "Portrait 720×1280"
-              },
-              {
-                "value": "1920x1080",
-                "label": "Landscape 1920×1080 (Pro)"
-              },
-              {
-                "value": "1080x1920",
-                "label": "Portrait 1080×1920 (Pro)"
-              }
-            ]
-          },
-          {
-            "name": "seconds",
-            "type": "select",
-            "label": "Duration",
-            "default": "8",
-            "options": [
-              {
-                "value": "4",
-                "label": "4 seconds"
-              },
-              {
-                "value": "8",
-                "label": "8 seconds"
-              },
-              {
-                "value": "12",
-                "label": "12 seconds"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "id": "sora-2-pro",
-        "label": "Sora 2 Pro",
-        "fields": [
-          {
-            "name": "size",
-            "type": "select",
-            "label": "Resolution",
-            "default": "1280x720",
-            "options": [
-              {
-                "value": "1280x720",
-                "label": "Landscape 1280×720"
-              },
-              {
-                "value": "720x1280",
-                "label": "Portrait 720×1280"
-              },
-              {
-                "value": "1920x1080",
-                "label": "Landscape 1920×1080 (Pro)"
-              },
-              {
-                "value": "1080x1920",
-                "label": "Portrait 1080×1920 (Pro)"
-              }
-            ]
-          },
-          {
-            "name": "seconds",
-            "type": "select",
-            "label": "Duration",
-            "default": "8",
-            "options": [
-              {
-                "value": "4",
-                "label": "4 seconds"
-              },
-              {
-                "value": "8",
-                "label": "8 seconds"
-              },
-              {
-                "value": "12",
-                "label": "12 seconds"
-              }
-            ]
-          }
-        ]
-      }
-    ],
     "text-to-image": [
       {
         "id": "gpt-image-1",
@@ -553,108 +449,6 @@ export const metadata: ProviderMetadata = {
         ]
       }
     ],
-    "text-to-video": [
-      {
-        "id": "sora-2",
-        "label": "Sora 2",
-        "fields": [
-          {
-            "name": "size",
-            "type": "select",
-            "label": "Resolution",
-            "default": "1280x720",
-            "options": [
-              {
-                "value": "1280x720",
-                "label": "Landscape 1280×720"
-              },
-              {
-                "value": "720x1280",
-                "label": "Portrait 720×1280"
-              },
-              {
-                "value": "1920x1080",
-                "label": "Landscape 1920×1080 (Pro)"
-              },
-              {
-                "value": "1080x1920",
-                "label": "Portrait 1080×1920 (Pro)"
-              }
-            ]
-          },
-          {
-            "name": "seconds",
-            "type": "select",
-            "label": "Duration",
-            "default": "8",
-            "options": [
-              {
-                "value": "4",
-                "label": "4 seconds"
-              },
-              {
-                "value": "8",
-                "label": "8 seconds"
-              },
-              {
-                "value": "12",
-                "label": "12 seconds"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "id": "sora-2-pro",
-        "label": "Sora 2 Pro",
-        "fields": [
-          {
-            "name": "size",
-            "type": "select",
-            "label": "Resolution",
-            "default": "1280x720",
-            "options": [
-              {
-                "value": "1280x720",
-                "label": "Landscape 1280×720"
-              },
-              {
-                "value": "720x1280",
-                "label": "Portrait 720×1280"
-              },
-              {
-                "value": "1920x1080",
-                "label": "Landscape 1920×1080 (Pro)"
-              },
-              {
-                "value": "1080x1920",
-                "label": "Portrait 1080×1920 (Pro)"
-              }
-            ]
-          },
-          {
-            "name": "seconds",
-            "type": "select",
-            "label": "Duration",
-            "default": "8",
-            "options": [
-              {
-                "value": "4",
-                "label": "4 seconds"
-              },
-              {
-                "value": "8",
-                "label": "8 seconds"
-              },
-              {
-                "value": "12",
-                "label": "12 seconds"
-              }
-            ]
-          }
-        ]
-      }
-    ],
     "video-caption": [
       {
         "id": "whisper-1",
@@ -672,6 +466,6 @@ export const metadata: ProviderMetadata = {
   },
   "website": "https://openai.com",
   "description": {
-    "en": "OpenAI's GPT models for writing, reasoning and vision — plus gpt-image-1 and Sora for image and video generation, and natural-sounding TTS voices."
+    "en": "OpenAI's GPT models for writing, reasoning and vision — plus gpt-image-1 for image generation and natural-sounding TTS voices."
   }
 };

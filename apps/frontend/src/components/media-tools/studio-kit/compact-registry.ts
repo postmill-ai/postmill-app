@@ -28,7 +28,6 @@ import { recraftDescriptor } from '../recraft/descriptor';
 import { reelfarmDescriptor } from '../reelfarm/descriptor';
 import { runwayDescriptor } from '../runway/descriptor';
 import { siliconflowDescriptor } from '../siliconflow/descriptor';
-import { soraDescriptor } from '../sora/descriptor';
 import { stabilityDescriptor } from '../stability-ai/descriptor';
 import { sunoDescriptor } from '../suno/descriptor';
 import { tavusDescriptor } from '../tavus/descriptor';
@@ -69,7 +68,6 @@ const ALL_DESCRIPTORS: StudioDescriptor[] = [
   reelfarmDescriptor,
   runwayDescriptor,
   siliconflowDescriptor,
-  soraDescriptor,
   stabilityDescriptor,
   sunoDescriptor,
   tavusDescriptor,
@@ -90,7 +88,7 @@ export interface CompactStudioResult {
 
 export interface CompactTab {
   // Unique within the entry — colliding providers (Kling + Pika both ride the
-  // `fal` credential, Sora rides `openai`) merge their tabs, so a repeated tab
+  // `fal` credential) merge their tabs, so a repeated tab
   // key is suffixed with the source studio's title.
   key: string;
   // i18n namespace of the SOURCE descriptor (provider + title, see i18n-keys.ts)

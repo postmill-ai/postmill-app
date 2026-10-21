@@ -263,6 +263,46 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     return 'image';
   }
 
+  // Model → native source-footage field for source-driven video generation,
+  // following the `_i2iInputField`/`_bgRemoveInputField` declaration-guard
+  // pattern: the guard is the metadata declaration (a model only receives a
+  // source when this package's `metadata.mediaModels` declares it under a
+  // source-driven category), this map is only the field-name knowledge —
+  // verified against the live Replicate input schemas. Image-to-video models
+  // take a first-frame IMAGE (`first_frame_image` / `image` / `start_image`);
+  // video-to-video (restyle/edit) models take a source VIDEO (`video`). A model
+  // declared in neither category, or declared but with no known field, returns
+  // null — hardcoding `video_url` for every model shipped a 422 for all of
+  // them (no allowlisted model accepts that name).
+  private static readonly _I2V_SOURCE_FIELD: Record<string, string> = {
+    'minimax/video-01': 'first_frame_image',
+    'bytedance/seedance-1-pro': 'image',
+    'kwaivgi/kling-v2.1': 'start_image',
+    'kwaivgi/kling-v2.5-turbo-pro': 'start_image',
+  };
+  private static readonly _V2V_SOURCE_FIELD: Record<string, string> = {
+    'wan-video/wan-2.7-videoedit': 'video',
+  };
+
+  private static _videoSourceInputField(
+    model: string,
+  ): { field: string; kind: 'image' | 'video' } | null {
+    const mediaModels = providerMetadata.mediaModels as
+      | Record<string, { id: string }[]>
+      | undefined;
+    const declaredIn = (category: string) =>
+      (mediaModels?.[category] ?? []).some((m) => m.id === model);
+    if (declaredIn('video-to-video')) {
+      const field = ReplicateMediaAdapter._V2V_SOURCE_FIELD[model];
+      return field ? { field, kind: 'video' } : null;
+    }
+    if (declaredIn('image-to-video')) {
+      const field = ReplicateMediaAdapter._I2V_SOURCE_FIELD[model];
+      return field ? { field, kind: 'image' } : null;
+    }
+    return null;
+  }
+
   async generateImage(prompt: string, options?: MediaGenerateOptions): Promise<MediaGenerationResult> {
     const aspectRatio = options?.aspect
       ? ReplicateMediaAdapter.ASPECT_RATIO[options.aspect]
@@ -318,23 +358,47 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   }
 
   async generateVideo(prompt: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
-    // video-to-video: when a source video is supplied, route to a v2v/restyle model.
-    // Accept options.input.video_url per the contract; fall back to options.sourceUrl for compat.
-    // NEEDS-LIVE-SMOKE-TEST: confirm the chosen model/version accepts video_url.
-    const sourceVideoUrl = options?.input?.video_url ?? options?.sourceUrl;
-    const isVideoToVideo = !!sourceVideoUrl;
-    const input: Record<string, string | number | boolean | undefined> = isVideoToVideo
-      ? { prompt, video_url: sourceVideoUrl }
-      : { prompt };
+    // Source-driven video: a source lands in the model's NATIVE field, resolved
+    // per model by `_videoSourceInputField` (declaration-guarded by the package
+    // metadata). `options.input.video_url` is the explicit v2v contract signal;
+    // it is consumed here (mapped onto the native field) rather than forwarded
+    // verbatim — no allowlisted model accepts a `video_url` input, so passing it
+    // through 422'd every source-driven call. `options.sourceUrl` is the legacy
+    // carrier (i2v image from AiDefaultsService.imageToVideo, v2v video from
+    // videoToVideo). Unknown/undeclared models throw instead of guessing.
+    const explicitVideoUrl =
+      typeof options?.input?.video_url === 'string' ? options.input.video_url : undefined;
+    const sourceUrl = explicitVideoUrl ?? options?.sourceUrl;
 
     const modelId = options?.version || options?.model;
-    if (isVideoToVideo && !modelId) {
+    if (sourceUrl && !modelId) {
       throw new Error(
-        'Replicate video-to-video requires an explicit model/version; no default v2v model is configured',
+        'Replicate source-driven video generation requires an explicit model/version; no default is configured',
       );
     }
 
-    const opts: MediaGenerateOptions = { ...options, version: modelId };
+    const input: Record<string, string | number | boolean | undefined> = { prompt };
+    let passthroughInput = options?.input;
+    if (sourceUrl) {
+      const source = ReplicateMediaAdapter._videoSourceInputField(modelId!);
+      if (!source) {
+        throw new Error(
+          `Replicate model ${modelId} does not declare an image-to-video or video-to-video source input`,
+        );
+      }
+      if (explicitVideoUrl && source.kind !== 'video') {
+        throw new Error(
+          `Replicate model ${modelId} does not accept a video source input (image-to-video only)`,
+        );
+      }
+      input[source.field] = sourceUrl;
+      if (explicitVideoUrl) {
+        passthroughInput = { ...options!.input };
+        delete passthroughInput.video_url;
+      }
+    }
+
+    const opts: MediaGenerateOptions = { ...options, input: passthroughInput, version: modelId };
     const data = await this._createPrediction(opts, input);
     if (!data.id) throw new Error('Replicate returned no prediction id');
     return { jobId: data.id };

@@ -5,7 +5,7 @@
 // text renders and where its translations are authored. See dev/I18N_UPDATE.md §3.6.
 //
 // Flat, underscore-only keys — NEVER '.' or ':' (i18next default separators). `provider`
-// is NOT unique per studio (e.g. Pika rides `fal`, Sora rides `openai`), so the studio
+// is NOT unique per studio (e.g. Pika rides `fal`), so the studio
 // namespace combines provider + title (a stable brand noun, itself left untranslated).
 
 const seg = (x: string | number): string =>

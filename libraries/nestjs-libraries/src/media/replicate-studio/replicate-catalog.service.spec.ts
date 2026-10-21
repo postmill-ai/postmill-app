@@ -176,7 +176,7 @@ describe('ReplicateCatalogService', () => {
         'google/veo-3',
         'minimax/video-01',
         'bytedance/seedance-1-pro',
-        'kwaivgi/kling-v2.1',
+        'kwaivgi/kling-v2.5-turbo-pro',
       ]);
       // Per-model fetches only — no /collections/ call.
       expect(

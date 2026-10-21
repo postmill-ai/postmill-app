@@ -10,7 +10,6 @@ export const metadata: ProviderMetadata = {
   "mediaCategories": [
     "image-bg-remove",
     "image-inpaint",
-    "image-outpaint",
     "image-slide",
     "image-to-image",
     "image-to-video",
@@ -25,134 +24,6 @@ export const metadata: ProviderMetadata = {
   "hasModelList": false,
   "mediaModels": {
     "text-to-image": [
-      {
-        "id": "black-forest-labs/flux-1.1-pro",
-        "label": "flux-1.1-pro",
-        "fields": [
-          {
-            "name": "aspect_ratio",
-            "label": "aspect_ratio",
-            "help": "Aspect ratio for the generated image",
-            "type": "select",
-            "options": [
-              {
-                "value": "custom",
-                "label": "custom"
-              },
-              {
-                "value": "1:1",
-                "label": "1:1"
-              },
-              {
-                "value": "16:9",
-                "label": "16:9"
-              },
-              {
-                "value": "3:2",
-                "label": "3:2"
-              },
-              {
-                "value": "2:3",
-                "label": "2:3"
-              },
-              {
-                "value": "4:5",
-                "label": "4:5"
-              },
-              {
-                "value": "5:4",
-                "label": "5:4"
-              },
-              {
-                "value": "9:16",
-                "label": "9:16"
-              },
-              {
-                "value": "3:4",
-                "label": "3:4"
-              },
-              {
-                "value": "4:3",
-                "label": "4:3"
-              }
-            ],
-            "default": "1:1"
-          },
-          {
-            "name": "output_format",
-            "label": "output_format",
-            "help": "Format of the output images.",
-            "type": "select",
-            "options": [
-              {
-                "value": "webp",
-                "label": "webp"
-              },
-              {
-                "value": "jpg",
-                "label": "jpg"
-              },
-              {
-                "value": "png",
-                "label": "png"
-              }
-            ],
-            "default": "webp"
-          },
-          {
-            "name": "seed",
-            "label": "Seed",
-            "help": "Random seed. Set for reproducible generation",
-            "type": "number",
-            "step": 1
-          },
-          {
-            "name": "width",
-            "label": "Width",
-            "help": "Width of the generated image in text-to-image mode. Only used when aspect_ratio=custom. Must be a multiple of 32 (if it's not, it will be rounded to nearest multiple of 32). Note: Ignored in img2img and inpainting modes.",
-            "type": "number",
-            "min": 256,
-            "max": 1440,
-            "step": 1
-          },
-          {
-            "name": "height",
-            "label": "Height",
-            "help": "Height of the generated image in text-to-image mode. Only used when aspect_ratio=custom. Must be a multiple of 32 (if it's not, it will be rounded to nearest multiple of 32). Note: Ignored in img2img and inpainting modes.",
-            "type": "number",
-            "min": 256,
-            "max": 1440,
-            "step": 1
-          },
-          {
-            "name": "output_quality",
-            "label": "Output Quality",
-            "help": "Quality when saving the output images, from 0 to 100. 100 is best quality, 0 is lowest quality. Not relevant for .png outputs",
-            "type": "number",
-            "min": 0,
-            "max": 100,
-            "step": 1,
-            "default": 80
-          },
-          {
-            "name": "safety_tolerance",
-            "label": "Safety Tolerance",
-            "help": "Safety tolerance, 1 is most strict and 6 is most permissive",
-            "type": "number",
-            "min": 1,
-            "max": 6,
-            "step": 1,
-            "default": 2
-          },
-          {
-            "name": "prompt_upsampling",
-            "label": "Prompt Upsampling",
-            "help": "Automatically modify the prompt for more creative generation",
-            "type": "toggle",
-            "default": false
-          }
-        ]
-      },
       {
         "id": "black-forest-labs/flux-dev",
         "label": "flux-dev",
@@ -318,6 +189,134 @@ export const metadata: ProviderMetadata = {
               }
             ],
             "default": "1"
+          }
+        ]
+      },
+      {
+        "id": "black-forest-labs/flux-1.1-pro",
+        "label": "flux-1.1-pro",
+        "fields": [
+          {
+            "name": "aspect_ratio",
+            "label": "aspect_ratio",
+            "help": "Aspect ratio for the generated image",
+            "type": "select",
+            "options": [
+              {
+                "value": "custom",
+                "label": "custom"
+              },
+              {
+                "value": "1:1",
+                "label": "1:1"
+              },
+              {
+                "value": "16:9",
+                "label": "16:9"
+              },
+              {
+                "value": "3:2",
+                "label": "3:2"
+              },
+              {
+                "value": "2:3",
+                "label": "2:3"
+              },
+              {
+                "value": "4:5",
+                "label": "4:5"
+              },
+              {
+                "value": "5:4",
+                "label": "5:4"
+              },
+              {
+                "value": "9:16",
+                "label": "9:16"
+              },
+              {
+                "value": "3:4",
+                "label": "3:4"
+              },
+              {
+                "value": "4:3",
+                "label": "4:3"
+              }
+            ],
+            "default": "1:1"
+          },
+          {
+            "name": "output_format",
+            "label": "output_format",
+            "help": "Format of the output images.",
+            "type": "select",
+            "options": [
+              {
+                "value": "webp",
+                "label": "webp"
+              },
+              {
+                "value": "jpg",
+                "label": "jpg"
+              },
+              {
+                "value": "png",
+                "label": "png"
+              }
+            ],
+            "default": "webp"
+          },
+          {
+            "name": "seed",
+            "label": "Seed",
+            "help": "Random seed. Set for reproducible generation",
+            "type": "number",
+            "step": 1
+          },
+          {
+            "name": "width",
+            "label": "Width",
+            "help": "Width of the generated image in text-to-image mode. Only used when aspect_ratio=custom. Must be a multiple of 32 (if it's not, it will be rounded to nearest multiple of 32). Note: Ignored in img2img and inpainting modes.",
+            "type": "number",
+            "min": 256,
+            "max": 1440,
+            "step": 1
+          },
+          {
+            "name": "height",
+            "label": "Height",
+            "help": "Height of the generated image in text-to-image mode. Only used when aspect_ratio=custom. Must be a multiple of 32 (if it's not, it will be rounded to nearest multiple of 32). Note: Ignored in img2img and inpainting modes.",
+            "type": "number",
+            "min": 256,
+            "max": 1440,
+            "step": 1
+          },
+          {
+            "name": "output_quality",
+            "label": "Output Quality",
+            "help": "Quality when saving the output images, from 0 to 100. 100 is best quality, 0 is lowest quality. Not relevant for .png outputs",
+            "type": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "default": 80
+          },
+          {
+            "name": "safety_tolerance",
+            "label": "Safety Tolerance",
+            "help": "Safety tolerance, 1 is most strict and 6 is most permissive",
+            "type": "number",
+            "min": 1,
+            "max": 6,
+            "step": 1,
+            "default": 2
+          },
+          {
+            "name": "prompt_upsampling",
+            "label": "Prompt Upsampling",
+            "help": "Automatically modify the prompt for more creative generation",
+            "type": "toggle",
+            "default": false
           }
         ]
       },
@@ -2569,25 +2568,36 @@ export const metadata: ProviderMetadata = {
         ]
       },
       {
-        "id": "kwaivgi/kling-v2.1",
-        "label": "kling-v2.1",
+        "id": "kwaivgi/kling-v2.5-turbo-pro",
+        "label": "kling-v2.5-turbo-pro",
         "fields": [
           {
-            "name": "mode",
-            "label": "mode",
-            "help": "Standard has a resolution of 720p, pro is 1080p. Both are 24fps.",
+            "name": "negative_prompt",
+            "label": "Negative Prompt",
+            "help": "Things you do not want to see in the video",
+            "type": "text",
+            "default": ""
+          },
+          {
+            "name": "aspect_ratio",
+            "label": "aspect_ratio",
+            "help": "Aspect ratio of the video. Ignored if start_image is provided.",
             "type": "select",
             "options": [
               {
-                "value": "standard",
-                "label": "standard"
+                "value": "16:9",
+                "label": "16:9"
               },
               {
-                "value": "pro",
-                "label": "pro"
+                "value": "9:16",
+                "label": "9:16"
+              },
+              {
+                "value": "1:1",
+                "label": "1:1"
               }
             ],
-            "default": "standard"
+            "default": "16:9"
           },
           {
             "name": "duration",
@@ -2607,11 +2617,11 @@ export const metadata: ProviderMetadata = {
             "default": "5"
           },
           {
-            "name": "negative_prompt",
-            "label": "Negative Prompt",
-            "help": "Things you do not want to see in the video",
-            "type": "text",
-            "default": ""
+            "name": "guidance_scale",
+            "label": "Guidance Scale",
+            "help": "Kept for backwards compatibility. This parameter is not used.",
+            "type": "number",
+            "step": 0.1
           }
         ]
       }
@@ -2781,19 +2791,15 @@ export const metadata: ProviderMetadata = {
     ],
     "video-to-video": [
       {
-        "id": "bytedance/seedance-1-pro",
-        "label": "seedance-1-pro",
+        "id": "wan-video/wan-2.7-videoedit",
+        "label": "wan-2.7-videoedit",
         "fields": [
           {
             "name": "resolution",
             "label": "resolution",
-            "help": "Video resolution",
+            "help": "Output video resolution",
             "type": "select",
             "options": [
-              {
-                "value": "480p",
-                "label": "480p"
-              },
               {
                 "value": "720p",
                 "label": "720p"
@@ -2808,76 +2814,68 @@ export const metadata: ProviderMetadata = {
           {
             "name": "aspect_ratio",
             "label": "aspect_ratio",
-            "help": "Video aspect ratio. Ignored if an image is used.",
+            "help": "Aspect ratio of the output video. 'auto' uses the input video's aspect ratio.",
             "type": "select",
             "options": [
               {
+                "value": "auto",
+                "label": "auto"
+              },
+              {
                 "value": "16:9",
                 "label": "16:9"
-              },
-              {
-                "value": "4:3",
-                "label": "4:3"
-              },
-              {
-                "value": "1:1",
-                "label": "1:1"
-              },
-              {
-                "value": "3:4",
-                "label": "3:4"
               },
               {
                 "value": "9:16",
                 "label": "9:16"
               },
               {
-                "value": "21:9",
-                "label": "21:9"
+                "value": "1:1",
+                "label": "1:1"
               },
               {
-                "value": "9:21",
-                "label": "9:21"
-              }
-            ],
-            "default": "16:9"
-          },
-          {
-            "name": "fps",
-            "label": "fps",
-            "help": "Frame rate (frames per second)",
-            "type": "select",
-            "options": [
+                "value": "4:3",
+                "label": "4:3"
+              },
               {
-                "value": "24",
-                "label": "24"
+                "value": "3:4",
+                "label": "3:4"
               }
             ],
-            "default": "24"
-          },
-          {
-            "name": "seed",
-            "label": "Seed",
-            "help": "Random seed. Set for reproducible generation",
-            "type": "number",
-            "step": 1
+            "default": "auto"
           },
           {
             "name": "duration",
             "label": "Duration",
-            "help": "Video duration in seconds",
+            "help": "Duration of the output video in seconds. If not set, matches input video duration. Use this to truncate.",
             "type": "number",
             "min": 2,
-            "max": 12,
-            "step": 1,
-            "default": 5
+            "max": 10,
+            "step": 1
           },
           {
-            "name": "camera_fixed",
-            "label": "Camera Fixed",
-            "help": "Whether to fix camera position",
-            "type": "toggle",
-            "default": false
+            "name": "audio_setting",
+            "label": "audio_setting",
+            "help": "Audio behavior for edited video. 'auto': model decides whether to regenerate audio. 'origin': keep the original audio.",
+            "type": "select",
+            "options": [
+              {
+                "value": "auto",
+                "label": "auto"
+              },
+              {
+                "value": "origin",
+                "label": "origin"
+              }
+            ],
+            "default": "auto"
+          },
+          {
+            "name": "seed",
+            "label": "Seed",
+            "help": "Random seed for reproducible generation. Range: 0-2147483647",
+            "type": "number",
+            "step": 1
           }
         ]
       }
@@ -2911,12 +2909,12 @@ export const metadata: ProviderMetadata = {
           {
             "name": "target_fps",
             "label": "Target Fps",
-            "help": "Target FPS (choose from 15fps to 120fps)",
+            "help": "Target FPS (choose from 15-60fps)",
             "type": "number",
             "min": 15,
-            "max": 120,
+            "max": 60,
             "step": 1,
-            "default": 60
+            "default": 30
           }
         ]
       },
@@ -3248,116 +3246,6 @@ export const metadata: ProviderMetadata = {
               }
             ],
             "default": "vibes"
-          }
-        ]
-      }
-    ],
-    "image-outpaint": [
-      {
-        "id": "black-forest-labs/flux-fill-pro",
-        "label": "flux-fill-pro",
-        "fields": [
-          {
-            "name": "outpaint",
-            "label": "outpaint",
-            "help": "A quick option for outpainting an input image. Mask will be ignored.",
-            "type": "select",
-            "options": [
-              {
-                "value": "None",
-                "label": "None"
-              },
-              {
-                "value": "Zoom out 1.5x",
-                "label": "Zoom out 1.5x"
-              },
-              {
-                "value": "Zoom out 2x",
-                "label": "Zoom out 2x"
-              },
-              {
-                "value": "Make square",
-                "label": "Make square"
-              },
-              {
-                "value": "Left outpaint",
-                "label": "Left outpaint"
-              },
-              {
-                "value": "Right outpaint",
-                "label": "Right outpaint"
-              },
-              {
-                "value": "Top outpaint",
-                "label": "Top outpaint"
-              },
-              {
-                "value": "Bottom outpaint",
-                "label": "Bottom outpaint"
-              }
-            ],
-            "default": "None"
-          },
-          {
-            "name": "seed",
-            "label": "Seed",
-            "help": "Random seed. Set for reproducible generation",
-            "type": "number",
-            "step": 1
-          },
-          {
-            "name": "steps",
-            "label": "Steps",
-            "help": "Number of diffusion steps. Higher values yield finer details but increase processing time.",
-            "type": "number",
-            "min": 15,
-            "max": 50,
-            "step": 1,
-            "default": 50
-          },
-          {
-            "name": "prompt_upsampling",
-            "label": "Prompt Upsampling",
-            "help": "Automatically modify the prompt for more creative generation",
-            "type": "toggle",
-            "default": false
-          },
-          {
-            "name": "guidance",
-            "label": "Guidance",
-            "help": "Controls the balance between adherence to the text prompt and image quality/diversity. Higher values make the output more closely match the prompt but may reduce overall image quality. Lower values allow for more creative freedom but might produce results less relevant to the prompt.",
-            "type": "number",
-            "min": 1.5,
-            "max": 100,
-            "step": 0.1,
-            "default": 60
-          },
-          {
-            "name": "safety_tolerance",
-            "label": "Safety Tolerance",
-            "help": "Safety tolerance, 1 is most strict and 6 is most permissive",
-            "type": "number",
-            "min": 1,
-            "max": 6,
-            "step": 1,
-            "default": 2
-          },
-          {
-            "name": "output_format",
-            "label": "output_format",
-            "help": "Format of the output images.",
-            "type": "select",
-            "options": [
-              {
-                "value": "jpg",
-                "label": "jpg"
-              },
-              {
-                "value": "png",
-                "label": "png"
-              }
-            ],
-            "default": "jpg"
           }
         ]
       }

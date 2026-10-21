@@ -500,9 +500,24 @@ describe('MediaLockerStorage', () => {
         jsonResponse({ id: 'user-1' }),
       );
 
-      const cap = medialockerStorageModule.create(makeCtx(fetchMock as any));
+      const cap = medialockerStorageModule.create(
+        makeCtx(fetchMock as any, CREDS, { publicUrl: 'https://cdn.example.com' }),
+      );
       await expect(cap.testConnection()).resolves.toEqual({ ok: true });
       expect(String(fetchMock.mock.calls[0][0])).toBe(`${API}/api/me`);
+    });
+
+    it('fails loudly without a publicUrl — persisted refs would be bare keys', async () => {
+      // Without a public base, stableRef stores a bare object key, which fails
+      // the designer-doc src schema. The config test must refuse the config
+      // instead of letting it save dead references — and never hit the API.
+      const fetchMock = vi.fn<SafeFetchPort>(async () => jsonResponse({ id: 'user-1' }));
+
+      const cap = medialockerStorageModule.create(makeCtx(fetchMock as any));
+      const res = await cap.testConnection();
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain('Public URL');
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('returns ok:false with the envelope message on 401', async () => {
@@ -513,7 +528,9 @@ describe('MediaLockerStorage', () => {
         ),
       );
 
-      const cap = medialockerStorageModule.create(makeCtx(fetchMock as any));
+      const cap = medialockerStorageModule.create(
+        makeCtx(fetchMock as any, CREDS, { publicUrl: 'https://cdn.example.com' }),
+      );
       const res = await cap.testConnection();
       expect(res.ok).toBe(false);
       expect(res.error).toBe('Invalid API key');
@@ -531,7 +548,9 @@ describe('MediaLockerStorage', () => {
         ),
       );
 
-      const cap = medialockerStorageModule.create(makeCtx(fetchMock as any));
+      const cap = medialockerStorageModule.create(
+        makeCtx(fetchMock as any, CREDS, { publicUrl: 'https://cdn.example.com' }),
+      );
       const res = await cap.testConnection();
       expect(res.ok).toBe(false);
       expect(res.error).toBe('Rate limit exceeded');
@@ -542,7 +561,9 @@ describe('MediaLockerStorage', () => {
         throw new Error('ECONNREFUSED');
       });
 
-      const cap = medialockerStorageModule.create(makeCtx(fetchMock as any));
+      const cap = medialockerStorageModule.create(
+        makeCtx(fetchMock as any, CREDS, { publicUrl: 'https://cdn.example.com' }),
+      );
       const res = await cap.testConnection();
       expect(res.ok).toBe(false);
       expect(res.error).toContain('ECONNREFUSED');

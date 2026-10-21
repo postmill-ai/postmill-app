@@ -74,11 +74,11 @@ describe('MediaIndex studios', () => {
   });
 
   it('resolves studios that ride another provider’s credentials', () => {
-    // sora → openai, kling/pika → fal, google-ai → google.
-    enabled = new Set(['openai']);
+    // google-ai → google, kling/pika → fal.
+    enabled = new Set(['google']);
     renderIndex();
     let hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
-    expect(hrefs).toContain('/media/sora');
+    expect(hrefs).toContain('/media/google-ai');
     expect(hrefs).not.toContain('/media/kling');
 
     cleanup();
@@ -87,7 +87,7 @@ describe('MediaIndex studios', () => {
     hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
     expect(hrefs).toContain('/media/kling');
     expect(hrefs).toContain('/media/pika');
-    expect(hrefs).not.toContain('/media/sora');
+    expect(hrefs).not.toContain('/media/google-ai');
   });
 
   it('renders capability chips from the studio badges', () => {

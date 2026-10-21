@@ -13,6 +13,7 @@ import {
   MAX_ELEMENTS_PER_OUTPUT,
   MAX_FONT_SIZE,
   MAX_INLINE_SRC_LEN,
+  MAX_SRC_LEN,
   MAX_VIDEO_DURATION_MS,
 } from './designer-doc.limits';
 
@@ -503,6 +504,23 @@ describe('primitive schemas', () => {
 
   it('rejects a src longer than 2048 chars', () => {
     expect(SrcSchema.safeParse('https://x/' + 'a'.repeat(2048)).success).toBe(false);
+  });
+
+  it('accepts a same-origin relative /uploads/ src (local storage without FRONTEND_URL)', () => {
+    // The local storage adapter returns `/uploads/…` paths when FRONTEND_URL is
+    // unset — a design referencing one must still save.
+    expect(SrcSchema.safeParse('/uploads/2026/10/21/abcdef1234.mp4').success).toBe(true);
+  });
+
+  it('caps a relative /uploads/ src at the URL budget, not the inline budget', () => {
+    expect(SrcSchema.safeParse('/uploads/' + 'a'.repeat(MAX_SRC_LEN)).success).toBe(false);
+  });
+
+  it('rejects other root-relative paths as src', () => {
+    // Only /uploads/ is same-origin-safe — an arbitrary relative path could
+    // point the renderer at an unrelated route.
+    expect(SrcSchema.safeParse('/api/secret').success).toBe(false);
+    expect(SrcSchema.safeParse('uploads/no-leading-slash.png').success).toBe(false);
   });
 
   it('accepts an inline (data:/SVG-markup) src past the URL cap', () => {

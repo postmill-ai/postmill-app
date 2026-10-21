@@ -107,10 +107,18 @@ export class MediaController {
     if (!job || job.organizationId !== org.id) {
       throw new HttpException('Job not found', HttpStatus.NOT_FOUND);
     }
+    // Resolve the landed File id so callers (designer timeline) can pin the
+    // clip against retention purge — mirrors the studio's `_presentJob`, which
+    // resolves the same path→File mapping via getFilesByPaths.
+    const completed = job.status === 'completed' && job.artifactUrl;
+    const files = completed
+      ? await this._fileService.getFilesByPaths(org.id, [job.artifactUrl!]).catch(() => [])
+      : [];
     return {
       id: job.id,
       status: job.status,
       artifactUrl: job.artifactUrl,
+      fileId: (files[0]?.id as string | undefined) ?? null,
       error: job.error,
     };
   }

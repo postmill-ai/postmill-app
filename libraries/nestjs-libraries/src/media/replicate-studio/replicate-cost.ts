@@ -23,6 +23,8 @@ export const PRICE_MAP: Record<string, PriceEntry> = {
   'minimax/video-01': { kind: 'per-video-sec', usd: 0.30 },
   'bytedance/seedance-1-pro': { kind: 'per-video-sec', usd: 0.40 },
   'kwaivgi/kling-v2.1': { kind: 'per-video-sec', usd: 0.35 },
+  // Replicate lists kling-v2.5-turbo-pro at $0.07 per second of output video.
+  'kwaivgi/kling-v2.5-turbo-pro': { kind: 'per-video-sec', usd: 0.07 },
   'topazlabs/video-upscale': { kind: 'per-run', usd: 0.25 },
   'minimax/speech-02-hd': { kind: 'per-run', usd: 0.05 },
   'minimax/voice-cloning': { kind: 'per-run', usd: 0.10 },

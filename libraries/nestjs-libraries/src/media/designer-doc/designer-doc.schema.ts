@@ -74,14 +74,22 @@ export const SrcSchema = z
   .string()
   .refine(
     (s) =>
-      s.startsWith('data:') || /^https?:\/\//.test(s) || isSvgMarkupSrc(s),
-    'src must be a data: or http(s) URL, or raw SVG markup (icon elements only)'
+      s.startsWith('data:') ||
+      /^https?:\/\//.test(s) ||
+      // Same-origin relative upload path — the local storage adapter returns
+      // exactly this shape when FRONTEND_URL is unset. Restricted to the
+      // /uploads/ prefix (not any root-relative URL) so an attacker-controlled
+      // doc can't point the renderer at an arbitrary same-origin route.
+      /^\/uploads\//.test(s) ||
+      isSvgMarkupSrc(s),
+    'src must be a data: or http(s) URL, a same-origin /uploads/ path, or raw SVG markup (icon elements only)'
   )
   .refine(
-    // Remote URLs stay tight; inline payloads (data: URLs, raw SVG markup on
-    // icon elements) get the larger budget from MAX_INLINE_SRC_LEN.
+    // Remote URLs and relative upload paths stay tight; inline payloads (data:
+    // URLs, raw SVG markup on icon elements) get the larger budget from
+    // MAX_INLINE_SRC_LEN.
     (s) =>
-      s.length <= (/^https?:\/\//.test(s) ? MAX_SRC_LEN : MAX_INLINE_SRC_LEN),
+      s.length <= (/^https?:\/\//.test(s) || /^\/uploads\//.test(s) ? MAX_SRC_LEN : MAX_INLINE_SRC_LEN),
     'src is too long'
   );
 

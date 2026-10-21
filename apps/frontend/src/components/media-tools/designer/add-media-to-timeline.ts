@@ -6,6 +6,97 @@ import { buildShapeClip } from './tool-draw';
 
 type StoreApi = ReturnType<typeof createDesignerStore>;
 
+export const JOB_POLL_INTERVAL_MS = 3000;
+// 400×3s = 20 min — matches the compact studio's guard (compact-replicate.tsx):
+// seedance/veo can legitimately take 10-15 min, and on timeout the job may
+// still finish server-side (it lands in Files when it does).
+export const JOB_MAX_POLLS = 400;
+// One transient status-check failure (network blip, 429, 5xx) must not abort a
+// paid, still-running generation — tolerate a few in a row before giving up.
+export const JOB_MAX_TRANSIENT_FAILURES = 3;
+
+export type JobPollOutcome =
+  | { kind: 'completed'; url: string; fileId: string | null }
+  | { kind: 'timeout' }
+  | { kind: 'unmounted' };
+
+interface PollMediaJobOptions {
+  jobId: string;
+  fetch: (url: string) => Promise<Pick<Response, 'ok' | 'status' | 'json'>>;
+  isMounted: () => boolean;
+  messages: {
+    checkFailed: string;
+    noArtifact: string;
+    generationFailed: string;
+  };
+  /** Injectable for tests. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * Poll GET /media/jobs/:id until the job completes. Terminal failures (job
+ * failed, non-transient HTTP error, completed-without-artifact) throw — the
+ * caller toasts `error.message`. Transient failures (network throw, 429, 5xx)
+ * are retried up to JOB_MAX_TRANSIENT_FAILURES in a row, then thrown: a single
+ * blip must not abort a paid, still-running generation.
+ */
+export async function pollMediaJobArtifact(options: PollMediaJobOptions): Promise<JobPollOutcome> {
+  const { jobId, fetch, isMounted, messages } = options;
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+
+  let transientFailures = 0;
+  const check = async (): Promise<{ url: string; fileId: string | null } | null> => {
+    let res: Pick<Response, 'ok' | 'status' | 'json'>;
+    try {
+      res = await fetch(`/media/jobs/${jobId}`);
+    } catch {
+      // Network-level failure (offline, socket reset) — transient by nature.
+      const err = new Error(messages.checkFailed) as Error & { transient?: boolean };
+      err.transient = true;
+      throw err;
+    }
+    if (!res.ok) {
+      const err = new Error(messages.checkFailed) as Error & { transient?: boolean };
+      // 429/5xx is transient (the job may still be fine); other non-OK stays terminal.
+      if (res.status === 429 || res.status >= 500) err.transient = true;
+      throw err;
+    }
+    const job = (await res.json()) as {
+      status?: string;
+      artifactUrl?: string | null;
+      fileId?: string | null;
+      error?: string | null;
+    };
+    if (job.status === 'completed') {
+      if (!job.artifactUrl) throw new Error(messages.noArtifact);
+      return { url: job.artifactUrl, fileId: job.fileId ?? null };
+    }
+    if (job.status === 'failed') throw new Error(job.error || messages.generationFailed);
+    return null;
+  };
+
+  let polls = 0;
+  while (polls < JOB_MAX_POLLS) {
+    if (!isMounted()) return { kind: 'unmounted' }; // timeline unmounted — stop polling
+    try {
+      const result = await check();
+      transientFailures = 0;
+      if (!isMounted()) return { kind: 'unmounted' };
+      if (result) return { kind: 'completed', url: result.url, fileId: result.fileId };
+    } catch (e) {
+      const err = e as Error & { transient?: boolean };
+      if (err.transient && transientFailures + 1 < JOB_MAX_TRANSIENT_FAILURES) {
+        transientFailures++;
+      } else {
+        throw err;
+      }
+    }
+    polls++;
+    await sleep(JOB_POLL_INTERVAL_MS);
+  }
+  return { kind: 'timeout' };
+}
+
 interface AddMediaToTimelineOptions {
   type: 'video' | 'audio';
   url: string;

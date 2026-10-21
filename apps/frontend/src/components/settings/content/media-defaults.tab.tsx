@@ -219,7 +219,6 @@ const DESCRIPTOR_LOADERS: Record<string, () => Promise<StudioDescriptor>> = {
   deepgram: async () =>
     (await import('../../media-tools/deepgram/descriptor')).deepgramDescriptor,
   openai: async () => (await import('../../media-tools/openai/descriptor')).openaiDescriptor,
-  sora: async () => (await import('../../media-tools/sora/descriptor')).soraDescriptor,
   fal: async () => (await import('../../media-tools/kling/descriptor')).klingDescriptor,
   pika: async () => (await import('../../media-tools/pika/descriptor')).pikaDescriptor,
   kling: async () => (await import('../../media-tools/kling/descriptor')).klingDescriptor,
@@ -230,14 +229,6 @@ async function loadDescriptor(
   category: AiMediaCategory,
   model?: string
 ): Promise<StudioDescriptor | null> {
-  const operation = MEDIA_CATEGORY_OPERATION[category];
-
-  // OpenAI video defaults use the Sora descriptor even though the credential
-  // provider is `openai`.
-  if (providerId === 'openai' && operation === 'video') {
-    return DESCRIPTOR_LOADERS.sora?.();
-  }
-
   // fal hosts both Kling and Pika; disambiguate by model id when possible.
   if (providerId === 'fal' && model?.toLowerCase().includes('pika')) {
     return DESCRIPTOR_LOADERS.pika?.();

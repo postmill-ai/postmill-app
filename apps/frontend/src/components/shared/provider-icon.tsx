@@ -65,7 +65,6 @@ const ICONS: Record<string, Entry> = {
   luma: { viewBox: '0 0 24 24', color: '#111111', node: (<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a6 6 0 0 1 0 12 3 3 0 0 0 0-6 3 3 0 0 1 0-6Z" />) },
   kling: { viewBox: '0 0 24 24', color: '#1A1A1A', node: (<path d="M5 3h3v7.5L15 3h3.8l-7.2 7.6L19 21h-3.9l-5.3-7.4L8 15.7V21H5V3Z" />) },
   pika: { viewBox: '0 0 24 24', color: '#FACC15', full: true, node: (<><circle cx="12" cy="12" r="10" fill="#FACC15" /><path d="M9 9.5 16 12l-7 2.5V9.5Z" fill="#111111" /></>) },
-  sora: { viewBox: '0 0 24 24', color: '#000000', node: (<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4.2a5.8 5.8 0 1 1 0 11.6 5.8 5.8 0 0 1 0-11.6Zm0 3.1a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4Z" />) },
   deepgram: { viewBox: '0 0 24 24', color: '#13EF93', full: true, node: (<><circle cx="12" cy="12" r="10" fill="#13EF93" /><path d="M7 9.5a4.5 4.5 0 0 1 4.5-4.5H17l-2.2 2.5H11.5A2 2 0 0 0 9.5 12v5L7 14.5v-5Zm10 5a4.5 4.5 0 0 1-4.5 4.5H7l2.2-2.5h3.3a2 2 0 0 0 2-2v-5l2.5 2.5v2.5Z" fill="#0B0B0B" /></>) },
   ideogram: { viewBox: '0 0 24 24', color: '#111111', node: (<path d="M6 4h12v3h-4.25v10H18v3H6v-3h4.25V7H6V4z" />) },
   leonardo: { viewBox: '0 0 24 24', color: '#0EA5E9', node: (<path d="M12 2 3 9l9 13 9-13-9-7zm0 2.54L18.6 9 12 18.2 5.4 9 12 4.54z" />) },

@@ -505,15 +505,6 @@ export const ROUTES: RouteDef[] = [
     "memberGated": true
   },
   {
-    "name": "media › sora",
-    "path": "/media/sora",
-    "area": "media",
-    "publicRoute": false,
-    "expectsContent": true,
-    "minActionables": 1,
-    "memberGated": true
-  },
-  {
     "name": "media › stability-ai",
     "path": "/media/stability-ai",
     "area": "media",

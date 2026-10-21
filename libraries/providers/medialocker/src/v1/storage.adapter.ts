@@ -211,6 +211,19 @@ export class MediaLockerStorage implements StorageCapability {
   }
 
   async testConnection(): Promise<{ ok: boolean; error?: string }> {
+    // A public base is REQUIRED for anything that persists a file reference
+    // (stableRef): without publicUrl the stored path is a bare object key,
+    // which fails the designer-doc src schema (absolute http(s) or same-origin
+    // /uploads/ only) and resolves to nothing off this API. There is no
+    // derivable public base, so fail the config test loudly instead of letting
+    // a config save dead references.
+    if (!this.publicUrl) {
+      return {
+        ok: false,
+        error:
+          'MediaLocker requires a Public URL (CDN or public bucket base) so stored files get absolute, downloadable URLs.',
+      };
+    }
     try {
       // /api/me is the cheap authenticated endpoint.
       await this.api('/api/me');

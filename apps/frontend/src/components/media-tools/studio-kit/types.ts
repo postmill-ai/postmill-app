@@ -73,7 +73,7 @@ export interface StudioLanding {
   // 4-5 short benefit bullets.
   highlights: string[];
   // Optional brand-icon override (ProviderIcon id) for studios whose `provider` is a
-  // shared credential id rather than the brand — e.g. Pika/Kling ride `fal`, Sora rides `openai`.
+  // shared credential id rather than the brand — e.g. Pika/Kling ride `fal`.
   icon?: string;
 }
 

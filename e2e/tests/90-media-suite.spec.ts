@@ -12,7 +12,7 @@ const MEDIA_ROUTES = [
   'black-forest-labs', 'stability-ai', 'recraft', 'ideogram', 'leonardo', 'openai', 'vertex',
   'google-ai', 'replicate',
   // video studios
-  'runway', 'luma', 'minimax', 'kling', 'pika', 'sora', 'wan', 'qwen', 'ltx', 'higgsfield',
+  'runway', 'luma', 'minimax', 'kling', 'pika', 'wan', 'qwen', 'ltx', 'higgsfield',
   // avatar / character
   'heygen', 'did', 'hedra', 'tavus', 'reelfarm', 'genviral',
   // audio

@@ -43,7 +43,6 @@ import { recraftDescriptor } from './recraft/descriptor';
 import { reelfarmDescriptor } from './reelfarm/descriptor';
 import { runwayDescriptor } from './runway/descriptor';
 import { siliconflowDescriptor } from './siliconflow/descriptor';
-import { soraDescriptor } from './sora/descriptor';
 import { stabilityDescriptor } from './stability-ai/descriptor';
 import { sunoDescriptor } from './suno/descriptor';
 import { tavusDescriptor } from './tavus/descriptor';
@@ -89,7 +88,6 @@ const LANDINGS: Record<string, { badges?: string[] } | undefined> = {
   replicate: REPLICATE_LANDING,
   runway: runwayDescriptor.landing,
   siliconflow: siliconflowDescriptor.landing,
-  sora: soraDescriptor.landing,
   'stability-ai': stabilityDescriptor.landing,
   suno: sunoDescriptor.landing,
   tavus: tavusDescriptor.landing,
@@ -105,13 +103,13 @@ const providers = MEDIA_TABS.filter((t) => t.section === 'Providers');
 describe('MEDIA_TABS composition', () => {
   // These counts are the ones AGENTS.md states; if a tool is added or removed,
   // that doc has to move in the same change.
-  it('holds all 46 media tools', () => {
-    expect(MEDIA_TABS).toHaveLength(46);
+  it('holds all 45 media tools', () => {
+    expect(MEDIA_TABS).toHaveLength(45);
   });
 
   it.each([
     ['Platform', 2],
-    ['Providers', 38],
+    ['Providers', 37],
     ['Content Pack', 6],
   ])('has %i %s tools', (section, count) => {
     expect(MEDIA_TABS.filter((t) => t.section === section)).toHaveLength(count as number);
@@ -182,9 +180,8 @@ describe('provider studio badges', () => {
 });
 
 describe('providerIdentifier', () => {
-  it('maps the four routes that ride another provider’s credentials', () => {
+  it('maps the routes that ride another provider’s credentials', () => {
     expect(providerIdentifier('/media/google-ai')).toBe('google');
-    expect(providerIdentifier('/media/sora')).toBe('openai');
     expect(providerIdentifier('/media/kling')).toBe('fal');
     expect(providerIdentifier('/media/pika')).toBe('fal');
   });

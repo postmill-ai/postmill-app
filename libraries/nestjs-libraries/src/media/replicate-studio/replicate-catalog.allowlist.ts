@@ -69,7 +69,10 @@ export const MODEL_ALLOWLIST: Record<string, string[]> = {
     'google/veo-3',
     'minimax/video-01',
     'bytedance/seedance-1-pro',
-    'kwaivgi/kling-v2.1',
+    // kling-v2.1 was misfiled here: it is strictly image-to-video upstream
+    // (mandatory `start_image`). kling-v2.5-turbo-pro is the t2v-capable Kling
+    // (verified against the live Replicate schema: only `prompt` is required).
+    'kwaivgi/kling-v2.5-turbo-pro',
   ],
   'image-to-video': [
     'minimax/video-01',
@@ -77,7 +80,10 @@ export const MODEL_ALLOWLIST: Record<string, string[]> = {
     'kwaivgi/kling-v2.1',
   ],
   'video-to-video': [
-    'bytedance/seedance-1-pro',
+    // seedance-1-pro has no video input (t2v/i2v only) — the picker asked for an
+    // IMAGE and generation 422'd. wan-2.7-videoedit takes a required `video` uri
+    // input plus `prompt` (verified against the live Replicate schema).
+    'wan-video/wan-2.7-videoedit',
   ],
   'video-upscale': [
     'topazlabs/video-upscale',
@@ -129,6 +135,8 @@ export const OFFICIAL_MODELS = new Set<string>([
   'minimax/video-01',
   'bytedance/seedance-1-pro',
   'kwaivgi/kling-v2.1',
+  'kwaivgi/kling-v2.5-turbo-pro',
+  'wan-video/wan-2.7-videoedit',
   'topazlabs/video-upscale',
   // Audio
   'minimax/speech-02-hd',

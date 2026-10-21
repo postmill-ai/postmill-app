@@ -117,6 +117,19 @@ export class R2Storage implements StorageCapability {
   }
 
   async testConnection(): Promise<{ ok: boolean; error?: string }> {
+    // A public base is REQUIRED for anything that persists a file reference:
+    // without publicUrl, getFileUrl returns a root-relative `/<key>` that fails
+    // the designer-doc src schema (absolute http(s) or same-origin /uploads/
+    // only) and downloads nowhere off-origin. R2's public URL (custom domain or
+    // the per-bucket r2.dev hash) cannot be derived from the endpoint, so fail
+    // the config test loudly instead of persisting dead references.
+    if (!this.publicUrl) {
+      return {
+        ok: false,
+        error:
+          'Cloudflare R2 requires a Public URL (custom domain or r2.dev public bucket URL) so stored files get absolute, downloadable URLs.',
+      };
+    }
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
       return { ok: true };
@@ -162,6 +175,9 @@ export class R2Storage implements StorageCapability {
     if (this.publicUrl) {
       return `${this.publicUrl}/${key}`;
     }
+    // Unreachable for configs created after the config-test began requiring a
+    // Public URL (see testConnection); kept only so pre-existing publicUrl-less
+    // configs keep reading their already-stored references.
     return `/${key}`;
   }
 

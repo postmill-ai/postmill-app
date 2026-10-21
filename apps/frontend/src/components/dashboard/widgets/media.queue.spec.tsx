@@ -56,7 +56,7 @@ const makeJobs = (overrides: Partial<any>[] = []) => ({
     },
     {
       id: 'job-3',
-      provider: 'sora',
+      provider: 'pika',
       operation: 'video',
       status: 'failed',
       artifactUrl: null,
@@ -101,7 +101,7 @@ describe('MediaQueueWidget', () => {
 
     expect(screen.getByRole('img', { name: 'heygen icon' })).toBeTruthy();
     expect(screen.getByRole('img', { name: 'runway icon' })).toBeTruthy();
-    expect(screen.getByRole('img', { name: 'sora icon' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'pika icon' })).toBeTruthy();
 
     expect(screen.getAllByText('video').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('text-to-video')).toBeTruthy();
