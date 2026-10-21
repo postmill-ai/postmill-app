@@ -123,4 +123,36 @@ describe.skipIf(!FFMPEG)('SlideService — real ffmpeg pipeline', () => {
       expect(Number(audio.duration)).toBeLessThan(6.5);
     }
   }, 60_000);
+
+  it('normalizes square frames onto the requested wide canvas (cover)', async () => {
+    const captured: { buffer?: Buffer; mime?: string } = {};
+    const service = makeService(captured);
+
+    // The source frames are 64x64 squares; without normalization the concat
+    // demuxer would emit a 64x64 video. Requesting 320x180 must produce
+    // exactly 320x180.
+    const result = await service.generateSlide({
+      orgId: 'org-1',
+      prompt: 'Two slides about red squares',
+      targetWidth: 320,
+      targetHeight: 180,
+      fitMode: 'cover',
+    });
+
+    expect(result).toBe('/uploads/pipeline.mp4');
+
+    if (HAS_FFPROBE) {
+      const probePath = `${fs.mkdtempSync('/tmp/slide-spec-probe-')}/out.mp4`;
+      fs.writeFileSync(probePath, captured.buffer!);
+      const probe = JSON.parse(
+        execFileSync('ffprobe', [
+          '-v', 'error', '-print_format', 'json',
+          '-show_streams', probePath,
+        ]).toString(),
+      );
+      const video = probe.streams.find((s: any) => s.codec_type === 'video');
+      expect(video.width).toBe(320);
+      expect(video.height).toBe(180);
+    }
+  }, 60_000);
 });

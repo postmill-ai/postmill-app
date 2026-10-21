@@ -1846,7 +1846,15 @@ export class AiMediaService {
     orgId: string,
     prompt: string,
     imageUrls?: string[],
-    options?: { userId?: string; slides?: number; durationPerSlideSeconds?: number },
+    options?: {
+      userId?: string;
+      slides?: number;
+      durationPerSlideSeconds?: number;
+      fitMode?: 'contain' | 'cover';
+      aspect?: 'square' | 'wide' | 'tall';
+      width?: number;
+      height?: number;
+    },
   ): Promise<string> {
     if (!this._moduleRef) {
       throw new CapabilityNotAvailable(
@@ -1870,6 +1878,10 @@ export class AiMediaService {
       imageUrls,
       slides: options?.slides,
       durationPerSlideSeconds: options?.durationPerSlideSeconds,
+      fitMode: options?.fitMode,
+      aspect: options?.aspect,
+      targetWidth: options?.width,
+      targetHeight: options?.height,
     });
   }
 

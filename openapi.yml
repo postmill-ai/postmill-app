@@ -10977,6 +10977,25 @@ components:
           items:
             type: string
             format: uri
+        fitMode:
+          type: string
+          enum:
+            - contain
+            - cover
+        aspect:
+          type: string
+          enum:
+            - square
+            - wide
+            - tall
+        width:
+          type: number
+          minimum: 16
+          maximum: 16384
+        height:
+          type: number
+          minimum: 16
+          maximum: 16384
     VoiceoverScriptDto:
       type: object
       properties:

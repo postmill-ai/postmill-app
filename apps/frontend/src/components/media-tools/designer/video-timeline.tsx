@@ -30,6 +30,7 @@ import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { aspectBucketForDimensions } from '@postmill-ai/nestjs-libraries/media/slide/slide-aspect';
 import {
   sourceTimeForClipTime,
   splitSpeedCurveForClip,
@@ -1076,13 +1077,20 @@ interface SlideshowDialogProps {
   fetch: ReturnType<typeof useFetch>;
   toaster: ReturnType<typeof useToaster>;
   onResult: (type: 'video' | 'audio', idOrUrl: string | false, fileId?: string) => Promise<void>;
+  // Current video output's canvas — drives the generated frames' aspect and
+  // the server-side per-slide normalization. Absent = legacy server behavior.
+  outputWidth?: number;
+  outputHeight?: number;
 }
 
-export const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult }) => {
+export const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult, outputWidth, outputHeight }) => {
   const t = useT();
   const modals = useModals();
   const [prompt, setPrompt] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
+  // 'cover' default: filling the canvas (cropping overflow) is what social
+  // outputs almost always want; 'contain' letterboxes on black.
+  const [fitMode, setFitMode] = useState<'contain' | 'cover'>('cover');
   const imagesPicker = useMediaPicker({
     title: t('add_images', 'Add images'),
     kinds: ['image'],
@@ -1090,6 +1098,7 @@ export const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onRe
     onConfirm: (items) => setImageUrls((prev) => [...prev, ...items.map((i) => i.url)]),
   });
   const [loading, setLoading] = useState(false);
+  const hasCanvas = !!(outputWidth && outputHeight);
 
   const generate = useCallback(async () => {
     if (!prompt.trim() && imageUrls.length === 0) {
@@ -1102,7 +1111,18 @@ export const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onRe
       const res = await fetch('/media/generate-slide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, imageUrls: imageUrls.length ? imageUrls : undefined }),
+        body: JSON.stringify({
+          prompt,
+          imageUrls: imageUrls.length ? imageUrls : undefined,
+          fitMode,
+          ...(hasCanvas
+            ? {
+                aspect: aspectBucketForDimensions(outputWidth!, outputHeight!),
+                width: outputWidth,
+                height: outputHeight,
+              }
+            : {}),
+        }),
       });
       if (!res.ok) throw new Error(await readErrorMessage(res, t('slideshow_generation_failed', 'Slideshow generation failed')));
       const data = await res.json();
@@ -1112,7 +1132,7 @@ export const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onRe
     } finally {
       setLoading(false);
     }
-  }, [fetch, prompt, imageUrls, onResult, toaster, modals, t]);
+  }, [fetch, prompt, imageUrls, fitMode, hasCanvas, outputWidth, outputHeight, onResult, toaster, modals, t]);
 
   return (
     <div className="flex flex-col gap-3 min-w-[280px]">
@@ -1143,6 +1163,24 @@ export const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onRe
               </button>
             </div>
           ))}
+        </div>
+      )}
+      {hasCanvas && (
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-textColor/70">{t('image_fit', 'Image fit')}</span>
+          <div className="flex gap-1">
+            {(['cover', 'contain'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setFitMode(mode)}
+                className={`px-2 py-1 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30 ${fitMode === mode ? 'bg-studioBorder/40' : ''}`}
+              >
+                {mode === 'cover'
+                  ? t('fit_fill_crop', 'Fill (crop)')
+                  : t('fit_letterbox', 'Fit (letterbox)')}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <button
@@ -3145,10 +3183,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           fetch={fetch}
           toaster={toaster}
           onResult={landOrPoll}
+          outputWidth={vo?.width}
+          outputHeight={vo?.height}
         />
       ),
     });
-  }, [modals, fetch, toaster, landOrPoll, translate]);
+  }, [modals, fetch, toaster, landOrPoll, translate, vo?.width, vo?.height]);
 
   /**
    * Open a dialog the Tools menu asked for.

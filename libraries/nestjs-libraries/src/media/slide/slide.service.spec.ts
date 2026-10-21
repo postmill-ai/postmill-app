@@ -223,4 +223,70 @@ describe('SlideService', () => {
     expect(imageWrite).toBeTruthy();
     expect(result).toBe('/uploads/slide-output.mp4');
   });
+
+  it('buckets the target canvas into an aspect for the image provider and normalizes each frame (cover by default)', async () => {
+    const { service, mocks } = makeService();
+
+    const result = await service.generateSlide({
+      orgId: 'org-1',
+      prompt: 'A friendly greeting',
+      targetWidth: 1920,
+      targetHeight: 1080,
+    });
+
+    expect(result).toBe('/uploads/slide-output.mp4');
+    expect(mocks.aiDefaults.textToImage).toHaveBeenCalledWith('org-1', 'A friendly greeting', { aspect: 'wide' });
+
+    // A per-slide normalization ffmpeg pass ran BEFORE the concat encode, with
+    // the cover filter (scale-to-fill + crop) for the requested canvas.
+    const normCall = mockSpawn.mock.calls.find((call) =>
+      (call[1] as string[]).some((a) => typeof a === 'string' && a.includes('force_original_aspect_ratio')),
+    );
+    expect(normCall).toBeTruthy();
+    const normArgs = normCall![1] as string[];
+    expect(normArgs).toContain('scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1');
+    expect(normArgs[normArgs.length - 1]).toBe('/tmp/postmill-slide-xxx/slide-0.norm.png');
+
+    // The concat demuxer consumes the normalized frame, not the raw download.
+    const concatWrite = mockWriteFileSync.mock.calls.find((call) => String(call[0]).endsWith('concat.txt'));
+    expect(String(concatWrite![1])).toContain('slide-0.norm.png');
+  });
+
+  it('honors an explicit aspect and contain fitMode', async () => {
+    const { service, mocks } = makeService();
+
+    await service.generateSlide({
+      orgId: 'org-1',
+      prompt: 'A friendly greeting',
+      aspect: 'square',
+      targetWidth: 1080,
+      targetHeight: 1920,
+      fitMode: 'contain',
+    });
+
+    // Explicit aspect wins over the bucket the canvas dims would give ('tall').
+    expect(mocks.aiDefaults.textToImage).toHaveBeenCalledWith('org-1', 'A friendly greeting', { aspect: 'square' });
+
+    const normCall = mockSpawn.mock.calls.find((call) =>
+      (call[1] as string[]).some((a) => typeof a === 'string' && a.includes('force_original_aspect_ratio')),
+    );
+    expect(normCall).toBeTruthy();
+    expect(normCall![1]).toContain(
+      'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1',
+    );
+  });
+
+  it('keeps the legacy path when no target canvas is supplied (no aspect opt, no normalization pass)', async () => {
+    const { service, mocks } = makeService();
+
+    await service.generateSlide({ orgId: 'org-1', prompt: 'A friendly greeting' });
+
+    expect(mocks.aiDefaults.textToImage).toHaveBeenCalledWith('org-1', 'A friendly greeting');
+    const normCall = mockSpawn.mock.calls.find((call) =>
+      (call[1] as string[]).some((a) => typeof a === 'string' && a.includes('force_original_aspect_ratio')),
+    );
+    expect(normCall).toBeUndefined();
+    const concatWrite = mockWriteFileSync.mock.calls.find((call) => String(call[0]).endsWith('concat.txt'));
+    expect(String(concatWrite![1])).toContain('slide-0.jpg');
+  });
 });

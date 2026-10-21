@@ -485,7 +485,12 @@ export class MediaController {
       if (!prompt) {
         throw new BadRequestException('A prompt or at least one image is required');
       }
-      const result = await this._aiDefaults.imageSlide(org.id, prompt, body.imageUrls);
+      const result = await this._aiDefaults.imageSlide(org.id, prompt, body.imageUrls, {
+        fitMode: body.fitMode,
+        aspect: body.aspect,
+        width: body.width,
+        height: body.height,
+      });
       return { id: result, status: 'pending' };
     } catch (err) {
       if (err instanceof DefaultNotConfiguredError) {

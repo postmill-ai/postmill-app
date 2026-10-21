@@ -332,7 +332,23 @@ describe('AiDefaultsService', () => {
       await service.imageSlide('org-1', 'prompt', ['https://img']);
       expect(mockMediaService.generateSlide).toHaveBeenCalledWith('org-1', 'prompt', [
         'https://img',
-      ]);
+      ], undefined);
+    });
+
+    it('imageSlide forwards the fit/aspect/canvas options', async () => {
+      vi.mocked(mockMediaService.generateSlide).mockResolvedValue('id');
+      await service.imageSlide('org-1', 'prompt', undefined, {
+        fitMode: 'contain',
+        aspect: 'tall',
+        width: 1080,
+        height: 1920,
+      });
+      expect(mockMediaService.generateSlide).toHaveBeenCalledWith('org-1', 'prompt', undefined, {
+        fitMode: 'contain',
+        aspect: 'tall',
+        width: 1080,
+        height: 1920,
+      });
     });
 
     it('videoAvatar delegates to generateAvatar with opts', async () => {

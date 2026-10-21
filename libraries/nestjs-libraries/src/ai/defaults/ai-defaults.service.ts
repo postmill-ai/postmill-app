@@ -428,9 +428,14 @@ export class AiDefaultsService {
     });
   }
 
-  async imageSlide(orgId: string, prompt: string, imageUrls?: string[]) {
+  async imageSlide(
+    orgId: string,
+    prompt: string,
+    imageUrls?: string[],
+    opts?: { fitMode?: 'contain' | 'cover'; aspect?: 'square' | 'wide' | 'tall'; width?: number; height?: number },
+  ) {
     await this._requireMedia(orgId, 'image-slide');
-    return this._aiMediaService.generateSlide(orgId, prompt, imageUrls);
+    return this._aiMediaService.generateSlide(orgId, prompt, imageUrls, opts);
   }
 
   async videoAvatar(orgId: string, script: string, opts?: { imageUrl?: string; avatarId?: string }) {

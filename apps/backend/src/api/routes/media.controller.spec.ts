@@ -120,7 +120,30 @@ describe('MediaController — Designer AI-media routes', () => {
     it('generate-slide delegates (org, prompt, imageUrls) and returns { id, status:pending }', async () => {
       const { controller, aiDefaults } = build();
       const res = await controller.generateSlide(org, { prompt: 'trip', imageUrls: ['https://x/1.png'] } as any);
-      expect(aiDefaults.imageSlide).toHaveBeenCalledWith('org-1', 'trip', ['https://x/1.png']);
+      expect(aiDefaults.imageSlide).toHaveBeenCalledWith('org-1', 'trip', ['https://x/1.png'], {
+        fitMode: undefined,
+        aspect: undefined,
+        width: undefined,
+        height: undefined,
+      });
+      expect(res).toEqual({ id: 'https://cdn/slide.mp4', status: 'pending' });
+    });
+
+    it('generate-slide forwards the fit/aspect/canvas fields', async () => {
+      const { controller, aiDefaults } = build();
+      const res = await controller.generateSlide(org, {
+        prompt: 'trip',
+        fitMode: 'contain',
+        aspect: 'wide',
+        width: 1920,
+        height: 1080,
+      } as any);
+      expect(aiDefaults.imageSlide).toHaveBeenCalledWith('org-1', 'trip', undefined, {
+        fitMode: 'contain',
+        aspect: 'wide',
+        width: 1920,
+        height: 1080,
+      });
       expect(res).toEqual({ id: 'https://cdn/slide.mp4', status: 'pending' });
     });
 
@@ -131,6 +154,7 @@ describe('MediaController — Designer AI-media routes', () => {
         'org-1',
         'A short slideshow showcasing the provided images.',
         ['https://x/1.png'],
+        { fitMode: undefined, aspect: undefined, width: undefined, height: undefined },
       );
       expect(res).toEqual({ id: 'https://cdn/slide.mp4', status: 'pending' });
     });

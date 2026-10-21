@@ -9,6 +9,12 @@ import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-
 import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
 import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults.errors';
+import {
+  aspectBucketForDimensions,
+  buildSlideNormalizeFilter,
+  SlideAspect,
+  SlideFitMode,
+} from './slide-aspect';
 
 function getFfmpegPath(): string {
   try {
@@ -47,6 +53,17 @@ export interface SlideGenerationOptions {
   imageUrls?: string[];
   slides?: number;
   durationPerSlideSeconds?: number;
+  // Coarse aspect forwarded to the image provider; derived from
+  // targetWidth/targetHeight when omitted.
+  aspect?: SlideAspect;
+  // Target canvas for frame normalization. Both must be present for
+  // normalization to run; absent = legacy behavior (the concat demuxer scales
+  // every slide to the first frame's dimensions).
+  targetWidth?: number;
+  targetHeight?: number;
+  // Defaults to 'cover' when a target canvas is supplied: social canvases
+  // almost always want the frame filled, cropping the overflow.
+  fitMode?: SlideFitMode;
 }
 
 @Injectable()
@@ -96,9 +113,26 @@ export class SlideService {
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-slide-'));
 
+    // Frame fitting: a supplied target canvas drives BOTH the image provider's
+    // coarse aspect and the per-slide ffmpeg normalization. fitMode defaults
+    // to 'cover' (fill the frame) — the common case for social canvases.
+    const aspect =
+      options.aspect ??
+      (options.targetWidth && options.targetHeight
+        ? aspectBucketForDimensions(options.targetWidth, options.targetHeight)
+        : undefined);
+    const normalize =
+      options.targetWidth && options.targetHeight
+        ? {
+            width: options.targetWidth,
+            height: options.targetHeight,
+            fitMode: options.fitMode ?? ('cover' as SlideFitMode),
+          }
+        : null;
+
     try {
       // 3. Generate assets for each slide in parallel.
-      const slideAssets = await this._generateSlideAssets(orgId, slides, tmpDir);
+      const slideAssets = await this._generateSlideAssets(orgId, slides, tmpDir, aspect, normalize);
 
       // 4. Assemble into a slideshow video.
       const videoPath = path.join(tmpDir, 'output.mp4');
@@ -158,6 +192,8 @@ export class SlideService {
     orgId: string,
     slides: Slide[],
     tmpDir: string,
+    aspect?: SlideAspect,
+    normalize?: { width: number; height: number; fitMode: SlideFitMode } | null,
   ): Promise<Array<{ imagePath: string; audioPath: string; durationSeconds: number }>> {
     const assets: Array<{ imagePath: string; audioPath: string; durationSeconds: number }> = [];
 
@@ -167,7 +203,9 @@ export class SlideService {
       // no defaults-catalog pre-gate (the availability check above already ran
       // through the same resolution), so the two endpoints can never disagree.
       const [imageUrl, audioBuffer] = await Promise.all([
-        this._aiDefaults.textToImage(orgId, slide.imagePrompt),
+        aspect
+          ? this._aiDefaults.textToImage(orgId, slide.imagePrompt, { aspect })
+          : this._aiDefaults.textToImage(orgId, slide.imagePrompt),
         this._aiMediaService.textToSpeech(slide.script, { orgId }),
       ]);
 
@@ -177,8 +215,25 @@ export class SlideService {
       await this._downloadImage(imageUrl, imagePath);
       fs.writeFileSync(audioPath, Buffer.isBuffer(audioBuffer) ? audioBuffer : Buffer.from(audioBuffer, 'base64'));
 
+      // Normalize each frame to the exact target canvas before concat: the
+      // concat demuxer would otherwise scale every slide to the FIRST frame's
+      // dimensions, so mixed-size slides (or square AI frames on a 16:9/9:16
+      // canvas) used to come out stretched or letterboxed at random.
+      let framePath = imagePath;
+      if (normalize) {
+        framePath = path.join(tmpDir, `slide-${i}.norm.png`);
+        await runFfmpeg([
+          '-y',
+          '-i',
+          imagePath,
+          '-vf',
+          buildSlideNormalizeFilter(normalize.width, normalize.height, normalize.fitMode),
+          framePath,
+        ]);
+      }
+
       const durationSeconds = await this._getAudioDurationSeconds(audioPath);
-      assets.push({ imagePath, audioPath, durationSeconds: Math.max(durationSeconds, 3) });
+      assets.push({ imagePath: framePath, audioPath, durationSeconds: Math.max(durationSeconds, 3) });
     }
 
     return assets;
