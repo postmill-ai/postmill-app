@@ -165,6 +165,17 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
     throw new Error('MiniMax does not support avatar generation');
   }
 
+  // Free auth check — the /models list never bills a render. Without this the
+  // settings Test button falls back to a real (billed) generateImage call.
+  async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
+    if (!resolveApiKey(options)) return { ok: false, message: 'MiniMax API key is required' };
+    const res = await this._fetch(`${BASE}/models`, { headers: this._headers(options) });
+    if (res.ok) return { ok: true, message: 'Connection successful' };
+    if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid API key' };
+    const body = await res.text();
+    throw new Error(`MiniMax connection test failed (${res.status}): ${redactError(body, 200)}`);
+  }
+
   async pollJob(jobId: string, options?: MediaCredentialOptions): Promise<MediaPollResult> {
     if (!resolveApiKey(options)) return { status: 'failed', error: 'MiniMax API key is required' };
 

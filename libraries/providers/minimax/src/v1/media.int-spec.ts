@@ -108,4 +108,30 @@ describe('minimax media adapter', () => {
     const adapter: any = minimaxMediaModule.create(ctx as any);
     await expect(adapter.generateAudio('hello', { apiKey: 'minimax-key' })).rejects.toThrow(/malformed/);
   });
+
+  // Free connection test — hits the /models list, never a billed render.
+  it('testConnection GETs /models with Bearer auth and reports ok', async () => {
+    const { recs, ctx } = makeCtx(() => res({ object: 'list', data: [] }));
+    const adapter: any = minimaxMediaModule.create(ctx as any);
+
+    const out = await adapter.testConnection({ credentials: { apiKey: 'minimax-key' } });
+    expect(out).toEqual({ ok: true, message: 'Connection successful' });
+    const r = recs[0];
+    expect(r.url).toBe('https://api.minimax.io/v1/models');
+    expect(r.method ?? 'GET').toBe('GET');
+    expect(r.headers.Authorization).toBe('Bearer minimax-key');
+  });
+
+  it('testConnection maps 401/403 to Invalid API key and requires a key', async () => {
+    const { ctx } = makeCtx(() => res('unauthorized', false, 401));
+    const adapter: any = minimaxMediaModule.create(ctx as any);
+    expect(await adapter.testConnection({ credentials: { apiKey: 'bad' } })).toEqual({
+      ok: false,
+      message: 'Invalid API key',
+    });
+    expect(await adapter.testConnection({ credentials: {} })).toEqual({
+      ok: false,
+      message: 'MiniMax API key is required',
+    });
+  });
 });

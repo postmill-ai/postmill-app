@@ -1,7 +1,12 @@
 import { OpenAICompatibleAdapter, type ProviderModule } from '@postmill-ai/provider-kernel';
 
 import { metadata as providerMetadata } from './metadata';
-const adapter = new OpenAICompatibleAdapter('minimax', 'MiniMax', 'https://api.minimax.chat/v1', {"image":true}, undefined, 'direct');
+// MiniMax keys are platform-specific and NOT interchangeable: international
+// (api.minimax.io) vs mainland China (api.minimaxi.com; api.minimax.chat is the
+// legacy China host). Default to the international platform — the media adapter
+// already does. China-platform keys work by setting the optional Base URL
+// credential field to https://api.minimaxi.com/v1.
+const adapter = new OpenAICompatibleAdapter('minimax', 'MiniMax', 'https://api.minimax.io/v1', {"image":true}, undefined, 'direct');
 
 export const minimaxAiModule: ProviderModule<any, any> = {
   metadata: providerMetadata,
