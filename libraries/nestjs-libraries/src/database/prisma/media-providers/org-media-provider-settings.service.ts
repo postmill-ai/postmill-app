@@ -1,4 +1,4 @@
-import { forwardRef, Injectable, Logger, Optional, Inject, HttpException } from '@nestjs/common';
+import { forwardRef, Injectable, Logger, Optional, Inject, HttpException, NotFoundException } from '@nestjs/common';
 import { OrgMediaProviderSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.repository';
 import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
@@ -545,7 +545,9 @@ export class OrgMediaProviderSettingsService {
     // default would report an otherwise-configured provider as "not configured").
     const config = await this._repository.findAnyByIdentifier(orgId, identifier);
     if (!config) {
-      throw new Error(`Media provider "${identifier}" not configured for this organization`);
+      // 404, not a generic Error — the controller wraps plain Errors into a 500,
+      // which the Sentry filter then reports for what is really a client mistake.
+      throw new NotFoundException(`Media provider "${identifier}" not configured for this organization`);
     }
 
     const testCredentials = this._decryptCredentials(config.credentials);
