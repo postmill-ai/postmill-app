@@ -433,6 +433,12 @@
       "@postmill-ai/provider-kimi/*": [
         "libraries/providers/kimi/src/*"
       ],
+      "@postmill-ai/provider-kling": [
+        "libraries/providers/kling/src"
+      ],
+      "@postmill-ai/provider-kling/*": [
+        "libraries/providers/kling/src/*"
+      ],
       "@postmill-ai/provider-lemmy": [
         "libraries/providers/lemmy/src"
       ],

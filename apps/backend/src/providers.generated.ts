@@ -60,6 +60,7 @@ import ipvanishModules from '@postmill-ai/provider-ipvanish';
 import isgdModules from '@postmill-ai/provider-isgd';
 import kickModules from '@postmill-ai/provider-kick';
 import kimiModules from '@postmill-ai/provider-kimi';
+import klingModules from '@postmill-ai/provider-kling';
 import lemmyModules from '@postmill-ai/provider-lemmy';
 import leonardoModules from '@postmill-ai/provider-leonardo';
 import lightningModules from '@postmill-ai/provider-lightning';
@@ -226,6 +227,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...isgdModules,
   ...kickModules,
   ...kimiModules,
+  ...klingModules,
   ...lemmyModules,
   ...leonardoModules,
   ...lightningModules,

@@ -6,12 +6,12 @@ kernel vitest alias. One row per **module** (multi-module packages — e.g. `ope
 get multiple rows). The `has-spec?` column reflects whether the **package** contains any
 `*.spec.ts` / `*.int-spec.ts` under `src/**`.
 
-- **Modules:** 191  (== `providerModules.length`)
-- **Packages:** 163  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
-  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **164** on a clean checkout because it also counts the `node_modules/` dir; **163** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **165** — both `node_modules/` and `coverage/` are non-package artifacts.)
-- **Packages with at least one spec:** 138 / 163  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
+- **Modules:** 192  (== `providerModules.length`)
+- **Packages:** 164  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
+  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **165** on a clean checkout because it also counts the `node_modules/` dir; **164** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **166** — both `node_modules/` and `coverage/` are non-package artifacts.)
+- **Packages with at least one spec:** 139 / 164  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
 
-Modules per domain: ai=30, auth=10, comms=5, contentpack=4, email=7, media=36, payments=4, shortlink=20, social=45, storage=14, vpn=16
+Modules per domain: ai=30, auth=10, comms=5, contentpack=4, email=7, media=37, payments=4, shortlink=20, social=45, storage=14, vpn=16
 
 | package | domain | providerId | version | status | has-spec? |
 |---|---|---|---|---|---|
@@ -88,6 +88,7 @@ Modules per domain: ai=30, auth=10, comms=5, contentpack=4, email=7, media=36, p
 | heygen | media | heygen | v1 | active | no |
 | higgsfield | media | higgsfield | v1 | active | no |
 | ideogram | media | ideogram | v1 | active | no |
+| kling | media | kling | v1 | active | yes |
 | leonardo | media | leonardo | v1 | active | no |
 | ltx | media | ltx | v1 | active | no |
 | luma | media | luma | v1 | active | no |

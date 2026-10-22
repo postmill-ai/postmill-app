@@ -2,7 +2,7 @@ import React from 'react';
 
 /**
  * The single enumeration of every tool under /media — 2 Platform tools,
- * 37 provider studios and 6 stock browsers.
+ * 38 provider studios and 6 stock browsers.
  *
  * Both the media rail (`app/(app)/(site)/media/layout.tsx`) and the /media index
  * read from here. `SORTED_MEDIA_TABS` is sorted once at module scope on purpose:
@@ -141,6 +141,18 @@ export const MEDIA_TABS: MediaTab[] = [
         <rect x="2" y="4" width="14" height="16" rx="2" />
         <path d="M16 9l6-3v12l-6-3" />
         <path d="M7 9l4 3-4 3z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/media/kling-ai',
+    badges: ['Video', 'Image'],
+    label: 'Kling AI',
+    section: 'Providers',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 3v18" />
+        <path d="M19 3l-9 8.5L19 21" />
       </svg>
     ),
   },
@@ -618,11 +630,14 @@ export const MEDIA_SECTION_LABELS: Record<string, { labelKey: string; labelDefau
 };
 
 // Most studio routes equal the provider identifier (/media/<id>). These few
-// don't — they're frontend-only studios that ride another provider's
-// credential/config, so their menu visibility tracks that provider's state.
+// don't — most are frontend-only studios that ride another provider's
+// credential/config (kling/pika ride fal), while kling-ai is the direct Kling AI
+// provider whose route simply isn't its identifier — so their menu visibility
+// tracks the mapped provider's state.
 export const ROUTE_TO_IDENTIFIER: Record<string, string> = {
   'google-ai': 'google',
   kling: 'fal',
+  'kling-ai': 'kling',
   pika: 'fal',
 };
 export const providerIdentifier = (href: string) => {

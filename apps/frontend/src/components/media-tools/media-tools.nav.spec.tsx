@@ -31,6 +31,7 @@ import { hedraDescriptor } from './hedra/descriptor';
 import { higgsfieldDescriptor } from './higgsfield/descriptor';
 import { ideogramDescriptor } from './ideogram/descriptor';
 import { klingDescriptor } from './kling/descriptor';
+import { klingAiDescriptor } from './kling-ai/descriptor';
 import { leonardoDescriptor } from './leonardo/descriptor';
 import { ltxDescriptor } from './ltx/descriptor';
 import { lumaDescriptor } from './luma/descriptor';
@@ -75,6 +76,7 @@ const LANDINGS: Record<string, { badges?: string[] } | undefined> = {
   higgsfield: higgsfieldDescriptor.landing,
   ideogram: ideogramDescriptor.landing,
   kling: klingDescriptor.landing,
+  'kling-ai': klingAiDescriptor.landing,
   leonardo: leonardoDescriptor.landing,
   ltx: ltxDescriptor.landing,
   luma: lumaDescriptor.landing,
@@ -103,13 +105,13 @@ const providers = MEDIA_TABS.filter((t) => t.section === 'Providers');
 describe('MEDIA_TABS composition', () => {
   // These counts are the ones AGENTS.md states; if a tool is added or removed,
   // that doc has to move in the same change.
-  it('holds all 45 media tools', () => {
-    expect(MEDIA_TABS).toHaveLength(45);
+  it('holds all 46 media tools', () => {
+    expect(MEDIA_TABS).toHaveLength(46);
   });
 
   it.each([
     ['Platform', 2],
-    ['Providers', 37],
+    ['Providers', 38],
     ['Content Pack', 6],
   ])('has %i %s tools', (section, count) => {
     expect(MEDIA_TABS.filter((t) => t.section === section)).toHaveLength(count as number);
@@ -184,6 +186,8 @@ describe('providerIdentifier', () => {
     expect(providerIdentifier('/media/google-ai')).toBe('google');
     expect(providerIdentifier('/media/kling')).toBe('fal');
     expect(providerIdentifier('/media/pika')).toBe('fal');
+    // The direct Kling AI studio's route isn't its provider identifier.
+    expect(providerIdentifier('/media/kling-ai')).toBe('kling');
   });
 
   it('passes every other studio route through unchanged', () => {

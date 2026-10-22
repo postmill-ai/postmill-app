@@ -58,9 +58,12 @@ function decodeJobId(jobId: string): { model: string; requestId: string } | null
 export class FalAdapter implements MediaProviderAdapter {
   constructor(private readonly _fetch: SafeFetchPort) {}
   readonly identifier = 'fal';
-  // Display name shown in Settings → Media. Kept as "Kling" to match the studio
-  // (/media/kling, nav + title "Kling"); the registry/config identifier stays `fal`.
-  readonly name = 'Kling';
+  // Display name shown in Settings → Media. This card is fal.ai (fal keys are
+  // `key-id:key-secret`; the backend calls fal.run) — it backs the /media/kling and
+  // /media/pika studio pages, which are model-collection studios riding this adapter.
+  // The dedicated direct integration for real klingai.com API keys is the separate
+  // `kling` provider (@postmill-ai/provider-kling).
+  readonly name = 'fal.ai';
   readonly capabilities: MediaProviderCapabilities = {
     image: true,
     video: true,

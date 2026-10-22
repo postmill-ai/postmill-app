@@ -7,12 +7,12 @@ single place you browse, organise, and reuse everything you've generated or uplo
 
 ## Nav structure
 
-The `/media` sidebar groups 45 tools into three sections:
+The `/media` sidebar groups 46 tools into three sections:
 
 | Section | Contents |
 |---|---|
 | **Platform** | [Designer](./designer) (manual Konva canvas/timeline editor) and [AI Designer](./ai-designer) (chat-driven canvas assistant). |
-| **Providers** | 37 generation studios, one per provider — text-to-image/video/audio models, AI avatar video, music, and more. |
+| **Providers** | 38 generation studios, one per provider — text-to-image/video/audio models, AI avatar video, music, and more. |
 | **Content Pack** | 6 stock browsers — Stock Photos, Stock Videos, Vectors, Stickers, Stock Audio, Icons. |
 
 Provider studios that aren't configured yet stay visible but dimmed; clicking one opens its own

@@ -25,7 +25,7 @@
 
 **Open-source, AI-native social media management, design and scheduling.**
 
-Postmill is a self-hostable social media scheduler for agencies and multi-brand teams: a visual publishing calendar, 45+ channels, 45 built-in media tools, and bring-your-own-key AI across 30 providers. Run it on infrastructure you control, and let every organization manage its own channels, brands, and AI keys. An open-source alternative to Buffer, Hootsuite, and Sprout Social.
+Postmill is a self-hostable social media scheduler for agencies and multi-brand teams: a visual publishing calendar, 45+ channels, 46 built-in media tools, and bring-your-own-key AI across 30 providers. Run it on infrastructure you control, and let every organization manage its own channels, brands, and AI keys. An open-source alternative to Buffer, Hootsuite, and Sprout Social.
 
 **[Website](https://postmill.ai)** · **[Docs](https://docs.postmill.ai)** · **[Quick Start](#-quick-start)** · **[Node SDK (`@postmill-ai/postmill-sdk`)](https://www.npmjs.com/package/@postmill-ai/postmill-sdk)** · **[Public API](https://docs.postmill.ai/developer-docs/public-api.html)**
 
@@ -103,7 +103,7 @@ A production-grade, layered editor inside your publishing workspace — no round
 - **Multi-format by design** — one editable file holds every channel variant (square post, portrait reel, story, and more), each with its own aspect ratio and layout. Export any variant to the media library, or attach the whole set to a multi-channel scheduled post.
 - **Templates** — save any design as a reusable, on-brand template for the team.
 
-Prefer to describe the design than draw it? The **AI Designer** drives the same production workflow through a conversational creative agent — see [45 built-in media tools](#-45-built-in-media-tools).
+Prefer to describe the design than draw it? The **AI Designer** drives the same production workflow through a conversational creative agent — see [46 built-in media tools](#-46-built-in-media-tools).
 
 ---
 
@@ -135,9 +135,9 @@ A natural-language assistant that operates the whole platform: schedule and resc
 
 Use the agent in-app or from **Slack, Telegram, Discord, Matrix, or LINE** — the same connections deliver notifications for published and failed posts, comments, budgets, media jobs, and more, routed centrally across in-app, email, and chat.
 
-## 🎨 45 built-in media tools
+## 🎨 46 built-in media tools
 
-Create, edit, generate, and source media without leaving Postmill. The media suite is **45 tools**: two designers, **37 BYOK provider studios** spanning image, video, audio, avatar, and music generation, and **6 stock browsers** for photos, videos, vectors, stickers, audio, and icons.
+Create, edit, generate, and source media without leaving Postmill. The media suite is **46 tools**: two designers, **38 BYOK provider studios** spanning image, video, audio, avatar, and music generation, and **6 stock browsers** for photos, videos, vectors, stickers, audio, and icons.
 
 The **Designer** is a layered image and video editor — a Konva canvas plus a full timeline — for people at home in Photoshop, Illustrator, or After Effects. The **AI Designer** drives the same production workflow through a conversational creative agent, for people who would rather describe the design than draw it.
 

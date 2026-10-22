@@ -77,6 +77,7 @@
     "@postmill-ai/provider-kernel": "workspace:*",
     "@postmill-ai/provider-kick": "workspace:*",
     "@postmill-ai/provider-kimi": "workspace:*",
+    "@postmill-ai/provider-kling": "workspace:*",
     "@postmill-ai/provider-lemmy": "workspace:*",
     "@postmill-ai/provider-leonardo": "workspace:*",
     "@postmill-ai/provider-lightning": "workspace:*",
