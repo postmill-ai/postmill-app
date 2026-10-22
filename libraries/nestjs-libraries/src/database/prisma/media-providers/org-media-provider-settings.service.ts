@@ -538,7 +538,7 @@ export class OrgMediaProviderSettingsService {
         credentials,
         orgId,
       });
-      return this.#runAdapterTest(adapter, credentials);
+      return this._runAdapterTest(adapter, credentials);
     }
 
     // §6.2: version-agnostic read so a v2-pinned row is testable (getByIdentifier's v1
@@ -555,10 +555,10 @@ export class OrgMediaProviderSettingsService {
       orgId,
     });
 
-    return this.#runAdapterTest(adapter, testCredentials);
+    return this._runAdapterTest(adapter, testCredentials);
   }
 
-  async #runAdapterTest(adapter: MediaProviderAdapter, credentials: Record<string, string>) {
+  private async _runAdapterTest(adapter: MediaProviderAdapter, credentials: Record<string, string>) {
     try {
       // Prefer the adapter's own auth check; only image-capable providers can be
       // verified via generateImage. Without either, the key can't be actively tested.
