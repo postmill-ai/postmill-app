@@ -561,14 +561,19 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   }
 
   async removeVideoBackground(videoUrl: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
-    // Live schema (verified 2026-10): the video input is `input_video` — the
-    // previous `video` field 422'd every job. `output_type` is always sent
-    // (default green-screen); an org media-defaults tunable still wins because
+    const model =
+      options?.model || options?.version || 'arielreplicate/robust_video_matting';
+    // Live schemas (verified 2026-10): robust_video_matting takes `input_video`
+    // + `output_type` and mattes PEOPLE only; lucataco/rembg-video takes
+    // `video` + `background_color` and handles general salient objects
+    // (products, pets). Default the rembg background to chroma green for parity
+    // with the green-screen flow; org media-defaults tunables still win because
     // `_createPrediction` spreads `options.input` last.
-    const data = await this._createPrediction(
-      { ...options, version: options?.version || 'arielreplicate/robust_video_matting' },
-      { input_video: videoUrl, output_type: 'green-screen' },
-    );
+    const input =
+      model === 'lucataco/rembg-video'
+        ? { video: videoUrl, background_color: '#00FF00' }
+        : { input_video: videoUrl, output_type: 'green-screen' };
+    const data = await this._createPrediction({ ...options, version: model }, input);
     if (!data.id) throw new Error('Replicate returned no prediction id');
     return { jobId: data.id };
   }

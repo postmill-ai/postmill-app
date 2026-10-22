@@ -3039,6 +3039,36 @@ export const metadata: ProviderMetadata = {
             "default": "green-screen"
           }
         ]
+      },
+      {
+        "id": "lucataco/rembg-video",
+        "label": "rembg-video",
+        "fields": [
+          {
+            "name": "mode",
+            "label": "mode",
+            "help": "Mode of operation",
+            "type": "select",
+            "options": [
+              {
+                "value": "Normal",
+                "label": "Normal"
+              },
+              {
+                "value": "Fast",
+                "label": "Fast"
+              }
+            ],
+            "default": "Normal"
+          },
+          {
+            "name": "background_color",
+            "label": "background_color",
+            "help": "Background color in hex format (e.g., '#FFFFFF' for white)",
+            "type": "text",
+            "default": "#FFFFFF"
+          }
+        ]
       }
     ],
     "text-to-music": [

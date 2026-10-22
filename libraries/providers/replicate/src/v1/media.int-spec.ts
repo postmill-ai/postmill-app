@@ -240,6 +240,27 @@ describe('replicate media adapter (async predictions)', () => {
     });
   });
 
+  it('routes rembg-video (object matting) with its own field names when selected', async () => {
+    const { recs, ctx } = makeCtx(() => res({ id: 'pred-bg2', status: 'starting' }));
+    const adapter: any = replicateMediaModule.create(ctx as any);
+
+    const sub = await adapter.removeVideoBackground('https://cdn.example.com/product.mp4', {
+      apiKey: 'replicate-key',
+      model: 'lucataco/rembg-video',
+    });
+
+    expect(sub.jobId).toBe('pred-bg2');
+    const r = recs[0];
+    expect(r.url).toBe(
+      'https://api.replicate.com/v1/models/lucataco/rembg-video/predictions',
+    );
+    const body = JSON.parse(r.body);
+    expect(body.input).toEqual({
+      video: 'https://cdn.example.com/product.mp4',
+      background_color: '#00FF00',
+    });
+  });
+
   // 2.5 — model reference routing: slug vs version hash.
   it('routes a default slug (generateImage) to /models/{slug}/predictions with no version field', async () => {
     const { recs, ctx } = makeCtx(() =>
