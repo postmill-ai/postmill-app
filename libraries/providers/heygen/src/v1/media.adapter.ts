@@ -87,11 +87,14 @@ export class HeyGenAdapter implements MediaProviderAdapter {
     throw new Error('HeyGen does not support image generation');
   }
 
-  // Validate the key with a cheap authenticated GET (the avatar catalog) so the
-  // Settings → Media "Test connection" doesn't fall back to image generation.
+  // Validate the key with a cheap authenticated GET (the voice catalog, ~200ms)
+  // so the Settings → Media "Test connection" doesn't fall back to image
+  // generation. Do NOT use /v2/avatars here: that catalog is enormous (3.9MB,
+  // 45s+ observed) and blows the default outbound timeout, falsely failing
+  // valid keys.
   async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
     try {
-      const res = await this._fetch('https://api.heygen.com/v2/avatars', { headers: this._headers(options) });
+      const res = await this._fetch('https://api.heygen.com/v2/voices', { headers: this._headers(options) });
       if (res.ok) return { ok: true, message: 'Connection successful' };
       if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid HeyGen API key' };
       return { ok: false, message: `HeyGen returned ${res.status}` };
@@ -110,7 +113,8 @@ export class HeyGenAdapter implements MediaProviderAdapter {
   async listModels(operation: MediaOperation, options?: MediaCredentialOptions): Promise<MediaModelOption[]> {
     if (operation !== 'video') return [];
     try {
-      const res = await this._fetch('https://api.heygen.com/v2/avatars', { headers: this._headers(options) });
+      // The avatar catalog is huge (3.9MB, 45s+ observed) — extend the budget.
+      const res = await this._fetch('https://api.heygen.com/v2/avatars', { headers: this._headers(options), timeoutMs: 120_000 });
       if (!res.ok) return [];
       const body = (await res.json()) as {
         data?: { avatars?: { avatar_id?: string; avatar_name?: string }[] };

@@ -131,6 +131,33 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
     expect(recs[0].headers['x-api-key']).toBe('heygen-key');
   });
 
+  it('testConnection validates the key against the cheap /v2/voices endpoint', async () => {
+    // /v2/avatars is a multi-MB, 45s+ catalog on real accounts — using it as
+    // the "Test connection" probe blew the 30s outbound budget and falsely
+    // failed valid keys (prod, 2026-10-22).
+    const { recs, ctx } = makeCtx(() => res({ data: { voices: [] } }));
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    const result = await adapter.testConnection({ apiKey: 'heygen-key' });
+
+    expect(result).toEqual({ ok: true, message: 'Connection successful' });
+    expect(recs[0].url).toBe('https://api.heygen.com/v2/voices');
+    expect(recs[0].headers['x-api-key']).toBe('heygen-key');
+  });
+
+  it('listModels extends the outbound timeout for the huge avatar catalog', async () => {
+    let seenTimeout: number | undefined;
+    const { ctx } = makeCtx((_url, init) => {
+      seenTimeout = init?.timeoutMs;
+      return res({ data: { avatars: [] } });
+    });
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    await adapter.listModels('video', { apiKey: 'k' });
+
+    expect(seenTimeout).toBe(120_000);
+  });
+
   it('listModels returns [] for non-video operations and on API failure (never throws)', async () => {
     const { ctx } = makeCtx(() => res('nope', false, 500));
     const adapter: any = heygenMediaModule.create(ctx as any);

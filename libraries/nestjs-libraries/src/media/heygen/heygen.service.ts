@@ -111,7 +111,13 @@ export class HeyGenService {
     if (cached) return JSON.parse(cached);
 
     const apiKey = await this._getApiKey(orgId);
-    const res = await safeFetch(`${BASE}/v2/avatars`, { headers: this._headers(apiKey) });
+    // HeyGen's avatar catalog is huge (3.9MB / 45s+ observed on a real account)
+    // — the default 30s outbound budget 500s this route. Results are cached for
+    // an hour below, so the extended budget is paid once per hour at most.
+    const res = await safeFetch(`${BASE}/v2/avatars`, {
+      headers: this._headers(apiKey),
+      timeoutMs: 120_000,
+    });
     if (!res.ok) throw new ForbiddenException(`HeyGen avatars request failed (${res.status})`);
     const { data } = (await res.json()) as HeyGenAvatarsResponse;
 
