@@ -2795,6 +2795,43 @@ export const metadata: ProviderMetadata = {
             "default": ""
           }
         ]
+      },
+      {
+        "id": "kwaivgi/kling-v2.5-turbo-pro",
+        "label": "kling-v2.5-turbo-pro",
+        "fields": [
+          {
+            "name": "negative_prompt",
+            "label": "Negative Prompt",
+            "help": "Things you do not want to see in the video",
+            "type": "text",
+            "default": ""
+          },
+          {
+            "name": "duration",
+            "label": "duration",
+            "help": "Duration of the video in seconds",
+            "type": "select",
+            "options": [
+              {
+                "value": "5",
+                "label": "5"
+              },
+              {
+                "value": "10",
+                "label": "10"
+              }
+            ],
+            "default": "5"
+          },
+          {
+            "name": "guidance_scale",
+            "label": "Guidance Scale",
+            "help": "Kept for backwards compatibility. This parameter is not used.",
+            "type": "number",
+            "step": 0.1
+          }
+        ]
       }
     ],
     "video-to-video": [

@@ -256,6 +256,26 @@ describe('ReplicateRunnerService', () => {
       expect(body.version).toBe('v-community');
     });
 
+    it('truncates over-long riffusion prompts (77-token CLIP cap) before posting', async () => {
+      mockSafeFetch.mockResolvedValue(
+        jsonResponse({ id: 'pred-3', status: 'starting' }),
+      );
+
+      const longPrompt = 'x'.repeat(400);
+      await runner.runAsync('org1', '', {
+        modelId: 'riffusion/riffusion',
+        versionId: 'v-riffusion',
+        input: { prompt_a: longPrompt, prompt_b: 'short', denoising: 0.75 },
+        operation: 'audio',
+      });
+
+      const init = mockSafeFetch.mock.calls[0][1] as RequestInit;
+      const body = JSON.parse(init.body as string);
+      expect(body.input.prompt_a).toBe('x'.repeat(300));
+      expect(body.input.prompt_b).toBe('short');
+      expect(body.input.denoising).toBe(0.75);
+    });
+
     it('throws BadRequestException when a community model is missing a version', async () => {
       mockCatalog.getModel.mockResolvedValue({ versionId: '' });
       mockSafeFetch.mockResolvedValue(jsonResponse({}));

@@ -144,6 +144,34 @@ export class ReplicateRunnerService {
     return record.path;
   }
 
+  // riffusion's CLIP text encoder hard-caps prompts at 77 tokens (prod failure:
+  // "Sizes of tensors must match... Expected size 77 but got size 154").
+  // ~300 chars ≈ 75 tokens. The studio/runner path bypasses the provider
+  // adapter, so the rule is mirrored here — keep in sync with
+  // _PROMPT_MAX_CHARS in libraries/providers/replicate/src/v1/media.adapter.ts.
+  private static readonly _PROMPT_MAX_CHARS: Record<string, number> = {
+    'riffusion/riffusion': 300,
+  };
+
+  private _sanitizeModelInput(
+    modelId: string,
+    input: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const maxChars = ReplicateRunnerService._PROMPT_MAX_CHARS[modelId];
+    if (!maxChars) return input;
+    let next = input;
+    for (const key of ['prompt_a', 'prompt_b', 'prompt']) {
+      const value = next[key];
+      if (typeof value === 'string' && value.length > maxChars) {
+        this._logger.warn(
+          `${modelId} ${key} truncated from ${value.length} to ${maxChars} chars (upstream token limit)`,
+        );
+        next = { ...next, [key]: value.slice(0, maxChars) };
+      }
+    }
+    return next;
+  }
+
   private async _pickCall(
     modelId: string,
     input: Record<string, unknown>,
@@ -152,6 +180,7 @@ export class ReplicateRunnerService {
     opts: { wait?: boolean; webhookUrl?: string; versionId?: string },
   ): Promise<ReplicatePrediction> {
     const warm = isWarm(modelId);
+    input = this._sanitizeModelInput(modelId, input);
 
     if (warm) {
       const res = await safeFetch(`${BASE}/models/${modelId}/predictions`, {

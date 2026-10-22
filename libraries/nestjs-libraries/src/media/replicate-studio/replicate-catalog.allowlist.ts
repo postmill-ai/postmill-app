@@ -81,6 +81,10 @@ export const MODEL_ALLOWLIST: Record<string, string[]> = {
     'minimax/video-01',
     'bytedance/seedance-1-pro',
     'kwaivgi/kling-v2.1',
+    // t2v-capable too, and its `start_image` input makes it the better Kling
+    // for i2v (verified against the live Replicate schema; no `mode` trap like
+    // v2.1's end_image-requires-pro).
+    'kwaivgi/kling-v2.5-turbo-pro',
   ],
   'video-to-video': [
     // seedance-1-pro has no video input (t2v/i2v only) — the picker asked for an
