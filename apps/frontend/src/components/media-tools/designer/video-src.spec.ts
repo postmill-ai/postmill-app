@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
   isVideoSrc,
+  clipIsVideo,
   markVideoSrcErrored,
   videoSrcErrored,
   clearVideoSrcErrors,
@@ -30,6 +31,28 @@ describe('isVideoSrc', () => {
     expect(isVideoSrc('https://cdn.example.com/video')).toBe(false);
     expect(isVideoSrc('')).toBe(false);
     expect(isVideoSrc(undefined)).toBe(false);
+  });
+});
+
+describe('clipIsVideo', () => {
+  it('treats an extensionless URL with a known video hint as video', () => {
+    // Regression: AI-generated videos are stored at extensionless URLs
+    // (`/uploads/<org>/2026/10/22/<hash32>`) — the sniff read them as images
+    // and the canvas overlay drew one static frame that never played.
+    expect(
+      clipIsVideo({ src: '/uploads/org-1/2026/10/22/0123456789abcdef0123456789abcdef', mediaType: 'video' })
+    ).toBe(true);
+  });
+
+  it('a known image hint beats a video-looking extension', () => {
+    expect(clipIsVideo({ src: 'https://cdn.example.com/a.mp4', mediaType: 'image' })).toBe(false);
+  });
+
+  it('falls back to the extension sniff when no hint is present', () => {
+    expect(clipIsVideo({ src: 'https://cdn.example.com/a.mp4' })).toBe(true);
+    expect(clipIsVideo({ src: 'https://cdn.example.com/a.png' })).toBe(false);
+    expect(clipIsVideo({ src: '/uploads/org-1/2026/10/22/0123456789abcdef0123456789abcdef' })).toBe(false);
+    expect(clipIsVideo({})).toBe(false);
   });
 });
 

@@ -10,6 +10,11 @@ interface VoiceoverRecordDialogProps {
    *  promise resolves — a rejection keeps it open, shows the error, and the
    *  recording stays intact for a retry. */
   onAdd: (blob: Blob, mimeType: string) => void | Promise<void>;
+  /** Title override — the voice-clone field says "Record voice". */
+  title?: string;
+  /** Primary CTA override — a form field accepts the recording with "Use
+   *  recording", not "Add to timeline". */
+  addLabel?: string;
 }
 
 /** Client-side recording cap — auto-stop, matching the timeline ceiling. */
@@ -63,6 +68,8 @@ const getAudioContext = (): AudioContext | null => {
 export const VoiceoverRecordDialog: FC<VoiceoverRecordDialogProps> = ({
   onClose,
   onAdd,
+  title,
+  addLabel,
 }) => {
   const t = useT();
   const [phase, setPhase] = useState<Phase>('requesting');
@@ -307,7 +314,7 @@ export const VoiceoverRecordDialog: FC<VoiceoverRecordDialogProps> = ({
   return (
     <div className="flex flex-col gap-[16px] p-[4px] min-w-[320px]">
       <h3 className="text-[14px] font-medium text-textColor">
-        {t('designer_record_voiceover_title', 'Record voiceover')}
+        {title ?? t('designer_record_voiceover_title', 'Record voiceover')}
       </h3>
 
       {phase === 'requesting' && (
@@ -469,7 +476,7 @@ export const VoiceoverRecordDialog: FC<VoiceoverRecordDialogProps> = ({
             >
               {adding
                 ? t('designer_adding_ellipsis', 'Adding…')
-                : t('designer_add_to_timeline', 'Add to timeline')}
+                : (addLabel ?? t('designer_add_to_timeline', 'Add to timeline'))}
             </button>
           </>
         )}

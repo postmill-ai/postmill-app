@@ -4,6 +4,8 @@ import { useCallback } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore } from './replicate.store';
+import { sanitizeModelInput } from './sanitize-input';
+import type { InputSchema } from './field-classification';
 
 // Category → execution routing (mirrors the backend allowlist execution modes).
 const SYNC_CATEGORIES = [
@@ -83,7 +85,14 @@ export function useGenerate() {
     store.setRunState('running');
     store.setError(null);
     store.setResult(null);
-    store.setResultMeta({ modelName: model.name, input: { ...store.formInput } });
+    // Unset optional controls ('' / null / undefined) are never sent — a
+    // present-but-empty optional field counts as SET server-side (kling's
+    // `end_image requires mode 'pro'` came from exactly that).
+    const input = sanitizeModelInput(
+      store.formInput,
+      model.inputSchema as InputSchema | null | undefined
+    );
+    store.setResultMeta({ modelName: model.name, input: { ...input } });
 
     try {
       let endpoint: string;
@@ -109,7 +118,7 @@ export function useGenerate() {
         body: JSON.stringify({
           modelId: model.id,
           versionId: model.versionId || undefined,
-          input: store.formInput,
+          input,
           operation,
           folderId: store.saveFolderId,
         }),

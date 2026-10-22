@@ -12,6 +12,7 @@ import { ModelPicker } from './model-picker';
 import { DynamicForm } from './dynamic-form';
 import { classifySchema, type InputSchema } from './field-classification';
 import { missingRequiredFields } from './use-generate';
+import { sanitizeModelInput } from './sanitize-input';
 import type { CompactOperation, CompactStudioResult } from '../studio-kit/compact-registry';
 
 // Compact, chrome-less embed of the Replicate studio for the Designer's
@@ -54,9 +55,16 @@ function useReplicateJobPoll(jobId: string | null) {
 export const CompactReplicate: FC<{
   operation: CompactOperation;
   prompt: string;
+  /**
+   * The hosting Designer canvas's aspect ratio (e.g. '16:9'), pre-computed by
+   * the dialog from the output dimensions. Seeded into the model's
+   * `aspect_ratio` field when the schema has one that accepts it — never
+   * overriding a value the user picked in Advanced settings.
+   */
+  aspectRatio?: string;
   onGenerated: (result: CompactStudioResult) => void;
   onError?: (message: string) => void;
-}> = ({ operation, prompt, onGenerated, onError }) => {
+}> = ({ operation, prompt, aspectRatio, onGenerated, onError }) => {
   const t = useT();
   const fetch = useFetch();
   const { data: status } = useReplicateStatus();
@@ -67,7 +75,14 @@ export const CompactReplicate: FC<{
   const formInput = useReplicateStore((s) => s.formInput);
   const setCategory = useReplicateStore((s) => s.setCategory);
   const updateFormField = useReplicateStore((s) => s.updateFormField);
+  const setCanvasAspectRatio = useReplicateStore((s) => s.setCanvasAspectRatio);
   const resetStore = useReplicateStore((s) => s.reset);
+
+  // Publish the canvas aspect to the store so defaultsFromSchema seeds it into
+  // `aspect_ratio` when a model is picked AFTER this dialog mounted.
+  useEffect(() => {
+    setCanvasAspectRatio(aspectRatio ?? null);
+  }, [aspectRatio, setCanvasAspectRatio]);
 
   // The zustand store is a module-global singleton shared with the full-page
   // studio (ModelPicker / DynamicForm read it directly) — leave it clean on
@@ -107,6 +122,29 @@ export const CompactReplicate: FC<{
   useEffect(() => {
     if (primaryPromptField) updateFormField(primaryPromptField, prompt);
   }, [primaryPromptField, prompt, updateFormField]);
+
+  // Seed the canvas aspect into `aspect_ratio` when the model's schema has —
+  // and accepts — the field. Guarded so it fires only while the field is
+  // untouched (unset, at the schema default, or at our own previous seed): an
+  // explicit Advanced-settings pick is never overridden.
+  const seededAspectRef = useRef<{ modelId: string; value: string } | null>(null);
+  useEffect(() => {
+    if (!aspectRatio || !selectedModel) return;
+    const aspectField = schema?.properties?.['aspect_ratio'];
+    if (!aspectField) return;
+    const enumValues = Array.isArray(aspectField.enum) ? aspectField.enum : undefined;
+    if (enumValues && !enumValues.includes(aspectRatio)) return;
+    const current = (formInput as Record<string, unknown>)['aspect_ratio'];
+    const previousSeed =
+      seededAspectRef.current?.modelId === selectedModel.id
+        ? seededAspectRef.current.value
+        : undefined;
+    const untouched =
+      current === undefined || current === aspectField.default || current === previousSeed;
+    if (!untouched || current === aspectRatio) return;
+    updateFormField('aspect_ratio', aspectRatio);
+    seededAspectRef.current = { modelId: selectedModel.id, value: aspectRatio };
+  }, [aspectRatio, selectedModel, schema, formInput, updateFormField]);
 
   const missing = useMemo(() => {
     const merged = { ...formInput };
@@ -154,9 +192,9 @@ export const CompactReplicate: FC<{
 
   const onGenerate = useCallback(async () => {
     if (!selectedModel || !categoryDef) return;
-    const input = { ...formInput };
-    if (primaryPromptField) input[primaryPromptField] = prompt;
-    const absent = missingRequiredFields(schema, input);
+    const raw = { ...formInput };
+    if (primaryPromptField) raw[primaryPromptField] = prompt;
+    const absent = missingRequiredFields(schema, raw);
     if (absent.length > 0) {
       fail(
         t('missing_required_fields_note', 'Missing required fields: {{fields}}', {
@@ -165,6 +203,9 @@ export const CompactReplicate: FC<{
       );
       return;
     }
+    // Unset optional controls are never sent (a present-but-empty optional
+    // counts as SET server-side — kling's `end_image requires mode 'pro'`).
+    const input = sanitizeModelInput(raw, schema);
     setStarting(true);
     setError(null);
     try {

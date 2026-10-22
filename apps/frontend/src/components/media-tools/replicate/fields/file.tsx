@@ -4,6 +4,10 @@ import React, { useMemo } from 'react';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { VoiceoverRecordDialog } from '@postmill-ai/frontend/components/media-tools/designer/voiceover-record-dialog';
+import { readErrorMessage } from '@postmill-ai/frontend/components/media-tools/designer/read-error-message';
 
 function mediaTypeNoun(t: (key: string, fallback: string) => string, type: string): string {
   switch (type) {
@@ -35,6 +39,8 @@ interface FileInputProps {
 export function FileInput({ value, onChange, label, required, acceptType = 'image' }: FileInputProps) {
   const t = useT();
   const toaster = useToaster();
+  const fetch = useFetch();
+  const modals = useModals();
 
   // Title was invisible before: the old `openModal({ removeLayout: true })`
   // wrapper never renders one.
@@ -72,6 +78,41 @@ export function FileInput({ value, onChange, label, required, acceptType = 'imag
     onChange(undefined);
   };
 
+  // Voice-clone fields take a reference voice — let the user record one on the
+  // spot instead of leaving for a recorder app. Audio fields only; the upload
+  // is the same /files/upload-simple pattern the timeline's voiceover recorder
+  // uses, and the backend resolves { fileId } inputs already.
+  const mediaRecorderSupported = typeof MediaRecorder !== 'undefined';
+  const handleRecord = () => {
+    modals.openModal({
+      children: (
+        <VoiceoverRecordDialog
+          title={t('record_voice_title', 'Record voice')}
+          addLabel={t('use_recording', 'Use recording')}
+          onClose={() => modals.closeAll()}
+          onAdd={async (blob, mimeType) => {
+            const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+            const form = new FormData();
+            form.append('file', blob, `voice-${Date.now()}.${ext}`);
+            const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
+            if (!uploadRes.ok) {
+              // Rethrow: the dialog stays open with the recording intact for a
+              // retry (closing it would GC the MediaRecorder blob).
+              throw new Error(
+                await readErrorMessage(
+                  uploadRes,
+                  t('voice_recording_upload_failed', 'Could not upload the recording')
+                )
+              );
+            }
+            const uploaded = (await uploadRes.json()) as { id?: string; path?: string };
+            onChange({ fileId: uploaded.id, url: uploaded.path, type: 'audio' });
+          }}
+        />
+      ),
+    });
+  };
+
   return (
     <div className="mb-3">
       {label && (
@@ -92,6 +133,15 @@ export function FileInput({ value, onChange, label, required, acceptType = 'imag
             t('choose_x_file_ellipsis', 'Choose {{type}} file...', { type: mediaTypeNoun(t, acceptType) })
           )}
         </button>
+        {acceptType === 'audio' && mediaRecorderSupported && (
+          <button
+            type="button"
+            onClick={handleRecord}
+            className="px-3 py-2 rounded-lg border border-studioBorder bg-newBgColorInner text-newTextColor text-sm hover:bg-boxHover transition-colors shrink-0"
+          >
+            {t('designer_start_recording', '● Record')}
+          </button>
+        )}
         {display && (
           <button
             type="button"

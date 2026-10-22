@@ -845,6 +845,9 @@ export const Designer: FC<DesignerProps> = ({
           endMs: durationMs,
           src: url,
           fileId,
+          // Known video (caption handoff) — pin it so an extensionless src is
+          // never mis-sniffed as an image by the canvas overlay.
+          mediaType: 'video',
         });
       }
 

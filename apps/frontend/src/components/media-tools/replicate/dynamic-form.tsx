@@ -6,6 +6,10 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { useReplicateStore } from './replicate.store';
 import { FileInput, type FileValue } from './fields/file';
 import {
+  getLanguageName,
+  isLikelyLanguageCode,
+} from '@postmill-ai/react/translation/language-name';
+import {
   classifySchema,
   type ClassifiedField,
   type InputSchema,
@@ -149,6 +153,17 @@ function AdvancedField({
       if (schema.type === 'boolean') return raw === 'true';
       return raw;
     };
+    // A `language` enum (Whisper STT & co) carries raw BCP-47 codes — render
+    // the display name, keep the code as the submitted value. `none`/`auto`
+    // is the provider's auto-detect sentinel, not a language.
+    const optionLabel = (opt: unknown): string => {
+      const raw = String(opt);
+      if (name !== 'language') return raw;
+      if (raw === 'none' || raw === 'auto') {
+        return t('language_auto_detect', 'Auto-detect');
+      }
+      return isLikelyLanguageCode(raw) ? getLanguageName(raw) : raw;
+    };
     return (
       <div className="mb-3">
         {label}
@@ -160,7 +175,7 @@ function AdvancedField({
           {!hasValue && <option value="">{t('select_ellipsis', 'Select…')}</option>}
           {schema.enum.map((opt) => (
             <option key={String(opt)} value={String(opt)}>
-              {String(opt)}
+              {optionLabel(opt)}
             </option>
           ))}
         </select>

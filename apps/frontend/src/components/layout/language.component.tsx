@@ -9,8 +9,9 @@ import {
 import i18next from 'i18next';
 import useCookie from 'react-use-cookie';
 import ReactCountryFlag from 'react-country-flag';
-import React, { useCallback } from 'react';
+import React from 'react';
 import countries from 'i18n-iso-countries';
+import { getLanguageName } from '@postmill-ai/react/translation/language-name';
 
 // Register required locales
 import countriesEn from 'i18n-iso-countries/langs/en.json';
@@ -74,20 +75,6 @@ export const ChangeLanguageComponent = () => {
     const dir = rtlLanguages.includes(language) ? 'rtl' : 'ltr';
     document.documentElement.setAttribute('dir', dir);
   };
-
-  // Function to get language name in its native script
-  const getLanguageName = useCallback((code: string) => {
-    try {
-      // Use browser's Intl API to get language name in native script
-      const displayNames = new Intl.DisplayNames([code], {
-        type: 'language',
-      });
-      return displayNames.of(code);
-    } catch (error) {
-      // Fallback to language code if the API isn't supported or language is not found
-      return code;
-    }
-  }, []);
 
   return (
     <div className="relative">

@@ -271,6 +271,9 @@ export function addImageClipToTimeline(
     endMs,
     src: options.url,
     fileId: options.fileId,
+    // Explicit hint: the canvas overlay prefers it over the URL extension
+    // sniff (extensionless AI-generated video URLs mis-sniff as images).
+    mediaType: 'image',
     x: Math.round((vo.width - geo.width) / 2),
     y: Math.round((vo.height - geo.height) / 2),
     width: Math.round(geo.width),
@@ -568,6 +571,10 @@ export function addMediaToTimeline(
       const clipBase: Omit<VideoClip, 'startMs' | 'endMs' | 'id'> = {
         src: url,
         fileId,
+        // The caller KNOWS the type (a video/audio pick or a generated
+        // artifact) — pin it so an extensionless `/uploads/…/<hash>` video URL
+        // is never mis-sniffed as a static image by the canvas overlay.
+        ...(type === 'video' ? { mediaType: 'video' as const } : {}),
       };
       const id = `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 

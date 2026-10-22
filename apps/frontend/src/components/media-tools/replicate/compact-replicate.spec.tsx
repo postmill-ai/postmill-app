@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
@@ -253,6 +253,87 @@ describe('CompactReplicate', () => {
     expect(body.input.prompt_a).toBe('a cat');
     // …the rest keep their schema defaults.
     expect(body.input.prompt_b).toBe('mellow outro');
+  });
+
+  it('seeds aspect_ratio from the hosting canvas and strips unset optional fields on submit', async () => {
+    // kling-style schema: an optional end_image (never touched) and an
+    // aspect_ratio the canvas knows better than the schema default.
+    modelDetail = {
+      ...MODEL_DETAIL,
+      inputSchema: {
+        required: ['prompt'],
+        properties: {
+          prompt: { type: 'string', title: 'Prompt' },
+          aspect_ratio: {
+            type: 'string',
+            title: 'Aspect ratio',
+            enum: ['16:9', '9:16', '1:1'],
+            default: '16:9',
+          },
+          end_image: { type: 'string', format: 'uri', title: 'End image' },
+          mode: { type: 'string', title: 'Mode', enum: ['std', 'pro'], default: 'std' },
+        },
+      },
+    };
+    wrap(
+      <CompactReplicate operation="video" prompt="a rocket" aspectRatio="9:16" onGenerated={vi.fn()} />
+    );
+    await pickModel('text-to-video');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(callsTo('/media/replicate/run/async')).toHaveLength(1));
+    const [, init] = callsTo('/media/replicate/run/async')[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    // The canvas seed beat the schema's '16:9' default…
+    expect(body.input.aspect_ratio).toBe('9:16');
+    // …the untouched optional end_image was never sent (kling-v2.1 counted
+    // `end_image: ''` as SET and rejected the run)…
+    expect('end_image' in body.input).toBe(false);
+    // …and with no end image there is nothing to force pro for.
+    expect(body.input.mode).toBe('std');
+  });
+
+  it("forces mode: 'pro' for a set end_image and never overrides a user-picked aspect_ratio", async () => {
+    modelDetail = {
+      ...MODEL_DETAIL,
+      inputSchema: {
+        required: ['prompt'],
+        properties: {
+          prompt: { type: 'string', title: 'Prompt' },
+          aspect_ratio: {
+            type: 'string',
+            title: 'Aspect ratio',
+            enum: ['16:9', '9:16', '1:1'],
+            default: '16:9',
+          },
+          end_image: { type: 'string', format: 'uri', title: 'End image' },
+          mode: { type: 'string', title: 'Mode', enum: ['std', 'pro'], default: 'std' },
+        },
+      },
+    };
+    wrap(
+      <CompactReplicate operation="video" prompt="a rocket" aspectRatio="9:16" onGenerated={vi.fn()} />
+    );
+    await pickModel('text-to-video');
+
+    // The user changes the seeded aspect in Advanced — later seeding passes
+    // must not take it back.
+    fireEvent.click(await screen.findByText('Advanced settings'));
+    fireEvent.change(await screen.findByDisplayValue('9:16'), { target: { value: '1:1' } });
+    // A picked end image (the file field's value shape).
+    act(() => {
+      useReplicateStore
+        .getState()
+        .updateFormField('end_image', { fileId: 'f1', url: '/uploads/end.png', type: 'image' });
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(callsTo('/media/replicate/run/async')).toHaveLength(1));
+    const [, init] = callsTo('/media/replicate/run/async')[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.input.aspect_ratio).toBe('1:1');
+    expect(body.input.end_image).toEqual({ fileId: 'f1', url: '/uploads/end.png', type: 'image' });
+    expect(body.input.mode).toBe('pro');
   });
 
   it('notes when the model has no prompt field at all', async () => {

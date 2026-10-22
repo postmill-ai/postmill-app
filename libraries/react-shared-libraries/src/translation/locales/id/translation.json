@@ -4578,5 +4578,10 @@
   "designer_restore_failed": "Failed to restore version",
   "designer_delete_version_title": "Delete version?",
   "designer_delete_version_confirm": "This version snapshot will be permanently deleted.",
-  "designer_add_video_format_heading": "Add Video Format"
+  "designer_add_video_format_heading": "Add Video Format",
+  "language_auto_detect": "Auto-detect",
+  "record_voice_title": "Record voice",
+  "use_recording": "Use recording",
+  "voice_recording_upload_failed": "Could not upload the recording",
+  "designer_video_text_baked_hint": "Text rendered inside a generated video is baked into the video — it can't be edited as text afterwards."
 }

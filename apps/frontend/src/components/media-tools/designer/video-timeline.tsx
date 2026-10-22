@@ -32,6 +32,7 @@ import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.vid
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { aspectBucketForDimensions } from '@postmill-ai/nestjs-libraries/media/slide/slide-aspect';
+import { closestAspectRatio } from '@postmill-ai/frontend/components/media-tools/replicate/aspect-ratio';
 import {
   sourceTimeForClipTime,
   splitSpeedCurveForClip,
@@ -785,9 +786,13 @@ interface AiVideoDialogProps {
   toaster: ReturnType<typeof useToaster>;
   selectedImageSrc?: string;
   onResult: (type: 'video' | 'audio', idOrUrl: string | false, fileId?: string) => Promise<void>;
+  // Current video output's canvas — seeds the studio schema's aspect_ratio
+  // field (same canvas-derived seeding the slideshow dialog does).
+  outputWidth?: number;
+  outputHeight?: number;
 }
 
-export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult }) => {
+export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult, outputWidth, outputHeight }) => {
   const t = useT();
   const modals = useModals();
   const [prompt, setPrompt] = useState('');
@@ -796,6 +801,10 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
   // '' = org default provider (legacy path); an explicit provider embeds its
   // compact studio, which owns generation inside the modal.
   const [provider, setProvider] = useGenerationProviderChoice('video');
+  const canvasAspect = useMemo(
+    () => closestAspectRatio(outputWidth, outputHeight),
+    [outputWidth, outputHeight]
+  );
 
   const generate = useCallback(async () => {
     if (!prompt.trim()) {
@@ -841,6 +850,12 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
         placeholder={t('describe_the_video_you_want_to_generate', 'Describe the video you want to generate...')}
         className="w-full bg-newBgColor border border-studioBorder rounded-sm p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-hidden min-h-[80px]"
       />
+      <p className="text-[10px] text-textColor/50">
+        {t(
+          'designer_video_text_baked_hint',
+          "Text rendered inside a generated video is baked into the video — it can't be edited as text afterwards."
+        )}
+      </p>
       <GenerationProviderPicker
         operation="video"
         dialogKey="video"
@@ -852,6 +867,7 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
           provider={provider}
           operation="video"
           prompt={prompt}
+          aspectRatio={canvasAspect}
           onGenerated={handleStudioGenerated}
         />
       ) : (
@@ -3302,10 +3318,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           toaster={toaster}
           selectedImageSrc={selectedImageSrc}
           onResult={landOrPoll}
+          outputWidth={vo?.width}
+          outputHeight={vo?.height}
         />
       ),
     });
-  }, [modals, fetch, toaster, selectedImageSrc, landOrPoll, translate]);
+  }, [modals, fetch, toaster, selectedImageSrc, landOrPoll, translate, vo?.width, vo?.height]);
 
   const handleGenerateMusic = useCallback(() => {
     modals.openModal({

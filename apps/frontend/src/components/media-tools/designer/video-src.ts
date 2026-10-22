@@ -8,6 +8,18 @@ export const isVideoSrc = (src?: string): boolean =>
   /\.(mp4|webm|mov|mkv|avi|m4v)(\?.*)?$/i.test(src || '');
 
 /**
+ * Video-vs-image for a CLIP: the explicit `mediaType` hint wins when present
+ * (AI-generated videos live at extensionless `/uploads/…/<hash>` URLs, which
+ * the sniff mis-reads as images — the canvas then draws one static frame that
+ * never plays); the extension sniff remains the fallback for clips that carry
+ * no hint (older docs, extensioned uploads, stock media).
+ */
+export const clipIsVideo = (clip: {
+  src?: string;
+  mediaType?: 'video' | 'image';
+}): boolean => (clip.mediaType ? clip.mediaType === 'video' : isVideoSrc(clip.src));
+
+/**
  * Clips whose hidden <video> element fired `error` (404, CORS, bad codec).
  * Keyed by `${clip.id}:${clip.src}` — not the id alone — so a regenerate that
  * swaps the clip's src clears the error automatically (the membership check

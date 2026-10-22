@@ -59,6 +59,12 @@ interface ReplicateState {
   resultMeta: { modelName: string; input: Record<string, unknown> } | null;
   error: string | null;
   saveFolderId: string | null;
+  /**
+   * The hosting Designer canvas's aspect ratio (e.g. '9:16'), set by an
+   * embedded studio host. `defaultsFromSchema` seeds it into `aspect_ratio`
+   * when the model's schema has — and accepts — that field.
+   */
+  canvasAspectRatio: string | null;
   history: Array<{ jobId: string; modelId: string; createdAt: Date }>;
   setCategory: (category: string | null) => void;
   setShowCommunity: (show: boolean) => void;
@@ -73,15 +79,24 @@ interface ReplicateState {
   setResultMeta: (meta: { modelName: string; input: Record<string, unknown> } | null) => void;
   setError: (error: string | null) => void;
   setSaveFolderId: (id: string | null) => void;
+  setCanvasAspectRatio: (ratio: string | null) => void;
   addToHistory: (entry: { jobId: string; modelId: string }) => void;
   reset: () => void;
 }
 
 // Seed the form with each schema property's `default` (oc-platform's onModelChange
 // behaviour) so a freshly-selected model arrives pre-filled rather than empty.
-function defaultsFromSchema(model: ModelDetail | null): Record<string, unknown> {
+// When the hosting canvas's aspect ratio is known (the Designer embeds the
+// studio) and the model's schema HAS an `aspect_ratio` field that accepts the
+// value, the canvas wins over the schema default — generating a portrait video
+// for a landscape canvas is never what the user wanted. This only runs at model
+// selection, so an explicit Advanced-settings choice afterwards is untouched.
+function defaultsFromSchema(
+  model: ModelDetail | null,
+  canvasAspectRatio?: string | null
+): Record<string, unknown> {
   const schema = model?.inputSchema as
-    | { properties?: Record<string, { default?: unknown }> }
+    | { properties?: Record<string, { default?: unknown; enum?: unknown[] }> }
     | null
     | undefined;
   const props = schema?.properties;
@@ -90,6 +105,13 @@ function defaultsFromSchema(model: ModelDetail | null): Record<string, unknown> 
   for (const [name, field] of Object.entries(props)) {
     if (field && field.default !== undefined) {
       out[name] = field.default;
+    }
+  }
+  const aspectField = props['aspect_ratio'];
+  if (canvasAspectRatio && aspectField) {
+    const enumValues = Array.isArray(aspectField.enum) ? aspectField.enum : undefined;
+    if (!enumValues || enumValues.includes(canvasAspectRatio)) {
+      out['aspect_ratio'] = canvasAspectRatio;
     }
   }
   return out;
@@ -109,6 +131,7 @@ const initialState: Pick<
   | 'resultMeta'
   | 'error'
   | 'saveFolderId'
+  | 'canvasAspectRatio'
   | 'history'
 > = {
   selectedCategory: null,
@@ -123,6 +146,7 @@ const initialState: Pick<
   resultMeta: null,
   error: null,
   saveFolderId: null,
+  canvasAspectRatio: null,
   history: [],
 };
 
@@ -152,7 +176,7 @@ export const useReplicateStore = create<ReplicateState>((set, get) => ({
     set({
       selectedModel: model,
       // Repopulate the form with the new model's defaults and clear stale enhance flags.
-      formInput: defaultsFromSchema(model),
+      formInput: defaultsFromSchema(model, get().canvasAspectRatio),
       enhanceFlags: {},
       estimate: null,
     }),
@@ -178,6 +202,8 @@ export const useReplicateStore = create<ReplicateState>((set, get) => ({
   setError: (error) => set({ error }),
 
   setSaveFolderId: (id) => set({ saveFolderId: id }),
+
+  setCanvasAspectRatio: (ratio) => set({ canvasAspectRatio: ratio }),
 
   addToHistory: (entry) => {
     set({

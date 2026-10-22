@@ -28,6 +28,9 @@ export interface CompactStudioProps {
   // The hosting dialog owns the prompt box; its value is injected into the
   // descriptor's `prompt`-type field at generate time.
   prompt: string;
+  // Hosting canvas's aspect ratio (e.g. '16:9') — descriptor studios ignore
+  // it; CompactReplicate seeds it into a schema `aspect_ratio` field.
+  aspectRatio?: string;
   onGenerated: (result: CompactStudioResult) => void;
   onError?: (message: string) => void;
 }
@@ -45,6 +48,7 @@ export const CompactStudio: FC<CompactStudioProps> = (props) => {
       <CompactReplicate
         operation={props.operation}
         prompt={props.prompt}
+        aspectRatio={props.aspectRatio}
         onGenerated={props.onGenerated}
         onError={props.onError}
       />

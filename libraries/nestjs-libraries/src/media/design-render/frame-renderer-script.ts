@@ -372,7 +372,10 @@ ${stripExportsNamespace(textRevealSource())}
     const src = clip.src;
     if (!src && trackType !== 'sticker') return;
     let element;
-    const isVideo = (clip.type === 'video' || (clip.src && /\\.(mp4|webm|mov|mkv|avi)(\\?.*)?$/i.test(clip.src)));
+    // The clip's explicit mediaType hint wins when present (AI-generated videos
+    // live at extensionless URLs the sniff mis-reads as images); the extension
+    // sniff remains the fallback for hint-less clips.
+    const isVideo = clip.mediaType === 'video' || (clip.mediaType !== 'image' && (clip.type === 'video' || (clip.src && /\\.(mp4|webm|mov|mkv|avi)(\\?.*)?$/i.test(clip.src))));
     if (isVideo) {
       element = await getVideo(src);
       const sourceTime = sourceTimeForPlayhead(clip, window.__CURRENT_TIME);
@@ -611,7 +614,7 @@ ${stripExportsNamespace(textRevealSource())}
       if (track.type === 'audio' || track.hidden) continue;
       for (const clip of track.clips) {
         if (!clip.src) continue;
-        const isVideo = clip.type === 'video' || /\\.(mp4|webm|mov|mkv|avi)(\\?.*)?$/i.test(clip.src);
+        const isVideo = clip.mediaType === 'video' || (clip.mediaType !== 'image' && (clip.type === 'video' || /\\.(mp4|webm|mov|mkv|avi)(\\?.*)?$/i.test(clip.src)));
         if (isVideo) {
           promises.push(getVideo(clip.src).catch(() => null));
         } else promises.push(loadImage(clip.src).catch(() => null));

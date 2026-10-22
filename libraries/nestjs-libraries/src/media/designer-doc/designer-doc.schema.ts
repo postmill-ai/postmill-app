@@ -698,6 +698,15 @@ export interface VideoClip {
   src?: string;
   fileId?: string;
   /**
+   * Explicit media-type hint for the clip's `src` (optional-additive). AI-
+   * generated videos are stored at extensionless URLs (`/uploads/<org>/…/<hash>`),
+   * where the extension sniff in `video-src.ts` mis-reads them as images and the
+   * canvas draws a static picture that never plays. Writers that KNOW the type
+   * (a timeline drop of a video pick, a generated video landing) set it; readers
+   * prefer it over the sniff and fall back to the sniff when it is absent.
+   */
+  mediaType?: 'video' | 'image';
+  /**
    * A non-destructive filter stack, exactly as on a layer (see `smartFilters`
    * on `DesignerElement`). Only meaningful for clips whose pixels do not change
    * over their own duration — image, shape, text and sticker clips — because a
@@ -1650,6 +1659,9 @@ const clipCommon = {
   originId: z.string().max(200).optional(),
   src: SrcSchema.optional(),
   fileId: z.string().max(200).optional(),
+  // Media-type hint for extensionless sources (see the VideoClip interface) —
+  // additive, so docs saved before it existed keep validating unchanged.
+  mediaType: z.enum(['video', 'image']).optional(),
   smartFilters: SmartFilterStackSchema,
   originalSrc: SrcSchema.optional(),
   originalFileId: z.string().max(200).optional(),

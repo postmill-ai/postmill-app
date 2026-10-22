@@ -5,6 +5,7 @@ import { useDecisionModal, useModals } from '@postmill-ai/frontend/components/la
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement, DesignerOutput, VideoClip, VideoTrack } from './designer.store';
+import { clipIsVideo } from './video-src';
 import { sharedStageRef } from './stage-ref';
 import {
   ensureBuffer,
@@ -393,8 +394,7 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
     const clip = track?.clips.find((c) => c.id === sel.clipId);
     if (!clip || !track) return null;
     const moving =
-      track.type === 'video' ||
-      /\.(mp4|webm|mov|mkv|avi|m4v)(\?.*)?$/i.test(clip.src || '');
+      track.type === 'video' || clipIsVideo(clip);
     if (moving) return null;
     return { sel, clip };
   }, [store]);

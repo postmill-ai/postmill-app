@@ -33,6 +33,7 @@ function useJobPoll(jobId: string | null) {
       return (await res.json()) as {
         status: string;
         result: { kind: string; urls: string[] } | null;
+        error: string | null;
       };
     },
     { refreshInterval: 6000 }
@@ -183,7 +184,9 @@ export function ResultPanel({ medium }: { medium: Medium }) {
       setRunState('success');
     }
     if (jobData?.status === 'failed') {
-      setError(t('generation_failed', 'Generation failed'));
+      // The jobs endpoint carries the real failure reason — show it (same
+      // rule as the compact studio), not a bare "Generation failed".
+      setError(jobData.error || t('generation_failed', 'Generation failed'));
       setRunState('error');
     }
   }, [jobData, setResult, setRunState, setError, resultJobId, t]);

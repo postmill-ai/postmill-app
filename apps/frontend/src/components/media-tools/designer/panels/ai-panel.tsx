@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useRef, useState } from 'react';
+import React, { FC, useCallback, useMemo, useRef, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
@@ -14,6 +14,7 @@ import {
   type CompactStudioResult,
 } from '@postmill-ai/frontend/components/media-tools/studio-kit/compact-studio';
 import { addImageClipToTimeline } from '@postmill-ai/frontend/components/media-tools/designer/add-media-to-timeline';
+import { closestAspectRatio } from '@postmill-ai/frontend/components/media-tools/replicate/aspect-ratio';
 
 interface AiPanelProps {
   store: any;
@@ -45,6 +46,13 @@ export const AiPanel: FC<AiPanelProps> = ({ store, onClose }) => {
   // '' = org default provider (the legacy path below); an explicit provider
   // embeds its compact studio, which owns generation instead.
   const [provider, setProvider] = useGenerationProviderChoice('image');
+  // The canvas's aspect seeds a studio schema's aspect_ratio field (never
+  // overriding an explicit Advanced-settings pick — see CompactReplicate).
+  const canvasAspect = useMemo(() => {
+    const state = store.getState();
+    const out = state.doc.outputs[state.currentOutput];
+    return closestAspectRatio(out?.width, out?.height);
+  }, [store]);
 
   const inFlight = status === 'queued' || status === 'generating';
 
@@ -238,6 +246,7 @@ export const AiPanel: FC<AiPanelProps> = ({ store, onClose }) => {
           provider={provider}
           operation="image"
           prompt={prompt}
+          aspectRatio={canvasAspect}
           onGenerated={handleStudioGenerated}
         />
       )}

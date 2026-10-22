@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Designer canvas:** AI-generated videos stored at extensionless `/uploads/…/<hash>` URLs now play on the canvas instead of rendering as a static first frame — clips carry an explicit `mediaType` hint (set by every timeline landing path that knows the type) which the canvas overlay, pixel-ops bake gate and server frame renderer prefer over the URL extension sniff.
+- **Replicate Studio:** unset optional form fields ('' / null / undefined) are no longer sent to the provider (fixes kling-v2.1 i2v's spurious `end_image requires mode 'pro'`), and a set `end_image` forces `mode: 'pro'` when the schema has a `mode` field. `$ref`-inlined schema components now carry their `default`/`description` through, so schema defaults actually seed the form. The Designer-hosted studio seeds `aspect_ratio` from the canvas dimensions (never overriding an explicit Advanced-settings pick). Failed jobs surface the real job error instead of a bare "Generation failed". STT `language` enums render native language names instead of raw BCP-47 codes, and audio file fields (voice clone) offer an in-dialog "● Record" button that uploads the take and fills the field.
+- **Designer AI Video dialog:** notes that text rendered inside a generated video is baked in and can't be edited as text afterwards.
+
 ## [1.3.0] - 2026-10-21
 
 ### Added

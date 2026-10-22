@@ -179,8 +179,9 @@ export class ReplicateCatalogService {
   // (`{ $ref: '#/components/schemas/<name>' }`), e.g. aspect_ratio,
   // output_format, megapixels, scheduler, voice, style, … The Input schema alone
   // carries no `enum`/`type` for ANY of these, so the UI can't render a select.
-  // Resolve the refs for EVERY property here and inline enum/type/min/max,
-  // keeping the property's own default/description/x-order.
+  // Resolve the refs for EVERY property here and inline enum/type/min/max plus
+  // the component's default/description — the property's own values always win
+  // when both carry one (x-order stays on the property).
   private _inlineEnumRefs(
     input: any,
     schemas: Record<string, any> | undefined,
@@ -216,7 +217,10 @@ export class ReplicateCatalogService {
       const ref = findRefSchema(prop);
       if (ref) {
         // Inline the referenced constraints, never overwriting the property's own.
-        for (const f of ['enum', 'type', 'minimum', 'maximum', 'title'] as const) {
+        // `default`/`description` ride along too — without them a schema whose
+        // defaults live on the $ref'd component (aspect_ratio, mode, …) seeds
+        // the form empty (compare replicate-schema-to-model-fields.ts).
+        for (const f of ['enum', 'type', 'minimum', 'maximum', 'title', 'default', 'description'] as const) {
           if (prop[f] == null && ref[f] != null) prop[f] = ref[f];
         }
         // Drop the now-resolved ref wrappers so the field renders directly.

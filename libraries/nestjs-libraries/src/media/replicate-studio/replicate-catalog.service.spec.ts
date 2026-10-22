@@ -202,4 +202,101 @@ describe('ReplicateCatalogService', () => {
       await expect(service.getReplicateKey('org1')).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('getModel schema ref inlining', () => {
+    const modelResponse = (input: unknown, extraSchemas: Record<string, unknown> = {}) =>
+      jsonResponse({
+        owner: 'kwaivgi',
+        name: 'kling-v2.1',
+        cover_image_url: null,
+        latest_version: {
+          id: 'v1',
+          openapi_schema: {
+            components: {
+              schemas: {
+                Input: input,
+                ...extraSchemas,
+              },
+            },
+          },
+        },
+      });
+
+    it('inlines enum/type/min/max/title AND default/description from a $ref component', async () => {
+      // Regression: default/description lived on the $ref'd component for many
+      // schemas (aspect_ratio, mode, …) and were dropped here, so form default
+      // seeding (defaultsFromSchema) saw nothing and forms arrived empty.
+      mockSafeFetch.mockResolvedValue(
+        modelResponse(
+          {
+            type: 'object',
+            properties: {
+              prompt: { type: 'string', 'x-order': 0 },
+              aspect_ratio: {
+                allOf: [{ $ref: '#/components/schemas/AspectRatio' }],
+                'x-order': 1,
+              },
+            },
+          },
+          {
+            AspectRatio: {
+              type: 'string',
+              enum: ['16:9', '9:16', '1:1'],
+              default: '16:9',
+              title: 'Aspect ratio',
+              description: 'Aspect ratio of the generated video',
+            },
+          },
+        ),
+      );
+
+      const model = await service.getModel('kwaivgi', 'kling-v2.1', 'org1');
+      const props = (model.inputSchema as any).properties;
+
+      expect(props.aspect_ratio).toMatchObject({
+        type: 'string',
+        enum: ['16:9', '9:16', '1:1'],
+        default: '16:9',
+        title: 'Aspect ratio',
+        description: 'Aspect ratio of the generated video',
+      });
+      // The resolved ref wrapper is dropped so the field renders directly.
+      expect(props.aspect_ratio.allOf).toBeUndefined();
+      expect(props.prompt).toEqual({ type: 'string', 'x-order': 0 });
+    });
+
+    it("the property's own default/description win over the component's", async () => {
+      mockSafeFetch.mockResolvedValue(
+        modelResponse(
+          {
+            type: 'object',
+            properties: {
+              mode: {
+                allOf: [{ $ref: '#/components/schemas/Mode' }],
+                default: 'std',
+                description: 'Standard is fine here',
+              },
+            },
+          },
+          {
+            Mode: {
+              type: 'string',
+              enum: ['std', 'pro'],
+              default: 'pro',
+              description: 'Component-level description',
+            },
+          },
+        ),
+      );
+
+      const model = await service.getModel('kwaivgi', 'kling-v2.1', 'org1');
+      const props = (model.inputSchema as any).properties;
+
+      expect(props.mode).toMatchObject({
+        enum: ['std', 'pro'],
+        default: 'std',
+        description: 'Standard is fine here',
+      });
+    });
+  });
 });

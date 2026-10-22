@@ -17,7 +17,7 @@ import { canvasCompositeFor } from '@postmill-ai/nestjs-libraries/media/designer
 import { clipGeometryUpdate, type ClipBox } from './clip-geometry';
 import { getBuffer } from './raster-layers';
 import {
-  isVideoSrc,
+  clipIsVideo,
   markVideoSrcErrored,
   videoSrcErrored,
   clearVideoSrcErrors,
@@ -239,7 +239,10 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
   // progress: `src` only catches up on commit, so drawing from it would lag a
   // whole stroke behind the cursor (same rule as raster ELEMENTS).
   const liveBuffer = getBuffer(clip.id);
-  const isVideoClip = isVideoSrc(clip.src) && !clip.frames;
+  // The clip's explicit media-type hint (set when the landing code knew the
+  // type) wins over the URL extension sniff — AI-generated videos are stored
+  // at extensionless URLs, which the sniff mis-reads as images.
+  const isVideoClip = clipIsVideo(clip) && !clip.frames;
   const isSticker = !!clip.frames;
   const relativeMs = Math.max(0, playheadMs - clip.startMs);
   const stickerFrameUrl = isSticker ? getStickerFrameUrl(clip, relativeMs) : undefined;
