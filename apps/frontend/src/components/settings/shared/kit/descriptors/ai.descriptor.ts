@@ -52,6 +52,9 @@ interface OrgProviderInfo {
   budgetMonthlyCap: number | null;
   budgetDailyCap: number | null;
   budgetAlertThresholdPct: number | null;
+  // Non-secret stored credential values (e.g. baseURL) — the backend strips
+  // password-typed fields, so this is safe to prefill the form with.
+  credentials?: Record<string, string>;
 }
 
 interface OrgConfigResponse {
@@ -78,10 +81,6 @@ const CAPABILITY_COLORS: Record<string, string> = {
 };
 
 const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-// Providers that bring their own endpoint — Base URL is a required, visible
-// setting for these; hosted providers keep their canonical endpoint hidden.
-const BASE_URL_PROVIDERS = new Set(['openai-compatible']);
 
 export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
   key: 'ai',
@@ -186,19 +185,11 @@ export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
         label: 'Budget limits',
       },
     ],
-    // Base URL is a user setting only for endpoint-bringing providers
-    // (openai-compatible has no canonical endpoint of its own). Every hosted AI
-    // adapter defaults its own canonical endpoint, so baseURL stays hidden for
-    // them. The same rule runs in filterCredentialFields for the catalog
-    // version-fields branch.
-    credentialFieldsFromMeta: (m) =>
-      (m?.credentialFields ?? []).filter(
-        (f) => f.key !== 'baseURL' || BASE_URL_PROVIDERS.has(m?.identifier ?? ''),
-      ),
-    filterCredentialFields: (fields, identifier) =>
-      fields.filter(
-        (f) => f.key !== 'baseURL' || BASE_URL_PROVIDERS.has(identifier),
-      ),
+    // Base URL is shown whenever the adapter declares it: optional for hosted
+    // providers (regional/MaaS endpoint override, e.g. Qwen Cloud, MiniMax China)
+    // and required only where the adapter marks it (openai-compatible). The
+    // backend SSRF-checks it on save (isSafePublicHttpsUrl).
+    credentialFieldsFromMeta: (m) => m?.credentialFields ?? [],
     // Model selection lives in Settings → AI → Model Defaults, not here.
     // Budget fields are gated by the budget-block switch: disabled ⇒ explicit
     // null ×3 (clears the columns server-side); enabled-but-empty ⇒ null (no
@@ -225,6 +216,10 @@ export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
     },
     buildTestBody: (state) => ({ credentials: state.credentials }),
     seedState: (meta) => ({
+      // Prefill non-secret stored values (baseURL) so an edit-and-save doesn't
+      // silently drop them; secret fields are never returned by the backend and
+      // must be re-entered.
+      credentials: { ...(meta?.credentials ?? {}) },
       extra: {
         budgetEnabled:
           meta?.budgetMonthlyCap != null ||

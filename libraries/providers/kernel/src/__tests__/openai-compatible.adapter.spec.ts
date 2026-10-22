@@ -296,6 +296,18 @@ describe('OpenAICompatibleAdapter', () => {
       const result = await adapter.validateCredentials({ apiKey: 'bad', baseURL: 'https://api.example.com/v1' });
       expect(result).toEqual({ ok: false, error: 'Invalid API key' });
     });
+
+    it('validateCredentials surfaces the vendor message from a JSON 401 body', async () => {
+      const safeFetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: { message: 'Incorrect API key provided. See https://alibabacloud.com/help' } }), { status: 401 }),
+      );
+      adapter.setSafeFetch(safeFetch);
+      const result = await adapter.validateCredentials({ apiKey: 'bad', baseURL: 'https://api.example.com/v1' });
+      expect(result).toEqual({
+        ok: false,
+        error: 'Invalid API key: Incorrect API key provided. See https://alibabacloud.com/help',
+      });
+    });
   });
 
   describe('baseURL normalization', () => {

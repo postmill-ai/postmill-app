@@ -326,6 +326,48 @@ describe('OrgAiSettingsService reads/mutations', () => {
       });
     });
 
+    it('returns only non-secret stored credential values for form prefill', async () => {
+      mockKernel.listManifests.mockReturnValue([{ providerId: 'qwen', version: 'v1' }]);
+      mockResolution.resolveAI.mockReturnValue({
+        identifier: 'qwen',
+        name: 'Qwen',
+        type: 'direct',
+        capabilities: ['text'],
+        credentialFields: [
+          { key: 'apiKey', type: 'password', required: true },
+          { key: 'baseURL', type: 'string', required: false },
+          { key: 'serviceJson', type: 'textarea', required: false },
+        ],
+        validateCredentials: vi.fn(),
+      });
+      mockRepo.getByOrg.mockResolvedValue([
+        {
+          identifier: 'qwen',
+          enabled: true,
+          isActive: false,
+          credentials:
+            'enc:{"apiKey":"sk-secret","baseURL":"https://token-plan.maas.qwencloudapi.com/compatible-mode/v1","serviceJson":"{\\"private_key\\":\\"x\\"}"}',
+          version: 'v1',
+        },
+      ]);
+
+      const res = await service.getProviders('org-1');
+      // apiKey (password) and serviceJson (textarea) never leave the server;
+      // baseURL (plain string) is returned for form prefill.
+      expect(res[0].credentials).toEqual({
+        baseURL: 'https://token-plan.maas.qwencloudapi.com/compatible-mode/v1',
+      });
+    });
+
+    it('returns empty credentials when the provider is not configured', async () => {
+      mockKernel.listManifests.mockReturnValue([{ providerId: 'openai', version: 'v1' }]);
+      mockResolution.resolveAI.mockReturnValue(adapter);
+      mockRepo.getByOrg.mockResolvedValue([]);
+
+      const res = await service.getProviders('org-1');
+      expect(res[0].credentials).toEqual({});
+    });
+
     it('defaults unset fields when there is no matching db config', async () => {
       mockKernel.listManifests.mockReturnValue([{ providerId: 'openai', version: 'v1' }]);
       mockResolution.resolveAI.mockReturnValue(adapter);

@@ -51,6 +51,7 @@ export default defineConfig({
       'src/components/settings/comms/**/*.spec.{ts,tsx}',
       'src/components/settings/ai/**/*.spec.{ts,tsx}',
       'src/components/settings/shared/kit/*.spec.{ts,tsx}',
+      'src/components/settings/shared/kit/descriptors/**/*.spec.{ts,tsx}',
       'src/components/settings/shared/kit/fields/**/*.spec.{ts,tsx}',
       'src/components/settings/vpn/**/*.spec.{ts,tsx}',
       'src/components/settings/storage/**/*.spec.{ts,tsx}',

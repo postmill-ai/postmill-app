@@ -359,7 +359,20 @@ export class OpenAICompatibleAdapter implements AiCapability {
     }
     if (response.ok) return { ok: true };
     if (response.status === 401 || response.status === 403) {
-      return { ok: false, error: 'Invalid API key' };
+      // Surface the vendor's own message when it arrives in the usual JSON error
+      // shape — it often says WHY (wrong platform/regional endpoint, revoked
+      // key), which a bare "Invalid API key" hides. Non-JSON bodies are NOT
+      // reflected (an org-supplied endpoint could put arbitrary text there).
+      const body = typeof response.text === 'function' ? await response.text().catch(() => '') : '';
+      let detail = '';
+      try {
+        const parsed: any = JSON.parse(body);
+        const msg = parsed?.error?.message ?? parsed?.message;
+        if (typeof msg === 'string') detail = msg.slice(0, 200);
+      } catch {
+        // not JSON — keep the generic message
+      }
+      return { ok: false, error: `Invalid API key${detail ? `: ${detail}` : ''}` };
     }
     return { ok: false, error: `Unexpected response: ${response.status}` };
   }

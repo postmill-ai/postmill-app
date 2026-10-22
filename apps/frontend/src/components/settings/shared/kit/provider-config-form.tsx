@@ -72,8 +72,8 @@ export function ProviderConfigForm<Meta = any>({
     showSelect && versionFields
       ? (versionFields as KitCredentialField[])
       : fallbackFields;
-  // Descriptor-level post-filter applies to both branches (e.g. the AI surface
-  // hides baseURL except for endpoint-bringing providers).
+  // Descriptor-level post-filter applies to both branches, when a surface
+  // declares one (the AI surface currently renders all adapter-declared fields).
   const fields: KitCredentialField[] =
     descriptor.form.filterCredentialFields?.(rawFields, identifier) ?? rawFields;
 

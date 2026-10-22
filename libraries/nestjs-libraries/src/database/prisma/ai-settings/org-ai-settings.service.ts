@@ -82,6 +82,9 @@ export class OrgAiSettingsService {
         budgetMonthlyCap: dbConfig?.budgetMonthlyCap ?? null,
         budgetDailyCap: dbConfig?.budgetDailyCap ?? null,
         budgetAlertThresholdPct: dbConfig?.budgetAlertThresholdPct ?? null,
+        // Non-secret stored credential values (e.g. baseURL) so the settings form
+        // can prefill them; password-typed fields are never returned.
+        credentials: this._nonSecretCredentials(adapter, dbConfig),
         version: dbConfig?.version ?? 'v1',
         createdAt: dbConfig?.createdAt || null,
         updatedAt: dbConfig?.updatedAt || null,
@@ -453,6 +456,33 @@ export class OrgAiSettingsService {
     if (!config) return false;
     const decrypted = this._decryptCredentials(config.credentials);
     return this._hasRequiredCredentials(adapter, decrypted);
+  }
+
+  // The stored credential values that are safe to hand back to the settings UI
+  // for prefilling: only fields the adapter explicitly declares as plain
+  // 'string'/'select' (baseURL and similar non-secret settings). 'password' and
+  // 'textarea' are always secret, and anything with a sensitive-looking key is
+  // excluded too — secrets never leave the server.
+  private _nonSecretCredentials(
+    adapter: { credentialFields: { key: string; type?: string }[] },
+    config: { credentials?: string | null } | undefined,
+  ): Record<string, string> {
+    if (!config?.credentials) return {};
+    const decrypted = this._decryptCredentials(config.credentials);
+    const returnableKeys = new Set(
+      adapter.credentialFields
+        .filter(
+          (f) =>
+            (f.type === 'string' || f.type === 'select') &&
+            !/key|token|secret|password/i.test(f.key),
+        )
+        .map((f) => f.key),
+    );
+    return Object.fromEntries(
+      Object.entries(decrypted).filter(
+        ([key, value]) => returnableKeys.has(key) && typeof value === 'string' && value.length > 0,
+      ),
+    );
   }
 
   private _hasRequiredCredentials(

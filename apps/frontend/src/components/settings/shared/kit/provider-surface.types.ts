@@ -169,8 +169,9 @@ export interface ProviderSurfaceDescriptor<Meta = any> {
     credentialFieldsFromMeta?: (meta: Meta) => KitCredentialField[];
     /**
      * Post-filter applied to the credential fields the form renders — runs on
-     * BOTH the meta fallback and the catalog version-fields branch (e.g. the AI
-     * surface hides baseURL except for endpoint-bringing providers).
+     * BOTH the meta fallback and the catalog version-fields branch. Most
+     * surfaces render all adapter-declared fields; declare this only to hide
+     * one.
      */
     filterCredentialFields?: (
       fields: KitCredentialField[],

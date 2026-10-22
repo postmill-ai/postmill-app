@@ -100,7 +100,7 @@ describe('openaiCompatibleAiModule', () => {
     });
 
     it('maps a 401 to "Invalid API key"', async () => {
-      const ctx = makeCtx(() => Promise.resolve({ ok: false, status: 401 }));
+      const ctx = makeCtx(() => Promise.resolve({ ok: false, status: 401, text: () => Promise.resolve('') }));
       const result = await openaiCompatibleAiModule.validateCredentials!({ ...ctx, credentials: { apiKey: 'sk-bad', baseURL: 'https://api.example.com/v1' } } as any);
       expect(result.ok).toBe(false);
       expect(result.error).toBe('Invalid API key');
