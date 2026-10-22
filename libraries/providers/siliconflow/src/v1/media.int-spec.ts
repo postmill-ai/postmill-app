@@ -63,3 +63,27 @@ describe('siliconflow media adapter (sync image + async video)', () => {
     await expect(adapter.generateAvatar('x', { apiKey: 'k' })).rejects.toThrow();
   });
 });
+
+describe('siliconflow media adapter testConnection', () => {
+  it('GETs /v1/models with Bearer auth — 200 ok, 401 Invalid API key, 500 throws, missing key', async () => {
+    const okCtx = makeCtx(() => res({ data: [] }));
+    const a1: any = siliconflowMediaModule.create(okCtx.ctx as any);
+    expect(await a1.testConnection({ apiKey: 'sf-key' })).toEqual({ ok: true, message: 'Connection successful' });
+    expect(okCtx.recs[0].url).toBe('https://api.siliconflow.com/v1/models');
+    expect(okCtx.recs[0].method).toBe('GET');
+    expect(okCtx.recs[0].headers.Authorization).toBe('Bearer sf-key');
+
+    const bad = makeCtx(() => res('unauthorized', false, 401));
+    const a2: any = siliconflowMediaModule.create(bad.ctx as any);
+    expect(await a2.testConnection({ apiKey: 'wrong' })).toEqual({ ok: false, message: 'Invalid API key' });
+
+    const err = makeCtx(() => res('boom', false, 500));
+    const a3: any = siliconflowMediaModule.create(err.ctx as any);
+    await expect(a3.testConnection({ apiKey: 'sf-key' })).rejects.toThrow(/connection test failed \(500\)/);
+
+    const noKey = makeCtx(() => res({}));
+    const a4: any = siliconflowMediaModule.create(noKey.ctx as any);
+    expect(await a4.testConnection({})).toEqual({ ok: false, message: 'SiliconFlow API key is required' });
+    expect(noKey.recs).toHaveLength(0);
+  });
+});

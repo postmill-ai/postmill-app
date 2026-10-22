@@ -5,7 +5,10 @@ import {
   MediaProviderCapabilities,
   MediaGenerationResult,
   MediaGenerateOptions,
+  MediaCredentialOptions,
   MediaJobSubmission,
+  resolveApiKey,
+  redactError,
   SafeFetchPort,
   ProviderModule,
   mediaUpstreamError,
@@ -105,6 +108,19 @@ export class LeonardoMediaAdapter extends BearerTokenMediaAdapter {
 
   async generateAvatar(_prompt: string, _options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
     throw new Error('Leonardo.ai does not support avatar generation');
+  }
+
+  // Free auth check: GET /me returns the user profile + token balance (an unmetered
+  // account read) — the settings Test button must not fall back to a billed render.
+  async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
+    const apiKey = resolveApiKey(options);
+    if (!apiKey) return { ok: false, message: 'Leonardo.ai API key is required' };
+    const res = await this._fetch(`${BASE}/me`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (res.ok) return { ok: true, message: 'Connection successful' };
+    if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid API key' };
+    throw new Error(`Leonardo.ai connection test failed (${res.status}): ${redactError(await res.text(), 200)}`);
   }
 }
 

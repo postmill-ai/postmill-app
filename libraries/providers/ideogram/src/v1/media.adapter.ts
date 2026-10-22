@@ -8,6 +8,7 @@ import {
   MediaInputValue,
   MediaJobSubmission,
   resolveApiKey,
+  redactError,
   SafeFetchPort,
   ProviderModule,
   mediaUpstreamError,
@@ -83,6 +84,22 @@ export class IdeogramMediaAdapter implements MediaProviderAdapter {
 
   async generateAvatar(_prompt: string, _options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
     throw new Error('Ideogram does not support avatar generation');
+  }
+
+  // Free auth check: GET /v2/account/api-keys is an unmetered account read — the settings
+  // Test button must not fall back to a billed render. Ideogram documents a 404 here for a
+  // VALID key whose owner is not an organization billing admin ("No organization with billing
+  // access was found for this credential"), so 404 also proves the key authenticated; only
+  // 401/403 means the key is wrong.
+  async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
+    const key = resolveApiKey(options);
+    if (!key) return { ok: false, message: 'Ideogram API key is required' };
+    const res = await this._fetch('https://api.ideogram.ai/v2/account/api-keys', {
+      headers: { 'Api-Key': key },
+    });
+    if (res.ok || res.status === 404) return { ok: true, message: 'Connection successful' };
+    if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid API key' };
+    throw new Error(`Ideogram connection test failed (${res.status}): ${redactError(await res.text(), 200)}`);
   }
 }
 

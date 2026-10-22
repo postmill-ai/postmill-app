@@ -181,6 +181,19 @@ export class StabilityAdapter implements MediaProviderAdapter {
       metadata: { provider: this.identifier, mime: 'video/mp4' },
     };
   }
+
+  // Free auth check: GET /v1/user/account is an unmetered account read — the settings
+  // Test button must not fall back to a billed render.
+  async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
+    const apiKey = resolveApiKey(options);
+    if (!apiKey) return { ok: false, message: 'Stability AI API key is required' };
+    const res = await this._fetch(`${BASE}/v1/user/account`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (res.ok) return { ok: true, message: 'Connection successful' };
+    if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid API key' };
+    throw new Error(`Stability AI connection test failed (${res.status}): ${redactError(await res.text(), 200)}`);
+  }
 }
 
 const _meta = new StabilityAdapter(undefined as unknown as SafeFetchPort);

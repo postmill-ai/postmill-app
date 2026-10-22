@@ -9,6 +9,7 @@ import {
   MediaPollResult,
   MediaInputValue,
   resolveApiKey,
+  redactError,
   SafeFetchPort,
   ProviderModule,
   mediaUpstreamError,
@@ -376,6 +377,19 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
     if (!res.ok) throw await mediaUpstreamError(this, res, 'stt');
     const data = (await res.json()) as OpenAITranscriptionResponse;
     return data.text || '';
+  }
+
+  // Free auth check: GET /v1/models is an unmetered catalog read — the settings
+  // Test button must not fall back to a billed image render.
+  async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
+    const apiKey = resolveApiKey(options);
+    if (!apiKey) return { ok: false, message: 'OpenAI API key is required' };
+    const res = await this._fetch('https://api.openai.com/v1/models', {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (res.ok) return { ok: true, message: 'Connection successful' };
+    if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid API key' };
+    throw new Error(`OpenAI connection test failed (${res.status}): ${redactError(await res.text(), 200)}`);
   }
 }
 

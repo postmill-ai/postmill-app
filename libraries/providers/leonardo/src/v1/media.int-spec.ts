@@ -93,3 +93,27 @@ describe('leonardo media adapter (create + bounded internal poll)', () => {
     await expect(adapter.generateImage('x', {})).rejects.toThrow('API key is required');
   });
 });
+
+describe('leonardo media adapter testConnection', () => {
+  it('GETs /me with Bearer auth — 200 ok, 401 Invalid API key, 500 throws, missing key', async () => {
+    const okCtx = makeCtx(() => res({ user_details: [] }));
+    const a1: any = leonardoMediaModule.create(okCtx.ctx as any);
+    expect(await a1.testConnection({ apiKey: 'leo-key' })).toEqual({ ok: true, message: 'Connection successful' });
+    expect(okCtx.recs[0].url).toBe('https://cloud.leonardo.ai/api/rest/v1/me');
+    expect(okCtx.recs[0].method).toBe('GET');
+    expect(okCtx.recs[0].headers.Authorization).toBe('Bearer leo-key');
+
+    const bad = makeCtx(() => res('unauthorized', false, 401));
+    const a2: any = leonardoMediaModule.create(bad.ctx as any);
+    expect(await a2.testConnection({ apiKey: 'wrong' })).toEqual({ ok: false, message: 'Invalid API key' });
+
+    const err = makeCtx(() => res('boom', false, 500));
+    const a3: any = leonardoMediaModule.create(err.ctx as any);
+    await expect(a3.testConnection({ apiKey: 'leo-key' })).rejects.toThrow(/connection test failed \(500\)/);
+
+    const noKey = makeCtx(() => res({}));
+    const a4: any = leonardoMediaModule.create(noKey.ctx as any);
+    expect(await a4.testConnection({})).toEqual({ ok: false, message: 'Leonardo.ai API key is required' });
+    expect(noKey.recs).toHaveLength(0);
+  });
+});

@@ -15,6 +15,7 @@ import {
   MediaOperation,
   MediaCredentialField,
   resolveApiKey,
+  redactError,
   ProviderModule,
   mediaUpstreamFromUnknown,
 } from '@postmill-ai/provider-kernel';
@@ -136,6 +137,21 @@ export class GatewayMediaAdapter extends AiSdkMediaAdapter {
     } catch {
       return [];
     }
+  }
+
+  // Free auth check: the gateway's model catalog (GET /v1/models) is an unmetered metadata
+  // read. Overrides the AI-SDK bridge's delegation so the media Test works without the AI
+  // registry and never falls back to a billed render.
+  override async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
+    const apiKey = options?.credentials?.apiKey || resolveApiKey(options);
+    if (!apiKey) return { ok: false, message: 'Vercel AI API key is required' };
+    if (!this._fetch) return { ok: false, message: 'Vercel AI connection test is unavailable (no HTTP client)' };
+    const res = await this._fetch(`${GATEWAY_BASE}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (res.ok) return { ok: true, message: 'Connection successful' };
+    if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid API key' };
+    throw new Error(`Vercel AI connection test failed (${res.status}): ${redactError(await res.text(), 200)}`);
   }
 }
 

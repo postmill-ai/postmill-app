@@ -2,6 +2,7 @@ import { metadata as providerMetadata } from './metadata';
 import {
   AiSdkMediaAdapter,
   MediaProviderCapabilities,
+  MediaCredentialOptions,
   MediaCredentialField,
   ProviderModule,
 } from '@postmill-ai/provider-kernel';
@@ -30,6 +31,18 @@ export class BedrockMediaAdapter extends AiSdkMediaAdapter {
     { key: 'secretAccessKey', label: 'Secret Access Key', type: 'password', required: true },
     { key: 'sessionToken', label: 'Session Token (optional)', type: 'password', required: false },
   ];
+
+  // PRESENCE-only check, mirroring the AI Bedrock adapter's deliberate decision (3.8/5.15):
+  // Bedrock exposes no *free* authenticated probe through this adapter (a control-plane
+  // ListFoundationModels call would need hand-rolled SigV4), and the AI-SDK bridge's old
+  // doGenerate ping burned paid inference. Verify the fields are present and say so honestly
+  // rather than implying live verification — real credentials fail on first use.
+  override async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
+    const creds = options?.credentials || {};
+    if (!creds.region) return { ok: false, message: 'AWS region is required' };
+    if (!creds.accessKeyId || !creds.secretAccessKey) return { ok: false, message: 'AWS credentials are required' };
+    return { ok: true, message: 'Credentials saved (AWS credentials are verified on first use — Bedrock has no free connection probe)' };
+  }
 }
 
 const _meta = new BedrockMediaAdapter();

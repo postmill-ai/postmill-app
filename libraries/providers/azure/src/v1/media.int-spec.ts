@@ -55,3 +55,35 @@ describe('azure media adapter (AI-SDK delegation)', () => {
     expect(recs).toHaveLength(0);
   });
 });
+
+describe('azure media adapter testConnection', () => {
+  it('GETs {resource}.openai.azure.com/openai/models with the api-key header — 200 ok, 401 Invalid API key, 500 throws, missing fields', async () => {
+    const okCtx = makeCtx(() => res({ data: [] }));
+    const a1: any = azureMediaModule.create(okCtx.ctx as any);
+    expect(await a1.testConnection({ credentials: { apiKey: 'az-key', resourceName: 'my-resource' } }))
+      .toEqual({ ok: true, message: 'Connection successful' });
+    expect(okCtx.recs[0].url).toBe('https://my-resource.openai.azure.com/openai/models?api-version=2024-10-21');
+    expect(okCtx.recs[0].method).toBe('GET');
+    expect(okCtx.recs[0].headers['api-key']).toBe('az-key');
+
+    const bad = makeCtx(() => res('unauthorized', false, 401));
+    const a2: any = azureMediaModule.create(bad.ctx as any);
+    expect(await a2.testConnection({ credentials: { apiKey: 'wrong', resourceName: 'my-resource' } }))
+      .toEqual({ ok: false, message: 'Invalid API key' });
+
+    const err = makeCtx(() => res('boom', false, 500));
+    const a3: any = azureMediaModule.create(err.ctx as any);
+    await expect(a3.testConnection({ credentials: { apiKey: 'az-key', resourceName: 'my-resource' } }))
+      .rejects.toThrow(/connection test failed \(500\)/);
+
+    const noKey = makeCtx(() => res({}));
+    const a4: any = azureMediaModule.create(noKey.ctx as any);
+    expect(await a4.testConnection({ credentials: { resourceName: 'my-resource' } }))
+      .toEqual({ ok: false, message: 'Azure OpenAI API key is required' });
+    expect(await a4.testConnection({ credentials: { apiKey: 'az-key' } }))
+      .toEqual({ ok: false, message: 'Azure OpenAI resource name is required' });
+    expect(await a4.testConnection({ credentials: { apiKey: 'az-key', resourceName: 'evil.com/x' } }))
+      .toEqual({ ok: false, message: 'Azure OpenAI resource name is invalid' });
+    expect(noKey.recs).toHaveLength(0);
+  });
+});

@@ -118,3 +118,27 @@ describe('gateway media adapter (AI-SDK delegation)', () => {
     );
   });
 });
+
+describe('gateway media adapter testConnection', () => {
+  it('GETs the gateway model catalog with Bearer auth — 200 ok, 401 Invalid API key, 500 throws, missing key', async () => {
+    const okCtx = makeCtx(() => res({ data: [] }));
+    const a1: any = gatewayMediaModule.create(okCtx.ctx as any);
+    expect(await a1.testConnection({ apiKey: 'vck-test' })).toEqual({ ok: true, message: 'Connection successful' });
+    expect(okCtx.recs[0].url).toBe('https://ai-gateway.vercel.sh/v1/models');
+    expect(okCtx.recs[0].method).toBe('GET');
+    expect(okCtx.recs[0].headers.Authorization).toBe('Bearer vck-test');
+
+    const bad = makeCtx(() => res('unauthorized', false, 401));
+    const a2: any = gatewayMediaModule.create(bad.ctx as any);
+    expect(await a2.testConnection({ apiKey: 'wrong' })).toEqual({ ok: false, message: 'Invalid API key' });
+
+    const err = makeCtx(() => res('boom', false, 500));
+    const a3: any = gatewayMediaModule.create(err.ctx as any);
+    await expect(a3.testConnection({ apiKey: 'vck-test' })).rejects.toThrow(/connection test failed \(500\)/);
+
+    const noKey = makeCtx(() => res({}));
+    const a4: any = gatewayMediaModule.create(noKey.ctx as any);
+    expect(await a4.testConnection({})).toEqual({ ok: false, message: 'Vercel AI API key is required' });
+    expect(noKey.recs).toHaveLength(0);
+  });
+});

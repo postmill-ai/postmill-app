@@ -7,6 +7,7 @@ import {
   MediaCredentialOptions,
   MediaJobSubmission,
   resolveApiKey,
+  redactError,
   validateModelId,
   SafeFetchPort,
   ProviderModule,
@@ -109,6 +110,20 @@ export class BlackForestLabsAdapter implements MediaProviderAdapter {
 
   async generateAvatar(_prompt: string, _options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
     throw new Error('Black Forest Labs does not support avatar generation');
+  }
+
+  // Free auth check: GET /v1/credits returns the account's credit balance (an unmetered
+  // account read, auth via the same `x-key` header) — the settings Test button must not
+  // fall back to a billed FLUX render.
+  async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
+    const apiKey = resolveApiKey(options);
+    if (!apiKey) return { ok: false, message: 'Black Forest Labs API key is required' };
+    const res = await this._fetch(`${BASE}/credits`, {
+      headers: { 'x-key': apiKey },
+    });
+    if (res.ok) return { ok: true, message: 'Connection successful' };
+    if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid API key' };
+    throw new Error(`Black Forest Labs connection test failed (${res.status}): ${redactError(await res.text(), 200)}`);
   }
 }
 

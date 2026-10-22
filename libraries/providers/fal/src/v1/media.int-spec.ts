@@ -123,3 +123,27 @@ describe('fal media adapter (sync image + queued video)', () => {
     ).rejects.toThrow(/Invalid model id/);
   });
 });
+
+describe('fal media adapter testConnection', () => {
+  it('GETs the platform model catalog with Key auth — 200 ok, 401 Invalid API key, 500 throws, missing key', async () => {
+    const okCtx = makeCtx(() => res({ models: [] }));
+    const a1: any = falMediaModule.create(okCtx.ctx as any);
+    expect(await a1.testConnection({ apiKey: 'fal-key' })).toEqual({ ok: true, message: 'Connection successful' });
+    expect(okCtx.recs[0].url).toBe('https://api.fal.ai/v1/models');
+    expect(okCtx.recs[0].method).toBe('GET');
+    expect(okCtx.recs[0].headers.Authorization).toBe('Key fal-key');
+
+    const bad = makeCtx(() => res('unauthorized', false, 401));
+    const a2: any = falMediaModule.create(bad.ctx as any);
+    expect(await a2.testConnection({ apiKey: 'wrong' })).toEqual({ ok: false, message: 'Invalid API key' });
+
+    const err = makeCtx(() => res('boom', false, 500));
+    const a3: any = falMediaModule.create(err.ctx as any);
+    await expect(a3.testConnection({ apiKey: 'fal-key' })).rejects.toThrow(/connection test failed \(500\)/);
+
+    const noKey = makeCtx(() => res({}));
+    const a4: any = falMediaModule.create(noKey.ctx as any);
+    expect(await a4.testConnection({})).toEqual({ ok: false, message: 'fal.ai API key is required' });
+    expect(noKey.recs).toHaveLength(0);
+  });
+});

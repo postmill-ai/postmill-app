@@ -198,6 +198,20 @@ export class FalAdapter implements MediaProviderAdapter {
     }
     return { status: 'pending' };
   }
+
+  // Free auth check: the platform API's model catalog (GET https://api.fal.ai/v1/models)
+  // is an unmetered metadata read — the settings Test button must not fall back to a billed
+  // fal.run render. Auth uses the same `Key` scheme as the generation endpoints.
+  async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
+    const apiKey = resolveApiKey(options);
+    if (!apiKey) return { ok: false, message: 'fal.ai API key is required' };
+    const res = await this._fetch('https://api.fal.ai/v1/models', {
+      headers: { Authorization: `Key ${apiKey}` },
+    });
+    if (res.ok) return { ok: true, message: 'Connection successful' };
+    if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid API key' };
+    throw new Error(`fal.ai connection test failed (${res.status}): ${redactError(await res.text(), 200)}`);
+  }
 }
 
 const _meta = new FalAdapter(undefined as unknown as SafeFetchPort);

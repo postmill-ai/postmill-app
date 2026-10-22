@@ -337,3 +337,27 @@ describe('replicate media adapter (async predictions)', () => {
     expect(out.error).toMatch(/API key/);
   });
 });
+
+describe('replicate media adapter testConnection', () => {
+  it('GETs /v1/models with Bearer auth — 200 ok, 401 Invalid API key, 500 throws, missing key', async () => {
+    const okCtx = makeCtx(() => res({ results: [] }));
+    const a1: any = replicateMediaModule.create(okCtx.ctx as any);
+    expect(await a1.testConnection({ apiKey: 'r8_key' })).toEqual({ ok: true, message: 'Connection successful' });
+    expect(okCtx.recs[0].url).toBe('https://api.replicate.com/v1/models');
+    expect(okCtx.recs[0].method).toBe('GET');
+    expect(okCtx.recs[0].headers.Authorization).toBe('Bearer r8_key');
+
+    const bad = makeCtx(() => res('unauthorized', false, 401));
+    const a2: any = replicateMediaModule.create(bad.ctx as any);
+    expect(await a2.testConnection({ apiKey: 'wrong' })).toEqual({ ok: false, message: 'Invalid API key' });
+
+    const err = makeCtx(() => res('boom', false, 500));
+    const a3: any = replicateMediaModule.create(err.ctx as any);
+    await expect(a3.testConnection({ apiKey: 'r8_key' })).rejects.toThrow(/connection test failed \(500\)/);
+
+    const noKey = makeCtx(() => res({}));
+    const a4: any = replicateMediaModule.create(noKey.ctx as any);
+    expect(await a4.testConnection({})).toEqual({ ok: false, message: 'Replicate API key is required' });
+    expect(noKey.recs).toHaveLength(0);
+  });
+});

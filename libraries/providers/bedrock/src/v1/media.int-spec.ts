@@ -57,3 +57,21 @@ describe('bedrock media adapter (AI-SDK delegation)', () => {
     expect(recs).toHaveLength(0);
   });
 });
+
+describe('bedrock media adapter testConnection', () => {
+  it('is a presence-only check (Bedrock has no free auth probe): full fields ok, missing fields fail, never fetches', async () => {
+    const { recs, ctx } = makeCtx(() => res({}));
+    const adapter: any = bedrockMediaModule.create(ctx as any);
+
+    const ok = await adapter.testConnection({
+      credentials: { region: 'us-east-1', accessKeyId: 'AKIAEXAMPLE', secretAccessKey: 'secret' },
+    });
+    expect(ok.ok).toBe(true);
+
+    expect(await adapter.testConnection({ credentials: { accessKeyId: 'AKIAEXAMPLE', secretAccessKey: 'secret' } }))
+      .toEqual({ ok: false, message: 'AWS region is required' });
+    expect(await adapter.testConnection({ credentials: { region: 'us-east-1' } }))
+      .toEqual({ ok: false, message: 'AWS credentials are required' });
+    expect(recs).toHaveLength(0);
+  });
+});

@@ -73,3 +73,32 @@ describe('ideogram media adapter (synchronous image, multipart)', () => {
     expect(ideogramMediaModule.manifest.capabilities.video).toBe(false);
   });
 });
+
+describe('ideogram media adapter testConnection', () => {
+  it('GETs /v2/account/api-keys with the Api-Key header — 200 ok, 404 ok (valid non-admin key), 401 Invalid API key, 500 throws, missing key', async () => {
+    const okCtx = makeCtx(() => res({ api_keys: [] }));
+    const a1: any = ideogramMediaModule.create(okCtx.ctx as any);
+    expect(await a1.testConnection({ apiKey: 'ideogram-key' })).toEqual({ ok: true, message: 'Connection successful' });
+    expect(okCtx.recs[0].url).toBe('https://api.ideogram.ai/v2/account/api-keys');
+    expect(okCtx.recs[0].method).toBe('GET');
+    expect(okCtx.recs[0].headers['Api-Key']).toBe('ideogram-key');
+
+    // 404 is documented for a VALID key whose owner is not an org billing admin.
+    const nonAdmin = makeCtx(() => res('no billing access', false, 404));
+    const a2: any = ideogramMediaModule.create(nonAdmin.ctx as any);
+    expect(await a2.testConnection({ apiKey: 'ideogram-key' })).toEqual({ ok: true, message: 'Connection successful' });
+
+    const bad = makeCtx(() => res('unauthorized', false, 401));
+    const a3: any = ideogramMediaModule.create(bad.ctx as any);
+    expect(await a3.testConnection({ apiKey: 'wrong' })).toEqual({ ok: false, message: 'Invalid API key' });
+
+    const err = makeCtx(() => res('boom', false, 500));
+    const a4: any = ideogramMediaModule.create(err.ctx as any);
+    await expect(a4.testConnection({ apiKey: 'ideogram-key' })).rejects.toThrow(/connection test failed \(500\)/);
+
+    const noKey = makeCtx(() => res({}));
+    const a5: any = ideogramMediaModule.create(noKey.ctx as any);
+    expect(await a5.testConnection({})).toEqual({ ok: false, message: 'Ideogram API key is required' });
+    expect(noKey.recs).toHaveLength(0);
+  });
+});

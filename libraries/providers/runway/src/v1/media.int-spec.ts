@@ -93,3 +93,28 @@ describe('runway media adapter', () => {
     expect(out.error).toMatch(/API key/);
   });
 });
+
+describe('runway media adapter testConnection', () => {
+  it('GETs /v1/organization with Bearer + X-Runway-Version — 200 ok, 401 Invalid API key, 500 throws, missing key', async () => {
+    const okCtx = makeCtx(() => res({ creditBalance: 100 }));
+    const a1: any = runwayMediaModule.create(okCtx.ctx as any);
+    expect(await a1.testConnection({ apiKey: 'runway-key' })).toEqual({ ok: true, message: 'Connection successful' });
+    expect(okCtx.recs[0].url).toBe('https://api.dev.runwayml.com/v1/organization');
+    expect(okCtx.recs[0].method).toBe('GET');
+    expect(okCtx.recs[0].headers.Authorization).toBe('Bearer runway-key');
+    expect(okCtx.recs[0].headers['X-Runway-Version']).toBe('2024-11-06');
+
+    const bad = makeCtx(() => res('unauthorized', false, 401));
+    const a2: any = runwayMediaModule.create(bad.ctx as any);
+    expect(await a2.testConnection({ apiKey: 'wrong' })).toEqual({ ok: false, message: 'Invalid API key' });
+
+    const err = makeCtx(() => res('boom', false, 500));
+    const a3: any = runwayMediaModule.create(err.ctx as any);
+    await expect(a3.testConnection({ apiKey: 'runway-key' })).rejects.toThrow(/connection test failed \(500\)/);
+
+    const noKey = makeCtx(() => res({}));
+    const a4: any = runwayMediaModule.create(noKey.ctx as any);
+    expect(await a4.testConnection({})).toEqual({ ok: false, message: 'Runway API key is required' });
+    expect(noKey.recs).toHaveLength(0);
+  });
+});
