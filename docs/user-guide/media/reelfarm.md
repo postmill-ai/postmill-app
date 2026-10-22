@@ -16,7 +16,7 @@ See [Settings](../settings) for provider setup.
 
 ## Generation flow
 
-The studio follows the standard Studio Kit flow: fill the form, click **Generate**, and the job appears in the **Render Queue**. When it completes, the video is saved to `/files` and can be opened in the [Designer](./designer) or posted directly. See [Media Studios overview](./index.md) for details.
+The studio follows the standard Studio Kit flow: fill the form, click **Generate**, and the job appears in the **Render Queue**. Slideshow exports render as **slide images** (TikTok slideshows are photo carousels, not mp4s) — when the job completes, each slide lands in `/files` as its own image and can be opened in the [Designer](./designer) or posted directly. See [Media Studios overview](./index.md) for details.
 
 ## Caveats
 

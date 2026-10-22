@@ -79,6 +79,43 @@ describe('reelfarm media adapter (slideshow generate → status → video)', () 
     expect(recs.some((r) => r.url === 'https://reel.farm/api/v1/videos/vid-1')).toBe(true);
   });
 
+  // Confirmed live 2026-10-22: slideshow exports return video_url: null + slideshow_images.
+  it('pollJob completes a slideshow export from slideshow_images (first = artifact, rest = extras)', async () => {
+    const { ctx } = makeCtx((url) => {
+      if (url.includes('/videos/')) {
+        return res({
+          video_id: 'vid-1',
+          status: 'completed',
+          video_url: null,
+          slideshow_images: [
+            { id: 0, image_url: 'https://slides.reel.farm/x/image_0.jpg' },
+            { id: 1, image_url: 'https://slides.reel.farm/x/image_1.jpg' },
+            { id: 2, image_url: 'https://slides.reel.farm/x/image_2.jpg' },
+          ],
+        });
+      }
+      return res({ status: 'completed', video_id: 'vid-1' });
+    });
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+
+    const done = await adapter.pollJob('4567', { apiKey: 'rf-key' });
+    expect(done.status).toBe('completed');
+    expect(done.artifactUrl).toBe('https://slides.reel.farm/x/image_0.jpg');
+    expect(done.extraArtifactUrls).toEqual([
+      'https://slides.reel.farm/x/image_1.jpg',
+      'https://slides.reel.farm/x/image_2.jpg',
+    ]);
+  });
+
+  it('pollJob stays pending when the export has neither video_url nor finished slides', async () => {
+    const { ctx } = makeCtx((url) => {
+      if (url.includes('/videos/')) return res({ video_id: 'vid-1', status: 'processing', video_url: null });
+      return res({ status: 'rendering', video_id: 'vid-1' });
+    });
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+    expect((await adapter.pollJob('4567', { apiKey: 'rf-key' })).status).toBe('pending');
+  });
+
   it('testConnection ok; image/audio/avatar and missing key/prompt throw', async () => {
     const { ctx } = makeCtx(() => res('', true, 404));
     const adapter: any = reelfarmMediaModule.create(ctx as any);

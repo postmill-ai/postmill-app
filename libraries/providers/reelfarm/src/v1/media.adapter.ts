@@ -22,15 +22,12 @@ import {
 // slideshow video. Generation is async:
 //   POST /slideshows/generate            → { slideshow_id, status }
 //   GET  /slideshows/{id}/status         → { status, video_id?, video_status? }   (no mp4 URL here)
-//   GET  /videos/{video_id}              → the rendered video object (carries video_url)
+//   GET  /videos/{video_id}              → the rendered video object
 // There is no completion webhook → it relies on the media-jobs-poll cron (like Runway/LTX). The
-// status endpoint does NOT carry the mp4 URL, so pollJob fetches /videos/{video_id} once a video
-// export exists and reads `video_url`.
-//
-// Built source-grounded WITHOUT a live key: the slideshow `/videos/{id}` response field that
-// carries the rendered mp4 (`video_url`) is documented for ugc/greenscreen videos and inferred for
-// slideshows — confirm against a real key during a smoke test (the repo's standard caveat for
-// own-key studios built blind, cf. LTX/Wan).
+// status endpoint does NOT carry the artifact, so pollJob fetches /videos/{video_id} once a video
+// export exists. Confirmed live: slideshow exports carry `slideshow_images` (slide JPGs — TikTok
+// slideshows are photo carousels) with `video_url: null`; the mp4-bearing `video_url` is only for
+// ugc/greenscreen video records.
 const BASE = 'https://reel.farm/api/v1';
 
 interface ReelFarmGenerateResponse {
@@ -52,6 +49,7 @@ interface ReelFarmVideoResponse {
   status?: string;
   finished?: boolean;
   failed?: boolean;
+  slideshow_images?: { id?: number; image_url?: string }[];
 }
 
 export class ReelFarmAdapter implements MediaProviderAdapter {
@@ -158,6 +156,20 @@ export class ReelFarmAdapter implements MediaProviderAdapter {
     if (video.failed) return { status: 'failed', error: 'Reel.Farm video render failed' };
     if (video.video_url) {
       return { status: 'completed', artifactUrl: video.video_url, metadata: { provider: this.identifier } };
+    }
+    // Slideshow exports render slide IMAGES, not an mp4 (confirmed live: `video_url` stays null
+    // and the record carries `slideshow_images` — TikTok slideshows are photo carousels). Land
+    // the first slide as the job artifact and the rest as sibling jobs (one File per slide).
+    const slides = (video.slideshow_images || [])
+      .map((s) => s.image_url)
+      .filter((u): u is string => typeof u === 'string' && u.length > 0);
+    if ((video.status === 'completed' || video.finished === true) && slides.length > 0) {
+      return {
+        status: 'completed',
+        artifactUrl: slides[0],
+        extraArtifactUrls: slides.slice(1),
+        metadata: { provider: this.identifier },
+      };
     }
     return { status: 'pending' };
   }
