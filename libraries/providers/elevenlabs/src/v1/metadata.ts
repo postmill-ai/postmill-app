@@ -8,7 +8,9 @@ export const metadata: ProviderMetadata = {
     "media"
   ],
   "mediaCategories": [
-    "text-to-speech"
+    "text-to-image",
+    "text-to-speech",
+    "text-to-video"
   ],
   "hasModelList": false,
   "mediaModels": {
@@ -94,8 +96,8 @@ export const metadata: ProviderMetadata = {
         ]
       },
       {
-        "id": "eleven_turbo_v2_5",
-        "label": "Turbo v2.5 (fast)",
+        "id": "eleven_v3",
+        "label": "Eleven v3 (expressive)",
         "fields": [
           {
             "name": "voice_id",
@@ -254,8 +256,8 @@ export const metadata: ProviderMetadata = {
         ]
       },
       {
-        "id": "eleven_monolingual_v1",
-        "label": "English v1",
+        "id": "eleven_turbo_v2_5",
+        "label": "Turbo v2.5 (legacy — use Flash)",
         "fields": [
           {
             "name": "voice_id",
@@ -333,10 +335,332 @@ export const metadata: ProviderMetadata = {
           }
         ]
       }
+    ],
+    "text-to-image": [
+      {
+        "id": "gemini-3.1-flash-image",
+        "label": "Gemini 3.1 Flash Image (fast)",
+        "fields": [
+          {
+            "name": "aspect_ratio",
+            "type": "select",
+            "label": "Aspect ratio",
+            "default": "16:9",
+            "options": [
+              {
+                "value": "16:9",
+                "label": "Landscape 16:9"
+              },
+              {
+                "value": "9:16",
+                "label": "Portrait 9:16"
+              },
+              {
+                "value": "1:1",
+                "label": "Square 1:1"
+              },
+              {
+                "value": "4:3",
+                "label": "Classic 4:3"
+              },
+              {
+                "value": "3:4",
+                "label": "Portrait 3:4"
+              }
+            ]
+          },
+          {
+            "name": "resolution",
+            "type": "select",
+            "label": "Resolution",
+            "default": "1K",
+            "options": [
+              {
+                "value": "1K",
+                "label": "1K"
+              },
+              {
+                "value": "2K",
+                "label": "2K"
+              },
+              {
+                "value": "4K",
+                "label": "4K"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gemini-3-pro-image",
+        "label": "Gemini 3 Pro Image (quality)",
+        "fields": [
+          {
+            "name": "aspect_ratio",
+            "type": "select",
+            "label": "Aspect ratio",
+            "default": "16:9",
+            "options": [
+              {
+                "value": "16:9",
+                "label": "Landscape 16:9"
+              },
+              {
+                "value": "9:16",
+                "label": "Portrait 9:16"
+              },
+              {
+                "value": "1:1",
+                "label": "Square 1:1"
+              },
+              {
+                "value": "4:3",
+                "label": "Classic 4:3"
+              },
+              {
+                "value": "3:4",
+                "label": "Portrait 3:4"
+              }
+            ]
+          },
+          {
+            "name": "resolution",
+            "type": "select",
+            "label": "Resolution",
+            "default": "1K",
+            "options": [
+              {
+                "value": "1K",
+                "label": "1K"
+              },
+              {
+                "value": "2K",
+                "label": "2K"
+              },
+              {
+                "value": "4K",
+                "label": "4K"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gpt-image-2",
+        "label": "GPT Image 2",
+        "fields": [
+          {
+            "name": "aspect_ratio",
+            "type": "select",
+            "label": "Aspect ratio",
+            "default": "1:1",
+            "options": [
+              {
+                "value": "1:1",
+                "label": "Square 1:1"
+              },
+              {
+                "value": "3:2",
+                "label": "Landscape 3:2"
+              },
+              {
+                "value": "2:3",
+                "label": "Portrait 2:3"
+              }
+            ]
+          },
+          {
+            "name": "quality",
+            "type": "select",
+            "label": "Quality",
+            "default": "medium",
+            "options": [
+              {
+                "value": "low",
+                "label": "Low (fast, cheap)"
+              },
+              {
+                "value": "medium",
+                "label": "Medium"
+              },
+              {
+                "value": "high",
+                "label": "High"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gpt-image-1",
+        "label": "GPT Image 1",
+        "fields": [
+          {
+            "name": "aspect_ratio",
+            "type": "select",
+            "label": "Aspect ratio",
+            "default": "1:1",
+            "options": [
+              {
+                "value": "1:1",
+                "label": "Square 1:1"
+              },
+              {
+                "value": "3:2",
+                "label": "Landscape 3:2"
+              },
+              {
+                "value": "2:3",
+                "label": "Portrait 2:3"
+              }
+            ]
+          },
+          {
+            "name": "quality",
+            "type": "select",
+            "label": "Quality",
+            "default": "medium",
+            "options": [
+              {
+                "value": "low",
+                "label": "Low (fast, cheap)"
+              },
+              {
+                "value": "medium",
+                "label": "Medium"
+              },
+              {
+                "value": "high",
+                "label": "High"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "text-to-video": [
+      {
+        "id": "veo-3.1-fast-generate-001",
+        "label": "Veo 3.1 Fast",
+        "fields": [
+          {
+            "name": "duration_secs",
+            "type": "number",
+            "label": "Duration (s)",
+            "default": 8,
+            "min": 4,
+            "max": 8,
+            "step": 2,
+            "help": "Veo renders 4, 6, or 8 seconds."
+          },
+          {
+            "name": "aspect_ratio",
+            "type": "select",
+            "label": "Aspect ratio",
+            "default": "16:9",
+            "options": [
+              {
+                "value": "16:9",
+                "label": "Landscape 16:9"
+              },
+              {
+                "value": "9:16",
+                "label": "Portrait 9:16"
+              }
+            ]
+          },
+          {
+            "name": "resolution",
+            "type": "select",
+            "label": "Resolution",
+            "default": "720p",
+            "options": [
+              {
+                "value": "720p",
+                "label": "720p"
+              },
+              {
+                "value": "1080p",
+                "label": "1080p"
+              },
+              {
+                "value": "4K",
+                "label": "4K"
+              }
+            ]
+          },
+          {
+            "name": "generate_audio",
+            "type": "toggle",
+            "label": "Generate audio",
+            "default": true,
+            "help": "Veo can synthesize a native soundtrack."
+          }
+        ]
+      },
+      {
+        "id": "veo-3.1-generate-001",
+        "label": "Veo 3.1 (quality)",
+        "fields": [
+          {
+            "name": "duration_secs",
+            "type": "number",
+            "label": "Duration (s)",
+            "default": 8,
+            "min": 4,
+            "max": 8,
+            "step": 2,
+            "help": "Veo renders 4, 6, or 8 seconds."
+          },
+          {
+            "name": "aspect_ratio",
+            "type": "select",
+            "label": "Aspect ratio",
+            "default": "16:9",
+            "options": [
+              {
+                "value": "16:9",
+                "label": "Landscape 16:9"
+              },
+              {
+                "value": "9:16",
+                "label": "Portrait 9:16"
+              }
+            ]
+          },
+          {
+            "name": "resolution",
+            "type": "select",
+            "label": "Resolution",
+            "default": "720p",
+            "options": [
+              {
+                "value": "720p",
+                "label": "720p"
+              },
+              {
+                "value": "1080p",
+                "label": "1080p"
+              },
+              {
+                "value": "4K",
+                "label": "4K"
+              }
+            ]
+          },
+          {
+            "name": "generate_audio",
+            "type": "toggle",
+            "label": "Generate audio",
+            "default": true,
+            "help": "Veo can synthesize a native soundtrack."
+          }
+        ]
+      }
     ]
   },
   "website": "https://elevenlabs.io",
   "description": {
-    "en": "The leading AI audio platform for ultra-realistic text-to-speech, voice cloning, and multilingual dubbing across 70+ languages — known for the most natural-sounding AI voices available."
+    "en": "The leading AI audio platform for ultra-realistic text-to-speech, voice cloning, and multilingual dubbing across 70+ languages — plus image and video generation (Gemini, GPT Image, Veo) via the Flows API on Pro plans."
   }
 };

@@ -489,7 +489,7 @@ export const MEDIA_TABS: MediaTab[] = [
   },
   {
     href: '/media/elevenlabs',
-    badges: ['Voice', 'Audio'],
+    badges: ['Voice', 'Audio', 'Image', 'Video'],
     label: 'ElevenLabs',
     section: 'Providers',
     icon: (
