@@ -19,6 +19,9 @@ import {
 
 interface FalQueueSubmitResponse {
   request_id?: string;
+  response_url?: string;
+  status_url?: string;
+  cancel_url?: string;
 }
 
 interface FalQueueStatusResponse {
@@ -41,18 +44,61 @@ const DEFAULT_IMAGE_MODEL = 'fal-ai/flux/schnell';
 const DEFAULT_VIDEO_MODEL = 'fal-ai/kling-video/v1.6/standard/text-to-video';
 const DEFAULT_AUDIO_MODEL = 'fal-ai/stable-audio';
 
-// fal queue job ids carry the model path (the status/result URLs include it):
-// `<model>::<request_id>`.
-function encodeJobId(model: string, requestId: string): string {
-  return `${model}::${requestId}`;
+const FAL_QUEUE_HOST = 'queue.fal.run';
+
+// fal queue job ids carry the model path plus the poll base fal returns at submit time:
+// `<model>::<request_id>::<base64url(pollBase)>`. fal's queue status/result endpoints are
+// served under the two-segment app base (`https://queue.fal.run/fal-ai/kling-video/…`),
+// NOT the full model path — polling the full path now 405s. The submit response's
+// `response_url` is the authoritative source, so it is pinned into the job id.
+// Older `<model>::<request_id>` ids fall back to the model's first two path segments.
+function encodeJobId(model: string, requestId: string, pollBase: string): string {
+  return `${model}::${requestId}::${Buffer.from(pollBase).toString('base64url')}`;
+}
+
+// The poll base round-trips through the DB job id, so only ever fetch from fal's own
+// queue host — anything else is dropped in favour of the model-derived base.
+function sanitizePollBase(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:' || u.hostname !== FAL_QUEUE_HOST) return null;
+    return u.origin + u.pathname.replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+}
+
+// `https://queue.fal.run/<app>/requests/<id>` → `https://queue.fal.run/<app>`.
+function pollBaseFromResponseUrl(responseUrl?: string): string | null {
+  if (!responseUrl) return null;
+  const idx = responseUrl.indexOf('/requests/');
+  if (idx === -1) return null;
+  return sanitizePollBase(responseUrl.slice(0, idx));
+}
+
+// fal's queue endpoints live under the two-segment app id (`<owner>/<app>`); deeper model
+// paths (e.g. `fal-ai/kling-video/v1.6/standard/text-to-video`) are submit-only.
+function pollBaseFromModel(model: string): string {
+  const app = model.split('/').slice(0, 2).join('/');
+  return `https://${FAL_QUEUE_HOST}/${app}`;
 }
 
 // 6.1i — a job id with no `::` is a legacy (pre-namespacing) id; the model path can't be
 // recovered, so decoding to a default would poll the wrong endpoint (404). Signal it instead.
-function decodeJobId(jobId: string): { model: string; requestId: string } | null {
-  const idx = jobId.lastIndexOf('::');
-  if (idx === -1) return null;
-  return { model: jobId.slice(0, idx), requestId: jobId.slice(idx + 2) };
+function decodeJobId(jobId: string): { model: string; requestId: string; pollBase: string } | null {
+  const parts = jobId.split('::');
+  if (parts.length < 2 || parts.length > 3) return null;
+  const [model, requestId, encodedBase] = parts;
+  if (!model || !requestId) return null;
+  let pollBase: string | null = null;
+  if (encodedBase) {
+    try {
+      pollBase = sanitizePollBase(Buffer.from(encodedBase, 'base64url').toString('utf8'));
+    } catch {
+      pollBase = null;
+    }
+  }
+  return { model, requestId, pollBase: pollBase ?? pollBaseFromModel(model) };
 }
 
 export class FalAdapter implements MediaProviderAdapter {
@@ -133,7 +179,8 @@ export class FalAdapter implements MediaProviderAdapter {
     if (!res.ok) throw await mediaUpstreamError(this, res);
     const data = (await res.json()) as FalQueueSubmitResponse;
     if (!data.request_id) throw new Error('fal.ai returned no request id');
-    return { jobId: encodeJobId(model, data.request_id) };
+    const pollBase = pollBaseFromResponseUrl(data.response_url) ?? pollBaseFromModel(model);
+    return { jobId: encodeJobId(model, data.request_id, pollBase) };
   }
 
   generateVideo(prompt: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
@@ -157,9 +204,9 @@ export class FalAdapter implements MediaProviderAdapter {
     // 6.1i — a legacy (un-namespaced) id can't route to the right model path; fail terminally
     // rather than polling a wrong/default endpoint that 404s until the 24h timeout.
     if (!decoded) return { status: 'failed', error: 'fal.ai legacy job id (no model namespace) cannot be polled' };
-    const { model, requestId } = decoded;
+    const { model, requestId, pollBase } = decoded;
     const statusRes = await this._fetch(
-      `https://queue.fal.run/${model}/requests/${requestId}/status`,
+      `${pollBase}/requests/${requestId}/status`,
       { headers: this._headers(options) },
     );
     if (!statusRes.ok) {
@@ -171,7 +218,7 @@ export class FalAdapter implements MediaProviderAdapter {
 
     if (status.status === 'COMPLETED') {
       const resultRes = await this._fetch(
-        `https://queue.fal.run/${model}/requests/${requestId}`,
+        `${pollBase}/requests/${requestId}`,
         { headers: this._headers(options) },
       );
       // Post-success result fetch: a 429/5xx here must retry (the render already succeeded).

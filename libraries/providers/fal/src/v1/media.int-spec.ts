@@ -4,21 +4,29 @@ import { falMediaModule } from './media.adapter';
 
 // Recorded-fixture integration test (plan B4) — no network. fal has a synchronous image path
 // (`POST https://fal.run/<model>`) and an async queue for video/audio
-// (`POST https://queue.fal.run/<model>` → poll `.../requests/<id>/status` then `.../requests/<id>`).
+// (`POST https://queue.fal.run/<model>` → poll the `status_url`/`response_url` the submit
+// response returns, which live under the two-segment app base, not the full model path).
+
+const b64url = (s: string) => Buffer.from(s).toString('base64url');
+const KLING_MODEL = 'fal-ai/kling-video/v1.6/standard/text-to-video';
+const KLING_POLL_BASE = 'https://queue.fal.run/fal-ai/kling-video';
+const KLING_JOB_ID = `${KLING_MODEL}::req-1::${b64url(KLING_POLL_BASE)}`;
 
 describe('fal media adapter (sync image + queued video)', () => {
   it('submits video to the queue endpoint with Key auth and routes prompt/input into the body', async () => {
-    const { recs, ctx } = makeCtx(() => res({ request_id: 'req-1' }));
+    const { recs, ctx } = makeCtx(() =>
+      res({ request_id: 'req-1', response_url: `${KLING_POLL_BASE}/requests/req-1` }),
+    );
     const adapter: any = falMediaModule.create(ctx as any);
 
     const sub = await adapter.generateVideo('a cat surfing', {
       apiKey: 'fal-key',
-      model: 'fal-ai/kling-video/v1.6/standard/text-to-video',
+      model: KLING_MODEL,
       input: { duration: 5, aspect_ratio: '16:9' },
     });
 
-    // job ids carry the model path: `<model>::<request_id>`.
-    expect(sub.jobId).toBe('fal-ai/kling-video/v1.6/standard/text-to-video::req-1');
+    // job ids pin the submit response's poll base: `<model>::<request_id>::<base64url(base)>`.
+    expect(sub.jobId).toBe(KLING_JOB_ID);
     const r = recs[0];
     expect(r.url).toBe('https://queue.fal.run/fal-ai/kling-video/v1.6/standard/text-to-video');
     expect(r.method).toBe('POST');
@@ -29,16 +37,19 @@ describe('fal media adapter (sync image + queued video)', () => {
     expect(body.aspect_ratio).toBe('16:9');
   });
 
-  it('pollJob parses IN_PROGRESS → pending and COMPLETED → completed with the result artifact', async () => {
-    const jobId = 'fal-ai/kling-video/v1.6/standard/text-to-video::req-1';
+  it('submit without a response_url falls back to the two-segment app base', async () => {
+    const { ctx } = makeCtx(() => res({ request_id: 'req-1' }));
+    const adapter: any = falMediaModule.create(ctx as any);
+    const sub = await adapter.generateVideo('a cat surfing', { apiKey: 'fal-key', model: KLING_MODEL });
+    expect(sub.jobId).toBe(KLING_JOB_ID);
+  });
 
+  it('pollJob parses IN_PROGRESS → pending and COMPLETED → completed with the result artifact', async () => {
     const pendingCtx = makeCtx(() => res({ status: 'IN_PROGRESS' }));
     const pendingAdapter: any = falMediaModule.create(pendingCtx.ctx as any);
-    const pending = await pendingAdapter.pollJob(jobId, { apiKey: 'fal-key' });
+    const pending = await pendingAdapter.pollJob(KLING_JOB_ID, { apiKey: 'fal-key' });
     expect(pending.status).toBe('pending');
-    expect(pendingCtx.recs[0].url).toBe(
-      'https://queue.fal.run/fal-ai/kling-video/v1.6/standard/text-to-video/requests/req-1/status',
-    );
+    expect(pendingCtx.recs[0].url).toBe(`${KLING_POLL_BASE}/requests/req-1/status`);
 
     const doneCtx = makeCtx((url) =>
       url.endsWith('/status')
@@ -46,12 +57,27 @@ describe('fal media adapter (sync image + queued video)', () => {
         : res({ video: { url: 'https://cdn.fal/out.mp4' } }),
     );
     const doneAdapter: any = falMediaModule.create(doneCtx.ctx as any);
-    const done = await doneAdapter.pollJob(jobId, { apiKey: 'fal-key' });
+    const done = await doneAdapter.pollJob(KLING_JOB_ID, { apiKey: 'fal-key' });
     expect(done.status).toBe('completed');
     expect(done.artifactUrl).toBe('https://cdn.fal/out.mp4');
-    expect(doneCtx.recs[1].url).toBe(
-      'https://queue.fal.run/fal-ai/kling-video/v1.6/standard/text-to-video/requests/req-1',
-    );
+    expect(doneCtx.recs[1].url).toBe(`${KLING_POLL_BASE}/requests/req-1`);
+  });
+
+  it('pollJob on a legacy `<model>::<id>` job id derives the two-segment poll base', async () => {
+    const { recs, ctx } = makeCtx(() => res({ status: 'IN_PROGRESS' }));
+    const adapter: any = falMediaModule.create(ctx as any);
+    const r = await adapter.pollJob(`${KLING_MODEL}::req-1`, { apiKey: 'fal-key' });
+    expect(r.status).toBe('pending');
+    expect(recs[0].url).toBe(`${KLING_POLL_BASE}/requests/req-1/status`);
+  });
+
+  it('pollJob ignores a tampered non-fal poll base in the job id (SSRF guard)', async () => {
+    const { recs, ctx } = makeCtx(() => res({ status: 'IN_PROGRESS' }));
+    const adapter: any = falMediaModule.create(ctx as any);
+    const evil = `${KLING_MODEL}::req-1::${b64url('https://evil.example.com/steal')}`;
+    const r = await adapter.pollJob(evil, { apiKey: 'fal-key' });
+    expect(r.status).toBe('pending');
+    expect(recs[0].url).toBe(`${KLING_POLL_BASE}/requests/req-1/status`);
   });
 
   it('generateImage POSTs synchronously to fal.run and parses images[].url', async () => {
