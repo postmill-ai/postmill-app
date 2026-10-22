@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import dayjs from 'dayjs';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { CampaignSelector } from '@postmill-ai/frontend/components/campaigns/selector/campaign-selector';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -288,6 +289,20 @@ export const ProviderFormModal: React.FC<ProviderFormModalProps> = ({
   // (`<icon> <name> Setup|Edit`), the X, Esc, and backdrop close.
   return (
     <div className="flex flex-col gap-[16px] w-[500px] max-w-full">
+      {editProvider?.id && (
+        <div className="flex items-center gap-[8px] text-[12px] -mb-[4px]">
+          <span className="rounded-[4px] px-[6px] py-[2px] bg-green-900/20 text-green-900 dark:text-green-400">
+            {translate('config_status_configured', 'Configured')}
+          </span>
+          {editProvider?.updatedAt && (
+            <span className="text-newTableText">
+              {translate('config_last_updated', 'Last updated {{date}}', {
+                date: dayjs(editProvider.updatedAt).format('MMM D, YYYY h:mm A'),
+              })}
+            </span>
+          )}
+        </div>
+      )}
       <ExtraField spec={NAME_SPEC} {...fieldProps} />
 
       {showCredentials &&

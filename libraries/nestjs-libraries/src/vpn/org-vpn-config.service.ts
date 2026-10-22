@@ -36,6 +36,8 @@ export interface VpnProviderListItem {
   // than a fixed catalog — the UI hides the per-region checklist for these.
   isDynamicRegions: boolean;
   setupNotes?: string;
+  createdAt?: Date | null;
+  updatedAt?: Date | null;
 }
 
 // One selectable provider×region for the per-channel VPN picker.
@@ -154,6 +156,8 @@ export class OrgVpnConfigService {
         enabledRegions,
         isDynamicRegions: isDynamic,
         setupNotes: adapter.setupNotes,
+        createdAt: config?.createdAt ?? null,
+        updatedAt: config?.updatedAt ?? null,
       };
     });
   }

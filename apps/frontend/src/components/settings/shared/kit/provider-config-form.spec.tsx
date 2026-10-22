@@ -159,4 +159,41 @@ describe('ProviderConfigForm', () => {
       expect(screen.getByText(/invalid api key/i)).toBeDefined();
     });
   });
+
+  it('renders the provider description in place of the generic hint', () => {
+    renderForm({ description: 'OpenAI builds GPT models for text, image, and audio.' });
+    expect(screen.getByText(/OpenAI builds GPT models/)).toBeDefined();
+    expect(screen.queryByText(/New here\?/)).toBeNull();
+    // Links still render alongside the description.
+    expect(screen.getByText(/where do i get my api key/i)).toBeDefined();
+  });
+
+  it('keeps the generic hint when no description is provided', () => {
+    renderForm();
+    expect(screen.getByText(/New here\?/)).toBeDefined();
+  });
+
+  it('renders the info box for a description-only provider (no links)', () => {
+    renderForm({
+      description: 'A provider with no manifest links.',
+      website: undefined,
+      docsUrl: undefined,
+      keysUrl: undefined,
+    });
+    expect(screen.getByText(/A provider with no manifest links/)).toBeDefined();
+    expect(screen.queryByText(/where do i get my api key/i)).toBeNull();
+    expect(screen.queryByText(/visit website/i)).toBeNull();
+  });
+
+  it('shows a Configured status with the last-updated date for configured providers', () => {
+    renderForm({ isConfigured: true, updatedAt: '2026-10-22T21:41:25.512Z' });
+    expect(screen.getByText(/^configured$/i)).toBeDefined();
+    expect(screen.getByText(/last updated/i)).toBeDefined();
+  });
+
+  it('hides the Configured status for unconfigured providers', () => {
+    renderForm({ isConfigured: false });
+    expect(screen.queryByText(/^configured$/i)).toBeNull();
+    expect(screen.queryByText(/last updated/i)).toBeNull();
+  });
 });

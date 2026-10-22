@@ -68,4 +68,29 @@ describe('ProviderFormModal — required config fields (CLOUDFLARE_R2, POSTMILL-
     expect(body.bucket).toBe('media');
     expect(body.endpoint).toBe('https://acct.r2.cloudflarestorage.com');
   });
+
+  it('shows Configured + last-updated when editing an existing provider', () => {
+    render(
+      <ProviderFormModal
+        onClose={() => {}}
+        onSaved={() => {}}
+        editProvider={{
+          id: 'sp-1',
+          type: 'CLOUDFLARE_R2',
+          name: 'My R2',
+          updatedAt: '2026-10-22T21:41:25.512Z',
+        }}
+      />
+    );
+    expect(screen.getByText(/^Configured$/)).toBeTruthy();
+    expect(screen.getByText(/Last updated/)).toBeTruthy();
+  });
+
+  it('hides the Configured status for a new provider', () => {
+    render(
+      <ProviderFormModal onClose={() => {}} onSaved={() => {}} presetType="CLOUDFLARE_R2" />
+    );
+    expect(screen.queryByText(/^Configured$/)).toBeNull();
+    expect(screen.queryByText(/Last updated/)).toBeNull();
+  });
 });

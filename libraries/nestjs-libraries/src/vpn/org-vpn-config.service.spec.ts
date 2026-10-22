@@ -171,9 +171,13 @@ describe('OrgVpnConfigService', () => {
     const nordvpn = providers.find((p) => p.identifier === 'nordvpn')!;
     expect(nordvpn.isConfigured).toBe(true);
     expect(nordvpn.enabled).toBe(true);
+    expect(nordvpn.createdAt).toBeInstanceOf(Date);
+    expect(nordvpn.updatedAt).toBeInstanceOf(Date);
 
     const mullvad = providers.find((p) => p.identifier === 'mullvad')!;
     expect(mullvad.isConfigured).toBe(false);
+    expect(mullvad.createdAt).toBeNull();
+    expect(mullvad.updatedAt).toBeNull();
   });
 
   it('encrypts credentials on upsert and validates first', async () => {

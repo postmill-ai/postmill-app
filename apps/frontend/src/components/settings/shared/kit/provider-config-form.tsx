@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import dayjs from 'dayjs';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {
   ProviderVersionSelect,
@@ -34,6 +35,10 @@ export interface ProviderConfigFormProps<Meta = any> {
   docsUrl?: string;
   /** Direct link to the provider's API-key page — preferred "get your key" target. */
   keysUrl?: string;
+  /** Localized catalog description (same string the provider info modal shows). */
+  description?: string;
+  /** Last config-write timestamp (ISO) — shown next to the Configured status. */
+  updatedAt?: string | null;
   onClose: () => void;
   onSaved: () => void;
   onRemoved?: () => void;
@@ -51,6 +56,8 @@ export function ProviderConfigForm<Meta = any>({
   website,
   docsUrl,
   keysUrl,
+  description,
+  updatedAt,
   onClose,
   onSaved,
   onRemoved,
@@ -217,7 +224,22 @@ export function ProviderConfigForm<Meta = any>({
   return (
     <div className="flex flex-col gap-[24px] w-[520px] max-w-full">
 
-      {keysHref && (
+      {isConfigured && (
+        <div className="flex items-center gap-[8px] text-[12px] -mb-[8px]">
+          <span className="rounded-[4px] px-[6px] py-[2px] bg-green-900/20 text-green-900 dark:text-green-400">
+            {t('config_status_configured', 'Configured')}
+          </span>
+          {updatedAt && (
+            <span className="text-newTableText">
+              {t('config_last_updated', 'Last updated {{date}}', {
+                date: dayjs(updatedAt).format('MMM D, YYYY h:mm A'),
+              })}
+            </span>
+          )}
+        </div>
+      )}
+
+      {(description || keysHref) && (
         <div className="text-[13px] leading-[1.5] text-textColor bg-btnPrimary/10 border border-btnPrimary/30 rounded-[8px] p-[12px] flex items-start gap-[10px]">
           <svg
             viewBox="0 0 20 20"
@@ -230,21 +252,22 @@ export function ProviderConfigForm<Meta = any>({
             <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 4a1 1 0 110 2 1 1 0 010-2zm1.25 9h-2.5v-1.25H9.5v-2.5H8.75V10h1.75a.75.75 0 01.75.75v3h.75V15z" />
           </svg>
           <span>
-            {t(
-              'config_key_hint',
-              'New here? Create an account and get your API key from the provider, then paste it below.',
-            )}{' '}
-            <a
-              href={keysHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-btnPrimaryAccent hover:underline whitespace-nowrap"
-            >
-              {keysUrl || docsUrl
-                ? t('config_keys_link', 'Where do I get my API key?')
-                : t('visit_website', 'Visit website')}{' '}
-              ↗
-            </a>
+            {description ||
+              t(
+                'config_key_hint',
+                'New here? Create an account and get your API key from the provider, then paste it below.',
+              )}{' '}
+            {keysHref && (keysUrl || docsUrl) && (
+              <a
+                href={keysHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-btnPrimaryAccent hover:underline whitespace-nowrap"
+              >
+                {t('config_keys_link', 'Where do I get my API key?')}{' '}
+                ↗
+              </a>
+            )}
             {keysUrl && docsUrl && (
               <>
                 {' · '}
@@ -257,6 +280,29 @@ export function ProviderConfigForm<Meta = any>({
                   {t('config_docs_link', 'Docs')} ↗
                 </a>
               </>
+            )}
+            {website && website !== keysHref && (
+              <>
+                {(keysUrl || docsUrl) && ' · '}
+                <a
+                  href={website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-btnPrimaryAccent hover:underline whitespace-nowrap"
+                >
+                  {t('visit_website', 'Visit website')} ↗
+                </a>
+              </>
+            )}
+            {website && website === keysHref && !keysUrl && !docsUrl && (
+              <a
+                href={website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-btnPrimaryAccent hover:underline whitespace-nowrap"
+              >
+                {t('visit_website', 'Visit website')} ↗
+              </a>
             )}
           </span>
         </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
+import i18next from '@postmill-ai/react/translation/i18next';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 import ProviderListShell, {
@@ -215,6 +216,13 @@ export function ProviderSettingsPanel<Meta = any>({
       const configEntry = catalog?.find(
         (e) => e.providerId === identifier && e.version === row?.version,
       );
+      // Same localized-description resolution as ProviderInfoModal: the base
+      // language code keys the description map; fall back to `en`.
+      const lang = i18next.resolvedLanguage || i18next.language;
+      const providerDescription =
+        (configEntry?.description &&
+          (configEntry.description[lang] || configEntry.description.en)) ||
+        undefined;
       openModal({
         title: (
           <ProviderModalTitle
@@ -234,6 +242,8 @@ export function ProviderSettingsPanel<Meta = any>({
             website={configEntry?.website}
             docsUrl={configEntry?.docsUrl ?? undefined}
             keysUrl={configEntry?.keysUrl ?? undefined}
+            description={providerDescription}
+            updatedAt={(row?.meta as any)?.updatedAt ?? null}
             onClose={close}
             onSaved={() => {
               close();
