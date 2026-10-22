@@ -66,7 +66,10 @@ export const MODEL_ALLOWLIST: Record<string, string[]> = {
     'stability-ai/stable-diffusion-inpainting',
   ],
   'text-to-video': [
-    'google/veo-3',
+    // google/veo-3 was retired upstream (prod jobs 404'd from
+    // aiplatform.googleapis.com); veo-3.1 is the live official replacement
+    // (verified against the live Replicate schema: same inputs + generate_audio).
+    'google/veo-3.1',
     'minimax/video-01',
     'bytedance/seedance-1-pro',
     // kling-v2.1 was misfiled here: it is strictly image-to-video upstream
@@ -131,7 +134,7 @@ export const OFFICIAL_MODELS = new Set<string>([
   'recraft-ai/recraft-crisp-upscale',
   'black-forest-labs/flux-fill-pro',
   // Video
-  'google/veo-3',
+  'google/veo-3.1',
   'minimax/video-01',
   'bytedance/seedance-1-pro',
   'kwaivgi/kling-v2.1',

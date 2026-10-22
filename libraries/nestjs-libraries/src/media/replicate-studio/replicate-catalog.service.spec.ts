@@ -173,7 +173,7 @@ describe('ReplicateCatalogService', () => {
       const result = await service.listModels('text-to-video', 'org1');
 
       expect(result.map((m) => m.id)).toEqual([
-        'google/veo-3',
+        'google/veo-3.1',
         'minimax/video-01',
         'bytedance/seedance-1-pro',
         'kwaivgi/kling-v2.5-turbo-pro',

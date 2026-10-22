@@ -19,12 +19,16 @@ export const PRICE_MAP: Record<string, PriceEntry> = {
   'bria/remove-background': { kind: 'per-image', usd: 0.002 },
   'recraft-ai/recraft-crisp-upscale': { kind: 'per-image', usd: 0.05 },
   'black-forest-labs/flux-fill-pro': { kind: 'per-image', usd: 0.05 },
-  'google/veo-3': { kind: 'per-video-sec', usd: 0.50 },
+  // Replicate lists veo-3.1 at $0.40/sec with audio (the default) and
+  // $0.20/sec without (generate_audio=false); veo-3 was retired upstream.
+  'google/veo-3.1': { kind: 'per-video-sec', usd: 0.40 },
   'minimax/video-01': { kind: 'per-video-sec', usd: 0.30 },
   'bytedance/seedance-1-pro': { kind: 'per-video-sec', usd: 0.40 },
   'kwaivgi/kling-v2.1': { kind: 'per-video-sec', usd: 0.35 },
   // Replicate lists kling-v2.5-turbo-pro at $0.07 per second of output video.
   'kwaivgi/kling-v2.5-turbo-pro': { kind: 'per-video-sec', usd: 0.07 },
+  // Replicate lists wan-2.7-videoedit at $0.10 per second of output video.
+  'wan-video/wan-2.7-videoedit': { kind: 'per-video-sec', usd: 0.10 },
   'topazlabs/video-upscale': { kind: 'per-run', usd: 0.25 },
   'minimax/speech-02-hd': { kind: 'per-run', usd: 0.05 },
   'minimax/voice-cloning': { kind: 'per-run', usd: 0.10 },

@@ -39,6 +39,15 @@ describe('Replicate catalog allowlist', () => {
     expect(MODEL_ALLOWLIST['text-to-video']).toContain('kwaivgi/kling-v2.5-turbo-pro');
   });
 
+  it('keeps the retired google/veo-3 OUT of the catalog in favor of google/veo-3.1', () => {
+    // veo-3 was retired upstream (prod jobs 404'd from aiplatform.googleapis.com).
+    const allAllowlisted = new Set(Object.values(MODEL_ALLOWLIST).flat());
+    expect(allAllowlisted.has('google/veo-3')).toBe(false);
+    expect(MODEL_ALLOWLIST['text-to-video']).toContain('google/veo-3.1');
+    expect(OFFICIAL_MODELS.has('google/veo-3.1')).toBe(true);
+    expect(OFFICIAL_MODELS.has('google/veo-3')).toBe(false);
+  });
+
   it('lists only models with a real `video` input under video-to-video', () => {
     // seedance-1-pro has no video input (t2v/i2v only) — the picker asked for
     // an IMAGE and generation 422'd. wan-2.7-videoedit takes a required `video`

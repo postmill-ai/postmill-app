@@ -126,6 +126,10 @@ const STORED_ARTIFACT_ALLOWED_MIME = new Set<string>([
   'image/tiff',
   'video/mp4',
   'video/webm',
+  // file-type sniffs .mov/.m4v provider artifacts as these; rejecting them here
+  // would fail the whole media job after the (paid) render succeeded.
+  'video/quicktime',
+  'video/x-m4v',
   'audio/mpeg',
   'audio/mp3',
   'audio/mp4',

@@ -2381,8 +2381,8 @@ export const metadata: ProviderMetadata = {
     ],
     "text-to-video": [
       {
-        "id": "google/veo-3",
-        "label": "veo-3",
+        "id": "google/veo-3.1",
+        "label": "veo-3.1",
         "fields": [
           {
             "name": "aspect_ratio",
@@ -2444,6 +2444,13 @@ export const metadata: ProviderMetadata = {
               }
             ],
             "default": "1080p"
+          },
+          {
+            "name": "generate_audio",
+            "label": "Generate Audio",
+            "help": "Generate audio with the video",
+            "type": "toggle",
+            "default": true
           },
           {
             "name": "seed",
@@ -2810,7 +2817,7 @@ export const metadata: ProviderMetadata = {
                 "label": "1080p"
               }
             ],
-            "default": "1080p"
+            "default": "720p"
           },
           {
             "name": "aspect_ratio",

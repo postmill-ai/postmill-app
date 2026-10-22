@@ -584,3 +584,93 @@ describe('ReplicateMediaAdapter object outputs (named artifacts)', () => {
     });
   });
 });
+
+describe('ReplicateMediaAdapter music prompt field mapping (riffusion)', () => {
+  let fetchMock: ReturnType<typeof makeFetch>;
+  let logger: { warn: ReturnType<typeof vi.fn> };
+  let adapter: ReplicateMediaAdapter;
+
+  beforeEach(() => {
+    fetchMock = makeFetch();
+    logger = { warn: vi.fn() };
+    adapter = new ReplicateMediaAdapter(fetchMock as any, logger as any);
+  });
+
+  it('sends prompt_a (not prompt) for riffusion/riffusion — its schema has no `prompt` input', async () => {
+    // Prod: every Designer music job on riffusion 422'd — the adapter sent
+    // `{ prompt }` but the model's schema takes `prompt_a`/`prompt_b`.
+    await adapter.generateAudio('lo-fi hip hop beat', {
+      credentials: { apiKey: 'k' },
+      model: 'riffusion/riffusion',
+    });
+    const body = lastRequestBody(fetchMock);
+    expect(body.input.prompt_a).toBe('lo-fi hip hop beat');
+    expect(body.input.prompt).toBeUndefined();
+  });
+
+  it('truncates an over-long riffusion prompt to 300 chars and warns (CLIP 77-token limit)', async () => {
+    // Prod error: "Sizes of tensors must match... Expected size 77 but got
+    // size 154" — the prompt blew past the CLIP context window.
+    const longPrompt = 'epic orchestral score '.repeat(30); // 660 chars
+    await adapter.generateAudio(longPrompt, {
+      credentials: { apiKey: 'k' },
+      model: 'riffusion/riffusion',
+    });
+    const body = lastRequestBody(fetchMock);
+    expect(body.input.prompt_a).toHaveLength(300);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('truncated'),
+    );
+  });
+
+  it('keeps a short riffusion prompt intact and stays silent', async () => {
+    await adapter.generateAudio('funky synth solo', {
+      credentials: { apiKey: 'k' },
+      model: 'riffusion/riffusion',
+    });
+    expect(lastRequestBody(fetchMock).input.prompt_a).toBe('funky synth solo');
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('keeps the default `prompt` field for other music models', async () => {
+    await adapter.generateAudio('upbeat jazz', {
+      credentials: { apiKey: 'k' },
+      model: 'meta/musicgen',
+    });
+    expect(lastRequestBody(fetchMock).input.prompt).toBe('upbeat jazz');
+  });
+});
+
+describe('ReplicateMediaAdapter.removeVideoBackground (robust_video_matting)', () => {
+  let fetchMock: ReturnType<typeof makeFetch>;
+  let adapter: ReplicateMediaAdapter;
+
+  beforeEach(() => {
+    fetchMock = makeFetch();
+    adapter = new ReplicateMediaAdapter(fetchMock as any);
+  });
+
+  it('sends the live-schema input_video field and an explicit output_type default', async () => {
+    // Live schema (2026-10): required `input_video` uri + `output_type` enum
+    // (green-screen | alpha-mask | foreground-mask, default green-screen).
+    const submission = await adapter.removeVideoBackground('https://cdn.example.com/in.mp4', {
+      credentials: { apiKey: 'k' },
+    });
+    expect(submission).toEqual({ jobId: 'pred-1' });
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/arielreplicate/robust_video_matting/predictions'
+    );
+    expect(lastRequestBody(fetchMock).input).toEqual({
+      input_video: 'https://cdn.example.com/in.mp4',
+      output_type: 'green-screen',
+    });
+  });
+
+  it('lets an org media-defaults tunable override output_type', async () => {
+    await adapter.removeVideoBackground('https://cdn.example.com/in.mp4', {
+      credentials: { apiKey: 'k' },
+      input: { output_type: 'alpha-mask' },
+    });
+    expect(lastRequestBody(fetchMock).input.output_type).toBe('alpha-mask');
+  });
+});

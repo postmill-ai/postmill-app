@@ -15,4 +15,17 @@ describe('replicate metadata', () => {
       (metadata.mediaModels as Record<string, { id: string }[]>)['image-outpaint'].map((m) => m.id),
     ).toContain('black-forest-labs/flux-fill-pro');
   });
+
+  it('replaces the retired google/veo-3 with google/veo-3.1 in text-to-video', () => {
+    // veo-3 was retired upstream (prod 404s); the snapshot must track the live
+    // catalog or the studio offers a model that always fails.
+    const t2v = (metadata.mediaModels as Record<string, { id: string; fields: { name: string }[] }[]>)[
+      'text-to-video'
+    ];
+    expect(t2v.map((m) => m.id)).toContain('google/veo-3.1');
+    expect(t2v.map((m) => m.id)).not.toContain('google/veo-3');
+    // veo-3.1 adds generate_audio over veo-3 (verified against the live schema).
+    const veo = t2v.find((m) => m.id === 'google/veo-3.1')!;
+    expect(veo.fields.map((f) => f.name)).toContain('generate_audio');
+  });
 });

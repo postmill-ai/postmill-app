@@ -741,3 +741,85 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
     });
   });
 });
+
+describe('MediaJobLifecycleService artifact extension hardening', () => {
+  const originalBackendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+  const originalJwt = process.env.JWT_SECRET;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSafeFetch.mockReset();
+    process.env.JWT_SECRET = 'test-secret';
+    process.env.NEXT_PUBLIC_BACKEND_URL = 'https://api.example.com';
+  });
+
+  afterEach(() => {
+    if (originalBackendUrl === undefined) delete process.env.NEXT_PUBLIC_BACKEND_URL;
+    else process.env.NEXT_PUBLIC_BACKEND_URL = originalBackendUrl;
+    if (originalJwt === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalJwt;
+  });
+
+  function completedVideoJob(contentType: string, storedPath: string) {
+    const ctx = makeService();
+    ctx.jobs.set('job-1', makeJob());
+    ctx.pollJob.mockResolvedValue({
+      status: 'completed',
+      artifactUrl: 'https://provider.example.com/out',
+    });
+    mockSafeFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': contentType, 'content-length': '4' }),
+      arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+    });
+    // The storage adapters sniff magic bytes and name the stored object
+    // `<id>.<sniffed-ext>` — mock that final path here.
+    ctx.storageAdapter.writeBuffer.mockResolvedValue(storedPath);
+    return ctx;
+  }
+
+  it('names the File with the sniffed extension from the stored path when the Content-Type is unknown', async () => {
+    // Prod: providers often serve artifacts as application/octet-stream, which
+    // mapped to `.bin` even though the adapter stored `<id>.mp4`.
+    const { service, mediaRepository } = completedVideoJob(
+      'application/octet-stream',
+      '/uploads/org-1/2026/10/22/abc123.mp4',
+    );
+
+    expect(await service.processJob('job-1')).toBe('completed');
+    expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({ name: 'video-job-1.mp4', path: '/uploads/org-1/2026/10/22/abc123.mp4' }),
+    );
+  });
+
+  it('maps video/quicktime to .mov', async () => {
+    const { service, storageAdapter, mediaRepository } = completedVideoJob(
+      'video/quicktime',
+      '/uploads/org-1/artifact.mov',
+    );
+
+    expect(await service.processJob('job-1')).toBe('completed');
+    expect(storageAdapter.writeBuffer).toHaveBeenCalledWith(expect.any(Buffer), 'video/quicktime');
+    expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({ name: 'video-job-1.mov' }),
+    );
+  });
+
+  it('keeps the Content-Type-derived extension when known, and falls back to .bin only with no sniffed ext', async () => {
+    const { service, mediaRepository } = completedVideoJob('video/mp4', '/uploads/org-1/artifact.mp4');
+    expect(await service.processJob('job-1')).toBe('completed');
+    expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({ name: 'video-job-1.mp4' }),
+    );
+
+    const ctx = completedVideoJob('application/octet-stream', '/uploads/org-1/noextension');
+    expect(await ctx.service.processJob('job-1')).toBe('completed');
+    expect(ctx.mediaRepository.saveGeneratedMedia).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({ name: 'video-job-1.bin' }),
+    );
+  });
+});

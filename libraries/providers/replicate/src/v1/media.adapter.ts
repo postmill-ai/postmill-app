@@ -13,6 +13,7 @@ import {
   isTransientStatus,
   validateModelId,
   SafeFetchPort,
+  LoggerPort,
   ProviderModule,
   mediaUpstreamError,
   mediaUpstreamFailure,
@@ -97,7 +98,10 @@ function isVersionHash(model: string): boolean {
 }
 
 export class ReplicateMediaAdapter implements MediaProviderAdapter {
-  constructor(private readonly _fetch: SafeFetchPort) {}
+  constructor(
+    private readonly _fetch: SafeFetchPort,
+    private readonly _logger?: LoggerPort,
+  ) {}
   readonly identifier = 'replicate';
   readonly name = 'Replicate';
   readonly capabilities: MediaProviderCapabilities = {
@@ -287,6 +291,51 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     'wan-video/wan-2.7-videoedit': 'video',
   };
 
+  // Model → native prompt field for the music models `metadata.mediaModels`
+  // declares under `text-to-music`/`music-to-music` (same declaration-guard
+  // discipline as `_videoSourceInputField`): riffusion's schema takes
+  // `prompt_a`/`prompt_b` and has NO `prompt` input, so the Designer music
+  // path (generateAudio → generateVideo) 422'd every riffusion job by sending
+  // `{ prompt }`. A declared model with no entry keeps the default `prompt`.
+  private static readonly _PROMPT_FIELD: Record<string, string> = {
+    'riffusion/riffusion': 'prompt_a',
+  };
+
+  // riffusion's CLIP text encoder hard-caps at 77 tokens (prod failure:
+  // "Sizes of tensors must match... Expected size 77 but got size 154").
+  // ~300 chars ≈ 75 tokens — truncate with a warning rather than fail a paid job.
+  private static readonly _PROMPT_MAX_CHARS: Record<string, number> = {
+    'riffusion/riffusion': 300,
+  };
+
+  private static _promptInputField(model: string | undefined): string | null {
+    if (!model) return null;
+    const mediaModels = providerMetadata.mediaModels as
+      | Record<string, { id: string }[]>
+      | undefined;
+    const declared = ['text-to-music', 'music-to-music'].some((category) =>
+      (mediaModels?.[category] ?? []).some((m) => m.id === model),
+    );
+    if (!declared) return null;
+    return ReplicateMediaAdapter._PROMPT_FIELD[model] ?? null;
+  }
+
+  private _promptInput(
+    model: string | undefined,
+    prompt: string,
+  ): Record<string, string> {
+    const field = ReplicateMediaAdapter._promptInputField(model);
+    if (!field) return { prompt };
+    const maxChars = ReplicateMediaAdapter._PROMPT_MAX_CHARS[model!];
+    if (maxChars && prompt.length > maxChars) {
+      this._logger?.warn(
+        `Replicate ${model} prompt truncated from ${prompt.length} to ${maxChars} chars (upstream token limit)`,
+      );
+      prompt = prompt.slice(0, maxChars);
+    }
+    return { [field]: prompt };
+  }
+
   private static _videoSourceInputField(
     model: string,
   ): { field: string; kind: 'image' | 'video' } | null {
@@ -380,7 +429,10 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
       );
     }
 
-    const input: Record<string, string | number | boolean | undefined> = { prompt };
+    // The prompt lands in the model's NATIVE prompt field (`prompt` for most;
+    // `prompt_a` for riffusion — see `_promptInputField`). `options.input` still
+    // spreads last in `_createPrediction`, so an explicit org tunable wins.
+    const input: Record<string, string | number | boolean | undefined> = this._promptInput(modelId, prompt);
     let passthroughInput = options?.input;
     if (sourceUrl) {
       const source = ReplicateMediaAdapter._videoSourceInputField(modelId!);
@@ -509,10 +561,13 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   }
 
   async removeVideoBackground(videoUrl: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
-    // NEEDS-LIVE-SMOKE-TEST: verify model id and input field names against a real Replicate key.
+    // Live schema (verified 2026-10): the video input is `input_video` — the
+    // previous `video` field 422'd every job. `output_type` is always sent
+    // (default green-screen); an org media-defaults tunable still wins because
+    // `_createPrediction` spreads `options.input` last.
     const data = await this._createPrediction(
       { ...options, version: options?.version || 'arielreplicate/robust_video_matting' },
-      { video: videoUrl },
+      { input_video: videoUrl, output_type: 'green-screen' },
     );
     if (!data.id) throw new Error('Replicate returned no prediction id');
     return { jobId: data.id };
@@ -532,5 +587,5 @@ export const replicateMediaModule: ProviderModule<any, any> = {
     credentialFields: (_meta as any).credentialFields || [],
     capabilities: (_meta as any).capabilities,
   },
-  create: (rt) => new ReplicateMediaAdapter(rt.fetch),
+  create: (rt) => new ReplicateMediaAdapter(rt.fetch, rt.logger),
 };

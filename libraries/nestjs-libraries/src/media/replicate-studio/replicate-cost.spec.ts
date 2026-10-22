@@ -31,6 +31,23 @@ describe('Replicate cost estimation', () => {
     });
   });
 
+  it('prices the veo-3.1 replacement per output second (veo-3 is retired upstream)', () => {
+    expect(estimate('google/veo-3.1', { duration: 8 })).toMatchObject({
+      usd: 3.2,
+      basis: 'per-video-sec',
+      approximate: false,
+    });
+    expect(estimate('google/veo-3')).toMatchObject({ basis: 'usage-based', approximate: true });
+  });
+
+  it('prices wan-2.7-videoedit per output second', () => {
+    expect(estimate('wan-video/wan-2.7-videoedit', { duration: 10 })).toMatchObject({
+      usd: 1,
+      basis: 'per-video-sec',
+      approximate: false,
+    });
+  });
+
   describe('ReplicateCostService', () => {
     it('exposes estimate, hasPrice, pricingCategory, and getPrice', () => {
       const service = new ReplicateCostService();

@@ -72,12 +72,25 @@ const MIME_EXT: Record<string, string> = {
   'image/gif': 'gif',
   'video/mp4': 'mp4',
   'video/webm': 'webm',
+  'video/quicktime': 'mov',
+  'video/x-m4v': 'm4v',
   'audio/mpeg': 'mp3',
   'audio/mp3': 'mp3',
   'audio/wav': 'wav',
   'text/plain': 'txt',
   'application/json': 'json',
 };
+
+// The storage adapters sniff magic bytes and name the stored object
+// `<id>.<sniffed-ext>`. When the Content-Type-derived MIME_EXT lookup misses
+// (providers often serve artifacts as application/octet-stream), take the
+// extension from the adapter's final path so the File name matches the stored
+// URL (`.mp4`, not `.bin`).
+function extFromStoredPath(path: string): string | null {
+  const fileName = (path.split('?')[0].split('#')[0].split('/').pop() || '');
+  const match = /\.([a-z0-9]{2,5})$/i.exec(fileName);
+  return match ? match[1].toLowerCase() : null;
+}
 
 export interface StoredArtifact {
   mediaId: string;
@@ -707,7 +720,7 @@ export class MediaJobLifecycleService {
           )
         : null);
 
-    const ext = MIME_EXT[params.mime] || 'bin';
+    const ext = MIME_EXT[params.mime] || extFromStoredPath(path) || 'bin';
     const media = await this._fileService.saveGeneratedMedia(params.organizationId, {
       name: `${params.baseName}.${ext}`,
       path,
