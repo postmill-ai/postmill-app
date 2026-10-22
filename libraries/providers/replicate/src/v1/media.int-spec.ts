@@ -235,7 +235,8 @@ describe('replicate media adapter (async predictions)', () => {
     const body = JSON.parse(r.body);
     expect(body.version).toBeUndefined();
     expect(body.input).toEqual({
-      video: 'https://cdn.example.com/with-bg.mp4',
+      input_video: 'https://cdn.example.com/with-bg.mp4',
+      output_type: 'green-screen',
     });
   });
 
