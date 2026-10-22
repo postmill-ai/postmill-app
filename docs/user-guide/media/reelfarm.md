@@ -25,6 +25,7 @@ The studio follows the standard Studio Kit flow: fill the form, click **Generate
 - Optional `image_N` fields are resolved to provider-reachable URLs from your selected `/files` assets.
 - Background images must already be saved in `/files`; the Media Selector validates that each pick is an image.
 - Reel.Farm is video-only — it does not generate images or audio.
+- Reel.Farm's public API creates **slideshow videos only**. Their UGC/avatar and greenscreen videos are generated in the Reel.Farm app — the API can list them (`video_type: "ugc" | "greenscreen"` in `GET /videos`) but cannot create them, so they are not available in this studio.
 
 ---
 > Verified against v1.3.0

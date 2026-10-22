@@ -10,7 +10,7 @@ export const reelfarmDescriptor: StudioDescriptor = {
     website: 'https://reel.farm',
     tagline: 'AI faceless slideshow videos at scale',
     description:
-      'Reel.Farm turns a single prompt into a finished TikTok-style slideshow video — slide text, layout, and pacing are all generated for you. Built for bulk, automated short-form content.',
+      'Reel.Farm turns a single prompt into a finished TikTok-style slideshow video — slide text, layout, and pacing are all generated for you. Built for bulk, automated short-form content. Note: Reel.Farm\u2019s public API creates slideshow videos only; UGC/avatar and greenscreen videos are generated in the Reel.Farm app (the API can list them, but not create them).',
     badges: ['Video'],
     highlights: [
       'Prompt → finished slideshow video',
