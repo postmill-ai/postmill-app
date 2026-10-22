@@ -51,10 +51,17 @@ describe('SentryReportFilter', () => {
     );
   });
 
-  it('does not report deliberate HttpExceptions', () => {
+  it('does not report deliberate 4xx HttpExceptions', () => {
     filter.catch(new HttpException('Forbidden', 403), makeHost());
 
     expect(Sentry.captureException).not.toHaveBeenCalled();
     expect(reply).toHaveBeenCalledWith('response', expect.anything(), 403);
+  });
+
+  it('reports 5xx HttpExceptions (controllers wrap root causes into 500 envelopes)', () => {
+    filter.catch(new HttpException('Cannot read private member …', 500), makeHost());
+
+    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(reply).toHaveBeenCalledWith('response', expect.anything(), 500);
   });
 });

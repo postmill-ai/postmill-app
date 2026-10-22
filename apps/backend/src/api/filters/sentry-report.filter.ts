@@ -24,7 +24,12 @@ export class SentryReportFilter extends BaseExceptionFilter {
   }
 
   catch(exception: unknown, host: ArgumentsHost) {
-    if (!(exception instanceof HttpException)) {
+    // Capture unexpected errors AND 5xx HttpExceptions — controllers often wrap
+    // root causes into HttpException(500) (e.g. media-provider test route), and
+    // those would otherwise stay invisible too. Deliberate 4xx stays quiet.
+    const status =
+      exception instanceof HttpException ? exception.getStatus() : null;
+    if (status === null || status >= 500) {
       this._logger.error(
         exception instanceof Error ? exception.message : String(exception),
         exception instanceof Error ? exception.stack : undefined,

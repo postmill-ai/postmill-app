@@ -6,6 +6,7 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  Logger,
   Param,
   Post,
   Put,
@@ -100,6 +101,13 @@ export class MediaProviderController {
       if (err instanceof HttpException) {
         throw err;
       }
+      // Log the original stack BEFORE wrapping into the 500 envelope — the
+      // envelope alone gives no diagnostics (a wrapped HttpException skips
+      // Nest's error logging).
+      new Logger('MediaProviderController').error(
+        `testConnection ${identifier} failed`,
+        (err as Error).stack,
+      );
       throw new HttpException(
         (err as Error).message,
         HttpStatus.INTERNAL_SERVER_ERROR,
