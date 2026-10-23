@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, PipeTransform } from '@nestjs/common';
 import { promises as fs } from 'fs';
+import { resolve, relative, isAbsolute } from 'path';
+import { tmpdir } from 'os';
 import { hasZipMagic } from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
 
 /**
@@ -13,8 +15,24 @@ export const DESIGN_IMPORT_MAX_BYTES = 1024 * 1024 * 1024;
 
 export type DesignImportKind = 'pdesign' | 'json';
 
+// Resolve a multer-supplied path and confine it to the OS temp dir, returning
+// the resolved path only when it stays inside tmpdir (else null). The
+// containment test is a `path.relative` escape check — the sanitizer shape
+// CodeQL's js/path-injection query recognizes — and the sink must use the
+// returned (resolved) value, not the raw input. Same pattern as
+// custom.upload.validation.ts.
+const resolveInsideTmp = (p: string): string | null => {
+  const resolved = resolve(p);
+  const rel = relative(resolve(tmpdir()), resolved);
+  return rel && !rel.startsWith('..') && !isAbsolute(rel) ? resolved : null;
+};
+
 const readHead = async (path: string): Promise<Buffer> => {
-  const handle = await fs.open(path, 'r');
+  const safePath = resolveInsideTmp(path);
+  if (!safePath) {
+    throw new BadRequestException('Invalid file upload.');
+  }
+  const handle = await fs.open(safePath, 'r');
   try {
     const head = Buffer.alloc(4);
     await handle.read(head, 0, 4, 0);

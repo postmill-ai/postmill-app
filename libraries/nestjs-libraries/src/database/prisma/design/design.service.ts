@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { createReadStream, promises as fs } from 'fs';
+import { resolve, relative, isAbsolute } from 'path';
+import { tmpdir } from 'os';
 import { DesignRepository } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.repository';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
@@ -25,9 +27,25 @@ import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.servi
 import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
 import { isBlankDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-blank';
 
+// Resolve a multer-supplied spool path and confine it to the OS temp dir,
+// returning the resolved path only when it stays inside tmpdir (else null).
+// The containment test is a `path.relative` escape check — the sanitizer shape
+// CodeQL's js/path-injection query recognizes — and sinks must use the
+// returned (resolved) value, not the raw input. Same pattern as
+// upload/custom.upload.validation.ts.
+const resolveInsideTmp = (p: string): string | null => {
+  const resolved = resolve(p);
+  const rel = relative(resolve(tmpdir()), resolved);
+  return rel && !rel.startsWith('..') && !isAbsolute(rel) ? resolved : null;
+};
+
 /** First bytes of a disk-spooled upload, for zip-vs-json detection without reading the file. */
 const readFileHead = async (path: string): Promise<Buffer> => {
-  const handle = await fs.open(path, 'r');
+  const safePath = resolveInsideTmp(path);
+  if (!safePath) {
+    throw new BadRequestException('Invalid file upload.');
+  }
+  const handle = await fs.open(safePath, 'r');
   try {
     const head = Buffer.alloc(4);
     await handle.read(head, 0, 4, 0);
@@ -477,10 +495,13 @@ export class DesignService {
     file: { buffer?: Buffer; path?: string; originalname?: string; size?: number }
   ) {
     let head: Buffer | undefined;
+    // The multer spool path is confined to tmpdir before ANY read — all three
+    // sinks below (head read, stream unzip, json read) use only `safePath`.
+    const safePath = file.path ? resolveInsideTmp(file.path) : null;
     if (Buffer.isBuffer(file.buffer)) {
       head = file.buffer.subarray(0, 4);
-    } else if (file.path) {
-      head = await readFileHead(file.path).catch(() => undefined);
+    } else if (safePath) {
+      head = await readFileHead(safePath).catch(() => undefined);
     }
     if (!head) {
       throw new BadRequestException('Invalid file upload.');
@@ -495,7 +516,7 @@ export class DesignService {
         parsed = Buffer.isBuffer(file.buffer)
           ? parsePostmillFile(file.buffer)
           : await parsePostmillFileStream(
-              createReadStream(file.path!),
+              createReadStream(safePath!),
               DESIGN_IMPORT_MAX_BYTES
             );
       } catch (err) {
@@ -512,7 +533,7 @@ export class DesignService {
     } else {
       try {
         docRaw = parseDesignJson(
-          Buffer.isBuffer(file.buffer) ? file.buffer : await fs.readFile(file.path!)
+          Buffer.isBuffer(file.buffer) ? file.buffer : await fs.readFile(safePath!)
         );
       } catch (err) {
         throw importErrorToHttp(err);
