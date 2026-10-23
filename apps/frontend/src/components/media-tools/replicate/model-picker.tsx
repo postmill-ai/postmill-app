@@ -70,6 +70,11 @@ export function ModelPicker({ categoryKey }: ModelPickerProps) {
     return <div className="h-10 rounded-lg bg-gray-800 animate-pulse" />;
   }
 
+  // Curated capability caveats for the selected model (from the provider
+  // metadata, attached to each summary server-side) — known limitations like
+  // "No audio track" that would otherwise surface as a surprising run.
+  const selectedNotes = models.find((m) => m.id === selectedModel?.id)?.notes;
+
   return (
     <div>
       <label htmlFor="replicate-model" className="block text-xs uppercase tracking-wider text-newTextColor/70 mb-1.5">
@@ -101,6 +106,13 @@ export function ModelPicker({ categoryKey }: ModelPickerProps) {
           </optgroup>
         )}
       </select>
+      {selectedNotes && selectedNotes.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 text-xs text-newTextColor/70 list-disc pl-4">
+          {selectedNotes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

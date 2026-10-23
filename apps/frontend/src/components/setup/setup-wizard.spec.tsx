@@ -8,6 +8,11 @@ const mockMutate = vi.fn();
 const mockFetch = vi.fn();
 
 let summaryData: any = { aiProviderActive: false };
+// What the /settings/roles/me SWR returns. `data: null` mirrors a RESOLVED
+// member/viewer-ish lookup (no privileged role); `permissionsError` flips it to
+// a FAILED fetch (loaded but unresolved) — the backend-restart case.
+let permissionsData: any = null;
+let permissionsError = false;
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
@@ -27,7 +32,10 @@ vi.mock('swr', () => ({
     if (key === '/dashboard/summary') {
       return { data: summaryData, mutate: vi.fn() };
     }
-    return { data: null, mutate: vi.fn() };
+    if (key === '/settings/roles/me' && permissionsError) {
+      return { data: undefined, error: new Error('boom'), isLoading: false, mutate: vi.fn() };
+    }
+    return { data: permissionsData, mutate: vi.fn() };
   },
   useSWRConfig: () => ({ mutate: mockMutate }),
 }));
@@ -58,6 +66,8 @@ describe('SetupWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     summaryData = { aiProviderActive: false };
+    permissionsData = null;
+    permissionsError = false;
     window.sessionStorage.clear();
   });
 
@@ -111,5 +121,27 @@ describe('SetupWizard', () => {
       { revalidate: true }
     );
     expect(mockReplace).toHaveBeenCalledWith('/dashboard');
+  });
+
+  it('ejects a resolved member to /dashboard (dead-end wizard guard)', async () => {
+    // Default mock: /settings/roles/me resolved with no privileged role.
+    render(<SetupWizard />);
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/dashboard');
+    });
+  });
+
+  it('ejects to /dashboard when the permissions fetch FAILS (backend blip) instead of stranding a member', async () => {
+    permissionsError = true;
+    render(<SetupWizard />);
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/dashboard');
+    });
+  });
+
+  it('does not eject an owner while permissions resolve', () => {
+    permissionsData = { role: 'owner', permissions: [], isSuperAdmin: false };
+    render(<SetupWizard />);
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

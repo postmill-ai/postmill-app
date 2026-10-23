@@ -9,6 +9,8 @@ export interface ModelSummary {
   warm: boolean;
   pricing: 'output' | 'usage';
   price: { kind: string; usd: number } | null;
+  /** Curated capability caveats for this model (e.g. "No audio track"), shown under the picker. */
+  notes?: string[];
 }
 
 export interface ModelDetail {

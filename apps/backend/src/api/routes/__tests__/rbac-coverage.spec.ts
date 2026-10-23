@@ -236,9 +236,6 @@ const INTENTIONALLY_UNGATED = new Set<string>([
   // Same validation plus per-channel warnings for the composer — persists nothing.
   'PostsController.preflightCheck',
 
-  // Org setup completion is a one-time onboarding step for the caller's own organization.
-  'SetupController.completeSetup',
-
   // Signatures lack a dedicated RBAC resource in the current seed; CRUD + usage tracking
   // is unrestricted within the org until a signatures permission is added.
   'SignatureController.trackUsage',
@@ -411,6 +408,7 @@ describe('RBAC coverage — every org-resource mutation is gated or explicitly a
       'RolesController',
       'SetsController',
       'SettingsController',
+      'SetupController',
       'StockMediaController',
       'BrandsController',
       'AiDesignerController',

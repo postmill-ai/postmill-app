@@ -33,6 +33,12 @@ export interface MediaModelDef {
   id: string;
   label: string;
   fields?: ModelField[];
+  /**
+   * Human-readable capability caveats shown where the user picks this model
+   * (e.g. "No audio track"). Curated, not fetched — known limitations of the
+   * upstream model that would otherwise surface as a failed or surprising run.
+   */
+  notes?: string[];
 }
 
 export interface ProviderMetadata {

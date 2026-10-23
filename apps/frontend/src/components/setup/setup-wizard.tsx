@@ -41,14 +41,19 @@ export function SetupWizard() {
   // can't complete the required LLM step (AI-config endpoints 403) — send them to the app
   // instead of a dead-end wizard. The layout gate already avoids force-redirecting members
   // here; this covers direct navigation / stale links.
+  //
+  // Gate on `isLoaded`, not `isResolved`: a FAILED /settings/roles/me (e.g. the backend
+  // restarting mid-deploy) leaves the role unknown, and waiting for resolution used to
+  // strand a member here forever. Ejecting is safe for a privileged user too — the layout
+  // gate sends them back to /setup once the permissions fetch recovers and resolves.
   const permissions = usePermissions();
   const canCompleteSetup =
     permissions.isSuperAdmin || permissions.isOwner || permissions.isAdmin;
   useEffect(() => {
-    if (permissions.isResolved && !canCompleteSetup) {
+    if (permissions.isLoaded && !canCompleteSetup) {
       router.replace('/dashboard');
     }
-  }, [permissions.isResolved, canCompleteSetup, router]);
+  }, [permissions.isLoaded, canCompleteSetup, router]);
 
   // Restore the active step after an OAuth full-page round-trip (connecting a channel or an
   // OAuth short-link provider navigates the tab out to the provider and back; the gate then

@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
+import { ProviderKernel } from '@postmill-ai/provider-kernel';
 import { CATEGORIES, MODEL_ALLOWLIST, isWarm, CategoryDefinition } from './replicate-catalog.allowlist';
 import { pricingCategory, hasPrice, ReplicateCostService } from './replicate-cost';
 
@@ -18,6 +20,8 @@ export interface ModelSummary {
   warm: boolean;
   pricing: 'output' | 'usage';
   price: { kind: string; usd: number } | null;
+  /** Curated capability caveats (from the provider package metadata), shown in the picker. */
+  notes?: string[];
 }
 
 export interface ModelDetail {
@@ -53,7 +57,24 @@ export class ReplicateCatalogService {
     private readonly _orgMediaProviderSettings: OrgMediaProviderSettingsService,
     private readonly _redis: RedisService,
     private readonly _cost: ReplicateCostService,
+    @Inject(PROVIDER_KERNEL) private readonly _kernel: ProviderKernel,
   ) {}
+
+  // Model capability caveats live on the provider package's static metadata
+  // (single source of truth, MediaModelDef.notes) — flatten every category's
+  // mediaModels into one id → notes lookup for the picker summaries.
+  private _modelNotes(): Map<string, string[]> {
+    const map = new Map<string, string[]>();
+    const metadata = this._kernel
+      ?.listMetadata('media')
+      .find((m) => m.id === 'replicate');
+    for (const list of Object.values(metadata?.mediaModels ?? {})) {
+      for (const m of list ?? []) {
+        if (m.notes?.length && !map.has(m.id)) map.set(m.id, m.notes);
+      }
+    }
+    return map;
+  }
 
   getCategories(): CategoryDefinition[] {
     return CATEGORIES;
@@ -121,7 +142,7 @@ export class ReplicateCatalogService {
     const categoryCacheKey = `replicate:category:v3:${allowlistHash}:${categoryKey}`;
     const cachedCategory = await this._redis.get(categoryCacheKey);
     if (cachedCategory) {
-      return JSON.parse(cachedCategory);
+      return this._withNotes(JSON.parse(cachedCategory));
     }
 
     const apiKey = await this.getReplicateKey(orgId);
@@ -152,7 +173,17 @@ export class ReplicateCatalogService {
     if (results.length > 0) {
       await this._redis.set(categoryCacheKey, JSON.stringify(results), CACHE_TTL);
     }
-    return results;
+    // Notes are static local metadata — attach at response time (never cached),
+    // so a metadata edit ships without waiting out the 24h model caches.
+    return this._withNotes(results);
+  }
+
+  private _withNotes(models: ModelSummary[]): ModelSummary[] {
+    const notes = this._modelNotes();
+    return models.map((m) => {
+      const n = notes.get(m.id);
+      return n ? { ...m, notes: n } : m;
+    });
   }
 
   async getModel(owner: string, name: string, orgId: string): Promise<ModelDetail> {

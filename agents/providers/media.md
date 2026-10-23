@@ -121,6 +121,8 @@ node tools/codegen/generate-studio-descriptor-registry.mjs --check  # verify no 
 
 Descriptor caveats: a descriptor that imports runtime values (custom panels) is skipped by the generator; orchestration categories (`image-focal-point`, `image-slide`, `video-caption`) declared in `metadata.ts` are preserved, and so is a hand-authored `mediaModels` catalog under an orchestration category (descriptors never generate one — e.g. OpenAI's Whisper ids under `video-caption`); live-`listModels` hubs and action-only providers are special-cased in the script's constant sets.
 
+`MediaModelDef.notes` (optional, hand-authored) carries curated capability caveats for a model (e.g. Replicate's `minimax/video-01` → "No audio track"). `ReplicateCatalogService` attaches them to picker summaries at response time (never into the 24h model caches), and the Replicate model picker renders them under the select.
+
 ## 6. Bespoke-studio exceptions
 
 Escape hatch only when the generic form can't express the UX:
