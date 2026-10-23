@@ -2464,6 +2464,10 @@ export const metadata: ProviderMetadata = {
       {
         "id": "minimax/video-01",
         "label": "video-01",
+        "notes": [
+          "No audio track",
+          "Text rendered into the video is baked in and may contain spelling errors — add text in the Designer instead"
+        ],
         "fields": [
           {
             "name": "prompt_optimizer",
@@ -2578,6 +2582,9 @@ export const metadata: ProviderMetadata = {
       {
         "id": "kwaivgi/kling-v2.5-turbo-pro",
         "label": "kling-v2.5-turbo-pro",
+        "notes": [
+          "Prompt adherence can be loose; text in video may contain errors"
+        ],
         "fields": [
           {
             "name": "negative_prompt",
@@ -2638,6 +2645,10 @@ export const metadata: ProviderMetadata = {
       {
         "id": "minimax/video-01",
         "label": "video-01",
+        "notes": [
+          "No audio track",
+          "Text rendered into the video is baked in and may contain spelling errors — add text in the Designer instead"
+        ],
         "fields": [
           {
             "name": "prompt_optimizer",
@@ -2752,6 +2763,9 @@ export const metadata: ProviderMetadata = {
       {
         "id": "kwaivgi/kling-v2.1",
         "label": "kling-v2.1",
+        "notes": [
+          "Prompt adherence can be loose; text in video may contain errors"
+        ],
         "fields": [
           {
             "name": "mode",
@@ -2799,6 +2813,9 @@ export const metadata: ProviderMetadata = {
       {
         "id": "kwaivgi/kling-v2.5-turbo-pro",
         "label": "kling-v2.5-turbo-pro",
+        "notes": [
+          "Prompt adherence can be loose; text in video may contain errors"
+        ],
         "fields": [
           {
             "name": "negative_prompt",
@@ -3016,6 +3033,9 @@ export const metadata: ProviderMetadata = {
       {
         "id": "arielreplicate/robust_video_matting",
         "label": "robust_video_matting",
+        "notes": [
+          "People only — not for general objects"
+        ],
         "fields": [
           {
             "name": "output_type",

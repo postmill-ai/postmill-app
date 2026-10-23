@@ -23,6 +23,7 @@ describe('ReplicateCatalogService', () => {
   let service: ReplicateCatalogService;
   let mockOrgMediaProviderSettings: any;
   let mockRedis: any;
+  let mockKernel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,10 +42,13 @@ describe('ReplicateCatalogService', () => {
       set: vi.fn().mockResolvedValue(undefined),
     };
 
+    mockKernel = { listMetadata: vi.fn().mockReturnValue([]) };
+
     service = new ReplicateCatalogService(
       mockOrgMediaProviderSettings,
       mockRedis,
       new ReplicateCostService(),
+      mockKernel,
     );
   });
 
@@ -184,6 +188,69 @@ describe('ReplicateCatalogService', () => {
           String(c[0]).includes('/collections/'),
         ),
       ).toHaveLength(0);
+    });
+
+    it('attaches curated capability notes from the provider metadata (never cached)', async () => {
+      mockKernel.listMetadata.mockReturnValue([
+        {
+          id: 'replicate',
+          mediaModels: {
+            'text-to-video': [
+              { id: 'minimax/video-01', label: 'video-01', notes: ['No audio track'] },
+            ],
+          },
+        },
+      ]);
+      mockSafeFetch.mockImplementation(async (url: string) =>
+        jsonResponse({
+          owner: 'x',
+          name: String(url).split('/').pop(),
+          description: '',
+          cover_image_url: null,
+          run_count: 0,
+          latest_version: { id: 'v1' },
+        }),
+      );
+
+      const result = await service.listModels('text-to-video', 'org1');
+
+      expect(result.find((m) => m.id === 'minimax/video-01')?.notes).toEqual([
+        'No audio track',
+      ]);
+      // Models without curated notes carry none.
+      expect(result.find((m) => m.id === 'google/veo-3.1')?.notes).toBeUndefined();
+      // Notes ride on the response only — the cached payload stays notes-free
+      // so a metadata edit ships without waiting out the 24h cache.
+      const cachedWrite = mockRedis.set.mock.calls.find((c: any[]) =>
+        String(c[0]).startsWith('replicate:category:'),
+      );
+      expect(cachedWrite).toBeDefined();
+      expect(JSON.parse(cachedWrite![1]).every((m: any) => m.notes === undefined)).toBe(
+        true,
+      );
+    });
+
+    it('attaches notes on a category cache hit too', async () => {
+      mockKernel.listMetadata.mockReturnValue([
+        {
+          id: 'replicate',
+          mediaModels: {
+            'text-to-video': [
+              { id: 'minimax/video-01', label: 'video-01', notes: ['No audio track'] },
+            ],
+          },
+        },
+      ]);
+      mockRedis.get.mockImplementation(async (key: string) =>
+        key.startsWith('replicate:category:')
+          ? JSON.stringify([{ id: 'minimax/video-01', name: 'video-01' }])
+          : null,
+      );
+
+      const result = await service.listModels('text-to-video', 'org1');
+
+      expect(mockSafeFetch).not.toHaveBeenCalled();
+      expect(result[0].notes).toEqual(['No audio track']);
     });
   });
 
