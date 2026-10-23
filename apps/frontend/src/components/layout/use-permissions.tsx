@@ -45,7 +45,13 @@ export const usePermissions = (): UsePermissionsResult => {
   const { data, error, isLoading, mutate } =
     useSWR<EffectivePermissionsResponse>('/settings/roles/me', load, {
       revalidateOnFocus: false,
-      revalidateOnReconnect: false,
+      revalidateOnReconnect: true,
+      // Gate-critical: the app-wide SWRConfig stops retrying after 3 attempts, and a
+      // backend restart (every deploy hard-restarts it) can outlast that — leaving
+      // permissions unresolved for the rest of the session. Keep retrying (SWR's
+      // exponential backoff) for long enough to ride out a restart: a failed fetch
+      // must mean "unknown, still trying", never a settled answer.
+      errorRetryCount: 10,
     });
 
   const hasPermission = useCallback(

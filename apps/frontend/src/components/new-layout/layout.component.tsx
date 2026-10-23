@@ -102,10 +102,14 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
     mutate,
   } = useSWR('/user/self', load, {
     revalidateOnFocus: false,
-    revalidateOnReconnect: false,
+    revalidateOnReconnect: true,
     revalidateIfStale: false,
     refreshWhenOffline: false,
     refreshWhenHidden: false,
+    // Same ride-out-a-restart budget as /settings/roles/me (use-permissions):
+    // the app-wide default of 3 retries can be exhausted by a deploy's backend
+    // restart, after which only the manual Retry button below would recover.
+    errorRetryCount: 10,
   });
 
   const router = useRouter();
