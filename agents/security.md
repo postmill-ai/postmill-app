@@ -114,6 +114,12 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
 - Claims are **scope-gated** (`profile`/`email`/`org` only — never `mcp:*`); the org
   claim is always the consent-context org from the `FederationGrant` row, never
   client-supplied.
+- `templates:install` is the first **capability** (write) scope: it grants no claims
+  and authorizes `POST /federation/install-template` (install a `.pdesign` into the
+  granting org). It is never in the omitted-`scope` default (identity scopes only),
+  is persisted on the grant at consent time, and is re-checked from the stored grant
+  on every call — a revoked grant or expired token fails closed
+  (`FederationRepository.findByAccessToken`).
 
 ## CSRF
 

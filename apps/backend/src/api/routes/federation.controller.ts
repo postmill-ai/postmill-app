@@ -7,9 +7,16 @@ import {
   HttpStatus,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { tmpdir } from 'os';
+import * as path from 'path';
+import * as fs from 'fs';
 import {
   FEDERATION_AUDIENCE,
   FederationService,
@@ -22,6 +29,15 @@ import {
   ApproveFederationDto,
 } from '@postmill-ai/nestjs-libraries/dtos/federation/authorize-federation.dto';
 import { TokenFederationDto } from '@postmill-ai/nestjs-libraries/dtos/federation/token-federation.dto';
+import {
+  DESIGN_IMPORT_MAX_BYTES,
+  DesignImportValidationPipe,
+} from '@postmill-ai/nestjs-libraries/upload/design-import.validation';
+
+// Disk-spooled template installs (bundled .pdesign files can reach 1 GB) —
+// same pattern as the design import route in design.controller.ts.
+const TMP_UPLOAD_DIR = path.join(tmpdir(), 'postmill-uploads');
+try { fs.mkdirSync(TMP_UPLOAD_DIR, { recursive: true }); } catch {}
 
 @ApiTags('Federation')
 @Controller('/.well-known')
@@ -120,6 +136,46 @@ export class FederationController {
       );
     }
     return info;
+  }
+
+  /**
+   * Install a `.pdesign` template (or raw DesignerDoc .json) into the token's
+   * org as a new design. Bearer `posf_` token with the `templates:install`
+   * scope — the first write-capable federation route, so it is throttled like
+   * the token endpoint and the upload goes through the same sniffing/1 GB
+   * disk-spooled validation as the in-app design import. The pipe is bound to
+   * the FILE param only (see files.controller.pipes.spec.ts).
+   */
+  @Post('/install-template')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @ApiOperation({
+    summary:
+      'Install a .pdesign template into the granting org (Bearer posf_ token, templates:install scope)',
+  })
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({ destination: TMP_UPLOAD_DIR }),
+    limits: { fileSize: DESIGN_IMPORT_MAX_BYTES },
+  }))
+  async installTemplate(
+    @Headers('authorization') authorization: string | undefined,
+    @UploadedFile(new DesignImportValidationPipe()) file: Express.Multer.File,
+  ) {
+    const token = authorization?.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length)
+      : undefined;
+    if (!token || !token.startsWith('posf_')) {
+      throw new HttpException(
+        { error: 'invalid_token' },
+        HttpStatus.UNAUTHORIZED
+      );
+    }
+
+    try {
+      return await this._federationService.installTemplate(token, file);
+    } finally {
+      // The temp spool file is always removed, success or failure.
+      if (file?.path) { try { await fs.promises.unlink(file.path); } catch { /* best-effort */ } }
+    }
   }
 }
 

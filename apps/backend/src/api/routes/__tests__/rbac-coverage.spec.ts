@@ -112,7 +112,10 @@ const PUBLIC_CONTROLLERS = new Set<string>([
   // Postmill ID federation: discovery/JWKS/authorize-metadata are anonymous; token
   // exchange is PKCE-authenticated; userinfo is Bearer posf_-authenticated; the
   // approve/deny POST is session-authenticated via authenticatedController (same
-  // shape as OAuthAuthorizedController above).
+  // shape as OAuthAuthorizedController above). install-template is Bearer
+  // posf_-authenticated AND scope-gated (templates:install, checked against the
+  // grant's persisted scope on every call) — token auth, not session, so org RBAC
+  // does not apply.
   'FederationDiscoveryController',
   'FederationController',
   'FederationAuthorizedController',

@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { FederationRepository } from '@postmill-ai/nestjs-libraries/database/prisma/federation/federation.repository';
+import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
 import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
 import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
 import { sign } from 'jsonwebtoken';
@@ -11,10 +12,18 @@ import crypto from 'crypto';
 export const FEDERATION_AUDIENCE = 'postmill-template-store';
 
 // Only these scopes may be granted through federation — never mcp:* or any
-// client-invented scope. Each maps 1:1 to a claim group in buildClaims.
-const FEDERATION_SCOPES = ['profile', 'email', 'org'] as const;
+// client-invented scope. Identity scopes map 1:1 to a claim group in
+// buildClaims; `templates:install` is the first CAPABILITY scope — it grants
+// no claims, it authorizes POST /federation/install-template.
+export const FEDERATION_SCOPES = ['profile', 'email', 'org', 'templates:install'] as const;
 
-type FederationScope = (typeof FEDERATION_SCOPES)[number];
+// Granted when the client omits `scope` entirely: identity ONLY. Capability
+// scopes must be requested explicitly and consented to by name — a store
+// client written before templates:install existed must never receive it by
+// default.
+const FEDERATION_DEFAULT_SCOPES: readonly FederationScope[] = ['profile', 'email', 'org'];
+
+export type FederationScope = (typeof FEDERATION_SCOPES)[number];
 
 // The template store builds this from its own `callbackUrl()` helper, which
 // gives every login provider its own path — the convention this instance also
@@ -37,7 +46,8 @@ export class FederationService {
 
   constructor(
     private _federationRepository: FederationRepository,
-    private _encryptionService: EncryptionService
+    private _encryptionService: EncryptionService,
+    private _designService: DesignService
   ) {}
 
   private lookupHash(value: string) {
@@ -193,7 +203,7 @@ export class FederationService {
   }
 
   private sanitizeScope(scope?: string): FederationScope[] {
-    const requested = (scope || FEDERATION_SCOPES.join(' '))
+    const requested = (scope || FEDERATION_DEFAULT_SCOPES.join(' '))
       .split(/[\s,]+/)
       .map((s) => s.trim())
       .filter(Boolean);
@@ -416,6 +426,53 @@ export class FederationService {
       return null;
     }
     return this.buildClaims(grant, this.sanitizeScope(grant.scope || undefined));
+  }
+
+  /**
+   * The first WRITE capability behind a `posf_` token: install a `.pdesign`
+   * template file into the granting org as a new design.
+   *
+   * The grant's persisted scope string is the authorization record —
+   * findByAccessToken already fails closed on expiry/revocation, and the
+   * capability check below runs on every call, so an identity-only grant
+   * (or one predating the scope) can never install. 401 unknown/expired
+   * token, 403 insufficient_scope when the user never consented to it.
+   */
+  async installTemplate(
+    accessToken: string,
+    file: { buffer?: Buffer; path?: string; originalname?: string; size?: number }
+  ) {
+    const grant = await this._federationRepository.findByAccessToken(
+      this.lookupHash(accessToken)
+    );
+    if (!grant) {
+      throw new HttpException({ error: 'invalid_token' }, HttpStatus.UNAUTHORIZED);
+    }
+
+    // Read the STORED scope tokens directly — not sanitizeScope, whose
+    // omitted-scope default exists for the authorize step, not for
+    // authorization checks.
+    const granted = (grant.scope || '').split(/[\s,]+/).filter(Boolean);
+    if (!granted.includes('templates:install')) {
+      throw new HttpException(
+        {
+          error: 'insufficient_scope',
+          error_description:
+            "This access token was not granted the 'templates:install' scope — repeat the authorization flow and approve template installation",
+        },
+        HttpStatus.FORBIDDEN
+      );
+    }
+
+    const design = await this._designService.importDesign(
+      grant.organizationId,
+      grant.userId,
+      file
+    );
+    return {
+      designId: design.id,
+      openUrl: `${this.frontendUrl()}/media/designer?designId=${design.id}`,
+    };
   }
 
   async getGrantsForUser(userId: string) {

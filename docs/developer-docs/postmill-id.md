@@ -45,6 +45,7 @@ store — this is inherent to any SSO-with-self-hosted design.
 | `POST /federation/authorize` | session + CSRF | User approve/deny (from the consent screen). Returns **201** |
 | `POST /federation/token` | PKCE | Code → `id_token` + `posf_` access token (20 req/min throttle). Returns **201** |
 | `GET`/`POST /federation/userinfo` | `Bearer posf_…` | Scope-gated claims (1 h token lifetime) |
+| `POST /federation/install-template` | `Bearer posf_…` + `templates:install` scope | Install a `.pdesign` template into the granting org as a new design (20 req/min throttle). Returns **201** `{ designId, openUrl }` |
 
 The consent screen lives on the instance's frontend at
 `/oauth/authorize?client=federation&redirect_uri=…&code_challenge=…&code_challenge_method=S256&scope=…&state=…&nonce=…`.
@@ -67,14 +68,23 @@ rather than an OAuth-shaped `invalid_request`. The token body is exactly
 
 Only these scopes exist in federation; anything else is rejected (`invalid_scope`).
 
-| Scope | Claims |
+| Scope | Grants |
 |---|---|
-| `profile` | `name`, `picture` (avatar URL) |
-| `email` | `email`, `email_verified` (true when the account is activated) |
-| `org` | `org: { id, name, role }` — the consent-context org and the user's role key in it (`owner`/`admin`/`editor`/`member`/`viewer`) |
+| `profile` | `name`, `picture` claims (avatar URL) |
+| `email` | `email`, `email_verified` claims (true when the account is activated) |
+| `org` | `org: { id, name, role }` claim — the consent-context org and the user's role key in it (`owner`/`admin`/`editor`/`member`/`viewer`) |
+| `templates:install` | **Capability, no claims** — authorizes `POST /federation/install-template` |
 
 `sub` (the Postmill user id) is always present. The same scope gating applies to both
 the `id_token` claims and `/federation/userinfo`.
+
+`templates:install` is the first write-capable scope. It is **never granted by
+default**: a client that omits `scope` receives the identity scopes only — the
+capability must be requested explicitly and appears on the consent screen as
+"Install templates into your Postmill designs". The granted scope string is
+persisted on the `FederationGrant` and re-checked on every install call, so
+revoking the grant (or its 1 h token expiring) closes the capability. See
+[Template store integration](./template-store-integration.md) for the install flow.
 
 ## Login flow (store side)
 

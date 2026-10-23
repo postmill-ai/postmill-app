@@ -744,6 +744,21 @@ paths:
       summary: Scope-gated identity claims for a posf_ access token
       tags:
         - Federation
+  /federation/install-template:
+    post:
+      operationId: FederationController_installTemplate
+      parameters:
+        - name: authorization
+          required: true
+          in: header
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+      summary: Install a .pdesign template into the granting org (Bearer posf_ token, templates:install scope)
+      tags:
+        - Federation
   /.well-known/postmill-identity:
     get:
       operationId: FederationDiscoveryController_discovery

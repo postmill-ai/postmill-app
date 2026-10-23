@@ -44,6 +44,7 @@ const makeGrant = (overrides: Record<string, unknown> = {}) => ({
 describe('FederationService (Postmill ID)', () => {
   let repository: any;
   let encryption: any;
+  let designService: any;
   let service: FederationService;
   let storedPrivateKeyPem: string;
 
@@ -69,7 +70,10 @@ describe('FederationService (Postmill ID)', () => {
       encrypt: vi.fn((v: string) => `enc:${v}`),
       decrypt: vi.fn((v: string) => v.replace(/^enc:/, '')),
     };
-    service = new FederationService(repository, encryption);
+    designService = {
+      importDesign: vi.fn().mockResolvedValue({ id: 'design-1' }),
+    };
+    service = new FederationService(repository, encryption, designService);
   });
 
   afterEach(() => {
@@ -252,6 +256,31 @@ describe('FederationService (Postmill ID)', () => {
         })
       );
     });
+
+    it('persists an explicitly requested templates:install scope on the grant', async () => {
+      await service.createAuthorizationCode('user-1', 'org-1', {
+        redirectUri: REDIRECT_URI,
+        scope: 'profile email org templates:install',
+        ...pkce,
+      });
+
+      expect(repository.upsertGrant).toHaveBeenCalledWith(
+        expect.objectContaining({ scope: 'profile email org templates:install' })
+      );
+    });
+
+    it('never grants templates:install by DEFAULT — an omitted scope is identity-only', async () => {
+      // Regression guard for the first write-capable federation scope: a client
+      // that predates it (or omits `scope`) must not silently gain it.
+      await service.createAuthorizationCode('user-1', 'org-1', {
+        redirectUri: REDIRECT_URI,
+        ...pkce,
+      });
+
+      const stored = repository.upsertGrant.mock.calls[0][0];
+      expect(stored.scope).toBe('profile email org');
+      expect(stored.scope).not.toContain('templates:install');
+    });
   });
 
   describe('exchangeCode', () => {
@@ -378,7 +407,7 @@ describe('FederationService (Postmill ID)', () => {
         id_token_signing_alg_values_supported: ['RS256'],
         audience: FEDERATION_AUDIENCE,
       });
-      expect(doc.scopes_supported).toEqual(['profile', 'email', 'org']);
+      expect(doc.scopes_supported).toEqual(['profile', 'email', 'org', 'templates:install']);
     });
 
     it('fails loudly (500) when FRONTEND_URL is unset instead of advertising "undefined/..."', async () => {
@@ -404,6 +433,64 @@ describe('FederationService (Postmill ID)', () => {
       await expect(service.revoke('user-1', 'nope')).rejects.toMatchObject({
         status: 404,
       });
+    });
+  });
+
+  describe('installTemplate (templates:install capability scope)', () => {
+    const file = { originalname: 'template.pdesign', path: '/tmp/spool-1', size: 1234 };
+
+    it('installs into the granting org+user and returns the designer openUrl', async () => {
+      repository.findByAccessToken.mockResolvedValue(
+        makeGrant({ scope: 'profile email org templates:install' })
+      );
+
+      const out = await service.installTemplate('posf_valid', file);
+
+      expect(repository.findByAccessToken).toHaveBeenCalledWith(sha256Lookup('posf_valid'));
+      expect(designService.importDesign).toHaveBeenCalledWith('org-1', 'user-1', file);
+      expect(out).toEqual({
+        designId: 'design-1',
+        openUrl: 'https://app.example.com/media/designer?designId=design-1',
+      });
+    });
+
+    it('401s an unknown or expired token (the repository fails closed on both)', async () => {
+      repository.findByAccessToken.mockResolvedValue(null);
+
+      await expect(service.installTemplate('posf_nope', file)).rejects.toMatchObject({
+        status: 401,
+        response: { error: 'invalid_token' },
+      });
+      expect(designService.importDesign).not.toHaveBeenCalled();
+    });
+
+    it('403s with insufficient_scope when the grant never consented to templates:install', async () => {
+      repository.findByAccessToken.mockResolvedValue(
+        makeGrant({ scope: 'profile email org' })
+      );
+
+      await expect(service.installTemplate('posf_readonly', file)).rejects.toMatchObject({
+        status: 403,
+        response: expect.objectContaining({ error: 'insufficient_scope' }),
+      });
+      expect(designService.importDesign).not.toHaveBeenCalled();
+    });
+
+    it('the scope survives the full authorize → token → install arc', async () => {
+      // The authorization record is the grant's persisted scope string: written
+      // at consent (createAuthorizationCode), carried into the token response
+      // (exchangeCode), and enforced at install time from the SAME stored value.
+      repository.findByCode.mockResolvedValue(
+        makeGrant({ scope: 'profile templates:install' })
+      );
+      const exchanged = await service.exchangeCode('the-code', REDIRECT_URI, 'verifier-1');
+      expect(exchanged.scope).toBe('profile templates:install');
+
+      repository.findByAccessToken.mockResolvedValue(
+        makeGrant({ scope: exchanged.scope })
+      );
+      const out = await service.installTemplate('posf_valid', file);
+      expect(out.designId).toBe('design-1');
     });
   });
 });

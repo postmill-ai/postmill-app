@@ -31,6 +31,10 @@ const SCOPE_LABELS: Record<string, { key: string; text: string }> = {
     key: 'oauth_scope_org',
     text: 'Read the organization you are currently using and your role in it',
   },
+  'templates:install': {
+    key: 'oauth_scope_templates_install',
+    text: 'Install templates into your Postmill designs',
+  },
 };
 
 // First-party federation clients pinned in the product (no OAuth app registration).
