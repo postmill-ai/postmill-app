@@ -2,9 +2,42 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { DesignRepository } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.repository';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import {
+  buildPostmillFile,
+  hasZipMagic,
+  parseDesignJson,
+  parsePostmillFile,
+  PostmillFileError,
+  sanitizeDownloadName,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
 import { isBlankDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-blank';
+
+/**
+ * Every `.pdesign` parse failure maps to a 400 whose message names the actual
+ * problem — a corrupt upload and a file written by a NEWER Postmill must not
+ * read the same to the user.
+ */
+const importErrorToHttp = (err: unknown): BadRequestException => {
+  if (err instanceof PostmillFileError) {
+    switch (err.code) {
+      case 'corrupt':
+        return new BadRequestException('The uploaded file is not a readable .pdesign archive');
+      case 'missing-entry':
+        return new BadRequestException('The .pdesign file is missing its manifest or document');
+      case 'wrong-type':
+        return new BadRequestException('This is not a Postmill design file');
+      case 'unsupported-format-version':
+      case 'unsupported-doc-version':
+        return new BadRequestException(err.message);
+      default:
+        return new BadRequestException('The uploaded file is not valid JSON');
+    }
+  }
+  return new BadRequestException('Could not read the uploaded design file');
+};
 
 @Injectable()
 export class DesignService {
@@ -396,8 +429,86 @@ export class DesignService {
       throw new NotFoundException('Template not found');
     }
     const validated = this._designerDocService.validate(template.doc);
-    const stripped = this._stripIds(validated);
+    const stripped = this._designerDocService.stripIds(validated);
     return this._designerDocService.assignIdsAndNormalize(stripped);
+  }
+
+  // ── .pdesign import/export (stage 1) ────────────────────────────────────
+  // The doc references org-scoped `fileId`s; stage 1 keeps them verbatim, so
+  // same-org round-trips resolve and cross-org imports show broken media
+  // until the asset bundling lands (stage 2). See media/designer-doc/postmill-file.ts.
+
+  /** Build the `.pdesign` zip for an org-owned design. */
+  async exportDesign(orgId: string, id: string): Promise<{ name: string; bytes: Uint8Array }> {
+    const design = await this._designRepository.findById(orgId, id);
+    if (!design) {
+      throw new NotFoundException('Design not found');
+    }
+    const doc = this._designerDocService.validate(design.doc);
+    return { name: design.name, bytes: buildPostmillFile(doc, design.name) };
+  }
+
+  /** Build the `.pdesign` zip for a template visible to the org. */
+  async exportTemplate(orgId: string, id: string): Promise<{ name: string; bytes: Uint8Array }> {
+    const template = await this._designRepository.findTemplateForOrg(id, orgId);
+    if (!template) {
+      throw new NotFoundException('Template not found');
+    }
+    const doc = this._designerDocService.validate(template.doc);
+    return { name: template.name, bytes: buildPostmillFile(doc, template.name) };
+  }
+
+  /**
+   * Import a `.pdesign` (zip) or raw `.json` DesignerDoc as a NEW design.
+   * The doc's ids are stripped and re-minted so the copy can never alias the
+   * source design's elements.
+   */
+  async importDesign(
+    orgId: string,
+    userId: string,
+    file: { buffer?: Buffer; originalname?: string; size?: number }
+  ) {
+    const buffer = file.buffer;
+    if (!buffer || !Buffer.isBuffer(buffer)) {
+      throw new BadRequestException('Invalid file upload.');
+    }
+
+    let docRaw: unknown;
+    let importedName: string | undefined;
+    if (hasZipMagic(buffer)) {
+      try {
+        const parsed = parsePostmillFile(buffer);
+        docRaw = parsed.doc;
+        importedName = parsed.manifest.name;
+      } catch (err) {
+        throw importErrorToHttp(err);
+      }
+    } else {
+      try {
+        docRaw = parseDesignJson(buffer);
+      } catch (err) {
+        throw importErrorToHttp(err);
+      }
+    }
+
+    // A raw .json skips the manifest gate, so the doc-version check from
+    // parsePostmillFile runs again here (validate() would otherwise bury the
+    // version cap under a generic "Invalid DesignerDoc").
+    if (typeof (docRaw as any)?.version === 'number' && (docRaw as any).version > DESIGNER_DOC_VERSION) {
+      throw new BadRequestException(
+        `This design was saved by a newer version of Postmill (document v${(docRaw as any).version}, supported up to v${DESIGNER_DOC_VERSION})`
+      );
+    }
+
+    const validated = this._designerDocService.validate(docRaw);
+    const stripped = this._designerDocService.stripIds(validated);
+    const normalized = this._designerDocService.assignIdsAndNormalize(stripped);
+
+    const stem = (file.originalname || '').replace(/\.(pdesign|json)$/i, '');
+    const name = importedName
+      || (stem.trim() ? sanitizeDownloadName(stem) : 'Imported design');
+
+    return this.createDesign(orgId, userId, { name, doc: normalized });
   }
 
   private async _assertOwnedFile(orgId: string, fileId: string) {
@@ -536,52 +647,6 @@ export class DesignService {
         `Could not delete replaced preview file ${previousFileId}: ${(err as Error)?.message}`
       );
     }
-  }
-
-  private _stripIds(doc: DesignerDoc): DesignerDoc {
-    const outputs = doc.outputs.map((out: any) => {
-      const base = { ...out };
-      delete base.id;
-      delete base.originId;
-      if ('children' in base) {
-        base.children = base.children.map((el: any) => {
-          const e = { ...el };
-          delete e.id;
-          delete e.originId;
-          return e;
-        });
-        // Pages (v8): strip page ids and their elements' ids the same way.
-        if (Array.isArray(base.pages)) {
-          base.pages = base.pages.map((page: any) => {
-            const p = { ...page };
-            delete p.id;
-            p.children = (p.children || []).map((el: any) => {
-              const e = { ...el };
-              delete e.id;
-              delete e.originId;
-              return e;
-            });
-            return p;
-          });
-        }
-      }
-      if ('tracks' in base) {
-        base.tracks = base.tracks.map((track: any) => {
-          const t = { ...track };
-          delete t.id;
-          delete t.originId;
-          t.clips = t.clips.map((clip: any) => {
-            const c = { ...clip };
-            delete c.id;
-            delete c.originId;
-            return c;
-          });
-          return t;
-        });
-      }
-      return base;
-    });
-    return { ...doc, outputs } as DesignerDoc;
   }
 
   async placeAsset(

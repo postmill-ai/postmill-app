@@ -1533,6 +1533,9 @@ importers:
       facebook-nodejs-business-sdk:
         specifier: ^21.0.5
         version: 21.0.5
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.2
       ffmpeg-static:
         specifier: ^5.2.0
         version: 5.3.0
@@ -15780,9 +15783,6 @@ packages:
   fetch-blob@3.2.0:
     resolution: {integrity: sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ==}
     engines: {node: ^12.20 || >= 14.13}
-
-  fflate@0.4.8:
-    resolution: {integrity: sha512-FJqqoDBR00Mdj9ppamLa/Y7vxm+PRmNWA67N846RvsoYVMKB4q3y/de5PA7gUmRMYK/8CMz2GDZQmCRN1wBcWA==}
 
   fflate@0.4.9:
     resolution: {integrity: sha512-zdxgIEddhfsyCaWpJ2SdXEP8ZMrKJ6+5jl4OupODcywU0IhRk6gdXuVGcPICyfx2H97hVK7xmJtRLPjkxAX8Vw==}
@@ -31491,6 +31491,7 @@ snapshots:
       class-transformer: 0.5.1
       class-validator-jsonschema: 5.1.0(class-transformer@0.5.1)(class-validator@0.14.4)
       facebook-nodejs-business-sdk: 21.0.5
+      fflate: 0.8.2
       ffmpeg-static: 5.3.0
       file-type: 22.0.2
       firebase-admin: 13.10.0
@@ -31837,6 +31838,7 @@ snapshots:
       class-transformer: 0.5.1
       class-validator-jsonschema: 5.1.0(class-transformer@0.5.1)(class-validator@0.14.4)
       facebook-nodejs-business-sdk: 21.0.5
+      fflate: 0.8.2
       ffmpeg-static: 5.3.0
       file-type: 22.0.2
       firebase-admin: 13.10.0
@@ -42624,8 +42626,6 @@ snapshots:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
 
-  fflate@0.4.8: {}
-
   fflate@0.4.9: {}
 
   fflate@0.8.2: {}
@@ -47408,7 +47408,7 @@ snapshots:
       '@posthog/types': 1.382.0
       core-js: 3.48.0
       dompurify: 3.4.17
-      fflate: 0.4.8
+      fflate: 0.4.9
       preact: 10.28.4
       query-selector-shadow-dom: 1.0.1
       web-vitals: 5.1.0

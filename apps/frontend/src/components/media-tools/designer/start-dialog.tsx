@@ -1,7 +1,8 @@
 'use client';
 
-import React, { FC, useCallback, useMemo, useState } from 'react';
+import React, { FC, useCallback, useMemo, useRef, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { MyDesignsPanel } from './panels/my-designs-panel';
 import { TemplatesPanel } from './panels/templates-panel';
@@ -25,12 +26,15 @@ type Step = 'home' | 'formats' | 'custom';
 // replaces the silent "blank → Instagram Post" default.
 export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) => {
   const translate = useT();
+  const toaster = useToaster();
   const [step, setStep] = useState<Step>('home');
   const [mode, setMode] = useState<'image' | 'video'>('image');
   const [tab, setTab] = useState<'my-designs' | 'templates'>('my-designs');
   const [selected, setSelected] = useState<string[]>([]);
   const [cw, setCw] = useState('1080');
   const [ch, setCh] = useState('1080');
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
 
   const presets = useMemo(() => {
     // `ig-reel`/`tiktok` are tagged category:'story' but are video surfaces (they
@@ -106,6 +110,37 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
     [fetchFn, store, onDone]
   );
 
+  // `.pdesign` / raw `.json` import — the server creates a NEW design
+  // (re-minted ids) and returns it; opening it is exactly the openDesign flow.
+  const importDesignFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      setImporting(true);
+      try {
+        const form = new FormData();
+        form.append('file', file, file.name);
+        const res = await fetchFn('/media/designs/import', { method: 'POST', body: form });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(data?.message || translate('designer_import_failed', 'Failed to import the design file'));
+        }
+        store.getState().loadDesign(data.doc, data.id, data.name, null);
+        toaster.show(translate('designer_import_success', 'Design imported'), 'success');
+        onDone();
+      } catch (err) {
+        toaster.show(
+          (err as Error)?.message || translate('designer_import_failed', 'Failed to import the design file'),
+          'warning'
+        );
+      } finally {
+        setImporting(false);
+      }
+    },
+    [fetchFn, store, onDone, toaster, translate]
+  );
+
   return (
     <div className="absolute inset-0 z-400 flex items-center justify-center bg-black/60 p-4">
       <div
@@ -120,7 +155,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
               {translate('designer_start_dialog_subtitle', 'Create a new design or open an existing one.')}
             </p>
 
-            <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
               <button
                 onClick={() => startNew('image')}
                 className="flex flex-col items-start gap-1 p-4 rounded-xl border border-studioBorder hover:border-designerAccent hover:bg-designerAccent/5 transition-colors text-left"
@@ -137,6 +172,23 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
                 <span className="text-[14px] font-semibold text-textColor">{translate('designer_new_video', 'New Video')}</span>
                 <span className="text-[11px] text-newTableText">{translate('designer_new_video_description', 'Video design with a timeline')}</span>
               </button>
+              <button
+                onClick={() => importInputRef.current?.click()}
+                disabled={importing}
+                className="flex flex-col items-start gap-1 p-4 rounded-xl border border-studioBorder hover:border-designerAccent hover:bg-designerAccent/5 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="text-[22px]">📥</span>
+                <span className="text-[14px] font-semibold text-textColor">{translate('designer_import_pdesign', 'Import .pdesign')}</span>
+                <span className="text-[11px] text-newTableText">{translate('designer_import_pdesign_description', 'Open a .pdesign or .json design file')}</span>
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".pdesign,.json,application/zip,application/json"
+                className="hidden"
+                aria-hidden="true"
+                onChange={importDesignFile}
+              />
             </div>
 
             <div className="flex border-b border-studioBorder mb-3">

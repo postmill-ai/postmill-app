@@ -629,6 +629,57 @@ export class DesignerDocService {
     return { ...doc, outputs } as DesignerDoc;
   }
 
+  /**
+   * Remove every id/originId (outputs, children, pages, tracks, clips) so a
+   * re-mint via `assignIdsAndNormalize` never collides with the source doc —
+   * template instantiation and `.pdesign` import both funnel through it.
+   */
+  stripIds(doc: DesignerDoc): DesignerDoc {
+    const outputs = doc.outputs.map((out: any) => {
+      const base = { ...out };
+      delete base.id;
+      delete base.originId;
+      if ('children' in base) {
+        base.children = base.children.map((el: any) => {
+          const e = { ...el };
+          delete e.id;
+          delete e.originId;
+          return e;
+        });
+        // Pages (v8): strip page ids and their elements' ids the same way.
+        if (Array.isArray(base.pages)) {
+          base.pages = base.pages.map((page: any) => {
+            const p = { ...page };
+            delete p.id;
+            p.children = (p.children || []).map((el: any) => {
+              const e = { ...el };
+              delete e.id;
+              delete e.originId;
+              return e;
+            });
+            return p;
+          });
+        }
+      }
+      if ('tracks' in base) {
+        base.tracks = base.tracks.map((track: any) => {
+          const t = { ...track };
+          delete t.id;
+          delete t.originId;
+          t.clips = t.clips.map((clip: any) => {
+            const c = { ...clip };
+            delete c.id;
+            delete c.originId;
+            return c;
+          });
+          return t;
+        });
+      }
+      return base;
+    });
+    return { ...doc, outputs } as DesignerDoc;
+  }
+
   assignIdsAndNormalize(doc: DesignerDoc): DesignerDoc {
     const outputs = doc.outputs.map((out) => {
       if (isImageOutput(out)) {

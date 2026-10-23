@@ -11,8 +11,11 @@ import {
   Put,
   Query,
   Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Organization, User } from '@prisma/client';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
@@ -60,6 +63,11 @@ import { parseByteRange } from '@postmill-ai/nestjs-libraries/media/design-rende
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
+import { sanitizeDownloadName } from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
+import {
+  DESIGN_IMPORT_MAX_BYTES,
+  DesignImportValidationPipe,
+} from '@postmill-ai/nestjs-libraries/upload/design-import.validation';
 import type { Response } from 'express';
 import * as fs from 'fs';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
@@ -111,6 +119,47 @@ export class DesignController {
     @Body() body: CreateDesignDto,
   ) {
     return this._designService.createDesign(org.id, user.id, body);
+  }
+
+  /**
+   * Import a `.pdesign` (zip) or raw `.json` DesignerDoc as a NEW design.
+   * Static segment declared before the parameterized `/:id` routes so it can
+   * never be captured as an id. The pipe is bound to the FILE param only —
+   * a method-scoped binding would run on org/body params too and reject them
+   * (see files.controller.pipes.spec.ts).
+   */
+  @Post('/import')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: DESIGN_IMPORT_MAX_BYTES } }))
+  async import(
+    @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
+    @UploadedFile(new DesignImportValidationPipe()) file: Express.Multer.File,
+  ) {
+    return this._designService.importDesign(org.id, user.id, file);
+  }
+
+  /**
+   * Download the design as a `.pdesign` file (zip: manifest.json + doc.json).
+   * Stage 1: media stay referenced by org-scoped fileId — same-org imports
+   * resolve, cross-org imports show broken media until asset bundling lands.
+   */
+  @Get('/:id/export')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async export(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { name, bytes } = await this._designService.exportDesign(org.id, id);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${sanitizeDownloadName(name)}.pdesign"`,
+    );
+    res.end(Buffer.from(bytes));
   }
 
   @Put('/:id')
@@ -490,6 +539,24 @@ export class DesignTemplateController {
     @Param('id') id: string,
   ) {
     return this._designService.getTemplate(org.id, id);
+  }
+
+  /** Download the template's doc as a `.pdesign` file (same format as design export). */
+  @Get('/:id/export')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async export(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { name, bytes } = await this._designService.exportTemplate(org.id, id);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${sanitizeDownloadName(name)}.pdesign"`,
+    );
+    res.end(Buffer.from(bytes));
   }
 
   @Put('/:id')

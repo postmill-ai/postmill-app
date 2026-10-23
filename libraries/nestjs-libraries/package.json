@@ -110,6 +110,7 @@
     "class-validator-jsonschema": "^5.1.0",
     "facebook-nodejs-business-sdk": "^21.0.5",
     "ffmpeg-static": "^5.2.0",
+    "fflate": "^0.8.2",
     "file-type": "^22.0.2",
     "firebase-admin": "^13.3.0",
     "fluent-ffmpeg": "^2.1.2",

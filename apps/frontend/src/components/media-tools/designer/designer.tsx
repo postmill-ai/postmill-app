@@ -921,6 +921,64 @@ export const Designer: FC<DesignerProps> = ({
     return true;
   }, [store, translate, decision]);
 
+  // --- .pdesign import/export (stage 1 interchange file) ---
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Export operates on the SAVED design (the server zips the stored doc), so
+  // an unsaved canvas has nothing to download — point the user at Save first.
+  const handleExportPostmill = useCallback(async () => {
+    const s = store.getState();
+    if (!s.designId) {
+      toaster.show(
+        translate('designer_export_pdesign_save_first', 'Save the design first, then export it as .pdesign'),
+        'warning'
+      );
+      return;
+    }
+    try {
+      const res = await fetch(`/media/designs/${s.designId}/export`);
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(s.designName || 'design').replace(/[\\/"]/g, ' ').replace(/[^\w\- ]+/g, '').trim() || 'design'}.pdesign`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toaster.show(translate('designer_export_pdesign_failed', 'Failed to export the design file'), 'warning');
+    }
+  }, [store, fetch, toaster, translate]);
+
+  const handleImportDesignFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      // Reset so picking the SAME file twice still fires onChange.
+      e.target.value = '';
+      if (!file) return;
+      if (!(await confirmDiscardIfDirty())) return;
+      try {
+        const form = new FormData();
+        form.append('file', file, file.name);
+        const res = await fetch('/media/designs/import', { method: 'POST', body: form });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(data?.message || translate('designer_import_failed', 'Failed to import the design file'));
+        }
+        store.getState().loadDesign(data.doc, data.id, data.name, null);
+        toaster.show(translate('designer_import_success', 'Design imported'), 'success');
+      } catch (err) {
+        toaster.show(
+          (err as Error)?.message || translate('designer_import_failed', 'Failed to import the design file'),
+          'warning'
+        );
+      }
+    },
+    [confirmDiscardIfDirty, fetch, store, toaster, translate]
+  );
+
   // Reusable image-from-media placement (centered + aspect-correct) — shared by
   // the Insert/Import media modal and the canvas "Add Image" (D-8).
   /**
@@ -1197,6 +1255,8 @@ export const Designer: FC<DesignerProps> = ({
       onOpenMedia,
       onInsertMedia,
       onExport: handleSaveToFiles,
+      onExportPostmill: handleExportPostmill,
+      onImportDesign: () => importInputRef.current?.click(),
       onUseInPost: setMedia ? handleExport : undefined,
       onClose: closeModal,
       onCanvasProperties: () => {
@@ -1350,6 +1410,8 @@ export const Designer: FC<DesignerProps> = ({
       handleSaveAsTemplate,
       handleExport,
       handleSaveToFiles,
+      handleExportPostmill,
+      handleImportDesignFile,
       onOpenMedia,
       onInsertMedia,
       confirmDiscardIfDirty,
@@ -1685,6 +1747,14 @@ export const Designer: FC<DesignerProps> = ({
         <StartDialog store={store} fetchFn={fetch} onDone={() => setShowStart(false)} />
       )}
       {mediaPicker.element}
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".pdesign,.json,application/zip,application/json"
+        className="hidden"
+        aria-hidden="true"
+        onChange={handleImportDesignFile}
+      />
     </div>
   );
 };

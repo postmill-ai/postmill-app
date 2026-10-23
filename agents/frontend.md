@@ -266,6 +266,20 @@ Acceptance test for any change here: render the same document through **both** p
 a document with a blended group, a clipped adjustment and a layer style is the case that catches
 divergence.
 
+## Designer: `.pdesign` import/export
+
+Designs and templates round-trip as a `.pdesign` file — a zip (`fflate`) with `manifest.json`
+(type tag `postmill-design`, `formatVersion`, `docVersion`, mode, name) and `doc.json` (the
+DesignerDoc verbatim). Build/parse live in `designer-doc/postmill-file.ts`; every parse failure is
+a coded `PostmillFileError` so the API can 400 with a distinct message (corrupt, wrong type, newer
+file format, newer doc version). Routes: `GET /media/designs/:id/export`,
+`GET /media/design-templates/:id/export`, `POST /media/designs/import` (multipart, 25 MB cap via
+`upload/design-import.validation.ts` — NOT `CustomFileValidationPipe`, which rejects zips and
+renames files). Import validates, strips ids (`DesignerDocService.stripIds`), re-mints them
+(`assignIdsAndNormalize`) and creates a NEW design. Stage-1 limitation: doc `fileId` media
+references are kept verbatim — same-org imports resolve, cross-org imports show broken media until
+the `assets/` bundling stage lands.
+
 ## Forms
 
 - `react-hook-form` + `FormProvider` is the standard; shared form primitives self-register against the

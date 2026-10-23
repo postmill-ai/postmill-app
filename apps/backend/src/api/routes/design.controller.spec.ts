@@ -2,6 +2,13 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CHECK_POLICIES_KEY } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
+import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
+import { DesignImportValidationPipe } from '@postmill-ai/nestjs-libraries/upload/design-import.validation';
+import {
+  buildPostmillFile,
+  parsePostmillFile,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
 import {
   AuthorizationActions,
   Sections,
@@ -66,6 +73,9 @@ describe('DesignController', () => {
     deleteFolder: ReturnType<typeof vi.fn>;
     moveTemplate: ReturnType<typeof vi.fn>;
     regenPreviews: ReturnType<typeof vi.fn>;
+    exportDesign: ReturnType<typeof vi.fn>;
+    exportTemplate: ReturnType<typeof vi.fn>;
+    importDesign: ReturnType<typeof vi.fn>;
   };
   let fileService: {
     getFileById: ReturnType<typeof vi.fn>;
@@ -95,6 +105,9 @@ describe('DesignController', () => {
       deleteFolder: vi.fn(),
       moveTemplate: vi.fn(),
       regenPreviews: vi.fn(),
+      exportDesign: vi.fn(),
+      exportTemplate: vi.fn(),
+      importDesign: vi.fn(),
     };
     fileService = {
       getFileById: vi.fn(),
@@ -205,6 +218,30 @@ describe('DesignController', () => {
         )
       ).toEqual({ resource: 'media', action: 'create' });
     });
+
+    it(' DesignController import is gated on media:create and MEDIA create policy', () => {
+      expect(
+        Reflect.getMetadata(CHECK_POLICIES_KEY, DesignController.prototype.import)
+      ).toEqual([[AuthorizationActions.Create, Sections.MEDIA]]);
+      expect(
+        Reflect.getMetadata(REQUIRE_PERMISSION_KEY, DesignController.prototype.import)
+      ).toEqual({ resource: 'media', action: 'create' });
+    });
+
+    it(' DesignController export is gated on media:read and MEDIA read policy', () => {
+      expect(
+        Reflect.getMetadata(CHECK_POLICIES_KEY, DesignController.prototype.export)
+      ).toEqual([[AuthorizationActions.Read, Sections.MEDIA]]);
+      expect(
+        Reflect.getMetadata(REQUIRE_PERMISSION_KEY, DesignController.prototype.export)
+      ).toEqual({ resource: 'media', action: 'read' });
+    });
+
+    it(' DesignTemplateController export is gated on media:read', () => {
+      expect(
+        Reflect.getMetadata(REQUIRE_PERMISSION_KEY, DesignTemplateController.prototype.export)
+      ).toEqual({ resource: 'media', action: 'read' });
+    });
   });
 
   describe('GET /media/designs', () => {
@@ -231,6 +268,97 @@ describe('DesignController', () => {
 
       expect(await controller.get(org, 'd1')).toBe(design);
       expect(designService.getDesign).toHaveBeenCalledWith('org-1', 'd1');
+    });
+  });
+
+  describe('POST /media/designs/import', () => {
+    it('binds DesignImportValidationPipe to the FILE param (not method scope)', () => {
+      const args =
+        Reflect.getMetadata(ROUTE_ARGS_METADATA, DesignController, 'import') ?? {};
+      const fileEntries = Object.entries(args).filter(([key]) =>
+        key.startsWith(`${RouteParamtypes.FILE}:`)
+      );
+      expect(fileEntries).toHaveLength(1);
+      expect(
+        (fileEntries[0][1] as any).pipes.some(
+          (p: unknown) => p instanceof DesignImportValidationPipe
+        )
+      ).toBe(true);
+    });
+
+    it('delegates to importDesign with the org, user and uploaded file', async () => {
+      const file = { originalname: 'party.pdesign', buffer: Buffer.from('zip') } as any;
+      const created = { id: 'd9', name: 'Party' };
+      designService.importDesign.mockResolvedValue(created);
+
+      expect(await controller.import(org, user, file)).toBe(created);
+      expect(designService.importDesign).toHaveBeenCalledWith('org-1', 'user-1', file);
+    });
+
+    it('propagates the dedicated 400 for a newer-version file', async () => {
+      designService.importDesign.mockRejectedValue(
+        new BadRequestException(
+          'This design was saved by a newer version of Postmill (document v9, supported up to v8)'
+        )
+      );
+
+      await expect(
+        controller.import(org, user, { buffer: Buffer.from('x') } as any)
+      ).rejects.toThrow(/newer version of Postmill/);
+    });
+  });
+
+  describe('GET /media/designs/:id/export', () => {
+    const makeRes = () => {
+      const res = { setHeader: vi.fn(), end: vi.fn() };
+      return res as any;
+    };
+
+    it('responds with a .pdesign zip that parses back to the exported doc', async () => {
+      const doc = {
+        version: 8,
+        mode: 'image',
+        outputs: [
+          { id: 'out-1', formatId: 'square', name: 'S', width: 1080, height: 1080, background: '#fff', children: [] },
+        ],
+      } as any;
+      designService.exportDesign.mockResolvedValue({
+        name: 'Hero / "Q4"',
+        bytes: buildPostmillFile(doc, 'Hero / "Q4"'),
+      });
+      const res = makeRes();
+
+      await controller.export(org, 'd1', res);
+
+      expect(designService.exportDesign).toHaveBeenCalledWith('org-1', 'd1');
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'application/zip');
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename="Hero Q4.pdesign"'
+      );
+      const parsed = parsePostmillFile(res.end.mock.calls[0][0]);
+      expect(parsed.doc).toEqual(doc);
+      expect(parsed.manifest.name).toBe('Hero / "Q4"');
+    });
+  });
+
+  describe('GET /media/design-templates/:id/export', () => {
+    it('responds with the template doc as a .pdesign zip', async () => {
+      const doc = { version: 8, mode: 'image', outputs: [] } as any;
+      designService.exportTemplate.mockResolvedValue({
+        name: 'Tpl',
+        bytes: buildPostmillFile(doc, 'Tpl'),
+      });
+      const res = { setHeader: vi.fn(), end: vi.fn() } as any;
+
+      await templateController.export(org, 't1', res);
+
+      expect(designService.exportTemplate).toHaveBeenCalledWith('org-1', 't1');
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename="Tpl.pdesign"'
+      );
+      expect(parsePostmillFile(res.end.mock.calls[0][0]).doc).toEqual(doc);
     });
   });
 

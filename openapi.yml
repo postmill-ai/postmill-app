@@ -7432,6 +7432,39 @@ paths:
           description: ""
       tags:
         - Design
+  /media/designs/import:
+    post:
+      operationId: DesignController_import
+      parameters: []
+      responses:
+        "201":
+          description: ""
+      summary: |-
+        Import a `.pdesign` (zip) or raw `.json` DesignerDoc as a NEW design.
+        Static segment declared before the parameterized `/:id` routes so it can
+        never be captured as an id. The pipe is bound to the FILE param only —
+        a method-scoped binding would run on org/body params too and reject them
+        (see files.controller.pipes.spec.ts).
+      tags:
+        - Design
+  /media/designs/{id}/export:
+    get:
+      operationId: DesignController_export
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      summary: |-
+        Download the design as a `.pdesign` file (zip: manifest.json + doc.json).
+        Stage 1: media stay referenced by org-scoped fileId — same-org imports
+        resolve, cross-org imports show broken media until asset bundling lands.
+      tags:
+        - Design
   /media/designs/maintenance/regen-previews:
     post:
       operationId: DesignController_regenPreviews
@@ -7821,6 +7854,21 @@ paths:
       responses:
         "200":
           description: ""
+      tags:
+        - Design Templates
+  /media/design-templates/{id}/export:
+    get:
+      operationId: DesignTemplateController_export
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      summary: Download the template's doc as a `.pdesign` file (same format as design export).
       tags:
         - Design Templates
   /media/designer/proxy:

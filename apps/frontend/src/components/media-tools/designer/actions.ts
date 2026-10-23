@@ -93,6 +93,10 @@ export interface DesignerActionCtx {
   /** Insert media of a specific kind, with the picker narrowed to match. */
   onInsertMedia: (kind: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio') => void;
   onExport: () => void;
+  /** Download the saved design as a `.pdesign` interchange file. */
+  onExportPostmill: () => void;
+  /** Import a `.pdesign` / `.json` design file as a new design. */
+  onImportDesign: () => void;
   onUseInPost?: () => void;
   onClose?: () => void;
   onCanvasProperties: () => void;
@@ -383,6 +387,8 @@ export const useDesignerActions = (
       { id: 'save-as-template', label: 'Save as Template', menu: 'file', group: 'save', keywords: ['template', 'save as'], run: ctx.onSaveAsTemplate },
       { id: 'import-media', label: 'Import Media…', menu: 'file', group: 'io', keywords: ['import', 'media', 'upload'], run: ctx.onOpenMedia },
       { id: 'export', label: 'Export…', menu: 'file', group: 'io', shortcut: '⌘E', keywords: ['export', 'download'], run: ctx.onExport },
+      { id: 'export-postmill', label: 'Export .pdesign…', menu: 'file', group: 'io', keywords: ['export', 'pdesign', 'design file', 'download'], run: ctx.onExportPostmill },
+      { id: 'import-design', label: 'Import Design File…', menu: 'file', group: 'io', keywords: ['import', 'pdesign', 'json', 'design file', 'open'], run: ctx.onImportDesign },
       ...(ctx.onUseInPost ? [{ id: 'use-in-post', label: 'Use in Post', menu: 'file' as const, group: 'io', keywords: ['post', 'use'], run: ctx.onUseInPost }] : []),
       ...(ctx.onClose ? [{ id: 'close', label: 'Close', menu: 'file' as const, group: 'close', keywords: ['close', 'exit'], run: ctx.onClose }] : []),
 

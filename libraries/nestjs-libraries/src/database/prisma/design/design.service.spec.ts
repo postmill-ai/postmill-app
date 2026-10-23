@@ -1,8 +1,16 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { zipSync, strToU8 } from 'fflate';
 import { DesignService } from './design.service';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
+import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import {
+  POSTMILL_FILE_TYPE,
+  POSTMILL_FORMAT_VERSION,
+  buildPostmillFile,
+  parsePostmillFile,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
 
 const makeDoc = (overrides: any = {}) => ({
   mode: 'image',
@@ -999,6 +1007,162 @@ describe('DesignService', () => {
 
       expect(result.designs.failed + result.templates.failed).toBe(1);
       expect(result.designs.regenerated + result.templates.regenerated).toBe(3);
+    });
+  });
+
+  describe('exportDesign / exportTemplate (.pdesign)', () => {
+    it('builds a .pdesign zip that parses back to the stored doc', async () => {
+      const doc = makeDoc();
+      repository.findById.mockResolvedValue({ id: 'd1', name: 'Hero / "Q4"', doc });
+
+      const { name, bytes } = await service.exportDesign('org-1', 'd1');
+
+      expect(repository.findById).toHaveBeenCalledWith('org-1', 'd1');
+      expect(name).toBe('Hero / "Q4"');
+      const parsed = parsePostmillFile(bytes);
+      expect(parsed.doc).toEqual(expect.objectContaining({ mode: 'image' }));
+      expect((parsed.doc as any).outputs[0].formatId).toBe('instagram-square');
+      expect(parsed.manifest).toMatchObject({
+        type: POSTMILL_FILE_TYPE,
+        formatVersion: POSTMILL_FORMAT_VERSION,
+        mode: 'image',
+        name: 'Hero / "Q4"',
+      });
+    });
+
+    it('404s exporting a design the org cannot see', async () => {
+      repository.findById.mockResolvedValue(null);
+      await expect(service.exportDesign('org-1', 'nope')).rejects.toThrow(NotFoundException);
+    });
+
+    it('exports a template doc the same way', async () => {
+      const doc = makeDoc();
+      repository.findTemplateForOrg.mockResolvedValue({ id: 't1', name: 'Tpl', doc });
+
+      const { name, bytes } = await service.exportTemplate('org-1', 't1');
+
+      expect(name).toBe('Tpl');
+      expect(parsePostmillFile(bytes).manifest.name).toBe('Tpl');
+    });
+
+    it('404s exporting a cross-org template', async () => {
+      repository.findTemplateForOrg.mockResolvedValue(null);
+      await expect(service.exportTemplate('org-1', 'nope')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('importDesign (.pdesign / .json)', () => {
+    const docWithIds = () =>
+      makeDoc({
+        doc: { version: DESIGNER_DOC_VERSION },
+        output: {
+          id: 'out-source',
+          children: [
+            {
+              id: 'el-source',
+              type: 'text',
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 50,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: 'Hello',
+            },
+          ],
+        },
+      });
+
+    it('imports a .pdesign: re-mints ids and names the design from the manifest', async () => {
+      const bytes = buildPostmillFile(docWithIds() as any, 'Party Invite');
+      repository.create.mockImplementation((payload: any) => payload);
+
+      const created = await service.importDesign('org-1', 'user-1', {
+        buffer: Buffer.from(bytes),
+        originalname: 'whatever.pdesign',
+      });
+
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ organizationId: 'org-1', createdById: 'user-1', name: 'Party Invite' })
+      );
+      const out = created.doc.outputs[0];
+      expect(out.id).not.toBe('out-source');
+      expect(out.id).toMatch(/^out-/);
+      expect(out.children[0].id).not.toBe('el-source');
+      expect(out.children[0].id).toMatch(/^el-/);
+      // ...while the content survives verbatim.
+      expect(out.children[0].text).toBe('Hello');
+    });
+
+    it('imports a raw .json DesignerDoc and names it from the filename', async () => {
+      repository.create.mockImplementation((payload: any) => payload);
+
+      const created = await service.importDesign('org-1', 'user-1', {
+        buffer: Buffer.from(JSON.stringify(docWithIds())),
+        originalname: 'My Design.json',
+      });
+
+      expect(created.name).toBe('My Design');
+      expect(created.doc.outputs[0].id).toMatch(/^out-/);
+    });
+
+    it('falls back to "Imported design" when there is no usable name', async () => {
+      repository.create.mockImplementation((payload: any) => payload);
+
+      const created = await service.importDesign('org-1', 'user-1', {
+        buffer: Buffer.from(JSON.stringify(docWithIds())),
+      });
+
+      expect(created.name).toBe('Imported design');
+    });
+
+    it('rejects a .pdesign whose doc is newer than this Postmill with a dedicated message', async () => {
+      const bytes = zipSync({
+        'manifest.json': strToU8(
+          JSON.stringify({ type: POSTMILL_FILE_TYPE, formatVersion: 1, name: 'Future' })
+        ),
+        'doc.json': strToU8(JSON.stringify(docWithIds())),
+      });
+      // Simulate a file from the future: docVersion above what we understand.
+      const future = parsePostmillFile(bytes);
+      const bumped = buildPostmillFile(
+        { ...(future.doc as any), version: DESIGNER_DOC_VERSION + 1 },
+        'Future'
+      );
+
+      await expect(
+        service.importDesign('org-1', 'user-1', { buffer: Buffer.from(bumped), originalname: 'f.pdesign' })
+      ).rejects.toThrow(/newer version of Postmill/);
+    });
+
+    it('rejects a raw .json whose doc version is newer than supported', async () => {
+      const doc = { ...docWithIds(), version: DESIGNER_DOC_VERSION + 1 };
+      await expect(
+        service.importDesign('org-1', 'user-1', {
+          buffer: Buffer.from(JSON.stringify(doc)),
+          originalname: 'f.json',
+        })
+      ).rejects.toThrow(/newer version of Postmill/);
+    });
+
+    it('rejects non-zip garbage with a 400', async () => {
+      await expect(
+        service.importDesign('org-1', 'user-1', {
+          buffer: Buffer.from('this is not a design file'),
+          originalname: 'notes.json',
+        })
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a schema-invalid doc with the shared Invalid DesignerDoc shape', async () => {
+      await expect(
+        service.importDesign('org-1', 'user-1', {
+          buffer: Buffer.from(JSON.stringify({ version: 8, mode: 'image', outputs: [] })),
+          originalname: 'bad.json',
+        })
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });
