@@ -144,6 +144,19 @@ export const RenderQueue: FC<RenderQueueProps> = ({
     [fetchTranscript, openComposer, toaster]
   );
 
+  // /uploads is intentionally public (unguessable names), so the artifact URL
+  // itself is the share link — the same URL the Files panel's Copy URL builds.
+  const copyLink = useCallback(
+    (job: StudioJob) => {
+      if (!job.artifactUrl) return;
+      navigator.clipboard.writeText(mediaDirectory.set(job.artifactUrl)).then(
+        () => toaster.show(t('url_copied_to_clipboard', 'URL copied to clipboard'), 'success'),
+        () => toaster.show(t('copy_failed', 'Copy failed'), 'warning')
+      );
+    },
+    [mediaDirectory, toaster, t]
+  );
+
   // A stable callback identity matters here: an inline ref is detached and
   // re-attached on every render, so scrollIntoView would re-fire (smooth
   // scrolling the queue back to this card) on each SWR poll while highlighted.
@@ -248,6 +261,15 @@ export const RenderQueue: FC<RenderQueueProps> = ({
                 >
                   {t('edit_in_designer', 'Edit in Designer')}
                 </button>
+                {job.artifactUrl && (
+                  <button
+                    type="button"
+                    onClick={() => copyLink(job)}
+                    className="flex-1 px-[10px] py-[7px] rounded-[8px] bg-btnSimple text-textColor text-[12px] hover:bg-boxHover transition-all"
+                  >
+                    {t('copy_link', 'Copy Link')}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => post(job)}
