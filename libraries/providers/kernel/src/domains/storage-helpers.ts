@@ -138,6 +138,9 @@ const STORED_ARTIFACT_ALLOWED_MIME = new Set<string>([
   'audio/webm',
   'text/plain',
   'application/json',
+  // Inert archive type (never rendered/executed in place) — the Designer
+  // `.pdesign` export artifact is a zip and lands through writeBuffer.
+  'application/zip',
 ]);
 
 /**

@@ -7,6 +7,7 @@ import { EmailActivity } from './activities/email.activity';
 import { IntegrationsActivity } from './activities/integrations.activity';
 import { AutopostActivity } from './activities/autopost.activity';
 import { MediaJobsActivity } from './activities/media-jobs.activity';
+import { DesignExportActivity } from './activities/design-export.activity';
 import { DigestActivity } from './activities/digest.activity';
 import { CampaignActivity } from './activities/campaign.activity';
 import { RetentionActivity } from './activities/retention.activity';
@@ -30,6 +31,7 @@ export class InngestService {
     integrationsActivity: IntegrationsActivity,
     autopostActivity: AutopostActivity,
     mediaJobsActivity: MediaJobsActivity,
+    designExportActivity: DesignExportActivity,
     digestActivity: DigestActivity,
     campaignActivity: CampaignActivity,
     retentionActivity: RetentionActivity,
@@ -53,6 +55,7 @@ export class InngestService {
       integrationsActivity,
       autopostActivity,
       mediaJobsActivity,
+      designExportActivity,
       digestActivity,
       campaignActivity,
       retentionActivity,

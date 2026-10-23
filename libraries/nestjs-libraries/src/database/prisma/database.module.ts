@@ -126,6 +126,7 @@ import { DesignBulkService } from '@postmill-ai/nestjs-libraries/media/design-re
 import { FontLoaderService } from '@postmill-ai/nestjs-libraries/media/design-render/font-loader.service';
 import { VideoRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
 import { VideoRenderModule } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.module';
+import { DesignExportModule } from '@postmill-ai/nestjs-libraries/media/design-export/design-export.module';
 import { AuthContextResolver } from '@postmill-ai/nestjs-libraries/auth/auth-context.resolver';
 import { DashboardService } from '@postmill-ai/nestjs-libraries/dashboard/dashboard.service';
 import { DashboardBriefService } from '@postmill-ai/nestjs-libraries/dashboard/dashboard-brief.service';
@@ -139,7 +140,7 @@ import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/a
 
 @Global()
 @Module({
-  imports: [MediaModule, VideoRenderModule],
+  imports: [MediaModule, VideoRenderModule, DesignExportModule],
   controllers: [],
   providers: [
     PrismaService,
@@ -318,8 +319,9 @@ import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/a
     // Re-export MediaModule so its media services are globally injectable.
     // VideoRenderModule is likewise re-exported so VideoRenderService is globally
     // injectable (MediaJobsActivity in InngestModule, design.controller in
-    // ApiModule) without each module re-importing it.
-    return [...this.providers, MediaModule, VideoRenderModule];
+    // ApiModule) without each module re-importing it. DesignExportModule the
+    // same way (DesignExportActivity, design.controller export routes).
+    return [...this.providers, MediaModule, VideoRenderModule, DesignExportModule];
   },
 })
 export class DatabaseModule implements OnModuleInit {

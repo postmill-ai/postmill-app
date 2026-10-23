@@ -49,14 +49,20 @@ function makeActivity(opts: {
   const organizationService = {
     getOrgById: vi.fn(async (_orgId: string) => ({ id: _orgId, name: 'Test Org' })),
   };
+  const designExport = {
+    processExport: vi.fn(async (id: string) => {
+      if (opts.jobsById?.[id]) opts.jobsById[id].status = 'completed';
+    }),
+  };
   const activity = new MediaJobsActivity(
     lifecycle as any,
     aiSettings as any,
     videoRender as any,
     subscriptionService as any,
     organizationService as any,
+    designExport as any,
   );
-  return { activity, lifecycle, aiSettings, videoRender, subscriptionService, organizationService };
+  return { activity, lifecycle, aiSettings, videoRender, subscriptionService, organizationService, designExport };
 }
 
 describe('MediaJobsActivity', () => {
@@ -171,8 +177,68 @@ describe('MediaJobsActivity', () => {
     expect(result.failed).toBe(1);
   });
 
-  it('processPollJob delegates to lifecycle.processJob', async () => {
-    const { activity, lifecycle } = makeActivity({});
+  it('fans out stale pending design-export jobs via media/design-export, never media/poll-job', async () => {
+    const { activity, lifecycle } = makeActivity({
+      pending: [
+        { id: 'x1', provider: 'design-export', model: null, updatedAt: new Date(Date.now() - 300_000) },
+        { id: 'p1', provider: 'replicate', model: 'video' },
+      ],
+    });
+
+    await activity.processPendingMediaJobs();
+
+    const bucket = Math.floor(Date.now() / 60000);
+    expect(h.send).toHaveBeenCalledWith({
+      name: 'media/design-export',
+      id: `design-export-x1-${bucket}`,
+      data: { jobId: 'x1' },
+    });
+    // The export job must NOT enter the provider-poll path.
+    expect(h.send).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'media/poll-job', data: { jobId: 'x1' } })
+    );
+    expect(h.send).toHaveBeenCalledWith(expect.objectContaining({ name: 'media/poll-job', data: { jobId: 'p1' } }));
+    expect(lifecycle.processJob).not.toHaveBeenCalled();
+  });
+
+  it('runs export jobs inline when Inngest is disabled', async () => {
+    h.enabled = false;
+    const { activity, designExport } = makeActivity({
+      pending: [{ id: 'x1', provider: 'design-export', model: null, updatedAt: new Date(Date.now() - 300_000) }],
+      jobsById: { x1: { id: 'x1', provider: 'design-export', model: null, status: 'pending' } },
+    });
+
+    const result = await activity.processPendingMediaJobs();
+
+    expect(h.send).not.toHaveBeenCalled();
+    expect(designExport.processExport).toHaveBeenCalledWith('x1');
+    expect(result.processed).toBe(1);
+  });
+
+  it('fails a design-export job stuck in processing past the export budget', async () => {
+    const { activity, aiSettings } = makeActivity({
+      pending: [
+        {
+          id: 'x1',
+          provider: 'design-export',
+          model: null,
+          status: 'processing',
+          organizationId: 'org-1',
+          updatedAt: new Date(Date.now() - 20 * 60 * 1000),
+        },
+      ],
+    });
+
+    const result = await activity.processPendingMediaJobs();
+
+    expect(aiSettings.updateMediaJob).toHaveBeenCalledWith('org-1', 'x1', {
+      status: 'failed',
+      error: 'Export exceeded its wall-clock budget with no live runner',
+    });
+    expect(result.failed).toBe(1);
+  });
+
+  it('processPollJob delegates to lifecycle.processJob', async () => {    const { activity, lifecycle } = makeActivity({});
 
     await activity.processPollJob('job-1');
 

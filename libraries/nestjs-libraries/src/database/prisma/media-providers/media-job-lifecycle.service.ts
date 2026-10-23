@@ -37,7 +37,7 @@ const MAX_EXTRA_ARTIFACTS = 8;
 // 'stt' jobs are created already-complete (transcript stored inline via
 // completeJobWithBuffer), so they never enter the async poll path — but the type must
 // admit them so the Deepgram studio can record transcript history as media jobs.
-type AsyncOperation = 'video' | 'audio' | 'avatar' | 'image' | 'stt' | 'slide' | 'caption' | 'video-bg' | 'video-upscale';
+type AsyncOperation = 'video' | 'audio' | 'avatar' | 'image' | 'stt' | 'slide' | 'caption' | 'video-bg' | 'video-upscale' | 'design-export';
 
 const OPERATION_FOLDER: Record<string, string> = {
   image: 'images',

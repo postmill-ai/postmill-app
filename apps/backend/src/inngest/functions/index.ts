@@ -5,6 +5,7 @@ import { EmailActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/
 import { IntegrationsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/integrations.activity';
 import { AutopostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/autopost.activity';
 import { MediaJobsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/media-jobs.activity';
+import { DesignExportActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/design-export.activity';
 import { DigestActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/digest.activity';
 import { CampaignActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/campaign.activity';
 import { RetentionActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/retention.activity';
@@ -24,6 +25,7 @@ import { createMissingPostFinder } from './missing-post-finder';
 import { createMediaJobsPoll } from './media-jobs-poll';
 import { createMediaJobsPollJob } from './media-jobs-poll-job';
 import { createMediaRender } from './media-render';
+import { createDesignExport } from './design-export';
 import { createSendEmail } from './send-email';
 import {
   createDigestEmailDaily,
@@ -53,6 +55,7 @@ export interface InngestActivities {
   integrationsActivity: IntegrationsActivity;
   autopostActivity: AutopostActivity;
   mediaJobsActivity: MediaJobsActivity;
+  designExportActivity: DesignExportActivity;
   digestActivity: DigestActivity;
   campaignActivity: CampaignActivity;
   retentionActivity: RetentionActivity;
@@ -73,6 +76,7 @@ export const createFunctions = (activities: InngestActivities): InngestFunction.
   createMediaJobsPoll(activities.mediaJobsActivity, activities.inngestRunService),
   createMediaJobsPollJob(activities.mediaJobsActivity),
   createMediaRender(activities.mediaJobsActivity),
+  createDesignExport(activities.designExportActivity),
   createSendEmail(activities.emailActivity),
   createDigestEmailDaily(activities.digestActivity),
   createDigestEmailWeekly(activities.digestActivity),

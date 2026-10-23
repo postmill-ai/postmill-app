@@ -7,6 +7,13 @@ import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/pris
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { getRenderConcurrency, getRenderTimeoutMs } from '@postmill-ai/nestjs-libraries/media/design-render/render-config';
 import { renderPayloadKey } from '@postmill-ai/nestjs-libraries/media/design-render/render-progress';
+import {
+  DESIGN_EXPORT_PROVIDER,
+  DESIGN_EXPORT_EVENT,
+  DESIGN_EXPORT_TIMEOUT_MS,
+  designExportEventId,
+  DesignExportService,
+} from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { mapWithConcurrency } from '@postmill-ai/nestjs-libraries/utils/concurrency';
 
@@ -25,6 +32,7 @@ export class MediaJobsActivity {
     private _videoRenderService: VideoRenderService,
     private _subscriptionService: SubscriptionService,
     private _organizationService: OrganizationService,
+    private _designExportService: DesignExportService,
   ) {}
 
   /**
@@ -164,9 +172,20 @@ export class MediaJobsActivity {
       const localJobs: typeof pending = [];
       const pollJobs: typeof pending = [];
       const stuckJobs: typeof pending = [];
+      const exportJobs: typeof pending = [];
+      const stuckExportJobs: typeof pending = [];
 
       for (const job of pending) {
-        if (this.isLocalRender(job)) {
+        // `.pdesign` exports are local-compute too, but through their own
+        // event/activity — they must never land in pollJobs (the provider-kernel
+        // poll path would fail them as an unknown provider).
+        if (job.provider === DESIGN_EXPORT_PROVIDER) {
+          if (job.status === 'processing') {
+            stuckExportJobs.push(job);
+          } else if (this.isStaleRender(job)) {
+            exportJobs.push(job);
+          }
+        } else if (this.isLocalRender(job)) {
           if (job.status === 'processing') {
             stuckJobs.push(job);
           } else if (this.isStaleRender(job)) {
@@ -202,6 +221,57 @@ export class MediaJobsActivity {
           this.logger.warn(
             `Failing stuck render ${job.id} failed: ${(err as Error).message}`,
           );
+        }
+      }
+
+      // A crashed export runner strands the job in `processing` the same way —
+      // fail it past the fixed export budget (no payload-derived budget here:
+      // exports are storage-I/O bound, not frame-scaled).
+      for (const job of stuckExportJobs) {
+        const since = new Date(job.updatedAt ?? job.createdAt ?? 0).getTime();
+        if (Date.now() - since <= DESIGN_EXPORT_TIMEOUT_MS) continue;
+        try {
+          await this._aiSettings.updateMediaJob(job.organizationId, job.id, {
+            status: 'failed',
+            error: 'Export exceeded its wall-clock budget with no live runner',
+          });
+          result.processed++;
+          result.failed++;
+          this.logger.warn(`Design export ${job.id} failed: stuck in processing`);
+        } catch (err) {
+          this.logger.warn(`Failing stuck export ${job.id} failed: ${(err as Error).message}`);
+        }
+      }
+
+      // Still-pending exports: re-enqueue via their own event (idempotent — the
+      // activity no-ops once status != pending), or run inline through the same
+      // concurrency knob when Inngest is off.
+      if (exportJobs.length > 0) {
+        if (isInngestEnabled()) {
+          for (const job of exportJobs) {
+            await inngest.send({
+              name: DESIGN_EXPORT_EVENT,
+              id: designExportEventId(job.id),
+              data: { jobId: job.id },
+            });
+          }
+          result.processed += exportJobs.length;
+        } else {
+          await mapWithConcurrency(exportJobs, getRenderConcurrency(), async (job) => {
+            try {
+              await this._withTimeout(
+                this._designExportService.processExport(job.id),
+                DESIGN_EXPORT_TIMEOUT_MS,
+                `Inline export timeout for ${job.id}`,
+              );
+              result.processed++;
+              result.completed++;
+            } catch (err) {
+              result.processed++;
+              result.failed++;
+              this.logger.warn(`Inline export error for ${job.id}: ${(err as Error).message}`);
+            }
+          });
         }
       }
 

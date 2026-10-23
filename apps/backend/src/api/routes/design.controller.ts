@@ -63,18 +63,26 @@ import { parseByteRange } from '@postmill-ai/nestjs-libraries/media/design-rende
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
-import { sanitizeDownloadName } from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
+import { DesignExportService } from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
 import {
   DESIGN_IMPORT_MAX_BYTES,
   DesignImportValidationPipe,
 } from '@postmill-ai/nestjs-libraries/upload/design-import.validation';
 import type { Response } from 'express';
 import * as fs from 'fs';
+import { diskStorage } from 'multer';
+import { tmpdir } from 'os';
+import * as path from 'path';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import {
   mediaJobWebhookToken,
   verifyMediaJobWebhookToken,
 } from '@postmill-ai/nestjs-libraries/media/media-job-token';
+
+// Disk-spooled design-import uploads (up to 1 GB bundled .pdesign files) —
+// same pattern as files.controller.ts.
+const TMP_UPLOAD_DIR = path.join(tmpdir(), 'postmill-uploads');
+try { fs.mkdirSync(TMP_UPLOAD_DIR, { recursive: true }); } catch {}
 
 @ApiTags('Design')
 @Controller('/media/designs')
@@ -87,6 +95,7 @@ export class DesignController {
     private _videoRenderService: VideoRenderService,
     private _designerDocService: DesignerDocService,
     private _fontLoaderService: FontLoaderService,
+    private _designExportService: DesignExportService,
   ) {}
 
   @Get('/')
@@ -122,44 +131,81 @@ export class DesignController {
   }
 
   /**
-   * Import a `.pdesign` (zip) or raw `.json` DesignerDoc as a NEW design.
-   * Static segment declared before the parameterized `/:id` routes so it can
-   * never be captured as an id. The pipe is bound to the FILE param only —
-   * a method-scoped binding would run on org/body params too and reject them
-   * (see files.controller.pipes.spec.ts).
+   * Import a `.pdesign` (zip, format v1 or v2) or raw `.json` DesignerDoc as a
+   * NEW design. Static segment declared before the parameterized `/:id` routes
+   * so it can never be captured as an id. The pipe is bound to the FILE param
+   * only — a method-scoped binding would run on org/body params too and reject
+   * them (see files.controller.pipes.spec.ts). Disk-spooled (1 GB cap): v2
+   * files bundle every referenced asset, so memory storage is not an option.
    */
   @Post('/import')
   @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
   @RequirePermission('media', 'create')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: DESIGN_IMPORT_MAX_BYTES } }))
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({ destination: TMP_UPLOAD_DIR }),
+    limits: { fileSize: DESIGN_IMPORT_MAX_BYTES },
+  }))
   async import(
     @GetOrgFromRequest() org: Organization,
     @GetUserFromRequest() user: User,
     @UploadedFile(new DesignImportValidationPipe()) file: Express.Multer.File,
   ) {
-    return this._designService.importDesign(org.id, user.id, file);
+    try {
+      return await this._designService.importDesign(org.id, user.id, file);
+    } finally {
+      // The temp spool file is always removed, success or failure.
+      if (file?.path) { try { await fs.promises.unlink(file.path); } catch { /* best-effort */ } }
+    }
   }
 
   /**
-   * Download the design as a `.pdesign` file (zip: manifest.json + doc.json).
-   * Stage 1: media stay referenced by org-scoped fileId — same-org imports
-   * resolve, cross-org imports show broken media until asset bundling lands.
+   * Start an async `.pdesign` bundle export (format v2: doc + all referenced
+   * assets + used custom fonts) — mirrors the render-video enqueue/poll
+   * pattern. Returns the job id; poll GET /media/designs/export/:jobId.
    */
-  @Get('/:id/export')
+  @Post('/:id/export')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
   async export(
     @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
     @Param('id') id: string,
-    @Res() res: Response,
-  ): Promise<void> {
-    const { name, bytes } = await this._designService.exportDesign(org.id, id);
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${sanitizeDownloadName(name)}.pdesign"`,
-    );
-    res.end(Buffer.from(bytes));
+  ) {
+    return this._designExportService.enqueueExport(org.id, user.id, { kind: 'design', id });
+  }
+
+  /**
+   * Poll a design-export job. The Designer polls this every 2s after enqueue —
+   * the throttle override mirrors render-video status so the global 600/h
+   * backstop doesn't eat the polls.
+   */
+  @Get('/export/:jobId')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  @Throttle({ default: { limit: 2000, ttl: 3600000 } })
+  async getExportStatus(
+    @GetOrgFromRequest() org: Organization,
+    @Param('jobId') jobId: string,
+  ) {
+    const job = await this._designExportService.getJob(org.id, jobId);
+    if (!job) throw new NotFoundException();
+    let progress = 0;
+    if (job.status === 'completed') {
+      progress = 100;
+    } else if (job.status === 'processing') {
+      const reported = await this._designExportService.getProgress(jobId);
+      progress =
+        reported && reported.total > 0
+          ? Math.min(99, Math.round((reported.done / reported.total) * 100))
+          : 50;
+    }
+    return {
+      id: job.id,
+      status: job.status,
+      artifactUrl: job.status === 'completed' ? job.artifactUrl : undefined,
+      errorMessage: job.status === 'failed' ? job.error : undefined,
+      progress,
+    };
   }
 
   @Put('/:id')
@@ -449,6 +495,7 @@ export class DesignTemplateController {
   constructor(
     private _designService: DesignService,
     private _videoRenderService: VideoRenderService,
+    private _designExportService: DesignExportService,
   ) {}
 
   // ── Folder endpoints ─────────────────────────────────────────
@@ -541,22 +588,19 @@ export class DesignTemplateController {
     return this._designService.getTemplate(org.id, id);
   }
 
-  /** Download the template's doc as a `.pdesign` file (same format as design export). */
-  @Get('/:id/export')
+  /**
+   * Start an async `.pdesign` bundle export of the template's doc (same job
+   * pipeline as design export; poll GET /media/designs/export/:jobId).
+   */
+  @Post('/:id/export')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
   async export(
     @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
     @Param('id') id: string,
-    @Res() res: Response,
-  ): Promise<void> {
-    const { name, bytes } = await this._designService.exportTemplate(org.id, id);
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${sanitizeDownloadName(name)}.pdesign"`,
-    );
-    res.end(Buffer.from(bytes));
+  ) {
+    return this._designExportService.enqueueExport(org.id, user.id, { kind: 'template', id });
   }
 
   @Put('/:id')

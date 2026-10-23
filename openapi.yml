@@ -7440,15 +7440,16 @@ paths:
         "201":
           description: ""
       summary: |-
-        Import a `.pdesign` (zip) or raw `.json` DesignerDoc as a NEW design.
-        Static segment declared before the parameterized `/:id` routes so it can
-        never be captured as an id. The pipe is bound to the FILE param only —
-        a method-scoped binding would run on org/body params too and reject them
-        (see files.controller.pipes.spec.ts).
+        Import a `.pdesign` (zip, format v1 or v2) or raw `.json` DesignerDoc as a
+        NEW design. Static segment declared before the parameterized `/:id` routes
+        so it can never be captured as an id. The pipe is bound to the FILE param
+        only — a method-scoped binding would run on org/body params too and reject
+        them (see files.controller.pipes.spec.ts). Disk-spooled (1 GB cap): v2
+        files bundle every referenced asset, so memory storage is not an option.
       tags:
         - Design
   /media/designs/{id}/export:
-    get:
+    post:
       operationId: DesignController_export
       parameters:
         - name: id
@@ -7457,12 +7458,30 @@ paths:
           schema:
             type: string
       responses:
+        "201":
+          description: ""
+      summary: |-
+        Start an async `.pdesign` bundle export (format v2: doc + all referenced
+        assets + used custom fonts) — mirrors the render-video enqueue/poll
+        pattern. Returns the job id; poll GET /media/designs/export/:jobId.
+      tags:
+        - Design
+  /media/designs/export/{jobId}:
+    get:
+      operationId: DesignController_getExportStatus
+      parameters:
+        - name: jobId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
         "200":
           description: ""
       summary: |-
-        Download the design as a `.pdesign` file (zip: manifest.json + doc.json).
-        Stage 1: media stay referenced by org-scoped fileId — same-org imports
-        resolve, cross-org imports show broken media until asset bundling lands.
+        Poll a design-export job. The Designer polls this every 2s after enqueue —
+        the throttle override mirrors render-video status so the global 600/h
+        backstop doesn't eat the polls.
       tags:
         - Design
   /media/designs/maintenance/regen-previews:
@@ -7857,7 +7876,7 @@ paths:
       tags:
         - Design Templates
   /media/design-templates/{id}/export:
-    get:
+    post:
       operationId: DesignTemplateController_export
       parameters:
         - name: id
@@ -7866,9 +7885,11 @@ paths:
           schema:
             type: string
       responses:
-        "200":
+        "201":
           description: ""
-      summary: Download the template's doc as a `.pdesign` file (same format as design export).
+      summary: |-
+        Start an async `.pdesign` bundle export of the template's doc (same job
+        pipeline as design export; poll GET /media/designs/export/:jobId).
       tags:
         - Design Templates
   /media/designer/proxy:

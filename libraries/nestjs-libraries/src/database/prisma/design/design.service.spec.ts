@@ -9,6 +9,7 @@ import {
   POSTMILL_FILE_TYPE,
   POSTMILL_FORMAT_VERSION,
   buildPostmillFile,
+  buildPostmillManifest,
   parsePostmillFile,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
 
@@ -61,10 +62,19 @@ describe('DesignService', () => {
     importFromUrl: ReturnType<typeof vi.fn>;
     getFileById: ReturnType<typeof vi.fn>;
     softDelete: ReturnType<typeof vi.fn>;
+    saveFile: ReturnType<typeof vi.fn>;
   };
   let previewService: {
     renderPreviewBuffer: ReturnType<typeof vi.fn>;
     uploadPreview: ReturnType<typeof vi.fn>;
+  };
+  let storageService: {
+    getLocalAdapterForOrg: ReturnType<typeof vi.fn>;
+    resolveAdapterForFolder: ReturnType<typeof vi.fn>;
+  };
+  let brandsService: {
+    getCustomFonts: ReturnType<typeof vi.fn>;
+    addCustomFont: ReturnType<typeof vi.fn>;
   };
   let service: DesignService;
 
@@ -100,16 +110,27 @@ describe('DesignService', () => {
       importFromUrl: vi.fn(),
       getFileById: vi.fn(),
       softDelete: vi.fn(),
+      saveFile: vi.fn(),
     };
     previewService = {
       renderPreviewBuffer: vi.fn(),
       uploadPreview: vi.fn(),
     };
+    storageService = {
+      getLocalAdapterForOrg: vi.fn(),
+      resolveAdapterForFolder: vi.fn(),
+    };
+    brandsService = {
+      getCustomFonts: vi.fn().mockResolvedValue([]),
+      addCustomFont: vi.fn(),
+    };
     service = new DesignService(
       repository as any,
       new DesignerDocService(),
       fileService as any,
-      previewService as any
+      previewService as any,
+      storageService as any,
+      brandsService as any
     );
   });
 
@@ -1010,47 +1031,6 @@ describe('DesignService', () => {
     });
   });
 
-  describe('exportDesign / exportTemplate (.pdesign)', () => {
-    it('builds a .pdesign zip that parses back to the stored doc', async () => {
-      const doc = makeDoc();
-      repository.findById.mockResolvedValue({ id: 'd1', name: 'Hero / "Q4"', doc });
-
-      const { name, bytes } = await service.exportDesign('org-1', 'd1');
-
-      expect(repository.findById).toHaveBeenCalledWith('org-1', 'd1');
-      expect(name).toBe('Hero / "Q4"');
-      const parsed = parsePostmillFile(bytes);
-      expect(parsed.doc).toEqual(expect.objectContaining({ mode: 'image' }));
-      expect((parsed.doc as any).outputs[0].formatId).toBe('instagram-square');
-      expect(parsed.manifest).toMatchObject({
-        type: POSTMILL_FILE_TYPE,
-        formatVersion: POSTMILL_FORMAT_VERSION,
-        mode: 'image',
-        name: 'Hero / "Q4"',
-      });
-    });
-
-    it('404s exporting a design the org cannot see', async () => {
-      repository.findById.mockResolvedValue(null);
-      await expect(service.exportDesign('org-1', 'nope')).rejects.toThrow(NotFoundException);
-    });
-
-    it('exports a template doc the same way', async () => {
-      const doc = makeDoc();
-      repository.findTemplateForOrg.mockResolvedValue({ id: 't1', name: 'Tpl', doc });
-
-      const { name, bytes } = await service.exportTemplate('org-1', 't1');
-
-      expect(name).toBe('Tpl');
-      expect(parsePostmillFile(bytes).manifest.name).toBe('Tpl');
-    });
-
-    it('404s exporting a cross-org template', async () => {
-      repository.findTemplateForOrg.mockResolvedValue(null);
-      await expect(service.exportTemplate('org-1', 'nope')).rejects.toThrow(NotFoundException);
-    });
-  });
-
   describe('importDesign (.pdesign / .json)', () => {
     const docWithIds = () =>
       makeDoc({
@@ -1163,6 +1143,180 @@ describe('DesignService', () => {
           originalname: 'bad.json',
         })
       ).rejects.toThrow(BadRequestException);
+    });
+
+    describe('v2 bundled assets', () => {
+      // A 1x1 transparent PNG.
+      const PNG_BYTES = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        'base64'
+      );
+
+      const docWithMedia = () =>
+        makeDoc({
+          doc: { version: DESIGNER_DOC_VERSION },
+          output: {
+            id: 'out-src',
+            children: [
+              {
+                id: 'el-src',
+                type: 'image',
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+                rotation: 0,
+                opacity: 1,
+                locked: false,
+                hidden: false,
+                fileId: 'old-file-1',
+                src: '/uploads/org-a/aaaa.png',
+              },
+            ],
+          },
+        });
+
+      const v2Bundle = (opts: { withFont?: boolean; doc?: any } = {}) => {
+        const manifest = buildPostmillManifest(
+          opts.doc ?? docWithMedia(),
+          'Bundled Design',
+          {
+            'old-file-1': {
+              path: 'assets/old-file-1.png',
+              mime: 'image/png',
+              originalName: 'hero.png',
+              size: PNG_BYTES.length,
+            },
+          },
+          opts.withFont
+            ? [{ family: 'Acme', weight: 700, italic: true, path: 'assets/fonts/acme-700i.ttf' }]
+            : undefined
+        );
+        return zipSync({
+          'manifest.json': strToU8(JSON.stringify(manifest)),
+          'doc.json': strToU8(JSON.stringify(opts.doc ?? docWithMedia())),
+          'assets/old-file-1.png': new Uint8Array(PNG_BYTES),
+          ...(opts.withFont
+            ? // Minimal TTF header bytes — the local adapter only sniffs.
+              { 'assets/fonts/acme-700i.ttf': new Uint8Array([0x00, 0x01, 0x00, 0x00, 0x00, 0x00]) }
+            : {}),
+        });
+      };
+
+      const mockLocalAdapter = () => {
+        const adapter = {
+          writeBuffer: vi.fn().mockResolvedValue('https://host.test/uploads/org-1/newpath.png'),
+          uploadFile: vi.fn().mockResolvedValue({
+            filename: 'newfont.ttf',
+            originalname: 'newfont.ttf',
+            path: 'https://host.test/uploads/org-1/newfont.ttf',
+          }),
+          readFile: vi.fn(),
+        };
+        storageService.getLocalAdapterForOrg.mockResolvedValue(adapter);
+        return adapter;
+      };
+
+      it('re-uploads bundled assets and remaps fileId + paired src', async () => {
+        const adapter = mockLocalAdapter();
+        fileService.saveFile.mockResolvedValue({ id: 'new-file-1' });
+        repository.create.mockImplementation((payload: any) => payload);
+
+        const created = await service.importDesign('org-1', 'user-1', {
+          buffer: Buffer.from(v2Bundle()),
+          originalname: 'bundle.pdesign',
+        });
+
+        expect(adapter.writeBuffer).toHaveBeenCalledTimes(1);
+        expect(fileService.saveFile).toHaveBeenCalledWith(
+          'org-1', 'hero.png', 'https://host.test/uploads/org-1/newpath.png', 'hero.png', undefined, PNG_BYTES.length
+        );
+        const el = created.doc.outputs[0].children[0];
+        expect(el.fileId).toBe('new-file-1');
+        expect(el.src).toBe('https://host.test/uploads/org-1/newpath.png');
+        // ids re-minted, content intact
+        expect(el.id).toMatch(/^el-/);
+        expect(created.name).toBe('Bundled Design');
+      });
+
+      it('restores bundled fonts through the deduped addCustomFont path', async () => {
+        mockLocalAdapter();
+        fileService.saveFile.mockResolvedValue({ id: 'new-file-1' });
+        repository.create.mockImplementation((payload: any) => payload);
+
+        await service.importDesign('org-1', 'user-1', {
+          buffer: Buffer.from(v2Bundle({ withFont: true })),
+          originalname: 'bundle.pdesign',
+        });
+
+        expect(brandsService.addCustomFont).toHaveBeenCalledWith('org-1', {
+          family: 'Acme',
+          fileId: 'newfont.ttf',
+          path: 'https://host.test/uploads/org-1/newfont.ttf',
+          weights: [700],
+          italic: true,
+          serverRender: true,
+        });
+      });
+
+      it('imports a v1 file (no assets manifest) exactly like stage 1 — references verbatim', async () => {
+        const v1 = zipSync({
+          'manifest.json': strToU8(
+            JSON.stringify({
+              type: POSTMILL_FILE_TYPE,
+              formatVersion: 1,
+              docVersion: DESIGNER_DOC_VERSION,
+              mode: 'image',
+              app: 'postmill',
+              exportedAt: new Date().toISOString(),
+              name: 'V1 File',
+            })
+          ),
+          'doc.json': strToU8(JSON.stringify(docWithMedia())),
+        });
+        repository.create.mockImplementation((payload: any) => payload);
+
+        const created = await service.importDesign('org-1', 'user-1', {
+          buffer: Buffer.from(v1),
+          originalname: 'v1.pdesign',
+        });
+
+        expect(storageService.getLocalAdapterForOrg).not.toHaveBeenCalled();
+        const el = created.doc.outputs[0].children[0];
+        expect(el.fileId).toBe('old-file-1');
+        expect(el.src).toBe('/uploads/org-a/aaaa.png');
+      });
+
+      it('rejects a bundle whose manifest asset has no zip entry (truncated file)', async () => {
+        const broken = zipSync({
+          'manifest.json': strToU8(
+            JSON.stringify(
+              buildPostmillManifest(docWithMedia(), 'Broken', {
+                'old-file-1': { path: 'assets/old-file-1.png', mime: 'image/png', originalName: 'hero.png', size: 10 },
+              })
+            )
+          ),
+          'doc.json': strToU8(JSON.stringify(docWithMedia())),
+          // no assets/old-file-1.png entry
+        });
+
+        await expect(
+          service.importDesign('org-1', 'user-1', { buffer: Buffer.from(broken), originalname: 'x.pdesign' })
+        ).rejects.toThrow(/missing the bundled asset/);
+      });
+
+      it('rejects a bundled asset the storage layer refuses (clean 400)', async () => {
+        const adapter = mockLocalAdapter();
+        adapter.writeBuffer.mockRejectedValue(new Error('Unsupported stored artifact type: text/html'));
+        repository.create.mockImplementation((payload: any) => payload);
+
+        await expect(
+          service.importDesign('org-1', 'user-1', {
+            buffer: Buffer.from(v2Bundle()),
+            originalname: 'x.pdesign',
+          })
+        ).rejects.toThrow(/could not be stored/);
+      });
     });
   });
 });

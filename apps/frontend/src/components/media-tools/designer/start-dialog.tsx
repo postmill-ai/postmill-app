@@ -117,6 +117,13 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
       const file = e.target.files?.[0];
       e.target.value = '';
       if (!file) return;
+      if (file.size > 1024 * 1024 * 1024) {
+        toaster.show(
+          translate('designer_import_too_large', 'Design file is too large (max 1 GB)'),
+          'warning'
+        );
+        return;
+      }
       setImporting(true);
       try {
         const form = new FormData();

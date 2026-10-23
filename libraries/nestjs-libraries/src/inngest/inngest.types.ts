@@ -94,6 +94,11 @@ export type InngestEvents = {
       op: 'design' | 'merge';
     };
   };
+  'media/design-export': {
+    data: {
+      jobId: string;
+    };
+  };
   'media/poll-job': {
     data: {
       jobId: string;
@@ -169,6 +174,9 @@ export const digestSendOneEvent = eventType('digest/send-one', {
 });
 export const mediaRenderEvent = eventType('media/render', {
   schema: staticSchema<InngestEvents['media/render']['data']>(),
+});
+export const mediaDesignExportEvent = eventType('media/design-export', {
+  schema: staticSchema<InngestEvents['media/design-export']['data']>(),
 });
 export const mediaPollJobEvent = eventType('media/poll-job', {
   schema: staticSchema<InngestEvents['media/poll-job']['data']>(),

@@ -48,10 +48,26 @@ describe('DesignImportValidationPipe', () => {
     ).rejects.toThrow(/Unsupported file type/);
   });
 
-  it('rejects files over the 25 MB cap', async () => {
+  it('rejects files over the 1 GB cap', async () => {
     await expect(
       pipe.transform(multerFile({ size: DESIGN_IMPORT_MAX_BYTES + 1 }))
     ).rejects.toThrow(/too large/);
+  });
+
+  it('sniffs from the disk path when there is no memory buffer', async () => {
+    const { promises: fsp } = await import('fs');
+    const { join } = await import('path');
+    const { tmpdir } = await import('os');
+    const tmp = join(tmpdir(), `pdesign-pipe-${Date.now()}.bin`);
+    await fsp.writeFile(tmp, zipBuffer());
+    try {
+      const out = await pipe.transform(
+        multerFile({ buffer: undefined, path: tmp, originalname: 'x.pdesign' })
+      );
+      expect(out.designImportKind).toBe('pdesign');
+    } finally {
+      await fsp.unlink(tmp).catch(() => {});
+    }
   });
 
   it('rejects a missing file', async () => {

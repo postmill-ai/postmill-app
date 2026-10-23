@@ -921,11 +921,13 @@ export const Designer: FC<DesignerProps> = ({
     return true;
   }, [store, translate, decision]);
 
-  // --- .pdesign import/export (stage 1 interchange file) ---
+  // --- .pdesign import/export (stage 2: bundled interchange file) ---
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [pdesignExporting, setPdesignExporting] = useState(false);
 
-  // Export operates on the SAVED design (the server zips the stored doc), so
-  // an unsaved canvas has nothing to download — point the user at Save first.
+  // Export is an async job bundling the SAVED design + all its assets (the
+  // server zips the stored doc), so an unsaved canvas has nothing to export —
+  // point the user at Save first.
   const handleExportPostmill = useCallback(async () => {
     const s = store.getState();
     if (!s.designId) {
@@ -935,10 +937,47 @@ export const Designer: FC<DesignerProps> = ({
       );
       return;
     }
+    if (pdesignExporting) return;
+    setPdesignExporting(true);
     try {
-      const res = await fetch(`/media/designs/${s.designId}/export`);
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
+      const startRes = await fetch(`/media/designs/${s.designId}/export`, { method: 'POST' });
+      const startData = await startRes.json().catch(() => null);
+      if (!startRes.ok) {
+        throw new Error(startData?.message || translate('designer_export_pdesign_failed', 'Failed to export the design file'));
+      }
+      const jobId = startData.id;
+
+      // Poll the job every 2s (the render-video polling idiom) until the
+      // artifact lands or the job reports its own failure.
+      const deadline = Date.now() + 10 * 60 * 1000;
+      let artifactUrl: string | undefined;
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const res = await fetch(`/media/designs/export/${jobId}`);
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(data?.message || translate('designer_export_pdesign_failed', 'Failed to export the design file'));
+        }
+        if (data.status === 'completed') {
+          artifactUrl = data.artifactUrl;
+          break;
+        }
+        if (data.status === 'failed') {
+          throw new Error(data.errorMessage || translate('designer_export_pdesign_failed', 'Failed to export the design file'));
+        }
+        if (Date.now() > deadline) {
+          throw new Error(translate('designer_export_pdesign_timeout', 'Export is taking too long — try again'));
+        }
+      }
+      if (!artifactUrl) {
+        throw new Error(translate('designer_export_pdesign_failed', 'Failed to export the design file'));
+      }
+
+      // artifactUrl is an absolute same-origin storage URL — use the native
+      // fetch (the useFetch wrapper would prefix the backend base onto it).
+      const blobRes = await window.fetch(artifactUrl);
+      if (!blobRes.ok) throw new Error('Download failed');
+      const blob = await blobRes.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -947,10 +986,16 @@ export const Designer: FC<DesignerProps> = ({
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch {
-      toaster.show(translate('designer_export_pdesign_failed', 'Failed to export the design file'), 'warning');
+      toaster.show(translate('designer_export_pdesign_ready', 'Design file downloaded'), 'success');
+    } catch (err) {
+      toaster.show(
+        (err as Error)?.message || translate('designer_export_pdesign_failed', 'Failed to export the design file'),
+        'warning'
+      );
+    } finally {
+      setPdesignExporting(false);
     }
-  }, [store, fetch, toaster, translate]);
+  }, [store, fetch, toaster, translate, pdesignExporting]);
 
   const handleImportDesignFile = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -958,6 +1003,13 @@ export const Designer: FC<DesignerProps> = ({
       // Reset so picking the SAME file twice still fires onChange.
       e.target.value = '';
       if (!file) return;
+      if (file.size > 1024 * 1024 * 1024) {
+        toaster.show(
+          translate('designer_import_too_large', 'Design file is too large (max 1 GB)'),
+          'warning'
+        );
+        return;
+      }
       if (!(await confirmDiscardIfDirty())) return;
       try {
         const form = new FormData();
@@ -1256,6 +1308,7 @@ export const Designer: FC<DesignerProps> = ({
       onInsertMedia,
       onExport: handleSaveToFiles,
       onExportPostmill: handleExportPostmill,
+      pdesignExporting,
       onImportDesign: () => importInputRef.current?.click(),
       onUseInPost: setMedia ? handleExport : undefined,
       onClose: closeModal,
@@ -1412,6 +1465,7 @@ export const Designer: FC<DesignerProps> = ({
       handleSaveToFiles,
       handleExportPostmill,
       handleImportDesignFile,
+      pdesignExporting,
       onOpenMedia,
       onInsertMedia,
       confirmDiscardIfDirty,

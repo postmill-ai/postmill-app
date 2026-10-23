@@ -272,13 +272,27 @@ Designs and templates round-trip as a `.pdesign` file — a zip (`fflate`) with 
 (type tag `postmill-design`, `formatVersion`, `docVersion`, mode, name) and `doc.json` (the
 DesignerDoc verbatim). Build/parse live in `designer-doc/postmill-file.ts`; every parse failure is
 a coded `PostmillFileError` so the API can 400 with a distinct message (corrupt, wrong type, newer
-file format, newer doc version). Routes: `GET /media/designs/:id/export`,
-`GET /media/design-templates/:id/export`, `POST /media/designs/import` (multipart, 25 MB cap via
+file format, newer doc version).
+
+**Format v2 (current) is self-contained and export is ASYNC.** `manifest.json` also carries
+`assets` (originalFileId → `{ path, mime, originalName, size }`, bytes in `assets/`) and `fonts`
+(`[{ family, weight, italic, path }]`, bytes in `assets/fonts/`). `POST /media/designs/:id/export`
+/ `POST /media/design-templates/:id/export` enqueue an uncosted (`creditType: 'none'`)
+`provider: 'design-export'` media job (`media/design-export` Inngest event; Redis payload key;
+deterministic same-minute event id — the video-render pattern); the Designer polls
+`GET /media/designs/export/:jobId` and downloads the artifact File. The export activity
+(`media/design-export/design-export.service.ts`) pre-flights summed asset bytes against a 1 GB
+ceiling, reads each file through its folder-resolved adapter, streams the zip (never `zipSync`)
+and lands the artifact via `writeBuffer` + `saveGeneratedMedia`. The media-jobs sweep routes
+export jobs to their own event (never the provider-poll path) and fails stuck ones past a 15 min
+budget. Import (`POST /media/designs/import`, disk-spooled, 1 GB cap via
 `upload/design-import.validation.ts` — NOT `CustomFileValidationPipe`, which rejects zips and
-renames files). Import validates, strips ids (`DesignerDocService.stripIds`), re-mints them
-(`assignIdsAndNormalize`) and creates a NEW design. Stage-1 limitation: doc `fileId` media
-references are kept verbatim — same-org imports resolve, cross-org imports show broken media until
-the `assets/` bundling stage lands.
+renames files) streams the unzip, re-uploads each bundled asset into the importing org, rewrites
+`fileId`/`originalFileId`/`maskFileId` + their paired `/uploads/…` srcs
+(`designer-doc/doc-file-refs.ts` `rewriteDocFileRefs`), recreates bundled fonts through the
+deduped `addCustomFont`, then runs the stage-1 pipeline: validate → `stripIds` →
+`assignIdsAndNormalize` → create a NEW design. **v1 files (no `assets` key) still import exactly
+as stage 1** — references verbatim; same-org round-trips resolve, cross-org media shows broken.
 
 ## Forms
 

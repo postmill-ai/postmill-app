@@ -6,10 +6,6 @@ import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
 import { DesignImportValidationPipe } from '@postmill-ai/nestjs-libraries/upload/design-import.validation';
 import {
-  buildPostmillFile,
-  parsePostmillFile,
-} from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
-import {
   AuthorizationActions,
   Sections,
 } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
@@ -24,6 +20,10 @@ vi.mock('@postmill-ai/nestjs-libraries/database/prisma/file/file.service', () =>
 
 vi.mock('@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service', () => ({
   DesignerDocService: class {},
+}));
+
+vi.mock('@postmill-ai/nestjs-libraries/media/design-export/design-export.service', () => ({
+  DesignExportService: class {},
 }));
 
 vi.mock('@postmill-ai/nestjs-libraries/media/design-render/render-progress', () => ({
@@ -73,9 +73,12 @@ describe('DesignController', () => {
     deleteFolder: ReturnType<typeof vi.fn>;
     moveTemplate: ReturnType<typeof vi.fn>;
     regenPreviews: ReturnType<typeof vi.fn>;
-    exportDesign: ReturnType<typeof vi.fn>;
-    exportTemplate: ReturnType<typeof vi.fn>;
     importDesign: ReturnType<typeof vi.fn>;
+  };
+  let designExportService: {
+    enqueueExport: ReturnType<typeof vi.fn>;
+    getJob: ReturnType<typeof vi.fn>;
+    getProgress: ReturnType<typeof vi.fn>;
   };
   let fileService: {
     getFileById: ReturnType<typeof vi.fn>;
@@ -105,9 +108,12 @@ describe('DesignController', () => {
       deleteFolder: vi.fn(),
       moveTemplate: vi.fn(),
       regenPreviews: vi.fn(),
-      exportDesign: vi.fn(),
-      exportTemplate: vi.fn(),
       importDesign: vi.fn(),
+    };
+    designExportService = {
+      enqueueExport: vi.fn(),
+      getJob: vi.fn(),
+      getProgress: vi.fn(),
     };
     fileService = {
       getFileById: vi.fn(),
@@ -124,9 +130,10 @@ describe('DesignController', () => {
       {} as any,
       {} as any,
       designerDocService as any,
-      {} as any
+      {} as any,
+      designExportService as any
     );
-    templateController = new DesignTemplateController(designService as any);
+    templateController = new DesignTemplateController(designService as any, {} as any, designExportService as any);
   });
 
   describe('policy and RBAC metadata', () => {
@@ -237,6 +244,12 @@ describe('DesignController', () => {
       ).toEqual({ resource: 'media', action: 'read' });
     });
 
+    it(' DesignController getExportStatus is gated on media:read', () => {
+      expect(
+        Reflect.getMetadata(REQUIRE_PERMISSION_KEY, DesignController.prototype.getExportStatus)
+      ).toEqual({ resource: 'media', action: 'read' });
+    });
+
     it(' DesignTemplateController export is gated on media:read', () => {
       expect(
         Reflect.getMetadata(REQUIRE_PERMISSION_KEY, DesignTemplateController.prototype.export)
@@ -308,57 +321,75 @@ describe('DesignController', () => {
     });
   });
 
-  describe('GET /media/designs/:id/export', () => {
-    const makeRes = () => {
-      const res = { setHeader: vi.fn(), end: vi.fn() };
-      return res as any;
-    };
+  describe('POST /media/designs/:id/export (async bundle job)', () => {
+    it('enqueues a design export job and returns its id', async () => {
+      designExportService.enqueueExport.mockResolvedValue({ id: 'job-1', status: 'pending' });
 
-    it('responds with a .pdesign zip that parses back to the exported doc', async () => {
-      const doc = {
-        version: 8,
-        mode: 'image',
-        outputs: [
-          { id: 'out-1', formatId: 'square', name: 'S', width: 1080, height: 1080, background: '#fff', children: [] },
-        ],
-      } as any;
-      designService.exportDesign.mockResolvedValue({
-        name: 'Hero / "Q4"',
-        bytes: buildPostmillFile(doc, 'Hero / "Q4"'),
+      const res = await controller.export(org, user, 'd1');
+
+      expect(res).toEqual({ id: 'job-1', status: 'pending' });
+      expect(designExportService.enqueueExport).toHaveBeenCalledWith('org-1', 'user-1', {
+        kind: 'design',
+        id: 'd1',
       });
-      const res = makeRes();
-
-      await controller.export(org, 'd1', res);
-
-      expect(designService.exportDesign).toHaveBeenCalledWith('org-1', 'd1');
-      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'application/zip');
-      expect(res.setHeader).toHaveBeenCalledWith(
-        'Content-Disposition',
-        'attachment; filename="Hero Q4.pdesign"'
-      );
-      const parsed = parsePostmillFile(res.end.mock.calls[0][0]);
-      expect(parsed.doc).toEqual(doc);
-      expect(parsed.manifest.name).toBe('Hero / "Q4"');
     });
   });
 
-  describe('GET /media/design-templates/:id/export', () => {
-    it('responds with the template doc as a .pdesign zip', async () => {
-      const doc = { version: 8, mode: 'image', outputs: [] } as any;
-      designService.exportTemplate.mockResolvedValue({
-        name: 'Tpl',
-        bytes: buildPostmillFile(doc, 'Tpl'),
+  describe('GET /media/designs/export/:jobId (status polling)', () => {
+    it('404s for a job the org cannot see', async () => {
+      designExportService.getJob.mockResolvedValue(null);
+      await expect(controller.getExportStatus(org, 'job-x')).rejects.toBeInstanceOf(NotFoundException);
+      expect(designExportService.getJob).toHaveBeenCalledWith('org-1', 'job-x');
+    });
+
+    it('returns completed status with the artifact URL', async () => {
+      designExportService.getJob.mockResolvedValue({
+        id: 'job-1',
+        status: 'completed',
+        artifactUrl: 'https://host.test/uploads/org-1/artifact.zip',
       });
-      const res = { setHeader: vi.fn(), end: vi.fn() } as any;
 
-      await templateController.export(org, 't1', res);
+      const out = await controller.getExportStatus(org, 'job-1');
+      expect(out).toEqual({
+        id: 'job-1',
+        status: 'completed',
+        artifactUrl: 'https://host.test/uploads/org-1/artifact.zip',
+        errorMessage: undefined,
+        progress: 100,
+      });
+    });
 
-      expect(designService.exportTemplate).toHaveBeenCalledWith('org-1', 't1');
-      expect(res.setHeader).toHaveBeenCalledWith(
-        'Content-Disposition',
-        'attachment; filename="Tpl.pdesign"'
-      );
-      expect(parsePostmillFile(res.end.mock.calls[0][0]).doc).toEqual(doc);
+    it('maps real asset progress while processing', async () => {
+      designExportService.getJob.mockResolvedValue({ id: 'job-1', status: 'processing' });
+      designExportService.getProgress.mockResolvedValue({ done: 3, total: 12, updatedAt: 1 });
+
+      const out = await controller.getExportStatus(org, 'job-1');
+      expect(out.progress).toBe(25);
+    });
+
+    it('surfaces the job failure message', async () => {
+      designExportService.getJob.mockResolvedValue({
+        id: 'job-1',
+        status: 'failed',
+        error: 'Design assets exceed the 1 GB export ceiling',
+      });
+
+      const out = await controller.getExportStatus(org, 'job-1');
+      expect(out).toMatchObject({ status: 'failed', errorMessage: 'Design assets exceed the 1 GB export ceiling' });
+    });
+  });
+
+  describe('POST /media/design-templates/:id/export (async bundle job)', () => {
+    it('enqueues a template export job', async () => {
+      designExportService.enqueueExport.mockResolvedValue({ id: 'job-2', status: 'pending' });
+
+      const res = await templateController.export(org, user, 't1');
+
+      expect(res).toEqual({ id: 'job-2', status: 'pending' });
+      expect(designExportService.enqueueExport).toHaveBeenCalledWith('org-1', 'user-1', {
+        kind: 'template',
+        id: 't1',
+      });
     });
   });
 

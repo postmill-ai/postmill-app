@@ -1,19 +1,41 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { createReadStream, promises as fs } from 'fs';
 import { DesignRepository } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.repository';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import {
-  buildPostmillFile,
   hasZipMagic,
   parseDesignJson,
   parsePostmillFile,
+  parsePostmillFileStream,
   PostmillFileError,
   sanitizeDownloadName,
+  ParsedPostmillFile,
+  PostmillFileManifest,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
+import {
+  rewriteDocFileRefs,
+  FileRefRemap,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
+import { DESIGN_IMPORT_MAX_BYTES } from '@postmill-ai/nestjs-libraries/upload/design-import.validation';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
 import { isBlankDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-blank';
+
+/** First bytes of a disk-spooled upload, for zip-vs-json detection without reading the file. */
+const readFileHead = async (path: string): Promise<Buffer> => {
+  const handle = await fs.open(path, 'r');
+  try {
+    const head = Buffer.alloc(4);
+    await handle.read(head, 0, 4, 0);
+    return head;
+  } finally {
+    await handle.close();
+  }
+};
 
 /**
  * Every `.pdesign` parse failure maps to a 400 whose message names the actual
@@ -58,6 +80,8 @@ export class DesignService {
     private readonly _designerDocService: DesignerDocService,
     private readonly _fileService: FileService,
     private readonly _designPreviewService: DesignPreviewService,
+    private readonly _storageService: StorageService,
+    private readonly _brandsService: BrandsService,
   ) {}
 
   async getDesign(orgId: string, id: string) {
@@ -433,59 +457,63 @@ export class DesignService {
     return this._designerDocService.assignIdsAndNormalize(stripped);
   }
 
-  // ── .pdesign import/export (stage 1) ────────────────────────────────────
-  // The doc references org-scoped `fileId`s; stage 1 keeps them verbatim, so
-  // same-org round-trips resolve and cross-org imports show broken media
-  // until the asset bundling lands (stage 2). See media/designer-doc/postmill-file.ts.
-
-  /** Build the `.pdesign` zip for an org-owned design. */
-  async exportDesign(orgId: string, id: string): Promise<{ name: string; bytes: Uint8Array }> {
-    const design = await this._designRepository.findById(orgId, id);
-    if (!design) {
-      throw new NotFoundException('Design not found');
-    }
-    const doc = this._designerDocService.validate(design.doc);
-    return { name: design.name, bytes: buildPostmillFile(doc, design.name) };
-  }
-
-  /** Build the `.pdesign` zip for a template visible to the org. */
-  async exportTemplate(orgId: string, id: string): Promise<{ name: string; bytes: Uint8Array }> {
-    const template = await this._designRepository.findTemplateForOrg(id, orgId);
-    if (!template) {
-      throw new NotFoundException('Template not found');
-    }
-    const doc = this._designerDocService.validate(template.doc);
-    return { name: template.name, bytes: buildPostmillFile(doc, template.name) };
-  }
+  // ── .pdesign import ─────────────────────────────────────────────────────
+  // v2 files bundle every referenced asset; the import re-uploads them into
+  // the importing org and rewrites the doc's fileId/src pairs. v1 files (no
+  // assets manifest) keep stage-1 behavior: references travel verbatim, so
+  // same-org round-trips resolve and cross-org media shows broken.
+  // See media/designer-doc/postmill-file.ts.
 
   /**
    * Import a `.pdesign` (zip) or raw `.json` DesignerDoc as a NEW design.
    * The doc's ids are stripped and re-minted so the copy can never alias the
-   * source design's elements.
+   * source design's elements. The upload may be memory-buffered (tests, small
+   * files) or disk-spooled (`path`) — the controller's FileInterceptor uses
+   * diskStorage for the 1 GB cap.
    */
   async importDesign(
     orgId: string,
     userId: string,
-    file: { buffer?: Buffer; originalname?: string; size?: number }
+    file: { buffer?: Buffer; path?: string; originalname?: string; size?: number }
   ) {
-    const buffer = file.buffer;
-    if (!buffer || !Buffer.isBuffer(buffer)) {
+    let head: Buffer | undefined;
+    if (Buffer.isBuffer(file.buffer)) {
+      head = file.buffer.subarray(0, 4);
+    } else if (file.path) {
+      head = await readFileHead(file.path).catch(() => undefined);
+    }
+    if (!head) {
       throw new BadRequestException('Invalid file upload.');
     }
 
     let docRaw: unknown;
     let importedName: string | undefined;
-    if (hasZipMagic(buffer)) {
+    let refMap = new Map<string, FileRefRemap>();
+    if (hasZipMagic(head)) {
+      let parsed: ParsedPostmillFile;
       try {
-        const parsed = parsePostmillFile(buffer);
-        docRaw = parsed.doc;
-        importedName = parsed.manifest.name;
+        parsed = Buffer.isBuffer(file.buffer)
+          ? parsePostmillFile(file.buffer)
+          : await parsePostmillFileStream(
+              createReadStream(file.path!),
+              DESIGN_IMPORT_MAX_BYTES
+            );
       } catch (err) {
         throw importErrorToHttp(err);
       }
+      docRaw = parsed.doc;
+      importedName = parsed.manifest.name;
+      if (parsed.manifest.assets && Object.keys(parsed.manifest.assets).length) {
+        refMap = await this._reuploadBundledAssets(orgId, parsed.manifest, parsed.assets);
+      }
+      if (parsed.manifest.fonts?.length) {
+        await this._restoreBundledFonts(orgId, parsed.manifest, parsed.assets);
+      }
     } else {
       try {
-        docRaw = parseDesignJson(buffer);
+        docRaw = parseDesignJson(
+          Buffer.isBuffer(file.buffer) ? file.buffer : await fs.readFile(file.path!)
+        );
       } catch (err) {
         throw importErrorToHttp(err);
       }
@@ -501,7 +529,8 @@ export class DesignService {
     }
 
     const validated = this._designerDocService.validate(docRaw);
-    const stripped = this._designerDocService.stripIds(validated);
+    const remapped = refMap.size ? rewriteDocFileRefs(validated, refMap) : validated;
+    const stripped = this._designerDocService.stripIds(remapped);
     const normalized = this._designerDocService.assignIdsAndNormalize(stripped);
 
     const stem = (file.originalname || '').replace(/\.(pdesign|json)$/i, '');
@@ -509,6 +538,90 @@ export class DesignService {
       || (stem.trim() ? sanitizeDownloadName(stem) : 'Imported design');
 
     return this.createDesign(orgId, userId, { name, doc: normalized });
+  }
+
+  /**
+   * v2 import: land every bundled asset in the importing org's LOCAL storage
+   * and build the oldFileId → {newId, newPath} remap. A missing zip entry for
+   * a manifest-listed asset is a truncated/corrupt file — a clean 400, not a
+   * partially-relinked design.
+   */
+  private async _reuploadBundledAssets(
+    orgId: string,
+    manifest: PostmillFileManifest,
+    assets: Map<string, Uint8Array>
+  ): Promise<Map<string, FileRefRemap>> {
+    const map = new Map<string, FileRefRemap>();
+    const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
+    for (const [oldId, entry] of Object.entries(manifest.assets ?? {})) {
+      const bytes = assets.get(entry.path);
+      if (!bytes) {
+        throw new BadRequestException(
+          `The .pdesign file is missing the bundled asset ${entry.path}`
+        );
+      }
+      let path: string;
+      try {
+        // writeBuffer re-sniffs and enforces STORED_ARTIFACT_ALLOWED_MIME.
+        path = await adapter.writeBuffer(Buffer.from(bytes), entry.mime);
+      } catch (err) {
+        throw new BadRequestException(
+          `Bundled asset "${entry.originalName}" could not be stored: ${(err as Error)?.message}`
+        );
+      }
+      const saved = await this._fileService.saveFile(
+        orgId,
+        entry.originalName || oldId,
+        path,
+        entry.originalName,
+        undefined,
+        entry.size
+      );
+      map.set(oldId, { id: saved.id, path });
+    }
+    return map;
+  }
+
+  /**
+   * v2 import: recreate the bundled custom fonts on the importing org's brand
+   * profile. Docs reference fonts by NAME, so no doc rewrite is needed;
+   * addCustomFont dedupes on (family, weight, italic). A font that fails to
+   * restore skips with a warning — the import must not fail over a font
+   * (renderers fall back to another face).
+   */
+  private async _restoreBundledFonts(
+    orgId: string,
+    manifest: PostmillFileManifest,
+    assets: Map<string, Uint8Array>
+  ): Promise<void> {
+    const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
+    for (const font of manifest.fonts ?? []) {
+      const bytes = assets.get(font.path);
+      if (!bytes) {
+        this._logger.warn(`Import: bundled font payload ${font.path} missing — skipping ${font.family}`);
+        continue;
+      }
+      try {
+        const originalname = font.path.split('/').pop() || `${font.family}.ttf`;
+        const uploaded = await adapter.uploadFile({
+          buffer: Buffer.from(bytes),
+          originalname,
+          size: bytes.length,
+        } as Express.Multer.File);
+        await this._brandsService.addCustomFont(orgId, {
+          family: font.family,
+          fileId: uploaded.filename || uploaded.originalname,
+          path: uploaded.path,
+          weights: [font.weight ?? 400],
+          ...(font.italic ? { italic: true } : {}),
+          serverRender: !originalname.endsWith('.woff2'),
+        });
+      } catch (err) {
+        this._logger.warn(
+          `Import: could not restore font ${font.family}: ${(err as Error)?.message}`
+        );
+      }
+    }
   }
 
   private async _assertOwnedFile(orgId: string, fileId: string) {
