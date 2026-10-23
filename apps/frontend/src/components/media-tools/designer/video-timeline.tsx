@@ -29,6 +29,7 @@ import { directFetchForAbsoluteUrls, type WaveformFetch } from './waveform-fetch
 import { KeyframeLane } from './keyframe-lane';
 import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
+import { parseJobError } from '@postmill-ai/frontend/components/ai/provider-error';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { aspectBucketForDimensions } from '@postmill-ai/nestjs-libraries/media/slide/slide-aspect';
@@ -82,6 +83,19 @@ const TRACK_COLORS: Record<VideoTrack['type'], string> = {
   caption: '#22C55E',
   audio: '#DC2626',
   sticker: '#9333EA',
+};
+
+// Media-job operation → timeline clip type, for the mount-time re-attach of
+// in-flight generations (see the reattachRef effect below). Image / stt /
+// design-export jobs are skipped — they don't land as timeline clips here.
+const TIMELINE_JOB_TYPE: Record<string, 'video' | 'audio'> = {
+  video: 'video',
+  avatar: 'video',
+  slide: 'video',
+  caption: 'video',
+  'video-bg': 'video',
+  'video-upscale': 'video',
+  audio: 'audio',
 };
 
 const formatTime = (ms: number): string => {
@@ -3111,11 +3125,47 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     }
     if (outcome.kind === 'unmounted') return;
     if (outcome.kind === 'timeout') {
-      if (mountedRef.current) toaster.show(translate('generation_timed_out', 'Generation timed out'), 'warning');
+      // The job may still finish server-side — deep-link the render queue
+      // (it re-lists and polls recent jobs) instead of a dead-end toast.
+      if (mountedRef.current) toaster.show(
+        translate('generation_timed_out', 'Generation timed out'),
+        'warning',
+        `/media/queue?job=${idOrUrl}`,
+        translate('media_queue_view_job', 'View in queue')
+      );
       return;
     }
     await landAndReveal(outcome.url, outcome.fileId ?? undefined);
   }, [fetch, store, toaster, translate]);
+
+  // In-flight generations used to be lost on a designer remount: the server
+  // lifecycle finished them (the artifact surfaced in Files later) but the
+  // timeline never re-attached its poll loop, so the user only saw the error
+  // toast. On mount, adopt the org's still-running video/audio jobs and drive
+  // each through the same landOrPoll path a fresh generate uses.
+  const reattachRef = useRef(false);
+  useEffect(() => {
+    if (reattachRef.current || !isVideo) return;
+    reattachRef.current = true;
+    (async () => {
+      let jobs: Array<{ id: string; operation: string; status: string }>;
+      try {
+        const res = await fetch('/dashboard/media-jobs');
+        if (!res.ok) return;
+        const data = await res.json();
+        jobs = Array.isArray(data?.jobs) ? data.jobs : [];
+      } catch {
+        return;
+      }
+      if (!mountedRef.current) return;
+      for (const job of jobs) {
+        if (job.status !== 'pending' && job.status !== 'processing') continue;
+        const type = TIMELINE_JOB_TYPE[job.operation];
+        if (!type) continue;
+        void landOrPoll(type, job.id);
+      }
+    })();
+  }, [isVideo, fetch, landOrPoll]);
 
   const runClipTransform = useCallback(async (
     endpoint: string,
@@ -3161,7 +3211,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             state.pushHistory();
             break;
           }
-          if (job.status === 'failed') throw new Error(job.error || translate('transform_failed', 'Transform failed'));
+          if (job.status === 'failed') throw new Error(parseJobError(job.error)?.message ?? job.error ?? translate('transform_failed', 'Transform failed'));
           polls++;
           await new Promise((r) => setTimeout(r, JOB_POLL_INTERVAL_MS));
         }
@@ -3292,7 +3342,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           await finish(job.artifactUrl);
           break;
         }
-        if (job.status === 'failed') throw new Error(job.error || translate('transform_failed', 'Transform failed'));
+        if (job.status === 'failed') throw new Error(parseJobError(job.error)?.message ?? job.error ?? translate('transform_failed', 'Transform failed'));
         polls++;
         await new Promise((r) => setTimeout(r, JOB_POLL_INTERVAL_MS));
       }

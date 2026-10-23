@@ -1,11 +1,12 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { Button } from '@postmill-ai/react/form/button';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { MEDIA_SETUP_HREF } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
-import { providerErrorToastText, type ProviderError } from '@postmill-ai/frontend/components/ai/provider-error';
+import { parseJobError, providerErrorToastText, type ProviderError } from '@postmill-ai/frontend/components/ai/provider-error';
 import { StudioForm } from './studio-form';
 import { useStudioStatus, useStudioJobs, useStudioGenerate } from './hooks';
 import { studioTabKey } from './i18n-keys';
@@ -109,16 +110,36 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
   const [starting, setStarting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { data: jobs, mutate: mutateJobs } = useStudioJobs(provider, configured && !!activeJobId);
+  const [errorSettingsUrl, setErrorSettingsUrl] = useState<string | null>(null);
+  // True once the mount-time adoption check has run (see below) — jobs polling
+  // stays enabled until then so a refreshed page can find its in-flight job.
+  const [adoptChecked, setAdoptChecked] = useState(false);
+  const { data: jobs, mutate: mutateJobs } = useStudioJobs(
+    provider,
+    configured && (!!activeJobId || !adoptChecked)
+  );
   // onGenerated must fire exactly once per job, even while SWR keeps re-rendering.
   const handledJobRef = useRef<string | null>(null);
   const fail = useCallback(
-    (message: string) => {
+    (message: string, settingsUrl?: string) => {
       setError(message);
+      setErrorSettingsUrl(settingsUrl ?? null);
       onError?.(message);
     },
     [onError]
   );
+
+  // A refresh mid-render used to strand the job: activeJobId lived only in
+  // this component's state, so the embed never re-attached and the finished
+  // artifact silently landed in Files. On mount, adopt any still-running job
+  // for this provider (jobs arrive most-recent-first) and let the effect
+  // below drive it to completion.
+  useEffect(() => {
+    if (adoptChecked || activeJobId || !jobs || !Array.isArray(jobs)) return;
+    setAdoptChecked(true);
+    const running = jobs.find((j) => j.status === 'pending' || j.status === 'processing');
+    if (running) setActiveJobId(running.id);
+  }, [adoptChecked, activeJobId, jobs]);
 
   useEffect(() => {
     if (!activeJobId || !jobs) return;
@@ -135,7 +156,13 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
     } else if (job.status === 'failed') {
       handledJobRef.current = job.id;
       setActiveJobId(null);
-      fail(job.error || t('generation_failed', 'Generation failed'));
+      // Poll-path failures can carry the structured envelope (message +
+      // settingsUrl) — unwrap it so the settings link renders (B7).
+      const envelope = parseJobError(job.error);
+      fail(
+        envelope?.message ?? job.error ?? t('generation_failed', 'Generation failed'),
+        envelope?.settingsUrl
+      );
     }
   }, [jobs, activeJobId, onGenerated, operation, fail, t]);
 
@@ -158,16 +185,19 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
       // input under the descriptor's prompt field name (filtered out of the
       // rendered form above).
       if (promptField) body.input[promptField.name] = prompt.trim();
+      // An idempotency-duplicate response now carries the ORIGINAL job's id
+      // too, so either way there is a job to track (previously undefined).
       const { jobId } = await generate(body);
       handledJobRef.current = null;
-      setActiveJobId(jobId);
+      setActiveJobId(jobId ?? null);
       mutateJobs();
     } catch (err) {
       const providerError = (err as { providerError?: ProviderError }).providerError;
       fail(
         providerError
           ? providerErrorToastText(t, providerError)
-          : (err as Error).message || t('studio_render_start_failed', 'Failed to start the render')
+          : (err as Error).message || t('studio_render_start_failed', 'Failed to start the render'),
+        providerError?.settingsUrl
       );
     } finally {
       setStarting(false);
@@ -253,6 +283,14 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
       {error && (
         <div role="alert" className="text-[12px] text-dangerText">
           {error}
+          {errorSettingsUrl && (
+            <>
+              {' '}
+              <Link href={errorSettingsUrl} className="underline">
+                {t('provider_error_open_settings', 'Open settings')}
+              </Link>
+            </>
+          )}
         </div>
       )}
     </div>

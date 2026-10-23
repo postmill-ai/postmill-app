@@ -292,6 +292,33 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
       );
     });
 
+    it('stores the structured envelope (kind + settingsUrl) for a provider-attributed poll failure', async () => {
+      // A poll-time quota failure must keep the 502-envelope information so the
+      // render queue can link Settings — the bare string rendered verbatim
+      // looked like a generic crash (B7).
+      const { service, jobs, pollJob, notificationService } = makeService();
+      jobs.set('job-1', makeJob());
+      const attributed =
+        "Replicate reports the account's quota or billing limit was reached (HTTP 402): insufficient credits";
+      pollJob.mockResolvedValue({ status: 'failed', error: attributed });
+
+      expect(await service.processJob('job-1')).toBe('failed');
+      const stored = JSON.parse(jobs.get('job-1')!.error!);
+      expect(stored).toEqual({
+        message: attributed,
+        kind: 'quota',
+        settingsUrl: '/settings/content/ai-media',
+      });
+      // The notification keeps the PLAIN text, not the JSON envelope.
+      expect(notificationService.notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('quota or billing limit'),
+        })
+      );
+      const notifyMessage = notificationService.notify.mock.calls[0][0].message as string;
+      expect(notifyMessage.startsWith('{')).toBe(false);
+    });
+
     it('downloads, stores under the typed folder, completes, and notifies on success', async () => {
       const { service, jobs, pollJob, orgSettings, storageAdapter, mediaRepository, notificationService } =
         makeService();

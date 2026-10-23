@@ -124,3 +124,33 @@ export function providerErrorAdvice(t: Translate, pe: ProviderError): string {
 export function providerErrorToastText(t: Translate, pe: ProviderError): string {
   return `${pe.message} — ${providerErrorAdvice(t, pe)}`;
 }
+
+// Poll-path media-job failures store a structured envelope as JSON in the
+// job's error column (media-job-lifecycle.service.ts `failJob`) so quota /
+// billing failures keep their settings link. Plain-string errors (anything
+// not matching this shape) must render verbatim — readers: the studio render
+// queues, the compact studios, and the designer's job poller.
+export interface JobErrorEnvelope {
+  message: string;
+  kind?: string;
+  settingsUrl?: string;
+}
+
+export function parseJobError(error: string | null | undefined): JobErrorEnvelope | null {
+  if (!error) return null;
+  const trimmed = error.trim();
+  if (!trimmed.startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
+      return {
+        message: parsed.message,
+        kind: typeof parsed.kind === 'string' ? parsed.kind : undefined,
+        settingsUrl: typeof parsed.settingsUrl === 'string' ? parsed.settingsUrl : undefined,
+      };
+    }
+  } catch {
+    /* plain string */
+  }
+  return null;
+}

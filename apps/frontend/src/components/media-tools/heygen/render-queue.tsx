@@ -8,6 +8,7 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { HeyGenJob } from './use-heygen';
 import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
+import { JobErrorText } from '@postmill-ai/frontend/components/media-tools/job-error';
 
 export const RenderQueue: FC<{ jobs: HeyGenJob[] | undefined; isLoading: boolean }> = ({ jobs, isLoading }) => {
   const t = useT();
@@ -93,7 +94,10 @@ export const RenderQueue: FC<{ jobs: HeyGenJob[] | undefined; isLoading: boolean
                   {OPERATION_LABEL[job.operation] || job.operation}
                 </div>
                 {job.status === 'failed' && job.error && (
-                  <div className="text-[11px] text-dangerText/80 truncate" title={job.error}>{job.error}</div>
+                  <JobErrorText
+                    error={job.error}
+                    className="text-[11px] text-dangerText/80 truncate"
+                  />
                 )}
               </div>
               <span className={`shrink-0 text-[10px] font-[600] px-[7px] py-[3px] rounded-full ${meta.className}`}>

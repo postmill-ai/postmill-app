@@ -97,13 +97,14 @@ export const MODEL_ALLOWLIST: Record<string, string[]> = {
     'lucataco/real-esrgan-video',
   ],
   'video-background': [
-    // robust_video_matting is human-only matting — objects/products get matted
-    // out with the background (QA prod failure 2026-10-22). rembg-video uses
-    // rembg's general salient-object segmentation, so it handles products,
+    // rembg-video FIRST — it is the default when the org hasn't pinned a
+    // model: rembg's general salient-object segmentation handles products,
     // pets, and other non-human subjects (verified against the live schema:
     // required `video` uri, optional `mode` + `background_color`).
-    'arielreplicate/robust_video_matting',
+    // robust_video_matting is human-only matting — objects/products get matted
+    // out with the background (QA prod failure 2026-10-22).
     'lucataco/rembg-video',
+    'arielreplicate/robust_video_matting',
   ],
   'caption': [
     'fictions-ai/autocaption',

@@ -92,7 +92,7 @@ describe('replicate media adapter (async predictions)', () => {
     const sub = await adapter.generateVideo('restyle this', {
       apiKey: 'replicate-key',
       model: 'wan-video/wan-2.7-videoedit',
-      input: { video_url: 'https://cdn.example.com/from-input.mp4', num_frames: 24 },
+      input: { video_url: 'https://cdn.example.com/from-input.mp4', resolution: '1080p' },
     });
 
     expect(sub.jobId).toBe('pred-v2v-input');
@@ -103,7 +103,29 @@ describe('replicate media adapter (async predictions)', () => {
     expect(body.input).toEqual({
       prompt: 'restyle this',
       video: 'https://cdn.example.com/from-input.mp4',
-      num_frames: 24,
+      resolution: '1080p',
+    });
+  });
+
+  it('strips org media-default tunables the target model does not declare', async () => {
+    const { recs, ctx } = makeCtx(() => res({ id: 'pred-i2v', status: 'starting' }));
+    const adapter: any = replicateMediaModule.create(ctx as any);
+
+    // kling-v2.1 is image-to-video and its schema has NO aspect_ratio input —
+    // forwarding the org-wide tunable 422'd every job (QA prod failure).
+    const sub = await adapter.generateVideo('animate this', {
+      apiKey: 'replicate-key',
+      model: 'kwaivgi/kling-v2.1',
+      sourceUrl: 'https://cdn.example.com/frame.png',
+      input: { aspect_ratio: '16:9', duration: '10' },
+    });
+
+    expect(sub.jobId).toBe('pred-i2v');
+    const body = JSON.parse(recs[0].body);
+    expect(body.input).toEqual({
+      prompt: 'animate this',
+      start_image: 'https://cdn.example.com/frame.png',
+      duration: '10',
     });
   });
 
@@ -219,7 +241,7 @@ describe('replicate media adapter (async predictions)', () => {
   });
 
   // NEEDS-LIVE-SMOKE-TEST
-  it('submits video background removal with the expected model and video input', async () => {
+  it('submits video background removal with the default model and video input', async () => {
     const { recs, ctx } = makeCtx(() => res({ id: 'pred-bg', status: 'starting' }));
     const adapter: any = replicateMediaModule.create(ctx as any);
 
@@ -229,14 +251,16 @@ describe('replicate media adapter (async predictions)', () => {
 
     expect(sub.jobId).toBe('pred-bg');
     const r = recs[0];
+    // Default is rembg-video (general salient objects); robust_video_matting
+    // (people-only) stays selectable by pinning the model.
     expect(r.url).toBe(
-      'https://api.replicate.com/v1/models/arielreplicate/robust_video_matting/predictions',
+      'https://api.replicate.com/v1/models/lucataco/rembg-video/predictions',
     );
     const body = JSON.parse(r.body);
     expect(body.version).toBeUndefined();
     expect(body.input).toEqual({
-      input_video: 'https://cdn.example.com/with-bg.mp4',
-      output_type: 'green-screen',
+      video: 'https://cdn.example.com/with-bg.mp4',
+      background_color: '#00FF00',
     });
   });
 

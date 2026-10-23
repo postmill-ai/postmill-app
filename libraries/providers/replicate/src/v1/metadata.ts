@@ -3031,36 +3031,6 @@ export const metadata: ProviderMetadata = {
     ],
     "video-background": [
       {
-        "id": "arielreplicate/robust_video_matting",
-        "label": "robust_video_matting",
-        "notes": [
-          "People only — not for general objects"
-        ],
-        "fields": [
-          {
-            "name": "output_type",
-            "label": "output_type",
-            "help": "An enumeration.",
-            "type": "select",
-            "options": [
-              {
-                "value": "green-screen",
-                "label": "green-screen"
-              },
-              {
-                "value": "alpha-mask",
-                "label": "alpha-mask"
-              },
-              {
-                "value": "foreground-mask",
-                "label": "foreground-mask"
-              }
-            ],
-            "default": "green-screen"
-          }
-        ]
-      },
-      {
         "id": "lucataco/rembg-video",
         "label": "rembg-video",
         "fields": [
@@ -3087,6 +3057,36 @@ export const metadata: ProviderMetadata = {
             "help": "Background color in hex format (e.g., '#FFFFFF' for white)",
             "type": "text",
             "default": "#FFFFFF"
+          }
+        ]
+      },
+      {
+        "id": "arielreplicate/robust_video_matting",
+        "label": "robust_video_matting",
+        "notes": [
+          "People only — not for general objects"
+        ],
+        "fields": [
+          {
+            "name": "output_type",
+            "label": "output_type",
+            "help": "An enumeration.",
+            "type": "select",
+            "options": [
+              {
+                "value": "green-screen",
+                "label": "green-screen"
+              },
+              {
+                "value": "alpha-mask",
+                "label": "alpha-mask"
+              },
+              {
+                "value": "foreground-mask",
+                "label": "foreground-mask"
+              }
+            ],
+            "default": "green-screen"
           }
         ]
       }

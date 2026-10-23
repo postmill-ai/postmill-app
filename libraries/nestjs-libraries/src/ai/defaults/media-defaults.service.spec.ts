@@ -72,6 +72,8 @@ vi.mock(
 
 const mockKernelGet = vi.fn();
 const mockKernelListManifests = vi.fn();
+const mockKernelGetMetadata = vi.fn();
+const mockKernelLatestActive = vi.fn();
 
 vi.mock('@postmill-ai/nestjs-libraries/providers/providers.module', () => ({
   PROVIDER_KERNEL: 'PROVIDER_KERNEL',
@@ -85,6 +87,8 @@ function makeService() {
     {
       get: mockKernelGet,
       listManifests: mockKernelListManifests,
+      getMetadata: mockKernelGetMetadata,
+      latestActive: mockKernelLatestActive,
     } as any,
     new (OrgMediaProviderSettingsService as any)(),
     mockRuntimeContextFactory as any,
@@ -173,7 +177,12 @@ describe('MediaDefaultsService', () => {
       new (DefaultsResolutionService as any)(),
       new (OrgDefaultModelRepository as any)(),
       { validate: validateSpy } as any,
-      { get: mockKernelGet, listManifests: mockKernelListManifests } as any,
+      {
+        get: mockKernelGet,
+        listManifests: mockKernelListManifests,
+        getMetadata: mockKernelGetMetadata,
+        latestActive: mockKernelLatestActive,
+      } as any,
       new (OrgMediaProviderSettingsService as any)(),
       mockRuntimeContextFactory as any,
     );
@@ -193,6 +202,56 @@ describe('MediaDefaultsService', () => {
       },
       { providerId: 'openai', model: undefined, version: 'v1' },
     );
+  });
+
+  it('setMediaDefault rejects an image-to-video-only model as the text-to-video default', async () => {
+    // kwaivgi/kling-v2.1 strictly requires `start_image` upstream — picked as
+    // the org's t2v default, every job 422'd (QA prod failure).
+    mockKernelGetMetadata.mockReturnValue({
+      mediaModels: {
+        'text-to-video': [{ id: 'google/veo-3.1' }],
+        'image-to-video': [{ id: 'kwaivgi/kling-v2.1' }],
+      },
+    });
+    const service = makeService();
+
+    await expect(
+      service.setMediaDefault(orgId, 'text-to-video', {
+        providerId: 'replicate',
+        version: 'v1',
+        model: 'kwaivgi/kling-v2.1',
+      } as any),
+    ).rejects.toThrow(/cannot be the text-to-video default/);
+    expect(mockRepositoryUpsert).not.toHaveBeenCalled();
+  });
+
+  it('setMediaDefault accepts a model declared for the category (and ignores undeclared models)', async () => {
+    mockKernelGetMetadata.mockReturnValue({
+      mediaModels: {
+        'text-to-video': [{ id: 'google/veo-3.1' }],
+        'image-to-video': [{ id: 'kwaivgi/kling-v2.1' }],
+      },
+    });
+    mockRepositoryUpsert.mockResolvedValue(undefined);
+    const service = makeService();
+
+    await expect(
+      service.setMediaDefault(orgId, 'text-to-video', {
+        providerId: 'replicate',
+        version: 'v1',
+        model: 'google/veo-3.1',
+      } as any),
+    ).resolves.toEqual({ category: 'text-to-video', success: true });
+
+    // A model absent from the static metadata (dynamic-list provider) is not
+    // second-guessed.
+    await expect(
+      service.setMediaDefault(orgId, 'text-to-video', {
+        providerId: 'replicate',
+        version: 'v1',
+        model: 'some/new-model',
+      } as any),
+    ).resolves.toEqual({ category: 'text-to-video', success: true });
   });
 
   it('clearMediaDefault removes a default', async () => {

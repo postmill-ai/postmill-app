@@ -8,6 +8,7 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { StudioJob } from './types';
 import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
+import { JobErrorText } from '@postmill-ai/frontend/components/media-tools/job-error';
 
 // Status/operation display text is resolved at render via `t()` (data-module pattern):
 // className stays here, the label is keyed off the stable status/operation id.
@@ -207,7 +208,10 @@ export const RenderQueue: FC<RenderQueueProps> = ({
                     : job.operation}
                 </div>
                 {job.status === 'failed' && job.error && (
-                  <div className="text-[11px] text-red-600 dark:text-red-400 line-clamp-2 break-words" title={job.error}>{job.error}</div>
+                  <JobErrorText
+                    error={job.error}
+                    className="text-[11px] text-red-600 dark:text-red-400 line-clamp-2 break-words"
+                  />
                 )}
               </div>
               <span className={`shrink-0 text-[10px] font-[600] px-[7px] py-[3px] rounded-full ${meta.className}`}>

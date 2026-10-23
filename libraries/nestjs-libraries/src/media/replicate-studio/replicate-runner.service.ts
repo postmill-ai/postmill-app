@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { upstreamErrorFromResponse } from '@postmill-ai/provider-kernel';
 import { ReplicateCatalogService } from './replicate-catalog.service';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
@@ -18,6 +19,15 @@ import { renderWorkDir } from '@postmill-ai/nestjs-libraries/media/design-render
 import * as fs from 'fs';
 
 const BASE = 'https://api.replicate.com/v1';
+
+// Same attribution the provider adapter uses (media.adapter.ts), so a
+// create-time 422 reaches the user verbatim through ProviderExceptionFilter
+// instead of a masked 500 "Replicate run failed".
+const UPSTREAM_CTX = {
+  domain: 'media',
+  providerId: 'replicate',
+  providerName: 'Replicate',
+} as const;
 
 interface ReplicatePrediction {
   id?: string;
@@ -146,11 +156,17 @@ export class ReplicateRunnerService {
 
   // riffusion's CLIP text encoder hard-caps prompts at 77 tokens (prod failure:
   // "Sizes of tensors must match... Expected size 77 but got size 154").
-  // ~300 chars ≈ 75 tokens. The studio/runner path bypasses the provider
+  // ~300 chars ≈ 75 tokens. The video models cap prompt length too (veo
+  // rejects past ~1024 chars; kling ~2500; seedance ~2000 — over-long prompts
+  // 422 the whole paid job). The studio/runner path bypasses the provider
   // adapter, so the rule is mirrored here — keep in sync with
   // _PROMPT_MAX_CHARS in libraries/providers/replicate/src/v1/media.adapter.ts.
   private static readonly _PROMPT_MAX_CHARS: Record<string, number> = {
     'riffusion/riffusion': 300,
+    'google/veo-3.1': 1024,
+    'bytedance/seedance-1-pro': 2000,
+    'kwaivgi/kling-v2.1': 2500,
+    'kwaivgi/kling-v2.5-turbo-pro': 2500,
   };
 
   private _sanitizeModelInput(
@@ -200,7 +216,7 @@ export class ReplicateRunnerService {
             : {}),
         }),
       });
-      if (!res.ok) throw new Error(`Replicate run failed: ${await res.text()}`);
+      if (!res.ok) throw await upstreamErrorFromResponse(UPSTREAM_CTX, res);
       return (await res.json()) as ReplicatePrediction;
     }
 
@@ -231,7 +247,7 @@ export class ReplicateRunnerService {
           : {}),
       }),
     });
-    if (!res.ok) throw new Error(`Replicate run failed: ${await res.text()}`);
+    if (!res.ok) throw await upstreamErrorFromResponse(UPSTREAM_CTX, res);
     return (await res.json()) as ReplicatePrediction;
   }
 

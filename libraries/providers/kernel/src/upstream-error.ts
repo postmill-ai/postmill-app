@@ -70,6 +70,16 @@ export class ProviderUpstreamError extends Error {
 }
 
 // "Google AI Studio reports the account's quota or billing limit was reached (HTTP 429): …"
+const KIND_PHRASES: Record<UpstreamErrorKind, string> = {
+  auth: 'rejected the API key',
+  quota: "reports the account's quota or billing limit was reached",
+  rate_limit: 'is rate-limiting requests',
+  invalid_request: 'rejected the request',
+  timeout: 'did not answer in time',
+  unavailable: 'is unavailable right now',
+  unknown: 'returned an error',
+};
+
 export function upstreamErrorMessage(
   ctx: Pick<UpstreamErrorContext, 'providerName'>,
   kind: UpstreamErrorKind,
@@ -77,17 +87,26 @@ export function upstreamErrorMessage(
   upstreamStatus?: number,
 ): string {
   const status = upstreamStatus ? ` (HTTP ${upstreamStatus})` : '';
-  const phrase = {
-    auth: 'rejected the API key',
-    quota: "reports the account's quota or billing limit was reached",
-    rate_limit: 'is rate-limiting requests',
-    invalid_request: 'rejected the request',
-    timeout: 'did not answer in time',
-    unavailable: 'is unavailable right now',
-    unknown: 'returned an error',
-  }[kind];
+  const phrase = KIND_PHRASES[kind];
   const tail = detail ? `: ${detail}` : '';
   return `${ctx.providerName} ${phrase}${status}${tail}`;
+}
+
+// Recover the kind from text built by upstreamErrorMessage — a thrown
+// ProviderUpstreamError message, or a poll path's upstreamFailureText. Paths
+// that carry only the string (a stored media-job error) use this to rebuild
+// the structured envelope. 'unknown' is checked LAST: its phrase is the most
+// generic. Returns undefined when no canonical phrase matches (an
+// unstructured, non-attributed error).
+export function upstreamKindFromText(text: string): UpstreamErrorKind | undefined {
+  const ordered: UpstreamErrorKind[] = (
+    Object.keys(KIND_PHRASES) as UpstreamErrorKind[]
+  ).filter((kind) => kind !== 'unknown');
+  ordered.push('unknown');
+  for (const kind of ordered) {
+    if (text.includes(KIND_PHRASES[kind])) return kind;
+  }
+  return undefined;
 }
 
 const QUOTA_HINT = /quota|billing|credit|balance|insufficient|exceeded your|plan/i;

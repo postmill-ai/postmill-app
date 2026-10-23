@@ -9,6 +9,10 @@ import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/st
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import {
+  upstreamKindFromText,
+  type UpstreamErrorKind,
+} from '@postmill-ai/provider-kernel';
 import { readResponseCapped } from '@postmill-ai/nestjs-libraries/utils/capped-stream';
 import { applyAudioOutroFade } from '@postmill-ai/nestjs-libraries/media/audio-outro-fade';
 
@@ -268,7 +272,12 @@ export class MediaJobLifecycleService {
 
     if (poll.status === 'failed') {
       if (!(await this._claimForCompletion(job.id, job.organizationId))) return 'skipped';
-      await this.failJob(job, poll.error || 'Provider reported failure');
+      const errorText = poll.error || 'Provider reported failure';
+      // Recover the kind from the adapter's attributed failure text so a
+      // poll-time quota/billing failure keeps the structured envelope (the
+      // render queue then links Settings) instead of degrading to a bare
+      // string. Unstructured errors stay plain.
+      await this.failJob(job, errorText, { kind: upstreamKindFromText(errorText) });
       return 'failed';
     }
     if (poll.status === 'completed' && poll.artifactUrl) {
@@ -488,10 +497,27 @@ export class MediaJobLifecycleService {
     }
   }
 
-  async failJob(job: AIMediaJob, error: string, options?: { notify?: boolean }): Promise<void> {
+  async failJob(
+    job: AIMediaJob,
+    error: string,
+    options?: { notify?: boolean; kind?: UpstreamErrorKind },
+  ): Promise<void> {
+    // A kind means the text is provider-attributed — store the structured
+    // envelope (JSON with message/kind/settingsUrl) so render queues can link
+    // straight to the fix; the notification below keeps the PLAIN text.
+    // Plain-string errors (no recovered kind) are stored verbatim, exactly as
+    // before. settingsUrl mirrors SETTINGS_URL_BY_DOMAIN['media'] in
+    // provider-exception.filter.ts.
+    const stored = options?.kind
+      ? JSON.stringify({
+          message: error.slice(0, 900),
+          kind: options.kind,
+          settingsUrl: '/settings/content/ai-media',
+        })
+      : error;
     await this._aiSettings.updateMediaJob(job.organizationId, job.id, {
       status: 'failed',
-      error: error.slice(0, 1000),
+      error: stored.slice(0, 1000),
       ...(this.providerJobRef(job) ? { artifactUrl: null } : {}),
     });
     if (options?.notify === false) return;

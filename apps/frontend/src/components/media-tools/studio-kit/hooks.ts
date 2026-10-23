@@ -27,7 +27,10 @@ export function useStudioJobs(provider: string, enabled: boolean) {
     {
       // Keep the render queue live while anything is still rendering.
       refreshInterval: (data) =>
-        data?.some((j) => j.status === 'pending' || j.status === 'processing') ? 5000 : 0,
+        Array.isArray(data) &&
+        data.some((j) => j.status === 'pending' || j.status === 'processing')
+          ? 5000
+          : 0,
     }
   );
 }
@@ -59,7 +62,10 @@ export function useStudioGenerate(provider: string) {
         const apiError = await readApiError(res, 'Generation failed');
         throw Object.assign(new Error(apiError.message), { providerError: apiError.providerError });
       }
-      return (await res.json()) as { jobId: string };
+      // `duplicate: true` means an idempotency-key retry; the backend now
+      // returns the ORIGINAL job's id with it, so jobId is present either way
+      // (absent only when the original dispatch never recorded one).
+      return (await res.json()) as { jobId?: string; duplicate?: boolean };
     },
     [fetch, provider]
   );

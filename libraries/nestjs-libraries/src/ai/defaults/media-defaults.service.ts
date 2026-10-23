@@ -52,6 +52,7 @@ export class MediaDefaultsService {
     if (!safeCategory) {
       throw new BadRequestException(`Invalid media category: ${category}`);
     }
+    this._assertModelMatchesCategory(safeCategory, body);
     const cleaned = this._sanitizeSettings('media', safeCategory, body);
     await this._defaultsRepository.upsert(orgId, 'media', safeCategory, cleaned);
     this._bustDefaultsCatalogCache(orgId);
@@ -157,6 +158,33 @@ export class MediaDefaultsService {
     const result = { category: safeCategory, options };
     await ioRedis.set(cacheKey, JSON.stringify(result), 'EX', 60);
     return result;
+  }
+
+  // Reject category/model mis-pairings the catalog UI can't express:
+  // kwaivgi/kling-v2.1 is image-to-video ONLY (its schema strictly requires
+  // `start_image`) — saved as the org's text-to-video default, every job
+  // 422'd. Only fires when the provider's static metadata declares the model
+  // under a DIFFERENT category; models absent from the static metadata
+  // (dynamic model-list providers) stay untouched.
+  private _assertModelMatchesCategory(
+    category: string,
+    body: SetDefaultModelDto,
+  ): void {
+    if (!body.model) return;
+    const metadata = body.version
+      ? this._kernel?.getMetadata('media', body.providerId, body.version)
+      : this._kernel?.latestActive('media', body.providerId)?.metadata;
+    const mediaModels = (metadata as { mediaModels?: Record<string, { id: string }[]> })
+      ?.mediaModels;
+    if (!mediaModels) return;
+    if ((mediaModels[category] ?? []).some((m) => m.id === body.model)) return;
+    const declaredElsewhere = Object.entries(mediaModels)
+      .filter(([, models]) => models.some((m) => m.id === body.model))
+      .map(([declaredCategory]) => declaredCategory);
+    if (declaredElsewhere.length === 0) return;
+    throw new BadRequestException(
+      `Model "${body.model}" cannot be the ${category} default — it is only available for: ${declaredElsewhere.join(', ')}`,
+    );
   }
 
   private _sanitizeSettings(

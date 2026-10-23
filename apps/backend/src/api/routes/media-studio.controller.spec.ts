@@ -9,13 +9,14 @@ vi.mock('@postmill-ai/nestjs-libraries/media/studio/media-studio.service', () =>
   },
 }));
 
-// Control the Redis SET NX / DEL for the idempotency claim; no real connection opens.
-const { mockRedisSet, mockRedisDel } = vi.hoisted(() => ({
+// Control the Redis SET NX / GET / DEL for the idempotency claim; no real connection opens.
+const { mockRedisSet, mockRedisGet, mockRedisDel } = vi.hoisted(() => ({
   mockRedisSet: vi.fn(),
+  mockRedisGet: vi.fn(),
   mockRedisDel: vi.fn(),
 }));
 vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
-  ioRedis: { set: mockRedisSet, del: mockRedisDel },
+  ioRedis: { set: mockRedisSet, get: mockRedisGet, del: mockRedisDel },
 }));
 
 import { MediaStudioController } from './media-studio.controller';
@@ -38,6 +39,7 @@ describe('MediaStudioController — generate idempotency (3.2)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRedisSet.mockResolvedValue('OK');
+    mockRedisGet.mockResolvedValue(null);
     mockRedisDel.mockResolvedValue(1);
     studio = new (MediaStudioService as any)();
     (studio.generate as any).mockResolvedValue({ jobId: 'job-1', status: 'pending' });
@@ -45,15 +47,22 @@ describe('MediaStudioController — generate idempotency (3.2)', () => {
   });
 
   it('dispatches once, then short-circuits a duplicate key with {duplicate:true}', async () => {
-    mockRedisSet.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
+    mockRedisSet
+      .mockResolvedValueOnce('OK') // first NX claim succeeds
+      .mockResolvedValueOnce('OK') // job-id record after the first dispatch
+      .mockResolvedValue(null); // second NX claim → already held
+    // The first dispatch records its job id under the key (set after generate);
+    // the duplicate retry hands it back so the client can re-attach its poll.
+    mockRedisGet.mockResolvedValue('job-1');
 
     const first = await controller.generate('openai', body, 'key-1', mockOrg, mockUser);
     const second = await controller.generate('openai', body, 'key-1', mockOrg, mockUser);
 
     expect(studio.generate).toHaveBeenCalledTimes(1);
     expect(first).toEqual({ jobId: 'job-1', status: 'pending' });
-    expect(second).toEqual({ duplicate: true });
+    expect(second).toEqual({ duplicate: true, jobId: 'job-1' });
     expect(mockRedisSet).toHaveBeenCalledWith('idem:org-1:key-1', '1', 'EX', 86400, 'NX');
+    expect(mockRedisSet).toHaveBeenCalledWith('idem:org-1:key-1', 'job-1', 'EX', 86400);
   });
 
   it('different keys each dispatch', async () => {

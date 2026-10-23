@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
 
 const mockSafeFetch = vi.fn();
 vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
@@ -274,6 +275,45 @@ describe('ReplicateRunnerService', () => {
       expect(body.input.prompt_a).toBe('x'.repeat(300));
       expect(body.input.prompt_b).toBe('short');
       expect(body.input.denoising).toBe(0.75);
+    });
+
+    it('truncates over-long veo prompts (1024-char cap) before posting', async () => {
+      mockSafeFetch.mockResolvedValue(
+        jsonResponse({ id: 'pred-veo', status: 'starting' }),
+      );
+
+      const longPrompt = 'x'.repeat(1500);
+      await runner.runAsync('org1', '', {
+        modelId: 'google/veo-3.1',
+        input: { prompt: longPrompt, aspect_ratio: '16:9' },
+        operation: 'video',
+      });
+
+      const init = mockSafeFetch.mock.calls[0][1] as RequestInit;
+      const body = JSON.parse(init.body as string);
+      expect(body.input.prompt).toBe('x'.repeat(1024));
+      expect(body.input.aspect_ratio).toBe('16:9');
+    });
+
+    it('throws ProviderUpstreamError with the verbatim upstream detail on a create-time 422', async () => {
+      // Was: plain `Error("Replicate run failed: …")` — masked as a 500 by the
+      // route catch-all instead of the 502 envelope naming Replicate.
+      mockSafeFetch.mockResolvedValue(
+        jsonResponse({ detail: 'input.prompt: too long' }, 422),
+      );
+
+      const err = await runner
+        .runAsync('org1', '', {
+          modelId: 'google/veo-3.1',
+          input: { prompt: 'cat' },
+          operation: 'video',
+        })
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(ProviderUpstreamError);
+      expect(err.kind).toBe('invalid_request');
+      expect(err.message).toContain('Replicate');
+      expect(err.message).toContain('input.prompt: too long');
     });
 
     it('throws BadRequestException when a community model is missing a version', async () => {

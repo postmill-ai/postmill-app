@@ -139,7 +139,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     const model = options?.version;
     if (!model) throw new Error('Replicate model/version is required');
     const body = {
-      input: { ...input, ...options?.input },
+      input: { ...input, ...this._filterTunableInput(model, options?.input) },
       ...(options?.webhookUrl
         ? { webhook: options.webhookUrl, webhook_events_filter: ['completed'] }
         : {}),
@@ -190,6 +190,63 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     const id = data.latest_version?.id;
     if (!id) throw new Error(`Replicate model ${model} has no latest version to run`);
     return id;
+  }
+
+  // Org media-default tunables (`options.input`) are model-generic — a tunable
+  // valid for one model 422s another because Replicate rejects unknown inputs
+  // (prod failure: `aspect_ratio` is invalid for kling-v2.1 image-to-video).
+  // Strip tunable keys the target model's metadata schema does not declare.
+  // Core adapter-managed inputs (prompt fields, native source fields) are
+  // always allowed; a model absent from the metadata (custom version hash,
+  // undeclared community model) keeps the historical verbatim passthrough.
+  private _filterTunableInput(
+    model: string,
+    input: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!input) return input;
+    const allowed = ReplicateMediaAdapter._declaredInputFields(model);
+    if (!allowed) return input;
+    let next: Record<string, unknown> | null = null;
+    for (const [key, value] of Object.entries(input)) {
+      if (allowed.has(key)) {
+        if (next) next[key] = value;
+      } else {
+        this._logger?.warn(
+          `Replicate ${model}: dropping unsupported media-default tunable "${key}" (not in the model's input schema)`,
+        );
+        next = next ?? { ...input };
+        delete next[key];
+      }
+    }
+    return next ?? input;
+  }
+
+  private static _declaredInputFields(model: string): Set<string> | null {
+    if (isVersionHash(model)) return null;
+    const mediaModels = providerMetadata.mediaModels as
+      | Record<string, { id: string; fields?: { name: string }[] }[]>
+      | undefined;
+    const allowed = new Set<string>(['prompt', 'prompt_a', 'prompt_b']);
+    let declared = false;
+    for (const models of Object.values(mediaModels ?? {})) {
+      for (const entry of models) {
+        if (entry.id !== model) continue;
+        declared = true;
+        for (const field of entry.fields ?? []) allowed.add(field.name);
+      }
+    }
+    if (!declared) return null;
+    // Adapter-managed inputs are always legal tunable overrides (an explicit
+    // org tunable wins over the adapter's own mapping — see generateImage's
+    // source handling), even when the metadata field list omits them.
+    const i2vField = ReplicateMediaAdapter._I2V_SOURCE_FIELD[model];
+    if (i2vField) allowed.add(i2vField);
+    const v2vField = ReplicateMediaAdapter._V2V_SOURCE_FIELD[model];
+    if (v2vField) allowed.add(v2vField);
+    const i2iField = ReplicateMediaAdapter._i2iInputField(model);
+    if (i2iField) allowed.add(i2iField);
+    allowed.add(ReplicateMediaAdapter._bgRemoveInputField(model));
+    return allowed;
   }
 
   // A blocking (`Prefer: wait`) create may still return `starting`/`processing` when the window
@@ -304,8 +361,16 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   // riffusion's CLIP text encoder hard-caps at 77 tokens (prod failure:
   // "Sizes of tensors must match... Expected size 77 but got size 154").
   // ~300 chars ≈ 75 tokens — truncate with a warning rather than fail a paid job.
+  // The video models cap prompt length too (veo rejects past ~1024 chars;
+  // kling ~2500; seedance ~2000) — over-long prompts 422 the whole job.
+  // Mirrored in ReplicateRunnerService._PROMPT_MAX_CHARS (the studio/runner
+  // path bypasses this adapter).
   private static readonly _PROMPT_MAX_CHARS: Record<string, number> = {
     'riffusion/riffusion': 300,
+    'google/veo-3.1': 1024,
+    'bytedance/seedance-1-pro': 2000,
+    'kwaivgi/kling-v2.1': 2500,
+    'kwaivgi/kling-v2.5-turbo-pro': 2500,
   };
 
   private static _promptInputField(model: string | undefined): string | null {
@@ -325,14 +390,18 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     prompt: string,
   ): Record<string, string> {
     const field = ReplicateMediaAdapter._promptInputField(model);
-    if (!field) return { prompt };
-    const maxChars = ReplicateMediaAdapter._PROMPT_MAX_CHARS[model!];
+    // The cap applies to every model with an entry (music AND video), not only
+    // the music-declared ones with a renamed prompt field.
+    const maxChars = model
+      ? ReplicateMediaAdapter._PROMPT_MAX_CHARS[model]
+      : undefined;
     if (maxChars && prompt.length > maxChars) {
       this._logger?.warn(
         `Replicate ${model} prompt truncated from ${prompt.length} to ${maxChars} chars (upstream token limit)`,
       );
       prompt = prompt.slice(0, maxChars);
     }
+    if (!field) return { prompt };
     return { [field]: prompt };
   }
 
@@ -561,8 +630,11 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   }
 
   async removeVideoBackground(videoUrl: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
+    // Default rembg-video (general salient objects — products, pets) over
+    // robust_video_matting (people-only matting) when the org hasn't pinned a
+    // model; mirrors the metadata/allowlist ordering.
     const model =
-      options?.model || options?.version || 'arielreplicate/robust_video_matting';
+      options?.model || options?.version || 'lucataco/rembg-video';
     // Live schemas (verified 2026-10): robust_video_matting takes `input_video`
     // + `output_type` and mattes PEOPLE only; lucataco/rembg-video takes
     // `video` + `background_color` and handles general salient objects

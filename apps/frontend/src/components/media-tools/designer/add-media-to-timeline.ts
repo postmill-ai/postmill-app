@@ -1,4 +1,5 @@
 import type { createDesignerStore, VideoClip, VideoOutput, VideoTrack } from './designer.store';
+import { parseJobError } from '../../ai/provider-error';
 import { fitWithin } from './panels/fit-within';
 import { probeImageNaturalSize } from './elements';
 import { DEFAULT_CLIP_MS } from './add-text';
@@ -72,7 +73,12 @@ export async function pollMediaJobArtifact(options: PollMediaJobOptions): Promis
       if (!job.artifactUrl) throw new Error(messages.noArtifact);
       return { url: job.artifactUrl, fileId: job.fileId ?? null };
     }
-    if (job.status === 'failed') throw new Error(job.error || messages.generationFailed);
+    // A failed job's error can be the structured envelope (JSON with
+    // message/kind/settingsUrl — see media-job-lifecycle failJob); toast the
+    // unwrapped message, not the raw JSON.
+    if (job.status === 'failed') {
+      throw new Error(parseJobError(job.error)?.message ?? job.error ?? messages.generationFailed);
+    }
     return null;
   };
 

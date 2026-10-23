@@ -1754,6 +1754,7 @@ export class AiMediaService {
   async upscaleVideo(videoUrl: string, options?: { orgId?: string; scale?: number }): Promise<string> {
     const candidates = await this._resolveForOperation(options?.orgId, 'video-upscale');
 
+    let lastError: Error | undefined;
     for (const candidate of candidates) {
       if (!candidate.adapter.upscaleVideo) continue;
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
@@ -1784,12 +1785,17 @@ export class AiMediaService {
         }
         return submission.artifactUrl || submission.jobId;
       } catch (err) {
+        lastError = err as Error;
         this._logger.warn(
-          `Media provider ${candidate.adapter.identifier} video upscale failed: ${(err as Error).message} — trying next`,
+          `Media provider ${candidate.adapter.identifier} video upscale failed: ${lastError.message} — trying next`,
         );
       }
     }
 
+    // Candidates resolved but every CALL failed: the provider IS configured —
+    // rethrow the real upstream error (mirrors textToSpeech) instead of
+    // misreporting it as "not available".
+    if (lastError) throw lastError;
     throw new CapabilityNotAvailable(
       'Video upscaling is not available. Configure a media provider with video-upscale support (Replicate) in Settings > Media.',
       'video',
@@ -1799,6 +1805,7 @@ export class AiMediaService {
   async removeVideoBackground(videoUrl: string, options?: { orgId?: string }): Promise<string> {
     const candidates = await this._resolveForOperation(options?.orgId, 'video-bg');
 
+    let lastError: Error | undefined;
     for (const candidate of candidates) {
       if (!candidate.adapter.removeVideoBackground) continue;
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
@@ -1828,12 +1835,17 @@ export class AiMediaService {
         }
         return submission.artifactUrl || submission.jobId;
       } catch (err) {
+        lastError = err as Error;
         this._logger.warn(
-          `Media provider ${candidate.adapter.identifier} video background removal failed: ${(err as Error).message} — trying next`,
+          `Media provider ${candidate.adapter.identifier} video background removal failed: ${lastError.message} — trying next`,
         );
       }
     }
 
+    // Candidates resolved but every CALL failed: the provider IS configured —
+    // rethrow the real upstream error (mirrors textToSpeech) instead of
+    // misreporting it as "not available".
+    if (lastError) throw lastError;
     throw new CapabilityNotAvailable(
       'Video background removal is not available. Configure a media provider with video-bg support (Replicate) in Settings > Media.',
       'video',

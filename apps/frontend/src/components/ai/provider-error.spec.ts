@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  parseJobError,
   providerErrorFromBody,
   providerErrorToastText,
   readApiError,
@@ -62,5 +63,28 @@ describe('providerErrorToastText', () => {
   it('ignores non-envelope bodies', () => {
     expect(providerErrorFromBody({ error: 'BudgetExceeded', message: 'x' })).toBeUndefined();
     expect(providerErrorFromBody('text')).toBeUndefined();
+  });
+});
+
+describe('parseJobError', () => {
+  it('unwraps the structured envelope stored on provider-attributed job failures', () => {
+    const envelope = JSON.stringify({
+      message: "Replicate reports the account's quota or billing limit was reached (HTTP 402): insufficient credits",
+      kind: 'quota',
+      settingsUrl: '/settings/content/ai-media',
+    });
+    expect(parseJobError(envelope)).toEqual({
+      message: "Replicate reports the account's quota or billing limit was reached (HTTP 402): insufficient credits",
+      kind: 'quota',
+      settingsUrl: '/settings/content/ai-media',
+    });
+  });
+
+  it('returns null for plain-string errors (backward compatible) and missing input', () => {
+    expect(parseJobError('NSFW rejected')).toBeNull();
+    expect(parseJobError('{"notMessage": true}')).toBeNull();
+    expect(parseJobError('{')).toBeNull();
+    expect(parseJobError(null)).toBeNull();
+    expect(parseJobError(undefined)).toBeNull();
   });
 });

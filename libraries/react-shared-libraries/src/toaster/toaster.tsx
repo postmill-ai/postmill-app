@@ -4,7 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 
-type ToasterEvent = { text: string; type?: 'success' | 'warning' };
+type ToasterEvent = {
+  text: string;
+  type?: 'success' | 'warning';
+  /** Optional action link rendered after the text (e.g. "Open settings"). */
+  href?: string;
+  hrefLabel?: string;
+};
 
 class ToasterEmitter extends EventTarget {
   show(params: ToasterEvent) {
@@ -19,12 +25,16 @@ export const Toaster = () => {
   const [toasterType, setToasterType] = useState<'success' | 'warning' | ''>(
     ''
   );
+  const [toasterHref, setToasterHref] = useState<string | undefined>(undefined);
+  const [toasterHrefLabel, setToasterHrefLabel] = useState<string | undefined>(undefined);
   useEffect(() => {
     const onShow = (event: Event) => {
       const params = (event as CustomEvent<ToasterEvent>).detail;
-      const { text, type } = params;
+      const { text, type, href, hrefLabel } = params;
       setToasterText(text);
       setToasterType(type || 'success');
+      setToasterHref(href);
+      setToasterHrefLabel(hrefLabel);
       setShowToaster(true);
       setTimeout(() => {
         setShowToaster(false);
@@ -78,6 +88,13 @@ export const Toaster = () => {
         )}
       </div>
       <div className="flex-1 text-textColor">{toasterText}</div>
+      {toasterHref && (
+        // Plain <a>: the shared library has no next/link dependency, and a
+        // toast action navigating away loses nothing by a full load.
+        <a href={toasterHref} className="shrink-0 underline text-textColor">
+          {toasterHrefLabel || toasterHref}
+        </a>
+      )}
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="60"
@@ -127,10 +144,12 @@ export const Toaster = () => {
 };
 export const useToaster = () => {
   return {
-    show: useCallback((text: string, type?: 'success' | 'warning') => {
+    show: useCallback((text: string, type?: 'success' | 'warning', href?: string, hrefLabel?: string) => {
       toaster.show({
         text,
         type,
+        href,
+        hrefLabel,
       });
     }, []),
   };

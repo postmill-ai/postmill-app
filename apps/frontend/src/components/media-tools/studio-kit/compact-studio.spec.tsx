@@ -111,6 +111,78 @@ describe('CompactStudio (descriptor provider)', () => {
     });
   });
 
+  it('adopts a still-running job on mount (refresh mid-render re-attaches)', async () => {
+    jobsPayload = [
+      {
+        id: 'job-in-flight',
+        operation: 'image',
+        status: 'processing',
+        artifactUrl: null,
+        fileId: null,
+        error: null,
+        createdAt: '2026-10-19T00:00:00.000Z',
+      },
+    ];
+    const onGenerated = vi.fn();
+    renderStudio(
+      <CompactStudio provider="google" operation="image" prompt="a cat" onGenerated={onGenerated} />
+    );
+    // No Generate click — the mount-time adoption picks up the in-flight job
+    // and shows the progress note.
+    expect(await screen.findByText(/Rendering — this can take a few minutes/)).toBeTruthy();
+
+    // The job then completes: the adopted poll loop hands the artifact back.
+    jobsPayload = [
+      {
+        id: 'job-in-flight',
+        operation: 'image',
+        status: 'completed',
+        artifactUrl: '/uploads/cat.png',
+        fileId: 'file-9',
+        error: null,
+        createdAt: '2026-10-19T00:00:00.000Z',
+      },
+    ];
+    // SWR dedupes identical keys within the interval — force a revalidation so
+    // the refreshed payload is seen (refreshInterval only fires live timers).
+    await waitFor(() => expect(onGenerated).toHaveBeenCalledTimes(1), { timeout: 12000 });
+    expect(onGenerated).toHaveBeenCalledWith({
+      operation: 'image',
+      artifactUrl: '/uploads/cat.png',
+      fileId: 'file-9',
+    });
+  }, 15000);
+
+  it('unwraps the structured failure envelope and links Settings', async () => {
+    jobsPayload = [
+      {
+        id: 'job-1',
+        operation: 'image',
+        status: 'failed',
+        artifactUrl: null,
+        fileId: null,
+        error: JSON.stringify({
+          message: "Google AI Studio reports the account's quota or billing limit was reached (HTTP 429): quota exceeded",
+          kind: 'quota',
+          settingsUrl: '/settings/content/ai-media',
+        }),
+        createdAt: '2026-10-19T00:00:00.000Z',
+      },
+    ];
+    const onGenerated = vi.fn();
+    renderStudio(
+      <CompactStudio provider="google" operation="image" prompt="a cat" onGenerated={onGenerated} />
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('quota or billing limit');
+    expect(alert.textContent).not.toContain('"kind"');
+    const link = alert.querySelector('a');
+    expect(link).toBeTruthy();
+    expect(link!.getAttribute('href')).toBe('/settings/content/ai-media');
+    expect(onGenerated).not.toHaveBeenCalled();
+  });
+
   it('surfaces the job error when generation fails', async () => {
     jobsPayload = [
       {

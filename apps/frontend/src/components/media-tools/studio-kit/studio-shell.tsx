@@ -63,7 +63,11 @@ export function StudioShell({ descriptor }: { descriptor: StudioDescriptor }) {
         providerError
           ? providerErrorToastText(translate, providerError)
           : (err as Error).message || translate('studio_render_start_failed', 'Failed to start the render'),
-        'warning'
+        'warning',
+        providerError?.settingsUrl,
+        providerError?.settingsUrl
+          ? translate('provider_error_open_settings', 'Open settings')
+          : undefined
       );
     } finally {
       setGenerating(false);

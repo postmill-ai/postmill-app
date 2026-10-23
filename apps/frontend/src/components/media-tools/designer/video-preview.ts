@@ -227,8 +227,13 @@ export class VideoPreviewEngine {
   private audioElements: Map<string, HTMLAudioElement> = new Map();
   // Clips whose element fired `error` (404, CORS, bad codec). Demoted out of
   // the per-tick seek/play path so a dead clip can't keep the engine retrying
-  // it every frame while the rest of the timeline plays on.
+  // it every frame while the rest of the timeline plays on. The demotion is
+  // NOT permanent: a `canplay` (or a src swap) clears it — a transient
+  // failure must not silence the clip for the rest of the session.
   private failedMedia: Set<string> = new Set();
+  // play() rejections already logged, so a blocked clip warns once instead of
+  // every tick.
+  private playWarned: Set<string> = new Set();
 
   constructor(store: ReturnType<typeof import('./designer.store').createDesignerStore>) {
     this.store = store;
@@ -335,7 +340,7 @@ export class VideoPreviewEngine {
             el.volume = v;
             el.muted = v <= 0;
             if (el.paused) {
-              el.play().catch(() => {});
+              this.tryPlay(el, clip.id);
             }
           }
         }
@@ -364,7 +369,7 @@ export class VideoPreviewEngine {
               // playhead sitting at/after the clip's end that is an end-of-track
               // stutter. (A scrub back into the clip seeks above, which clears
               // `ended`, so legitimate resumes still play.)
-              el.play().catch(() => {});
+              this.tryPlay(el, clip.id);
             }
           }
         }
@@ -410,6 +415,24 @@ export class VideoPreviewEngine {
     el.pause();
   }
 
+  // play() rejections were swallowed (`catch(() => {})`), so a clip the
+  // browser refused to start looked exactly like a silent clip — the timeline
+  // preview stayed quiet while the exported download had audio. AbortError is
+  // benign (a pause/load raced a pending play) and stays quiet; anything else
+  // (notably NotAllowedError when autoplay is blocked without a user gesture)
+  // is surfaced once and RETRIED — the clip is not demoted, so the next tick
+  // after a user gesture / play toggle starts it.
+  private tryPlay(el: HTMLMediaElement, clipId: string) {
+    el.play().catch((err: unknown) => {
+      if ((err as DOMException)?.name === 'AbortError') return;
+      if (this.playWarned.has(clipId)) return;
+      this.playWarned.add(clipId);
+      console.warn(
+        `[video-preview] clip ${clipId} play() was rejected (${(err as Error)?.message ?? err}) — will retry on the next play`,
+      );
+    });
+  }
+
   private getOrCreateVideo(clip: VideoClip): HTMLVideoElement | null {
     if (!clip.src) return null;
     if (this.videoElements.has(clip.id)) {
@@ -433,6 +456,10 @@ export class VideoPreviewEngine {
     const el = document.createElement('video');
     el.src = clip.src;
     el.addEventListener('error', () => this.markMediaFailed(clip, el));
+    // Recovery: a clip demoted after a transient load failure (CORS blip,
+    // raced range request) rejoins the per-tick path once the element becomes
+    // playable, instead of staying silent for the rest of the session.
+    el.addEventListener('canplay', () => this.failedMedia.delete(clip.id));
     // Only mute when the volume is explicitly zeroed; an unset volume defaults to
     // 1 (audible), so the preview no longer silences default video audio. A
     // keyframed volume overrides this on the next tick (see seekMediaElements).
@@ -473,6 +500,8 @@ export class VideoPreviewEngine {
     const el = document.createElement('audio');
     el.src = clip.src;
     el.addEventListener('error', () => this.markMediaFailed(clip, el));
+    // Same recovery rule as the video elements (see getOrCreateVideo).
+    el.addEventListener('canplay', () => this.failedMedia.delete(clip.id));
     el.volume = clampVolume(volumeAtClipTime(clip, 0));
     const rate = this.initialRateFor(clip);
     if (rate !== null) {
@@ -505,5 +534,6 @@ export class VideoPreviewEngine {
     this.videoElements.clear();
     this.audioElements.clear();
     this.failedMedia.clear();
+    this.playWarned.clear();
   }
 }

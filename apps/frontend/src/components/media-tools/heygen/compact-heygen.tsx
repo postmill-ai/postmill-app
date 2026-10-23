@@ -9,6 +9,7 @@ import { Button } from '@postmill-ai/react/form/button';
 import { MEDIA_SETUP_HREF } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { readErrorMessage } from '@postmill-ai/frontend/components/media-tools/designer/read-error-message';
+import { parseJobError } from '@postmill-ai/frontend/components/ai/provider-error';
 import { VoicePicker } from './voice-picker';
 import { useHeygenStatus, useHeygenVoices, useHeygenJobs } from './use-heygen';
 import type { CompactOperation, CompactStudioResult } from '../studio-kit/compact-registry';
@@ -79,7 +80,9 @@ export const CompactHeyGen: FC<{
     } else if (job.status === 'failed') {
       handledJobRef.current = job.id;
       setActiveJobId(null);
-      fail(job.error || t('generation_failed', 'Generation failed'));
+      // Unwrap the structured failure envelope (see JobErrorText) so the
+      // inline error never shows raw JSON.
+      fail(parseJobError(job.error)?.message ?? job.error ?? t('generation_failed', 'Generation failed'));
     }
   }, [jobs, activeJobId, onGenerated, fail, t]);
 

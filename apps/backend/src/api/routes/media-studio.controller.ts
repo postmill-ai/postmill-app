@@ -91,11 +91,21 @@ export class MediaStudioController {
         claimed = true; // Redis down → fail open
       }
       if (!claimed) {
-        return { duplicate: true };
+        // Hand back the ORIGINAL job's id (stored once the first dispatch
+        // succeeded) so the caller can re-attach its poll loop — a bare
+        // `{ duplicate: true }` left compact studios with nothing to track.
+        let jobId: string | undefined;
+        try {
+          const stored = await ioRedis.get(`idem:${org.id}:${idempotencyKey}`);
+          if (stored && stored !== '1') jobId = stored;
+        } catch {
+          // best-effort — the client just can't re-attach
+        }
+        return { duplicate: true, jobId };
       }
     }
     try {
-      return await this._studio.generate(org.id, user.id, provider, {
+      const result = await this._studio.generate(org.id, user.id, provider, {
         operation: body.operation,
         model: body.model,
         input: body.input,
@@ -103,6 +113,21 @@ export class MediaStudioController {
         folderId: body.folderId,
         version,
       });
+      // Upgrade the claim marker to the job id so a duplicate retry can adopt
+      // the in-flight job (see above). Same 24h TTL as the original claim.
+      if (idempotencyKey && result?.jobId) {
+        try {
+          await ioRedis.set(
+            `idem:${org.id}:${idempotencyKey}`,
+            result.jobId,
+            'EX',
+            86400,
+          );
+        } catch {
+          // best-effort — dedup still works, re-attach just degrades
+        }
+      }
+      return result;
     } catch (e) {
       if (idempotencyKey) {
         try {

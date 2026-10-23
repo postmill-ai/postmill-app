@@ -632,6 +632,39 @@ describe('ReplicateMediaAdapter music prompt field mapping (riffusion)', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it('truncates an over-long veo prompt to 1024 chars and warns', async () => {
+    // Video models cap prompt length too — over-long prompts 422 the whole
+    // paid job, so the adapter warn-truncates like riffusion (A1).
+    const longPrompt = 'cinematic drone shot '.repeat(100); // 2100 chars
+    await adapter.generateVideo(longPrompt, {
+      credentials: { apiKey: 'k' },
+      model: 'google/veo-3.1',
+    });
+    expect(lastRequestBody(fetchMock).input.prompt).toHaveLength(1024);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('truncated'),
+    );
+  });
+
+  it('truncates an over-long kling prompt to 2500 chars', async () => {
+    const longPrompt = 'x'.repeat(3000);
+    await adapter.generateVideo(longPrompt, {
+      credentials: { apiKey: 'k' },
+      model: 'kwaivgi/kling-v2.5-turbo-pro',
+    });
+    expect(lastRequestBody(fetchMock).input.prompt).toHaveLength(2500);
+  });
+
+  it('leaves prompts for uncapped models untouched', async () => {
+    const longPrompt = 'x'.repeat(3000);
+    await adapter.generateVideo(longPrompt, {
+      credentials: { apiKey: 'k' },
+      model: 'minimax/video-01',
+      sourceUrl: 'https://cdn.example.com/frame.png',
+    });
+    expect(lastRequestBody(fetchMock).input.prompt).toHaveLength(3000);
+  });
+
   it('keeps the default `prompt` field for other music models', async () => {
     await adapter.generateAudio('upbeat jazz', {
       credentials: { apiKey: 'k' },
@@ -655,6 +688,7 @@ describe('ReplicateMediaAdapter.removeVideoBackground (robust_video_matting)', (
     // (green-screen | alpha-mask | foreground-mask, default green-screen).
     const submission = await adapter.removeVideoBackground('https://cdn.example.com/in.mp4', {
       credentials: { apiKey: 'k' },
+      model: 'arielreplicate/robust_video_matting',
     });
     expect(submission).toEqual({ jobId: 'pred-1' });
     expect(lastRequestUrl(fetchMock)).toBe(
@@ -669,8 +703,22 @@ describe('ReplicateMediaAdapter.removeVideoBackground (robust_video_matting)', (
   it('lets an org media-defaults tunable override output_type', async () => {
     await adapter.removeVideoBackground('https://cdn.example.com/in.mp4', {
       credentials: { apiKey: 'k' },
+      model: 'arielreplicate/robust_video_matting',
       input: { output_type: 'alpha-mask' },
     });
     expect(lastRequestBody(fetchMock).input.output_type).toBe('alpha-mask');
+  });
+
+  it('defaults to lucataco/rembg-video (general objects) when no model is pinned', async () => {
+    await adapter.removeVideoBackground('https://cdn.example.com/in.mp4', {
+      credentials: { apiKey: 'k' },
+    });
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/lucataco/rembg-video/predictions'
+    );
+    expect(lastRequestBody(fetchMock).input).toEqual({
+      video: 'https://cdn.example.com/in.mp4',
+      background_color: '#00FF00',
+    });
   });
 });
