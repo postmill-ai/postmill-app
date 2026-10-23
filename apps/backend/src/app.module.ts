@@ -33,6 +33,7 @@ import { CollaborationModule } from '@postmill-ai/backend/services/collaboration
 import { ProvidersModule } from '@postmill-ai/nestjs-libraries/providers/providers.module';
 import { ProvidersBootstrap } from './providers.bootstrap';
 import { ProviderExceptionFilter } from './api/filters/provider-exception.filter';
+import { SentryReportFilter } from './api/filters/sentry-report.filter';
 
 // Module-level feature flags are read at bootstrap time. Defaults keep all
 // features enabled for production/CI; local developers opt-out via env vars.
@@ -78,6 +79,19 @@ const scheduleModule = featureFlags.isEnabled('cron')
   ],
   controllers: [InngestController],
   providers: [
+    // Catch-all Sentry backstop — must be the FIRST provider in this array.
+    // Nest collects APP_FILTER providers during module scanning (ahead of
+    // main.ts useGlobalFilters pushes) and then REVERSES the global filter
+    // array before matching (RouterExceptionFilters.create →
+    // setCustomFilters(filters.reverse())), so the first-registered filter
+    // matches LAST. Verified empirically by dumping the per-route filter
+    // array: anywhere else, this catch-all shadows the typed filters below
+    // (provider errors lose their 502 envelope and account-explained
+    // upstream 4xx spam Sentry). Locked by sentry-report.registration.spec.
+    {
+      provide: APP_FILTER,
+      useClass: SentryReportFilter,
+    },
     PROVIDER_NOT_CONFIGURED_FILTER,
     PAYMENTS_UNSUPPORTED_FILTER,
     SHORT_LINK_PROVIDER_FILTER,
@@ -98,11 +112,6 @@ const scheduleModule = featureFlags.isEnabled('cron')
       provide: APP_FILTER,
       useClass: ProviderExceptionFilter,
     },
-    // The catch-all SentryReportFilter is NOT registered here: Nest reverses
-    // the global filter array before matching (RouterExceptionFilters.create →
-    // setCustomFilters(filters.reverse())), so the LAST provider in this array
-    // would match FIRST and shadow the typed filters. It is the first
-    // useGlobalFilters call in main.ts, which lands it last in match order.
   ],
   exports: [
     DatabaseModule,

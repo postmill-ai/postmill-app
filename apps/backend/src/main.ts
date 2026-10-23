@@ -16,14 +16,13 @@ process.env.TZ = 'UTC';
 
 import cookieParser from 'cookie-parser';
 import { Logger, ValidationPipe } from '@nestjs/common';
-import { NestFactory, HttpAdapterHost } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
 
 import { SubscriptionExceptionFilter } from '@postmill-ai/backend/services/auth/permissions/subscription.exception';
 import { PostValidationExceptionFilter } from '@postmill-ai/backend/api/routes/posts.validation.exception';
 import { HttpExceptionFilter } from '@postmill-ai/nestjs-libraries/services/exception.filter';
-import { SentryReportFilter } from '@postmill-ai/backend/api/filters/sentry-report.filter';
 import { ConfigurationChecker } from '@postmill-ai/helpers/configuration/configuration.checker';
 import { startMcp } from '@postmill-ai/nestjs-libraries/chat/start.mcp';
 import { isDev } from '@postmill-ai/helpers/utils/is.dev';
@@ -181,12 +180,12 @@ async function start() {
       xssFilter: true,
     }));
   }
-  // Catch-all Sentry backstop FIRST: Nest reverses the global filter array
-  // before matching (RouterExceptionFilters.create → setCustomFilters(
-  // filters.reverse())), so the FIRST registered filter matches LAST. A
-  // catch-all registered later shadows every typed filter — provider errors
-  // lose their 502 envelope and account-explained upstream 4xx spam Sentry.
-  app.useGlobalFilters(new SentryReportFilter(app.get(HttpAdapterHost)));
+  // The catch-all SentryReportFilter is NOT registered here: module APP_FILTER
+  // providers are collected during NestFactory.create's scan, ahead of these
+  // useGlobalFilters pushes, and Nest then REVERSES the array before matching
+  // — so anything registered here matches before AppModule's typed filters. It
+  // is the first provider in AppModule instead, which lands it last in match
+  // order (see the comment there).
   app.useGlobalFilters(new SubscriptionExceptionFilter());
   app.useGlobalFilters(new PostValidationExceptionFilter());
   app.useGlobalFilters(new HttpExceptionFilter());

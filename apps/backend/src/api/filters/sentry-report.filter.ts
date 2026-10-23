@@ -8,22 +8,22 @@ import { BaseExceptionFilter, HttpAdapterHost } from '@nestjs/core';
 import * as Sentry from '@sentry/nestjs';
 
 /**
- * Backstop filter, registered as the FIRST useGlobalFilters call in main.ts.
- * Nest reverses the global filter array before matching
- * (RouterExceptionFilters.create → setCustomFilters(filters.reverse())), so
- * first-registered matches LAST: the typed filters (provider errors, 401s,
- * validation) get first chance to shape their responses, and anything that
- * falls through lands here. Unexpected errors (plain `Error`s, not deliberate
- * HttpExceptions) are reported to Sentry before the default error response
- * renders — previously these only hit the Nest log and never reached Sentry
- * (e.g. the HeyGen avatar-catalog timeout 500).
+ * Backstop filter, registered as the FIRST provider in AppModule.
  *
- * Do NOT register this as an APP_FILTER provider or after another
- * useGlobalFilters call: anything registered later matches EARLIER post-
- * reversal, so a catch-all there shadows all typed filters
- * (ProviderExceptionFilter et al. lost their response envelopes and account-
- * explained upstream 4xx — the org's own key/plan/quota state, not app bugs —
- * spammed Sentry as errors).
+ * Nest collects APP_FILTER providers during module scanning (ahead of any
+ * useGlobalFilters calls in main.ts) and then REVERSES the global filter
+ * array before matching (RouterExceptionFilters.create →
+ * setCustomFilters(filters.reverse())). First-registered therefore matches
+ * LAST: the typed filters (provider errors, 401s, validation) get first
+ * chance to shape their responses, and anything that falls through lands
+ * here. Unexpected errors (plain `Error`s, not deliberate HttpExceptions)
+ * are reported to Sentry before the default error response renders.
+ *
+ * Do NOT move this later in the providers array or into main.ts: anywhere
+ * else, this catch-all matches BEFORE the typed filters (verified by dumping
+ * the per-route filter array — ProviderExceptionFilter et al. lost their
+ * response envelopes and account-explained upstream 4xx — the org's own
+ * key/plan/quota state, not app bugs — spammed Sentry as errors).
  */
 @Catch()
 export class SentryReportFilter extends BaseExceptionFilter {
