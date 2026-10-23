@@ -34,6 +34,7 @@ import { CollaborationModule } from '@postmill-ai/backend/services/collaboration
 import { ProvidersModule } from '@postmill-ai/nestjs-libraries/providers/providers.module';
 import { ProvidersBootstrap } from './providers.bootstrap';
 import { ProviderExceptionFilter } from './api/filters/provider-exception.filter';
+import { SentryReportFilter } from './api/filters/sentry-report.filter';
 
 // Module-level feature flags are read at bootstrap time. Defaults keep all
 // features enabled for production/CI; local developers opt-out via env vars.
@@ -99,6 +100,14 @@ const scheduleModule = featureFlags.isEnabled('cron')
     {
       provide: APP_FILTER,
       useClass: ProviderExceptionFilter,
+    },
+    // Catch-all Sentry backstop — must be the LAST global filter: Nest picks the
+    // first filter whose @Catch matches, and a catch-all registered via
+    // useGlobalFilters shadows every typed APP_FILTER below (provider errors lost
+    // their 502 envelope and account-explained upstream 4xx spammed Sentry).
+    {
+      provide: APP_FILTER,
+      useClass: SentryReportFilter,
     },
   ],
   exports: [

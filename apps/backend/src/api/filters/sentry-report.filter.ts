@@ -8,12 +8,18 @@ import { BaseExceptionFilter, HttpAdapterHost } from '@nestjs/core';
 import * as Sentry from '@sentry/nestjs';
 
 /**
- * Backstop filter, registered LAST: the specific filters (provider errors,
- * 401s, validation) get first chance to shape their responses, and anything
- * that falls through lands here. Unexpected errors (plain `Error`s, not
- * deliberate HttpExceptions) are reported to Sentry before the default
- * error response renders — previously these only hit the Nest log and
- * never reached Sentry (e.g. the HeyGen avatar-catalog timeout 500).
+ * Backstop filter, registered LAST (as the final APP_FILTER in AppModule):
+ * the specific filters (provider errors, 401s, validation) get first chance to
+ * shape their responses, and anything that falls through lands here. Unexpected
+ * errors (plain `Error`s, not deliberate HttpExceptions) are reported to Sentry
+ * before the default error response renders — previously these only hit the
+ * Nest log and never reached Sentry (e.g. the HeyGen avatar-catalog timeout 500).
+ *
+ * Do NOT register this via app.useGlobalFilters() in main.ts: those land ahead
+ * of every APP_FILTER provider in Nest's first-match-wins resolution, so a
+ * catch-all there shadows all typed module filters (ProviderExceptionFilter et
+ * al. lost their response envelopes and account-explained upstream 4xx — the
+ * org's own key/plan/quota state, not app bugs — spammed Sentry as errors).
  */
 @Catch()
 export class SentryReportFilter extends BaseExceptionFilter {
