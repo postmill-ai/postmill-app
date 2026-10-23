@@ -30,6 +30,19 @@ export const RenderQueue: FC<{ jobs: HeyGenJob[] | undefined; isLoading: boolean
     audio: t('heygen_operation_voiceover', 'Voiceover'),
   };
 
+  // /uploads is intentionally public (unguessable names), so the artifact URL
+  // itself is the share link — the same URL the Files panel's Copy URL builds.
+  const copyLink = useCallback(
+    (job: HeyGenJob) => {
+      if (!job.artifactUrl) return;
+      navigator.clipboard.writeText(mediaDirectory.set(job.artifactUrl)).then(
+        () => toaster.show(t('url_copied_to_clipboard', 'URL copied to clipboard'), 'success'),
+        () => toaster.show(t('copy_failed', 'Copy failed'), 'warning')
+      );
+    },
+    [mediaDirectory, toaster, t]
+  );
+
   const post = useCallback(
     async (job: HeyGenJob) => {
       if (!job.artifactUrl || !job.fileId) {
@@ -116,6 +129,15 @@ export const RenderQueue: FC<{ jobs: HeyGenJob[] | undefined; isLoading: boolean
                 >
                   {t('edit_in_designer', 'Edit in Designer')}
                 </button>
+                {job.artifactUrl && (
+                  <button
+                    type="button"
+                    onClick={() => copyLink(job)}
+                    className="flex-1 px-[10px] py-[7px] rounded-[8px] bg-btnSimple text-textColor text-[12px] hover:bg-boxHover transition-all"
+                  >
+                    {t('copy_link', 'Copy Link')}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => post(job)}

@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useReplicateStore } from './replicate.store';
 import { AudioPlayer } from '@postmill-ai/frontend/components/media-tools/audio-player';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -168,6 +170,8 @@ export function ResultPanel({ medium }: { medium: Medium }) {
 
   const fetch = useFetch();
   const generate = useGenerate();
+  const toaster = useToaster();
+  const mediaDirectory = useMediaDirectory();
   const [saving, setSaving] = useState(false);
   const [savedPaths, setSavedPaths] = useState<Record<string, string>>({});
 
@@ -232,6 +236,19 @@ export function ResultPanel({ medium }: { medium: Medium }) {
     const target = saveFolderId ? `/files?folderId=${encodeURIComponent(saveFolderId)}` : '/files';
     window.open(target, '_blank');
   }, [saveFolderId]);
+
+  // /uploads is intentionally public (unguessable names), so the stored
+  // artifact URL itself is the share link — the same URL the Files panel's
+  // Copy URL builds.
+  const handleCopyLink = useCallback(
+    (url: string) => {
+      navigator.clipboard.writeText(mediaDirectory.set(url)).then(
+        () => toaster.show(t('url_copied_to_clipboard', 'URL copied to clipboard'), 'success'),
+        () => toaster.show(t('copy_failed', 'Copy failed'), 'warning')
+      );
+    },
+    [mediaDirectory, toaster, t]
+  );
 
   // ── State 1: placeholder ───────────────────────────────────────────────────
   if (!selectedModel) {
@@ -426,6 +443,18 @@ export function ResultPanel({ medium }: { medium: Medium }) {
                   {t('open_in_designer', 'Open in Designer')}
                 </button>
               )}
+              {['image', 'audio', 'video'].includes(result.kind) &&
+                // Only share a durable URL: job-backed results are already
+                // landed in tenant storage (provider URLs expire), and a sync
+                // result becomes durable once saved to Files.
+                (savedPaths[urls[0]] || result.jobId) && (
+                  <button
+                    onClick={() => handleCopyLink(savedPaths[urls[0]] || urls[0])}
+                    className="px-3 py-1.5 rounded-lg bg-btnSimple text-textColor text-xs hover:bg-boxHover transition-colors"
+                  >
+                    {t('copy_link', 'Copy Link')}
+                  </button>
+                )}
             </div>
           )}
 

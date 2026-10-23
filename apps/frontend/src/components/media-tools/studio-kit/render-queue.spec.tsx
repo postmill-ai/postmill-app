@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
@@ -14,8 +14,9 @@ vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
   useModals: () => ({ openModal: vi.fn() }),
 }));
 
+const mockShow = vi.fn();
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
-  useToaster: () => ({ show: vi.fn() }),
+  useToaster: () => ({ show: mockShow }),
 }));
 
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
@@ -40,6 +41,12 @@ const job = (over: Record<string, unknown> = {}) => ({
 }) as any;
 
 afterEach(cleanup);
+
+const mockClipboard = () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  return writeText;
+};
 
 describe('RenderQueue', () => {
   it('renders a known status with its label', () => {
@@ -74,5 +81,37 @@ describe('RenderQueue', () => {
     );
     expect(document.getElementById('media-job-j2')!.className).toContain('ring-2');
     expect(document.getElementById('media-job-j1')!.className).not.toContain('ring-2');
+  });
+
+  it('copies the public artifact URL from a completed job', async () => {
+    const writeText = mockClipboard();
+    render(<RenderQueue jobs={[job({ operation: 'video', artifactUrl: '/uploads/v.mp4' })]} isLoading={false} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Link' }));
+
+    expect(writeText).toHaveBeenCalledWith('/uploads/v.mp4');
+    await waitFor(() =>
+      expect(mockShow).toHaveBeenCalledWith('URL copied to clipboard', 'success')
+    );
+  });
+
+  it('warns instead of toasting success when the clipboard write fails', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(<RenderQueue jobs={[job()]} isLoading={false} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Link' }));
+
+    await waitFor(() => expect(mockShow).toHaveBeenCalledWith('Copy failed', 'warning'));
+  });
+
+  it('offers no link copy on transcripts or artifact-less jobs', () => {
+    render(
+      <RenderQueue
+        jobs={[job({ id: 's1', operation: 'stt' }), job({ id: 's2', artifactUrl: null })]}
+        isLoading={false}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Copy Link' })).toBeNull();
   });
 });
