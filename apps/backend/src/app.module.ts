@@ -15,7 +15,6 @@ import { ThrottlerBehindProxyGuard } from '@postmill-ai/nestjs-libraries/throttl
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AgentModule } from '@postmill-ai/nestjs-libraries/agent/agent.module';
 import { SentryModule } from '@sentry/nestjs/setup';
-import { FILTER } from '@postmill-ai/nestjs-libraries/sentry/sentry.exception';
 import { PROVIDER_NOT_CONFIGURED_FILTER } from '@postmill-ai/nestjs-libraries/integrations/provider-not-configured.filter';
 import { SHORT_LINK_PROVIDER_FILTER } from '@postmill-ai/nestjs-libraries/short-linking/short-link-provider.filter';
 import { ChatModule } from '@postmill-ai/nestjs-libraries/chat/chat.module';
@@ -80,7 +79,6 @@ const scheduleModule = featureFlags.isEnabled('cron')
   ],
   controllers: [InngestController],
   providers: [
-    FILTER,
     PROVIDER_NOT_CONFIGURED_FILTER,
     PAYMENTS_UNSUPPORTED_FILTER,
     SHORT_LINK_PROVIDER_FILTER,
@@ -102,9 +100,12 @@ const scheduleModule = featureFlags.isEnabled('cron')
       useClass: ProviderExceptionFilter,
     },
     // Catch-all Sentry backstop — must be the LAST global filter: Nest picks the
-    // first filter whose @Catch matches, and a catch-all registered via
-    // useGlobalFilters shadows every typed APP_FILTER below (provider errors lost
-    // their 502 envelope and account-explained upstream 4xx spammed Sentry).
+    // first filter whose @Catch matches, and a catch-all registered ahead of the
+    // typed filters shadows them (provider errors lose their 502 envelope and
+    // account-explained upstream 4xx spam Sentry). The SDK's own catch-all
+    // SentryGlobalFilter (@postmill-ai/nestjs-libraries/sentry/sentry.exception)
+    // is deliberately NOT registered: it sat first in this array and shadowed
+    // everything below — SentryReportFilter covers unexpected-error capture.
     {
       provide: APP_FILTER,
       useClass: SentryReportFilter,
