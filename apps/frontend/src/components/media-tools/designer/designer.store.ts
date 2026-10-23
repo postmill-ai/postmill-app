@@ -138,6 +138,13 @@ export interface DesignerState {
   brandEnforcement: boolean;
   brandAdminOverride: boolean;
   playheadMs: number;
+  /**
+   * Whether timeline playback is currently running. Ephemeral editor state
+   * (never part of history); mirrored from VideoTimeline so sibling subtrees —
+   * the canvas overlay's repaint loop — can gate per-frame work on it without
+   * prop-threading through DesignerCanvas.
+   */
+  isPlaying: boolean;
   /** The primary selection — drives the inspector. Always a member of `selectedClips`. */
   selectedClip: { outputIndex: number; trackId: string; clipId: string } | null;
   /**
@@ -333,6 +340,7 @@ export interface DesignerActions {
   splitClip: (outputIndex: number, trackId: string, clipId: string, atMs: number) => void;
   setMode: (mode: 'image' | 'video') => void;
   setPlayhead: (ms: number) => void;
+  setIsPlaying: (playing: boolean) => void;
   setSelectedClip: (clip: { outputIndex: number; trackId: string; clipId: string } | null) => void;
   /**
    * Replace the multi-selection. Keeps the primary (`selectedClip`) a member:
@@ -534,6 +542,7 @@ export const createDesignerStore = (
       brandEnforcement: false,
       brandAdminOverride: false,
       playheadMs: 0,
+      isPlaying: false,
       selectedClip: null,
       selectedClips: [],
       clipClipboard: [],
@@ -1833,6 +1842,8 @@ export const createDesignerStore = (
       },
 
       setPlayhead: (ms) => set({ playheadMs: ms }),
+
+      setIsPlaying: (playing) => set({ isPlaying: playing }),
 
       setSelectedClip: (clip) => {
         // Single select is a one-member multi-selection — keep the two in sync

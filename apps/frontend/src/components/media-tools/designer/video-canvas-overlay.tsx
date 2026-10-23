@@ -560,12 +560,39 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     }
   }, [clipsAtPlayhead]);
 
-  // A continuous redraw is only needed when dynamic content (a video/sticker or a
-  // CSS-filtered clip) sits under the playhead; text/image/caption/empty regions
-  // repaint from the playhead subscription above, so the 60fps loop stays off then.
+  // A continuous redraw is only needed while PLAYING dynamic content (a
+  // video/sticker or a CSS-filtered clip) under the playhead; text/image/
+  // caption/empty regions repaint from the playhead subscription above, so the
+  // 60fps loop stays off then. Gating on playback state (mirrored into the
+  // store by VideoTimeline) is the load-bearing half of the long-session fix:
+  // paused, the loop used to keep running batchDraw + setTick every frame
+  // forever — a React re-render, a composeClipsAtPlayhead recompute, and
+  // re-fired seeks at 60fps for the whole session.
+  const [isPlaying, setIsPlaying] = useState(store.getState().isPlaying);
+  useEffect(
+    () =>
+      store.subscribe((state, prev) => {
+        if (state.isPlaying !== prev.isPlaying) setIsPlaying(state.isPlaying);
+      }),
+    [store]
+  );
+
+  // A hidden tab gets no rAF callbacks anyway; tracking visibility lets the
+  // loop tear down instead of queuing, and repaint once when the tab returns.
+  const [pageVisible, setPageVisible] = useState(
+    typeof document === 'undefined' ? true : !document.hidden
+  );
+  useEffect(() => {
+    const onVisibility = () => setPageVisible(!document.hidden);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
   const needsRaf = useMemo(
     () =>
       isVideo &&
+      isPlaying &&
+      pageVisible &&
       clipsAtPlayhead.some(
         ({ clip, trackType, props }) =>
           trackType === 'video' ||
@@ -574,7 +601,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           // A blur transition animates the CSS filter per frame.
           (props.blurPx ?? 0) > 0
       ),
-    [isVideo, clipsAtPlayhead]
+    [isVideo, isPlaying, pageVisible, clipsAtPlayhead]
   );
 
   // Keep redrawing so the video frame updates while playing. The batchDraw is
@@ -583,11 +610,18 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   // repaint the artboard keeps whatever it last drew (blank until some
   // unrelated interaction, like selecting the clip, forced a draw).
   //
+  // When the loop is OFF (paused, hidden tab, or static content), repaint ONCE
+  // on the transition so the canvas still reflects the current state — the
+  // held video frame on pause, the pose at the playhead when the tab returns.
+  //
   // Deps deliberately EXCLUDE the playhead: it moves per frame during
   // playback, and having it here tore the loop down and re-created it on
   // every tick. The loop reads the playhead imperatively via playheadRef.
   useEffect(() => {
-    if (!needsRaf) return;
+    if (!needsRaf) {
+      redrawLayer();
+      return;
+    }
     rafActiveRef.current = true;
     let raf: number;
     const loop = () => {
@@ -600,7 +634,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
       rafActiveRef.current = false;
       cancelAnimationFrame(raf);
     };
-  }, [needsRaf]);
+  }, [needsRaf, redrawLayer]);
 
   // Seek/pause video elements so the held frame is rendered when paused.
   useEffect(() => {

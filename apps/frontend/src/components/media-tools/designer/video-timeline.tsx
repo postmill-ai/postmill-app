@@ -96,6 +96,10 @@ const formatTime = (ms: number): string => {
 // schema stays untouched) — probe it lazily per src, exactly as a media drop
 // does, and cache it. Returns undefined until the probe lands; the end-edge
 // clamp only applies once the duration is known.
+// Bounded LRU (insertion order doubles as recency: hits re-insert, overflow
+// evicts the oldest entry) — same discipline as the peaks and filmstrip caches
+// below, so a long-lived session doesn't accumulate one entry per probed src.
+const SOURCE_DURATION_CACHE_MAX = 50;
 const sourceDurationCache = new Map<string, number>();
 const sourceDurationInflight = new Set<string>();
 const getSourceDurationMs = (
@@ -103,7 +107,11 @@ const getSourceDurationMs = (
   kind: 'video' | 'audio'
 ): number | undefined => {
   const cached = sourceDurationCache.get(src);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    sourceDurationCache.delete(src);
+    sourceDurationCache.set(src, cached);
+    return cached;
+  }
   if (!sourceDurationInflight.has(src)) {
     sourceDurationInflight.add(src);
     const probe =
@@ -112,6 +120,10 @@ const getSourceDurationMs = (
         : probeVideoMetadata(src).then((r) => r.durationMs);
     probe.then((ms) => {
       sourceDurationCache.set(src, ms);
+      if (sourceDurationCache.size > SOURCE_DURATION_CACHE_MAX) {
+        const oldest = sourceDurationCache.keys().next().value;
+        if (oldest !== undefined) sourceDurationCache.delete(oldest);
+      }
       sourceDurationInflight.delete(src);
     });
   }
@@ -1303,6 +1315,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const [zoomPxPerMs, setZoomPxPerMs] = useState(1 / MS_PER_PIXEL_DEFAULT);
   const [keyframeLaneOpen, setKeyframeLaneOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  // Mirror playback state into the store so sibling subtrees (the canvas
+  // overlay's repaint loop) can gate per-frame work on it — the timeline owns
+  // the play/pause state, and DesignerCanvas sits in a different subtree.
+  useEffect(() => {
+    store.getState().setIsPlaying(isPlaying);
+  }, [isPlaying, store]);
   const [loopPlayback, setLoopPlayback] = useState(false);
   const [dragging, setDragging] = useState<{
     trackId: string;
