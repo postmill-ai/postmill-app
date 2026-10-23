@@ -34,6 +34,8 @@ export class DesignPreviewService {
    * t=0-active ones on video tracks): each clip's File row thumbnail. A file
    * with no thumbnail yet is self-healed — one ffmpeg frame extraction,
    * persisted back onto the File row so later renders skip the extraction.
+   * Older clips carry no `fileId`, only a `src` URL — those resolve their
+   * File row by path and key the poster by clip id.
    * Fail-soft throughout: any resolution/extraction failure just leaves the
    * clip without a poster (it projects as before — skipped).
    */
@@ -43,35 +45,56 @@ export class DesignPreviewService {
   ): Promise<VideoPosterMap | undefined> {
     try {
       const fileIds = new Set<string>();
+      const clipsBySrc: Array<{ id: string; src: string }> = [];
       for (const out of doc.outputs ?? []) {
         if (!('tracks' in out)) continue;
         for (const track of out.tracks) {
           if (track.hidden || track.type !== 'video') continue;
           for (const clip of track.clips) {
-            if (clip.startMs <= 0 && clip.endMs > 0 && clip.fileId) {
-              fileIds.add(clip.fileId);
-            }
+            if (!(clip.startMs <= 0 && clip.endMs > 0)) continue;
+            if (clip.fileId) fileIds.add(clip.fileId);
+            else if (clip.src) clipsBySrc.push({ id: clip.id, src: clip.src });
           }
         }
       }
-      if (!fileIds.size) return undefined;
+      if (!fileIds.size && !clipsBySrc.length) return undefined;
 
       const posters = new Map<string, string>();
-      const files = await this._fileService.getByIds(orgId, [...fileIds]);
-      for (const file of files) {
-        if (file.thumbnail) posters.set(file.id, file.thumbnail);
+      if (fileIds.size) {
+        const files = await this._fileService.getByIds(orgId, [...fileIds]);
+        for (const file of files) {
+          if (file.thumbnail) posters.set(file.id, file.thumbnail);
+        }
+
+        // Self-heal the missing ones — locally stored files only: the preview
+        // render is synchronous and must never wait on a remote bucket read.
+        for (const fileId of fileIds) {
+          if (posters.has(fileId)) continue;
+          const extracted = await this._videoThumbnailService.generateForFile(
+            orgId,
+            fileId,
+            { localOnly: true }
+          );
+          if (extracted) posters.set(fileId, extracted);
+        }
       }
 
-      // Self-heal the missing ones — locally stored files only: the preview
-      // render is synchronous and must never wait on a remote bucket read.
-      for (const fileId of fileIds) {
-        if (posters.has(fileId)) continue;
-        const extracted = await this._videoThumbnailService.generateForFile(
-          orgId,
-          fileId,
-          { localOnly: true }
-        );
-        if (extracted) posters.set(fileId, extracted);
+      // Clips saved before fileId existed: resolve the File row by its stored
+      // path (same lookup the render-job status endpoint uses), self-heal the
+      // thumbnail the same way, key the poster by clip id.
+      for (const clip of clipsBySrc) {
+        try {
+          const file = await this._fileService.getFileByPath(orgId, clip.src);
+          if (!file) continue;
+          const thumb =
+            file.thumbnail ??
+            (await this._videoThumbnailService.generateForFile(orgId, file.id, {
+              localOnly: true,
+            }));
+          if (thumb) posters.set(clip.id, thumb);
+        } catch {
+          // Fail-soft per clip — one unresolvable src must not blank the rest.
+        }
       }
       return posters.size ? posters : undefined;
     } catch (err) {
