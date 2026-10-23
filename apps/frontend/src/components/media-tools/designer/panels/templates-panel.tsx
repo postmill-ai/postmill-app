@@ -10,7 +10,7 @@ import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs'
 import { ContextMenu } from '@postmill-ai/frontend/components/ui/context-menu';
 import { useContextMenu } from '@postmill-ai/frontend/components/ui/use-context-menu';
 import type { DesignerDoc } from '../designer.store';
-import { getThumbnailDataUrl } from '../designer';
+import { captureStageThumbnail } from '../stage-thumbnail';
 import { readErrorMessage } from '../read-error-message';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import {
@@ -249,8 +249,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   const persistTemplate = useCallback(async (category: string): Promise<boolean> => {
     const state = store.getState();
     const name = state.designName;
-    const stageEl = document.querySelector('.konva-stage canvas') as HTMLCanvasElement;
-    const previewDataUrl = getThumbnailDataUrl(stageEl);
+    const previewDataUrl = captureStageThumbnail();
     let thumbnailFileId: string | undefined;
     if (previewDataUrl) {
       try {

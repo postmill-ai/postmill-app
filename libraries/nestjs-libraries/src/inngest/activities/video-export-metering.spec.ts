@@ -73,7 +73,8 @@ describe('MediaJobsActivity — video export metering', () => {
       videoRenderService as any,
       creditTracker.subscriptionService as any,
       organizationService as any,
-      { processExport: vi.fn().mockResolvedValue(undefined) } as any
+      { processExport: vi.fn().mockResolvedValue(undefined) } as any,
+      { generateForFile: vi.fn() } as any
     );
 
     return {

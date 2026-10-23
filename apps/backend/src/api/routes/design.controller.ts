@@ -234,7 +234,8 @@ export class DesignController {
    * Maintenance: regenerate server-side previews for the caller's org —
    * designs whose preview is missing or whose doc is video-mode (the client
    * live-stage snapshot is a black frame), same for template thumbnails.
-   * Bounded and fail-soft per item; returns per-kind counts.
+   * Missing video file thumbnails are backfilled first so video posters have
+   * frames to draw. Bounded and fail-soft per item; returns per-kind counts.
    */
   @Post('/maintenance/regen-previews')
   @CheckPolicies([AuthorizationActions.Update, Sections.MEDIA])

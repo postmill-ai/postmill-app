@@ -24,6 +24,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CustomFileValidationPipe } from '@postmill-ai/nestjs-libraries/upload/custom.upload.validation';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 import { StockMediaService, CONTENT_PACK_CAPABILITY_MAP } from '@postmill-ai/nestjs-libraries/media/stock/stock-media.service';
 import { ContentPackDailyCapError } from '@postmill-ai/nestjs-libraries/media/stock/content-packs/content-pack.interface';
 import { ImportFromUrlDto } from '@postmill-ai/nestjs-libraries/dtos/file/import.from.url.dto';
@@ -63,8 +64,17 @@ export class FilesController {
     private _fileService: FileService,
     private _storageService: StorageService,
     private _stockMediaService: StockMediaService,
-    private _resolution: ProviderResolutionService
+    private _resolution: ProviderResolutionService,
+    private _videoThumbnailService: VideoThumbnailService
   ) {}
+
+  // Uploaded videos get an async thumbnail (fire-and-forget — the upload
+  // response never waits on ffmpeg).
+  private _enqueueVideoThumbnail(orgId: string, file: Express.Multer.File, savedId: string) {
+    if (file?.mimetype?.startsWith('video/')) {
+      this._videoThumbnailService.enqueueGenerate(orgId, savedId);
+    }
+  }
 
   // ── File CRUD ────────────────────────────────────────────
 
@@ -124,7 +134,7 @@ export class FilesController {
         throw err;
       });
       try {
-        return await this._fileService.saveFile(
+        const saved = await this._fileService.saveFile(
           org.id,
           uploadedFile.originalname,
           uploadedFile.path,
@@ -132,6 +142,8 @@ export class FilesController {
           folderId,
           file?.size
         );
+        this._enqueueVideoThumbnail(org.id, file, saved.id);
+        return saved;
       } catch (err) {
         // M4: the object is already stored — on ANY post-write failure (402 quota,
         // folder-ownership 404, DB error) best-effort delete it so a failed upload
@@ -183,7 +195,7 @@ export class FilesController {
     }
 
     try {
-      return await this._fileService.saveFile(
+      const saved = await this._fileService.saveFile(
         org.id,
         getFile.originalname,
         getFile.path,
@@ -192,6 +204,8 @@ export class FilesController {
         file?.size,
         { internal: body.internal }
       );
+      this._enqueueVideoThumbnail(org.id, file, saved.id);
+      return saved;
     } catch (err) {
       // M4: same delete-on-failure as uploadServer — the stored object must not
       // leak when the post-write save fails. Cleanup failure is logged only.

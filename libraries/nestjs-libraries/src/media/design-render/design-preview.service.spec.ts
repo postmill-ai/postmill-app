@@ -42,10 +42,46 @@ const videoDoc: any = {
   ],
 };
 
+// A video doc whose t=0 content is a video clip — the case that used to
+// render as a pure black fallback base.
+const videoClipDoc: any = {
+  mode: 'video',
+  outputs: [
+    {
+      id: 'out-1',
+      formatId: 'reel',
+      name: 'Reel',
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      durationMs: 5000,
+      tracks: [
+        {
+          id: 'tr-vid',
+          type: 'video',
+          clips: [
+            {
+              id: 'clip-vid',
+              startMs: 0,
+              endMs: 5000,
+              src: '/uploads/org-1/vid.mp4',
+              fileId: 'file-vid-1',
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 describe('DesignPreviewService', () => {
   let renderService: { renderPage: ReturnType<typeof vi.fn> };
   let storageService: { getLocalAdapterForOrg: ReturnType<typeof vi.fn> };
-  let fileService: { saveFile: ReturnType<typeof vi.fn> };
+  let fileService: {
+    saveFile: ReturnType<typeof vi.fn>;
+    getByIds: ReturnType<typeof vi.fn>;
+  };
+  let videoThumbnailService: { generateForFile: ReturnType<typeof vi.fn> };
   let adapter: { writeBuffer: ReturnType<typeof vi.fn>; removeFile: ReturnType<typeof vi.fn> };
   let service: DesignPreviewService;
 
@@ -60,11 +96,16 @@ describe('DesignPreviewService', () => {
     };
     fileService = {
       saveFile: vi.fn().mockResolvedValue({ id: 'file-1', path: '/uploads/preview-1.png' }),
+      getByIds: vi.fn().mockResolvedValue([]),
+    };
+    videoThumbnailService = {
+      generateForFile: vi.fn().mockResolvedValue(null),
     };
     service = new DesignPreviewService(
       renderService as any,
       storageService as any,
-      fileService as any
+      fileService as any,
+      videoThumbnailService as any
     );
   });
 
@@ -96,6 +137,75 @@ describe('DesignPreviewService', () => {
       renderService.renderPage.mockRejectedValue(new Error('video output'));
 
       await expect(service.renderPreviewBuffer(videoDoc)).rejects.toThrow('video output');
+    });
+
+    it('draws a video clip from its File thumbnail poster', async () => {
+      fileService.getByIds.mockResolvedValue([
+        { id: 'file-vid-1', thumbnail: '/uploads/org-1/thumb-1.jpg' },
+      ]);
+
+      await service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' });
+
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      const children = renderDoc.outputs[0].children;
+      expect(children).toHaveLength(1);
+      expect(children[0]).toMatchObject({
+        type: 'image',
+        src: '/uploads/org-1/thumb-1.jpg',
+        fitMode: 'cover',
+        width: 1080,
+        height: 1920,
+      });
+      // A stored thumbnail needs no extraction.
+      expect(videoThumbnailService.generateForFile).not.toHaveBeenCalled();
+    });
+
+    it('self-heals a missing thumbnail via on-demand extraction (local only)', async () => {
+      fileService.getByIds.mockResolvedValue([{ id: 'file-vid-1', thumbnail: null }]);
+      videoThumbnailService.generateForFile.mockResolvedValue('/uploads/org-1/thumb-new.jpg');
+
+      await service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' });
+
+      expect(videoThumbnailService.generateForFile).toHaveBeenCalledWith(
+        'org-1',
+        'file-vid-1',
+        { localOnly: true }
+      );
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      expect(renderDoc.outputs[0].children[0]).toMatchObject({
+        type: 'image',
+        src: '/uploads/org-1/thumb-new.jpg',
+      });
+    });
+
+    it('skips the clip (never fails the preview) when extraction yields nothing', async () => {
+      fileService.getByIds.mockResolvedValue([{ id: 'file-vid-1', thumbnail: null }]);
+      videoThumbnailService.generateForFile.mockResolvedValue(null);
+
+      await service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' });
+
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      expect(renderDoc.outputs[0].children).toHaveLength(0);
+      expect(renderService.renderPage).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders without posters when poster resolution itself fails', async () => {
+      fileService.getByIds.mockRejectedValue(new Error('db down'));
+
+      await service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' });
+
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      expect(renderDoc.outputs[0].children).toHaveLength(0);
+      expect(videoThumbnailService.generateForFile).not.toHaveBeenCalled();
+    });
+
+    it('skips poster resolution entirely without an orgId', async () => {
+      await service.renderPreviewBuffer(videoClipDoc);
+
+      expect(fileService.getByIds).not.toHaveBeenCalled();
+      expect(videoThumbnailService.generateForFile).not.toHaveBeenCalled();
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      expect(renderDoc.outputs[0].children).toHaveLength(0);
     });
   });
 

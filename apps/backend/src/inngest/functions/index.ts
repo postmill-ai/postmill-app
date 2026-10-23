@@ -25,6 +25,7 @@ import { createMissingPostFinder } from './missing-post-finder';
 import { createMediaJobsPoll } from './media-jobs-poll';
 import { createMediaJobsPollJob } from './media-jobs-poll-job';
 import { createMediaRender } from './media-render';
+import { createVideoThumbnail } from './video-thumbnail';
 import { createDesignExport } from './design-export';
 import { createSendEmail } from './send-email';
 import {
@@ -76,6 +77,7 @@ export const createFunctions = (activities: InngestActivities): InngestFunction.
   createMediaJobsPoll(activities.mediaJobsActivity, activities.inngestRunService),
   createMediaJobsPollJob(activities.mediaJobsActivity),
   createMediaRender(activities.mediaJobsActivity),
+  createVideoThumbnail(activities.mediaJobsActivity),
   createDesignExport(activities.designExportActivity),
   createSendEmail(activities.emailActivity),
   createDigestEmailDaily(activities.digestActivity),

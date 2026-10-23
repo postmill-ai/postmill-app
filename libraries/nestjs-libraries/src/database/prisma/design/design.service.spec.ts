@@ -76,6 +76,9 @@ describe('DesignService', () => {
     getCustomFonts: ReturnType<typeof vi.fn>;
     addCustomFont: ReturnType<typeof vi.fn>;
   };
+  let videoThumbnailService: {
+    backfillOrgThumbnails: ReturnType<typeof vi.fn>;
+  };
   let service: DesignService;
 
   beforeEach(() => {
@@ -124,13 +127,19 @@ describe('DesignService', () => {
       getCustomFonts: vi.fn().mockResolvedValue([]),
       addCustomFont: vi.fn(),
     };
+    videoThumbnailService = {
+      backfillOrgThumbnails: vi
+        .fn()
+        .mockResolvedValue({ scanned: 0, generated: 0, failed: 0 }),
+    };
     service = new DesignService(
       repository as any,
       new DesignerDocService(),
       fileService as any,
       previewService as any,
       storageService as any,
-      brandsService as any
+      brandsService as any,
+      videoThumbnailService as any
     );
   });
 
@@ -1012,9 +1021,12 @@ describe('DesignService', () => {
       expect(repository.setTemplateThumbnail).toHaveBeenCalledTimes(1);
       expect(repository.setTemplateThumbnail).toHaveBeenCalledWith('t3', 'new-file');
       expect(result).toEqual({
+        videoThumbnails: { scanned: 0, generated: 0, failed: 0 },
         designs: { scanned: 4, regenerated: 2, skipped: 2, failed: 0 },
         templates: { scanned: 3, regenerated: 2, skipped: 1, failed: 0 },
       });
+      // Missing video file thumbnails are backfilled BEFORE the preview sweep.
+      expect(videoThumbnailService.backfillOrgThumbnails).toHaveBeenCalledWith('org-1');
       // The replaced stored preview file is trashed.
       expect(fileService.softDelete).toHaveBeenCalledWith('old-file', 'org-1');
     });

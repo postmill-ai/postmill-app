@@ -61,6 +61,7 @@ function makeActivity(opts: {
     subscriptionService as any,
     organizationService as any,
     designExport as any,
+    { generateForFile: vi.fn() } as any,
   );
   return { activity, lifecycle, aiSettings, videoRender, subscriptionService, organizationService, designExport };
 }

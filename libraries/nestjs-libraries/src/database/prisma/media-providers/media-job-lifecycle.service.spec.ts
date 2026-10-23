@@ -95,6 +95,8 @@ function makeService() {
 
   const notificationService = { notify: vi.fn().mockResolvedValue(undefined) };
 
+  const videoThumbnailService = { enqueueGenerate: vi.fn() };
+
   const service = new MediaJobLifecycleService(
     aiSettings as never,
     orgSettings as never,
@@ -102,6 +104,7 @@ function makeService() {
     storageService as never,
     mediaRepository as never,
     notificationService as never,
+    videoThumbnailService as never,
   );
 
   return {
@@ -115,6 +118,7 @@ function makeService() {
     storageService,
     mediaRepository,
     notificationService,
+    videoThumbnailService,
   };
 }
 
@@ -320,7 +324,7 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
     });
 
     it('downloads, stores under the typed folder, completes, and notifies on success', async () => {
-      const { service, jobs, pollJob, orgSettings, storageAdapter, mediaRepository, notificationService } =
+      const { service, jobs, pollJob, orgSettings, storageAdapter, mediaRepository, notificationService, videoThumbnailService } =
         makeService();
       jobs.set('job-1', makeJob());
       orgSettings.getConfigForProvider.mockResolvedValue({
@@ -373,6 +377,26 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
           channels: { email: false, push: false, inApp: true },
         })
       );
+      // URL-landed video artifact → async thumbnail generation enqueued
+      expect(videoThumbnailService.enqueueGenerate).toHaveBeenCalledWith('org-1', 'media-1');
+    });
+
+    it('does not enqueue a video thumbnail for non-video operations', async () => {
+      const { service, jobs, pollJob, videoThumbnailService } = makeService();
+      jobs.set('job-1', makeJob({ operation: 'image' }));
+      pollJob.mockResolvedValue({
+        status: 'completed',
+        artifactUrl: 'https://provider.example.com/out.png',
+        metadata: {},
+      });
+      mockSafeFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers({ 'content-type': 'image/png', 'content-length': '4' }),
+        arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+      });
+
+      expect(await service.processJob('job-1')).toBe('completed');
+      expect(videoThumbnailService.enqueueGenerate).not.toHaveBeenCalled();
     });
 
     it('uses the bound storage provider adapter when configured', async () => {

@@ -138,10 +138,73 @@ describe('videoOutputToPosterOutput', () => {
 
     // The clip entering at 6000ms is not in the t=0 frame.
     expect(byId.has('clip-late')).toBe(false);
-    // Audio and video clips have no poster pixels (video needs the render
-    // container's ffmpeg path).
+    // Audio clips have no poster pixels; video clips are skipped when no
+    // poster map is supplied (the pixels need the ffmpeg frame path).
     expect(byId.has('clip-audio')).toBe(false);
     expect(byId.has('clip-vid')).toBe(false);
+  });
+
+  it('a video clip with a poster projects as an image element', () => {
+    const poster = videoOutputToPosterOutput(
+      makeVideoOutput(),
+      new Map([['clip-vid', '/uploads/org-1/thumb-1.jpg']])
+    );
+    const vid = poster.children.find((el) => el.id === 'clip-vid') as any;
+    // z-order keeps track order: the video track is last, so its poster
+    // draws on top of the shape plate.
+    expect(poster.children.map((el) => el.id)).toEqual([
+      'clip-bg',
+      'clip-headline',
+      'clip-plate',
+      'clip-vid',
+    ]);
+    expect(vid).toMatchObject({
+      type: 'image',
+      src: '/uploads/org-1/thumb-1.jpg',
+      fitMode: 'cover',
+      // Box-less clip → fullscreen (the frame renderer's own default).
+      x: 0,
+      y: 0,
+      width: 1080,
+      height: 1920,
+    });
+  });
+
+  it('a video poster keyed by fileId resolves too', () => {
+    const out = makeVideoOutput();
+    (out.tracks[4].clips[0] as any).fileId = 'file-vid-1';
+    const poster = videoOutputToPosterOutput(
+      out,
+      new Map([['file-vid-1', '/uploads/org-1/thumb-2.jpg']])
+    );
+    const vid = poster.children.find((el) => el.id === 'clip-vid') as any;
+    expect(vid).toMatchObject({
+      type: 'image',
+      src: '/uploads/org-1/thumb-2.jpg',
+      fileId: 'file-vid-1',
+    });
+  });
+
+  it('a video clip without a poster in the map stays skipped', () => {
+    const poster = videoOutputToPosterOutput(
+      makeVideoOutput(),
+      new Map([['someone-else', '/uploads/org-1/thumb-3.jpg']])
+    );
+    expect(poster.children.some((el) => el.id === 'clip-vid')).toBe(false);
+  });
+
+  it('a tMs=0 keyframe pins the video poster box', () => {
+    const out = makeVideoOutput();
+    (out.tracks[4].clips[0] as any).keyframes = [
+      { tMs: 0, props: { x: 100, y: 200, width: 540, height: 960 } },
+      { tMs: 5000, props: { x: 0, y: 0, width: 1080, height: 1920 } },
+    ];
+    const poster = videoOutputToPosterOutput(
+      out,
+      new Map([['clip-vid', '/uploads/org-1/thumb-1.jpg']])
+    );
+    const vid = poster.children.find((el) => el.id === 'clip-vid')!;
+    expect([vid.x, vid.y, vid.width, vid.height]).toEqual([100, 200, 540, 960]);
   });
 
   it('a tMs=0 keyframe pins the poster box (Ken Burns start state)', () => {
@@ -228,5 +291,19 @@ describe('docWithVideoPosters', () => {  it('returns the same doc object when th
     const projected = docWithVideoPosters(doc);
     expect('children' in projected.outputs[0]).toBe(true);
     expect(projected.outputs[1]).toBe(imageOut);
+  });
+
+  it('passes the poster map through to every video output', () => {
+    const doc = {
+      version: 8,
+      mode: 'video',
+      outputs: [makeVideoOutput()],
+    } as any;
+    const projected = docWithVideoPosters(
+      doc,
+      new Map([['clip-vid', '/uploads/org-1/thumb-1.jpg']])
+    );
+    const children = (projected.outputs[0] as any).children;
+    expect(children.some((el: any) => el.id === 'clip-vid' && el.type === 'image')).toBe(true);
   });
 });

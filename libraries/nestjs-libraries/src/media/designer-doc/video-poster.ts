@@ -15,9 +15,12 @@
  * - Intro transitions (transitionIn fades) are NOT applied: at a literal t=0
  *   a fading-in clip is invisible, which would blank exactly the content the
  *   preview/QC exists to judge. The poster is the composed opening state.
- * - `video` clips are SKIPPED: their pixels live in a media file that only
- *   the frame renderer's ffmpeg path can decode, and previews must not
- *   require the render container. Image/sticker/raster clips map to image
+ * - `video` clips map to image elements from their POSTER frame (the owning
+ *   File row's stored thumbnail), passed in via the `videoPosters` map —
+ *   this module stays pure/sync; resolving and extracting posters is the
+ *   caller's job (`DesignPreviewService`). A video clip with NO poster is
+ *   skipped: its pixels live in a media file only the frame renderer's
+ *   ffmpeg path can decode. Image/sticker/raster clips map to image
  *   elements (a sticker falls back to its first frame); text/caption clips
  *   to text elements; shape clips to shape elements — the inverse of the
  *   `imageDocToVideoDoc` mapping.
@@ -33,6 +36,13 @@ import type {
 } from './designer-doc.schema';
 
 type TrackType = VideoTrack['type'];
+
+/**
+ * Poster-frame sources for `video` clips, keyed by clip id OR by the clip's
+ * `fileId` (both are tried, clip id first). Resolved by the caller — see
+ * `DesignPreviewService` — from the File rows' stored thumbnails.
+ */
+export type VideoPosterMap = ReadonlyMap<string, string>;
 
 const isActiveAtZero = (clip: VideoClip): boolean =>
   clip.startMs <= 0 && clip.endMs > 0;
@@ -78,7 +88,8 @@ const baseElement = (
 const clipToElement = (
   clip: VideoClip,
   trackType: TrackType,
-  output: VideoOutput
+  output: VideoOutput,
+  videoPosters?: VideoPosterMap
 ): DesignerElement | null => {
   switch (trackType) {
     case 'image':
@@ -128,8 +139,26 @@ const clipToElement = (
           : {}),
       } as DesignerElement;
     }
+    case 'video': {
+      // The poster frame paints as a plain image element — `renderPage`
+      // already draws image elements by src, so no renderer changes. Without
+      // a resolved poster the clip is skipped (see the module doc).
+      const poster =
+        videoPosters?.get(clip.id) ??
+        (clip.fileId ? videoPosters?.get(clip.fileId) : undefined);
+      if (!poster) return null;
+      return {
+        ...baseElement(clip, 'image', output),
+        src: poster,
+        fileId: clip.fileId,
+        fitMode: clip.fitMode ?? 'cover',
+        ...(clip.crop ? { crop: clip.crop } : {}),
+        ...(clip.focalPoint ? { focalPoint: clip.focalPoint } : {}),
+        ...(clip.naturalWidth ? { naturalWidth: clip.naturalWidth } : {}),
+        ...(clip.naturalHeight ? { naturalHeight: clip.naturalHeight } : {}),
+      } as DesignerElement;
+    }
     default:
-      // video: pixels need the ffmpeg frame path (see the module doc);
       // audio: nothing to paint.
       return null;
   }
@@ -141,14 +170,15 @@ const clipToElement = (
  * video output remains the source of truth).
  */
 export const videoOutputToPosterOutput = (
-  output: VideoOutput
+  output: VideoOutput,
+  videoPosters?: VideoPosterMap
 ): DesignerOutput => {
   const children: DesignerElement[] = [];
   for (const track of output.tracks) {
     if (track.hidden) continue;
     for (const clip of track.clips) {
       if (!isActiveAtZero(clip)) continue;
-      const el = clipToElement(clip, track.type, output);
+      const el = clipToElement(clip, track.type, output, videoPosters);
       if (el) children.push(el);
     }
   }
@@ -171,14 +201,18 @@ export const videoOutputToPosterOutput = (
 /**
  * Map every VIDEO output of `doc` to its poster projection, leaving image
  * outputs untouched. Returns the SAME doc object when nothing changed, so
- * callers can cheaply short-circuit.
+ * callers can cheaply short-circuit. `videoPosters` is optional — omitted
+ * means "no video posters available", today's skip-the-clip behavior.
  */
-export const docWithVideoPosters = (doc: DesignerDoc): DesignerDoc => {
+export const docWithVideoPosters = (
+  doc: DesignerDoc,
+  videoPosters?: VideoPosterMap
+): DesignerDoc => {
   if (!(doc.outputs ?? []).some((out) => 'tracks' in out)) return doc;
   return {
     ...doc,
     outputs: doc.outputs.map((out) =>
-      'tracks' in out ? videoOutputToPosterOutput(out) : out
+      'tracks' in out ? videoOutputToPosterOutput(out, videoPosters) : out
     ),
   };
 };

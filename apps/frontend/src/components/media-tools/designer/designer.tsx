@@ -59,6 +59,7 @@ import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-too
 import { getBrandViolations } from './brand-compliance';
 import { useBrandColors } from './panels/use-brand-colors';
 import { useBrandFonts, useCustomFonts } from './panels/use-brand-fonts';
+import { captureStageThumbnail } from './stage-thumbnail';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
 import { DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
@@ -185,21 +186,8 @@ export const dataUrlToBlob = (dataUrl: string): Blob | null => {
   return new Blob([decodeURIComponent(data)], { type: mime });
 };
 
-export const getThumbnailDataUrl = (canvas: HTMLCanvasElement | null, maxDim = 400): string | undefined => {
-  if (!canvas) return undefined;
-  const ratio = Math.min(1, maxDim / Math.max(canvas.width, canvas.height));
-  const w = Math.round(canvas.width * ratio);
-  const h = Math.round(canvas.height * ratio);
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  const ctx = c.getContext('2d');
-  if (!ctx) return undefined;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(canvas, 0, 0, w, h);
-  return c.toDataURL('image/jpeg', 0.85);
-};
+// Re-exported so existing importers (export-dialog, templates-panel) keep working.
+export { getThumbnailDataUrl } from './stage-thumbnail';
 
 export const Designer: FC<DesignerProps> = ({
   setMedia,
@@ -574,9 +562,7 @@ export const Designer: FC<DesignerProps> = ({
               { ...first, children: pageChildren(first, 0) },
               state.doc.symbols as never
             )
-          : getThumbnailDataUrl(
-              document.querySelector('.konva-stage canvas') as HTMLCanvasElement
-            );
+          : captureStageThumbnail();
       const previewBlob = previewDataUrl ? dataUrlToBlob(previewDataUrl) : null;
       if (previewBlob) {
         try {
@@ -688,8 +674,7 @@ export const Designer: FC<DesignerProps> = ({
     }
     s.setSaving(true);
     try {
-      const stageEl = document.querySelector('.konva-stage canvas') as HTMLCanvasElement;
-      const previewDataUrl = getThumbnailDataUrl(stageEl);
+      const previewDataUrl = captureStageThumbnail();
       let thumbnailFileId: string | undefined;
       const previewBlob = previewDataUrl ? dataUrlToBlob(previewDataUrl) : null;
       if (previewBlob) {
