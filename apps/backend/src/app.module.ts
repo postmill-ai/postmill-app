@@ -33,7 +33,6 @@ import { CollaborationModule } from '@postmill-ai/backend/services/collaboration
 import { ProvidersModule } from '@postmill-ai/nestjs-libraries/providers/providers.module';
 import { ProvidersBootstrap } from './providers.bootstrap';
 import { ProviderExceptionFilter } from './api/filters/provider-exception.filter';
-import { SentryReportFilter } from './api/filters/sentry-report.filter';
 
 // Module-level feature flags are read at bootstrap time. Defaults keep all
 // features enabled for production/CI; local developers opt-out via env vars.
@@ -99,17 +98,11 @@ const scheduleModule = featureFlags.isEnabled('cron')
       provide: APP_FILTER,
       useClass: ProviderExceptionFilter,
     },
-    // Catch-all Sentry backstop — must be the LAST global filter: Nest picks the
-    // first filter whose @Catch matches, and a catch-all registered ahead of the
-    // typed filters shadows them (provider errors lose their 502 envelope and
-    // account-explained upstream 4xx spam Sentry). The SDK's own catch-all
-    // SentryGlobalFilter (@postmill-ai/nestjs-libraries/sentry/sentry.exception)
-    // is deliberately NOT registered: it sat first in this array and shadowed
-    // everything below — SentryReportFilter covers unexpected-error capture.
-    {
-      provide: APP_FILTER,
-      useClass: SentryReportFilter,
-    },
+    // The catch-all SentryReportFilter is NOT registered here: Nest reverses
+    // the global filter array before matching (RouterExceptionFilters.create →
+    // setCustomFilters(filters.reverse())), so the LAST provider in this array
+    // would match FIRST and shadow the typed filters. It is the first
+    // useGlobalFilters call in main.ts, which lands it last in match order.
   ],
   exports: [
     DatabaseModule,

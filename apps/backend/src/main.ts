@@ -16,13 +16,14 @@ process.env.TZ = 'UTC';
 
 import cookieParser from 'cookie-parser';
 import { Logger, ValidationPipe } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
 
 import { SubscriptionExceptionFilter } from '@postmill-ai/backend/services/auth/permissions/subscription.exception';
 import { PostValidationExceptionFilter } from '@postmill-ai/backend/api/routes/posts.validation.exception';
 import { HttpExceptionFilter } from '@postmill-ai/nestjs-libraries/services/exception.filter';
+import { SentryReportFilter } from '@postmill-ai/backend/api/filters/sentry-report.filter';
 import { ConfigurationChecker } from '@postmill-ai/helpers/configuration/configuration.checker';
 import { startMcp } from '@postmill-ai/nestjs-libraries/chat/start.mcp';
 import { isDev } from '@postmill-ai/helpers/utils/is.dev';
@@ -180,13 +181,15 @@ async function start() {
       xssFilter: true,
     }));
   }
+  // Catch-all Sentry backstop FIRST: Nest reverses the global filter array
+  // before matching (RouterExceptionFilters.create → setCustomFilters(
+  // filters.reverse())), so the FIRST registered filter matches LAST. A
+  // catch-all registered later shadows every typed filter — provider errors
+  // lose their 502 envelope and account-explained upstream 4xx spam Sentry.
+  app.useGlobalFilters(new SentryReportFilter(app.get(HttpAdapterHost)));
   app.useGlobalFilters(new SubscriptionExceptionFilter());
   app.useGlobalFilters(new PostValidationExceptionFilter());
   app.useGlobalFilters(new HttpExceptionFilter());
-  // The catch-all SentryReportFilter is NOT registered here: useGlobalFilters
-  // land ahead of every APP_FILTER provider in Nest's filter resolution
-  // (first @Catch match wins), so a catch-all here shadows all typed module
-  // filters. It is registered as the last APP_FILTER in AppModule instead.
 
   loadSwagger(app);
 
