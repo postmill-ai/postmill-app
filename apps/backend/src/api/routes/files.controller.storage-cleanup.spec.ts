@@ -48,6 +48,7 @@ function makeController(fileRepo: FileRepository, storageService: any) {
     storageService as any,
     {} as any,
     {} as any,
+    {} as any,
   );
 }
 

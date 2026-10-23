@@ -15,6 +15,7 @@ import {
 } from '@postmill-ai/provider-kernel';
 import { readResponseCapped } from '@postmill-ai/nestjs-libraries/utils/capped-stream';
 import { applyAudioOutroFade } from '@postmill-ai/nestjs-libraries/media/audio-outro-fade';
+import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 
 // AIMediaJob has no dedicated provider-job-id column; while a job is pending the
 // provider's external reference is stored in `artifactUrl` under this scheme and is
@@ -113,6 +114,7 @@ export class MediaJobLifecycleService {
     private _storageService: StorageService,
     private _fileService: FileService,
     private _notificationService: NotificationService,
+    private _videoThumbnailService: VideoThumbnailService,
   ) {}
 
   // ── Job creation / provider-reference tracking ──
@@ -476,6 +478,15 @@ export class MediaJobLifecycleService {
         artifactUrl: stored.path,
         error: null,
       });
+
+      // URL-landed video artifacts never got the buffer-path thumbnail —
+      // generate it async (fire-and-forget; the response is already settled).
+      if (OPERATION_MEDIA_TYPE[job.operation] === 'video') {
+        this._videoThumbnailService.enqueueGenerate(
+          job.organizationId,
+          stored.mediaId
+        );
+      }
 
       // §6.2: siblings (extra takes) pass notify:false — the primary already told the
       // user "ready", and a sibling that fails between create and complete must not

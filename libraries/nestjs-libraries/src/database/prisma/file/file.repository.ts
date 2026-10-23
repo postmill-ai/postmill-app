@@ -634,6 +634,25 @@ export class FileRepository {
     });
   }
 
+  /**
+   * Video files with no stored thumbnail yet (org-scoped, non-deleted, oldest
+   * first) — the backfill set for video thumbnail generation. Bounded by
+   * `limit`; matches both `File.type` vocabularies (see typeFilterClause).
+   */
+  findVideosWithoutThumbnail(org: string, limit: number) {
+    return this._file.model.file.findMany({
+      where: {
+        organizationId: org,
+        deletedAt: null as null,
+        thumbnail: null,
+        ...typeFilterClause('video'),
+      },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
+  }
+
   async searchFiles(org: string, query: string, folderId?: string) {
     const where: any = {
       organizationId: org,

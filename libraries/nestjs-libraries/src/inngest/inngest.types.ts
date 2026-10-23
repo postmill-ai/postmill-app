@@ -99,6 +99,12 @@ export type InngestEvents = {
       jobId: string;
     };
   };
+  'media/video-thumbnail.generate': {
+    data: {
+      organizationId: string;
+      fileId: string;
+    };
+  };
   'media/poll-job': {
     data: {
       jobId: string;
@@ -178,6 +184,15 @@ export const mediaRenderEvent = eventType('media/render', {
 export const mediaDesignExportEvent = eventType('media/design-export', {
   schema: staticSchema<InngestEvents['media/design-export']['data']>(),
 });
+export const mediaVideoThumbnailGenerateEvent = eventType(
+  'media/video-thumbnail.generate',
+  {
+    schema:
+      staticSchema<
+        InngestEvents['media/video-thumbnail.generate']['data']
+      >(),
+  }
+);
 export const mediaPollJobEvent = eventType('media/poll-job', {
   schema: staticSchema<InngestEvents['media/poll-job']['data']>(),
 });

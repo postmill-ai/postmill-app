@@ -16,6 +16,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { mapWithConcurrency } from '@postmill-ai/nestjs-libraries/utils/concurrency';
+import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 
 // Polling fallback for async media generations (§11.2): the sweep selects pending
 // jobs and fans them out via `media/poll-job` Inngest events; local renders are
@@ -33,6 +34,7 @@ export class MediaJobsActivity {
     private _subscriptionService: SubscriptionService,
     private _organizationService: OrganizationService,
     private _designExportService: DesignExportService,
+    private _videoThumbnailService: VideoThumbnailService,
   ) {}
 
   /**
@@ -85,6 +87,19 @@ export class MediaJobsActivity {
       }
     }
     return getRenderTimeoutMs();
+  }
+
+  /**
+   * Generate + persist a video file's thumbnail (invoked by the
+   * `media/video-thumbnail.generate` Inngest handler). Fail-soft — a video
+   * that cannot be decoded keeps a null thumbnail; the preview self-heal
+   * path can retry on demand.
+   */
+  async generateVideoThumbnail(
+    organizationId: string,
+    fileId: string
+  ): Promise<void> {
+    await this._videoThumbnailService.generateForFile(organizationId, fileId);
   }
 
   /**

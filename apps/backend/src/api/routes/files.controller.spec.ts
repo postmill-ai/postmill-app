@@ -102,10 +102,19 @@ vi.mock('@postmill-ai/nestjs-libraries/providers/provider-resolution.service', (
   },
 }));
 
+const mockEnqueueGenerate = vi.fn();
+
+vi.mock('@postmill-ai/nestjs-libraries/media/video-thumbnail.service', () => ({
+  VideoThumbnailService: class {
+    enqueueGenerate = mockEnqueueGenerate;
+  },
+}));
+
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { StockMediaService } from '@postmill-ai/nestjs-libraries/media/stock/stock-media.service';
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 import { ContentPackDailyCapError } from '@postmill-ai/nestjs-libraries/media/stock/content-packs/content-pack.interface';
 
 const org = { id: 'org-1' } as any;
@@ -116,6 +125,7 @@ function makeController() {
     new (StorageService as any)(),
     new (StockMediaService as any)(),
     new (ProviderResolutionService as any)(),
+    new (VideoThumbnailService as any)(),
   );
 }
 
@@ -172,6 +182,76 @@ describe('FilesController', () => {
       );
       // Most routes have RBAC; uploadServer/uploadSimple only use CheckPolicies.
       expect(rbacMetadata || true).toBeTruthy();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Video thumbnail enqueue on upload
+  // ---------------------------------------------------------------------------
+  describe('video thumbnail enqueue on upload', () => {
+    const adapter = { uploadFile: vi.fn() };
+
+    beforeEach(() => {
+      adapter.uploadFile.mockResolvedValue({
+        originalname: 'vid.mp4',
+        path: '/uploads/org-1/vid.mp4',
+      });
+      mockResolveAdapterForFolderWithConfigId.mockResolvedValue({
+        adapter,
+        configId: null,
+      });
+      mockAssertWithinProviderQuota.mockResolvedValue(undefined);
+      mockSaveFile.mockResolvedValue({ id: 'file-1' });
+    });
+
+    it('enqueues thumbnail generation for a video upload (uploadSimple)', async () => {
+      const controller = makeController();
+
+      await controller.uploadSimple(
+        org,
+        { originalname: 'vid.mp4', mimetype: 'video/mp4', size: 100 } as any,
+        {} as any
+      );
+
+      expect(mockEnqueueGenerate).toHaveBeenCalledWith('org-1', 'file-1');
+    });
+
+    it('does not enqueue for a non-video upload (uploadSimple)', async () => {
+      const controller = makeController();
+
+      await controller.uploadSimple(
+        org,
+        { originalname: 'img.png', mimetype: 'image/png', size: 100 } as any,
+        {} as any
+      );
+
+      expect(mockEnqueueGenerate).not.toHaveBeenCalled();
+    });
+
+    it('enqueues thumbnail generation for a video upload (uploadServer)', async () => {
+      const controller = makeController();
+
+      await controller.uploadServer(
+        org,
+        { originalname: 'vid.mp4', mimetype: 'video/mp4', size: 100 } as any,
+        {} as any
+      );
+
+      expect(mockEnqueueGenerate).toHaveBeenCalledWith('org-1', 'file-1');
+    });
+
+    it('never enqueues on the preventSave path (no File row exists)', async () => {
+      const controller = makeController();
+
+      const result = await controller.uploadSimple(
+        org,
+        { originalname: 'vid.mp4', mimetype: 'video/mp4', size: 100 } as any,
+        { preventSave: true } as any
+      );
+
+      expect(result).toEqual({ path: '/uploads/org-1/vid.mp4' });
+      expect(mockSaveFile).not.toHaveBeenCalled();
+      expect(mockEnqueueGenerate).not.toHaveBeenCalled();
     });
   });
 

@@ -69,6 +69,7 @@ function makeController() {
     storageService as any,
     stockMediaService as any,
     resolution as any,
+    {} as any,
   );
   return { ctrl, fileService, storageService, adapter, stockMediaService, resolution };
 }

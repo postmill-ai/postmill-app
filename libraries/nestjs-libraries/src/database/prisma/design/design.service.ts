@@ -25,6 +25,7 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
+import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 import { isBlankDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-blank';
 
 // Resolve a multer-supplied spool path and confine it to the OS temp dir,
@@ -100,6 +101,7 @@ export class DesignService {
     private readonly _designPreviewService: DesignPreviewService,
     private readonly _storageService: StorageService,
     private readonly _brandsService: BrandsService,
+    private readonly _videoThumbnailService: VideoThumbnailService,
   ) {}
 
   async getDesign(orgId: string, id: string) {
@@ -691,11 +693,23 @@ export class DesignService {
    * Maintenance sweep: regenerate server-side previews for the org's designs
    * and templates whose preview is missing (designs: both previewFileId and
    * previewDataUrl null; templates: thumbnailFileId null) OR whose doc is
-   * video-mode (the client snapshot is a black stage). Blank docs are skipped
-   * — a blank canvas has nothing to render. Per-item failures are counted,
-   * never abort the run.
+   * video-mode (the client snapshot is a black stage). First backfills missing
+   * video FILE thumbnails (bounded) so video posters have frames to draw.
+   * Blank docs are skipped — a blank canvas has nothing to render. Per-item
+   * failures are counted, never abort the run.
    */
   async regenPreviews(orgId: string) {
+    // Video posters draw from File.thumbnail — backfill the missing ones first
+    // or the sweep below would re-render the same black frames.
+    const thumbnailStats = await this._videoThumbnailService
+      .backfillOrgThumbnails(orgId)
+      .catch((err) => {
+        this._logger.warn(
+          `Video thumbnail backfill failed; continuing with preview regen: ${(err as Error)?.message}`
+        );
+        return { scanned: 0, generated: 0, failed: 0 };
+      });
+
     const [designs, templates] = await Promise.all([
       this._designRepository.findDesignsForPreviewRegen(orgId),
       this._designRepository.findTemplatesForPreviewRegen(orgId),
@@ -760,7 +774,7 @@ export class DesignService {
           : this._designRepository.setTemplateThumbnail(row.id, fileId),
       (row) => row.thumbnailFileId
     );
-    return { designs: designStats, templates: templateStats };
+    return { videoThumbnails: thumbnailStats, designs: designStats, templates: templateStats };
   }
 
   // Autosave mints a fresh thumbnail File on every save; the replaced one

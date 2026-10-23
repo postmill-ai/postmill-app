@@ -66,6 +66,7 @@ All ids below are copied verbatim from `inngest.createFunction({ id: ... })` cal
 | `media-jobs-poll-job` | `media/poll-job` | concurrency 15 | Poll one provider media job. |
 | `media-render` | `media/render` | `concurrency: { limit: getRenderConcurrency() }` (`VIDEO_RENDER_CONCURRENCY`, default 3) | Local video render (Designer timeline + clip-merge) in a resource-capped Podman container. |
 | `media-design-export` | `media/design-export` | `concurrency: { limit: getRenderConcurrency() }` | Async `.pdesign` bundle export (doc + all referenced assets + used custom fonts → zip artifact File). Uncosted (`creditType: 'none'`); the media-jobs sweep routes `provider: 'design-export'` jobs here (never to the provider poll path). |
+| `media-video-thumbnail` | `media/video-thumbnail.generate` | concurrency 5 | Generate + persist one video File's `thumbnail` (ffmpeg frame via `media/video-frame.ts`, stored beside the video). Enqueued fire-and-forget by `/files/upload-*` video uploads and `completeJob` URL-landed video artifacts; idempotent (no-op when a thumbnail exists). |
 | `send-email` | `email/send` | `rateLimit: { limit: 1, period: '1s' }` (no `key` — one global bucket; a literal key fails CEL registration) | Send one email via `EmailActivity.sendEmail`. |
 | `digest-send-one` | `digest/send-one` | — | Send one digest email. |
 | `agent-digest-org` | `agent/digest-org` | concurrency 2 | Generate + notify one org's agent digest (two `step.run`s so an ack-loss retry never re-spends on the LLM). |

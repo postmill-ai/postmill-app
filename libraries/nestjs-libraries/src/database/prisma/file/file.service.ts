@@ -77,6 +77,10 @@ export class FileService {
     return this._fileRepository.getByIds(org, ids);
   }
 
+  findVideosWithoutThumbnail(org: string, limit: number) {
+    return this._fileRepository.findVideosWithoutThumbnail(org, limit);
+  }
+
   getFileByPath(org: string, filePath: string) {
     return this._fileRepository.getFileByPath(org, filePath);
   }
