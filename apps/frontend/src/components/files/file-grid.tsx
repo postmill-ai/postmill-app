@@ -29,6 +29,11 @@ const SectionHeading: FC<{ children: React.ReactNode }> = ({ children }) => (
   </div>
 );
 
+// Type-based, not extension-based: .webm/.mov clips are typed 'video' (or a
+// full video/* mime) and must not fall into the broken-img path.
+const isVideoFile = (file: FileItem) =>
+  file.type === 'video' || !!file.type?.startsWith('video/');
+
 // Thumbnail with a graceful fallback: prefer a still thumbnail (doubles as a
 // video poster), fall back to the raw image path / video first-frame, and show
 // a placeholder icon when the source is missing/unrenderable (broken image).
@@ -36,7 +41,7 @@ const Thumb: FC<{ file: FileItem }> = ({ file }) => {
   const mediaDirectory = useMediaDirectory();
   const t = useT();
   const [broken, setBroken] = useState(false);
-  const isVideo = hasExtension(file.path, 'mp4');
+  const isVideo = isVideoFile(file);
   const isAudio = hasExtension(file.path, 'mp3', 'wav', 'ogg', 'm4a');
   const thumb = file.thumbnail
     ? mediaDirectory.set(file.thumbnail)
@@ -318,6 +323,20 @@ const FileTile: FC<{
     >
       <div className="w-full aspect-square overflow-hidden rounded-t-[5px] bg-newBgColorInner relative">
         <Thumb file={file} />
+
+        {isVideoFile(file) && (
+          <div
+            data-testid="video-play-overlay"
+            aria-hidden="true"
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          >
+            <div className="w-[36px] h-[36px] rounded-full bg-black/55 flex items-center justify-center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </div>
+          </div>
+        )}
 
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all pointer-events-none" />
 

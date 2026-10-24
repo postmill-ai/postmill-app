@@ -171,7 +171,7 @@ export class DesignExportService {
   private async _loadSource(
     orgId: string,
     source: { kind: 'design' | 'template'; id: string }
-  ): Promise<{ name: string; doc: DesignerDoc }> {
+  ): Promise<{ name: string; doc: DesignerDoc; previewPath: string | null }> {
     const row =
       source.kind === 'design'
         ? await this._designService.getDesign(orgId, source.id)
@@ -181,7 +181,34 @@ export class DesignExportService {
         source.kind === 'design' ? 'Design not found' : 'Template not found'
       );
     }
-    return { name: row.name, doc: this._designerDocService.validate(row.doc) };
+    return {
+      name: row.name,
+      doc: this._designerDocService.validate(row.doc),
+      previewPath: await this._resolvePreviewPath(orgId, source.kind, row),
+    };
+  }
+
+  /**
+   * Path of the file the design/template currently points at as its preview.
+   * Best-effort: a replaced (soft-deleted) or cross-org pointer resolves to
+   * null — the export simply ships without a thumbnail.
+   */
+  private async _resolvePreviewPath(
+    orgId: string,
+    kind: 'design' | 'template',
+    row: unknown
+  ): Promise<string | null> {
+    try {
+      const fileId =
+        kind === 'design'
+          ? (row as { previewFileId?: string | null }).previewFileId
+          : (row as { thumbnailFileId?: string | null }).thumbnailFileId;
+      if (!fileId) return null;
+      const file = await this._fileService.getFileById(orgId, fileId);
+      return file?.path ?? null;
+    } catch {
+      return null;
+    }
   }
 
   async enqueueExport(
@@ -258,17 +285,47 @@ export class DesignExportService {
 
     try {
       const payload = JSON.parse(raw) as DesignExportPayload;
-      const { name, bytes } = await this._buildBundle(orgId, jobId, payload);
+      const { name, bytes, previewPath } = await this._buildBundle(orgId, jobId, payload);
 
       const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
       const path = await adapter.writeBuffer(bytes, 'application/zip');
-      await this._fileService.saveGeneratedMedia(orgId, {
+      const created = await this._fileService.saveGeneratedMedia(orgId, {
         name: `${sanitizeDownloadName(name)}.pdesign`,
         path,
         type: 'document',
         fileSize: bytes.length,
-        metadata: { source: 'design-export', mime: 'application/zip' },
+        metadata: {
+          source: 'design-export',
+          mime: 'application/zip',
+          kind: payload.kind,
+          [`${payload.kind}Id`]: payload.sourceId,
+        },
       });
+
+      // COPY the source preview as the artifact thumbnail — never reference
+      // the preview file itself: DesignService._cleanupReplacedFile
+      // soft-deletes it the moment autosave replaces the design preview.
+      // Best-effort: an export must never fail over a thumbnail.
+      if (previewPath) {
+        try {
+          const previewBytes = await adapter.readFile(previewPath);
+          const ext = pathExtension(previewPath);
+          const copiedPath = await adapter.writeBuffer(
+            previewBytes,
+            ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png'
+          );
+          await this._fileService.saveMediaInformation(orgId, {
+            id: created.id,
+            thumbnail: copiedPath,
+            alt: '',
+            thumbnailTimestamp: 0,
+          });
+        } catch (err) {
+          this._logger.warn(
+            `Design export ${jobId}: preview thumbnail copy failed: ${(err as Error)?.message}`
+          );
+        }
+      }
 
       await this._aiSettings.updateMediaJob(orgId, jobId, {
         status: 'completed',
@@ -293,8 +350,8 @@ export class DesignExportService {
     orgId: string,
     jobId: string,
     payload: DesignExportPayload
-  ): Promise<{ name: string; bytes: Buffer }> {
-    const { name, doc } = await this._loadSource(orgId, {
+  ): Promise<{ name: string; bytes: Buffer; previewPath: string | null }> {
+    const { name, doc, previewPath } = await this._loadSource(orgId, {
       kind: payload.kind,
       id: payload.sourceId,
     });
@@ -379,7 +436,7 @@ export class DesignExportService {
       { name: 'doc.json', data: strToU8(JSON.stringify(doc)), compress: true },
       ...assetEntries,
     ]);
-    return { name, bytes };
+    return { name, bytes, previewPath };
   }
 
   private async _writeProgress(jobId: string, done: number, total: number): Promise<void> {

@@ -43,6 +43,11 @@ const fileSize = (bytes: number, t: ReturnType<typeof useT>) => {
   return t('file_size_mb', '{{size}} MB', { size: (bytes / (1024 * 1024)).toFixed(1) });
 };
 
+// Type-based, not extension-based: .webm/.mov clips are typed 'video' (or a
+// full video/* mime) and must not fall into the broken-img path.
+const isVideoFile = (file: FileItem) =>
+  file.type === 'video' || !!file.type?.startsWith('video/');
+
 export const FileList: FC<{
   files: FileItem[];
   selectedFiles: FileItem[];
@@ -131,10 +136,10 @@ export const FileList: FC<{
       header: '',
       width: '40px',
       render: (file: FileItem) => {
-        const isVideo = hasExtension(file.path, 'mp4');
+        const isVideo = isVideoFile(file);
         const isAudio = hasExtension(file.path, 'mp3', 'wav', 'ogg', 'm4a');
         return (
-          <div className="w-[36px] h-[36px] rounded-[6px] overflow-hidden bg-newBgColorInner">
+          <div className="w-[36px] h-[36px] rounded-[6px] overflow-hidden bg-newBgColorInner relative">
             {isAudio ? (
               <div className="flex items-center justify-center w-full h-full">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-textColor/60">
@@ -151,6 +156,17 @@ export const FileList: FC<{
               // Remote upload URLs cannot be pre-configured in next/image domains; use native img for thumbnails.
               // eslint-disable-next-line @next/next/no-img-element
               <img src={mediaDirectory.set(file.path)} alt="" className="w-full h-full object-cover" loading="lazy" />
+            )}
+            {isVideo && (
+              <div
+                data-testid="video-play-overlay"
+                aria-hidden="true"
+                className="absolute bottom-[2px] right-[2px] w-[16px] h-[16px] rounded-full bg-black/55 flex items-center justify-center pointer-events-none"
+              >
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
             )}
           </div>
         );

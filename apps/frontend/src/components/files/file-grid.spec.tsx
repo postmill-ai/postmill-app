@@ -264,6 +264,36 @@ describe('FileGrid', () => {
     expect(onToggleSelect).toHaveBeenCalledWith(target);
   });
 
+  it('renders the play overlay on video tiles but not on image tiles', () => {
+    const video = {
+      ...file('v1', 'clip.webm'),
+      name: 'v1.webm',
+      path: '/uploads/v1.webm',
+      type: 'video',
+    };
+    render(<FileGrid {...baseProps} files={[video, file('f1', 'alpha.png')]} folders={[]} />);
+
+    expect(screen.getAllByTestId('video-play-overlay')).toHaveLength(1);
+  });
+
+  it('treats a full video/* mime type as video too', () => {
+    const video = {
+      ...file('v1', 'clip.mov'),
+      name: 'v1.mov',
+      path: '/uploads/v1.mov',
+      type: 'video/quicktime',
+    };
+    render(<FileGrid {...baseProps} files={[video]} folders={[]} />);
+
+    expect(screen.getByTestId('video-play-overlay')).toBeTruthy();
+  });
+
+  it('shows no play overlay for image files', () => {
+    render(<FileGrid {...baseProps} files={[file('f1', 'alpha.png')]} folders={[]} />);
+
+    expect(screen.queryByTestId('video-play-overlay')).toBeNull();
+  });
+
   it('makes file tiles inert while filesInert, but leaves folder tiles live', () => {
     // While the next folder loads, the visible file tiles are the previous
     // folder's — clicks there must not land. Folder tiles already reflect the
