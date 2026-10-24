@@ -16,6 +16,7 @@ import {
 import { readResponseCapped } from '@postmill-ai/nestjs-libraries/utils/capped-stream';
 import { applyAudioOutroFade } from '@postmill-ai/nestjs-libraries/media/audio-outro-fade';
 import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
+import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
 
 // AIMediaJob has no dedicated provider-job-id column; while a job is pending the
 // provider's external reference is stored in `artifactUrl` under this scheme and is
@@ -50,6 +51,7 @@ const OPERATION_FOLDER: Record<string, string> = {
   avatar: 'video',
   audio: 'audio',
   tts: 'audio',
+  document: 'documents',
   stt: 'documents',
   slide: 'video',
   caption: 'video',
@@ -86,8 +88,22 @@ const MIME_EXT: Record<string, string> = {
   'application/json': 'json',
 };
 
+function classifyStoredMedia(mime: string, operation: string): string {
+  const operationType = OPERATION_MEDIA_TYPE[operation] || 'other';
+  // GIF/WebP remain in their operation category so Designer/video jobs keep
+  // their existing thumbnail and playback behavior.
+  if (mime === 'image/gif' || mime === 'image/webp') return operationType;
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('audio/')) return 'audio';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('text/') || mime.startsWith('application/')) {
+    return mime === 'application/octet-stream' ? operationType : 'document';
+  }
+  return operationType;
+}
+
 // The storage adapters sniff magic bytes and name the stored object
-// `<id>.<sniffed-ext>`. When the Content-Type-derived MIME_EXT lookup misses
+// `<id>.<sniffed-ext>`. When the detected/supplied MIME_EXT lookup misses
 // (providers often serve artifacts as application/octet-stream), take the
 // extension from the adapter's final path so the File name matches the stored
 // URL (`.mp4`, not `.bin`).
@@ -101,6 +117,7 @@ export interface StoredArtifact {
   mediaId: string;
   path: string;
   fileSize: number;
+  mediaType: string;
 }
 
 @Injectable()
@@ -481,7 +498,7 @@ export class MediaJobLifecycleService {
 
       // URL-landed video artifacts never got the buffer-path thumbnail —
       // generate it async (fire-and-forget; the response is already settled).
-      if (OPERATION_MEDIA_TYPE[job.operation] === 'video') {
+      if (stored.mediaType === 'video') {
         this._videoThumbnailService.enqueueGenerate(
           job.organizationId,
           stored.mediaId
@@ -736,7 +753,10 @@ export class MediaJobLifecycleService {
       ? await this._storageService.getAdapter(config.storageProviderId, params.organizationId)
       : await this._storageService.getLocalAdapterForOrg(params.organizationId, true);
 
-    const path = await adapter.writeBuffer(params.buffer, params.mime);
+    const detected = await fromBuffer(params.buffer).catch(() => undefined);
+    const mime = detected?.mime || params.mime;
+    const mediaType = classifyStoredMedia(mime, params.operation);
+    const path = await adapter.writeBuffer(params.buffer, mime);
 
     // 1.3: the folderId originates from a client (studio/heygen generate DTO);
     // only honour it when the caller's org owns it, else fall through to the
@@ -746,7 +766,7 @@ export class MediaJobLifecycleService {
       params.folderId,
     );
 
-    const folderName = OPERATION_FOLDER[params.operation] || 'other';
+    const folderName = OPERATION_FOLDER[mediaType] || 'other';
     const folderId =
       ownedFolderId ??
       (config?.storageRootFolderId
@@ -757,17 +777,17 @@ export class MediaJobLifecycleService {
           )
         : null);
 
-    const ext = MIME_EXT[params.mime] || extFromStoredPath(path) || 'bin';
+    const ext = MIME_EXT[mime] || extFromStoredPath(path) || 'bin';
     const media = await this._fileService.saveGeneratedMedia(params.organizationId, {
       name: `${params.baseName}.${ext}`,
       path,
-      type: OPERATION_MEDIA_TYPE[params.operation] || 'other',
+      type: mediaType,
       folderId,
       fileSize: params.buffer.length,
-      metadata: params.metadata,
+      metadata: { ...params.metadata, mime },
     });
 
-    return { mediaId: media.id, path, fileSize: params.buffer.length };
+    return { mediaId: media.id, path, fileSize: params.buffer.length, mediaType };
   }
 
   private async _notify(

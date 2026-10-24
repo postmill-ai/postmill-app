@@ -3,9 +3,10 @@ import { StorageProviderType } from '@prisma/client';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import {
-  extractVideoFrame,
+  extractVideoFrameInfo,
   VIDEO_FRAME_MAX_BYTES,
 } from '@postmill-ai/nestjs-libraries/media/video-frame';
+import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
 import {
   inngest,
   isInngestEnabled,
@@ -22,8 +23,9 @@ import {
  *   design preview is never black;
  * - backfill: the design preview maintenance sweep backfills the org first.
  *
- * Every method is fail-soft: a video that cannot be decoded keeps a null
- * thumbnail, never an error surfaced to the triggering flow.
+ * Every method is fail-soft: undecodable video keeps a null thumbnail, while
+ * mislabeled still images and audio-only media are reclassified. Failures are
+ * never surfaced to the triggering flow.
  */
 
 export const VIDEO_THUMBNAIL_EVENT = 'media/video-thumbnail.generate';
@@ -37,6 +39,11 @@ const extFromPath = (p: string): string => {
   const match = /\.([a-z0-9]{2,5})$/i.exec(fileName);
   return match ? match[1].toLowerCase() : 'mp4';
 };
+
+export interface VideoThumbnailOutcome {
+  thumbnail: string | null;
+  reclassified?: { type: 'image' | 'audio'; mime: string };
+}
 
 @Injectable()
 export class VideoThumbnailService {
@@ -79,40 +86,80 @@ export class VideoThumbnailService {
     fileId: string,
     opts?: { localOnly?: boolean }
   ): Promise<string | null> {
+    return (await this.generateOutcomeForFile(orgId, fileId, opts)).thumbnail;
+  }
+
+  async generateOutcomeForFile(
+    orgId: string,
+    fileId: string,
+    opts?: { localOnly?: boolean }
+  ): Promise<VideoThumbnailOutcome> {
     try {
       const file = await this._fileService.getFileById(orgId, fileId);
-      if (!file || !isVideoType(file.type)) return null;
-      if (file.thumbnail) return file.thumbnail;
-      if (file.fileSize > VIDEO_FRAME_MAX_BYTES) return null;
+      if (!file || !isVideoType(file.type)) return { thumbnail: null };
+      if (file.thumbnail) return { thumbnail: file.thumbnail };
+      if (file.fileSize > VIDEO_FRAME_MAX_BYTES) return { thumbnail: null };
 
       const adapter = await this._storageService.resolveAdapterForFolder(
         file.folderId,
         orgId
       );
       if (opts?.localOnly && adapter.type !== StorageProviderType.LOCAL) {
-        return null;
+        return { thumbnail: null };
       }
 
       const buffer = await adapter.readFile(file.path);
-      const frame = await extractVideoFrame(buffer, extFromPath(file.path));
-      if (!frame) return null;
+      const detected = await fromBuffer(buffer).catch(() => undefined);
+      if (detected?.mime === 'image/jpeg' || detected?.mime === 'image/png') {
+        return this._reclassify(orgId, file, 'image', detected.mime);
+      }
+
+      const ext = extFromPath(file.path);
+      const info = await extractVideoFrameInfo(buffer, ext);
+      if (info.hasAudioStream && !info.hasVideoStream) {
+        const mime = detected?.mime.startsWith('audio/')
+          ? detected.mime
+          : detected?.mime.startsWith('video/')
+            ? detected.mime.replace(/^video\//, 'audio/')
+            : `audio/${ext}`;
+        return this._reclassify(orgId, file, 'audio', mime);
+      }
+      if (!info.frame) return { thumbnail: null };
 
       // Land the thumbnail beside the video (same adapter), then point the
       // File row at it — the same shape completeJobWithBuffer persists.
-      const thumbnailPath = await adapter.writeBuffer(frame, 'image/jpeg');
+      const thumbnailPath = await adapter.writeBuffer(info.frame, 'image/jpeg');
       await this._fileService.saveMediaInformation(orgId, {
         id: file.id,
         thumbnail: thumbnailPath,
         alt: file.alt ?? '',
         thumbnailTimestamp: 0,
       });
-      return thumbnailPath;
+      return { thumbnail: thumbnailPath };
     } catch (err) {
       this._logger.warn(
         `Video thumbnail generation failed for file ${fileId}: ${(err as Error)?.message}`
       );
-      return null;
+      return { thumbnail: null };
     }
+  }
+
+  private async _reclassify(
+    orgId: string,
+    file: { id: string; metadata: unknown },
+    type: 'image' | 'audio',
+    mime: string,
+  ): Promise<VideoThumbnailOutcome> {
+    const updated = await this._fileService.reclassifyFile(
+      orgId,
+      file.id,
+      type,
+      mime,
+      file.metadata,
+    );
+    return updated.count === 1
+      ? { thumbnail: null, reclassified: { type, mime } }
+      : { thumbnail: null };
   }
 
   /**
@@ -123,15 +170,17 @@ export class VideoThumbnailService {
    */
   async backfillOrgThumbnails(orgId: string, limit = 100) {
     const rows = await this._fileService.findVideosWithoutThumbnail(orgId, limit);
-    const stats = { scanned: rows.length, generated: 0, failed: 0 };
+    const stats = { scanned: rows.length, generated: 0, reclassified: 0, failed: 0 };
     const CONCURRENCY = 2;
     let cursor = 0;
     const worker = async () => {
       while (cursor < rows.length) {
         const row = rows[cursor++];
-        const out = await this.generateForFile(orgId, row.id);
-        if (out) {
+        const out = await this.generateOutcomeForFile(orgId, row.id);
+        if (out.thumbnail) {
           stats.generated++;
+        } else if (out.reclassified) {
+          stats.reclassified++;
         } else {
           stats.failed++;
         }

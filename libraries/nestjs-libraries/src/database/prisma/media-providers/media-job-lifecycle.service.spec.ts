@@ -17,6 +17,17 @@ vi.mock('@postmill-ai/nestjs-libraries/media/audio-outro-fade', () => ({
 import { MediaJobLifecycleService } from './media-job-lifecycle.service';
 import { AIMediaJob } from '@prisma/client';
 
+const tinyJpeg = Buffer.from([
+  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46,
+  0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x48,
+]);
+const tinyMp4 = Buffer.from([
+  0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+  0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
+  0x69, 0x73, 0x6f, 0x6d, 0x69, 0x73, 0x6f, 0x32,
+  0x6d, 0x70, 0x34, 0x31,
+]);
+
 function makeJob(overrides: Partial<AIMediaJob> = {}): AIMediaJob {
   return {
     id: 'job-1',
@@ -397,6 +408,80 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
 
       expect(await service.processJob('job-1')).toBe('completed');
       expect(videoThumbnailService.enqueueGenerate).not.toHaveBeenCalled();
+    });
+
+    it('stores actual JPEG slide bytes as an image and skips video thumbnail generation', async () => {
+      const { service, jobs, pollJob, orgSettings, storageAdapter, mediaRepository, videoThumbnailService } = makeService();
+      jobs.set('job-1', makeJob({ operation: 'slide' }));
+      orgSettings.getConfigForProvider.mockResolvedValue({
+        credentials: { apiKey: 'k' },
+        storageProviderId: null,
+        storageRootFolderId: 'root-1',
+        version: 'v1',
+      });
+      pollJob.mockResolvedValue({
+        status: 'completed',
+        artifactUrl: 'https://provider.example.com/slide',
+      });
+      mockSafeFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers({ 'content-type': 'video/mp4' }),
+        arrayBuffer: async () => tinyJpeg.buffer.slice(
+          tinyJpeg.byteOffset,
+          tinyJpeg.byteOffset + tinyJpeg.byteLength,
+        ),
+      });
+
+      expect(await service.processJob('job-1')).toBe('completed');
+
+      expect(storageAdapter.writeBuffer).toHaveBeenCalledWith(tinyJpeg, 'image/jpeg');
+      expect(orgSettings.getStandardFolderId).toHaveBeenCalledWith('org-1', 'root-1', 'images');
+      expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledWith('org-1', expect.objectContaining({
+        name: 'slide-job-1.jpg',
+        type: 'image',
+        metadata: expect.objectContaining({ mime: 'image/jpeg' }),
+      }));
+      expect(videoThumbnailService.enqueueGenerate).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['image/gif', Buffer.from('GIF89a'), 'gif'],
+      ['image/webp', Buffer.concat([Buffer.from('RIFF'), Buffer.from([4, 0, 0, 0]), Buffer.from('WEBP')]), 'webp'],
+    ])('preserves the slide operation category for %s', async (mime, bytes, ext) => {
+      const { service, jobs, pollJob, mediaRepository, videoThumbnailService } = makeService();
+      jobs.set('job-1', makeJob({ operation: 'slide' }));
+      pollJob.mockResolvedValue({
+        status: 'completed',
+        artifactUrl: `data:${mime};base64,${bytes.toString('base64')}`,
+      });
+
+      expect(await service.processJob('job-1')).toBe('completed');
+
+      expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledWith('org-1', expect.objectContaining({
+        name: `slide-job-1.${ext}`,
+        type: 'video',
+        metadata: expect.objectContaining({ mime }),
+      }));
+      expect(videoThumbnailService.enqueueGenerate).toHaveBeenCalledWith('org-1', 'media-1');
+    });
+
+    it('detects a normal MP4 from bytes when the response MIME is octet-stream', async () => {
+      const { service, jobs, pollJob, storageAdapter, mediaRepository, videoThumbnailService } = makeService();
+      jobs.set('job-1', makeJob());
+      pollJob.mockResolvedValue({
+        status: 'completed',
+        artifactUrl: `data:application/octet-stream;base64,${tinyMp4.toString('base64')}`,
+      });
+
+      expect(await service.processJob('job-1')).toBe('completed');
+
+      expect(storageAdapter.writeBuffer).toHaveBeenCalledWith(tinyMp4, 'video/mp4');
+      expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledWith('org-1', expect.objectContaining({
+        name: 'video-job-1.mp4',
+        type: 'video',
+        metadata: expect.objectContaining({ mime: 'video/mp4' }),
+      }));
+      expect(videoThumbnailService.enqueueGenerate).toHaveBeenCalledWith('org-1', 'media-1');
     });
 
     it('uses the bound storage provider adapter when configured', async () => {

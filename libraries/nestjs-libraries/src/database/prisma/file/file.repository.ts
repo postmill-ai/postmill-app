@@ -288,6 +288,18 @@ export class FileRepository {
     });
   }
 
+  reclassifyFile(
+    org: string,
+    id: string,
+    type: 'image' | 'audio',
+    metadata: Record<string, unknown>,
+  ) {
+    return this._file.model.file.updateMany({
+      where: { id, organizationId: org, deletedAt: null },
+      data: { type, metadata: metadata as Prisma.InputJsonValue },
+    });
+  }
+
   getFileByPath(org: string, filePath: string) {
     return this._file.model.file.findFirst({
       where: {

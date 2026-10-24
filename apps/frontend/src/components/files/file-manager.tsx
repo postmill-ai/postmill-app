@@ -91,6 +91,7 @@ export type FileItem = {
   metadata?: {
     dimensions?: { width?: number; height?: number };
     mimeType?: string;
+    mime?: string;
     source?: string;
     kind?: 'design' | 'template';
     designId?: string;

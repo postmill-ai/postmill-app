@@ -136,7 +136,7 @@ describe('DesignService', () => {
     videoThumbnailService = {
       backfillOrgThumbnails: vi
         .fn()
-        .mockResolvedValue({ scanned: 0, generated: 0, failed: 0 }),
+        .mockResolvedValue({ scanned: 0, generated: 0, reclassified: 0, failed: 0 }),
     };
     service = new DesignService(
       repository as any,
@@ -1027,7 +1027,7 @@ describe('DesignService', () => {
       expect(repository.setTemplateThumbnail).toHaveBeenCalledTimes(1);
       expect(repository.setTemplateThumbnail).toHaveBeenCalledWith('t3', 'new-file');
       expect(result).toEqual({
-        videoThumbnails: { scanned: 0, generated: 0, failed: 0 },
+        videoThumbnails: { scanned: 0, generated: 0, reclassified: 0, failed: 0 },
         designFileMetadata: { scanned: 0, updated: 0, skipped: 0, failed: 0 },
         designs: { scanned: 4, regenerated: 2, skipped: 2, failed: 0 },
         templates: { scanned: 3, regenerated: 2, skipped: 1, failed: 0 },

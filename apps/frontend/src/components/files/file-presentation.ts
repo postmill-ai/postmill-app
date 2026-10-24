@@ -37,18 +37,19 @@ export const isDesignFile = (file: FileItem) =>
 
 export const getFileMediaKind = (file: FileItem): FileMediaKind => {
   if (isDesignFile(file)) return null;
-  const types = [file.type, file.metadata?.mimeType]
-    .filter((type): type is string => Boolean(type))
-    .map((type) => type.toLowerCase());
-  if (types.some((type) => type === 'image' || type.startsWith('image/')) || hasAnyExtension(file, IMAGE_EXTENSIONS)) {
-    return 'image';
-  }
-  if (types.some((type) => type === 'video' || type.startsWith('video/')) || hasAnyExtension(file, VIDEO_EXTENSIONS)) {
-    return 'video';
-  }
-  if (types.some((type) => type === 'audio' || type.startsWith('audio/')) || hasAnyExtension(file, AUDIO_EXTENSIONS)) {
-    return 'audio';
-  }
+  const type = file.type.toLowerCase();
+  if (type === 'image' || type === 'video' || type === 'audio') return type;
+
+  const mimeTypes = [file.type, file.metadata?.mimeType, file.metadata?.mime]
+    .filter((mimeType): mimeType is string => Boolean(mimeType))
+    .map((mimeType) => mimeType.toLowerCase());
+  if (mimeTypes.some((mimeType) => mimeType.startsWith('image/'))) return 'image';
+  if (mimeTypes.some((mimeType) => mimeType.startsWith('video/'))) return 'video';
+  if (mimeTypes.some((mimeType) => mimeType.startsWith('audio/'))) return 'audio';
+
+  if (hasAnyExtension(file, IMAGE_EXTENSIONS)) return 'image';
+  if (hasAnyExtension(file, VIDEO_EXTENSIONS)) return 'video';
+  if (hasAnyExtension(file, AUDIO_EXTENSIONS)) return 'audio';
   return null;
 };
 

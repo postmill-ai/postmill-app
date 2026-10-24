@@ -610,3 +610,25 @@ describe('FileService — design metadata backfill', () => {
     expect(repository.updateFileMetadata).toHaveBeenCalledTimes(100);
   });
 });
+
+describe('FileService — media reclassification', () => {
+  it('merges both MIME aliases without discarding existing metadata', async () => {
+    const repository = { reclassifyFile: vi.fn().mockResolvedValue({ count: 1 }) };
+    const service = new FileService(repository as any, {} as any);
+
+    await service.reclassifyFile('org-1', 'file-1', 'audio', 'audio/webm', {
+      provider: 'elevenlabs',
+      durationSeconds: 3,
+      mime: 'video/webm',
+      attribution: { author: 'Ada' },
+    });
+
+    expect(repository.reclassifyFile).toHaveBeenCalledWith('org-1', 'file-1', 'audio', {
+      provider: 'elevenlabs',
+      durationSeconds: 3,
+      mime: 'audio/webm',
+      mimeType: 'audio/webm',
+      attribution: { author: 'Ada' },
+    });
+  });
+});

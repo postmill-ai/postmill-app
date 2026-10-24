@@ -350,6 +350,19 @@ describe('FileRepository — design metadata backfill', () => {
       data: { metadata: { kind: 'design', mode: 'image' } },
     });
   });
+
+  it('changes type and merged metadata in one org-scoped operation', async () => {
+    const { repo, model } = makeRepo();
+    model.file.updateMany.mockResolvedValue({ count: 1 });
+    const metadata = { provider: 'reel-farm', mime: 'image/jpeg', mimeType: 'image/jpeg' };
+
+    await repo.reclassifyFile('org-1', 'file-1', 'image', metadata);
+
+    expect(model.file.updateMany).toHaveBeenCalledWith({
+      where: { id: 'file-1', organizationId: 'org-1', deletedAt: null },
+      data: { type: 'image', metadata },
+    });
+  });
 });
 
 describe('FileRepository — generated media type', () => {

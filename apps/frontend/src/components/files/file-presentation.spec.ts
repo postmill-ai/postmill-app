@@ -38,6 +38,51 @@ describe('file presentation', () => {
     expect(getFileMediaKind(file(input))).toBe(expected);
   });
 
+  it('treats corrected bare categories as authoritative over MIME types and extensions', () => {
+    const audio = file({
+      type: 'audio',
+      path: '/voiceover.webm',
+      name: 'voiceover.webm',
+      metadata: { mimeType: 'video/webm' },
+    });
+    expect(getFilePresentation(audio)).toMatchObject({
+      mediaKind: 'audio',
+      hasVideoDuration: false,
+      preview: { kind: 'audio', src: '/voiceover.webm' },
+    });
+
+    const image = file({
+      type: 'image',
+      path: '/slide.jpg',
+      name: 'slide.jpg',
+      originalName: 'slide.webm',
+      metadata: { mimeType: 'video/mp4' },
+    });
+    expect(getFilePresentation(image)).toMatchObject({
+      mediaKind: 'image',
+      hasVideoDuration: false,
+      preview: { kind: 'image', src: '/slide.jpg' },
+    });
+  });
+
+  it('uses metadata.mime before conflicting legacy extensions', () => {
+    const audio = file({
+      path: '/voiceover.webm',
+      name: 'voiceover.webm',
+      metadata: { mime: 'audio/webm' },
+    });
+    expect(getFileMediaKind(audio)).toBe('audio');
+    expect(getFilePresentation(audio).hasVideoDuration).toBe(false);
+  });
+
+  it.each([
+    [{ path: '/legacy.webm', name: 'legacy.webm' }, 'video'],
+    [{ type: 'unknown', path: '/legacy.jpg', name: 'legacy.jpg' }, 'image'],
+    [{ path: '/legacy.mp3', name: 'legacy.mp3' }, 'audio'],
+  ] as const)('keeps extension fallback for document and unknown rows', (input, expected) => {
+    expect(getFileMediaKind(file(input))).toBe(expected);
+  });
+
   it('recognizes pdesign before its generic document category', () => {
     const design = file({ name: 'snapshot.pdesign', path: '/uploads/snapshot.pdesign' });
     expect(isDesignFile(design)).toBe(true);

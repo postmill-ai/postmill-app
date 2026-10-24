@@ -726,7 +726,7 @@ export class DesignService {
         this._logger.warn(
           `Video thumbnail backfill failed; continuing with preview regen: ${(err as Error)?.message}`
         );
-        return { scanned: 0, generated: 0, failed: 0 };
+        return { scanned: 0, generated: 0, reclassified: 0, failed: 0 };
       }),
       this._fileService.backfillDesignMetadata(orgId).catch((err) => {
         this._logger.warn(
