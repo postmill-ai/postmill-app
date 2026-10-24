@@ -3,14 +3,15 @@
 import React, { FC, useCallback, useRef, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
-import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import clsx from 'clsx';
-import { AudioPlayer } from '@postmill-ai/frontend/components/media-tools/audio-player';
 import { CampaignSelector } from '@postmill-ai/frontend/components/campaigns/selector/campaign-selector';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import i18next from '@postmill-ai/react/translation/i18next';
 import type { FileItem } from './file-manager';
+import { FilePreview } from './file-preview';
+import { formatVideoDuration, getDesignLabel, getFilePresentation } from './file-presentation';
+import { useOpenFileInDesigner } from './use-open-file-in-designer';
 
 const formatDate = (dateStr: string) => {
   try {
@@ -82,8 +83,11 @@ export const FileDetailsPanel: FC<{
   const toaster = useToaster();
   const t = useT();
   const mediaDirectory = useMediaDirectory();
-  const isVideo = hasExtension(file.path, 'mp4');
-  const isAudio = hasExtension(file.path, 'mp3', 'wav', 'ogg', 'm4a');
+  const { openFile, pendingFileId } = useOpenFileInDesigner();
+  const presentation = getFilePresentation(file);
+  const designLabel = getDesignLabel(file);
+  const duration = formatVideoDuration(file.metadata?.durationMs);
+  const isOpening = pendingFileId === file.id;
 
   const [editingName, setEditingName] = useState(false);
   // The display name is `originalName || name` everywhere else; edit the same
@@ -185,19 +189,8 @@ export const FileDetailsPanel: FC<{
       </div>
 
       <div className="p-[16px]">
-        <div className="rounded-[8px] overflow-hidden bg-black/20 mb-[16px]">
-          {isAudio ? (
-            <div className="p-[12px]"><AudioPlayer src={mediaDirectory.set(file.path)} /></div>
-          ) : isVideo ? (
-            <video src={mediaDirectory.set(file.path)} className="w-full aspect-video object-cover" controls>
-              <track kind="captions" src="" label={t('no_captions', 'No captions')} default />
-            </video>
-          ) : (
-            // User-uploaded previews come from dynamic storage URLs; next/image is
-            // impractical without a configured loader/known domains, so a native img is used.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={mediaDirectory.set(file.path)} alt="" className="w-full aspect-square object-cover" />
-          )}
+        <div className="mb-[16px]">
+          <FilePreview file={file} drawer />
         </div>
 
         <div className="space-y-[14px]">
@@ -296,10 +289,20 @@ export const FileDetailsPanel: FC<{
               <span className="text-textColor/50">{t('file_size', 'File size')}</span>
               <span className="text-textColor">{fileSize(file.fileSize, t)}</span>
             </div>
-            <div className="flex justify-between text-[12px]">
+            <div className="flex justify-between gap-[12px] text-[12px]">
               <span className="text-textColor/50">{t('type', 'Type')}</span>
-              <span className="text-textColor">{file.type || t('file_type_image', 'image')}</span>
+              <span className="text-end text-textColor">
+                {presentation.isDesign
+                  ? t(designLabel.key, designLabel.fallback)
+                  : file.type || t('file_type_image', 'image')}
+              </span>
             </div>
+            {presentation.hasVideoDuration && duration && (
+              <div className="flex justify-between text-[12px]">
+                <span className="text-textColor/50">{t('duration', 'Duration')}</span>
+                <span className="text-textColor">{duration}</span>
+              </div>
+            )}
             <div className="flex justify-between text-[12px]">
               <span className="text-textColor/50">{t('created', 'Created')}</span>
               <span className="text-textColor">{formatDate(file.createdAt)}</span>
@@ -336,6 +339,21 @@ export const FileDetailsPanel: FC<{
               </svg>
               {t('open_file', 'Open file')}
             </button>
+            {presentation.canOpenInDesigner && (
+              <button
+                disabled={isOpening}
+                onClick={() => openFile(file, onClose)}
+                className="w-full flex items-center gap-[8px] px-[12px] py-[8px] rounded-[8px] text-[13px] text-textColor hover:bg-boxHover transition-all disabled:opacity-60"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+                {isOpening
+                  ? t('opening_in_designer', 'Opening in Designer...')
+                  : t('open_in_designer', 'Open in Designer')}
+              </button>
+            )}
             <button
               onClick={handleDelete}
               className="w-full flex items-center gap-[8px] px-[12px] py-[8px] rounded-[8px] text-[13px] text-dangerText hover:bg-boxHover transition-all"

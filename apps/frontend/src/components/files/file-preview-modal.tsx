@@ -1,15 +1,13 @@
 'use client';
 
 import React, { FC } from 'react';
-import { useRouter } from 'next/navigation';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
-import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
-import { AudioPlayer } from '@postmill-ai/frontend/components/media-tools/audio-player';
-import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import i18next from '@postmill-ai/react/translation/i18next';
 import type { FileItem } from './file-manager';
+import { FilePreview } from './file-preview';
+import { getDesignLabel, getFilePresentation } from './file-presentation';
+import { useOpenFileInDesigner } from './use-open-file-in-designer';
 
 const fileSize = (bytes: number, t: ReturnType<typeof useT>) => {
   if (!bytes) return '-';
@@ -29,59 +27,26 @@ export const FilePreviewModal: FC<{
   // campaign. The caller handles confirmation. Not passed by /files.
   onRemoveFromCampaign?: (file: FileItem) => void;
 }> = ({ file, onDetails, onNewPostDraft, onRemoveFromCampaign }) => {
-  const router = useRouter();
   const modal = useModals();
   const mediaDirectory = useMediaDirectory();
   const t = useT();
-
-  const url = mediaDirectory.set(file.path);
-  const isVideo = hasExtension(file.path, 'mp4', 'mov', 'webm');
-  const isAudio = hasExtension(file.path, 'mp3', 'wav', 'ogg', 'm4a');
-  const isImage = hasExtension(file.path, 'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg', 'bmp');
-  const canDesign = isImage || isVideo || isAudio; // images/videos on canvas, audio on timeline
-
-  const handleOpenInDesigner = () => {
-    const operation = isVideo ? 'video' : isAudio ? 'audio' : 'image';
-    const thumbUrl = isVideo && file.thumbnail ? mediaDirectory.set(file.thumbnail) : undefined;
-    modal.closeAll();
-    openInDesigner(
-      {
-        operation,
-        artifactUrl: url,
-        fileId: file.id,
-        source: 'files',
-        thumbUrl,
-      },
-      router.push
-    );
-  };
+  const { openFile, pendingFileId } = useOpenFileInDesigner();
+  const presentation = getFilePresentation(file);
+  const designLabel = getDesignLabel(file);
+  const canCreatePost = presentation.mediaKind !== null;
+  const isOpening = pendingFileId === file.id;
 
   return (
     <div className="flex flex-col gap-[15px] w-[760px] max-w-full text-textColor">
       <div className="text-[16px] font-[600] truncate">{file.name}</div>
 
-      {isAudio ? (
-        <div className="rounded-[8px] bg-newBgColorInner border border-newColColor p-[16px]">
-          <AudioPlayer src={url} height={56} />
-        </div>
-      ) : (
-        <div className="rounded-[8px] overflow-hidden bg-black/30 flex items-center justify-center max-h-[60vh]">
-          {isVideo ? (
-            <video controls src={url} className="w-full max-h-[60vh] object-contain">
-              <track kind="captions" src="" label={t('no_captions', 'No captions')} default />
-            </video>
-          ) : (
-            // User-uploaded previews come from dynamic storage URLs; next/image is
-            // impractical without a configured loader/known domains, so a native img is used.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={url} alt={file.alt || ''} className="w-full max-h-[60vh] object-contain" />
-          )}
-        </div>
-      )}
+      <FilePreview file={file} />
 
       <div className="flex items-center justify-between gap-[10px] flex-wrap">
         <div className="text-[12px] text-newTextColor/65">
-          {(file.type || t('file_type_file', 'file'))} · {fileSize(file.fileSize, t)}
+          {(presentation.isDesign
+            ? t(designLabel.key, designLabel.fallback)
+            : file.type || t('file_type_file', 'file'))} · {fileSize(file.fileSize, t)}
         </div>
         <div className="flex items-center gap-[10px] flex-wrap">
           {onRemoveFromCampaign && (
@@ -104,12 +69,12 @@ export const FilePreviewModal: FC<{
             </button>
           )}
           <button
-            onClick={() => window.open(url, '_blank')}
+            onClick={() => window.open(mediaDirectory.set(file.path), '_blank')}
             className="px-[16px] py-[10px] rounded-[8px] border border-newColColor text-textColor text-[13px] font-[500] hover:bg-boxHover transition-all"
           >
             {t('download', 'Download')}
           </button>
-          {onNewPostDraft && canDesign && (
+          {onNewPostDraft && canCreatePost && (
             <button
               onClick={() => {
                 modal.closeAll();
@@ -123,16 +88,19 @@ export const FilePreviewModal: FC<{
               {t('new_post_draft', 'New Post Draft')}
             </button>
           )}
-          {canDesign && (
+          {presentation.canOpenInDesigner && (
             <button
-              onClick={handleOpenInDesigner}
-              className="px-[16px] py-[10px] rounded-[8px] bg-green-600 text-white text-[13px] font-[500] hover:bg-green-700 transition-all flex items-center gap-[6px]"
+              disabled={isOpening}
+              onClick={() => openFile(file, modal.closeAll)}
+              className="px-[16px] py-[10px] rounded-[8px] bg-green-600 text-white text-[13px] font-[500] hover:bg-green-700 transition-all flex items-center gap-[6px] disabled:opacity-60"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 20h9" />
                 <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
               </svg>
-              {t('open_in_designer', 'Open in Designer')}
+              {isOpening
+                ? t('opening_in_designer', 'Opening in Designer...')
+                : t('open_in_designer', 'Open in Designer')}
             </button>
           )}
         </div>

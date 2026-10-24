@@ -16,6 +16,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
 import {
   buildPostmillManifest,
+  designFileMetadata,
   sanitizeDownloadName,
   PostmillAssetEntry,
   PostmillFontEntry,
@@ -285,7 +286,7 @@ export class DesignExportService {
 
     try {
       const payload = JSON.parse(raw) as DesignExportPayload;
-      const { name, bytes, previewPath } = await this._buildBundle(orgId, jobId, payload);
+      const { name, bytes, previewPath, metadata } = await this._buildBundle(orgId, jobId, payload);
 
       const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
       const path = await adapter.writeBuffer(bytes, 'application/zip');
@@ -299,6 +300,7 @@ export class DesignExportService {
           mime: 'application/zip',
           kind: payload.kind,
           [`${payload.kind}Id`]: payload.sourceId,
+          ...metadata,
         },
       });
 
@@ -350,7 +352,12 @@ export class DesignExportService {
     orgId: string,
     jobId: string,
     payload: DesignExportPayload
-  ): Promise<{ name: string; bytes: Buffer; previewPath: string | null }> {
+  ): Promise<{
+    name: string;
+    bytes: Buffer;
+    previewPath: string | null;
+    metadata: NonNullable<ReturnType<typeof designFileMetadata>>;
+  }> {
     const { name, doc, previewPath } = await this._loadSource(orgId, {
       kind: payload.kind,
       id: payload.sourceId,
@@ -436,7 +443,7 @@ export class DesignExportService {
       { name: 'doc.json', data: strToU8(JSON.stringify(doc)), compress: true },
       ...assetEntries,
     ]);
-    return { name, bytes, previewPath };
+    return { name, bytes, previewPath, metadata: designFileMetadata(doc)! };
   }
 
   private async _writeProgress(jobId: string, done: number, total: number): Promise<void> {

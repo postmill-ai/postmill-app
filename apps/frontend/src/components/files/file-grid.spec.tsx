@@ -294,6 +294,51 @@ describe('FileGrid', () => {
     expect(screen.queryByTestId('video-play-overlay')).toBeNull();
   });
 
+  it('shows design identity, thumbnail, and known duration without treating the design as a rendered video', () => {
+    const design = {
+      ...file('d1', 'snapshot.pdesign'),
+      name: 'snapshot.pdesign',
+      path: '/uploads/snapshot.pdesign',
+      type: 'document',
+      thumbnail: '/thumbnails/snapshot.png',
+      metadata: { kind: 'template' as const, mode: 'video' as const, durationMs: 65_000 },
+    };
+    const { container } = render(<FileGrid {...baseProps} files={[design]} folders={[]} />);
+
+    expect(screen.getByRole('img').getAttribute('src')).toBe('/thumbnails/snapshot.png');
+    expect(screen.getByText('Video template')).toBeTruthy();
+    expect(screen.getByTestId('video-duration-badge').textContent).toBe('1:05');
+    expect(screen.queryByTestId('video-play-overlay')).toBeNull();
+    expect(container.querySelector('img[src="/uploads/snapshot.pdesign"]')).toBeNull();
+  });
+
+  it('uses an intentional document fallback rather than a broken image', () => {
+    const documentFile = {
+      ...file('doc', 'report.pdf'),
+      name: 'report.pdf',
+      path: '/uploads/report.pdf',
+      type: 'document',
+    };
+    const { container } = render(<FileGrid {...baseProps} files={[documentFile]} folders={[]} />);
+    expect(screen.getByText('No preview available')).toBeTruthy();
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('loads legacy video duration from metadata without preloading video content', () => {
+    const video = {
+      ...file('v1', 'clip.webm'),
+      name: 'v1.webm',
+      path: '/uploads/v1.webm',
+      type: 'video',
+    };
+    const { container } = render(<FileGrid {...baseProps} files={[video]} folders={[]} />);
+    const probe = container.querySelector('video.hidden') as HTMLVideoElement;
+    expect(probe.getAttribute('preload')).toBe('metadata');
+    Object.defineProperty(probe, 'duration', { configurable: true, value: 61.2 });
+    fireEvent.loadedMetadata(probe);
+    expect(screen.getByTestId('video-duration-badge').textContent).toBe('1:01');
+  });
+
   it('makes file tiles inert while filesInert, but leaves folder tiles live', () => {
     // While the next folder loads, the visible file tiles are the previous
     // folder's — clicks there must not land. Folder tiles already reflect the

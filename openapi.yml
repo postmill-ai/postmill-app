@@ -7463,6 +7463,21 @@ paths:
         files bundle every referenced asset, so memory storage is not an option.
       tags:
         - Design
+  /media/designs/import-library:
+    post:
+      operationId: DesignController_importLibrary
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportLibraryDesignDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Design
   /media/designs/{id}/export:
     post:
       operationId: DesignController_export
@@ -12120,6 +12135,13 @@ components:
       required:
         - name
         - doc
+    ImportLibraryDesignDto:
+      type: object
+      properties:
+        fileId:
+          type: string
+      required:
+        - fileId
     UpdateDesignDto:
       type: object
       properties:

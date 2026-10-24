@@ -13,6 +13,8 @@ import {
   parseDesignJson,
   parsePostmillFile,
   parsePostmillFileStream,
+  parsePostmillFileMetadataStream,
+  designFileMetadata,
   sanitizeDownloadName,
 } from './postmill-file';
 
@@ -270,6 +272,38 @@ describe('parseDesignJson (raw .json import path)', () => {
       expect(err).toBeInstanceOf(PostmillFileError);
       expect((err as PostmillFileError).code).toBe('invalid-json');
     }
+  });
+});
+
+describe('design file metadata', () => {
+  it('reads image and primary-output video metadata', () => {
+    expect(designFileMetadata(sampleDoc())).toEqual({ mode: 'image' });
+    expect(designFileMetadata({
+      mode: 'video',
+      outputs: [{ durationMs: 12345 }, { durationMs: 9000 }],
+    })).toEqual({ mode: 'video', durationMs: 12345 });
+  });
+
+  it.each([0, -1, NaN, Infinity, '5000', undefined])(
+    'omits invalid video duration %s',
+    (durationMs) => {
+      expect(designFileMetadata({ mode: 'video', outputs: [{ durationMs }] })).toEqual({
+        mode: 'video',
+      });
+    }
+  );
+
+  it('parses only manifest/doc entries and does not inflate bundled assets', async () => {
+    const doc = { ...sampleDoc(), mode: 'video', outputs: [{ durationMs: 5000 }] };
+    const bytes = Buffer.from(zipSync({
+      'manifest.json': strToU8(JSON.stringify(buildPostmillManifest(sampleDoc(), 'Video'))),
+      'doc.json': strToU8(JSON.stringify(doc)),
+      'assets/large.bin': new Uint8Array(2 * 1024 * 1024).fill(65),
+    }, { level: 9 }));
+
+    await expect(
+      parsePostmillFileMetadataStream(Readable.from([bytes]))
+    ).resolves.toEqual({ mode: 'video', durationMs: 5000 });
   });
 });
 

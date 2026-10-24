@@ -5,6 +5,8 @@ import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
 import { DesignImportValidationPipe } from '@postmill-ai/nestjs-libraries/upload/design-import.validation';
+import { ImportLibraryDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/import-library-design.dto';
+import { validate } from 'class-validator';
 import {
   AuthorizationActions,
   Sections,
@@ -40,7 +42,7 @@ vi.mock('@postmill-ai/nestjs-libraries/media/design-render/render-assets', () =>
   },
 }));
 
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ValidationPipe } from '@nestjs/common';
 import {
   DesignController,
   DesignRenderFrameController,
@@ -74,6 +76,7 @@ describe('DesignController', () => {
     moveTemplate: ReturnType<typeof vi.fn>;
     regenPreviews: ReturnType<typeof vi.fn>;
     importDesign: ReturnType<typeof vi.fn>;
+    importLibraryDesign: ReturnType<typeof vi.fn>;
   };
   let designExportService: {
     enqueueExport: ReturnType<typeof vi.fn>;
@@ -109,6 +112,7 @@ describe('DesignController', () => {
       moveTemplate: vi.fn(),
       regenPreviews: vi.fn(),
       importDesign: vi.fn(),
+      importLibraryDesign: vi.fn(),
     };
     designExportService = {
       enqueueExport: vi.fn(),
@@ -318,6 +322,44 @@ describe('DesignController', () => {
       await expect(
         controller.import(org, user, { buffer: Buffer.from('x') } as any)
       ).rejects.toThrow(/newer version of Postmill/);
+    });
+  });
+
+  describe('POST /media/designs/import-library', () => {
+    it('is gated on media:create and MEDIA create policy', () => {
+      expect(Reflect.getMetadata(
+        CHECK_POLICIES_KEY,
+        DesignController.prototype.importLibrary
+      )).toEqual([[AuthorizationActions.Create, Sections.MEDIA]]);
+      expect(Reflect.getMetadata(
+        REQUIRE_PERMISSION_KEY,
+        DesignController.prototype.importLibrary
+      )).toEqual({ resource: 'media', action: 'create' });
+    });
+
+    it('validates fileId and rejects undeclared body fields', async () => {
+      expect(await validate(Object.assign(new ImportLibraryDesignDto(), { fileId: 'file-1' })))
+        .toHaveLength(0);
+      expect(await validate(Object.assign(new ImportLibraryDesignDto(), { fileId: '' })))
+        .not.toHaveLength(0);
+      const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true });
+      await expect(pipe.transform(
+        { fileId: 'file-1', designId: 'not-allowed' },
+        { type: 'body', metatype: ImportLibraryDesignDto }
+      )).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('delegates to the snapshot import and returns the new design', async () => {
+      const created = { id: 'new-design', name: 'Snapshot' };
+      designService.importLibraryDesign.mockResolvedValue(created);
+
+      await expect(controller.importLibrary(org, user, { fileId: 'file-1' }))
+        .resolves.toBe(created);
+      expect(designService.importLibraryDesign).toHaveBeenCalledWith(
+        'org-1',
+        'user-1',
+        'file-1'
+      );
     });
   });
 

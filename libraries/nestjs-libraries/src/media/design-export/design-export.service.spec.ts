@@ -348,6 +348,44 @@ describe('DesignExportService.processExport', () => {
     );
   });
 
+  it('stores video mode and the primary output duration on the exported File', async () => {
+    const doc = {
+      version: DESIGNER_DOC_VERSION,
+      mode: 'video',
+      outputs: [{
+        id: 'out-video',
+        formatId: 'reel',
+        name: 'Reel',
+        width: 1080,
+        height: 1920,
+        fps: 30,
+        durationMs: 12345,
+        tracks: [],
+      }],
+    };
+    const { service, fileService } = makeService({
+      job: pendingExportJob,
+      design: { id: 'd1', name: 'Video', doc },
+      files: {},
+    });
+    primePayload({ organizationId: 'org-1', kind: 'design', sourceId: 'd1' });
+
+    await service.processExport('job-1');
+
+    expect(fileService.saveGeneratedMedia).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          source: 'design-export',
+          kind: 'design',
+          designId: 'd1',
+          mode: 'video',
+          durationMs: 12345,
+        }),
+      })
+    );
+  });
+
   it('copies the design preview as the artifact thumbnail and links the metadata to the source', async () => {
     const { service, aiSettings, localAdapter, fileService } = makeService({
       job: pendingExportJob,
@@ -387,7 +425,13 @@ describe('DesignExportService.processExport', () => {
     expect(fileService.saveGeneratedMedia).toHaveBeenCalledWith(
       'org-1',
       expect.objectContaining({
-        metadata: { source: 'design-export', mime: 'application/zip', kind: 'design', designId: 'd1' },
+        metadata: {
+          source: 'design-export',
+          mime: 'application/zip',
+          kind: 'design',
+          designId: 'd1',
+          mode: 'image',
+        },
       })
     );
     expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith(

@@ -45,6 +45,7 @@ import { FontLoaderService } from '@postmill-ai/nestjs-libraries/media/design-re
 import { RenderVideoDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/render-video.design.dto';
 import { BulkGenerateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/bulk.generate.design.dto';
 import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design.dto';
+import { ImportLibraryDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/import-library-design.dto';
 import { UpdateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-design.dto';
 import { CreateDesignVersionDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design-version.dto';
 import { CreateTemplateDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-template.dto';
@@ -156,6 +157,17 @@ export class DesignController {
       // The temp spool file is always removed, success or failure.
       if (file?.path) { try { await fs.promises.unlink(file.path); } catch { /* best-effort */ } }
     }
+  }
+
+  @Post('/import-library')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async importLibrary(
+    @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
+    @Body() body: ImportLibraryDesignDto,
+  ) {
+    return this._designService.importLibraryDesign(org.id, user.id, body.fileId);
   }
 
   /**

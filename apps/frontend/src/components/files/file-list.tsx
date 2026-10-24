@@ -1,8 +1,6 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
-import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -13,6 +11,9 @@ import type { FolderItem } from './folder.utils';
 import { DataTable } from '@postmill-ai/frontend/components/ui/data-table';
 import type { Column } from '@postmill-ai/frontend/components/ui/data-table';
 import { useLongPress } from '@postmill-ai/frontend/components/ui/use-long-press';
+import { FileThumbnail } from './file-preview';
+import { getDesignLabel, getFilePresentation } from './file-presentation';
+import { VideoDurationBadge } from './video-duration-badge';
 
 /** Shape `useContextMenu().openAt` accepts. */
 type MenuEvent = {
@@ -42,11 +43,6 @@ const fileSize = (bytes: number, t: ReturnType<typeof useT>) => {
     return t('file_size_kb', '{{size}} KB', { size: (bytes / 1024).toFixed(1) });
   return t('file_size_mb', '{{size}} MB', { size: (bytes / (1024 * 1024)).toFixed(1) });
 };
-
-// Type-based, not extension-based: .webm/.mov clips are typed 'video' (or a
-// full video/* mime) and must not fall into the broken-img path.
-const isVideoFile = (file: FileItem) =>
-  file.type === 'video' || !!file.type?.startsWith('video/');
 
 export const FileList: FC<{
   files: FileItem[];
@@ -81,7 +77,6 @@ export const FileList: FC<{
   onFolderMenu,
   onRefresh,
 }) => {
-  const mediaDirectory = useMediaDirectory();
   const fetch = useFetch();
   const toaster = useToaster();
   const t = useT();
@@ -136,38 +131,22 @@ export const FileList: FC<{
       header: '',
       width: '40px',
       render: (file: FileItem) => {
-        const isVideo = isVideoFile(file);
-        const isAudio = hasExtension(file.path, 'mp3', 'wav', 'ogg', 'm4a');
+        const presentation = getFilePresentation(file);
         return (
           <div className="w-[36px] h-[36px] rounded-[6px] overflow-hidden bg-newBgColorInner relative">
-            {isAudio ? (
-              <div className="flex items-center justify-center w-full h-full">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-textColor/60">
-                  <path d="M2 10V14C2 15.1046 2.89543 16 4 16H6L11.2929 20.2929C11.7458 20.7458 12.5 20.4243 12.5 19.8047V4.19534C12.5 3.57571 11.7458 3.25419 11.2929 3.70711L6 8H4C2.89543 8 2 8.89543 2 10Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M15.5355 8.46448C16.4684 9.39734 16.9948 10.6611 17 11.9927C17.0052 13.3243 16.4888 14.5921 15.564 15.5355" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M19.6569 5.17157C21.1494 6.66412 21.9952 8.69168 22 10.8487C22.0048 13.0058 21.1692 15.0372 19.6845 16.5372" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-            ) : isVideo ? (
-              <video src={mediaDirectory.set(file.path)} className="w-full h-full object-cover" muted preload="metadata">
-                <track kind="captions" src="" label={t('no_captions', 'No captions')} default />
-              </video>
-            ) : (
-              // Remote upload URLs cannot be pre-configured in next/image domains; use native img for thumbnails.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={mediaDirectory.set(file.path)} alt="" className="w-full h-full object-cover" loading="lazy" />
-            )}
-            {isVideo && (
+            <FileThumbnail file={file} />
+            {presentation.mediaKind === 'video' && (
               <div
                 data-testid="video-play-overlay"
                 aria-hidden="true"
-                className="absolute bottom-[2px] right-[2px] w-[16px] h-[16px] rounded-full bg-black/55 flex items-center justify-center pointer-events-none"
+                className="absolute top-[2px] end-[2px] w-[14px] h-[14px] rounded-full bg-black/55 flex items-center justify-center pointer-events-none"
               >
-                <svg width="8" height="8" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                <svg width="7" height="7" viewBox="0 0 24 24" fill="white" aria-hidden="true">
                   <path d="M8 5v14l11-7z" />
                 </svg>
               </div>
             )}
+            <VideoDurationBadge file={file} compact />
           </div>
         );
       },
@@ -207,8 +186,14 @@ export const FileList: FC<{
       },
     },
     { key: 'type', header: t('type', 'Type'), sortable: true, render: (file: FileItem) => {
+      const presentation = getFilePresentation(file);
+      const designLabel = getDesignLabel(file);
       const ext = file.name?.split('.').pop()?.toUpperCase() || file.type?.toUpperCase();
-      return <span className="text-[12px] text-textColor/60">{ext}</span>;
+      return (
+        <span className="text-[12px] text-textColor/60 whitespace-nowrap">
+          {presentation.isDesign ? t(designLabel.key, designLabel.fallback) : ext}
+        </span>
+      );
     }},
     { key: 'size', header: t('size', 'Size'), sortable: true, render: (file: FileItem) => (
       <span className="text-[12px] text-textColor/60">{fileSize(file.fileSize, t)}</span>
@@ -219,7 +204,7 @@ export const FileList: FC<{
     { key: 'createdAt', header: t('created', 'Created'), sortable: true, render: (file: FileItem) => (
       <span className="text-[12px] text-textColor/60 whitespace-nowrap">{formatDate(file.createdAt)}</span>
     )},
-  ], [renamingId, renamingName, mediaDirectory, handleRename, startRename, t]);
+  ], [renamingId, renamingName, handleRename, startRename, t]);
 
   // One hook instance serves every row — only one touch press exists at a time.
   const fileLongPress = useLongPress<FileItem>((point, file) =>
