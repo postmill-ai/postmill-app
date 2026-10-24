@@ -74,6 +74,9 @@ jobs:
         #   GHSA-ch52-4w7c-c8xp  http-cache-semantics — dev-only: @swc/cli → bin-wrapper → got (build tooling, never ships)
         #   GHSA-86w9-cpqp-85rv  node-forge   — @copilotkit/runtime → @langchain/google-gauth → gtoken → google-p12-pem;
         #                                     the LangChain Google-auth path is never exercised (Google provider uses the AI SDK)
+        #   GHSA-mrhx-c7xc-m3w5  zod          — the repo's own zod is 4.6.7 (patched ≥4.6.6); the flagged instances are the
+        #                                     zod 3.25.x line pinned by @copilotkit/* and `ai` peer requirements, and no
+        #                                     patched 3.x release exists (latest 3.25.76 is still flagged)
         # Drop entries the moment a patched release exists. Any NON-allowlisted
         # high/critical advisory fails the job.
         run: |
@@ -91,7 +94,8 @@ jobs:
           ALLOWED='[
             "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
             "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
-            "https://github.com/advisories/GHSA-86w9-cpqp-85rv"
+            "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+            "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5"
           ]'
           REMAINING=$(echo "$OUT" | jq -c --argjson allowed "$ALLOWED" \
             '[.advisories[] | select(.url as $u | $allowed | index($u) | not) | {module: .module_name, severity, url}]')
