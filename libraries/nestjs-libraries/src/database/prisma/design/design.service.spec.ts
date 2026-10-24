@@ -2,6 +2,8 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { zipSync, strToU8 } from 'fflate';
+import { Readable } from 'stream';
+import * as postmillFile from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
 import { DesignService } from './design.service';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
@@ -63,6 +65,7 @@ describe('DesignService', () => {
     getFileById: ReturnType<typeof vi.fn>;
     softDelete: ReturnType<typeof vi.fn>;
     saveFile: ReturnType<typeof vi.fn>;
+    backfillDesignMetadata: ReturnType<typeof vi.fn>;
   };
   let previewService: {
     renderPreviewBuffer: ReturnType<typeof vi.fn>;
@@ -114,6 +117,9 @@ describe('DesignService', () => {
       getFileById: vi.fn(),
       softDelete: vi.fn(),
       saveFile: vi.fn(),
+      backfillDesignMetadata: vi
+        .fn()
+        .mockResolvedValue({ scanned: 0, updated: 0, skipped: 0, failed: 0 }),
     };
     previewService = {
       renderPreviewBuffer: vi.fn(),
@@ -1022,6 +1028,7 @@ describe('DesignService', () => {
       expect(repository.setTemplateThumbnail).toHaveBeenCalledWith('t3', 'new-file');
       expect(result).toEqual({
         videoThumbnails: { scanned: 0, generated: 0, failed: 0 },
+        designFileMetadata: { scanned: 0, updated: 0, skipped: 0, failed: 0 },
         designs: { scanned: 4, regenerated: 2, skipped: 2, failed: 0 },
         templates: { scanned: 3, regenerated: 2, skipped: 1, failed: 0 },
       });
@@ -1040,6 +1047,89 @@ describe('DesignService', () => {
 
       expect(result.designs.failed + result.templates.failed).toBe(1);
       expect(result.designs.regenerated + result.templates.regenerated).toBe(3);
+    });
+  });
+
+  describe('importLibraryDesign', () => {
+    const snapshot = () => Buffer.from(buildPostmillFile(makeDoc({
+      doc: { version: DESIGNER_DOC_VERSION },
+      output: {
+        id: 'source-output',
+        children: [{
+          id: 'source-element',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 50,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+          text: 'Exported snapshot',
+        }],
+      },
+    }) as any, 'Snapshot'));
+
+    it('rejects a missing or foreign file without reading storage', async () => {
+      fileService.getFileById.mockResolvedValue(null);
+
+      await expect(service.importLibraryDesign('org-1', 'user-1', 'file-1'))
+        .rejects.toBeInstanceOf(NotFoundException);
+      expect(storageService.resolveAdapterForFolder).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-pdesign and over-1GB files', async () => {
+      fileService.getFileById.mockResolvedValueOnce({
+        id: 'file-1', name: 'image.png', originalName: null, fileSize: 10,
+      });
+      await expect(service.importLibraryDesign('org-1', 'user-1', 'file-1'))
+        .rejects.toBeInstanceOf(BadRequestException);
+
+      fileService.getFileById.mockResolvedValueOnce({
+        id: 'file-1', name: 'huge.pdesign', originalName: null,
+        fileSize: 1024 * 1024 * 1024 + 1,
+      });
+      await expect(service.importLibraryDesign('org-1', 'user-1', 'file-1'))
+        .rejects.toThrow(/max 1 GB/);
+      expect(storageService.resolveAdapterForFolder).not.toHaveBeenCalled();
+    });
+
+    it('reads through the folder adapter and creates a new design from the snapshot', async () => {
+      const bytes = snapshot();
+      const readFile = vi.fn().mockResolvedValue(bytes);
+      storageService.resolveAdapterForFolder.mockResolvedValue({ readFile });
+      fileService.getFileById.mockResolvedValue({
+        id: 'file-1',
+        name: 'generated-storage-name',
+        originalName: 'original.pdesign',
+        path: 'org/file.zip',
+        folderId: 'folder-1',
+        fileSize: bytes.length,
+      });
+      repository.create.mockImplementation((payload: any) => ({ id: 'new-design', ...payload }));
+
+      const created = await service.importLibraryDesign('org-1', 'user-1', 'file-1');
+
+      expect(storageService.resolveAdapterForFolder).toHaveBeenCalledWith('folder-1', 'org-1');
+      expect(readFile).toHaveBeenCalledWith('org/file.zip');
+      expect(created.id).toBe('new-design');
+      expect(repository.create).toHaveBeenCalledWith(expect.objectContaining({
+        organizationId: 'org-1',
+        createdById: 'user-1',
+        name: 'Snapshot',
+        doc: expect.objectContaining({
+          outputs: [expect.objectContaining({
+            id: expect.not.stringMatching('source-output'),
+            children: [expect.objectContaining({
+              id: expect.not.stringMatching('source-element'),
+              text: 'Exported snapshot',
+            })],
+          })],
+        }),
+      }));
+      expect(repository.update).not.toHaveBeenCalled();
+      expect(repository.updateTemplate).not.toHaveBeenCalled();
     });
   });
 
@@ -1086,6 +1176,23 @@ describe('DesignService', () => {
       expect(out.children[0].id).toMatch(/^el-/);
       // ...while the content survives verbatim.
       expect(out.children[0].text).toBe('Hello');
+    });
+
+    it('uses the capped streaming parser for buffered ZIP imports', async () => {
+      const parser = vi.spyOn(postmillFile, 'parsePostmillFileStream');
+      try {
+        await service.importDesign('org-1', 'user-1', {
+          buffer: Buffer.from(buildPostmillFile(docWithIds() as any, 'Buffered')),
+          originalname: 'buffered.pdesign',
+        });
+
+        expect(parser).toHaveBeenCalledWith(
+          expect.any(Readable),
+          1024 * 1024 * 1024
+        );
+      } finally {
+        parser.mockRestore();
+      }
     });
 
     it('imports a raw .json DesignerDoc and names it from the filename', async () => {

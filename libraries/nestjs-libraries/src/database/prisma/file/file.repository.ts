@@ -243,6 +243,51 @@ export class FileRepository {
     });
   }
 
+  findDesignFilesForMetadataBackfill(org: string, limit: number, cursor?: string) {
+    return this._file.model.file.findMany({
+      where: {
+        organizationId: org,
+        deletedAt: null,
+        AND: [
+          {
+            OR: [
+              { name: { endsWith: '.pdesign', mode: 'insensitive' } },
+              { originalName: { endsWith: '.pdesign', mode: 'insensitive' } },
+            ],
+          },
+          {
+            OR: [
+              { metadata: { path: ['mode'], equals: Prisma.AnyNull } },
+              {
+                AND: [
+                  { metadata: { path: ['mode'], equals: 'video' } },
+                  { metadata: { path: ['durationMs'], equals: Prisma.AnyNull } },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      orderBy: { id: 'asc' },
+      take: limit,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: {
+        id: true,
+        path: true,
+        folderId: true,
+        fileSize: true,
+        metadata: true,
+      },
+    });
+  }
+
+  updateFileMetadata(org: string, id: string, metadata: Record<string, unknown>) {
+    return this._file.model.file.updateMany({
+      where: { id, organizationId: org, deletedAt: null },
+      data: { metadata: metadata as Prisma.InputJsonValue },
+    });
+  }
+
   getFileByPath(org: string, filePath: string) {
     return this._file.model.file.findFirst({
       where: {

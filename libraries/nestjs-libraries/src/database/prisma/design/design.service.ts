@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { createReadStream, promises as fs } from 'fs';
 import { resolve, relative, isAbsolute } from 'path';
 import { tmpdir } from 'os';
+import { Readable } from 'stream';
 import { DesignRepository } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.repository';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
@@ -9,7 +10,6 @@ import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/design
 import {
   hasZipMagic,
   parseDesignJson,
-  parsePostmillFile,
   parsePostmillFileStream,
   PostmillFileError,
   sanitizeDownloadName,
@@ -484,13 +484,34 @@ export class DesignService {
   // same-org round-trips resolve and cross-org media shows broken.
   // See media/designer-doc/postmill-file.ts.
 
-  /**
-   * Import a `.pdesign` (zip) or raw `.json` DesignerDoc as a NEW design.
-   * The doc's ids are stripped and re-minted so the copy can never alias the
-   * source design's elements. The upload may be memory-buffered (tests, small
-   * files) or disk-spooled (`path`) — the controller's FileInterceptor uses
-   * diskStorage for the 1 GB cap.
-   */
+  async importLibraryDesign(orgId: string, userId: string, fileId: string) {
+    const file = await this._fileService.getFileById(orgId, fileId);
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+    const isDesignFile = [file.name, file.originalName, file.path].some(
+      (value) => value && /\.pdesign$/i.test(value)
+    );
+    if (!isDesignFile) {
+      throw new BadRequestException('Only .pdesign files can be imported as designs');
+    }
+    if (file.fileSize > DESIGN_IMPORT_MAX_BYTES) {
+      throw new BadRequestException('Design file is too large (max 1 GB).');
+    }
+
+    const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, orgId);
+    const bytes = await adapter.readFile(file.path);
+    if (bytes.length > DESIGN_IMPORT_MAX_BYTES) {
+      throw new BadRequestException('Design file is too large (max 1 GB).');
+    }
+
+    return this.importDesign(orgId, userId, {
+      buffer: bytes,
+      originalname: file.originalName || file.name,
+      size: bytes.length,
+    });
+  }
+
   async importDesign(
     orgId: string,
     userId: string,
@@ -515,12 +536,12 @@ export class DesignService {
     if (hasZipMagic(head)) {
       let parsed: ParsedPostmillFile;
       try {
-        parsed = Buffer.isBuffer(file.buffer)
-          ? parsePostmillFile(file.buffer)
-          : await parsePostmillFileStream(
-              createReadStream(safePath!),
-              DESIGN_IMPORT_MAX_BYTES
-            );
+        parsed = await parsePostmillFileStream(
+          Buffer.isBuffer(file.buffer)
+            ? Readable.from([file.buffer])
+            : createReadStream(safePath!),
+          DESIGN_IMPORT_MAX_BYTES
+        );
       } catch (err) {
         throw importErrorToHttp(err);
       }
@@ -693,22 +714,27 @@ export class DesignService {
    * Maintenance sweep: regenerate server-side previews for the org's designs
    * and templates whose preview is missing (designs: both previewFileId and
    * previewDataUrl null; templates: thumbnailFileId null) OR whose doc is
-   * video-mode (the client snapshot is a black stage). First backfills missing
-   * video FILE thumbnails (bounded) so video posters have frames to draw.
-   * Blank docs are skipped — a blank canvas has nothing to render. Per-item
-   * failures are counted, never abort the run.
+   * video-mode (the client snapshot is a black stage). Backfills missing video
+   * FILE thumbnails so video posters have frames to draw, plus .pdesign mode
+   * and duration metadata for the library (both bounded). Blank docs are
+   * skipped — a blank canvas has nothing to render. Per-item failures are
+   * counted, never abort the run.
    */
   async regenPreviews(orgId: string) {
-    // Video posters draw from File.thumbnail — backfill the missing ones first
-    // or the sweep below would re-render the same black frames.
-    const thumbnailStats = await this._videoThumbnailService
-      .backfillOrgThumbnails(orgId)
-      .catch((err) => {
+    const [thumbnailStats, designFileMetadata] = await Promise.all([
+      this._videoThumbnailService.backfillOrgThumbnails(orgId).catch((err) => {
         this._logger.warn(
           `Video thumbnail backfill failed; continuing with preview regen: ${(err as Error)?.message}`
         );
         return { scanned: 0, generated: 0, failed: 0 };
-      });
+      }),
+      this._fileService.backfillDesignMetadata(orgId).catch((err) => {
+        this._logger.warn(
+          `Design file metadata backfill failed; continuing with preview regen: ${(err as Error)?.message}`
+        );
+        return { scanned: 0, updated: 0, skipped: 0, failed: 0 };
+      }),
+    ]);
 
     const [designs, templates] = await Promise.all([
       this._designRepository.findDesignsForPreviewRegen(orgId),
@@ -774,7 +800,12 @@ export class DesignService {
           : this._designRepository.setTemplateThumbnail(row.id, fileId),
       (row) => row.thumbnailFileId
     );
-    return { videoThumbnails: thumbnailStats, designs: designStats, templates: templateStats };
+    return {
+      videoThumbnails: thumbnailStats,
+      designFileMetadata,
+      designs: designStats,
+      templates: templateStats,
+    };
   }
 
   // Autosave mints a fresh thumbnail File on every save; the replaced one

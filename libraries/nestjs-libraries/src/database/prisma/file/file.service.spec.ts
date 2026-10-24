@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import { FileService } from './file.service';
 import { FileRepository } from './file.repository';
+import { buildPostmillFile, buildPostmillManifest } from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
+import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { DESIGN_IMPORT_MAX_BYTES } from '@postmill-ai/nestjs-libraries/upload/design-import.validation';
+import { strToU8, zipSync } from 'fflate';
 
 function makeModel() {
   return {
@@ -468,5 +472,141 @@ describe('FileService — cross-provider move', () => {
     expect(srcAdapter.removeFile).toHaveBeenCalledWith('p-b');
     expect(srcAdapter.readFile).toHaveBeenCalledWith('p-b');
     expect(srcAdapter.readFile).toHaveBeenCalledWith('p-c');
+  });
+});
+
+describe('FileService — design metadata backfill', () => {
+  const imageDoc = {
+    version: DESIGNER_DOC_VERSION,
+    mode: 'image',
+    outputs: [{
+      id: 'out-1',
+      formatId: 'square',
+      name: 'Square',
+      width: 1080,
+      height: 1080,
+      children: [],
+    }],
+  } as any;
+  const videoBytes = () => Buffer.from(zipSync({
+    'manifest.json': strToU8(JSON.stringify(buildPostmillManifest(imageDoc, 'Video'))),
+    'doc.json': strToU8(JSON.stringify({
+      ...imageDoc,
+      mode: 'video',
+      outputs: [{ ...imageDoc.outputs[0], fps: 30, durationMs: 7500, tracks: [] }],
+    })),
+  }));
+
+  const setup = (rows: any[], readFile = vi.fn()) => {
+    const repository = {
+      findDesignFilesForMetadataBackfill: vi.fn()
+        .mockResolvedValueOnce(rows)
+        .mockResolvedValue([]),
+      updateFileMetadata: vi.fn().mockResolvedValue({ count: 1 }),
+    };
+    readFile.mockResolvedValue(Buffer.from(buildPostmillFile(imageDoc, 'Image')));
+    const storage = {
+      resolveAdapterForFolder: vi.fn().mockResolvedValue({ readFile }),
+    };
+    return {
+      service: new FileService(repository as any, storage as any),
+      repository,
+      storage,
+      readFile,
+    };
+  };
+
+  it('merges recovered metadata without removing existing keys', async () => {
+    const rows = [{
+      id: 'file-1',
+      path: 'design.pdesign',
+      folderId: 'folder-1',
+      metadata: { source: 'design-export', kind: 'design', designId: 'd1', attribution: 'Ada' },
+    }];
+    const { service, repository, storage } = setup(rows);
+
+    await expect(service.backfillDesignMetadata('org-1')).resolves.toEqual({
+      scanned: 1,
+      updated: 1,
+      skipped: 0,
+      failed: 0,
+    });
+    expect(storage.resolveAdapterForFolder).toHaveBeenCalledWith('folder-1', 'org-1');
+    expect(repository.updateFileMetadata).toHaveBeenCalledWith('org-1', 'file-1', {
+      source: 'design-export',
+      kind: 'design',
+      designId: 'd1',
+      attribution: 'Ada',
+      mode: 'image',
+    });
+  });
+
+  it('recovers video duration and counts per-file failures without aborting', async () => {
+    const rows = [
+      { id: 'bad', path: 'bad.pdesign', folderId: null, metadata: null },
+      { id: 'video', path: 'video.pdesign', folderId: null, metadata: { kind: 'template' } },
+    ];
+    const readFile = vi.fn()
+      .mockRejectedValueOnce(new Error('missing object'))
+      .mockResolvedValueOnce(videoBytes());
+    const { service, repository } = setup(rows, readFile);
+
+    await expect(service.backfillDesignMetadata('org-1')).resolves.toEqual({
+      scanned: 2,
+      updated: 1,
+      skipped: 0,
+      failed: 1,
+    });
+    expect(repository.updateFileMetadata).toHaveBeenCalledOnce();
+    expect(repository.updateFileMetadata).toHaveBeenCalledWith('org-1', 'video', {
+      kind: 'template',
+      mode: 'video',
+      durationMs: 7500,
+    });
+  });
+
+  it('skips oversized files without resolving storage or reading bytes', async () => {
+    const rows = [{
+      id: 'huge',
+      path: 'huge.pdesign',
+      folderId: 'folder-1',
+      fileSize: DESIGN_IMPORT_MAX_BYTES + 1,
+      metadata: null,
+    }];
+    const { service, storage, repository } = setup(rows);
+
+    await expect(service.backfillDesignMetadata('org-1')).resolves.toEqual({
+      scanned: 1,
+      updated: 0,
+      skipped: 1,
+      failed: 0,
+    });
+    expect(storage.resolveAdapterForFolder).not.toHaveBeenCalled();
+    expect(repository.updateFileMetadata).not.toHaveBeenCalled();
+  });
+
+  it('stops after the bounded number of batches', async () => {
+    const rows = Array.from({ length: 25 }, (_, index) => ({
+      id: `file-${index}`,
+      path: `${index}.pdesign`,
+      folderId: null,
+      metadata: null,
+    }));
+    const repository = {
+      findDesignFilesForMetadataBackfill: vi.fn().mockResolvedValue(rows),
+      updateFileMetadata: vi.fn().mockResolvedValue({ count: 1 }),
+    };
+    const storage = {
+      resolveAdapterForFolder: vi.fn().mockResolvedValue({
+        readFile: vi.fn().mockResolvedValue(Buffer.from(buildPostmillFile(imageDoc, 'Image'))),
+      }),
+    };
+    const service = new FileService(repository as any, storage as any);
+
+    const result = await service.backfillDesignMetadata('org-1');
+
+    expect(result.scanned).toBe(100);
+    expect(repository.findDesignFilesForMetadataBackfill).toHaveBeenCalledTimes(4);
+    expect(repository.updateFileMetadata).toHaveBeenCalledTimes(100);
   });
 });

@@ -183,15 +183,30 @@ export const parsePostmillFile = (
   return parsedFromEntries(entries);
 };
 
-/**
- * Streaming parse for the import endpoint's disk-spooled uploads (up to
- * 1 GB). Only manifest/doc/asset entries are collected — everything else is
- * inflated and discarded — and decompressed bytes are capped so a zip bomb
- * cannot exhaust memory through a small compressed upload.
- */
-export const parsePostmillFileStream = (
+export interface DesignFileMetadata {
+  mode: 'image' | 'video';
+  durationMs?: number;
+}
+
+export const designFileMetadata = (doc: unknown): DesignFileMetadata | null => {
+  const mode = (doc as any)?.mode;
+  if (mode !== 'image' && mode !== 'video') return null;
+  const durationMs = (doc as any)?.outputs?.[0]?.durationMs;
+  return {
+    mode,
+    ...(mode === 'video' &&
+    typeof durationMs === 'number' &&
+    Number.isFinite(durationMs) &&
+    durationMs > 0
+      ? { durationMs }
+      : {}),
+  };
+};
+
+const parsePostmillFileEntries = (
   stream: Readable,
-  maxAssetBytes: number
+  maxAssetBytes: number,
+  metadataOnly = false
 ): Promise<ParsedPostmillFile> =>
   new Promise((resolve, reject) => {
     const entries: Record<string, Uint8Array> = {};
@@ -213,7 +228,8 @@ export const parsePostmillFileStream = (
       const wanted =
         file.name === 'manifest.json' ||
         file.name === 'doc.json' ||
-        file.name.startsWith('assets/');
+        (!metadataOnly && file.name.startsWith('assets/'));
+      if (metadataOnly && !wanted) return;
       const cap =
         file.name === 'doc.json'
           ? POSTMILL_MAX_DOC_BYTES
@@ -267,7 +283,6 @@ export const parsePostmillFileStream = (
         unzip.push(new Uint8Array(0), true);
         settled = true;
         if (!sawFile) {
-          // No local-file header was ever found: this was never a zip.
           reject(new PostmillFileError('corrupt', 'The file is not a readable .pdesign archive'));
           return;
         }
@@ -284,6 +299,22 @@ export const parsePostmillFileStream = (
       fail(new PostmillFileError('corrupt', 'The uploaded file could not be read'))
     );
   });
+
+/**
+ * Streaming parse for the import endpoint's disk-spooled uploads (up to
+ * 1 GB). Only manifest/doc/asset entries are collected — everything else is
+ * inflated and discarded — and decompressed bytes are capped so a zip bomb
+ * cannot exhaust memory through a small compressed upload.
+ */
+export const parsePostmillFileStream = (stream: Readable, maxAssetBytes: number) =>
+  parsePostmillFileEntries(stream, maxAssetBytes);
+
+export const parsePostmillFileMetadataStream = async (
+  stream: Readable
+): Promise<DesignFileMetadata | null> => {
+  const parsed = await parsePostmillFileEntries(stream, 0, true);
+  return designFileMetadata(parsed.doc);
+};
 
 const concatU8 = (chunks: Uint8Array[]): Uint8Array => {
   const total = chunks.reduce((s, c) => s + c.length, 0);

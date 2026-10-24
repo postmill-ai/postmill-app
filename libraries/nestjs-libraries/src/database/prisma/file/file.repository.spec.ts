@@ -323,6 +323,35 @@ describe('FileRepository — AI Designer session purge queries', () => {
   });
 });
 
+describe('FileRepository — design metadata backfill', () => {
+  it('selects a bounded org-scoped batch of active design files missing metadata', async () => {
+    const { repo, model } = makeRepo();
+    model.file.findMany.mockResolvedValue([]);
+
+    await repo.findDesignFilesForMetadataBackfill('org-1', 25, 'file-1');
+
+    expect(model.file.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ organizationId: 'org-1', deletedAt: null }),
+      take: 25,
+      cursor: { id: 'file-1' },
+      skip: 1,
+      orderBy: { id: 'asc' },
+    }));
+  });
+
+  it('updates metadata only for an active row in the same org', async () => {
+    const { repo, model } = makeRepo();
+    model.file.updateMany.mockResolvedValue({ count: 1 });
+
+    await repo.updateFileMetadata('org-1', 'file-1', { kind: 'design', mode: 'image' });
+
+    expect(model.file.updateMany).toHaveBeenCalledWith({
+      where: { id: 'file-1', organizationId: 'org-1', deletedAt: null },
+      data: { metadata: { kind: 'design', mode: 'image' } },
+    });
+  });
+});
+
 describe('FileRepository — generated media type', () => {
   it('stores the bare category when a caller passes a MIME type', async () => {
     const { repo, model } = makeRepo();

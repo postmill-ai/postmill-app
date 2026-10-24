@@ -7,6 +7,9 @@ import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetc
 import { readResponseCapped } from '@postmill-ai/nestjs-libraries/utils/capped-stream';
 import { IStorageAdapter } from '@postmill-ai/nestjs-libraries/upload/upload.interface';
 import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
+import { parsePostmillFileMetadataStream } from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
+import { DESIGN_IMPORT_MAX_BYTES } from '@postmill-ai/nestjs-libraries/upload/design-import.validation';
+import { Readable } from 'stream';
 
 export interface ImportFromPathResult {
   buffer: Buffer;
@@ -87,6 +90,62 @@ export class FileService {
 
   getFilesByPaths(org: string, filePaths: string[]) {
     return this._fileRepository.getFilesByPaths(org, filePaths);
+  }
+
+  async backfillDesignMetadata(org: string) {
+    const stats = { scanned: 0, updated: 0, skipped: 0, failed: 0 };
+    const batchSize = 25;
+    const maxFiles = 100;
+    let cursor: string | undefined;
+
+    while (stats.scanned < maxFiles) {
+      const rows = await this._fileRepository.findDesignFilesForMetadataBackfill(
+        org,
+        Math.min(batchSize, maxFiles - stats.scanned),
+        cursor
+      );
+      if (!rows.length) break;
+      cursor = rows[rows.length - 1].id;
+
+      for (const file of rows) {
+        stats.scanned++;
+        if (file.fileSize > DESIGN_IMPORT_MAX_BYTES) {
+          stats.skipped++;
+          continue;
+        }
+        try {
+          const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, org);
+          const bytes = await adapter.readFile(file.path);
+          const metadata = await parsePostmillFileMetadataStream(Readable.from([bytes]));
+          if (!metadata) throw new Error('Invalid design document metadata');
+
+          const existing =
+            file.metadata && typeof file.metadata === 'object' && !Array.isArray(file.metadata)
+              ? file.metadata as Record<string, unknown>
+              : {};
+          if (Object.entries(metadata).every(([key, value]) => existing[key] === value)) {
+            stats.skipped++;
+            continue;
+          }
+
+          const result = await this._fileRepository.updateFileMetadata(org, file.id, {
+            ...existing,
+            ...metadata,
+          });
+          if (result.count === 1) stats.updated++;
+          else stats.skipped++;
+        } catch (err) {
+          stats.failed++;
+          this._logger.warn(
+            `Design metadata backfill failed for file ${file.id}: ${(err as Error)?.message}`
+          );
+        }
+      }
+
+      if (rows.length < batchSize) break;
+    }
+
+    return stats;
   }
 
   async saveFile(

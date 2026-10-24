@@ -25,9 +25,9 @@ import { useContextMenu } from '@postmill-ai/frontend/components/ui/use-context-
 import { RenameDialog } from '@postmill-ai/frontend/components/files/rename-dialog';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
 import { readErrorMessage } from '@postmill-ai/frontend/components/media-tools/designer/read-error-message';
-import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
-import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
 import { usePathname, useRouter } from 'next/navigation';
+import { getFilePresentation } from './file-presentation';
+import { useOpenFileInDesigner } from './use-open-file-in-designer';
 
 type ViewMode = 'grid' | 'list';
 
@@ -91,6 +91,12 @@ export type FileItem = {
   metadata?: {
     dimensions?: { width?: number; height?: number };
     mimeType?: string;
+    source?: string;
+    kind?: 'design' | 'template';
+    designId?: string;
+    templateId?: string;
+    mode?: 'image' | 'video';
+    durationMs?: number;
   } | null;
   folder?: { id: string; name: string } | null;
 };
@@ -154,6 +160,7 @@ export const FileManager: FC<{
   const router = useRouter();
   const pathname = usePathname();
   const mediaDirectory = useMediaDirectory();
+  const { openFile: openFileInDesigner, pendingFileId: designerPendingFileId } = useOpenFileInDesigner();
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebounce(search, 300);
@@ -455,24 +462,6 @@ export const FileManager: FC<{
     [deleteFolderById]
   );
 
-  const openInDesignerFromFile = useCallback(
-    (file: FileItem) => {
-      const isVideo = hasExtension(file.path, 'mp4', 'mov', 'webm');
-      const isAudio = hasExtension(file.path, 'mp3', 'wav', 'ogg', 'm4a');
-      openInDesigner(
-        {
-          operation: isVideo ? 'video' : isAudio ? 'audio' : 'image',
-          artifactUrl: mediaDirectory.set(file.path),
-          fileId: file.id,
-          source: 'files',
-          thumbUrl: isVideo && file.thumbnail ? mediaDirectory.set(file.thumbnail) : undefined,
-        },
-        router.push
-      );
-    },
-    [mediaDirectory, router]
-  );
-
   const fileMenuItems = useCallback(
     (file: FileItem): ContextMenuItem[] => [
       // Preview and Designer are suppressed in picker mode, where a click means
@@ -480,10 +469,15 @@ export const FileManager: FC<{
       ...(!onSelect
         ? ([
             { label: t('preview', 'Preview'), onClick: () => handleFileClick(file) },
-            {
-              label: t('open_in_designer', 'Open in Designer'),
-              onClick: () => openInDesignerFromFile(file),
-            },
+            ...(getFilePresentation(file).canOpenInDesigner
+              ? [{
+                  label: designerPendingFileId === file.id
+                    ? t('opening_in_designer', 'Opening in Designer...')
+                    : t('open_in_designer', 'Open in Designer'),
+                  disabled: designerPendingFileId === file.id,
+                  onClick: () => openFileInDesigner(file, fileMenu.close),
+                }]
+              : []),
             { label: t('details', 'Details'), onClick: () => setDetailsFile(file) },
             { divider: true },
           ] as ContextMenuItem[])
@@ -504,7 +498,9 @@ export const FileManager: FC<{
       onSelect,
       t,
       handleFileClick,
-      openInDesignerFromFile,
+      openFileInDesigner,
+      designerPendingFileId,
+      fileMenu.close,
       renameFile,
       deleteFile,
       mediaDirectory,

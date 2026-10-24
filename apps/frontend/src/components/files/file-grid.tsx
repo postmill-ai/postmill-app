@@ -1,14 +1,15 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
-import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
-import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import React, { FC, useCallback, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import i18next from '@postmill-ai/react/translation/i18next';
 import type { FileItem } from './file-manager';
 import type { FolderItem } from './folder.utils';
 import { useLongPress } from '@postmill-ai/frontend/components/ui/use-long-press';
+import { FileThumbnail } from './file-preview';
+import { getDesignLabel, getFilePresentation } from './file-presentation';
+import { VideoDurationBadge } from './video-duration-badge';
 
 /** Shape `useContextMenu().openAt` accepts — a real event or a synthesized point. */
 type MenuEvent = {
@@ -28,87 +29,6 @@ const SectionHeading: FC<{ children: React.ReactNode }> = ({ children }) => (
     {children}
   </div>
 );
-
-// Type-based, not extension-based: .webm/.mov clips are typed 'video' (or a
-// full video/* mime) and must not fall into the broken-img path.
-const isVideoFile = (file: FileItem) =>
-  file.type === 'video' || !!file.type?.startsWith('video/');
-
-// Thumbnail with a graceful fallback: prefer a still thumbnail (doubles as a
-// video poster), fall back to the raw image path / video first-frame, and show
-// a placeholder icon when the source is missing/unrenderable (broken image).
-const Thumb: FC<{ file: FileItem }> = ({ file }) => {
-  const mediaDirectory = useMediaDirectory();
-  const t = useT();
-  const [broken, setBroken] = useState(false);
-  const isVideo = isVideoFile(file);
-  const isAudio = hasExtension(file.path, 'mp3', 'wav', 'ogg', 'm4a');
-  const thumb = file.thumbnail
-    ? mediaDirectory.set(file.thumbnail)
-    : !isVideo && !isAudio
-    ? mediaDirectory.set(file.path)
-    : '';
-  const thumbRef = useRef<HTMLImageElement>(null);
-  useEffect(() => {
-    const img = thumbRef.current;
-    if (!img) return;
-    const onError = () => setBroken(true);
-    img.addEventListener('error', onError);
-    return () => img.removeEventListener('error', onError);
-  }, [thumb]);
-
-  if (isAudio) {
-    // Compact audio tile; the full waveform player opens in the modal.
-    return (
-      <div className="flex flex-col items-center justify-center gap-[10px] w-full h-full bg-newBgColorInner text-newTextColor/70">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 18V5l12-2v13" />
-          <circle cx="6" cy="18" r="3" />
-          <circle cx="18" cy="16" r="3" />
-        </svg>
-        <div className="flex items-end gap-[2px] h-[18px]">
-          {[6, 12, 9, 16, 8, 14, 5, 11, 7].map((h, i) => (
-            <span key={i} style={{ height: h }} className="w-[3px] rounded-full bg-btnPrimary/60" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (thumb && !broken) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        ref={thumbRef}
-        src={thumb}
-        alt={file.alt || file.name}
-        className="w-full h-full object-cover"
-        loading="lazy"
-      />
-    );
-  }
-  if (isVideo && !broken) {
-    return (
-      <video
-        src={mediaDirectory.set(file.path)}
-        className="w-full h-full object-cover"
-        muted
-        preload="metadata"
-      >
-        <track kind="captions" src="" label={t('no_captions', 'No captions')} default />
-      </video>
-    );
-  }
-  return (
-    <div className="flex items-center justify-center w-full h-full text-newTextColor/60">
-      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <circle cx="9" cy="9" r="2" />
-        <path d="M21 15l-5-5L5 21" />
-      </svg>
-    </div>
-  );
-};
 
 const formatDate = (d: string) => {
   try {
@@ -246,6 +166,8 @@ const FileTile: FC<{
   t: ReturnType<typeof useT>;
 }> = ({ file, isSelected, onDragStart, onActivate, onPreview, onMenu, longPress, t }) => {
   const tags: string[] = file.tags ? JSON.parse(file.tags) : [];
+  const presentation = getFilePresentation(file);
+  const designLabel = getDesignLabel(file);
 
   // The tile is only armed for HTML5 drag after the pointer has actually
   // travelled — with `draggable` set unconditionally, a few px of movement
@@ -322,9 +244,15 @@ const FileTile: FC<{
       }}
     >
       <div className="w-full aspect-square overflow-hidden rounded-t-[5px] bg-newBgColorInner relative">
-        <Thumb file={file} />
+        <FileThumbnail file={file} />
 
-        {isVideoFile(file) && (
+        {presentation.isDesign && (
+          <span className="absolute top-[6px] start-[6px] max-w-[calc(100%-12px)] truncate rounded-[4px] bg-black/70 px-[6px] py-[3px] text-[10px] font-[500] text-white">
+            {t(designLabel.key, designLabel.fallback)}
+          </span>
+        )}
+
+        {presentation.mediaKind === 'video' && (
           <div
             data-testid="video-play-overlay"
             aria-hidden="true"
@@ -337,6 +265,7 @@ const FileTile: FC<{
             </div>
           </div>
         )}
+        <VideoDurationBadge file={file} />
 
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all pointer-events-none" />
 

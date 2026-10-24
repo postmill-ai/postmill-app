@@ -333,3 +333,41 @@ describe('FileManager URL sync', () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });
+
+describe('FileManager Designer context action', () => {
+  it('hides Designer for unsupported documents instead of rendering a dead action', async () => {
+    respondWith({
+      files: [{
+        ...FILES[0],
+        name: 'report.pdf',
+        originalName: 'report.pdf',
+        path: '/uploads/report.pdf',
+        type: 'document',
+      }],
+    });
+    renderManager();
+    const name = await screen.findByText('report.pdf');
+    fireEvent.contextMenu(name.closest('[role="button"]')!, { clientX: 20, clientY: 30 });
+
+    expect(await screen.findByRole('menuitem', { name: 'Preview' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Open in Designer' })).toBeNull();
+  });
+
+  it('offers Designer for pdesign files', async () => {
+    respondWith({
+      files: [{
+        ...FILES[0],
+        name: 'snapshot.pdesign',
+        originalName: 'snapshot.pdesign',
+        path: '/uploads/snapshot.pdesign',
+        type: 'document',
+        metadata: { kind: 'design', mode: 'image' },
+      }],
+    });
+    renderManager();
+    const name = await screen.findByText('snapshot.pdesign');
+    fireEvent.contextMenu(name.closest('[role="button"]')!, { clientX: 20, clientY: 30 });
+
+    expect(await screen.findByRole('menuitem', { name: 'Open in Designer' })).toBeTruthy();
+  });
+});
