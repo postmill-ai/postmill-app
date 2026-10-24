@@ -126,7 +126,7 @@
     "mastra": "^1.12.2",
     "mime": "^3.0.0",
     "mime-types": "^2.1.35",
-    "multer": "^2.3.0",
+    "multer": "^2.5.0",
     "music-metadata": "^11.12.3",
     "nestjs-command": "^3.1.4",
     "nestjs-real-ip": "^3.0.1",

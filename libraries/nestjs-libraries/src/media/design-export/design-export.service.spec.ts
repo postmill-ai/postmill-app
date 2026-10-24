@@ -97,6 +97,7 @@ const makeService = (over: {
   const fileService = {
     getFileById: vi.fn(async (_org: string, id: string) => over.files?.[id] ?? null),
     saveGeneratedMedia: vi.fn(async (_org: string, data: any) => ({ id: 'artifact-file-1', ...data })),
+    saveMediaInformation: vi.fn(async () => ({})),
   };
   const assetAdapter = { readFile: vi.fn(async () => PNG_BYTES) };
   const localAdapter = {
@@ -340,6 +341,106 @@ describe('DesignExportService.processExport', () => {
     await service.processExport('job-1');
 
     expect(designService.getTemplate).toHaveBeenCalledWith('org-1', 't1');
+    expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith(
+      'org-1',
+      'job-1',
+      expect.objectContaining({ status: 'completed' })
+    );
+  });
+
+  it('copies the design preview as the artifact thumbnail and links the metadata to the source', async () => {
+    const { service, aiSettings, localAdapter, fileService } = makeService({
+      job: pendingExportJob,
+      design: { id: 'd1', name: 'Hero', doc: docWithMedia(), previewFileId: 'preview-1' },
+      files: {
+        'file-1': {
+          id: 'file-1',
+          folderId: null,
+          path: 'https://host.test/uploads/org-1/aaaa.png',
+          originalName: 'hero.png',
+          name: 'hero.png',
+          fileSize: PNG_BYTES.length,
+        },
+        'preview-1': {
+          id: 'preview-1',
+          folderId: null,
+          path: 'https://host.test/uploads/org-1/preview.png',
+          name: 'preview.png',
+          fileSize: PNG_BYTES.length,
+        },
+      },
+    });
+    primePayload({ organizationId: 'org-1', kind: 'design', sourceId: 'd1' });
+
+    await service.processExport('job-1');
+
+    // Zip artifact + preview copy.
+    expect(localAdapter.writeBuffer).toHaveBeenCalledTimes(2);
+    expect(localAdapter.writeBuffer.mock.calls[1][1]).toBe('image/png');
+    const copiedPath = localAdapter.writeBuffer.mock.results[1].value
+      ? await localAdapter.writeBuffer.mock.results[1].value
+      : undefined;
+    expect(fileService.saveMediaInformation).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({ id: 'artifact-file-1', thumbnail: copiedPath })
+    );
+    expect(fileService.saveGeneratedMedia).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({
+        metadata: { source: 'design-export', mime: 'application/zip', kind: 'design', designId: 'd1' },
+      })
+    );
+    expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith(
+      'org-1',
+      'job-1',
+      expect.objectContaining({ status: 'completed' })
+    );
+  });
+
+  it('completes without a thumbnail when the source has no preview file', async () => {
+    const { service, aiSettings, localAdapter, fileService } = makeService({
+      job: pendingExportJob,
+      design: { id: 'd1', name: 'Hero', doc: docWithMedia() },
+      files: {},
+      customFonts: [],
+    });
+    primePayload({ organizationId: 'org-1', kind: 'design', sourceId: 'd1' });
+
+    await service.processExport('job-1');
+
+    expect(localAdapter.writeBuffer).toHaveBeenCalledTimes(1);
+    expect(fileService.saveMediaInformation).not.toHaveBeenCalled();
+    expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith(
+      'org-1',
+      'job-1',
+      expect.objectContaining({ status: 'completed' })
+    );
+  });
+
+  it('still completes when the preview bytes cannot be read', async () => {
+    const { service, aiSettings, localAdapter, fileService } = makeService({
+      job: pendingExportJob,
+      design: { id: 'd1', name: 'Hero', doc: docWithMedia(), previewFileId: 'preview-1' },
+      files: {
+        'preview-1': {
+          id: 'preview-1',
+          folderId: null,
+          path: 'https://host.test/uploads/org-1/preview.png',
+          name: 'preview.png',
+          fileSize: PNG_BYTES.length,
+        },
+      },
+      customFonts: [],
+    });
+    localAdapter.readFile.mockImplementation(async (p: string) => {
+      if (p.includes('preview')) throw new Error('object gone');
+      return PNG_BYTES;
+    });
+    primePayload({ organizationId: 'org-1', kind: 'design', sourceId: 'd1' });
+
+    await service.processExport('job-1');
+
+    expect(fileService.saveMediaInformation).not.toHaveBeenCalled();
     expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith(
       'org-1',
       'job-1',

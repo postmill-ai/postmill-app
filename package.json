@@ -124,7 +124,7 @@
       "@fastify/busboy": "^3.2.2",
       "fast-xml-parser": "^4.5.5",
       "form-data": "^2.5.6",
-      "happy-dom": "^20.8.9",
+      "happy-dom": "^21.0.4",
       "ip-address": "^10.3.1",
       "js-yaml": "^4.3.2",
       "@opentelemetry/propagator-jaeger": "^2.9.0",
@@ -145,7 +145,9 @@
       "compression": "^1.8.2",
       "dompurify": "^3.4.17",
       "body-parser@>=1.0.0 <1.20.9": "1.20.9",
-      "body-parser@>=2.0.0 <2.4.0": "2.4.0"
+      "body-parser@>=2.0.0 <2.4.0": "2.4.0",
+      "multer@>=2.0.0 <2.5.0": "2.5.0",
+      "undici@>=7.30.0 <7.30.1": "7.30.1"
     }
   },
   "volta": {
