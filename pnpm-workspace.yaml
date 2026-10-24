@@ -62,9 +62,9 @@ overrides:
   'hono@<4.12.25': '>=4.12.25 <5'
   # multer <2.3.0: high DoS via deeply nested field names (GHSA-72gw-mp4g-v24j, patched
   # 2.2.0), via crafted (GHSA-wc9g-mqfw-jrwm) and oversized (GHSA-535w-7cp7-47q4) file
-  # fields (patched 2.3.0), pulled by @nestjs/platform-express (pins 2.1.1). Bump to
-  # patched 2.3.x (same major).
-  'multer@<2.3.0': '>=2.3.0 <3'
+  # fields (patched 2.3.0), pulled by @nestjs/platform-express (pins 2.1.1);
+  # GHSA-q7qp-rjg7-q26m raises the floor to 2.5.0. Bump to patched 2.5.x (same major).
+  'multer@<2.3.0': '>=2.5.0 <3'
   # postcss <=8.5.11: high arbitrary file read via attacker-controlled sourceMappingURL
   # in CSS comments (GHSA-6g55-p6wh-862q). Only vulnerable path is next's exact 8.4.31
   # pin; parent-scoped so direct postcss specifiers (^8.5.22) are untouched — an
@@ -91,8 +91,9 @@ overrides:
   # undici >=7.0.0 <7.28.0: high WebSocket DoS (GHSA-vxpw-j846-p89q) and SOCKS5
   # cross-origin request routing (GHSA-hm92-r4w5-c3mj), pulled by jsdom@29.1 via vitest.
   # GHSA-rfgv-xxqx-mfg5 / GHSA-w293-vg96-wgc3 raise the floor to 7.29.1 (also via
-  # @copilotkit/runtime). Same major.
-  'undici@>=7.0.0 <7.29.1': '>=7.29.1 <8'
+  # @copilotkit/runtime); GHSA-xjj6-f33q-929c (cheerio via @langchain/community) raises
+  # it to 7.30.1. Same major.
+  'undici@>=7.0.0 <7.30.1': '>=7.30.1 <8'
   # undici >=8.0.0 <8.5.0: high WebSocket DoS (GHSA-vxpw-j846-p89q, GHSA-38rv-x7px-6hhq) and
   # TLS cert validation bypass (GHSA-vmh5-mc38-953g), direct dependency; GHSA-rfgv-xxqx-mfg5 /
   # GHSA-vp8m-p9jh-q5pm raise the floor to 8.10.2. Same major.
@@ -106,9 +107,12 @@ overrides:
   # ws <8.21.0: high memory-exhaustion DoS from tiny fragments (GHSA-96hv-2xvq-fx4p), pulled by
   # @toruslabs/solana-embed -> socket.io-client -> engine.io-client. Bump to patched 8.21.x.
   'ws@<8.21.0': '>=8.21.0 <9'
-  # happy-dom <20.8.9: critical VM-context-escape RCE (GHSA-96g7-g7g9-jxw8) + follow-up
-  # advisory. Bump to patched 20.8.x (same DOM API).
-  'happy-dom@<20.8.9': '^20.8.9'
+  # happy-dom <21.0.4: high SSRF via CSS/IFrame subresource loading (GHSA-834v-8h66-3h79);
+  # v21 disables both by default. Vitest's peer range is `*` (no suite uses the happy-dom
+  # environment — configs run jsdom/node) and @wyw-in-js/transform only evaluates styles in
+  # it at build time, so the 20→21 cross-major floor is safe. The earlier floor closed the
+  # critical VM-context-escape RCE (GHSA-96g7-g7g9-jxw8).
+  'happy-dom@<21.0.4': '^21.0.4'
   # glob >=10.2.0 <10.5.0: high command injection via -c/--cmd (GHSA-5j98-mcp5-4vw2),
   # pulled by @nestjs/cli. Bump to patched 10.5.x.
   'glob@>=10.2.0 <10.5.0': '>=10.5.0'

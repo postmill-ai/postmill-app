@@ -77,6 +77,15 @@ jobs:
         #   GHSA-mrhx-c7xc-m3w5  zod          — the repo's own zod is 4.6.7 (patched ≥4.6.6); the flagged instances are the
         #                                     zod 3.25.x line pinned by @copilotkit/* and `ai` peer requirements, and no
         #                                     patched 3.x release exists (latest 3.25.76 is still flagged)
+        #   GHSA-xcx6-jx8p-x3h5  @azure/msal-node — transitive: @copilotkit/runtime@1.69.3 → channels-intelligence →
+        #                                     channels-teams → @microsoft/agents-hosting, which pins msal-node 5.x
+        #                                     EXACTLY in every release incl. latest stable 1.9.1 (5.6.0) and the
+        #                                     1.10.0-beta line — no patched 5.x exists (fix is ≥7.1.0). A 5→7
+        #                                     double-major override of an auth library under a parent built against
+        #                                     5.x is unsafe; the real fix is the CopilotKit family bump to 1.79.x
+        #                                     (channels-teams 0.11.x drops agents-hosting entirely), which needs
+        #                                     product-level validation of the /chat surface — tracked as a follow-up.
+        #                                     Only reachable when the Teams channel is active.
         # Drop entries the moment a patched release exists. Any NON-allowlisted
         # high/critical advisory fails the job.
         run: |
@@ -95,7 +104,8 @@ jobs:
             "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
             "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
             "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
-            "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5"
+            "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+            "https://github.com/advisories/GHSA-xcx6-jx8p-x3h5"
           ]'
           REMAINING=$(echo "$OUT" | jq -c --argjson allowed "$ALLOWED" \
             '[.advisories[] | select(.url as $u | $allowed | index($u) | not) | {module: .module_name, severity, url}]')
@@ -104,7 +114,7 @@ jobs:
             echo "::error::high/critical advisories present (see above)"
             exit 1
           fi
-          echo "::warning::Only allowlisted unfixable advisories remain (braces, http-cache-semantics, node-forge — see step comment). Revisit when patched releases ship."
+          echo "::warning::Only allowlisted unfixable advisories remain (braces, http-cache-semantics, node-forge, zod, msal-node — see step comment). Revisit when patched releases ship."
           exit 0
 
       - name: Check for reintroduced channel env reads
