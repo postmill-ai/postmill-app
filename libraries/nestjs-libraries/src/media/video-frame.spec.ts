@@ -21,7 +21,11 @@ vi.mock('child_process', () => ({
   spawn: (...args: any[]) => mockSpawn(...args),
 }));
 
-import { extractVideoFrame, VIDEO_FRAME_MAX_BYTES } from './video-frame';
+import {
+  extractVideoFrame,
+  extractVideoFrameInfo,
+  VIDEO_FRAME_MAX_BYTES,
+} from './video-frame';
 
 const fakeJpeg = Buffer.from('fake-jpeg-bytes');
 
@@ -152,5 +156,50 @@ describe('extractVideoFrame', () => {
       await extractVideoFrame(Buffer.alloc(VIDEO_FRAME_MAX_BYTES + 1), 'mp4')
     ).toBeNull();
     expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it('reports audio-only media from the probe without attempting a frame decode', async () => {
+    queueProcesses(makeFfmpegProcess(1, [
+      'Duration: 00:00:03.00, start: 0.000000',
+      'Stream #0:0: Audio: opus, 48000 Hz, stereo, fltp',
+    ].join('\n')));
+
+    const out = await extractVideoFrameInfo(Buffer.from('webm-bytes'), 'webm');
+
+    expect(out).toEqual({ frame: null, hasVideoStream: false, hasAudioStream: true });
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    expect(mockRmSync).toHaveBeenCalled();
+  });
+
+  it('reports video and audio streams while returning an ordinary video frame', async () => {
+    queueProcesses(
+      makeFfmpegProcess(1, [
+        'Duration: 00:00:10.00, start: 0.000000',
+        'Stream #0:0: Video: h264 (High), yuv420p, 1920x1080',
+        'Stream #0:1(eng): Audio: aac (LC), 48000 Hz, stereo',
+      ].join('\n')),
+      makeFfmpegProcess(0),
+    );
+
+    const out = await extractVideoFrameInfo(Buffer.from('mp4-bytes'), 'mp4');
+
+    expect(out).toEqual({ frame: fakeJpeg, hasVideoStream: true, hasAudioStream: true });
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves stream information when frame decoding fails', async () => {
+    queueProcesses(
+      makeFfmpegProcess(1, [
+        'Duration: 00:00:10.00, start: 0.000000',
+        'Stream #0:0: Video: h264 (High), yuv420p, 1920x1080',
+      ].join('\n')),
+      makeFfmpegProcess(1, 'decode failed'),
+      makeFfmpegProcess(1, 'decode failed'),
+    );
+    mockExistsSync.mockReturnValue(false);
+
+    const out = await extractVideoFrameInfo(Buffer.from('mp4-bytes'), 'mp4');
+
+    expect(out).toEqual({ frame: null, hasVideoStream: true, hasAudioStream: false });
   });
 });

@@ -166,6 +166,7 @@ onlyBuiltDependencies:
   - bcrypt
   - '@sentry-internal/node-cpu-profiler'
   - canvas
+  - ffmpeg-static
 
 allowBuilds:
   '@google/genai': true

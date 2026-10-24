@@ -84,6 +84,24 @@ export class FileService {
     return this._fileRepository.findVideosWithoutThumbnail(org, limit);
   }
 
+  reclassifyFile(
+    org: string,
+    id: string,
+    type: 'image' | 'audio',
+    mime: string,
+    metadata: unknown,
+  ) {
+    const existing =
+      metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+        ? metadata as Record<string, unknown>
+        : {};
+    return this._fileRepository.reclassifyFile(org, id, type, {
+      ...existing,
+      mime,
+      mimeType: mime,
+    });
+  }
+
   getFileByPath(org: string, filePath: string) {
     return this._fileRepository.getFileByPath(org, filePath);
   }

@@ -2,8 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockExtractVideoFrame = vi.fn();
 vi.mock('@postmill-ai/nestjs-libraries/media/video-frame', () => ({
-  extractVideoFrame: (...args: any[]) => mockExtractVideoFrame(...args),
+  extractVideoFrameInfo: (...args: any[]) => mockExtractVideoFrame(...args),
   VIDEO_FRAME_MAX_BYTES: 256 * 1024 * 1024,
+}));
+
+const mockFromBuffer = vi.fn();
+vi.mock('@postmill-ai/nestjs-libraries/upload/file-type.compat', () => ({
+  fromBuffer: (...args: any[]) => mockFromBuffer(...args),
 }));
 
 let inngestEnabled = false;
@@ -44,6 +49,7 @@ function makeService(over: {
         : over.file
     ),
     saveMediaInformation: vi.fn().mockResolvedValue({}),
+    reclassifyFile: vi.fn().mockResolvedValue({ count: 1 }),
     findVideosWithoutThumbnail: vi.fn().mockResolvedValue([]),
   };
   const service = new VideoThumbnailService(
@@ -57,7 +63,12 @@ describe('VideoThumbnailService.generateForFile', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     inngestEnabled = false;
-    mockExtractVideoFrame.mockResolvedValue(fakeFrame);
+    mockFromBuffer.mockResolvedValue(undefined);
+    mockExtractVideoFrame.mockResolvedValue({
+      frame: fakeFrame,
+      hasVideoStream: true,
+      hasAudioStream: false,
+    });
   });
 
   it('extracts a frame, stores it beside the video, and persists the thumbnail', async () => {
@@ -173,8 +184,84 @@ describe('VideoThumbnailService.generateForFile', () => {
     expect(await service.generateForFile('org-1', 'file-1')).toBeNull();
 
     const { service: service2 } = makeService();
-    mockExtractVideoFrame.mockResolvedValue(null);
+    mockExtractVideoFrame.mockResolvedValue({
+      frame: null,
+      hasVideoStream: true,
+      hasAudioStream: false,
+    });
     expect(await service2.generateForFile('org-1', 'file-1')).toBeNull();
+  });
+
+  it.each(['image/jpeg', 'image/png'])('reclassifies a mislabeled still %s without writing a thumbnail', async (mime) => {
+    const file = {
+      id: 'file-image',
+      type: 'video',
+      path: '/uploads/org-1/slide.jpg',
+      thumbnail: null,
+      alt: '',
+      fileSize: 100,
+      folderId: null,
+      metadata: { provider: 'reel-farm', durationSeconds: 4 },
+    };
+    const { service, adapter, fileService } = makeService({ file });
+    mockFromBuffer.mockResolvedValue({ mime, ext: mime === 'image/jpeg' ? 'jpg' : 'png' });
+
+    const out = await service.generateOutcomeForFile('org-1', file.id);
+
+    expect(out).toEqual({ thumbnail: null, reclassified: { type: 'image', mime } });
+    expect(fileService.reclassifyFile).toHaveBeenCalledWith(
+      'org-1',
+      file.id,
+      'image',
+      mime,
+      file.metadata,
+    );
+    expect(mockExtractVideoFrame).not.toHaveBeenCalled();
+    expect(adapter.writeBuffer).not.toHaveBeenCalled();
+  });
+
+  it.each(['image/gif', 'image/webp'])('keeps %s on video thumbnail handling', async (mime) => {
+    const { service, fileService } = makeService();
+    mockFromBuffer.mockResolvedValue({ mime, ext: mime.split('/')[1] });
+
+    expect(await service.generateForFile('org-1', 'file-1')).toBe('/uploads/org-1/thumb-1.jpg');
+    expect(mockExtractVideoFrame).toHaveBeenCalled();
+    expect(fileService.reclassifyFile).not.toHaveBeenCalled();
+  });
+
+  it('reclassifies audio-only WebM and preserves metadata for the merge', async () => {
+    const file = {
+      id: 'file-audio',
+      type: 'video',
+      path: '/uploads/org-1/voiceover.webm',
+      thumbnail: null,
+      alt: '',
+      fileSize: 100,
+      folderId: null,
+      metadata: { provider: 'elevenlabs', durationSeconds: 3 },
+    };
+    const { service, adapter, fileService } = makeService({ file });
+    mockFromBuffer.mockResolvedValue({ mime: 'video/webm', ext: 'webm' });
+    mockExtractVideoFrame.mockResolvedValue({
+      frame: null,
+      hasVideoStream: false,
+      hasAudioStream: true,
+    });
+
+    const out = await service.generateOutcomeForFile('org-1', file.id);
+
+    expect(out).toEqual({
+      thumbnail: null,
+      reclassified: { type: 'audio', mime: 'audio/webm' },
+    });
+    expect(fileService.reclassifyFile).toHaveBeenCalledWith(
+      'org-1',
+      file.id,
+      'audio',
+      'audio/webm',
+      file.metadata,
+    );
+    expect(adapter.writeBuffer).not.toHaveBeenCalled();
   });
 });
 
@@ -218,7 +305,12 @@ describe('VideoThumbnailService.backfillOrgThumbnails', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     inngestEnabled = false;
-    mockExtractVideoFrame.mockResolvedValue(fakeFrame);
+    mockFromBuffer.mockResolvedValue(undefined);
+    mockExtractVideoFrame.mockResolvedValue({
+      frame: fakeFrame,
+      hasVideoStream: true,
+      hasAudioStream: false,
+    });
   });
 
   it('generates thumbnails for every backfill row and counts outcomes', async () => {
@@ -240,7 +332,7 @@ describe('VideoThumbnailService.backfillOrgThumbnails', () => {
 
     const stats = await service.backfillOrgThumbnails('org-1');
 
-    expect(stats).toEqual({ scanned: 3, generated: 3, failed: 0 });
+    expect(stats).toEqual({ scanned: 3, generated: 3, reclassified: 0, failed: 0 });
   });
 
   it('counts failures without aborting the run', async () => {
@@ -250,11 +342,24 @@ describe('VideoThumbnailService.backfillOrgThumbnails', () => {
       { id: 'file-2' },
     ]);
     mockExtractVideoFrame
-      .mockResolvedValueOnce(fakeFrame)
-      .mockResolvedValueOnce(null);
+      .mockResolvedValueOnce({ frame: fakeFrame, hasVideoStream: true, hasAudioStream: false })
+      .mockResolvedValueOnce({ frame: null, hasVideoStream: true, hasAudioStream: false });
 
     const stats = await service.backfillOrgThumbnails('org-1');
 
-    expect(stats).toEqual({ scanned: 2, generated: 1, failed: 1 });
+    expect(stats).toEqual({ scanned: 2, generated: 1, reclassified: 0, failed: 1 });
+  });
+
+  it('counts reclassified rows separately from generated thumbnails', async () => {
+    const { service, fileService } = makeService();
+    fileService.findVideosWithoutThumbnail.mockResolvedValue([{ id: 'file-image' }]);
+    vi.spyOn(service, 'generateOutcomeForFile').mockResolvedValue({
+      thumbnail: null,
+      reclassified: { type: 'image', mime: 'image/jpeg' },
+    });
+
+    const stats = await service.backfillOrgThumbnails('org-1');
+
+    expect(stats).toEqual({ scanned: 1, generated: 0, reclassified: 1, failed: 0 });
   });
 });

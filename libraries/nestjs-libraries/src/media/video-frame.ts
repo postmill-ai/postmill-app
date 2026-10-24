@@ -73,17 +73,24 @@ async function grabFrame(
   return fs.statSync(outPath).size > 0;
 }
 
+export interface VideoFrameInfo {
+  frame: Buffer | null;
+  hasVideoStream: boolean;
+  hasAudioStream: boolean;
+}
+
 /**
- * Extract a poster frame from a video buffer as JPEG bytes. Seeks to ~0.1s
- * (past a fade-from-black head); degenerate files — unparseable header, or a
- * clip shorter than the seek — fall back to the literal first frame. Returns
- * null when no frame could be decoded; never throws.
+ * Extract a poster frame and report streams found by the existing ffmpeg probe.
+ * Seeks to ~0.1s (past a fade-from-black head); degenerate files — unparseable
+ * header, or a clip shorter than the seek — fall back to the literal first
+ * frame. Failures return a null frame; never throws.
  */
-export async function extractVideoFrame(
+export async function extractVideoFrameInfo(
   buffer: Buffer,
   ext = 'mp4'
-): Promise<Buffer | null> {
-  if (!buffer.length || buffer.length > VIDEO_FRAME_MAX_BYTES) return null;
+): Promise<VideoFrameInfo> {
+  const empty = { frame: null, hasVideoStream: false, hasAudioStream: false };
+  if (!buffer.length || buffer.length > VIDEO_FRAME_MAX_BYTES) return empty;
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-vframe-'));
   try {
@@ -94,24 +101,37 @@ export async function extractVideoFrame(
     // Duration probe guard: a headerless/degenerate file reports no Duration —
     // seeking past EOF would yield an empty frame, so drop to frame 0.
     const probe = await runFfmpeg(['-hide_banner', '-i', inPath]);
+    const hasVideoStream = /^\s*Stream #\d+:\d+.*: Video:/m.test(probe.stderr);
+    const hasAudioStream = /^\s*Stream #\d+:\d+.*: Audio:/m.test(probe.stderr);
+    if (hasAudioStream && !hasVideoStream) {
+      return { frame: null, hasVideoStream, hasAudioStream };
+    }
     const duration = parseFfmpegDurationSeconds(probe.stderr);
     const seek =
       duration != null && duration > VIDEO_FRAME_SEEK_SECONDS * 2
         ? VIDEO_FRAME_SEEK_SECONDS
         : 0;
 
+    let frame: Buffer | null = null;
     if (await grabFrame(inPath, outPath, seek)) {
-      return fs.readFileSync(outPath);
+      frame = fs.readFileSync(outPath);
+    } else if (seek > 0 && (await grabFrame(inPath, outPath, 0))) {
+      // The seek produced nothing (e.g. a stream whose first packet lands
+      // later) — one last try at the literal first frame before giving up.
+      frame = fs.readFileSync(outPath);
     }
-    // The seek produced nothing (e.g. a stream whose first packet lands
-    // later) — one last try at the literal first frame before giving up.
-    if (seek > 0 && (await grabFrame(inPath, outPath, 0))) {
-      return fs.readFileSync(outPath);
-    }
-    return null;
+    return { frame, hasVideoStream, hasAudioStream };
   } catch {
-    return null;
+    return empty;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/** Compatibility wrapper for callers that only need the JPEG frame. */
+export async function extractVideoFrame(
+  buffer: Buffer,
+  ext = 'mp4'
+): Promise<Buffer | null> {
+  return (await extractVideoFrameInfo(buffer, ext)).frame;
 }
