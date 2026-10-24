@@ -5,6 +5,18 @@ export const initializeSentryBasic = (environment: string, dsn: string, extensio
     return;
   }
 
+  const tracesRateOverride = parseFloat(
+    process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? ''
+  );
+  const tracesSampleRate =
+    environment === 'development'
+      ? 1.0
+      : Number.isFinite(tracesRateOverride) &&
+          tracesRateOverride >= 0 &&
+          tracesRateOverride <= 1
+        ? tracesRateOverride
+        : 0.25;
+
   const ignorePatterns = [
     /^Failed to fetch$/,
     /^Failed to fetch .*/i,
@@ -30,7 +42,7 @@ export const initializeSentryBasic = (environment: string, dsn: string, extensio
         },
       },
       integrations: [
-        Sentry.consoleLoggingIntegration({ levels: ['log', 'info', 'warn', 'error', 'debug', 'assert', 'trace'] }),
+        Sentry.consoleLoggingIntegration({ levels: ['warn', 'error'] }),
       ],
       environment: environment || 'development',
       spotlight: process.env.SENTRY_SPOTLIGHT === '1',
@@ -38,7 +50,7 @@ export const initializeSentryBasic = (environment: string, dsn: string, extensio
       sendDefaultPii: false,
       ...extension,
       debug: environment === 'development',
-      tracesSampleRate: 1.0,
+      tracesSampleRate,
 
       beforeSend(event, hint) {
         if (event.exception && event.exception.values) {

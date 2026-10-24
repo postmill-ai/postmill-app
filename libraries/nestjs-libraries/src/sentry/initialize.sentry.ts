@@ -121,6 +121,15 @@ export const initializeSentry = (appName: string, allowLogs = false) => {
   const isDev = process.env.NODE_ENV === 'development';
   const profilingEnabled = process.env.SENTRY_PROFILING === '1' || !isDev;
 
+  const tracesRateOverride = parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE ?? '');
+  const tracesSampleRate = isDev
+    ? 1.0
+    : Number.isFinite(tracesRateOverride) &&
+        tracesRateOverride >= 0 &&
+        tracesRateOverride <= 1
+      ? tracesRateOverride
+      : 0.2;
+
   try {
     Sentry.init({
       initialScope: {
@@ -149,11 +158,11 @@ export const initializeSentry = (appName: string, allowLogs = false) => {
           recordOutputs: false,
         }),
       ],
-      tracesSampleRate: 1.0,
+      tracesSampleRate,
       enableLogs: true,
 
       // Profiling
-      profileSessionSampleRate: profilingEnabled ? (isDev ? 1.0 : 0.45) : 0,
+      profileSessionSampleRate: profilingEnabled ? (isDev ? 1.0 : 0.1) : 0,
       profileLifecycle: 'trace',
 
       beforeSend(event, hint) {
