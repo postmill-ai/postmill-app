@@ -171,6 +171,22 @@ describe('DesignPreviewService', () => {
       expect(videoDoc.outputs[0].tracks).toHaveLength(1);
     });
 
+    it('labels an audio-only design instead of producing a black card', async () => {
+      const audioDoc = structuredClone(videoDoc);
+      audioDoc.outputs[0].tracks[0].type = 'audio';
+
+      await service.renderPreviewBuffer(audioDoc, { orgId: 'org-1' });
+
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      expect(renderDoc.outputs[0].children).toHaveLength(2);
+      expect(renderDoc.outputs[0].children[1]).toMatchObject({
+        type: 'text',
+        text: 'Audio-only design',
+        fill: '#FFFFFF',
+      });
+      expect(audioDoc.outputs[0].tracks[0].type).toBe('audio');
+    });
+
     it('rejects when the underlying render rejects', async () => {
       renderService.renderPage.mockRejectedValue(new Error('video output'));
 
