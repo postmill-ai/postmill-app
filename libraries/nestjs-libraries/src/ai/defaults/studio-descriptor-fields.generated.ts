@@ -254,6 +254,284 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
             "type": "toggle"
           }
         ]
+      },
+      {
+        "key": "text-to-image",
+        "operation": "image",
+        "fields": [
+          {
+            "name": "model",
+            "type": "select"
+          },
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "aspect_ratio",
+            "type": "select"
+          },
+          {
+            "name": "resolution",
+            "type": "select"
+          }
+        ]
+      },
+      {
+        "key": "gpt-image",
+        "operation": "image",
+        "fields": [
+          {
+            "name": "model",
+            "type": "select"
+          },
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "aspect_ratio",
+            "type": "select"
+          },
+          {
+            "name": "quality",
+            "type": "select"
+          }
+        ]
+      },
+      {
+        "key": "text-to-video",
+        "operation": "video",
+        "fields": [
+          {
+            "name": "model",
+            "type": "select"
+          },
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "duration_secs",
+            "type": "number"
+          },
+          {
+            "name": "aspect_ratio",
+            "type": "select"
+          },
+          {
+            "name": "resolution",
+            "type": "select"
+          },
+          {
+            "name": "generate_audio",
+            "type": "toggle"
+          }
+        ]
+      }
+    ]
+  },
+  "fal": {
+    "provider": "fal",
+    "tabs": [
+      {
+        "key": "text-to-image",
+        "operation": "image",
+        "model": "fal-ai/flux/schnell",
+        "fields": [
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "image_size",
+            "type": "select"
+          },
+          {
+            "name": "num_inference_steps",
+            "type": "number"
+          },
+          {
+            "name": "output_format",
+            "type": "select"
+          },
+          {
+            "name": "seed",
+            "type": "number"
+          },
+          {
+            "name": "enable_safety_checker",
+            "type": "toggle"
+          }
+        ]
+      },
+      {
+        "key": "text-to-video",
+        "operation": "video",
+        "fields": [
+          {
+            "name": "model",
+            "type": "select"
+          },
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "negative_prompt",
+            "type": "text"
+          },
+          {
+            "name": "duration",
+            "type": "select"
+          },
+          {
+            "name": "aspect_ratio",
+            "type": "select"
+          },
+          {
+            "name": "cfg_scale",
+            "type": "number"
+          }
+        ]
+      },
+      {
+        "key": "image-to-video",
+        "operation": "video",
+        "fields": [
+          {
+            "name": "model",
+            "type": "select"
+          },
+          {
+            "name": "image_url",
+            "type": "media"
+          },
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "negative_prompt",
+            "type": "text"
+          },
+          {
+            "name": "duration",
+            "type": "select"
+          },
+          {
+            "name": "cfg_scale",
+            "type": "number"
+          }
+        ]
+      },
+      {
+        "key": "pika-text-to-video",
+        "operation": "video",
+        "model": "fal-ai/pika/v2.2/text-to-video",
+        "fields": [
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "negative_prompt",
+            "type": "text"
+          },
+          {
+            "name": "aspect_ratio",
+            "type": "select"
+          },
+          {
+            "name": "resolution",
+            "type": "select"
+          },
+          {
+            "name": "duration",
+            "type": "select"
+          },
+          {
+            "name": "seed",
+            "type": "number"
+          }
+        ]
+      },
+      {
+        "key": "pika-image-to-video",
+        "operation": "video",
+        "model": "fal-ai/pika/v2.2/image-to-video",
+        "fields": [
+          {
+            "name": "image_url",
+            "type": "media"
+          },
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "negative_prompt",
+            "type": "text"
+          },
+          {
+            "name": "resolution",
+            "type": "select"
+          },
+          {
+            "name": "duration",
+            "type": "select"
+          },
+          {
+            "name": "seed",
+            "type": "number"
+          }
+        ]
+      },
+      {
+        "key": "pika-pikaffects",
+        "operation": "video",
+        "model": "fal-ai/pika/v1.5/pikaffects",
+        "fields": [
+          {
+            "name": "image_url",
+            "type": "media"
+          },
+          {
+            "name": "pikaffect",
+            "type": "select"
+          },
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "seed",
+            "type": "number"
+          }
+        ]
+      },
+      {
+        "key": "text-to-music",
+        "operation": "audio",
+        "model": "fal-ai/stable-audio",
+        "fields": [
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "seconds_total",
+            "type": "number"
+          },
+          {
+            "name": "cfg_scale",
+            "type": "number"
+          },
+          {
+            "name": "seed",
+            "type": "number"
+          }
+        ]
       }
     ]
   },
@@ -653,8 +931,8 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
       }
     ]
   },
-  "fal": {
-    "provider": "fal",
+  "kling": {
+    "provider": "kling",
     "tabs": [
       {
         "key": "text-to-video",
@@ -669,10 +947,6 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
             "type": "prompt"
           },
           {
-            "name": "negative_prompt",
-            "type": "text"
-          },
-          {
             "name": "duration",
             "type": "select"
           },
@@ -681,8 +955,12 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
             "type": "select"
           },
           {
-            "name": "cfg_scale",
-            "type": "number"
+            "name": "resolution",
+            "type": "select"
+          },
+          {
+            "name": "audio",
+            "type": "select"
           }
         ]
       },
@@ -695,7 +973,11 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
             "type": "select"
           },
           {
-            "name": "image_url",
+            "name": "image",
+            "type": "media"
+          },
+          {
+            "name": "image_tail",
             "type": "media"
           },
           {
@@ -703,24 +985,27 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
             "type": "prompt"
           },
           {
-            "name": "negative_prompt",
-            "type": "text"
-          },
-          {
             "name": "duration",
             "type": "select"
           },
           {
-            "name": "cfg_scale",
-            "type": "number"
+            "name": "resolution",
+            "type": "select"
+          },
+          {
+            "name": "audio",
+            "type": "select"
           }
         ]
       },
       {
-        "key": "text-to-video",
-        "operation": "video",
-        "model": "fal-ai/pika/v2.2/text-to-video",
+        "key": "text-to-image",
+        "operation": "image",
         "fields": [
+          {
+            "name": "model",
+            "type": "select"
+          },
           {
             "name": "prompt",
             "type": "prompt"
@@ -738,65 +1023,7 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
             "type": "select"
           },
           {
-            "name": "duration",
-            "type": "select"
-          },
-          {
-            "name": "seed",
-            "type": "number"
-          }
-        ]
-      },
-      {
-        "key": "image-to-video",
-        "operation": "video",
-        "model": "fal-ai/pika/v2.2/image-to-video",
-        "fields": [
-          {
-            "name": "image_url",
-            "type": "media"
-          },
-          {
-            "name": "prompt",
-            "type": "prompt"
-          },
-          {
-            "name": "negative_prompt",
-            "type": "text"
-          },
-          {
-            "name": "resolution",
-            "type": "select"
-          },
-          {
-            "name": "duration",
-            "type": "select"
-          },
-          {
-            "name": "seed",
-            "type": "number"
-          }
-        ]
-      },
-      {
-        "key": "pikaffects",
-        "operation": "video",
-        "model": "fal-ai/pika/v1.5/pikaffects",
-        "fields": [
-          {
-            "name": "image_url",
-            "type": "media"
-          },
-          {
-            "name": "pikaffect",
-            "type": "select"
-          },
-          {
-            "name": "prompt",
-            "type": "prompt"
-          },
-          {
-            "name": "seed",
+            "name": "n",
             "type": "number"
           }
         ]
@@ -1166,54 +1393,6 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
           {
             "name": "speed",
             "type": "number"
-          }
-        ]
-      },
-      {
-        "key": "text-to-video",
-        "operation": "video",
-        "fields": [
-          {
-            "name": "prompt",
-            "type": "prompt"
-          },
-          {
-            "name": "model",
-            "type": "select"
-          },
-          {
-            "name": "size",
-            "type": "select"
-          },
-          {
-            "name": "seconds",
-            "type": "select"
-          }
-        ]
-      },
-      {
-        "key": "image-to-video",
-        "operation": "video",
-        "fields": [
-          {
-            "name": "input_reference",
-            "type": "media"
-          },
-          {
-            "name": "prompt",
-            "type": "prompt"
-          },
-          {
-            "name": "model",
-            "type": "select"
-          },
-          {
-            "name": "size",
-            "type": "select"
-          },
-          {
-            "name": "seconds",
-            "type": "select"
           }
         ]
       }

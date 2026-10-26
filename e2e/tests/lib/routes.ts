@@ -379,6 +379,24 @@ export const ROUTES: RouteDef[] = [
     "memberGated": true
   },
   {
+    "name": "media › fal",
+    "path": "/media/fal",
+    "area": "media",
+    "publicRoute": false,
+    "expectsContent": true,
+    "minActionables": 1,
+    "memberGated": true
+  },
+  {
+    "name": "media › kling-ai",
+    "path": "/media/kling-ai",
+    "area": "media",
+    "publicRoute": false,
+    "expectsContent": true,
+    "minActionables": 1,
+    "memberGated": true
+  },
+  {
     "name": "media › kling",
     "path": "/media/kling",
     "area": "media",

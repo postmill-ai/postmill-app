@@ -132,15 +132,13 @@ export const MEDIA_TABS: MediaTab[] = [
     ),
   },
   {
-    href: '/media/kling',
-    badges: ['Video', 'Image'],
-    label: 'Kling',
+    href: '/media/fal',
+    badges: ['Image', 'Video', 'Audio'],
+    label: 'fal.ai',
     section: 'Providers',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="4" width="14" height="16" rx="2" />
-        <path d="M16 9l6-3v12l-6-3" />
-        <path d="M7 9l4 3-4 3z" />
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M5 3h6v6H5V3Zm8 0h6v6h-6V3ZM5 11h6v6H5v-6Zm8 0h6v6h-6v-6ZM5 19h6v2H5v-2Zm8 0h6v2h-6v-2Z" />
       </svg>
     ),
   },
@@ -630,13 +628,11 @@ export const MEDIA_SECTION_LABELS: Record<string, { labelKey: string; labelDefau
 };
 
 // Most studio routes equal the provider identifier (/media/<id>). These few
-// don't — most are frontend-only studios that ride another provider's
-// credential/config (kling/pika ride fal), while kling-ai is the direct Kling AI
-// provider whose route simply isn't its identifier — so their menu visibility
-// tracks the mapped provider's state.
+// don't — Pika rides the fal credential, while kling-ai is the direct Kling AI
+// provider whose route isn't its identifier — so menu visibility tracks the
+// mapped provider's state.
 export const ROUTE_TO_IDENTIFIER: Record<string, string> = {
   'google-ai': 'google',
-  kling: 'fal',
   'kling-ai': 'kling',
   pika: 'fal',
 };

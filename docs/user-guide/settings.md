@@ -357,9 +357,11 @@ icons and capability chips, a search box and capability filter chips, an **On/Of
 **Make Primary** per configured provider, and **Test / Remove** actions. Click a provider's row to
 enter its API credentials (encrypted at rest).
 
-It lists every AI media provider studio — fal.ai, OpenAI, ElevenLabs, HeyGen, Runway, Black Forest
-Labs, Google, Replicate, Stability AI, MiniMax, Luma, and more; see
-[Media Studios](./media/index.md) for the full list.
+It lists every AI media provider — fal.ai, direct Kling AI, OpenAI, ElevenLabs, HeyGen, Runway,
+Black Forest Labs, Google, Replicate, Stability AI, MiniMax, Luma, and more; see
+[Media Studios](./media/index.md) for the full list. The fal.ai card opens `/media/fal`, and the
+Kling AI card opens `/media/kling-ai`. Pika uses the configured fal.ai connection and deliberately
+has no separate provider card.
 
 Image generation returns immediately; video, audio, and avatar generation run as background jobs
 and the finished artifact is saved into your storage when the provider completes.

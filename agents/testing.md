@@ -143,7 +143,7 @@ never hand-edit the artifact.
 
 | Gate | Workflow | Refresh with |
 |---|---|---|
-| Studio descriptor metadata | `test.yml` — "Studio descriptor metadata drift gate" | `node tools/codegen/generate-studio-descriptor-registry.mjs` |
+| Studio descriptor metadata + generated default-settings fields | `test.yml` — "Studio descriptor metadata drift gate" | `node tools/codegen/generate-studio-descriptor-registry.mjs` |
 | Destructive schema diff | `test.yml` — "Destructive schema guard (vs origin/main)" | n/a — fix the migration, or set `ALLOW_DESTRUCTIVE_SCHEMA` |
 | `openapi.yml` | `boot-guard.yml` — "OpenAPI drift gate" | `pnpm run build:backend && pnpm run openapi:generate` |
 

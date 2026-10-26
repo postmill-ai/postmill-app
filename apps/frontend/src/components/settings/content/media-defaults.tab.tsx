@@ -219,9 +219,9 @@ const DESCRIPTOR_LOADERS: Record<string, () => Promise<StudioDescriptor>> = {
   deepgram: async () =>
     (await import('../../media-tools/deepgram/descriptor')).deepgramDescriptor,
   openai: async () => (await import('../../media-tools/openai/descriptor')).openaiDescriptor,
-  fal: async () => (await import('../../media-tools/kling/descriptor')).klingDescriptor,
+  fal: async () => (await import('../../media-tools/fal/descriptor')).falDescriptor,
   pika: async () => (await import('../../media-tools/pika/descriptor')).pikaDescriptor,
-  kling: async () => (await import('../../media-tools/kling/descriptor')).klingDescriptor,
+  kling: async () => (await import('../../media-tools/kling-ai/descriptor')).klingAiDescriptor,
 };
 
 async function loadDescriptor(

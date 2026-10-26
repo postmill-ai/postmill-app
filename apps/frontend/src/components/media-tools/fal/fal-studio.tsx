@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { StudioShell } from '@postmill-ai/frontend/components/media-tools/studio-kit/studio-shell';
-import { klingDescriptor } from './descriptor';
+import { falDescriptor } from './descriptor';
 
-export function KlingStudio() {
-  return <StudioShell descriptor={klingDescriptor} />;
+export function FalStudio() {
+  return <StudioShell descriptor={falDescriptor} />;
 }

@@ -148,6 +148,63 @@ describe('fal media adapter (sync image + queued video)', () => {
       adapter.generateImage('x', { apiKey: 'k', model: 'fal-ai/flux?fal_webhook=https://evil' }),
     ).rejects.toThrow(/Invalid model id/);
   });
+
+  it('keeps the Pika video request shape unchanged', async () => {
+    const pollBase = 'https://queue.fal.run/fal-ai/pika';
+    const { recs, ctx } = makeCtx(() =>
+      res({ request_id: 'pika-1', response_url: `${pollBase}/requests/pika-1` }),
+    );
+    const adapter: any = falMediaModule.create(ctx as any);
+    await adapter.generateVideo('a dancing cat', {
+      apiKey: 'fal-key',
+      model: 'fal-ai/pika/v2.2/text-to-video',
+      input: { negative_prompt: 'blurry', aspect_ratio: '16:9', resolution: '720p', duration: '5', seed: 7 },
+    });
+    expect(recs[0].url).toBe('https://queue.fal.run/fal-ai/pika/v2.2/text-to-video');
+    expect(JSON.parse(recs[0].body)).toEqual({
+      prompt: 'a dancing cat',
+      negative_prompt: 'blurry',
+      aspect_ratio: '16:9',
+      resolution: '720p',
+      duration: '5',
+      seed: 7,
+    });
+  });
+
+  it('submits Stable Audio and polls its audio_file artifact', async () => {
+    const model = 'fal-ai/stable-audio';
+    const pollBase = 'https://queue.fal.run/fal-ai/stable-audio';
+    const submitCtx = makeCtx(() =>
+      res({ request_id: 'audio-1', response_url: `${pollBase}/requests/audio-1` }),
+    );
+    const submitAdapter: any = falMediaModule.create(submitCtx.ctx as any);
+    const submission = await submitAdapter.generateAudio('warm ambient piano', {
+      apiKey: 'fal-key',
+      model,
+      input: { seconds_total: 30, cfg_scale: 7 },
+    });
+    expect(submitCtx.recs[0].url).toBe('https://queue.fal.run/fal-ai/stable-audio');
+    expect(JSON.parse(submitCtx.recs[0].body)).toEqual({
+      prompt: 'warm ambient piano',
+      seconds_total: 30,
+      cfg_scale: 7,
+    });
+    expect(submission.jobId).toBe(`${model}::audio-1::${b64url(pollBase)}`);
+
+    const pollCtx = makeCtx((url) =>
+      url.endsWith('/status')
+        ? res({ status: 'COMPLETED' })
+        : res({ audio_file: { url: 'https://cdn.fal/audio.wav' } }),
+    );
+    const pollAdapter: any = falMediaModule.create(pollCtx.ctx as any);
+    const result = await pollAdapter.pollJob(submission.jobId, { apiKey: 'fal-key' });
+    expect(result.status).toBe('completed');
+    expect(result.artifactUrl).toBe('https://cdn.fal/audio.wav');
+    expect(pollCtx.recs.map((rec) => rec.url)).toEqual([
+      `${pollBase}/requests/audio-1/status`,
+      `${pollBase}/requests/audio-1`,
+    ]);
+  });
 });
 
 describe('fal media adapter testConnection', () => {

@@ -105,8 +105,8 @@ export class FalAdapter implements MediaProviderAdapter {
   constructor(private readonly _fetch: SafeFetchPort) {}
   readonly identifier = 'fal';
   // Display name shown in Settings → Media. This card is fal.ai (fal keys are
-  // `key-id:key-secret`; the backend calls fal.run) — it backs the /media/kling and
-  // /media/pika studio pages, which are model-collection studios riding this adapter.
+  // `key-id:key-secret`; the backend calls fal.run) — it backs the canonical /media/fal
+  // studio and the branded /media/pika model-collection studio.
   // The dedicated direct integration for real klingai.com API keys is the separate
   // `kling` provider (@postmill-ai/provider-kling).
   readonly name = 'fal.ai';

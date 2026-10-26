@@ -1,12 +1,5 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import dynamic from 'next/dynamic';
-
-const KlingStudio = dynamic(
-  () => import('@postmill-ai/frontend/components/media-tools/kling/kling-studio').then((m) => m.KlingStudio),
-  { ssr: false }
-);
-
-export default function KlingPage() {
-  return <KlingStudio />;
+export default function LegacyKlingPage() {
+  redirect('/media/fal');
 }
