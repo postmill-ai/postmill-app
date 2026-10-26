@@ -307,6 +307,99 @@ describe('MediaStudioService', () => {
     });
   });
 
+  describe('generate model validation', () => {
+    const staticCatalog = {
+      hasModelList: false,
+      mediaModels: {
+        'text-to-video': [
+          { id: 'fal-ai/kling-video/v1.6/standard/text-to-video', label: 'Kling 1.6 Standard', fields: [] },
+          { id: 'fal-ai/kling-video/v2/master/text-to-video', label: 'Kling 2.0 Master', fields: [] },
+        ],
+      },
+    };
+
+    it('rejects a model from another provider before creating the job (stale cross-provider model)', async () => {
+      const { service, kernel, lifecycle, adapter } = makeService();
+      kernel.getMetadata.mockReturnValue(staticCatalog);
+
+      await expect(
+        service.generate('org-1', 'user-1', 'test-provider', {
+          operation: 'video',
+          model: 'veo-3.1-generate-001',
+          input: { prompt: 'a rocket' },
+        }),
+      ).rejects.toThrow(
+        'Model "veo-3.1-generate-001" is not available for media provider "test-provider"',
+      );
+
+      expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
+      expect(adapter.generateVideo).not.toHaveBeenCalled();
+    });
+
+    it('accepts a model from the provider static catalog', async () => {
+      const { service, kernel, lifecycle, adapter } = makeService();
+      kernel.getMetadata.mockReturnValue(staticCatalog);
+      adapter.generateVideo.mockResolvedValue({ jobId: 'upstream-1' });
+
+      const result = await service.generate('org-1', 'user-1', 'test-provider', {
+        operation: 'video',
+        model: 'fal-ai/kling-video/v2/master/text-to-video',
+        input: { prompt: 'a rocket' },
+      });
+
+      expect(result).toEqual({ jobId: 'job-1' });
+      expect(adapter.generateVideo).toHaveBeenCalledWith(
+        'a rocket',
+        expect.objectContaining({ model: 'fal-ai/kling-video/v2/master/text-to-video' }),
+      );
+      expect(lifecycle.attachProviderJob).toHaveBeenCalledWith('job-1', 'upstream-1', 'org-1');
+    });
+
+    it('skips validation when the provider declares no static model list', async () => {
+      const { service, kernel, adapter } = makeService();
+      kernel.getMetadata.mockReturnValue({ hasModelList: false });
+      adapter.generateVideo.mockResolvedValue({ jobId: 'upstream-1' });
+
+      const result = await service.generate('org-1', 'user-1', 'test-provider', {
+        operation: 'video',
+        model: 'any-free-form-model-id',
+        input: { prompt: 'a rocket' },
+      });
+
+      expect(result).toEqual({ jobId: 'job-1' });
+      expect(adapter.generateVideo).toHaveBeenCalled();
+    });
+
+    it('skips validation for hub providers with a live catalog (hasModelList), whose static list is only a fallback', async () => {
+      const { service, kernel, adapter } = makeService();
+      kernel.getMetadata.mockReturnValue({ ...staticCatalog, hasModelList: true });
+      adapter.generateVideo.mockResolvedValue({ jobId: 'upstream-1' });
+
+      const result = await service.generate('org-1', 'user-1', 'test-provider', {
+        operation: 'video',
+        model: 'some-live-catalog-model',
+        input: { prompt: 'a rocket' },
+      });
+
+      expect(result).toEqual({ jobId: 'job-1' });
+      expect(adapter.generateVideo).toHaveBeenCalled();
+    });
+
+    it('skips validation when no model is requested', async () => {
+      const { service, kernel, adapter } = makeService();
+      kernel.getMetadata.mockReturnValue(staticCatalog);
+      adapter.generateVideo.mockResolvedValue({ jobId: 'upstream-1' });
+
+      const result = await service.generate('org-1', 'user-1', 'test-provider', {
+        operation: 'video',
+        input: { prompt: 'a rocket' },
+      });
+
+      expect(result).toEqual({ jobId: 'job-1' });
+      expect(adapter.generateVideo).toHaveBeenCalled();
+    });
+  });
+
   describe('generate mediaInputs resolution', () => {
     it('resolves a media-library file id to its provider-reachable URL', async () => {
       const { service, fileService, adapter } = makeService();

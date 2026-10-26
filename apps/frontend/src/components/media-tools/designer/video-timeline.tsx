@@ -889,7 +889,10 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
         onChange={setProvider}
       />
       {provider ? (
+        // key: remount on provider switch so the previous provider's field
+        // values (model!) can't leak into the new provider's submit.
         <CompactStudio
+          key={provider}
           provider={provider}
           operation="video"
           prompt={prompt}
@@ -985,7 +988,10 @@ export const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) 
         onChange={setProvider}
       />
       {provider ? (
+        // key: remount on provider switch so the previous provider's field
+        // values (model!) can't leak into the new provider's submit.
         <CompactStudio
+          key={provider}
           provider={provider}
           operation="audio"
           prompt={prompt}
@@ -1076,7 +1082,10 @@ export const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedIm
       {provider ? (
         // Avatar studios are descriptor `video` tabs (script + portrait model);
         // the dialog's script textarea drives the studio's prompt field.
+        // key: remount on provider switch so the previous provider's field
+        // values (model!) can't leak into the new provider's submit.
         <CompactStudio
+          key={provider}
           provider={provider}
           operation="video"
           prompt={script}
