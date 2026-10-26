@@ -3,6 +3,7 @@ import {
   ProviderUpstreamError,
   classifyUpstream,
   extractUpstreamDetail,
+  upstreamErrorFromBody,
   upstreamErrorFromResponse,
   upstreamErrorFromUnknown,
   upstreamFailureText,
@@ -58,6 +59,38 @@ describe('extractUpstreamDetail', () => {
     ['', ''],
   ])('%s → %s', (body, detail) => {
     expect(extractUpstreamDetail(body)).toBe(detail);
+  });
+  it('unwraps an OBJECT detail (ElevenLabs 402) to its message, not the JSON blob', () => {
+    // The exact body behind the QA report: HTTP 402 paid_plan_required.
+    const body = JSON.stringify({
+      detail: {
+        type: 'payment_required',
+        code: 'paid_plan_required',
+        message: 'This endpoint requires a Pro plan or above.',
+        docs_url: 'https://elevenlabs.io/docs',
+      },
+    });
+    expect(extractUpstreamDetail(body)).toBe('This endpoint requires a Pro plan or above.');
+    const err = upstreamErrorFromBody(
+      { domain: 'media', providerId: 'elevenlabs', providerName: 'ElevenLabs' },
+      402,
+      body,
+    );
+    expect(err.kind).toBe('quota');
+    expect(err.message).toBe(
+      "ElevenLabs reports the account's quota or billing limit was reached (HTTP 402): This endpoint requires a Pro plan or above.",
+    );
+  });
+  it('falls back to detail.code, then detail.type, when the object has no message', () => {
+    expect(extractUpstreamDetail('{"detail":{"type":"payment_required","code":"paid_plan_required"}}')).toBe(
+      'paid_plan_required',
+    );
+    expect(extractUpstreamDetail('{"detail":{"type":"payment_required"}}')).toBe('payment_required');
+  });
+  it('reads an object detail nested under error', () => {
+    expect(
+      extractUpstreamDetail('{"error":{"detail":{"message":"Nested object detail"}}}'),
+    ).toBe('Nested object detail');
   });
   it('redacts signed-URL params and bounds the length', () => {
     const long = 'x'.repeat(1000);

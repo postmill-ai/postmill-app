@@ -138,8 +138,8 @@ export function classifyUpstream(
 
 // One human line out of the usual JSON error shapes:
 //   {error:{message}} (Google, OpenAI), {error:"…"}, {message}, {detail} (X, FastAPI),
-//   {errors:[{message|title}]}, {title}. Falls back to the raw body. Always
-//   redacted (signed-URL params) and bounded.
+//   {detail:{message|code|type}} (ElevenLabs), {errors:[{message|title}]}, {title}.
+//   Falls back to the raw body. Always redacted (signed-URL params) and bounded.
 export function extractUpstreamDetail(body: string): string {
   const raw = (body || '').trim();
   let candidate = raw;
@@ -160,18 +160,30 @@ function pickMessage(parsed: any): string | null {
   if (!parsed || typeof parsed !== 'object') return null;
   const str = (v: unknown) =>
     typeof v === 'string' && v.trim() ? v.trim() : null;
+  // `detail` is a string for most providers but an OBJECT for FastAPI-style
+  // bodies (ElevenLabs 402: {detail:{code, message, …}}) — pull the human
+  // sentence out of it, falling back to its code/type, never the raw JSON.
+  const detail = (v: unknown): string | null => {
+    const s = str(v);
+    if (s) return s;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const d = v as Record<string, unknown>;
+      return str(d.message) || str(d.code) || str(d.type) || null;
+    }
+    return null;
+  };
   const err = parsed.error;
   if (err && typeof err === 'object') {
-    const m = str(err.message) || str(err.detail) || str(err.msg);
+    const m = str(err.message) || detail(err.detail) || str(err.msg);
     if (m) return m;
   }
   const errors = Array.isArray(parsed.errors) ? parsed.errors[0] : null;
   return (
     str(err) ||
     str(parsed.message) ||
-    str(parsed.detail) ||
+    detail(parsed.detail) ||
     str(parsed.msg) ||
-    (errors && (str(errors.message) || str(errors.title) || str(errors.detail))) ||
+    (errors && (str(errors.message) || str(errors.title) || detail(errors.detail))) ||
     str(parsed.title) ||
     null
   );

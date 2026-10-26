@@ -309,7 +309,19 @@ function reconcileMetadata(providerId, existing, catalog) {
   const mergedMediaModels = {};
   for (const cat of mediaCategories) {
     if (catalog.mediaModels[cat]) {
-      mergedMediaModels[cat] = catalog.mediaModels[cat];
+      // Descriptor regeneration rebuilds each model as {id, label, fields};
+      // curated notes are authored by hand in metadata.ts, so carry them
+      // across by model id instead of dropping them.
+      const existingNotes = new Map(
+        (existing.mediaModels?.[cat] || [])
+          .filter((m) => m.notes?.length)
+          .map((m) => [m.id, m.notes]),
+      );
+      mergedMediaModels[cat] = catalog.mediaModels[cat].map((m) =>
+        existingNotes.has(m.id)
+          ? { id: m.id, label: m.label, notes: existingNotes.get(m.id), fields: m.fields }
+          : m,
+      );
     }
   }
 

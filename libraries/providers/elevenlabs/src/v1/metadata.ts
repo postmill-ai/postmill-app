@@ -542,6 +542,9 @@ export const metadata: ProviderMetadata = {
       {
         "id": "veo-3.1-fast-generate-001",
         "label": "Veo 3.1 Fast",
+        "notes": [
+          "Requires an ElevenLabs Pro plan or above"
+        ],
         "fields": [
           {
             "name": "duration_secs",
@@ -601,6 +604,9 @@ export const metadata: ProviderMetadata = {
       {
         "id": "veo-3.1-generate-001",
         "label": "Veo 3.1 (quality)",
+        "notes": [
+          "Requires an ElevenLabs Pro plan or above"
+        ],
         "fields": [
           {
             "name": "duration_secs",
