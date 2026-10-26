@@ -80,10 +80,14 @@ export const MODEL_ALLOWLIST: Record<string, string[]> = {
   'image-to-video': [
     'minimax/video-01',
     'bytedance/seedance-1-pro',
-    'kwaivgi/kling-v2.1',
+    // kling-v2.1 was DISCONTINUED upstream (Replicate: "Error code 1203: The
+    // model 'kling-v2-1' has been discontinued"). kling-v2.1-master is the
+    // official successor (verified against the live Replicate schema: only
+    // `prompt` is required, optional `start_image` first frame — no `mode`
+    // trap like v2.1's end_image-requires-pro).
+    'kwaivgi/kling-v2.1-master',
     // t2v-capable too, and its `start_image` input makes it the better Kling
-    // for i2v (verified against the live Replicate schema; no `mode` trap like
-    // v2.1's end_image-requires-pro).
+    // for i2v (verified against the live Replicate schema).
     'kwaivgi/kling-v2.5-turbo-pro',
   ],
   'video-to-video': [
@@ -148,7 +152,7 @@ export const OFFICIAL_MODELS = new Set<string>([
   'google/veo-3.1',
   'minimax/video-01',
   'bytedance/seedance-1-pro',
-  'kwaivgi/kling-v2.1',
+  'kwaivgi/kling-v2.1-master',
   'kwaivgi/kling-v2.5-turbo-pro',
   'wan-video/wan-2.7-videoedit',
   'topazlabs/video-upscale',

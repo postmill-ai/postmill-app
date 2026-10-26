@@ -2481,6 +2481,9 @@ export const metadata: ProviderMetadata = {
       {
         "id": "bytedance/seedance-1-pro",
         "label": "seedance-1-pro",
+        "notes": [
+          "No audio track"
+        ],
         "fields": [
           {
             "name": "resolution",
@@ -2583,6 +2586,7 @@ export const metadata: ProviderMetadata = {
         "id": "kwaivgi/kling-v2.5-turbo-pro",
         "label": "kling-v2.5-turbo-pro",
         "notes": [
+          "No audio track",
           "Prompt adherence can be loose; text in video may contain errors"
         ],
         "fields": [
@@ -2662,6 +2666,9 @@ export const metadata: ProviderMetadata = {
       {
         "id": "bytedance/seedance-1-pro",
         "label": "seedance-1-pro",
+        "notes": [
+          "No audio track"
+        ],
         "fields": [
           {
             "name": "resolution",
@@ -2761,28 +2768,19 @@ export const metadata: ProviderMetadata = {
         ]
       },
       {
-        "id": "kwaivgi/kling-v2.1",
-        "label": "kling-v2.1",
+        "id": "kwaivgi/kling-v2.1-master",
+        "label": "kling-v2.1-master",
         "notes": [
+          "No audio track",
           "Prompt adherence can be loose; text in video may contain errors"
         ],
         "fields": [
           {
-            "name": "mode",
-            "label": "mode",
-            "help": "Standard has a resolution of 720p, pro is 1080p. Both are 24fps.",
-            "type": "select",
-            "options": [
-              {
-                "value": "standard",
-                "label": "standard"
-              },
-              {
-                "value": "pro",
-                "label": "pro"
-              }
-            ],
-            "default": "standard"
+            "name": "negative_prompt",
+            "label": "Negative Prompt",
+            "help": "Things you do not want to see in the video",
+            "type": "text",
+            "default": ""
           },
           {
             "name": "duration",
@@ -2800,13 +2798,6 @@ export const metadata: ProviderMetadata = {
               }
             ],
             "default": "5"
-          },
-          {
-            "name": "negative_prompt",
-            "label": "Negative Prompt",
-            "help": "Things you do not want to see in the video",
-            "type": "text",
-            "default": ""
           }
         ]
       },
@@ -2814,6 +2805,7 @@ export const metadata: ProviderMetadata = {
         "id": "kwaivgi/kling-v2.5-turbo-pro",
         "label": "kling-v2.5-turbo-pro",
         "notes": [
+          "No audio track",
           "Prompt adherence can be loose; text in video may contain errors"
         ],
         "fields": [

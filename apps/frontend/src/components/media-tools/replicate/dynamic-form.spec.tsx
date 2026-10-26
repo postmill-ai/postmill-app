@@ -94,3 +94,41 @@ describe('DynamicForm language enum', () => {
     expect(labels).toEqual(['Select…', 'std', 'pro']);
   });
 });
+
+describe('DynamicForm per-model hidden fields', () => {
+  const VIDEO_01_MODEL = {
+    id: 'minimax/video-01',
+    name: 'video-01',
+    coverImageUrl: null,
+    warm: true,
+    versionId: 'v1',
+    inputSchema: {
+      required: ['prompt'],
+      properties: {
+        prompt: { type: 'string', title: 'Prompt' },
+        first_frame_image: {
+          type: 'string',
+          format: 'uri',
+          title: 'First Frame Image',
+        },
+        subject_reference: {
+          type: 'string',
+          format: 'uri',
+          title: 'Subject Reference',
+        },
+      },
+    },
+  };
+
+  it('hides video-01 subject_reference so an i2v upload lands on first_frame_image', async () => {
+    // Prod failure (QA 2026-10-26): an uploaded image placed in
+    // subject_reference silently switches video-01 to the upstream S2V-01
+    // model, which failed every attempt with "Error 1000: unexpected error".
+    useReplicateStore.getState().setCategory('image-to-video');
+    useReplicateStore.getState().setSelectedModel(VIDEO_01_MODEL);
+    render(<DynamicForm />);
+
+    expect(await screen.findByText('First Frame Image')).toBeTruthy();
+    expect(screen.queryByText('Subject Reference')).toBeNull();
+  });
+});

@@ -11,6 +11,7 @@ import {
 } from '@postmill-ai/react/translation/language-name';
 import {
   classifySchema,
+  MODEL_HIDDEN_FIELDS,
   type ClassifiedField,
   type InputSchema,
   type SchemaField,
@@ -309,11 +310,14 @@ export function DynamicForm({ hiddenFields }: { hiddenFields?: Set<string> }) {
     const set = new Set<string>(ALWAYS_EXCLUDED);
     // Inpaint drives image + mask via the dedicated mask editor.
     if (selectedCategory === 'inpaint') set.add('image');
+    // Model-specific traps (e.g. video-01's subject_reference — see
+    // MODEL_HIDDEN_FIELDS).
+    for (const name of MODEL_HIDDEN_FIELDS[selectedModel?.id ?? ''] ?? []) set.add(name);
     // Embedded hosts (CompactReplicate) own some fields themselves — e.g. the
     // dialog's prompt box drives the schema's prompt field.
     for (const name of hiddenFields ?? []) set.add(name);
     return set;
-  }, [selectedCategory, hiddenFields]);
+  }, [selectedCategory, selectedModel, hiddenFields]);
 
   const { primary, advanced } = useMemo(
     () => classifySchema(selectedModel?.inputSchema as unknown as InputSchema | null, excluded),
