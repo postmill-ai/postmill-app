@@ -9,6 +9,9 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-poster';
 import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 
+const isImageFile = (type?: string | null) =>
+  type === 'image' || !!type?.startsWith('image/');
+
 /**
  * Server-side design preview rendering.
  *
@@ -57,7 +60,7 @@ export class DesignPreviewService {
     if (fileIds.size) {
       const files = await this._fileService.getByIds(orgId, [...fileIds]);
       for (const file of files) {
-        if (file.type === 'image') posters.set(file.id, file.path);
+        if (isImageFile(file.type)) posters.set(file.id, file.path);
         else if (file.thumbnail) posters.set(file.id, file.thumbnail);
       }
       for (const fileId of fileIds) {
@@ -74,7 +77,7 @@ export class DesignPreviewService {
     for (const clip of clipsBySrc) {
       const file = await this._fileService.getFileByPath(orgId, clip.src);
       if (!file) continue;
-      const thumb = file.type === 'image'
+      const thumb = isImageFile(file.type)
         ? file.path
         : file.thumbnail ??
           (await this._videoThumbnailService.generateForFile(orgId, file.id, {
