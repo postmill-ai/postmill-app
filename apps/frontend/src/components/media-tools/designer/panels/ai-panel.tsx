@@ -242,7 +242,10 @@ export const AiPanel: FC<AiPanelProps> = ({ store, onClose }) => {
       />
 
       {provider && (
+        // key: remount on provider switch so the previous provider's field
+        // values (model!) can't leak into the new provider's submit.
         <CompactStudio
+          key={provider}
           provider={provider}
           operation="image"
           prompt={prompt}

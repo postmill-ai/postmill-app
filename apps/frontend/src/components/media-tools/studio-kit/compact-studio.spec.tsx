@@ -225,4 +225,48 @@ describe('CompactStudio (descriptor provider)', () => {
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Generate' })).toBeNull();
   });
+
+  // Regression: the Designer dialogs key CompactStudio by provider so switching
+  // providers remounts the studio. Without the remount, valuesByTab survives
+  // across providers that share a tab key (both ElevenLabs and fal/Kling use
+  // 'text-to-video') and the stale model id is submitted to the new provider
+  // (production: model 'veo-3.1-generate-001' sent to fal → upstream 404).
+  it('resets the model selection when the provider is switched (keyed remount)', async () => {
+    const Harness = () => {
+      const [provider, setProvider] = React.useState('elevenlabs');
+      return (
+        <>
+          <button onClick={() => setProvider('fal')}>switch provider</button>
+          <CompactStudio
+            key={provider}
+            provider={provider}
+            operation="video"
+            prompt="a rocket"
+            onGenerated={vi.fn()}
+          />
+        </>
+      );
+    };
+    renderStudio(<Harness />);
+
+    // Pick the non-default Veo model on ElevenLabs.
+    const elevenLabsModel = await screen.findByLabelText('Model');
+    fireEvent.change(elevenLabsModel, { target: { value: 'veo-3.1-generate-001' } });
+    expect((elevenLabsModel as HTMLSelectElement).value).toBe('veo-3.1-generate-001');
+
+    // Switch to fal — the remount must drop the ElevenLabs values entirely.
+    fireEvent.click(screen.getByText('switch provider'));
+    const falModel = (await screen.findByLabelText('Model')) as HTMLSelectElement;
+    expect(falModel.value).toBe('fal-ai/kling-video/v1.6/standard/text-to-video');
+
+    // And the submitted body carries fal's model, never the stale ElevenLabs id.
+    // (fetchMock calls accumulate across tests — match the fal call specifically.)
+    const falGenerateCall = () =>
+      fetchMock.mock.calls.find(([url]) => String(url).includes('/media/studio/fal/generate'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(falGenerateCall()).toBeTruthy());
+    const [, init] = falGenerateCall()!;
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.model).toBe('fal-ai/kling-video/v1.6/standard/text-to-video');
+  });
 });

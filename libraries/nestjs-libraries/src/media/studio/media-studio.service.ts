@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { AIMediaJob } from '@prisma/client';
 import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
@@ -170,6 +170,22 @@ export class MediaStudioService {
     const { prompt, model: inputModel, ...rest } = input;
     const model = params.model || (typeof inputModel === 'string' ? inputModel : undefined);
     const promptStr = typeof prompt === 'string' ? prompt : '';
+
+    // Cross-provider guard: a stale model id from another provider's studio (or a
+    // hand-written request) otherwise sails through to the upstream API and fails
+    // with a confusing 404. Reject early — but only when the static catalog is
+    // authoritative: `hasModelList` providers (hubs like OpenRouter/DeepInfra)
+    // expose a live catalog and accept ids beyond their curated static fallback,
+    // and providers with no static list at all are free-form.
+    const metadata = this._kernel.getMetadata('media', provider, config.version);
+    if (model && metadata && !metadata.hasModelList) {
+      const catalog = this._staticModelsForOperation(provider, config.version, params.operation);
+      if (catalog.length > 0 && !catalog.some((m) => m.id === model)) {
+        throw new BadRequestException(
+          `Model "${model}" is not available for media provider "${provider}"`
+        );
+      }
+    }
 
     const job = await this._lifecycle.createPendingJob({
       organizationId: orgId,
