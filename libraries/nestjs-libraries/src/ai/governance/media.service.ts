@@ -43,6 +43,7 @@ import {
   MEDIA_CATEGORY_OPERATION,
   type AiMediaCategory,
 } from '@postmill-ai/nestjs-libraries/ai/defaults/default-categories';
+import { MODEL_ALLOWLIST } from '@postmill-ai/nestjs-libraries/media/replicate-studio/replicate-catalog.allowlist';
 
 // Read-only, credential-free view of which media providers are active per operation.
 // Surfaced to non-admin users (4F) so they can see what media capabilities the org
@@ -1802,7 +1803,16 @@ export class AiMediaService {
     );
   }
 
-  async removeVideoBackground(videoUrl: string, options?: { orgId?: string }): Promise<string> {
+  async removeVideoBackground(videoUrl: string, options?: { orgId?: string; model?: string }): Promise<string> {
+    // A caller-pinned model (the Designer's White/Green-screen choice) must be
+    // on the curated 'video-background' allowlist — the client sends a raw
+    // Replicate model id, so without this check the field would be an
+    // arbitrary-model execution primitive billed to the org's key.
+    if (options?.model && !(MODEL_ALLOWLIST['video-background'] || []).includes(options.model)) {
+      throw new BadRequestException(
+        `Model "${options.model}" is not allowed for video background removal.`,
+      );
+    }
     const candidates = await this._resolveForOperation(options?.orgId, 'video-bg');
 
     let lastError: Error | undefined;
@@ -1812,7 +1822,7 @@ export class AiMediaService {
       try {
         const submission = await candidate.adapter.removeVideoBackground(videoUrl, {
           credentials: candidate.credentials,
-          model: candidate.model,
+          model: options?.model || candidate.model,
           input: candidate.settings as MediaGenerateOptions['input'],
         });
         if (options?.orgId && this._lifecycle) {

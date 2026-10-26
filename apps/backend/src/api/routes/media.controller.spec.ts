@@ -81,7 +81,19 @@ describe('MediaController — Designer AI-media routes', () => {
     it('remove-video-background delegates (org, videoUrl) and returns { id, status:pending }', async () => {
       const { controller, aiDefaults } = build();
       const res = await controller.removeVideoBackground(org, { videoUrl: 'https://x/v.mp4' } as any);
-      expect(aiDefaults.videoBackground).toHaveBeenCalledWith('org-1', 'https://x/v.mp4');
+      expect(aiDefaults.videoBackground).toHaveBeenCalledWith('org-1', 'https://x/v.mp4', { model: undefined });
+      expect(res).toEqual({ id: 'job-bg', status: 'pending' });
+    });
+
+    it('remove-video-background forwards an explicit model choice', async () => {
+      const { controller, aiDefaults } = build();
+      const res = await controller.removeVideoBackground(org, {
+        videoUrl: 'https://x/v.mp4',
+        model: 'lucataco/rembg-video',
+      } as any);
+      expect(aiDefaults.videoBackground).toHaveBeenCalledWith('org-1', 'https://x/v.mp4', {
+        model: 'lucataco/rembg-video',
+      });
       expect(res).toEqual({ id: 'job-bg', status: 'pending' });
     });
 

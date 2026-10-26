@@ -39,6 +39,8 @@ import {
 } from '../clip-look-presets';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { runClipTransformRequest, VIDEO_BG_REMOVAL_MODELS } from '../clip-transform';
 import { FontFamilyPicker } from './font-family-picker';
 import { VoiceoverClipSection } from './voiceover-clip-section';
 
@@ -709,6 +711,39 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     [clip, clipTrackType]
   );
 
+  // --- AI background removal (video clips) ---------------------------------
+  // Same runClipTransform request/poll/land path the timeline clip context
+  // menu uses (clip-transform.ts); the choice picks WHICH removal model runs.
+  // "Auto" omits `model`, so the org's configured media default wins.
+  const fetch = useFetch();
+  const mountedRef = useRef(true);
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
+  const [bgRemovalRunning, setBgRemovalRunning] = useState(false);
+
+  const runBackgroundRemoval = useCallback(
+    async (model?: string) => {
+      if (!clip?.src || bgRemovalRunning) return;
+      setBgRemovalRunning(true);
+      try {
+        await runClipTransformRequest({
+          store,
+          target: { outputIndex, trackId, clipId },
+          endpoint: '/media/remove-video-background',
+          body: model ? { videoUrl: clip.src, model } : { videoUrl: clip.src },
+          fetch,
+          translate,
+          toaster,
+          isMounted: () => mountedRef.current,
+        });
+      } finally {
+        if (mountedRef.current) setBgRemovalRunning(false);
+      }
+    },
+    [clip?.src, bgRemovalRunning, store, outputIndex, trackId, clipId, fetch, translate, toaster],
+  );
+
   if (!clip) return null;
 
   return (
@@ -791,6 +826,52 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           ))}
         </select>
       </div>
+
+      {/* Background removal — video clips only. Three choices mirror the
+          timeline clip menu's Remove-background submenu: White / Green screen
+          pin the model explicitly (allowlist-enforced server-side), Auto
+          defers to the org default. */}
+      {clipTrackType === 'video' && !!clip.src && (
+        <div className="pt-1 border-t border-studioBorder space-y-2">
+          <div className="text-[11px] text-textColor/50">
+            {translate('designer_background_removal', 'Background removal')}
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              disabled={bgRemovalRunning}
+              title={translate('bg_removal_white_hint', 'Best for clips shot on a white/light background')}
+              onClick={() => runBackgroundRemoval(VIDEO_BG_REMOVAL_MODELS.white)}
+              className="flex-1 h-7 rounded text-[11px] font-medium border border-studioBorder text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {translate('bg_removal_white_background', 'White background')}
+            </button>
+            <button
+              type="button"
+              disabled={bgRemovalRunning}
+              title={translate('bg_removal_green_hint', 'Best for clips shot on a green screen')}
+              onClick={() => runBackgroundRemoval(VIDEO_BG_REMOVAL_MODELS.green)}
+              className="flex-1 h-7 rounded text-[11px] font-medium border border-studioBorder text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {translate('bg_removal_green_screen', 'Green screen')}
+            </button>
+            <button
+              type="button"
+              disabled={bgRemovalRunning}
+              title={translate('bg_removal_auto_hint', 'Use the organization default model')}
+              onClick={() => runBackgroundRemoval()}
+              className="flex-1 h-7 rounded text-[11px] font-medium border border-studioBorder text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {translate('bg_removal_auto', 'Auto (org default)')}
+            </button>
+          </div>
+          <p className="text-[10px] text-textColor/40">
+            {bgRemovalRunning
+              ? translate('designer_bg_removal_running', 'Removing background — the clip updates when it finishes.')
+              : translate('designer_bg_removal_hint', 'Replaces this clip with a background-free version.')}
+          </p>
+        </div>
+      )}
 
       {/* Audio */}
       <div className="pt-1 border-t border-studioBorder">

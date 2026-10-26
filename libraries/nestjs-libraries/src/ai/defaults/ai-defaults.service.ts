@@ -448,9 +448,9 @@ export class AiDefaultsService {
     return this._aiMediaService.captionVideo(orgId, videoUrl);
   }
 
-  async videoBackground(orgId: string, videoUrl: string, _opts?: { background?: string }) {
+  async videoBackground(orgId: string, videoUrl: string, opts?: { model?: string }) {
     await this._requireMedia(orgId, 'video-background');
-    return this._aiMediaService.removeVideoBackground(videoUrl, { orgId });
+    return this._aiMediaService.removeVideoBackground(videoUrl, { orgId, model: opts?.model });
   }
 
   async videoUpscale(orgId: string, videoUrl: string) {

@@ -371,6 +371,18 @@ describe('AiDefaultsService', () => {
       await service.videoBackground('org-1', 'https://video');
       expect(mockMediaService.removeVideoBackground).toHaveBeenCalledWith('https://video', {
         orgId: 'org-1',
+        model: undefined,
+      });
+    });
+
+    it('videoBackground forwards an explicit model choice to removeVideoBackground', async () => {
+      vi.mocked(mockMediaService.removeVideoBackground).mockResolvedValue('url');
+      await service.videoBackground('org-1', 'https://video', {
+        model: 'arielreplicate/robust_video_matting',
+      });
+      expect(mockMediaService.removeVideoBackground).toHaveBeenCalledWith('https://video', {
+        orgId: 'org-1',
+        model: 'arielreplicate/robust_video_matting',
       });
     });
 

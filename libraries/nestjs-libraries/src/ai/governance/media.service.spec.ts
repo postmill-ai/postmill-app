@@ -823,6 +823,59 @@ describe('AiMediaService', () => {
     });
   });
 
+  describe('removeVideoBackground model override', () => {
+    const videoBgAdapter = (removeVideoBackground: ReturnType<typeof vi.fn>) =>
+      makeAdapter('replicate', { video: true, videoBg: true }, { removeVideoBackground });
+
+    it.each(['lucataco/rembg-video', 'arielreplicate/robust_video_matting'])(
+      'forwards the allowlisted explicit model %s to the adapter',
+      async (model) => {
+        const removeVideoBackground = vi.fn().mockResolvedValue({ jobId: 'rep-job-1' });
+        const { service } = setup([videoBgAdapter(removeVideoBackground)]);
+
+        const result = await service.removeVideoBackground('https://x/clip.mp4', {
+          orgId: 'org-1',
+          model,
+        });
+
+        expect(result).toBe('tracked-job-1');
+        expect(removeVideoBackground).toHaveBeenCalledWith(
+          'https://x/clip.mp4',
+          expect.objectContaining({ model }),
+        );
+      },
+    );
+
+    it('leaves the model unset when no override is passed (auto / org default)', async () => {
+      const removeVideoBackground = vi.fn().mockResolvedValue({ jobId: 'rep-job-1' });
+      const { service } = setup([videoBgAdapter(removeVideoBackground)]);
+
+      await service.removeVideoBackground('https://x/clip.mp4', { orgId: 'org-1' });
+
+      expect(removeVideoBackground).toHaveBeenCalledWith(
+        'https://x/clip.mp4',
+        expect.objectContaining({ model: undefined }),
+      );
+    });
+
+    it('rejects a model outside the video-background allowlist with 400 before any adapter call', async () => {
+      const removeVideoBackground = vi.fn().mockResolvedValue({ jobId: 'rep-job-1' });
+      const { service } = setup([videoBgAdapter(removeVideoBackground)]);
+
+      await expect(
+        service.removeVideoBackground('https://x/clip.mp4', { orgId: 'org-1', model: 'evil/anything' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(removeVideoBackground).not.toHaveBeenCalled();
+    });
+
+    it('rejects a bad model as 400 even when no provider is configured (validation precedes resolution)', async () => {
+      const service = bareService();
+      await expect(
+        service.removeVideoBackground('https://x/clip.mp4', { orgId: 'org-1', model: 'nope/model' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
   describe('image-edit inputs arriving as data URIs (persist hop)', () => {
     const tinyPngDataUri = `data:image/png;base64,${Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64')}`;
     const mintedUrl = 'https://uploads.example.com/uploads/org-1/2026/10/21/abc.png';
