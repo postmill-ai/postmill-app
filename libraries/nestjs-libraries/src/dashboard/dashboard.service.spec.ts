@@ -683,7 +683,7 @@ describe('DashboardService.getMediaJobs', () => {
     });
     fileRepository.getFilesByPaths = vi
       .fn()
-      .mockResolvedValue([{ path: '/uploads/a.mp4', id: 'file-a' }]);
+      .mockResolvedValue([{ path: '/uploads/a.mp4', id: 'file-a', type: 'video' }]);
 
     const result = await service.getMediaJobs('org-1', {});
 
@@ -693,8 +693,10 @@ describe('DashboardService.getMediaJobs', () => {
       '/uploads/b.mp4',
     ]);
     expect(result.jobs[0].fileId).toBe('file-a');
+    expect(result.jobs[0].fileType).toBe('video');
     // No File row yet (still being written) — null, not a crash.
     expect(result.jobs[1].fileId).toBeNull();
+    expect(result.jobs[1].fileType).toBeNull();
   });
 
   it("presents the synchronous writer's 'done' as 'completed'", async () => {
@@ -729,6 +731,25 @@ describe('DashboardService.getMediaJobs', () => {
     expect(result.jobs[0].fileId).toBeNull();
     // Nothing completed, so there is nothing to look up.
     expect(fileRepository.getFilesByPaths).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the content-classified file type when it differs from the operation', async () => {
+    // Reel.Farm slideshows: a 'video' job can complete with the first slide JPG;
+    // the stored File row is classified 'image' and the queue must see that.
+    const { service, aiSettingsService, fileRepository } = buildService();
+    aiSettingsService.getMediaJobsWithCounts = vi.fn().mockResolvedValue({
+      jobs: [jobRow({ provider: 'reelfarm', artifactUrl: '/uploads/slide.jpg' })],
+      counts,
+    });
+    fileRepository.getFilesByPaths = vi
+      .fn()
+      .mockResolvedValue([{ path: '/uploads/slide.jpg', id: 'file-s', type: 'image' }]);
+
+    const result = await service.getMediaJobs('org-1', {});
+
+    expect(result.jobs[0].operation).toBe('video');
+    expect(result.jobs[0].fileId).toBe('file-s');
+    expect(result.jobs[0].fileType).toBe('image');
   });
 
   it('clamps the page size and passes the filters through', async () => {

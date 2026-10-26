@@ -36,6 +36,7 @@ const toStudioJobs = (jobs: MediaJob[]): StudioJob[] =>
     status: job.status as StudioJob['status'],
     artifactUrl: job.artifactUrl,
     fileId: job.fileId,
+    fileType: job.fileType,
     error: job.error,
     createdAt: job.createdAt,
   }));

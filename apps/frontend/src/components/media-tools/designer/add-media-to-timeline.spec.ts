@@ -68,7 +68,7 @@ describe('pollMediaJobArtifact — job-status polling resilience', () => {
       sleep: noSleep,
     });
 
-    expect(outcome).toEqual({ kind: 'completed', url: '/uploads/v.mp4', fileId: 'file-9' });
+    expect(outcome).toEqual({ kind: 'completed', url: '/uploads/v.mp4', fileId: 'file-9', fileType: null });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -89,8 +89,33 @@ describe('pollMediaJobArtifact — job-status polling resilience', () => {
       sleep: noSleep,
     });
 
-    expect(outcome).toEqual({ kind: 'completed', url: '/uploads/v.mp4', fileId: null });
+    expect(outcome).toEqual({ kind: 'completed', url: '/uploads/v.mp4', fileId: null, fileType: null });
     expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('carries the content-classified file type through on completion', async () => {
+    // Reel.Farm slideshow: a video-operation job completes with the first slide
+    // JPG; the timeline lands image artifacts as image clips, not video clips.
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        okJob({ status: 'completed', artifactUrl: '/uploads/slide.jpg', fileId: 'file-s', fileType: 'image' })
+      );
+
+    const outcome = await pollMediaJobArtifact({
+      jobId: 'job-1',
+      fetch,
+      isMounted: () => true,
+      messages,
+      sleep: noSleep,
+    });
+
+    expect(outcome).toEqual({
+      kind: 'completed',
+      url: '/uploads/slide.jpg',
+      fileId: 'file-s',
+      fileType: 'image',
+    });
   });
 
   it('treats a network-level throw as transient too', async () => {

@@ -20,7 +20,7 @@ import {
   type SegmentWindow,
 } from './segment-regenerate';
 import { Stepper } from './controls';
-import { addMediaToTimeline, addVoiceoverToTimeline, probeAudioDuration, probeVideoMetadata, pollMediaJobArtifact, JOB_MAX_POLLS, JOB_POLL_INTERVAL_MS, type JobPollOutcome } from './add-media-to-timeline';
+import { addMediaToTimeline, addImageClipToTimeline, addVoiceoverToTimeline, probeAudioDuration, probeVideoMetadata, pollMediaJobArtifact, JOB_MAX_POLLS, JOB_POLL_INTERVAL_MS, type JobPollOutcome } from './add-media-to-timeline';
 import { postTextToSpeech } from './text-to-speech';
 import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, planTrackDrop, resolveClipPlacement } from './clip-geometry';
@@ -3074,7 +3074,22 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     // Generated clips are inserted at startMs 0 while the canvas previews the
     // playhead — after a land, seek to the clip and select it so the result is
     // visibly on the canvas instead of looking like nothing happened.
-    const landAndReveal = async (url: string, landedFileId?: string) => {
+    const landAndReveal = async (url: string, landedFileId?: string, fileType?: string | null) => {
+      // A video-operation job can complete with an image artifact (e.g. a
+      // Reel.Farm slideshow that finished without a video export stores its
+      // first slide JPG) — land it as an image clip, not a video clip that
+      // can't decode. addImageClipToTimeline places at the playhead and
+      // selects the clip itself.
+      if (type === 'video' && fileType === 'image') {
+        const clipId = addImageClipToTimeline(store, { url, fileId: landedFileId });
+        if (!clipId) {
+          toaster.show(
+            translate('generated_clip_couldnt_be_placed', "The generated clip couldn't be placed on the timeline — find it in your media library."),
+            'warning'
+          );
+        }
+        return;
+      }
       const landed = await addMediaToTimeline(store, { type, url, fileId: landedFileId });
       if (landed?.probeFailed) {
         toaster.show(
@@ -3135,7 +3150,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       );
       return;
     }
-    await landAndReveal(outcome.url, outcome.fileId ?? undefined);
+    await landAndReveal(outcome.url, outcome.fileId ?? undefined, outcome.fileType);
   }, [fetch, store, toaster, translate]);
 
   // In-flight generations used to be lost on a designer remount: the server

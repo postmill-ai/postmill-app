@@ -18,7 +18,7 @@ export const JOB_MAX_POLLS = 400;
 export const JOB_MAX_TRANSIENT_FAILURES = 3;
 
 export type JobPollOutcome =
-  | { kind: 'completed'; url: string; fileId: string | null }
+  | { kind: 'completed'; url: string; fileId: string | null; fileType: string | null }
   | { kind: 'timeout' }
   | { kind: 'unmounted' };
 
@@ -47,7 +47,7 @@ export async function pollMediaJobArtifact(options: PollMediaJobOptions): Promis
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
   let transientFailures = 0;
-  const check = async (): Promise<{ url: string; fileId: string | null } | null> => {
+  const check = async (): Promise<{ url: string; fileId: string | null; fileType: string | null } | null> => {
     let res: Pick<Response, 'ok' | 'status' | 'json'>;
     try {
       res = await fetch(`/media/jobs/${jobId}`);
@@ -67,11 +67,14 @@ export async function pollMediaJobArtifact(options: PollMediaJobOptions): Promis
       status?: string;
       artifactUrl?: string | null;
       fileId?: string | null;
+      // Content-classified type of the stored File; a video-operation job can
+      // land an image artifact (Reel.Farm slideshow without a video export).
+      fileType?: string | null;
       error?: string | null;
     };
     if (job.status === 'completed') {
       if (!job.artifactUrl) throw new Error(messages.noArtifact);
-      return { url: job.artifactUrl, fileId: job.fileId ?? null };
+      return { url: job.artifactUrl, fileId: job.fileId ?? null, fileType: job.fileType ?? null };
     }
     // A failed job's error can be the structured envelope (JSON with
     // message/kind/settingsUrl — see media-job-lifecycle failJob); toast the
@@ -89,7 +92,7 @@ export async function pollMediaJobArtifact(options: PollMediaJobOptions): Promis
       const result = await check();
       transientFailures = 0;
       if (!isMounted()) return { kind: 'unmounted' };
-      if (result) return { kind: 'completed', url: result.url, fileId: result.fileId };
+      if (result) return { kind: 'completed', url: result.url, fileId: result.fileId, fileType: result.fileType };
     } catch (e) {
       const err = e as Error & { transient?: boolean };
       if (err.transient && transientFailures + 1 < JOB_MAX_TRANSIENT_FAILURES) {

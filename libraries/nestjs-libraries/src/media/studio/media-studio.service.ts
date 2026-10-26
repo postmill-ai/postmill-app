@@ -238,29 +238,35 @@ export class MediaStudioService {
     return jobs.map((j) => this._presentJob(j, fileMap));
   }
 
-  private async _resolveFileMap(orgId: string, jobs: AIMediaJob[]): Promise<Map<string, { id: string }>> {
+  private async _resolveFileMap(
+    orgId: string,
+    jobs: AIMediaJob[],
+  ): Promise<Map<string, { id: string; type: string }>> {
     const completedPaths = jobs
       .filter((j) => j.status === 'completed' && j.artifactUrl)
       .map((j) => j.artifactUrl!);
-    if (completedPaths.length === 0) return new Map<string, { id: string }>();
+    if (completedPaths.length === 0) return new Map<string, { id: string; type: string }>();
     const files = (await this._fileService
       .getFilesByPaths(orgId, completedPaths)
-      .catch(() => [])) as Array<{ path: string; id: string }>;
+      .catch(() => [])) as Array<{ path: string; id: string; type: string }>;
     return new Map(files.map((f) => [f.path, f]));
   }
 
-  private _presentJob(job: AIMediaJob, fileMap: Map<string, { id: string }>) {
+  private _presentJob(job: AIMediaJob, fileMap: Map<string, { id: string; type: string }>) {
     // The pending `pending://` ref is internal and must never reach the client; only a
-    // completed job has a real /files URL. Resolve the File id too so the composer
-    // handoff ("Post") can attach it.
+    // completed job has a real /files URL. Resolve the File row too: its id backs the
+    // composer handoff ("Post"), and its content-classified `type` lets the queue render
+    // the artifact by what it IS — a video-operation job can land an image (e.g. a
+    // Reel.Farm slideshow completed without a video export stores the first slide).
     const completed = job.status === 'completed' && job.artifactUrl;
-    const fileId = completed ? fileMap.get(job.artifactUrl!)?.id ?? null : null;
+    const file = completed ? fileMap.get(job.artifactUrl!) : undefined;
     return {
       id: job.id,
       operation: job.operation,
       status: job.status,
       artifactUrl: completed ? job.artifactUrl : null,
-      fileId,
+      fileId: file?.id ?? null,
+      fileType: file?.type ?? null,
       error: job.error || null,
       createdAt: job.createdAt,
     };
