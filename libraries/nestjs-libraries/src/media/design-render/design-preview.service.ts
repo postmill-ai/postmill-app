@@ -57,7 +57,8 @@ export class DesignPreviewService {
     if (fileIds.size) {
       const files = await this._fileService.getByIds(orgId, [...fileIds]);
       for (const file of files) {
-        if (file.thumbnail) posters.set(file.id, file.thumbnail);
+        if (file.type === 'image') posters.set(file.id, file.path);
+        else if (file.thumbnail) posters.set(file.id, file.thumbnail);
       }
       for (const fileId of fileIds) {
         if (posters.has(fileId)) continue;
@@ -73,11 +74,12 @@ export class DesignPreviewService {
     for (const clip of clipsBySrc) {
       const file = await this._fileService.getFileByPath(orgId, clip.src);
       if (!file) continue;
-      const thumb =
-        file.thumbnail ??
-        (await this._videoThumbnailService.generateForFile(orgId, file.id, {
-          localOnly: true,
-        }));
+      const thumb = file.type === 'image'
+        ? file.path
+        : file.thumbnail ??
+          (await this._videoThumbnailService.generateForFile(orgId, file.id, {
+            localOnly: true,
+          }));
       if (thumb) posters.set(clip.id, thumb);
     }
     return posters.size ? posters : undefined;

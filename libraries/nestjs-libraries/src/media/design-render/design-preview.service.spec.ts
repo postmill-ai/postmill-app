@@ -198,6 +198,21 @@ describe('DesignPreviewService', () => {
       expect(videoThumbnailService.generateForFile).not.toHaveBeenCalled();
     });
 
+    it('uses an image File directly when it is placed on a video track', async () => {
+      fileService.getByIds.mockResolvedValue([
+        { id: 'file-vid-1', type: 'image', path: '/uploads/org-1/still.jpg', thumbnail: null },
+      ]);
+
+      await service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' });
+
+      expect(videoThumbnailService.generateForFile).not.toHaveBeenCalled();
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      expect(renderDoc.outputs[0].children[0]).toMatchObject({
+        type: 'image',
+        src: '/uploads/org-1/still.jpg',
+      });
+    });
+
     it('self-heals a missing thumbnail via on-demand extraction (local only)', async () => {
       fileService.getByIds.mockResolvedValue([{ id: 'file-vid-1', thumbnail: null }]);
       videoThumbnailService.generateForFile.mockResolvedValue('/uploads/org-1/thumb-new.jpg');
