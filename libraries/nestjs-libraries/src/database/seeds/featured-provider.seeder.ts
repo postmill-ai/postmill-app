@@ -9,7 +9,7 @@ export const FEATURED_PROVIDERS: Array<{ domain: string; providerId: string; sor
   { domain: 'ai',          providerId: 'gateway',    sortOrder: 3 }, // Vercel AI Gateway
   { domain: 'media',       providerId: 'replicate',  sortOrder: 1 },
   { domain: 'media',       providerId: 'heygen',     sortOrder: 2 },
-  { domain: 'media',       providerId: 'fal',        sortOrder: 3 }, // fal.ai (backs the /media/kling + /media/pika studios)
+  { domain: 'media',       providerId: 'fal',        sortOrder: 3 }, // fal.ai (backs the /media/fal + /media/pika studios)
   { domain: 'contentpack', providerId: 'magnific',   sortOrder: 1 },
   { domain: 'storage',     providerId: 'medialocker',sortOrder: 1 },
   { domain: 'shortlink',   providerId: 'lnkify',     sortOrder: 1 },

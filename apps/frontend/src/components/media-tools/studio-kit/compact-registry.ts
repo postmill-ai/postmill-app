@@ -8,6 +8,7 @@ import { deepinfraDescriptor } from '../deepinfra/descriptor';
 import { didDescriptor } from '../did/descriptor';
 import { elevenlabsDescriptor } from '../elevenlabs/descriptor';
 import { fireworksDescriptor } from '../fireworks/descriptor';
+import { falDescriptor } from '../fal/descriptor';
 import { gatewayDescriptor } from '../gateway/descriptor';
 import { genviralDescriptor } from '../genviral/descriptor';
 import { googleAiDescriptor } from '../google-ai/descriptor';
@@ -15,14 +16,13 @@ import { groqDescriptor } from '../groq/descriptor';
 import { hedraDescriptor } from '../hedra/descriptor';
 import { higgsfieldDescriptor } from '../higgsfield/descriptor';
 import { ideogramDescriptor } from '../ideogram/descriptor';
-import { klingDescriptor } from '../kling/descriptor';
+import { klingAiDescriptor } from '../kling-ai/descriptor';
 import { leonardoDescriptor } from '../leonardo/descriptor';
 import { ltxDescriptor } from '../ltx/descriptor';
 import { lumaDescriptor } from '../luma/descriptor';
 import { minimaxDescriptor } from '../minimax/descriptor';
 import { openaiDescriptor } from '../openai/descriptor';
 import { openrouterDescriptor } from '../openrouter/descriptor';
-import { pikaDescriptor } from '../pika/descriptor';
 import { qwenDescriptor } from '../qwen/descriptor';
 import { recraftDescriptor } from '../recraft/descriptor';
 import { reelfarmDescriptor } from '../reelfarm/descriptor';
@@ -36,9 +36,9 @@ import { vertexDescriptor } from '../vertex/descriptor';
 import { wanDescriptor } from '../wan/descriptor';
 import { xaiDescriptor } from '../xai/descriptor';
 
-// Static provider → descriptor map for the embeddable CompactStudio. Every
-// studio-kit descriptor is importable here; bespoke studios (HeyGen, Replicate)
-// ship no descriptor and are handled separately below.
+// Static provider → descriptor map for the embeddable CompactStudio. Canonical
+// provider descriptors only: Pika's tabs already live in falDescriptor, so the
+// branded standalone Pika descriptor is deliberately not merged a second time.
 const ALL_DESCRIPTORS: StudioDescriptor[] = [
   azureDescriptor,
   bedrockDescriptor,
@@ -47,6 +47,7 @@ const ALL_DESCRIPTORS: StudioDescriptor[] = [
   deepinfraDescriptor,
   didDescriptor,
   elevenlabsDescriptor,
+  falDescriptor,
   fireworksDescriptor,
   gatewayDescriptor,
   genviralDescriptor,
@@ -55,14 +56,13 @@ const ALL_DESCRIPTORS: StudioDescriptor[] = [
   hedraDescriptor,
   higgsfieldDescriptor,
   ideogramDescriptor,
-  klingDescriptor,
+  klingAiDescriptor,
   leonardoDescriptor,
   ltxDescriptor,
   lumaDescriptor,
   minimaxDescriptor,
   openaiDescriptor,
   openrouterDescriptor,
-  pikaDescriptor,
   qwenDescriptor,
   recraftDescriptor,
   reelfarmDescriptor,
@@ -87,9 +87,8 @@ export interface CompactStudioResult {
 }
 
 export interface CompactTab {
-  // Unique within the entry — colliding providers (Kling + Pika both ride the
-  // `fal` credential) merge their tabs, so a repeated tab
-  // key is suffixed with the source studio's title.
+  // Unique within the entry — descriptors that share a credential merge their
+  // tabs, so a repeated key is suffixed with the source studio's title.
   key: string;
   // i18n namespace of the SOURCE descriptor (provider + title, see i18n-keys.ts)
   // — merged tabs keep their own studio's translation keys.

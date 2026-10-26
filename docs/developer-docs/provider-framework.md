@@ -136,7 +136,7 @@ Super-admins curate a per-domain **featured** set, stored in the `FeaturedProvid
 | `ai/gateway` | 3 | Vercel AI |
 | `media/replicate` | 1 | Replicate |
 | `media/heygen` | 2 | HeyGen |
-| `media/fal` | 3 | Kling |
+| `media/fal` | 3 | fal.ai |
 | `contentpack/magnific` | 1 | Magnific |
 | `storage/medialocker` | 1 | MediaLocker |
 | `shortlink/lnkify` | 1 | Lnkify |

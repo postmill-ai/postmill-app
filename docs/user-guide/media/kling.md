@@ -1,37 +1,32 @@
-# Kling
+# Kling AI
 
-**Kling** (`/media/kling`) is a next-generation AI video studio by Kuaishou, known for long, cinematic clips with strong realism and physics. Recent models add native audio, voiceovers, and sound in a single pass.
+**Kling AI** (`/media/kling-ai`) is Postmill's direct integration with the official Kling AI API by Kuaishou. It is independent of the fal-hosted Kling models available in the [fal.ai studio](./fal).
+
+The legacy `/media/kling` studio used the `fal` provider and now redirects to `/media/fal`. It did not use direct Kling AI credentials.
 
 ## Where to configure
 
-Kling runs through the **fal.ai** adapter, so you configure a single fal.ai API key at **Settings → Media**. The registry/config identifier is `fal`, but the studio title and nav remain "Kling." Postmill stores the key encrypted at rest; there is no environment-variable fallback.
-
-See [Settings](../settings) for provider setup and the media capability matrix.
+Configure your official Kling AI credentials at **Settings → Media → Kling AI**. The provider card opens `/media/kling-ai`; it uses the preserved `kling` provider identifier and does not share the fal.ai API key.
 
 ## Tabs / operations
 
 | Tab | Operation | Key fields | Produces |
 |---|---|---|---|
-| **Text → Video** | `video` | Model, prompt, negative prompt, duration (5s or 10s), aspect ratio, CFG scale | A Kling video clip |
-| **Image → Video** | `video` | Source image, model, prompt, negative prompt, duration, CFG scale | A Kling video clip animated from the image |
+| **Text → Video** | `video` | Model, prompt, duration, aspect ratio, resolution, audio | A direct Kling video clip |
+| **Image → Video** | `video` | First/last frame, model, prompt, duration, resolution, audio | A Kling clip animated from source frames |
+| **Text → Image** | `image` | Model, prompt, negative prompt, aspect ratio, resolution, image count | A Kling image |
 
-Available models include Kling 1.6 Standard, Kling 1.6 Pro, and Kling 2.0 Master for both text-to-video and image-to-video.
+Video models include Kling 3.0 Turbo, 3.0, 2.6, and 2.5 Turbo. Image models include Kling V3 and V2.1.
 
 ## Generation flow
 
-Video jobs are submitted to the fal.ai queue and appear in the **Render Queue** as pending/processing. The queue polls while a job is active; when completed, the video is saved to `/files` and can be opened in the [Designer](./designer) or posted directly from the queue card. See [Media Studios](./index) for the shared flow.
-
-## Caveats
-
-- **fal.ai-backed:** the adapter is shared with other fal-hosted providers (Pika and the generic fal image/audio path), but the Kling descriptor uses Kling-specific model endpoints.
-- **Webhook with poll fallback:** when your backend has a public HTTPS URL, fal.ai calls back on completion; otherwise (and as a fallback) completions rely on the shared media-jobs poll cron, so the queue updates on its polling interval.
-- **Namespaced job ids:** fal queue jobs are stored as `<model>::<request_id>` so the poller can route status checks to the correct model endpoint.
+Video jobs are submitted to the official Kling API and tracked in the **Render Queue**. Completed media is saved to `/files` and can be opened in the [Designer](./designer) or posted directly. Kling AI is also registered as a compact generation provider in Designer picker dialogs.
 
 ## Related docs
 
-- [Media Studios](./index) — the shared render-queue/hand-off flow used by other studios.
-- [Designer](./designer) — the target of every "Edit in Designer" hand-off.
-- [Settings](../settings) — configuring the fal.ai media provider used by Kling.
+- [fal.ai](./fal) — fal-hosted Kling, Pika, Flux, and Stable Audio models.
+- [Media Studios](./index) — the shared generation flow.
+- [Settings](../settings) — configuring direct Kling AI credentials.
 
 ---
 > Verified against v1.3.0

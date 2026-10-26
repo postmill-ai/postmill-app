@@ -77,10 +77,11 @@ of riding the generic Studio Kit form:
 **Platform:** [Designer](./designer) · [AI Designer](./ai-designer)
 
 **Providers:** [Replicate](./replicate) · [HeyGen](./heygen) · [Deepgram](./deepgram) · Reel.Farm ·
-Genviral · Kling · Higgsfield · LTX Studio · Luma · MiniMax · Pika · Qwen · Together AI · Runway ·
-Suno · Wan · SiliconFlow · Groq · OpenRouter · Fireworks AI · DeepInfra · xAI Grok · Vercel AI
-Gateway · Amazon Bedrock · Azure OpenAI · Google AI Studio · Google Vertex · Black Forest Labs ·
-Stability AI · Recraft · Ideogram · Leonardo.ai · OpenAI · ElevenLabs · D-ID · Hedra · Tavus
+Genviral · [fal.ai](./fal) · [Kling AI](./kling) · Higgsfield · LTX Studio · Luma · MiniMax ·
+[Pika](./pika) · Qwen · Together AI · Runway · Suno · Wan · SiliconFlow · Groq · OpenRouter ·
+Fireworks AI · DeepInfra · xAI Grok · Vercel AI Gateway · Amazon Bedrock · Azure OpenAI ·
+Google AI Studio · Google Vertex · Black Forest Labs · Stability AI · Recraft · Ideogram ·
+Leonardo.ai · OpenAI · ElevenLabs · D-ID · Hedra · Tavus
 
 **Content Pack:** Stock Photos · Stock Videos · Vectors · Stickers · Stock Audio · Icons
 

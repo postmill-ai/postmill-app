@@ -2,7 +2,7 @@ import { ProviderMetadata } from '@postmill-ai/provider-kernel';
 
 export const metadata: ProviderMetadata = {
   "id": "fal",
-  "displayName": "fal",
+  "displayName": "fal.ai",
   "kind": "direct",
   "domains": [
     "media"
@@ -10,10 +10,88 @@ export const metadata: ProviderMetadata = {
   "mediaCategories": [
     "image-slide",
     "image-to-video",
+    "text-to-image",
+    "text-to-music",
     "text-to-video"
   ],
   "hasModelList": false,
   "mediaModels": {
+    "text-to-image": [
+      {
+        "id": "fal-ai/flux/schnell",
+        "label": "fal.ai (Text → Image)",
+        "fields": [
+          {
+            "name": "image_size",
+            "type": "select",
+            "label": "Image size",
+            "default": "landscape_4_3",
+            "options": [
+              {
+                "value": "square_hd",
+                "label": "Square HD"
+              },
+              {
+                "value": "square",
+                "label": "Square"
+              },
+              {
+                "value": "portrait_4_3",
+                "label": "Portrait 4:3"
+              },
+              {
+                "value": "portrait_16_9",
+                "label": "Portrait 16:9"
+              },
+              {
+                "value": "landscape_4_3",
+                "label": "Landscape 4:3"
+              },
+              {
+                "value": "landscape_16_9",
+                "label": "Landscape 16:9"
+              }
+            ]
+          },
+          {
+            "name": "num_inference_steps",
+            "type": "number",
+            "label": "Inference steps",
+            "default": 4,
+            "min": 1,
+            "max": 12,
+            "step": 1
+          },
+          {
+            "name": "output_format",
+            "type": "select",
+            "label": "Output format",
+            "default": "jpeg",
+            "options": [
+              {
+                "value": "jpeg",
+                "label": "JPEG"
+              },
+              {
+                "value": "png",
+                "label": "PNG"
+              }
+            ]
+          },
+          {
+            "name": "seed",
+            "type": "number",
+            "label": "Seed (optional)"
+          },
+          {
+            "name": "enable_safety_checker",
+            "type": "toggle",
+            "label": "Safety checker",
+            "default": true
+          }
+        ]
+      }
+    ],
     "text-to-video": [
       {
         "id": "fal-ai/kling-video/v1.6/standard/text-to-video",
@@ -185,7 +263,7 @@ export const metadata: ProviderMetadata = {
       },
       {
         "id": "fal-ai/pika/v2.2/text-to-video",
-        "label": "Pika (Text → Video)",
+        "label": "Pika Text → Video",
         "fields": [
           {
             "name": "negative_prompt",
@@ -380,7 +458,7 @@ export const metadata: ProviderMetadata = {
       },
       {
         "id": "fal-ai/pika/v2.2/image-to-video",
-        "label": "Pika (Image → Video)",
+        "label": "Pika Image → Video",
         "fields": [
           {
             "name": "negative_prompt",
@@ -426,10 +504,41 @@ export const metadata: ProviderMetadata = {
           }
         ]
       }
+    ],
+    "text-to-music": [
+      {
+        "id": "fal-ai/stable-audio",
+        "label": "fal.ai (Text → Music)",
+        "fields": [
+          {
+            "name": "seconds_total",
+            "type": "number",
+            "label": "Duration (seconds)",
+            "default": 30,
+            "min": 1,
+            "max": 47,
+            "step": 1
+          },
+          {
+            "name": "cfg_scale",
+            "type": "number",
+            "label": "CFG scale",
+            "default": 7,
+            "min": 1,
+            "max": 20,
+            "step": 0.5
+          },
+          {
+            "name": "seed",
+            "type": "number",
+            "label": "Seed (optional)"
+          }
+        ]
+      }
     ]
   },
-  "website": "https://klingai.com",
+  "website": "https://fal.ai",
   "description": {
-    "en": "A leading video generator by Kuaishou, known for long, cinematic clips with strong realism and physics. Recent models add native audio, voiceovers, and sound in a single pass."
+    "en": "Generate images, video, music, and audio with fal.ai. This studio includes FLUX, Stable Audio, fal-hosted Kling, Pika, and Pikaffects using your configured fal.ai API key."
   }
 };

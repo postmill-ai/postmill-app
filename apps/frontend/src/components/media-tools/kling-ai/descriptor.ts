@@ -1,7 +1,7 @@
 import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Kling AI, direct from the official API (provider identifier `kling`) — separate from the
-// fal-backed /media/kling model-collection studio. Field names are the vendor's native params
+// fal-hosted Kling models in /media/fal. Field names are the vendor's native params
 // (docs: https://kling.ai/document-api); the adapter maps them onto the two API standards —
 // video is path-per-model with a `settings` block (duration as int seconds, aspect_ratio is
 // t2v-only, audio only on kling-3.0/2.6), image is the legacy /v1 body with model_name.

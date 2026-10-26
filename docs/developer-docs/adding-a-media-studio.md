@@ -171,9 +171,10 @@ Every provider package must ship `src/v1/metadata.ts` exporting a `ProviderMetad
 > **Descriptor drift gate:** after adding or changing a studio descriptor, run
 > `node tools/codegen/generate-studio-descriptor-registry.mjs` from the repo root. It merges generated
 > `mediaModels`, `website`, `description.en`, and reconciled `mediaCategories`/`kind` from the
-> frontend descriptors into each provider's `metadata.ts`. CI runs the same script with `--check`
-> (`.github/workflows/test.yml`, "Studio descriptor metadata drift gate") and fails the build if the
-> committed metadata has drifted from the descriptors.
+> frontend descriptors into each provider's `metadata.ts`. It also regenerates
+> `libraries/nestjs-libraries/src/ai/defaults/studio-descriptor-fields.generated.ts` for media-default
+> settings validation. CI runs the same script with `--check` (`.github/workflows/test.yml`, "Studio
+> descriptor metadata drift gate") and fails the build if either committed artifact has drifted.
 
 ```ts
 export interface ProviderMetadata {

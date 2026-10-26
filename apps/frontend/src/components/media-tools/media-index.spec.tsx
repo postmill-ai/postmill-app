@@ -74,18 +74,18 @@ describe('MediaIndex studios', () => {
   });
 
   it('resolves studios that ride another provider’s credentials', () => {
-    // google-ai → google, kling/pika → fal.
+    // google-ai → google, pika → fal.
     enabled = new Set(['google']);
     renderIndex();
     let hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
     expect(hrefs).toContain('/media/google-ai');
-    expect(hrefs).not.toContain('/media/kling');
+    expect(hrefs).not.toContain('/media/fal');
 
     cleanup();
     enabled = new Set(['fal']);
     renderIndex();
     hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
-    expect(hrefs).toContain('/media/kling');
+    expect(hrefs).toContain('/media/fal');
     expect(hrefs).toContain('/media/pika');
     expect(hrefs).not.toContain('/media/google-ai');
   });

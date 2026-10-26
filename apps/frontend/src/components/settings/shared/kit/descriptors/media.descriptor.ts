@@ -47,10 +47,11 @@ interface MediaProviderConfig {
 /** Raw provider object carried through `ProviderRow.meta`. */
 type MediaMeta = MediaProviderCatalogEntry & MediaProviderConfig;
 
-// Most media studio routes match the provider identifier (/media/<id>); these two differ.
+// Most media studio routes match the provider identifier (/media/<id>); these differ.
 const ROUTE_OVERRIDES: Record<string, string> = {
   google: 'google-ai',
-  fal: 'kling',
+  fal: 'fal',
+  kling: 'kling-ai',
 };
 
 const DEFAULT_CREDENTIAL_FIELDS: KitCredentialField[] = [

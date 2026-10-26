@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Pika's official API is hosted on **fal.ai**, so the studio rides the fal adapter. Configure your fal.ai API key in **Settings → Media**. See [Settings](../settings.md) for provider setup.
+Pika's official API is hosted on **fal.ai**, so the studio uses your configured fal.ai connection and API key from **Settings → Media → fal.ai**. There is no separate Pika provider card or Pika credential to configure. The same models are also available in the canonical [fal.ai studio](./fal). See [Settings](../settings.md) for provider setup.
 
 ## Tabs / operations
 

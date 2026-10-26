@@ -112,14 +112,14 @@ Backend for the generic path: **none**. `MediaStudioController` (`apps/backend/s
 
 ### CI gate (do not skip)
 
-`tools/codegen/generate-studio-descriptor-registry.mjs` reads every `media-tools/*/descriptor.ts` and merges generated `mediaModels`, `website`, `description.en`, and reconciled `mediaCategories`/`kind` into the provider package's `src/v1/metadata.ts`. `.github/workflows/test.yml` runs it with `--check` ("Studio descriptor metadata drift gate") and **fails the build on drift**. After adding/changing a descriptor, run write mode and commit the result:
+`tools/codegen/generate-studio-descriptor-registry.mjs` reads every `media-tools/*/descriptor.ts` and merges generated `mediaModels`, `website`, `description.en`, and reconciled `mediaCategories`/`kind` into the provider package's `src/v1/metadata.ts`. It also writes `libraries/nestjs-libraries/src/ai/defaults/studio-descriptor-fields.generated.ts`, the field schema used to validate saved media defaults. `.github/workflows/test.yml` runs it with `--check` ("Studio descriptor metadata drift gate") and **fails the build on either artifact drifting**. After adding/changing a descriptor, run write mode and commit both results:
 
 ```bash
 node tools/codegen/generate-studio-descriptor-registry.mjs          # write mode
 node tools/codegen/generate-studio-descriptor-registry.mjs --check  # verify no drift
 ```
 
-Descriptor caveats: a descriptor that imports runtime values (custom panels) is skipped by the generator; orchestration categories (`image-focal-point`, `image-slide`, `video-caption`) declared in `metadata.ts` are preserved, and so is a hand-authored `mediaModels` catalog under an orchestration category (descriptors never generate one — e.g. OpenAI's Whisper ids under `video-caption`); live-`listModels` hubs and action-only providers are special-cased in the script's constant sets.
+Descriptor caveats: descriptors may share pure-data runtime imports from a `tabs.ts` module; other runtime imports (custom panels) are skipped by the generator. When branded descriptors share a provider with a canonical descriptor whose directory matches the provider id, only the canonical descriptor contributes to the generated default-settings field registry, and duplicate models across descriptors are emitted once. Orchestration categories (`image-focal-point`, `image-slide`, `video-caption`) declared in `metadata.ts` are preserved, and so is a hand-authored `mediaModels` catalog under an orchestration category (descriptors never generate one — e.g. OpenAI's Whisper ids under `video-caption`); live-`listModels` hubs and action-only providers are special-cased in the script's constant sets.
 
 `MediaModelDef.notes` (optional, hand-authored) carries curated capability caveats for a model (e.g. Replicate's `minimax/video-01` → "No audio track"). `ReplicateCatalogService` attaches them to picker summaries at response time (never into the 24h model caches), and the Replicate model picker renders them under the select.
 

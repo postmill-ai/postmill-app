@@ -12,8 +12,8 @@ import {
 // Badges are duplicated onto MEDIA_TABS on purpose: reading them from the
 // descriptors at runtime would pull ~125KB of model/field catalogs into the
 // /media entry chunk to get three strings per studio, and the provider catalog
-// can't supply them (kling and pika are both provider `fal`, so they'd get
-// identical chips). The duplication is safe only because this spec fails the
+// can't supply them (canonical fal and branded Pika share provider `fal`, so
+// they'd get identical chips). The duplication is safe only because this spec fails the
 // moment the two disagree — a test can afford the heavy import.
 import { azureDescriptor } from './azure/descriptor';
 import { bedrockDescriptor } from './bedrock/descriptor';
@@ -30,7 +30,7 @@ import { groqDescriptor } from './groq/descriptor';
 import { hedraDescriptor } from './hedra/descriptor';
 import { higgsfieldDescriptor } from './higgsfield/descriptor';
 import { ideogramDescriptor } from './ideogram/descriptor';
-import { klingDescriptor } from './kling/descriptor';
+import { falDescriptor } from './fal/descriptor';
 import { klingAiDescriptor } from './kling-ai/descriptor';
 import { leonardoDescriptor } from './leonardo/descriptor';
 import { ltxDescriptor } from './ltx/descriptor';
@@ -75,7 +75,7 @@ const LANDINGS: Record<string, { badges?: string[] } | undefined> = {
   heygen: HEYGEN_LANDING,
   higgsfield: higgsfieldDescriptor.landing,
   ideogram: ideogramDescriptor.landing,
-  kling: klingDescriptor.landing,
+  fal: falDescriptor.landing,
   'kling-ai': klingAiDescriptor.landing,
   leonardo: leonardoDescriptor.landing,
   ltx: ltxDescriptor.landing,
@@ -154,14 +154,12 @@ describe('provider studio badges', () => {
     }
   );
 
-  it('keeps kling and pika independent even though both are provider "fal"', () => {
-    // This is the case that rules out deriving chips from the provider catalog,
-    // which is keyed by provider id and would give the two identical chips.
-    expect(providerIdentifier('/media/kling')).toBe('fal');
+  it('keeps canonical fal and branded Pika independent on the shared credential', () => {
+    expect(providerIdentifier('/media/fal')).toBe('fal');
     expect(providerIdentifier('/media/pika')).toBe('fal');
-    const kling = MEDIA_TABS.find((t) => t.href === '/media/kling');
+    const fal = MEDIA_TABS.find((t) => t.href === '/media/fal');
     const pika = MEDIA_TABS.find((t) => t.href === '/media/pika');
-    expect(kling!.badges).toEqual(klingDescriptor.landing!.badges);
+    expect(fal!.badges).toEqual(falDescriptor.landing!.badges);
     expect(pika!.badges).toEqual(pikaDescriptor.landing!.badges);
   });
 
@@ -184,7 +182,7 @@ describe('provider studio badges', () => {
 describe('providerIdentifier', () => {
   it('maps the routes that ride another provider’s credentials', () => {
     expect(providerIdentifier('/media/google-ai')).toBe('google');
-    expect(providerIdentifier('/media/kling')).toBe('fal');
+    expect(providerIdentifier('/media/fal')).toBe('fal');
     expect(providerIdentifier('/media/pika')).toBe('fal');
     // The direct Kling AI studio's route isn't its provider identifier.
     expect(providerIdentifier('/media/kling-ai')).toBe('kling');

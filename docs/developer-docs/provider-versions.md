@@ -8,9 +8,7 @@ Use `GET /providers/catalog?domain=` to fetch this catalog live from the running
 
 The catalog is metadata-driven: each provider package exports `src/v1/metadata.ts` with `kind`, `domains`, `modelCategories`, `mediaCategories`, `hasModelList`, and `modelHints`. The authenticated `/providers/catalog` endpoint and the Settings → AI *Model Defaults* / Settings → Content *Media Defaults* tabs use this metadata to build candidate sets, format labels such as `<provider>[-<ui-name>]: <model>`, and auto-rank models when no stored default exists.
 
-A few branded media studios ride another provider's adapter:
-
-- **Kling** and **Pika** studios use the `fal` (`fal.ai`) adapter.
+The branded **Pika** studio uses the `fal` (`fal.ai`) adapter and credential. The canonical `/media/fal` studio includes those Pika models alongside fal-hosted Kling, Flux, and Stable Audio. Direct **Kling AI** is the separate `kling` provider at `/media/kling-ai`; legacy `/media/kling` redirects to `/media/fal`.
 
 The table below shows each provider's registered domains. A provider that appears in both `ai` and `media` can share a single org credential across both surfaces.
 
@@ -95,7 +93,7 @@ The table below shows each provider's registered domains. A provider that appear
 | ses | `ses` |
 | smtp | `smtp` |
 
-## Media (`media`) — 36 providers
+## Media (`media`) — 37 providers
 
 | Provider | ID | Domains | Kind / Notes |
 |---|---|---|---|
@@ -115,7 +113,8 @@ The table below shows each provider's registered domains. A provider that appear
 | HeyGen | `heygen` | media | direct; image-to-video, text-to-video, video-avatar |
 | Higgsfield | `higgsfield` | media | direct; image-slide, image-to-video, text-to-image |
 | Ideogram | `ideogram` | media | action; image-slide, image-to-image, text-to-image |
-| Kling | `fal` | media | direct; image-slide, image-to-video, text-to-video |
+| fal.ai | `fal` | media | direct; image-slide, image-to-video, text-to-image, text-to-music, text-to-video |
+| Kling AI | `kling` | media | direct; image-to-video, text-to-image, text-to-video |
 | Leonardo.ai | `leonardo` | media | direct; image-slide, text-to-image |
 | LTX Studio | `ltx` | media | direct; image-to-video, text-to-video |
 | Luma | `luma` | media | direct; image-to-video, text-to-video |

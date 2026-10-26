@@ -81,7 +81,8 @@ const LIVE_LISTMODELS_HUBS = new Set([
 
 const CHECK = process.argv.includes('--check');
 
-function evaluateTsFile(file) {
+function evaluateTsFile(file, cache = new Map()) {
+  if (cache.has(file)) return cache.get(file);
   const source = fs.readFileSync(file, 'utf8');
   const result = ts.transpileModule(source, {
     compilerOptions: {
@@ -95,6 +96,15 @@ function evaluateTsFile(file) {
   });
   const exports = {};
   const moduleObj = { exports };
+  cache.set(file, moduleObj.exports);
+  const localRequire = (request) => {
+    if (request.startsWith('.')) {
+      const base = path.resolve(path.dirname(file), request);
+      const dependency = [`${base}.ts`, base].find((candidate) => fs.existsSync(candidate));
+      if (dependency) return evaluateTsFile(dependency, cache);
+    }
+    return require(request);
+  };
   const fn = new Function(
     'exports',
     'module',
@@ -103,25 +113,37 @@ function evaluateTsFile(file) {
     '__filename',
     result.outputText,
   );
-  fn(exports, moduleObj, require, path.dirname(file), file);
+  fn(exports, moduleObj, localRequire, path.dirname(file), file);
   return moduleObj.exports;
 }
 
 function findDescriptorExport(file) {
   const source = fs.readFileSync(file, 'utf8');
 
-  // Skip descriptors that import runtime values (custom panels). They have no
-  // generic form fields and are not used by the studio-kit default path.
-  if (/^import\s+\{[^}]+\}\s+from\s+['"][^'"]+['"];?\s*$/m.test(source)) {
+  // Custom panels are not generic form descriptors. Pure-data tab modules are
+  // the only runtime imports the generator evaluates, allowing branded studios
+  // to share their model definitions without duplicating them.
+  const runtimeImports = Array.from(
+    source.matchAll(/^import\s+\{[^}]+\}\s+from\s+['"]([^'"]+)['"];?\s*$/gm),
+    (match) => match[1],
+  );
+  if (runtimeImports.some((request) => !/(?:^|\/)tabs$/.test(request))) {
     const base = path.basename(path.dirname(file));
     console.log(`Skipping ${base} (runtime import)`);
     return null;
   }
 
   const moduleExports = evaluateTsFile(file);
-  return Object.values(moduleExports).find(
+  const descriptor = Object.values(moduleExports).find(
     (v) => v && typeof v === 'object' && v.provider && Array.isArray(v.tabs),
   );
+  if (descriptor) {
+    Object.defineProperty(descriptor, 'source', {
+      value: path.basename(path.dirname(file)),
+      enumerable: false,
+    });
+  }
+  return descriptor;
 }
 
 function isMediaInputField(field) {
@@ -146,7 +168,9 @@ function categoryForTab(tab, descriptorTitle) {
   }
 
   if (tab.operation === 'video') {
-    if (tab.key === 'image-to-video') return 'image-to-video';
+    if (tab.key === 'image-to-video' || tab.key.endsWith('-image-to-video')) {
+      return 'image-to-video';
+    }
     // Skip one-off VFX / talking-head / audio-to-video tabs that take media
     // inputs but are not the standard image-to-video default category.
     const hasMediaInput = tab.fields.some(isMediaInputField);
@@ -206,6 +230,15 @@ function buildProviderCatalog(descriptors) {
     if (!entry.description && descriptor.landing?.description) {
       entry.description = descriptor.landing.description;
     }
+    const existingModelIds = new Set(
+      Object.values(entry.mediaModels).flat().map((model) => model.id),
+    );
+    const addModel = (category, model) => {
+      if (!entry.mediaModels[category]) entry.mediaModels[category] = [];
+      // Branded descriptors can repeat a canonical provider's models. Preserve
+      // intentional duplicates within one descriptor, but not across descriptors.
+      if (!existingModelIds.has(model.id)) entry.mediaModels[category].push(model);
+    };
 
     for (const tab of descriptor.tabs || []) {
       const category = categoryForTab(tab, descriptor.title);
@@ -214,7 +247,6 @@ function buildProviderCatalog(descriptors) {
       const fields = modelFieldsFromTab(tab);
 
       if (tab.model) {
-        if (!entry.mediaModels[category]) entry.mediaModels[category] = [];
         const genericLabels = new Set([
           'Text → Video',
           'Image → Video',
@@ -228,7 +260,7 @@ function buildProviderCatalog(descriptors) {
         if (genericLabels.has(label)) {
           label = `${descriptor.title} (${label})`;
         }
-        entry.mediaModels[category].push({
+        addModel(category, {
           id: tab.model,
           label,
           fields,
@@ -238,9 +270,8 @@ function buildProviderCatalog(descriptors) {
           (f) => f.type === 'select' && f.name === 'model',
         );
         if (modelField && modelField.options) {
-          if (!entry.mediaModels[category]) entry.mediaModels[category] = [];
           for (const opt of modelField.options) {
-            entry.mediaModels[category].push({
+            addModel(category, {
               id: opt.value,
               label: opt.label || opt.value,
               fields,
@@ -252,6 +283,56 @@ function buildProviderCatalog(descriptors) {
   }
 
   return catalog;
+}
+
+function buildDescriptorFieldRegistry(descriptors) {
+  const byProvider = new Map();
+  for (const descriptor of descriptors) {
+    const list = byProvider.get(descriptor.provider) || [];
+    list.push(descriptor);
+    byProvider.set(descriptor.provider, list);
+  }
+
+  return Object.fromEntries(
+    Array.from(byProvider, ([provider, providerDescriptors]) => {
+      const canonical = providerDescriptors.find((descriptor) => descriptor.source === provider);
+      const selected = canonical ? [canonical] : providerDescriptors;
+      return [provider, {
+        provider,
+        tabs: selected.flatMap((descriptor) => descriptor.tabs.map((tab) => ({
+          key: tab.key,
+          operation: tab.operation,
+          ...(tab.model ? { model: tab.model } : {}),
+          fields: tab.fields.map((field) => ({ name: field.name, type: field.type })),
+        }))),
+      }];
+    }),
+  );
+}
+
+function descriptorFieldRegistryText(registry) {
+  return `// Auto-generated by tools/codegen/generate-studio-descriptor-registry.mjs.
+// Do not edit by hand. Source of truth: apps/frontend/src/components/media-tools/*/descriptor.ts
+
+export interface StudioFieldSchema {
+  name: string;
+  type: string;
+}
+
+export interface StudioTabSchema {
+  key: string;
+  operation: 'video' | 'image' | 'audio';
+  model?: string;
+  fields: StudioFieldSchema[];
+}
+
+export interface StudioDescriptorSchema {
+  provider: string;
+  tabs: StudioTabSchema[];
+}
+
+export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> = ${JSON.stringify(registry, null, 2)};
+`;
 }
 
 function generatedCategories(mediaModels) {
@@ -458,12 +539,28 @@ function main() {
     );
   }
 
+  const fieldsFile = path.join(
+    __dirname,
+    '../../libraries/nestjs-libraries/src/ai/defaults/studio-descriptor-fields.generated.ts',
+  );
+  const expectedFields = descriptorFieldRegistryText(buildDescriptorFieldRegistry(descriptors));
+  if (CHECK) {
+    const currentFields = fs.readFileSync(fieldsFile, 'utf8');
+    if (currentFields.trim() !== expectedFields.trim()) {
+      console.error(`DRIFT: ${fieldsFile} does not match the studio descriptors.`);
+      drift = true;
+    }
+  } else {
+    fs.writeFileSync(fieldsFile, expectedFields, 'utf8');
+    console.log(`Updated studio descriptor fields: ${descriptors.length} descriptors`);
+  }
+
   if (CHECK) {
     if (drift) {
-      console.error('\nMetadata drift detected. Run the generator without --check to refresh.');
+      console.error('\nStudio descriptor drift detected. Run the generator without --check to refresh.');
       process.exit(1);
     }
-    console.log('No metadata drift.');
+    console.log('No studio descriptor metadata or field drift.');
   }
 }
 
