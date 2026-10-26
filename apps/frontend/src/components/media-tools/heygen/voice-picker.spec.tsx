@@ -26,6 +26,16 @@ vi.mock('@postmill-ai/frontend/components/media-tools/audio-player', () => ({
 import { VoicePicker } from './voice-picker';
 import type { HeyGenVoice } from './use-heygen';
 
+const LARGE_VOICE_LIST: HeyGenVoice[] = Array.from({ length: 125 }, (_, index) => ({
+  voiceId: `hv-${index + 1}`,
+  name: index === 100 ? 'Hidden Voice' : `Voice ${index + 1}`,
+  language: 'English',
+  gender: 'Female',
+  previewAudio: null,
+  supportPause: false,
+  emotionSupport: false,
+}));
+
 const VOICES: HeyGenVoice[] = [
   {
     voiceId: 'hv-1',
@@ -83,5 +93,34 @@ describe('VoicePicker', () => {
       target: { value: 'zzz' },
     });
     expect(screen.getByText('No voices match "zzz"')).toBeTruthy();
+  });
+
+  it('mounts only the initial batch of a large voice list', () => {
+    render(<VoicePicker voices={LARGE_VOICE_LIST} onSelect={vi.fn()} />);
+    expect(screen.getAllByRole('button', { name: 'Use' })).toHaveLength(50);
+    expect(screen.getByText('Voice 50')).toBeTruthy();
+    expect(screen.queryByText('Voice 51')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Show more' }).getAttribute('aria-controls')
+    ).toBe('heygen-voice-list');
+  });
+
+  it('reveals the next batch when Show more is activated', () => {
+    render(<VoicePicker voices={LARGE_VOICE_LIST} onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
+    expect(screen.getAllByRole('button', { name: 'Use' })).toHaveLength(100);
+    expect(screen.getByText('Voice 100')).toBeTruthy();
+    expect(screen.queryByText('Hidden Voice')).toBeNull();
+  });
+
+  it('searches the full list beyond the mounted batch', () => {
+    render(<VoicePicker voices={LARGE_VOICE_LIST} onSelect={vi.fn()} />);
+    expect(screen.queryByText('Hidden Voice')).toBeNull();
+    fireEvent.change(screen.getByPlaceholderText('Search by name or language...'), {
+      target: { value: 'hidden voice' },
+    });
+    expect(screen.getByText('Hidden Voice')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Use' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
   });
 });
