@@ -24,6 +24,17 @@ export interface InputSchema {
 
 export type FieldRole = 'prompt' | 'negative' | 'file';
 
+// Fields hidden per model, on top of the caller's `excluded` set. video-01's
+// `subject_reference` is not an i2v first-frame input: it silently switches
+// generation to the upstream S2V-01 subject-to-video model, which failed
+// every prod attempt with "Error 1000: unexpected error" (QA 2026-10-26 —
+// an uploaded image landed here instead of `first_frame_image`). The studio's
+// image-to-video contract is first-frame animation, so the form pins the
+// single image upload to `first_frame_image` and never renders the trap.
+export const MODEL_HIDDEN_FIELDS: Record<string, string[]> = {
+  'minimax/video-01': ['subject_reference'],
+};
+
 export interface ClassifiedField {
   name: string;
   field: SchemaField;

@@ -29,11 +29,16 @@ describe('Replicate catalog allowlist', () => {
   // the Replicate studio's picker; a model filed under the wrong category
   // produces a picker that asks for the wrong source media and a generation
   // that 422s.
-  it('keeps the strictly-image-to-video kling-v2.1 OUT of text-to-video', () => {
-    // Live Replicate schema: kwaivgi/kling-v2.1 REQUIRES `start_image` — it can
-    // never serve a prompt-only text-to-video call.
-    expect(MODEL_ALLOWLIST['text-to-video']).not.toContain('kwaivgi/kling-v2.1');
-    expect(MODEL_ALLOWLIST['image-to-video']).toContain('kwaivgi/kling-v2.1');
+  it('keeps the discontinued kling-v2.1 OUT of the catalog in favor of kling-v2.1-master', () => {
+    // kling-v2.1 was discontinued upstream (Replicate: "Error code 1203: The
+    // model 'kling-v2-1' has been discontinued and is no longer available").
+    const allAllowlisted = new Set(Object.values(MODEL_ALLOWLIST).flat());
+    expect(allAllowlisted.has('kwaivgi/kling-v2.1')).toBe(false);
+    expect(OFFICIAL_MODELS.has('kwaivgi/kling-v2.1')).toBe(false);
+    // The official successor (verified live: only `prompt` required, optional
+    // `start_image`) fills the image-to-video slot.
+    expect(MODEL_ALLOWLIST['image-to-video']).toContain('kwaivgi/kling-v2.1-master');
+    expect(OFFICIAL_MODELS.has('kwaivgi/kling-v2.1-master')).toBe(true);
     // The t2v-capable Kling (verified live: only `prompt` is required) is the
     // text-to-video entry.
     expect(MODEL_ALLOWLIST['text-to-video']).toContain('kwaivgi/kling-v2.5-turbo-pro');
