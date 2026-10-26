@@ -6,8 +6,13 @@ import { isBlockedIp } from './webhook.url.validator';
 // Pins DNS resolution: every resolved IP is checked with `isBlockedIp` and
 // the caller (undici) connects to that same set. Closes the TOCTOU window
 // `isSafePublicHttpsUrl` alone leaves open (see GHSA-f7jj-p389-4w45).
+// `timeout` raises undici's 10s connect ceiling; `autoSelectFamily` enables
+// happy-eyeballs so a blackholed IPv6 route falls back to IPv4 instead of
+// stalling until the connect timeout fires.
 export const ssrfSafeDispatcher = new Agent({
   connect: {
+    timeout: 30_000,
+    autoSelectFamily: true,
     lookup(hostname, options, callback) {
       if (net.isIP(hostname)) {
         const family = net.isIP(hostname);

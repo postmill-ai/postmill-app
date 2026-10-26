@@ -14,6 +14,7 @@ describe('minimax media adapter', () => {
     const sub = await adapter.generateVideo('a cat surfing', {
       apiKey: 'minimax-key',
       model: 'video-01',
+      webhookUrl: 'https://backend.example/media-jobs/webhook/job-1/tok',
       input: { prompt_optimizer: true, subject_image: 'https://img/me.png' },
     });
 
@@ -26,6 +27,9 @@ describe('minimax media adapter', () => {
     expect(body.model).toBe('video-01');
     expect(body.prompt).toBe('a cat surfing');
     expect(body.prompt_optimizer).toBe(true);
+    // MiniMax rejects callback URLs it can't challenge-verify, so webhookUrl is never
+    // forwarded; polling covers completion.
+    expect(body.callback_url).toBeUndefined();
     // subject_image is flattened into MiniMax's nested subject_reference array.
     expect(body.subject_reference).toEqual([{ type: 'character', image: ['https://img/me.png'] }]);
   });
