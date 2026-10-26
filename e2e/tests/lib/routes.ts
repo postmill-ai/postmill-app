@@ -403,7 +403,8 @@ export const ROUTES: RouteDef[] = [
     "publicRoute": false,
     "expectsContent": true,
     "minActionables": 1,
-    "memberGated": true
+    "memberGated": true,
+    "note": "Legacy redirect to /media/fal"
   },
   {
     "name": "media › leonardo",

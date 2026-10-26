@@ -20,9 +20,9 @@ import {
   mediaUpstreamFromPoll,
 } from '@postmill-ai/provider-kernel';
 
-// Kling AI direct (official API, api-singapore.klingai.com) — NOT the fal.ai-backed "Kling"
-// studio (/media/kling is a model-collection page riding the fal adapter; this package is the
-// dedicated integration for real klingai.com API keys). Auth is a single Bearer API key from
+// Kling AI direct (official API, api-singapore.klingai.com) at /media/kling-ai — separate from
+// the fal-hosted Kling models in /media/fal. This package is the dedicated integration for real
+// klingai.com API keys. Auth is a single Bearer API key from
 // https://kling.ai/dev/api-key — the legacy AK/SK JWT scheme is rejected by the current API
 // (401 / code 1002) and deliberately not implemented.
 //
