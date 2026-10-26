@@ -249,7 +249,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   const persistTemplate = useCallback(async (category: string): Promise<boolean> => {
     const state = store.getState();
     const name = state.designName;
-    const previewDataUrl = captureStageThumbnail();
+    const previewDataUrl = state.doc.mode === 'image' ? captureStageThumbnail() : undefined;
     let thumbnailFileId: string | undefined;
     if (previewDataUrl) {
       try {

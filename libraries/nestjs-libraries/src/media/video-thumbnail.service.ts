@@ -84,7 +84,7 @@ export class VideoThumbnailService {
   async generateForFile(
     orgId: string,
     fileId: string,
-    opts?: { localOnly?: boolean }
+    opts?: { localOnly?: boolean; force?: boolean }
   ): Promise<string | null> {
     return (await this.generateOutcomeForFile(orgId, fileId, opts)).thumbnail;
   }
@@ -92,12 +92,12 @@ export class VideoThumbnailService {
   async generateOutcomeForFile(
     orgId: string,
     fileId: string,
-    opts?: { localOnly?: boolean }
+    opts?: { localOnly?: boolean; force?: boolean }
   ): Promise<VideoThumbnailOutcome> {
     try {
       const file = await this._fileService.getFileById(orgId, fileId);
       if (!file || !isVideoType(file.type)) return { thumbnail: null };
-      if (file.thumbnail) return { thumbnail: file.thumbnail };
+      if (file.thumbnail && !opts?.force) return { thumbnail: file.thumbnail };
       if (file.fileSize > VIDEO_FRAME_MAX_BYTES) return { thumbnail: null };
 
       const adapter = await this._storageService.resolveAdapterForFolder(
@@ -126,15 +126,33 @@ export class VideoThumbnailService {
       }
       if (!info.frame) return { thumbnail: null };
 
-      // Land the thumbnail beside the video (same adapter), then point the
-      // File row at it — the same shape completeJobWithBuffer persists.
       const thumbnailPath = await adapter.writeBuffer(info.frame, 'image/jpeg');
-      await this._fileService.saveMediaInformation(orgId, {
-        id: file.id,
-        thumbnail: thumbnailPath,
-        alt: file.alt ?? '',
-        thumbnailTimestamp: 0,
-      });
+      try {
+        await this._fileService.saveMediaInformation(orgId, {
+          id: file.id,
+          thumbnail: thumbnailPath,
+          alt: file.alt ?? '',
+          thumbnailTimestamp: 0,
+        });
+      } catch (err) {
+        try {
+          await adapter.removeFile(thumbnailPath);
+        } catch (cleanupErr) {
+          this._logger.warn(
+            `Could not remove orphaned video thumbnail ${thumbnailPath}: ${(cleanupErr as Error)?.message}`
+          );
+        }
+        throw err;
+      }
+      if (file.thumbnail && file.thumbnail !== thumbnailPath) {
+        try {
+          await adapter.removeFile(file.thumbnail);
+        } catch (err) {
+          this._logger.warn(
+            `Could not remove replaced video thumbnail ${file.thumbnail}: ${(err as Error)?.message}`
+          );
+        }
+      }
       return { thumbnail: thumbnailPath };
     } catch (err) {
       this._logger.warn(
@@ -160,6 +178,28 @@ export class VideoThumbnailService {
     return updated.count === 1
       ? { thumbnail: null, reclassified: { type, mime } }
       : { thumbnail: null };
+  }
+
+  async repairThumbnails(orgId: string, fileIds: string[]) {
+    const ids = [...new Set(fileIds)];
+    const stats = { scanned: ids.length, generated: 0, reclassified: 0, failed: 0 };
+    const CONCURRENCY = 2;
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < ids.length) {
+        const fileId = ids[cursor++];
+        const out = await this.generateOutcomeForFile(orgId, fileId, { force: true });
+        if (out.thumbnail) {
+          stats.generated++;
+        } else if (out.reclassified) {
+          stats.reclassified++;
+        } else {
+          stats.failed++;
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, ids.length) }, worker));
+    return stats;
   }
 
   /**

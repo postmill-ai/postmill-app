@@ -30,6 +30,22 @@ const addText = (store: ReturnType<typeof createDesignerStore>, text: string) =>
   });
 };
 
+const addVideo = (store: ReturnType<typeof createDesignerStore>) => {
+  store.getState().setMode('video');
+  const state = store.getState();
+  const output = state.doc.outputs[state.currentOutput];
+  if (!('tracks' in output)) throw new Error('Expected a video output');
+  const track = output.tracks.find((t) => t.type === 'video');
+  if (!track) throw new Error('Expected a video track');
+  state.addClip(state.currentOutput, track.id, {
+    id: '',
+    startMs: 0,
+    endMs: 5000,
+    src: '/uploads/org-1/video.mp4',
+    fileId: 'source-video',
+  });
+};
+
 const callsTo = (fetchMock: ReturnType<typeof vi.fn>, method: string, url: string) =>
   fetchMock.mock.calls.filter(
     ([u, init]) => u === url && (init as RequestInit | undefined)?.method === method
@@ -84,6 +100,32 @@ describe('createDesignAutosave', () => {
     expect(putPayload.name).toBe('Untitled Design');
     expect(putPayload.previewFileId).toBe('file-1');
     expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('never uploads or sends client snapshots for video create and update saves', async () => {
+    const store = createDesignerStore(1080, 1920);
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/media/designs') return Promise.resolve(okJson({ id: 'video-design' }));
+      return Promise.resolve(okJson({}));
+    });
+    const uploadPreview = vi.fn().mockResolvedValue({ previewFileId: 'black-frame' });
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
+
+    addVideo(store);
+    autosave.save(store.getState().doc);
+    await flush();
+    store.getState().setDoc(store.getState().doc);
+    autosave.save(store.getState().doc);
+    await flush();
+
+    const post = callsTo(fetchMock, 'POST', '/media/designs')[0];
+    const put = callsTo(fetchMock, 'PUT', '/media/designs/video-design')[0];
+    for (const [, init] of [post, put]) {
+      const payload = JSON.parse((init as RequestInit).body as string);
+      expect(payload.previewFileId).toBeUndefined();
+      expect(payload.previewDataUrl).toBeUndefined();
+    }
+    expect(uploadPreview).not.toHaveBeenCalled();
   });
 
   it('persists a rename through the autosave PUT (name read at send time)', async () => {

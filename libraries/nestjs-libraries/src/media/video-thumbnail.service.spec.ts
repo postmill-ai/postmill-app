@@ -30,6 +30,7 @@ function makeService(over: {
     type: over.adapterType ?? 'LOCAL',
     readFile: vi.fn().mockResolvedValue(Buffer.from('video-bytes')),
     writeBuffer: vi.fn().mockResolvedValue('/uploads/org-1/thumb-1.jpg'),
+    removeFile: vi.fn().mockResolvedValue(undefined),
   };
   const storageService = {
     resolveAdapterForFolder: vi.fn().mockResolvedValue(adapter),
@@ -108,6 +109,50 @@ describe('VideoThumbnailService.generateForFile', () => {
 
     expect(out).toBe('/uploads/org-1/existing.jpg');
     expect(adapter.readFile).not.toHaveBeenCalled();
+  });
+
+  it('force replaces an existing thumbnail and removes the old object', async () => {
+    const { service, adapter, fileService } = makeService({
+      adapterType: 'S3',
+      file: {
+        id: 'file-1',
+        type: 'video',
+        path: '/uploads/org-1/vid.mp4',
+        thumbnail: '/uploads/org-1/black.jpg',
+        alt: '',
+        fileSize: 1024,
+        folderId: null,
+      },
+    });
+
+    const out = await service.generateForFile('org-1', 'file-1', { force: true });
+
+    expect(out).toBe('/uploads/org-1/thumb-1.jpg');
+    expect(adapter.readFile).toHaveBeenCalled();
+    expect(fileService.saveMediaInformation).toHaveBeenCalled();
+    expect(adapter.removeFile).toHaveBeenCalledWith('/uploads/org-1/black.jpg');
+  });
+
+  it('force failure preserves the existing thumbnail reference and object', async () => {
+    const { service, adapter } = makeService({
+      file: {
+        id: 'file-1',
+        type: 'video',
+        path: '/uploads/org-1/vid.mp4',
+        thumbnail: '/uploads/org-1/existing.jpg',
+        alt: '',
+        fileSize: 1024,
+        folderId: null,
+      },
+    });
+    mockExtractVideoFrame.mockResolvedValue({
+      frame: null,
+      hasVideoStream: true,
+      hasAudioStream: false,
+    });
+
+    expect(await service.generateForFile('org-1', 'file-1', { force: true })).toBeNull();
+    expect(adapter.removeFile).not.toHaveBeenCalled();
   });
 
   it('returns null for a missing or non-video file', async () => {
@@ -361,5 +406,18 @@ describe('VideoThumbnailService.backfillOrgThumbnails', () => {
     const stats = await service.backfillOrgThumbnails('org-1');
 
     expect(stats).toEqual({ scanned: 1, generated: 0, reclassified: 1, failed: 0 });
+  });
+
+  it('targeted repair dedupes ids and forces every source thumbnail', async () => {
+    const { service } = makeService();
+    const generate = vi.spyOn(service, 'generateOutcomeForFile').mockResolvedValue({
+      thumbnail: '/uploads/org-1/repaired.jpg',
+    });
+
+    const stats = await service.repairThumbnails('org-1', ['file-1', 'file-2', 'file-1']);
+
+    expect(stats).toEqual({ scanned: 2, generated: 2, reclassified: 0, failed: 0 });
+    expect(generate).toHaveBeenCalledWith('org-1', 'file-1', { force: true });
+    expect(generate).toHaveBeenCalledWith('org-1', 'file-2', { force: true });
   });
 });

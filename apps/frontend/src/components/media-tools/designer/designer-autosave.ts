@@ -204,8 +204,9 @@ export const createDesignAutosave = ({
         // never sink the create, so degrade to no preview. A retry of a failed
         // create for the same doc + name reuses the preview it already
         // uploaded rather than serializing the canvas again.
-        const { previewFileId, previewDataUrl } =
-          lastFailed && lastFailed.doc === sentDoc && lastFailed.name === sentName
+        const { previewFileId, previewDataUrl } = sentDoc.mode === 'video'
+          ? {} as PreviewUpload
+          : lastFailed && lastFailed.doc === sentDoc && lastFailed.name === sentName
             ? lastFailed.preview
             : await uploadPreview().catch(() => ({}) as PreviewUpload);
         const payload: Record<string, unknown> = {
@@ -261,7 +262,7 @@ export const createDesignAutosave = ({
     // File row in the library (backend cleanup only deletes REPLACED
     // referenced previews).
     let preview: PreviewUpload = {};
-    if (store.getState().doc === sentDoc) {
+    if (sentDoc.mode !== 'video' && store.getState().doc === sentDoc) {
       if (lastFailed && lastFailed.doc === sentDoc) {
         // A backoff retry for a doc whose preview already uploaded — reuse it
         // instead of re-serializing the canvas and re-uploading an identical
