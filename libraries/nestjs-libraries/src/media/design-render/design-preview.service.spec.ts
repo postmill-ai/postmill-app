@@ -171,6 +171,22 @@ describe('DesignPreviewService', () => {
       expect(videoDoc.outputs[0].tracks).toHaveLength(1);
     });
 
+    it('labels an audio-only design instead of producing a black card', async () => {
+      const audioDoc = structuredClone(videoDoc);
+      audioDoc.outputs[0].tracks[0].type = 'audio';
+
+      await service.renderPreviewBuffer(audioDoc, { orgId: 'org-1' });
+
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      expect(renderDoc.outputs[0].children).toHaveLength(2);
+      expect(renderDoc.outputs[0].children[1]).toMatchObject({
+        type: 'text',
+        text: 'Audio-only design',
+        fill: '#FFFFFF',
+      });
+      expect(audioDoc.outputs[0].tracks[0].type).toBe('audio');
+    });
+
     it('rejects when the underlying render rejects', async () => {
       renderService.renderPage.mockRejectedValue(new Error('video output'));
 
@@ -196,6 +212,36 @@ describe('DesignPreviewService', () => {
       });
       // A stored thumbnail needs no extraction.
       expect(videoThumbnailService.generateForFile).not.toHaveBeenCalled();
+    });
+
+    it('uses an image File directly when it is placed on a video track', async () => {
+      fileService.getByIds.mockResolvedValue([
+        { id: 'file-vid-1', type: 'image', path: '/uploads/org-1/still.jpg', thumbnail: null },
+      ]);
+
+      await service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' });
+
+      expect(videoThumbnailService.generateForFile).not.toHaveBeenCalled();
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      expect(renderDoc.outputs[0].children[0]).toMatchObject({
+        type: 'image',
+        src: '/uploads/org-1/still.jpg',
+      });
+    });
+
+    it('uses a MIME-typed image File directly on a video track', async () => {
+      fileService.getByIds.mockResolvedValue([
+        { id: 'file-vid-1', type: 'image/jpeg', path: '/uploads/org-1/legacy.jpg', thumbnail: null },
+      ]);
+
+      await service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' });
+
+      expect(videoThumbnailService.generateForFile).not.toHaveBeenCalled();
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      expect(renderDoc.outputs[0].children[0]).toMatchObject({
+        type: 'image',
+        src: '/uploads/org-1/legacy.jpg',
+      });
     });
 
     it('self-heals a missing thumbnail via on-demand extraction (local only)', async () => {

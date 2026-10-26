@@ -9,6 +9,9 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-poster';
 import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 
+const isImageFile = (type?: string | null) =>
+  type === 'image' || !!type?.startsWith('image/');
+
 /**
  * Server-side design preview rendering.
  *
@@ -57,7 +60,8 @@ export class DesignPreviewService {
     if (fileIds.size) {
       const files = await this._fileService.getByIds(orgId, [...fileIds]);
       for (const file of files) {
-        if (file.thumbnail) posters.set(file.id, file.thumbnail);
+        if (isImageFile(file.type)) posters.set(file.id, file.path);
+        else if (file.thumbnail) posters.set(file.id, file.thumbnail);
       }
       for (const fileId of fileIds) {
         if (posters.has(fileId)) continue;
@@ -73,11 +77,12 @@ export class DesignPreviewService {
     for (const clip of clipsBySrc) {
       const file = await this._fileService.getFileByPath(orgId, clip.src);
       if (!file) continue;
-      const thumb =
-        file.thumbnail ??
-        (await this._videoThumbnailService.generateForFile(orgId, file.id, {
-          localOnly: true,
-        }));
+      const thumb = isImageFile(file.type)
+        ? file.path
+        : file.thumbnail ??
+          (await this._videoThumbnailService.generateForFile(orgId, file.id, {
+            localOnly: true,
+          }));
       if (thumb) posters.set(clip.id, thumb);
     }
     return posters.size ? posters : undefined;
@@ -107,6 +112,43 @@ export class DesignPreviewService {
     }
   }
 
+  private _withAudioOnlyPlaceholder(doc: DesignerDoc, source: DesignerDoc): DesignerDoc {
+    const sourceOutput = source.outputs?.[0];
+    const output = doc.outputs?.[0] as any;
+    if (
+      !sourceOutput ||
+      !('tracks' in sourceOutput) ||
+      !output ||
+      !('children' in output) ||
+      output.children.length ||
+      !sourceOutput.tracks.some(
+        (track) => track.type === 'audio' && !track.hidden && track.clips.length > 0
+      )
+    ) {
+      return doc;
+    }
+    const { width, height } = output;
+    const backdrop = {
+      id: 'audio-only-backdrop', type: 'shape', shape: 'rect',
+      x: Math.round(width * 0.12), y: Math.round(height * 0.38),
+      width: Math.round(width * 0.76), height: Math.round(height * 0.24),
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+      fill: '#171717', borderRadius: 24,
+    };
+    const label = {
+      id: 'audio-only-label', type: 'text', text: 'Audio-only design',
+      x: Math.round(width * 0.16), y: Math.round(height * 0.45),
+      width: Math.round(width * 0.68), height: Math.round(height * 0.1),
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+      fontFamily: 'Inter', fontSize: Math.round(Math.min(width, height) * 0.045),
+      fontWeight: 600, fill: '#FFFFFF', align: 'center',
+    };
+    return {
+      ...doc,
+      outputs: [{ ...output, children: [backdrop, label] }, ...doc.outputs.slice(1)],
+    };
+  }
+
   /**
    * Render the preview PNG for a doc. Image docs render output 0 page 1 as-is;
    * video docs are projected to their poster (t=0 composed state) first, since
@@ -127,7 +169,10 @@ export class DesignPreviewService {
       ? await this._resolveVideoPosters(doc, opts.orgId)
       : undefined;
     this._assertRequiredVideoAssets(doc, videoPosters);
-    const renderDoc = docWithVideoPosters(doc, videoPosters);
+    const renderDoc = this._withAudioOnlyPlaceholder(
+      docWithVideoPosters(doc, videoPosters),
+      doc
+    );
     await this._designRenderService.assertVisualAssets(renderDoc, 0);
     return this._designRenderService.renderPage(renderDoc, 0, opts);
   }
