@@ -58,7 +58,7 @@ new OpenAICompatibleAdapter(
   capabilities?: Partial<AiCapabilities>, // text:true, tools:true always default on
   models?: AiModelInfo[],             // static fallback catalog
   type: AiProviderType = 'hub',
-  opts?: { requireBaseURL?: boolean },
+  opts?: { requireBaseURL?: boolean; ipFamily?: 4 | 6 },
 )
 ```
 
@@ -66,9 +66,9 @@ Behavior you get for free:
 
 - Inference via `createOpenAI` (`@ai-sdk/openai`) and `ChatOpenAI` (`@langchain/openai`); clients are cached in `BoundedProviderCache` (bounded LRU, default cap 256) keyed by `apiKey||baseURL`.
 - `credentialFields` = `apiKey` (password, required) + `baseURL` (string, required only when `requireBaseURL`).
-- `listModels` is live-first: `fetchOpenAIStyleModels(safeFetch, baseURL, apiKey)` GETs `{baseURL}/models` (Bearer auth, never throws, returns `null` on any failure) and `mergeLiveModels(live, staticModels, capabilities)` merges — live decides which ids exist, static wins on curated metadata for known ids, live-only ids are classified by `heuristicModelInfo` (id-substring heuristics for embedding/image/speech kinds).
+- `listModels` is live-first: `fetchOpenAIStyleModels(safeFetch, baseURL, apiKey, ipFamily?)` GETs `{baseURL}/models` (Bearer auth, never throws, returns `null` on any failure) and `mergeLiveModels(live, staticModels, capabilities)` merges — live decides which ids exist, static wins on curated metadata for known ids, live-only ids are classified by `heuristicModelInfo` (id-substring heuristics for embedding/image/speech kinds).
 - `validateCredentials` runs over the injected `safeFetch` only: missing `_safeFetch` ⇒ `{ ok: false, error: 'cannot validate' }`; SSRF `Blocked URL` errors are re-thrown (caller maps to 400); transport errors become `{ ok: false, error: 'Could not reach the Base URL (...)' }`; 401/403 ⇒ `Invalid API key`.
-- Tenant-supplied `baseURL` (≠ canonical default) routes all inference through the SSRF-safe fetch with a 300s ceiling; without an injected safeFetch it throws rather than falling back to the global fetch. `requireBaseURL: true` also refuses to default to `api.openai.com`.
+- Tenant-supplied `baseURL` (≠ canonical default) routes all inference through the SSRF-safe fetch with a 300s ceiling; without an injected safeFetch it throws rather than falling back to the global fetch. `requireBaseURL: true` also refuses to default to `api.openai.com`. Setting `ipFamily` also routes canonical inference through safeFetch and applies that family to model listing, validation, and LangChain calls.
 
 Minimal package shape (from `libraries/providers/openai-compatible/src`):
 

@@ -39,9 +39,10 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
 - Pipeline (enforced inside `safeFetch`): per-hop `isSafePublicHttpsUrl`
   (`./webhook.url.validator.ts`) → undici `fetch` with `redirect: 'manual'` +
   `dispatcher: ssrfSafeDispatcher` (`./ssrf.safe.dispatcher.ts`, DNS-pinned) → manual
-  redirect loop (`MAX_REDIRECTS = 5`) re-validating every hop. Credential-class headers
-  (`authorization`, `cookie`, `x-api-key`, … `CREDENTIAL_HEADER_NAMES`, :41-49) are
-  stripped once a redirect leaves the original origin.
+  redirect loop (`MAX_REDIRECTS = 5`) re-validating every hop. Optional per-request
+  `ipFamily: 4 | 6` selects a cached dispatcher with the same DNS filtering/pinning.
+  Credential-class headers (`authorization`, `cookie`, `x-api-key`, …
+  `CREDENTIAL_HEADER_NAMES`, :41-49) are stripped once a redirect leaves the original origin.
 - Must use **npm undici's** `fetch`, not the global one — the v8 `Agent` dispatcher is
   incompatible with Node's built-in undici (comment :93-98).
 - Timeouts: default 30 s (`OUTBOUND_HTTP_TIMEOUT_MS`), webhooks 10 s
