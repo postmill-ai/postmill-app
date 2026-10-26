@@ -21,6 +21,7 @@ import {
 } from './segment-regenerate';
 import { Stepper } from './controls';
 import { addMediaToTimeline, addImageClipToTimeline, addVoiceoverToTimeline, probeAudioDuration, probeVideoMetadata, pollMediaJobArtifact, JOB_MAX_POLLS, JOB_POLL_INTERVAL_MS, type JobPollOutcome } from './add-media-to-timeline';
+import { runClipTransformRequest, VIDEO_BG_REMOVAL_MODELS } from './clip-transform';
 import { postTextToSpeech } from './text-to-speech';
 import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, planTrackDrop, resolveClipPlacement } from './clip-geometry';
@@ -3197,51 +3198,19 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     clearMenu = true
   ) => {
     if (!clipMenu) return;
-    const state = store.getState();
-    const vo = state.doc.outputs[clipMenu.outputIndex] as VideoOutput;
-    const track = vo.tracks.find((t) => t.id === clipMenu.trackId);
-    const clip = track?.clips.find((c) => c.id === clipMenu.clipId);
-    if (!clip?.src) {
-      toaster.show(translate('clip_has_no_source', 'Selected clip has no source'), 'warning');
-      return;
-    }
     try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      // Shared with the clip Inspector's AI actions — both surfaces run the
+      // same request/poll/land path (clip-transform.ts).
+      await runClipTransformRequest({
+        store,
+        target: clipMenu,
+        endpoint,
+        body,
+        fetch,
+        translate,
+        toaster,
+        isMounted: () => mountedRef.current,
       });
-      if (!res.ok) throw new Error(translate('transform_failed', 'Transform failed'));
-      const { id } = await res.json();
-      if (isArtifactPath(id)) {
-        state.updateClipSilent(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, {
-          src: id,
-          fileId: undefined,
-        });
-        state.pushHistory();
-      } else {
-        let polls = 0;
-        while (polls < JOB_MAX_POLLS) {
-          if (!mountedRef.current) return; // timeline unmounted — stop polling
-          const jobRes = await fetch(`/media/jobs/${id}`);
-          if (!jobRes.ok) throw new Error(translate('failed_to_check_transform_status', 'Failed to check transform status'));
-          const job = await jobRes.json();
-          if (job.status === 'completed') {
-            if (!job.artifactUrl) throw new Error(translate('no_artifact', 'No artifact'));
-            state.updateClipSilent(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, {
-              src: job.artifactUrl,
-              fileId: undefined,
-            });
-            state.pushHistory();
-            break;
-          }
-          if (job.status === 'failed') throw new Error(parseJobError(job.error)?.message ?? job.error ?? translate('transform_failed', 'Transform failed'));
-          polls++;
-          await new Promise((r) => setTimeout(r, JOB_POLL_INTERVAL_MS));
-        }
-      }
-    } catch (e) {
-      if (mountedRef.current) toaster.show((e as Error).message || translate('transform_failed', 'Transform failed'), 'warning');
     } finally {
       if (clearMenu && mountedRef.current) setClipMenu(null);
     }
@@ -4192,10 +4161,25 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                   <div className="flex flex-col gap-1">
                     <div className="text-[11px] font-medium text-textColor/60 mb-1 px-1">{translate('remove_background', 'Remove background')}</div>
                     <button
-                      onClick={() => runClipTransform('/media/remove-video-background', { videoUrl: clipSrc })}
+                      onClick={() => runClipTransform('/media/remove-video-background', { videoUrl: clipSrc, model: VIDEO_BG_REMOVAL_MODELS.white })}
+                      title={translate('bg_removal_white_hint', 'Best for clips shot on a white/light background')}
                       className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
                     >
-                      {translate('remove_background', 'Remove background')}
+                      {translate('bg_removal_white_background', 'White background')}
+                    </button>
+                    <button
+                      onClick={() => runClipTransform('/media/remove-video-background', { videoUrl: clipSrc, model: VIDEO_BG_REMOVAL_MODELS.green })}
+                      title={translate('bg_removal_green_hint', 'Best for clips shot on a green screen')}
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
+                    >
+                      {translate('bg_removal_green_screen', 'Green screen')}
+                    </button>
+                    <button
+                      onClick={() => runClipTransform('/media/remove-video-background', { videoUrl: clipSrc })}
+                      title={translate('bg_removal_auto_hint', 'Use the organization default model')}
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
+                    >
+                      {translate('bg_removal_auto', 'Auto (org default)')}
                     </button>
                     <button
                       onClick={() => setClipTransformMode(null)}

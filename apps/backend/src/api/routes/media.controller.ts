@@ -388,7 +388,7 @@ export class MediaController {
     @Body() body: RemoveVideoBackgroundDto
   ) {
     try {
-      const result = await this._aiDefaults.videoBackground(org.id, body.videoUrl);
+      const result = await this._aiDefaults.videoBackground(org.id, body.videoUrl, { model: body.model });
       return { id: result, status: 'pending' };
     } catch (err) {
       if (err instanceof DefaultNotConfiguredError) {
