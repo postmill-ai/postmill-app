@@ -224,7 +224,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   render the t=0 POSTER projection `designer-doc/video-poster.ts` — a render-only synthetic image
   output (clips→elements; `video`-track clips draw from their File row's stored thumbnail poster
   when one is resolved by the caller — `DesignPreviewService` self-heals missing ones for locally
-  stored videos via `media/video-frame.ts` — and are skipped only when no poster exists).
+  stored videos via `media/video-frame.ts`). Preview rendering fails when a visible required
+  time-zero poster or other visual asset cannot be loaded; intentional black pixels remain valid.
   `renderPage` still rejects video outputs.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
   carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a

@@ -19,8 +19,8 @@
  *   File row's stored thumbnail), passed in via the `videoPosters` map —
  *   this module stays pure/sync; resolving and extracting posters is the
  *   caller's job (`DesignPreviewService`). A video clip with NO poster is
- *   skipped: its pixels live in a media file only the frame renderer's
- *   ffmpeg path can decode. Image/sticker/raster clips map to image
+ *   omitted by this pure projection; preview callers reject that incomplete
+ *   document instead of uploading a black fallback. Image/sticker/raster clips map to image
  *   elements (a sticker falls back to its first frame); text/caption clips
  *   to text elements; shape clips to shape elements — the inverse of the
  *   `imageDocToVideoDoc` mapping.

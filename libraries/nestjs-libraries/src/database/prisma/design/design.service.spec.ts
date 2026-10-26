@@ -63,6 +63,7 @@ describe('DesignService', () => {
   let fileService: {
     importFromUrl: ReturnType<typeof vi.fn>;
     getFileById: ReturnType<typeof vi.fn>;
+    getFileByPath: ReturnType<typeof vi.fn>;
     softDelete: ReturnType<typeof vi.fn>;
     saveFile: ReturnType<typeof vi.fn>;
     backfillDesignMetadata: ReturnType<typeof vi.fn>;
@@ -81,6 +82,7 @@ describe('DesignService', () => {
   };
   let videoThumbnailService: {
     backfillOrgThumbnails: ReturnType<typeof vi.fn>;
+    repairThumbnails: ReturnType<typeof vi.fn>;
   };
   let service: DesignService;
 
@@ -115,6 +117,7 @@ describe('DesignService', () => {
     fileService = {
       importFromUrl: vi.fn(),
       getFileById: vi.fn(),
+      getFileByPath: vi.fn(),
       softDelete: vi.fn(),
       saveFile: vi.fn(),
       backfillDesignMetadata: vi
@@ -135,6 +138,9 @@ describe('DesignService', () => {
     };
     videoThumbnailService = {
       backfillOrgThumbnails: vi
+        .fn()
+        .mockResolvedValue({ scanned: 0, generated: 0, reclassified: 0, failed: 0 }),
+      repairThumbnails: vi
         .fn()
         .mockResolvedValue({ scanned: 0, generated: 0, reclassified: 0, failed: 0 }),
     };
@@ -913,18 +919,20 @@ describe('DesignService', () => {
       expect(fileService.softDelete).toHaveBeenCalledWith('client-file', 'org-1');
     });
 
-    it('createDesign keeps the client preview when regen fails', async () => {
+    it('createDesign saves no preview and cleans the client file when regen fails', async () => {
       previewService.renderPreviewBuffer.mockRejectedValue(new Error('no canvas'));
 
       await service.createDesign('org-1', 'user-1', {
         name: 'Video',
         doc: videoDoc,
         previewFileId: 'client-file',
+        previewDataUrl: 'data:image/jpeg;base64,zzz',
       });
 
-      expect(repository.create).toHaveBeenCalledWith(
-        expect.objectContaining({ previewFileId: 'client-file' })
-      );
+      const payload = repository.create.mock.calls[0][0];
+      expect(payload.previewFileId).toBeUndefined();
+      expect(payload.previewDataUrl).toBeUndefined();
+      expect(fileService.softDelete).toHaveBeenCalledWith('client-file', 'org-1');
     });
 
     it('createDesign does not render a preview for an image doc', async () => {
@@ -936,41 +944,45 @@ describe('DesignService', () => {
       expect(previewService.renderPreviewBuffer).not.toHaveBeenCalled();
     });
 
-    it('updateDesign regenerates once per design inside the throttle window', async () => {
+    it('two video saves inside 60 seconds cannot replace the good server poster', async () => {
       previewService.renderPreviewBuffer.mockResolvedValue(Buffer.from('png'));
       previewService.uploadPreview.mockResolvedValue('regen-file');
       repository.findById.mockResolvedValue({ id: 'd1', previewFileId: 'old-file' });
 
-      await service.updateDesign('org-1', 'd1', { doc: videoDoc });
-      await service.updateDesign('org-1', 'd1', { doc: videoDoc });
+      await service.updateDesign('org-1', 'd1', { doc: videoDoc, previewFileId: 'client-1' });
+      await service.updateDesign('org-1', 'd1', { doc: videoDoc, previewFileId: 'client-2' });
 
       expect(previewService.renderPreviewBuffer).toHaveBeenCalledTimes(1);
-      // The first (un-throttled) save wrote the regen preview.
       expect(repository.update).toHaveBeenNthCalledWith(
         1,
         'd1',
         'org-1',
         expect.objectContaining({ previewFileId: 'regen-file' })
       );
+      const throttledPayload = repository.update.mock.calls[1][2];
+      expect(throttledPayload).not.toHaveProperty('previewFileId');
+      expect(throttledPayload).not.toHaveProperty('previewDataUrl');
       expect(fileService.softDelete).toHaveBeenCalledWith('old-file', 'org-1');
+      expect(fileService.softDelete).toHaveBeenCalledWith('client-1', 'org-1');
+      expect(fileService.softDelete).toHaveBeenCalledWith('client-2', 'org-1');
     });
 
-    it('updateDesign still saves the doc when regen fails', async () => {
+    it('updateDesign preserves the old preview and cleans the client file when regen fails', async () => {
       previewService.renderPreviewBuffer.mockRejectedValue(new Error('render down'));
       repository.findById.mockResolvedValue({ id: 'd1', previewFileId: 'old-file' });
 
       await service.updateDesign('org-1', 'd1', {
         doc: videoDoc,
+        previewFileId: 'client-file',
         previewDataUrl: 'data:image/jpeg;base64,zzz',
       });
 
-      expect(repository.update).toHaveBeenCalledWith(
-        'd1',
-        'org-1',
-        expect.objectContaining({
-          doc: expect.objectContaining({ mode: 'video' }),
-        })
-      );
+      const payload = repository.update.mock.calls[0][2];
+      expect(payload.doc).toMatchObject({ mode: 'video' });
+      expect(payload).not.toHaveProperty('previewFileId');
+      expect(payload).not.toHaveProperty('previewDataUrl');
+      expect(fileService.softDelete).toHaveBeenCalledWith('client-file', 'org-1');
+      expect(fileService.softDelete).not.toHaveBeenCalledWith('old-file', 'org-1');
     });
   });
 
@@ -1047,6 +1059,70 @@ describe('DesignService', () => {
 
       expect(result.designs.failed + result.templates.failed).toBe(1);
       expect(result.designs.regenerated + result.templates.regenerated).toBe(3);
+    });
+
+    it('forces source thumbnails and only targeted design/template previews', async () => {
+      const sourceDoc = {
+        mode: 'video',
+        outputs: [{
+          tracks: [{
+            type: 'video',
+            clips: [
+              { id: 'c1', fileId: 'video-1' },
+              { id: 'c2', src: '/uploads/org-1/legacy.mp4' },
+            ],
+          }],
+        }],
+      };
+      repository.findDesignsForPreviewRegen.mockResolvedValue([
+        { id: 'target-design', doc: sourceDoc, previewFileId: 'old-file', previewDataUrl: null },
+      ]);
+      repository.findTemplatesForPreviewRegen.mockResolvedValue([
+        { id: 'target-template', organizationId: 'org-1', doc: sourceDoc, thumbnailFileId: 'old-thumb' },
+      ]);
+      fileService.getFileByPath.mockResolvedValue({ id: 'video-2' });
+      videoThumbnailService.repairThumbnails.mockResolvedValue({
+        scanned: 2, generated: 2, reclassified: 0, failed: 0,
+      });
+
+      const result = await service.regenPreviews('org-1', {
+        designIds: ['target-design'],
+        templateIds: ['target-template'],
+        forceSourceThumbnails: true,
+      });
+
+      expect(repository.findDesignsForPreviewRegen).toHaveBeenCalledWith('org-1', ['target-design']);
+      expect(repository.findTemplatesForPreviewRegen).toHaveBeenCalledWith('org-1', ['target-template']);
+      expect(videoThumbnailService.repairThumbnails).toHaveBeenCalledWith('org-1', ['video-1', 'video-2']);
+      expect(videoThumbnailService.backfillOrgThumbnails).not.toHaveBeenCalled();
+      expect(fileService.backfillDesignMetadata).not.toHaveBeenCalled();
+      expect(result.videoThumbnails.generated).toBe(2);
+      expect(result.designs).toEqual({ scanned: 1, regenerated: 1, skipped: 0, failed: 0 });
+      expect(result.templates).toEqual({ scanned: 1, regenerated: 1, skipped: 0, failed: 0 });
+    });
+
+    it('does not sweep the unspecified record kind in targeted mode', async () => {
+      repository.findDesignsForPreviewRegen.mockResolvedValue([]);
+      repository.findTemplatesForPreviewRegen.mockResolvedValue([]);
+
+      await service.regenPreviews('org-1', { designIds: ['only-design'] });
+
+      expect(repository.findDesignsForPreviewRegen).toHaveBeenCalledWith('org-1', ['only-design']);
+      expect(repository.findTemplatesForPreviewRegen).toHaveBeenCalledWith('org-1', []);
+      expect(previewService.renderPreviewBuffer).not.toHaveBeenCalled();
+    });
+
+    it('cleans a newly uploaded preview when linking it fails', async () => {
+      repository.findDesignsForPreviewRegen.mockResolvedValue([
+        { id: 'd1', doc: imageDoc, previewFileId: null, previewDataUrl: null },
+      ]);
+      repository.findTemplatesForPreviewRegen.mockResolvedValue([]);
+      repository.update.mockRejectedValue(new Error('db down'));
+
+      const result = await service.regenPreviews('org-1');
+
+      expect(result.designs.failed).toBe(1);
+      expect(fileService.softDelete).toHaveBeenCalledWith('new-file', 'org-1');
     });
   });
 
@@ -1176,6 +1252,45 @@ describe('DesignService', () => {
       expect(out.children[0].id).toMatch(/^el-/);
       // ...while the content survives verbatim.
       expect(out.children[0].text).toBe('Hello');
+    });
+
+    it('imports a video .pdesign without persisting a black fallback preview', async () => {
+      const importedVideo = {
+        version: DESIGNER_DOC_VERSION,
+        mode: 'video',
+        outputs: [{
+          id: 'out-video',
+          formatId: 'reel',
+          name: 'Reel',
+          width: 1080,
+          height: 1920,
+          fps: 30,
+          durationMs: 5000,
+          tracks: [{
+            id: 'track-video',
+            type: 'video',
+            clips: [{
+              id: 'clip-video',
+              startMs: 0,
+              endMs: 5000,
+              fileId: 'source-video',
+              src: '/uploads/org-1/source.mp4',
+            }],
+          }],
+        }],
+      };
+      previewService.renderPreviewBuffer.mockRejectedValue(new Error('poster unresolved'));
+      repository.create.mockImplementation((payload: any) => payload);
+
+      const created = await service.importDesign('org-1', 'user-1', {
+        buffer: Buffer.from(buildPostmillFile(importedVideo as any, 'Video Import')),
+        originalname: 'video.pdesign',
+      });
+
+      expect(created.name).toBe('Video Import');
+      expect(created.previewFileId).toBeUndefined();
+      expect(created.previewDataUrl).toBeUndefined();
+      expect(previewService.renderPreviewBuffer).toHaveBeenCalled();
     });
 
     it('uses the capped streaming parser for buffered ZIP imports', async () => {

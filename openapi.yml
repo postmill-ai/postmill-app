@@ -7518,15 +7518,16 @@ paths:
     post:
       operationId: DesignController_regenPreviews
       parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegenPreviewsDto"
       responses:
         "201":
           description: ""
-      summary: |-
-        Maintenance: regenerate server-side previews for the caller's org —
-        designs whose preview is missing or whose doc is video-mode (the client
-        live-stage snapshot is a black frame), same for template thumbnails.
-        Missing video file thumbnails are backfilled first so video posters have
-        frames to draw. Bounded and fail-soft per item; returns per-kind counts.
+      summary: Bounded org maintenance, optionally targeted at explicit records.
       tags:
         - Design
   /media/designs/{id}/versions:
@@ -12164,6 +12165,23 @@ components:
           type: string
         previewFileId:
           type: string
+    RegenPreviewsDto:
+      type: object
+      properties:
+        designIds:
+          minItems: 1
+          maxItems: 100
+          type: array
+          items:
+            type: string
+        templateIds:
+          minItems: 1
+          maxItems: 100
+          type: array
+          items:
+            type: string
+        forceSourceThumbnails:
+          type: boolean
     CreateDesignVersionDto:
       type: object
       properties:

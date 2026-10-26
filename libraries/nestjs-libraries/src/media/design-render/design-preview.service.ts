@@ -30,78 +30,80 @@ export class DesignPreviewService {
   ) {}
 
   /**
-   * Poster sources for the video clips a poster projection would draw (the
-   * t=0-active ones on video tracks): each clip's File row thumbnail. A file
-   * with no thumbnail yet is self-healed — one ffmpeg frame extraction,
-   * persisted back onto the File row so later renders skip the extraction.
-   * Older clips carry no `fileId`, only a `src` URL — those resolve their
-   * File row by path and key the poster by clip id.
-   * Fail-soft throughout: any resolution/extraction failure just leaves the
-   * clip without a poster (it projects as before — skipped).
+   * Resolve every poster required by output 0's visible t=0 video clips. A
+   * missing thumbnail is self-healed from local storage; unresolved media is
+   * an incomplete render and must fail rather than silently painting black.
    */
   private async _resolveVideoPosters(
     doc: DesignerDoc,
     orgId: string
   ): Promise<VideoPosterMap | undefined> {
-    try {
-      const fileIds = new Set<string>();
-      const clipsBySrc: Array<{ id: string; src: string }> = [];
-      for (const out of doc.outputs ?? []) {
-        if (!('tracks' in out)) continue;
-        for (const track of out.tracks) {
-          if (track.hidden || track.type !== 'video') continue;
-          for (const clip of track.clips) {
-            if (!(clip.startMs <= 0 && clip.endMs > 0)) continue;
-            if (clip.fileId) fileIds.add(clip.fileId);
-            else if (clip.src) clipsBySrc.push({ id: clip.id, src: clip.src });
+    const output = doc.outputs?.[0];
+    if (!output || !('tracks' in output)) return undefined;
+    const fileIds = new Set<string>();
+    const clipsBySrc: Array<{ id: string; src: string }> = [];
+    for (const track of output.tracks) {
+      if (track.hidden || track.type !== 'video') continue;
+      for (const clip of track.clips) {
+        if (!(clip.startMs <= 0 && clip.endMs > 0)) continue;
+        if ((clip.opacity ?? 1) <= 0 || clip.width === 0 || clip.height === 0) continue;
+        if (clip.fileId) fileIds.add(clip.fileId);
+        else if (clip.src) clipsBySrc.push({ id: clip.id, src: clip.src });
+      }
+    }
+    if (!fileIds.size && !clipsBySrc.length) return undefined;
+
+    const posters = new Map<string, string>();
+    if (fileIds.size) {
+      const files = await this._fileService.getByIds(orgId, [...fileIds]);
+      for (const file of files) {
+        if (file.thumbnail) posters.set(file.id, file.thumbnail);
+      }
+      for (const fileId of fileIds) {
+        if (posters.has(fileId)) continue;
+        const extracted = await this._videoThumbnailService.generateForFile(
+          orgId,
+          fileId,
+          { localOnly: true }
+        );
+        if (extracted) posters.set(fileId, extracted);
+      }
+    }
+
+    for (const clip of clipsBySrc) {
+      const file = await this._fileService.getFileByPath(orgId, clip.src);
+      if (!file) continue;
+      const thumb =
+        file.thumbnail ??
+        (await this._videoThumbnailService.generateForFile(orgId, file.id, {
+          localOnly: true,
+        }));
+      if (thumb) posters.set(clip.id, thumb);
+    }
+    return posters.size ? posters : undefined;
+  }
+
+  private _assertRequiredVideoAssets(doc: DesignerDoc, posters?: VideoPosterMap): void {
+    const output = doc.outputs?.[0];
+    if (!output || !('tracks' in output)) return;
+    for (const track of output.tracks) {
+      if (track.hidden) continue;
+      for (const clip of track.clips) {
+        if (!(clip.startMs <= 0 && clip.endMs > 0)) continue;
+        if ((clip.opacity ?? 1) <= 0 || clip.width === 0 || clip.height === 0) continue;
+        if (track.type === 'video') {
+          const poster = posters?.get(clip.id) ??
+            (clip.fileId ? posters?.get(clip.fileId) : undefined);
+          if (!poster) {
+            throw new Error(`Required time-zero poster for clip ${clip.id} could not be resolved`);
           }
+        } else if (
+          (track.type === 'image' || track.type === 'sticker' || track.type === 'raster') &&
+          !clip.src && !clip.frames?.[0]?.url && !clip.fileId
+        ) {
+          throw new Error(`Required time-zero asset for clip ${clip.id} could not be resolved`);
         }
       }
-      if (!fileIds.size && !clipsBySrc.length) return undefined;
-
-      const posters = new Map<string, string>();
-      if (fileIds.size) {
-        const files = await this._fileService.getByIds(orgId, [...fileIds]);
-        for (const file of files) {
-          if (file.thumbnail) posters.set(file.id, file.thumbnail);
-        }
-
-        // Self-heal the missing ones — locally stored files only: the preview
-        // render is synchronous and must never wait on a remote bucket read.
-        for (const fileId of fileIds) {
-          if (posters.has(fileId)) continue;
-          const extracted = await this._videoThumbnailService.generateForFile(
-            orgId,
-            fileId,
-            { localOnly: true }
-          );
-          if (extracted) posters.set(fileId, extracted);
-        }
-      }
-
-      // Clips saved before fileId existed: resolve the File row by its stored
-      // path (same lookup the render-job status endpoint uses), self-heal the
-      // thumbnail the same way, key the poster by clip id.
-      for (const clip of clipsBySrc) {
-        try {
-          const file = await this._fileService.getFileByPath(orgId, clip.src);
-          if (!file) continue;
-          const thumb =
-            file.thumbnail ??
-            (await this._videoThumbnailService.generateForFile(orgId, file.id, {
-              localOnly: true,
-            }));
-          if (thumb) posters.set(clip.id, thumb);
-        } catch {
-          // Fail-soft per clip — one unresolvable src must not blank the rest.
-        }
-      }
-      return posters.size ? posters : undefined;
-    } catch (err) {
-      this._logger.warn(
-        `Video poster resolution failed; rendering without posters: ${(err as Error)?.message}`
-      );
-      return undefined;
     }
   }
 
@@ -118,12 +120,15 @@ export class DesignPreviewService {
       doc.mode === 'video' ||
       (doc.outputs ?? []).some((out) => 'tracks' in (out as object));
     if (!isVideo) {
+      await this._designRenderService.assertVisualAssets(doc, 0);
       return this._designRenderService.renderPage(doc, 0, opts);
     }
     const videoPosters = opts?.orgId
       ? await this._resolveVideoPosters(doc, opts.orgId)
       : undefined;
+    this._assertRequiredVideoAssets(doc, videoPosters);
     const renderDoc = docWithVideoPosters(doc, videoPosters);
+    await this._designRenderService.assertVisualAssets(renderDoc, 0);
     return this._designRenderService.renderPage(renderDoc, 0, opts);
   }
 

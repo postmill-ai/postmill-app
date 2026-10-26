@@ -105,7 +105,10 @@ const videoClipSrcOnlyDoc: any = {
 };
 
 describe('DesignPreviewService', () => {
-  let renderService: { renderPage: ReturnType<typeof vi.fn> };
+  let renderService: {
+    renderPage: ReturnType<typeof vi.fn>;
+    assertVisualAssets: ReturnType<typeof vi.fn>;
+  };
   let storageService: { getLocalAdapterForOrg: ReturnType<typeof vi.fn> };
   let fileService: {
     saveFile: ReturnType<typeof vi.fn>;
@@ -117,7 +120,10 @@ describe('DesignPreviewService', () => {
   let service: DesignPreviewService;
 
   beforeEach(() => {
-    renderService = { renderPage: vi.fn().mockResolvedValue(Buffer.from('png')) };
+    renderService = {
+      renderPage: vi.fn().mockResolvedValue(Buffer.from('png')),
+      assertVisualAssets: vi.fn().mockResolvedValue(undefined),
+    };
     adapter = {
       writeBuffer: vi.fn().mockResolvedValue('/uploads/preview-1.png'),
       removeFile: vi.fn().mockResolvedValue(undefined),
@@ -210,34 +216,33 @@ describe('DesignPreviewService', () => {
       });
     });
 
-    it('skips the clip (never fails the preview) when extraction yields nothing', async () => {
+    it('fails instead of rendering black when extraction yields nothing', async () => {
       fileService.getByIds.mockResolvedValue([{ id: 'file-vid-1', thumbnail: null }]);
       videoThumbnailService.generateForFile.mockResolvedValue(null);
 
-      await service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' });
+      await expect(service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' }))
+        .rejects.toThrow('Required time-zero poster');
 
-      const [renderDoc] = renderService.renderPage.mock.calls[0];
-      expect(renderDoc.outputs[0].children).toHaveLength(0);
-      expect(renderService.renderPage).toHaveBeenCalledTimes(1);
+      expect(renderService.renderPage).not.toHaveBeenCalled();
     });
 
-    it('renders without posters when poster resolution itself fails', async () => {
+    it('fails instead of rendering black when poster resolution fails', async () => {
       fileService.getByIds.mockRejectedValue(new Error('db down'));
 
-      await service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' });
+      await expect(service.renderPreviewBuffer(videoClipDoc, { orgId: 'org-1' }))
+        .rejects.toThrow('db down');
 
-      const [renderDoc] = renderService.renderPage.mock.calls[0];
-      expect(renderDoc.outputs[0].children).toHaveLength(0);
+      expect(renderService.renderPage).not.toHaveBeenCalled();
       expect(videoThumbnailService.generateForFile).not.toHaveBeenCalled();
     });
 
-    it('skips poster resolution entirely without an orgId', async () => {
-      await service.renderPreviewBuffer(videoClipDoc);
+    it('fails a required video poster when no org context can resolve it', async () => {
+      await expect(service.renderPreviewBuffer(videoClipDoc))
+        .rejects.toThrow('Required time-zero poster');
 
       expect(fileService.getByIds).not.toHaveBeenCalled();
       expect(videoThumbnailService.generateForFile).not.toHaveBeenCalled();
-      const [renderDoc] = renderService.renderPage.mock.calls[0];
-      expect(renderDoc.outputs[0].children).toHaveLength(0);
+      expect(renderService.renderPage).not.toHaveBeenCalled();
     });
 
     it('resolves a fileId-less clip by its src path (stored thumbnail)', async () => {
@@ -276,13 +281,29 @@ describe('DesignPreviewService', () => {
       });
     });
 
-    it('skips a fileId-less clip whose src matches no File row', async () => {
+    it('fails a fileId-less clip whose src matches no File row', async () => {
       fileService.getFileByPath.mockResolvedValue(null);
 
-      await service.renderPreviewBuffer(videoClipSrcOnlyDoc, { orgId: 'org-1' });
+      await expect(service.renderPreviewBuffer(videoClipSrcOnlyDoc, { orgId: 'org-1' }))
+        .rejects.toThrow('Required time-zero poster');
+      expect(renderService.renderPage).not.toHaveBeenCalled();
+    });
 
-      const [renderDoc] = renderService.renderPage.mock.calls[0];
-      expect(renderDoc.outputs[0].children).toHaveLength(0);
+    it('allows an intentionally invisible clip to have no poster', async () => {
+      const doc = structuredClone(videoClipDoc);
+      doc.outputs[0].tracks[0].clips[0].opacity = 0;
+
+      await service.renderPreviewBuffer(doc, { orgId: 'org-1' });
+
+      expect(renderService.renderPage).toHaveBeenCalledTimes(1);
+    });
+
+    it('propagates document-aware asset validation failures', async () => {
+      renderService.assertVisualAssets.mockRejectedValue(new Error('unreadable image'));
+
+      await expect(service.renderPreviewBuffer(imageDoc, { orgId: 'org-1' }))
+        .rejects.toThrow('unreadable image');
+      expect(renderService.renderPage).not.toHaveBeenCalled();
     });
   });
 

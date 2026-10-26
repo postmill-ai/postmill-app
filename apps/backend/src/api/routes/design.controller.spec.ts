@@ -643,8 +643,9 @@ describe('DesignController', () => {
       };
       designService.regenPreviews.mockResolvedValue(result);
 
-      expect(await controller.regenPreviews(org)).toBe(result);
-      expect(designService.regenPreviews).toHaveBeenCalledWith('org-1');
+      const targeted = { designIds: ['d1'], forceSourceThumbnails: true };
+      expect(await controller.regenPreviews(org, targeted)).toBe(result);
+      expect(designService.regenPreviews).toHaveBeenCalledWith('org-1', targeted);
     });
   });
 

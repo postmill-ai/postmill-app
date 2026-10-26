@@ -63,9 +63,13 @@ export class DesignRepository {
 
   // Preview-regen maintenance scan: every live design of the org with just the
   // fields the selection rule reads (see DesignService.regenPreviews).
-  findDesignsForPreviewRegen(orgId: string) {
+  findDesignsForPreviewRegen(orgId: string, ids?: string[]) {
     return this._design.model.design.findMany({
-      where: { organizationId: orgId, deletedAt: null },
+      where: {
+        organizationId: orgId,
+        deletedAt: null,
+        ...(ids ? { id: { in: ids } } : {}),
+      },
       select: { id: true, doc: true, previewFileId: true, previewDataUrl: true },
     });
   }
@@ -171,11 +175,13 @@ export class DesignRepository {
   // (or re-renders a video-mode one) — it never touches name/category/doc, so
   // letting any org's maintenance run repair them is safe and fixes the dark
   // empty tiles every org sees in the Templates tab.
-  findTemplatesForPreviewRegen(orgId: string) {
+  findTemplatesForPreviewRegen(orgId: string, ids?: string[]) {
     return this._designTemplate.model.designTemplate.findMany({
       where: {
         deletedAt: null,
-        OR: [{ organizationId: orgId }, { isSystem: true }],
+        ...(ids
+          ? { id: { in: ids }, organizationId: orgId }
+          : { OR: [{ organizationId: orgId }, { isSystem: true }] }),
       },
       select: { id: true, organizationId: true, doc: true, thumbnailFileId: true },
     });

@@ -550,19 +550,18 @@ export const Designer: FC<DesignerProps> = ({
     previewFileId?: string;
     previewDataUrl?: string;
   }> => {
+    const state = store.getState();
+    if (state.doc.mode === 'video') return {};
     try {
       // The design thumbnail is ALWAYS page 1 of output 0 (multi-page docs,
       // doc v8) — not whatever page/output the stage happens to be showing.
-      // Render it off-stage for image docs; video keeps the live stage frame.
-      const state = store.getState();
       const first = state.doc.outputs[0] as DesignerOutput | undefined;
-      const previewDataUrl =
-        state.doc.mode === 'image' && first && 'children' in first
-          ? await renderOutputThumbnail(
-              { ...first, children: pageChildren(first, 0) },
-              state.doc.symbols as never
-            )
-          : captureStageThumbnail();
+      const previewDataUrl = first && 'children' in first
+        ? await renderOutputThumbnail(
+            { ...first, children: pageChildren(first, 0) },
+            state.doc.symbols as never
+          )
+        : undefined;
       const previewBlob = previewDataUrl ? dataUrlToBlob(previewDataUrl) : null;
       if (previewBlob) {
         try {
@@ -673,9 +672,9 @@ export const Designer: FC<DesignerProps> = ({
       return;
     }
     s.setSaving(true);
+    let thumbnailFileId: string | undefined;
     try {
-      const previewDataUrl = captureStageThumbnail();
-      let thumbnailFileId: string | undefined;
+      const previewDataUrl = s.doc.mode === 'image' ? captureStageThumbnail() : undefined;
       const previewBlob = previewDataUrl ? dataUrlToBlob(previewDataUrl) : null;
       if (previewBlob) {
         try {
@@ -712,6 +711,9 @@ export const Designer: FC<DesignerProps> = ({
       }
       toaster.show(translate('saved_as_template', 'Saved as template'), 'success');
     } catch {
+      if (thumbnailFileId) {
+        fetch(`/files/${thumbnailFileId}/trash`, { method: 'POST' }).catch(() => {});
+      }
       toaster.show(translate('failed_to_save_as_template', 'Failed to save as template'), 'warning');
     } finally {
       s.setSaving(false);

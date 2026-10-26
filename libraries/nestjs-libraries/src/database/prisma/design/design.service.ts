@@ -138,6 +138,8 @@ export class DesignService {
     if (data.previewFileId) {
       await this._assertOwnedFile(orgId, data.previewFileId);
     }
+    let regenId: string | null = null;
+    let isVideo = false;
     if (data.doc !== undefined) {
       const validatedDoc = this._designerDocService.validate(data.doc);
       const firstOutput = validatedDoc.outputs[0];
@@ -148,17 +150,23 @@ export class DesignService {
         height: firstOutput.height,
       };
       if (validatedDoc.mode === 'video') {
-        // A client live-stage snapshot of a video doc is an unpainted black
-        // frame — render the poster server-side instead. Creates are never
-        // throttled.
-        const regenId = await this._renderVideoPreview(orgId, validatedDoc);
-        if (regenId) {
-          await this._cleanupReplacedFile(orgId, data.previewFileId, regenId);
-          payload.previewFileId = regenId;
-        }
+        isVideo = true;
+        delete payload.previewFileId;
+        delete payload.previewDataUrl;
+        regenId = await this._renderVideoPreview(orgId, validatedDoc);
+        if (regenId) payload.previewFileId = regenId;
       }
     }
-    return this._designRepository.create(payload);
+    try {
+      const created = await this._designRepository.create(payload);
+      if (isVideo) {
+        await this._cleanupReplacedFile(orgId, data.previewFileId, regenId);
+      }
+      return created;
+    } catch (err) {
+      if (regenId) await this._cleanupReplacedFile(orgId, regenId, null);
+      throw err;
+    }
   }
 
   async updateDesign(orgId: string, id: string, data: {
@@ -173,36 +181,54 @@ export class DesignService {
     if (data.previewFileId) {
       await this._assertOwnedFile(orgId, data.previewFileId);
     } else if (data.previewDataUrl) {
-      // The save fell back to a data-URL preview (thumbnail upload failed) —
-      // clear the stale file pointer so the fresher data URL wins in listings.
       payload.previewFileId = null;
     }
-    if (data.doc !== undefined) {
-      const validatedDoc = this._designerDocService.validate(data.doc);
-      const firstOutput = validatedDoc.outputs[0];
-      payload = {
-        ...payload,
-        doc: validatedDoc,
-        width: firstOutput.width,
-        height: firstOutput.height,
-      };
-      if (validatedDoc.mode === 'video' && this._previewRegenDue(id)) {
-        const regenId = await this._renderVideoPreview(orgId, validatedDoc);
-        if (regenId) {
-          // Supersede both the client's snapshot file (below) and the stored
-          // preview (the previous-row lookup + cleanup further down).
-          await this._cleanupReplacedFile(orgId, data.previewFileId, regenId);
-          payload.previewFileId = regenId;
-        }
-      }
+    if (data.doc === undefined) {
+      const previous = payload.previewFileId !== undefined
+        ? await this._designRepository.findById(orgId, id)
+        : null;
+      const updated = await this._designRepository.update(id, orgId, payload);
+      await this._cleanupReplacedFile(orgId, previous?.previewFileId, payload.previewFileId);
+      return updated;
     }
-    // Only look up the previous row when this write moves the preview pointer.
-    const previous = payload.previewFileId !== undefined
-      ? await this._designRepository.findById(orgId, id)
+
+    const validatedDoc = this._designerDocService.validate(data.doc);
+    const firstOutput = validatedDoc.outputs[0];
+    payload = {
+      ...payload,
+      doc: validatedDoc,
+      width: firstOutput.width,
+      height: firstOutput.height,
+    };
+    if (validatedDoc.mode !== 'video') {
+      const previous = payload.previewFileId !== undefined
+        ? await this._designRepository.findById(orgId, id)
+        : null;
+      const updated = await this._designRepository.update(id, orgId, payload);
+      await this._cleanupReplacedFile(orgId, previous?.previewFileId, payload.previewFileId);
+      return updated;
+    }
+
+    delete payload.previewFileId;
+    delete payload.previewDataUrl;
+    const previous = await this._designRepository.findById(orgId, id);
+    const regenId = this._previewRegenDue(id)
+      ? await this._renderVideoPreview(orgId, validatedDoc)
       : null;
-    const updated = await this._designRepository.update(id, orgId, payload);
-    await this._cleanupReplacedFile(orgId, previous?.previewFileId, payload.previewFileId);
-    return updated;
+    if (regenId) payload.previewFileId = regenId;
+    try {
+      const updated = await this._designRepository.update(id, orgId, payload);
+      if (regenId) {
+        await this._cleanupReplacedFile(orgId, previous?.previewFileId, regenId);
+      }
+      if (data.previewFileId !== previous?.previewFileId) {
+        await this._cleanupReplacedFile(orgId, data.previewFileId, regenId);
+      }
+      return updated;
+    } catch (err) {
+      if (regenId) await this._cleanupReplacedFile(orgId, regenId, null);
+      throw err;
+    }
   }
 
   async deleteDesign(orgId: string, id: string) {
@@ -675,11 +701,7 @@ export class DesignService {
     }
   }
 
-  /**
-   * Render + upload a server-side video preview. NEVER throws: a render or
-   * upload failure logs and returns null, so the save keeps whatever preview
-   * the client supplied.
-   */
+  /** Render failures preserve the stored preview and never fail the doc save. */
   private async _renderVideoPreview(
     orgId: string,
     doc: DesignerDoc
@@ -689,7 +711,7 @@ export class DesignService {
       return await this._designPreviewService.uploadPreview(orgId, buffer);
     } catch (err) {
       this._logger.warn(
-        `Server-side video preview regen failed; keeping the client preview: ${(err as Error)?.message}`
+        `Server-side video preview regen failed; preserving the stored preview: ${(err as Error)?.message}`
       );
       return null;
     }
@@ -710,36 +732,77 @@ export class DesignService {
     return true;
   }
 
-  /**
-   * Maintenance sweep: regenerate server-side previews for the org's designs
-   * and templates whose preview is missing (designs: both previewFileId and
-   * previewDataUrl null; templates: thumbnailFileId null) OR whose doc is
-   * video-mode (the client snapshot is a black stage). Backfills missing video
-   * FILE thumbnails so video posters have frames to draw, plus .pdesign mode
-   * and duration metadata for the library (both bounded). Blank docs are
-   * skipped — a blank canvas has nothing to render. Per-item failures are
-   * counted, never abort the run.
-   */
-  async regenPreviews(orgId: string) {
-    const [thumbnailStats, designFileMetadata] = await Promise.all([
-      this._videoThumbnailService.backfillOrgThumbnails(orgId).catch((err) => {
-        this._logger.warn(
-          `Video thumbnail backfill failed; continuing with preview regen: ${(err as Error)?.message}`
-        );
-        return { scanned: 0, generated: 0, reclassified: 0, failed: 0 };
-      }),
-      this._fileService.backfillDesignMetadata(orgId).catch((err) => {
-        this._logger.warn(
-          `Design file metadata backfill failed; continuing with preview regen: ${(err as Error)?.message}`
-        );
-        return { scanned: 0, updated: 0, skipped: 0, failed: 0 };
-      }),
-    ]);
+  async regenPreviews(
+    orgId: string,
+    opts: {
+      designIds?: string[];
+      templateIds?: string[];
+      forceSourceThumbnails?: boolean;
+    } = {}
+  ) {
+    const targeted = opts.designIds !== undefined || opts.templateIds !== undefined;
+    const emptyThumbnailStats = { scanned: 0, generated: 0, reclassified: 0, failed: 0 };
+    const emptyMetadataStats = { scanned: 0, updated: 0, skipped: 0, failed: 0 };
+    let thumbnailStats = emptyThumbnailStats;
+    let designFileMetadata = emptyMetadataStats;
+    if (!targeted) {
+      [thumbnailStats, designFileMetadata] = await Promise.all([
+        this._videoThumbnailService.backfillOrgThumbnails(orgId).catch((err) => {
+          this._logger.warn(
+            `Video thumbnail backfill failed; continuing with preview regen: ${(err as Error)?.message}`
+          );
+          return emptyThumbnailStats;
+        }),
+        this._fileService.backfillDesignMetadata(orgId).catch((err) => {
+          this._logger.warn(
+            `Design file metadata backfill failed; continuing with preview regen: ${(err as Error)?.message}`
+          );
+          return emptyMetadataStats;
+        }),
+      ]);
+    }
 
     const [designs, templates] = await Promise.all([
-      this._designRepository.findDesignsForPreviewRegen(orgId),
-      this._designRepository.findTemplatesForPreviewRegen(orgId),
+      this._designRepository.findDesignsForPreviewRegen(
+        orgId,
+        targeted ? opts.designIds ?? [] : undefined
+      ),
+      this._designRepository.findTemplatesForPreviewRegen(
+        orgId,
+        targeted ? opts.templateIds ?? [] : undefined
+      ),
     ]);
+
+    if (targeted && opts.forceSourceThumbnails) {
+      const fileIds = new Set<string>();
+      for (const row of [...designs, ...templates]) {
+        const doc = row.doc as any;
+        for (const output of doc?.outputs ?? []) {
+          if (!('tracks' in output)) continue;
+          for (const track of output.tracks) {
+            if (track.type !== 'video') continue;
+            for (const clip of track.clips) {
+              if (clip.fileId) {
+                fileIds.add(clip.fileId);
+              } else if (clip.src) {
+                try {
+                  const file = await this._fileService.getFileByPath(orgId, clip.src);
+                  if (file) fileIds.add(file.id);
+                } catch (err) {
+                  this._logger.warn(
+                    `Could not resolve source video for ${row.id}: ${(err as Error)?.message}`
+                  );
+                }
+              }
+            }
+          }
+        }
+      }
+      thumbnailStats = await this._videoThumbnailService.repairThumbnails(
+        orgId,
+        [...fileIds]
+      );
+    }
 
     const run = async <T extends { id: string; doc: any }>(
       rows: T[],
@@ -749,31 +812,31 @@ export class DesignService {
     ) => {
       const stats = { scanned: rows.length, regenerated: 0, skipped: 0, failed: 0 };
       const queue = rows.filter((row) => {
-        if (isBlankDoc(row.doc)) {
-          stats.skipped++;
-          return false;
-        }
-        if (!needsRegen(row)) {
+        if (isBlankDoc(row.doc) || !needsRegen(row)) {
           stats.skipped++;
           return false;
         }
         return true;
       });
-      // Small fixed concurrency: preview renders are CPU-heavy (node-canvas),
-      // so a wide fan-out would stall the API process.
       const CONCURRENCY = 2;
       let cursor = 0;
       const worker = async () => {
         while (cursor < queue.length) {
           const row = queue[cursor++];
+          let fileId: string | null = null;
+          let linked = false;
           try {
             const doc = this._designerDocService.validate(row.doc);
             const buffer = await this._designPreviewService.renderPreviewBuffer(doc, { orgId });
-            const fileId = await this._designPreviewService.uploadPreview(orgId, buffer);
+            fileId = await this._designPreviewService.uploadPreview(orgId, buffer);
             await apply(row, fileId);
+            linked = true;
             await this._cleanupReplacedFile(orgId, oldFileId(row), fileId);
             stats.regenerated++;
           } catch (err) {
+            if (fileId && !linked) {
+              await this._cleanupReplacedFile(orgId, fileId, null);
+            }
             stats.failed++;
             this._logger.warn(
               `Preview regen failed for ${row.id}: ${(err as Error)?.message}`
@@ -787,13 +850,13 @@ export class DesignService {
 
     const designStats = await run(
       designs,
-      (row) => (!row.previewFileId && !row.previewDataUrl) || (row.doc as any)?.mode === 'video',
+      (row) => targeted || (!row.previewFileId && !row.previewDataUrl) || (row.doc as any)?.mode === 'video',
       (row, fileId) => this._designRepository.update(row.id, orgId, { previewFileId: fileId }),
       (row) => row.previewFileId
     );
     const templateStats = await run(
       templates,
-      (row) => !row.thumbnailFileId || (row.doc as any)?.mode === 'video',
+      (row) => targeted || !row.thumbnailFileId || (row.doc as any)?.mode === 'video',
       (row, fileId) =>
         row.organizationId === orgId
           ? this._designRepository.updateTemplate(row.id, orgId, { thumbnailFileId: fileId })

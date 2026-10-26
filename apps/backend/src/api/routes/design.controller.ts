@@ -47,6 +47,7 @@ import { BulkGenerateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design
 import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design.dto';
 import { ImportLibraryDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/import-library-design.dto';
 import { UpdateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-design.dto';
+import { RegenPreviewsDto } from '@postmill-ai/nestjs-libraries/dtos/design/regen-previews.dto';
 import { CreateDesignVersionDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design-version.dto';
 import { CreateTemplateDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-template.dto';
 import { UpdateTemplateDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-template.dto';
@@ -242,18 +243,15 @@ export class DesignController {
     return { success: true };
   }
 
-  /**
-   * Maintenance: regenerate server-side previews for the caller's org —
-   * designs whose preview is missing or whose doc is video-mode (the client
-   * live-stage snapshot is a black frame), same for template thumbnails.
-   * Missing video file thumbnails are backfilled first so video posters have
-   * frames to draw. Bounded and fail-soft per item; returns per-kind counts.
-   */
+  /** Bounded org maintenance, optionally targeted at explicit records. */
   @Post('/maintenance/regen-previews')
   @CheckPolicies([AuthorizationActions.Update, Sections.MEDIA])
   @RequirePermission('media', 'update')
-  async regenPreviews(@GetOrgFromRequest() org: Organization) {
-    return this._designService.regenPreviews(org.id);
+  async regenPreviews(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body?: RegenPreviewsDto,
+  ) {
+    return this._designService.regenPreviews(org.id, body ?? {});
   }
 
   // ── Version history ─────────────────────────────────────────────────────

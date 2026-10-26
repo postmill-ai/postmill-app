@@ -797,6 +797,49 @@ export class DesignRenderService {
     return canvas.toBuffer('image/png');
   }
 
+  async assertVisualAssets(
+    doc: DesignerDoc,
+    outputIndex: number,
+    pageNumber = 0
+  ): Promise<void> {
+    const base = doc.outputs?.[outputIndex] as DesignerOutput | undefined;
+    if (!base || !('children' in base)) {
+      throw new Error(`Output ${outputIndex} is not an image output`);
+    }
+    const page = pageNumber > 0 ? base.pages?.[pageNumber - 1] : undefined;
+    if (pageNumber > 0 && !page) {
+      throw new Error(`Page ${pageNumber + 1} out of range for output ${outputIndex}`);
+    }
+    const output: DesignerOutput = page
+      ? { ...base, bg: page.background ?? base.bg, children: page.children ?? [] }
+      : base;
+    const bg = output.bg;
+    if (bg?.type === 'image' && (bg.src || bg.fileId)) {
+      const image = await this.loadImageSafe(bg.src);
+      if (!image) throw new Error('Required background image could not be loaded');
+    }
+
+    const children = expandSymbols(output.children ?? [], doc.symbols);
+    const visit = async (nodes: LayerNode[]): Promise<void> => {
+      for (const node of nodes) {
+        const el = node.element;
+        if (el.hidden || (el.opacity ?? 1) <= 0) continue;
+        if (
+          (el.type === 'image' || el.type === 'icon' || el.type === 'raster') &&
+          el.width > 0 &&
+          el.height > 0
+        ) {
+          const image = await this.loadElementImage(el);
+          if (!image) {
+            throw new Error(`Required visual asset for element ${el.id} could not be loaded`);
+          }
+        }
+        if (el.type === 'group') await visit(node.children);
+      }
+    };
+    await visit(buildLayerTree(children));
+  }
+
   async renderAllPages(
     doc: DesignerDoc,
     opts?: RenderOptions

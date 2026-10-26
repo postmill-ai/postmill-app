@@ -13,6 +13,7 @@ vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
 }));
 
 import { DesignRenderService } from './design-render.service';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 
 class FakeFontLoaderService {
   async loadOrgFonts(_orgId?: string) {
@@ -1436,5 +1437,88 @@ describe('DesignRenderService flat text layout', () => {
 
     // Block top 0, plus half a 24px line box — the baseline Konva draws on.
     expect(spy.mock.calls[0][2]).toBe(12);
+  });
+});
+
+describe('DesignRenderService.assertVisualAssets', () => {
+  const docWithImage = (src: string): any => ({
+    version: 8,
+    mode: 'image',
+    outputs: [{
+      id: 'out-image',
+      formatId: 'square',
+      name: 'Square',
+      width: 100,
+      height: 100,
+      background: '#000000',
+      children: [{
+        id: 'required-image',
+        type: 'image',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        rotation: 0,
+        opacity: 1,
+        locked: false,
+        hidden: false,
+        src,
+      }],
+    }],
+  });
+
+  it('rejects a required remote asset that cannot be read', async () => {
+    const service = makeService();
+
+    await expect(service.assertVisualAssets(
+      docWithImage('https://unreachable.invalid/image.png'),
+      0
+    )).rejects.toThrow('Required visual asset');
+  });
+
+  it('rejects an oversized remote asset before reading its body', async () => {
+    const service = makeService();
+    const arrayBuffer = vi.fn();
+    vi.mocked(safeFetch).mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-length': String(Number.MAX_SAFE_INTEGER) }),
+      arrayBuffer,
+    } as unknown as Response);
+
+    await expect(service.assertVisualAssets(
+      docWithImage('https://cdn.example.com/large.png'),
+      0
+    )).rejects.toThrow('Required visual asset');
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unreadable image instead of accepting a blank render', async () => {
+    const service = makeService();
+
+    await expect(service.assertVisualAssets(
+      docWithImage('data:image/png;base64,bm90LWFuLWltYWdl'),
+      0
+    )).rejects.toThrow('Required visual asset');
+  });
+
+  it('accepts and renders an intentionally black image asset', async () => {
+    const service = makeService();
+    const black = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: '#000000' },
+    }).png().toBuffer();
+    const doc = docWithImage(`data:image/png;base64,${black.toString('base64')}`);
+
+    await expect(service.assertVisualAssets(doc, 0)).resolves.toBeUndefined();
+    const png = await service.renderPage(doc, 0);
+    const { data } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    expect([...data.subarray(0, 3)]).toEqual([0, 0, 0]);
+  });
+
+  it('does not require assets for hidden content', async () => {
+    const service = makeService();
+    const doc = docWithImage('https://unreachable.invalid/image.png');
+    doc.outputs[0].children[0].hidden = true;
+
+    await expect(service.assertVisualAssets(doc, 0)).resolves.toBeUndefined();
   });
 });
