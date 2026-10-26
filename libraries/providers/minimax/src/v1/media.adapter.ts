@@ -75,6 +75,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
     const res = await this._fetch(`${BASE}/image_generation`, {
       method: 'POST',
       headers: this._headers(options),
+      ipFamily: 4,
       body: JSON.stringify({
         model,
         prompt,
@@ -110,6 +111,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
     const res = await this._fetch(`${BASE}/video_generation`, {
       method: 'POST',
       headers: this._headers(options),
+      ipFamily: 4,
       body: JSON.stringify({
         model,
         prompt,
@@ -133,6 +135,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
     const res = await this._fetch(`${BASE}/t2a_v2`, {
       method: 'POST',
       headers: this._headers(options),
+      ipFamily: 4,
       body: JSON.stringify({
         model,
         text: prompt,
@@ -171,7 +174,10 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
   // settings Test button falls back to a real (billed) generateImage call.
   async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
     if (!resolveApiKey(options)) return { ok: false, message: 'MiniMax API key is required' };
-    const res = await this._fetch(`${BASE}/models`, { headers: this._headers(options) });
+    const res = await this._fetch(`${BASE}/models`, {
+      headers: this._headers(options),
+      ipFamily: 4,
+    });
     if (res.ok) return { ok: true, message: 'Connection successful' };
     if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid API key' };
     const body = await res.text();
@@ -183,6 +189,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
 
     const res = await this._fetch(`${BASE}/query/video_generation?task_id=${encodeURIComponent(jobId)}`, {
       headers: this._headers(options),
+      ipFamily: 4,
     });
     if (!res.ok) {
       const body = await res.text();
@@ -197,6 +204,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
     if (data.status === 'Success' && data.file_id) {
       const fileRes = await this._fetch(`${BASE}/files/retrieve?file_id=${encodeURIComponent(data.file_id)}`, {
         headers: this._headers(options),
+        ipFamily: 4,
       });
       // 3.4 — the render already succeeded; a transient error on the file-retrieve leg must
       // retry, not permanently fail a completed generation.

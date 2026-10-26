@@ -6,7 +6,15 @@ import { metadata as providerMetadata } from './metadata';
 // legacy China host). Default to the international platform — the media adapter
 // already does. China-platform keys work by setting the optional Base URL
 // credential field to https://api.minimaxi.com/v1.
-const adapter = new OpenAICompatibleAdapter('minimax', 'MiniMax', 'https://api.minimax.io/v1', {"image":true}, undefined, 'direct');
+const adapter = new OpenAICompatibleAdapter(
+  'minimax',
+  'MiniMax',
+  'https://api.minimax.io/v1',
+  { image: true },
+  undefined,
+  'direct',
+  { ipFamily: 4 },
+);
 
 export const minimaxAiModule: ProviderModule<any, any> = {
   metadata: providerMetadata,

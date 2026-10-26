@@ -20,6 +20,7 @@ describe('minimax media adapter', () => {
 
     expect(sub.jobId).toBe('task-123');
     const r = recs[0];
+    expect(r.ipFamily).toBe(4);
     expect(r.url).toBe('https://api.minimax.io/v1/video_generation');
     expect(r.method).toBe('POST');
     expect(r.headers.Authorization).toBe('Bearer minimax-key');
@@ -42,6 +43,7 @@ describe('minimax media adapter', () => {
 
     const out = await adapter.generateImage('a logo', { apiKey: 'minimax-key', model: 'image-01' });
     const r = recs[0];
+    expect(r.ipFamily).toBe(4);
     expect(r.url).toBe('https://api.minimax.io/v1/image_generation');
     expect(r.method).toBe('POST');
     const body = JSON.parse(r.body);
@@ -52,7 +54,7 @@ describe('minimax media adapter', () => {
   });
 
   it('pollJob parses pending then Success (query → files/retrieve → download_url)', async () => {
-    const { ctx } = makeCtx((url, _i, n) => {
+    const { recs, ctx } = makeCtx((url, _i, n) => {
       if (url.includes('query/video_generation')) {
         return n === 1
           ? res({ status: 'Processing' })
@@ -69,6 +71,8 @@ describe('minimax media adapter', () => {
     const done = await adapter.pollJob('task-123', { apiKey: 'minimax-key' });
     expect(done.status).toBe('completed');
     expect(done.artifactUrl).toBe('https://cdn.minimax/out.mp4');
+    expect(recs).toHaveLength(3);
+    expect(recs.every((r) => r.ipFamily === 4)).toBe(true);
   });
 
   it('rejects unsupported avatar and a missing key', async () => {
@@ -108,9 +112,10 @@ describe('minimax media adapter', () => {
 
   // 6.1e — malformed (non-hex) sync audio is rejected rather than silently corrupted.
   it('generateAudio rejects a non-hex audio payload', async () => {
-    const { ctx } = makeCtx(() => res({ data: { audio: 'nothex!!' } }));
+    const { recs, ctx } = makeCtx(() => res({ data: { audio: 'nothex!!' } }));
     const adapter: any = minimaxMediaModule.create(ctx as any);
     await expect(adapter.generateAudio('hello', { apiKey: 'minimax-key' })).rejects.toThrow(/malformed/);
+    expect(recs[0].ipFamily).toBe(4);
   });
 
   // Free connection test — hits the /models list, never a billed render.
@@ -121,6 +126,7 @@ describe('minimax media adapter', () => {
     const out = await adapter.testConnection({ credentials: { apiKey: 'minimax-key' } });
     expect(out).toEqual({ ok: true, message: 'Connection successful' });
     const r = recs[0];
+    expect(r.ipFamily).toBe(4);
     expect(r.url).toBe('https://api.minimax.io/v1/models');
     expect(r.method ?? 'GET').toBe('GET');
     expect(r.headers.Authorization).toBe('Bearer minimax-key');

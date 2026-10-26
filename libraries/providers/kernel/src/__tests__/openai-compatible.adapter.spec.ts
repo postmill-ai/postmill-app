@@ -397,4 +397,35 @@ describe('OpenAICompatibleAdapter tenant baseURL safety', () => {
     const call = vi.mocked(createOpenAI).mock.calls.at(-1)![0];
     expect(call.fetch).toBeUndefined();
   });
+
+  it('applies an optional IP family to validation, model listing, and canonical inference', async () => {
+    const adapter = new OpenAICompatibleAdapter(
+      'hubx',
+      'HubX',
+      'https://api.hubx.com/v1',
+      undefined,
+      undefined,
+      'hub',
+      { ipFamily: 4 },
+    );
+    const safeFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ data: [{ id: 'live-model' }] }), { status: 200 }),
+    );
+    adapter.setSafeFetch(safeFetch as any);
+
+    await adapter.validateCredentials({ apiKey: 'k' });
+    await adapter.listModels({ apiKey: 'k' });
+    adapter.createLanguageModel({ apiKey: 'k' }, 'm');
+    const call = vi.mocked(createOpenAI).mock.calls.at(-1)![0];
+    await call.fetch('https://api.hubx.com/v1/chat/completions', { method: 'POST' });
+
+    expect(safeFetch).toHaveBeenCalledTimes(3);
+    for (const [, init] of safeFetch.mock.calls) {
+      expect(init).toEqual(expect.objectContaining({ ipFamily: 4 }));
+    }
+    expect(safeFetch).toHaveBeenLastCalledWith(
+      'https://api.hubx.com/v1/chat/completions',
+      expect.objectContaining({ method: 'POST', timeoutMs: 300_000, ipFamily: 4 }),
+    );
+  });
 });

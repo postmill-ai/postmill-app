@@ -105,12 +105,14 @@ export async function fetchOpenAIStyleModels(
   safeFetch: SafeFetchPort | undefined,
   baseURL: string | undefined,
   apiKey: string | undefined,
+  ipFamily?: 4 | 6,
 ): Promise<LiveModelEntry[] | null> {
   if (!safeFetch || !baseURL || !apiKey) return null;
   try {
     const url = baseURL.replace(/(?<![/])\/+$/, '');
     const response = await safeFetch(`${url}/models`, {
       headers: { Authorization: `Bearer ${apiKey}` },
+      ipFamily,
     });
     if (!response.ok) return null;
     const data: any = await response.json();
@@ -226,6 +228,7 @@ export class OpenAICompatibleAdapter implements AiCapability {
   private readonly _defaultModels: AiModelInfo[];
   private readonly _defaultBaseURL: string;
   private readonly _requireBaseURL: boolean;
+  private readonly _ipFamily?: 4 | 6;
   private _providerCache = new BoundedProviderCache<ReturnType<typeof createOpenAI>>();
   // 0.4: the SSRF-safe fetch, injected by each provider module's create(ctx).
   // When absent (isolated unit context) the `${baseURL}/models` call is skipped
@@ -244,7 +247,7 @@ export class OpenAICompatibleAdapter implements AiCapability {
     capabilities?: Partial<AiCapabilities>,
     models?: AiModelInfo[],
     type: AiProviderType = 'hub',
-    opts?: { requireBaseURL?: boolean },
+    opts?: { requireBaseURL?: boolean; ipFamily?: 4 | 6 },
   ) {
     this.identifier = identifier;
     this.name = name;
@@ -255,6 +258,7 @@ export class OpenAICompatibleAdapter implements AiCapability {
     // with no canonical URL of their own).
     this._defaultBaseURL = baseURL;
     this._requireBaseURL = opts?.requireBaseURL ?? false;
+    this._ipFamily = opts?.ipFamily;
     this.credentialFields = [
       { key: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 'Enter API key' },
       {
@@ -282,22 +286,25 @@ export class OpenAICompatibleAdapter implements AiCapability {
    * Inference on an ORG-SUPPLIED base URL must route through the injected
    * SSRF-safe fetch — the save-time public-HTTPS string check alone does not
    * survive DNS rebinding, and `createOpenAI`'s default global fetch has no
-   * per-request re-validation. Canonical provider endpoints (compile-time
-   * constants) keep the SDK's default fetch. Never fall back to the global
-   * fetch for a tenant URL: without a safeFetch we refuse instead.
+   * per-request re-validation. Canonical provider endpoints keep the SDK's
+   * default fetch unless the provider requires an explicit IP family.
    */
-  private _tenantSafeFetch(baseURL: string): ((input: any, init?: any) => Promise<Response>) | undefined {
+  private _providerFetch(baseURL: string): ((input: any, init?: any) => Promise<Response>) | undefined {
     const orgSupplied = !!baseURL && baseURL !== this._defaultBaseURL;
-    if (!orgSupplied) return undefined;
+    if (!orgSupplied && !this._ipFamily) return undefined;
     const safeFetch = this._safeFetch;
     if (!safeFetch) {
-      throw new Error(`${this.name}: cannot call an org-supplied Base URL without the SSRF-safe fetch`);
+      throw new Error(`${this.name}: cannot use the requested endpoint without the SSRF-safe fetch`);
     }
     return (input: any, init?: any) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input?.url;
-      // 5-minute ceiling (safeFetch's max) bounds streamed completions on tenant endpoints.
-      return safeFetch(String(url), { ...init, timeoutMs: 300_000 });
+      // 5-minute ceiling (safeFetch's max) bounds streamed completions.
+      return safeFetch(String(url), {
+        ...init,
+        timeoutMs: 300_000,
+        ipFamily: this._ipFamily,
+      });
     };
   }
 
@@ -314,7 +321,7 @@ export class OpenAICompatibleAdapter implements AiCapability {
       provider = createOpenAI({
         apiKey: creds.apiKey,
         baseURL: baseURL || undefined,
-        fetch: this._tenantSafeFetch(baseURL),
+        fetch: this._providerFetch(baseURL),
       });
       this._providerCache.set(key, provider);
     }
@@ -330,6 +337,7 @@ export class OpenAICompatibleAdapter implements AiCapability {
       this._safeFetch,
       creds.baseURL || this._defaultBaseURL,
       creds.apiKey,
+      this._ipFamily,
     );
     return mergeLiveModels(live, this._defaultModels, this.capabilities);
   }
@@ -352,6 +360,7 @@ export class OpenAICompatibleAdapter implements AiCapability {
     try {
       response = await this._safeFetch(`${baseURL}/models`, {
         headers: { Authorization: `Bearer ${creds.apiKey}` },
+        ipFamily: this._ipFamily,
       });
     } catch (err) {
       if (isBlockedUrlError(err)) throw err;
@@ -394,9 +403,8 @@ export class OpenAICompatibleAdapter implements AiCapability {
       apiKey: creds.apiKey,
       configuration: {
         baseURL: baseURL || undefined,
-        // Same tenant-URL rule as _getProvider: org-supplied endpoints go
-        // through the SSRF-safe fetch.
-        fetch: this._tenantSafeFetch(baseURL) as any,
+        // Same endpoint and IP-family rules as _getProvider.
+        fetch: this._providerFetch(baseURL) as any,
       },
       model: modelId,
       temperature: opts?.temperature,

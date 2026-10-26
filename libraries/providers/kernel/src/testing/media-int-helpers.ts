@@ -12,6 +12,7 @@ export interface Rec {
   method: string;
   headers: Record<string, string>;
   body: any;
+  ipFamily?: 4 | 6;
 }
 
 /**
@@ -26,6 +27,7 @@ export function makeCtx(handler: (url: string, init: any, n: number) => any) {
       method: init.method || 'GET',
       headers: init.headers || {},
       body: init.body,
+      ipFamily: init.ipFamily,
     });
     return handler(String(input), init, recs.length);
   };

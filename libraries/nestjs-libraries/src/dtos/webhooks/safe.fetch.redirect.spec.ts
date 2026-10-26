@@ -4,7 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('./webhook.url.validator', () => ({
   isSafePublicHttpsUrl: vi.fn(async () => true),
 }));
-vi.mock('./ssrf.safe.dispatcher', () => ({ ssrfSafeDispatcher: {} }));
+vi.mock('./ssrf.safe.dispatcher', () => ({
+  getSsrfSafeDispatcher: vi.fn(() => ({})),
+}));
 
 // Capture the init passed to each undici.fetch call.
 const fetchCalls: Array<{ url: string; init: any }> = [];
