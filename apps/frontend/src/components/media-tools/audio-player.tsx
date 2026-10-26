@@ -32,7 +32,8 @@ const fmtTime = (s: number) => {
 
 interface AudioPlayerProps {
   src: string;
-  /** Decode the real waveform only on first play (use in lists). */
+  /** Lists: no network on mount (preload='none') and decode the real waveform
+   * only on first play. */
   lazy?: boolean;
   height?: number;
   className?: string;
@@ -135,7 +136,11 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({ src, lazy = false, height = 
     // No crossOrigin: a media element plays cross-origin audio (e.g. Jamendo)
     // fine without CORS; setting it would make the browser refuse to play.
     audio.src = src;
-    audio.preload = 'metadata';
+    // Lazy instances (voice picker, stock-audio lists — hundreds per modal)
+    // must not fire a CDN metadata request per row on mount: preload='none'
+    // defers ALL fetching until the user first presses play; the duration
+    // label fills in via 'loadedmetadata' once playback starts.
+    audio.preload = lazy ? 'none' : 'metadata';
     audioRef.current = audio;
     decodedRef.current = false;
     peaksRef.current = null;

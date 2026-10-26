@@ -68,7 +68,10 @@ export const VoicePicker: FC<VoicePickerProps> = ({ voices, selectedId, onSelect
                 type="button"
                 onClick={() => {
                   onSelect(v);
-                  modal.closeAll();
+                  // Close only the picker — closeAll() would also destroy a
+                  // host dialog (e.g. the Designer's avatar dialog) and wipe
+                  // its script/portrait state.
+                  modal.closeCurrent();
                 }}
                 className="shrink-0 px-[14px] py-[8px] rounded-[8px] bg-[#2B5CD3] text-white text-[12px] font-[500] hover:bg-[#2B5CD3]/80 transition-all"
               >

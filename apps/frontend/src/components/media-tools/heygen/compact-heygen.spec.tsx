@@ -21,12 +21,15 @@ vi.mock('@postmill-ai/react/helpers/use.media.directory', () => ({
 // The voice picker opens through the modal manager — capture its children so
 // the test can render and interact with them.
 let modalChildren: React.ReactNode = null;
+const closeAllMock = vi.fn();
+const closeCurrentMock = vi.fn();
 vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
   useModals: () => ({
     openModal: vi.fn((params: { children?: React.ReactNode }) => {
       modalChildren = params.children ?? null;
     }),
-    closeAll: vi.fn(),
+    closeAll: closeAllMock,
+    closeCurrent: closeCurrentMock,
   }),
 }));
 
@@ -91,6 +94,8 @@ beforeEach(() => {
   jobsPayload = [];
   modalChildren = null;
   mediaPickerOnSelect = null;
+  closeAllMock.mockReset();
+  closeCurrentMock.mockReset();
   fetchMock.mockReset();
   fetchMock.mockImplementation((url: string) => {
     if (url.includes('/media/heygen/status')) return Promise.resolve(ok({ configured: true }));
@@ -181,5 +186,13 @@ describe('CompactHeyGen', () => {
     wrap(<CompactHeyGen operation="video" prompt="say hello" onGenerated={vi.fn()} />);
     expect(await screen.findByText(/isn't configured — add your credentials/)).toBeTruthy();
     expect(screen.queryByText('Pick a photo from Files')).toBeNull();
+  });
+
+  it('closes only the picker modal when a voice is chosen, not the whole modal stack', async () => {
+    wrap(<CompactHeyGen operation="video" prompt="say hello" onGenerated={vi.fn()} />);
+    await pickPhotoAndVoice();
+    // closeAll() here used to destroy the host avatar dialog (and its script).
+    expect(closeCurrentMock).toHaveBeenCalledTimes(1);
+    expect(closeAllMock).not.toHaveBeenCalled();
   });
 });

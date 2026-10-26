@@ -46,7 +46,9 @@ export const AvatarPicker: FC<AvatarPickerProps> = ({ avatars, selectedId, onSel
               type="button"
               onClick={() => {
                 onSelect(a);
-                modal.closeAll();
+                // Close only the picker (see voice-picker.tsx) — closeAll()
+                // would destroy any host dialog underneath it.
+                modal.closeCurrent();
               }}
               className={`group flex flex-col rounded-[10px] overflow-hidden border-2 transition-all text-left ${
                 selectedId === a.avatarId ? 'border-[#2B5CD3]' : 'border-transparent hover:border-[#2B5CD3]/40'
