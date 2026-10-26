@@ -2,6 +2,11 @@ interface OpenInDesignerArgs {
   operation: string;
   artifactUrl?: string | null;
   fileId?: string | null;
+  // Content-classified type of the stored File, when the caller has it (render
+  // queues). Trusted over `operation`: a video-operation job can land an image
+  // artifact (e.g. a Reel.Farm slideshow completed without a video export), and
+  // an image must land on the static canvas, not the video timeline.
+  fileType?: string | null;
   // Optional metadata forwarded for the static-canvas (image) path so attribution,
   // source, and natural dimensions are preserved.
   source?: string;
@@ -36,6 +41,7 @@ export function openInDesigner(
     operation,
     artifactUrl,
     fileId,
+    fileType,
     source,
     author,
     authorUrl,
@@ -53,7 +59,14 @@ export function openInDesigner(
 
   const go = (url: string) => (navigate ? navigate(url) : window.open(url, '_blank'));
 
-  if (operation === 'image') {
+  // The classified file type wins over the requested operation; without it,
+  // 'avatar' renders are video and everything else is taken at face value.
+  const kind =
+    fileType === 'image' || fileType === 'audio' || fileType === 'video'
+      ? fileType
+      : operation;
+
+  if (kind === 'image') {
     const params = new URLSearchParams({ url: artifactUrl, type: 'photo' });
     if (source) params.set('source', source);
     if (author) params.set('author', author);
@@ -68,7 +81,7 @@ export function openInDesigner(
     return;
   }
 
-  const type = operation === 'audio' ? 'audio' : 'video';
+  const type = kind === 'audio' ? 'audio' : 'video';
   try {
     window.sessionStorage.setItem(
       DESIGNER_HANDOFF_KEY,

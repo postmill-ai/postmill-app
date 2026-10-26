@@ -37,4 +37,20 @@ describe('openInDesigner', () => {
     openInDesigner({ operation: 'video', artifactUrl: null }, navigate);
     expect(navigate).not.toHaveBeenCalled();
   });
+
+  it('routes an image artifact from a video-operation job to the static canvas', () => {
+    // Reel.Farm slideshows complete a 'video' job with a slide JPG; the stored
+    // File is classified 'image'. Sending it to the video timeline would create
+    // a clip that can't decode.
+    const navigate = vi.fn();
+    openInDesigner(
+      { operation: 'video', artifactUrl: 'https://cdn.example/slide.jpg', fileType: 'image' },
+      navigate
+    );
+    expect(navigate).toHaveBeenCalledWith(
+      expect.stringContaining('/media/designer?url=')
+    );
+    expect(navigate).toHaveBeenCalledWith(expect.stringContaining('type=photo'));
+    expect(window.sessionStorage.getItem(TIMELINE_KEY)).toBeNull();
+  });
 });

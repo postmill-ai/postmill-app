@@ -433,8 +433,8 @@ describe('MediaStudioService', () => {
       ];
       aiSettings.getMediaJobsByProvider.mockResolvedValue(completedJobs);
       fileService.getFilesByPaths.mockResolvedValue([
-        { id: 'file-1', path: '/uploads/org-1/a.png' },
-        { id: 'file-2', path: '/uploads/org-1/b.png' },
+        { id: 'file-1', path: '/uploads/org-1/a.png', type: 'image' },
+        { id: 'file-2', path: '/uploads/org-1/b.png', type: 'image' },
       ]);
 
       const result = await service.listJobs('org-1', 'test-provider');
@@ -448,8 +448,8 @@ describe('MediaStudioService', () => {
       expect(fileService.getFileByPath).not.toHaveBeenCalled();
       expect(result).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: 'job-1', fileId: 'file-1' }),
-          expect.objectContaining({ id: 'job-2', fileId: 'file-2' }),
+          expect.objectContaining({ id: 'job-1', fileId: 'file-1', fileType: 'image' }),
+          expect.objectContaining({ id: 'job-2', fileId: 'file-2', fileType: 'image' }),
         ]),
       );
     });

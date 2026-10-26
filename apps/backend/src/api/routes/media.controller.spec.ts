@@ -356,7 +356,7 @@ describe('MediaController — Designer AI-media routes', () => {
         error: null,
       });
       fileService.getFilesByPaths.mockResolvedValue([
-        { id: 'file-9', path: '/uploads/video-job-1.mp4' },
+        { id: 'file-9', path: '/uploads/video-job-1.mp4', type: 'video' },
       ]);
 
       const res = await controller.getMediaJob(org, 'job-1');
@@ -369,6 +369,7 @@ describe('MediaController — Designer AI-media routes', () => {
         status: 'completed',
         artifactUrl: '/uploads/video-job-1.mp4',
         fileId: 'file-9',
+        fileType: 'video',
         error: null,
       });
     });

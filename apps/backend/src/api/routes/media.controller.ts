@@ -108,9 +108,12 @@ export class MediaController {
     if (!job || job.organizationId !== org.id) {
       throw new HttpException('Job not found', HttpStatus.NOT_FOUND);
     }
-    // Resolve the landed File id so callers (designer timeline) can pin the
+    // Resolve the landed File row so callers (designer timeline) can pin the
     // clip against retention purge — mirrors the studio's `_presentJob`, which
-    // resolves the same path→File mapping via getFilesByPaths.
+    // resolves the same path→File mapping via getFilesByPaths. The row's
+    // content-classified `type` lets the timeline land an image artifact (a
+    // video-operation job can store one, e.g. a Reel.Farm slideshow's first
+    // slide) as an image clip instead of a dead video clip.
     const completed = job.status === 'completed' && job.artifactUrl;
     const files = completed
       ? await this._fileService.getFilesByPaths(org.id, [job.artifactUrl!]).catch(() => [])
@@ -120,6 +123,7 @@ export class MediaController {
       status: job.status,
       artifactUrl: job.artifactUrl,
       fileId: (files[0]?.id as string | undefined) ?? null,
+      fileType: (files[0]?.type as string | undefined) ?? null,
       error: job.error,
     };
   }

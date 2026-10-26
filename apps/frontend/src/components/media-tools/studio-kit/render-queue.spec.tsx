@@ -35,6 +35,7 @@ const job = (over: Record<string, unknown> = {}) => ({
   status: 'completed',
   artifactUrl: '/uploads/a.png',
   fileId: 'f1',
+  fileType: null,
   error: null,
   createdAt: '2026-07-01T00:00:00.000Z',
   ...over,
@@ -113,5 +114,37 @@ describe('RenderQueue', () => {
       />
     );
     expect(screen.queryByRole('button', { name: 'Copy Link' })).toBeNull();
+  });
+
+  it('previews a video-operation job as an image when the stored file is one', () => {
+    // Reel.Farm slideshows: the API creates a slideshow; when it finishes without
+    // a video export the job completes with the first slide JPG. The stored File
+    // is content-classified as 'image' — key the preview off that, not the
+    // requested operation, else <video src="…slide.jpg"> fails to decode.
+    const { container } = render(
+      <RenderQueue
+        jobs={[
+          job({
+            operation: 'video',
+            artifactUrl: '/uploads/slide.jpg',
+            fileType: 'image',
+          }),
+        ]}
+        isLoading={false}
+      />
+    );
+    expect(container.querySelector('img[src="/uploads/slide.jpg"]')).toBeTruthy();
+    expect(container.querySelector('video')).toBeNull();
+  });
+
+  it('falls back to the operation while the file type is unresolved', () => {
+    const { container } = render(
+      <RenderQueue
+        jobs={[job({ operation: 'video', artifactUrl: '/uploads/v.mp4', fileType: null })]}
+        isLoading={false}
+      />
+    );
+    expect(container.querySelector('video[src="/uploads/v.mp4"]')).toBeTruthy();
+    expect(container.querySelector('img')).toBeNull();
   });
 });

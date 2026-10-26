@@ -85,6 +85,8 @@ export interface DashboardMediaJobsResponse {
     artifactUrl: string | null;
     /** File row for a completed artifact, so the queue's composer handoff can attach it. */
     fileId: string | null;
+    /** Content-classified File type — may differ from `operation` (e.g. slideshow → image). */
+    fileType: string | null;
     error: string | null;
     createdAt: Date;
   }>;
@@ -300,22 +302,28 @@ export class DashboardService {
     const files = completedPaths.length
       ? ((await this._fileRepository
           .getFilesByPaths(orgId, completedPaths)
-          .catch(() => [])) as Array<{ path: string; id: string }>)
+          .catch(() => [])) as Array<{ path: string; id: string; type: string }>)
       : [];
-    const fileByPath = new Map(files.map((f) => [f.path, f.id]));
+    const fileByPath = new Map(files.map((f) => [f.path, f]));
 
     return {
       nextCursor: jobs.length === limit ? jobs[jobs.length - 1].id : null,
       jobs: jobs.map((j: any) => {
         // `pending://` refs are internal and must never reach the client.
         const completed = isFinished(j.status) && j.artifactUrl;
+        const file = completed ? fileByPath.get(j.artifactUrl) : undefined;
         return {
           id: j.id,
           provider: j.provider,
           operation: j.operation,
           status: isFinished(j.status) ? 'completed' : j.status,
           artifactUrl: completed ? j.artifactUrl : null,
-          fileId: completed ? fileByPath.get(j.artifactUrl) ?? null : null,
+          fileId: file?.id ?? null,
+          // Content-classified File type (image/audio/video/…). A video-operation
+          // job can land an image artifact (e.g. a Reel.Farm slideshow completed
+          // without a video export) — consumers must key previews off this, not
+          // the requested operation.
+          fileType: file?.type ?? null,
           error: j.error ?? null,
           createdAt: j.createdAt,
         };
