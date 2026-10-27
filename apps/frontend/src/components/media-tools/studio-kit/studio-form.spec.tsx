@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { StudioForm } from './studio-form';
 import { studioSelectOptions, type StudioField } from './types';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
-  useT: () => (_key: string, fallback: string) => fallback,
+  useT: () => (key: string, fallback: string) =>
+    ({
+      kling_ai_text_to_video_resolution_opt0: 'Translated 720p',
+      kling_ai_text_to_video_resolution_opt1: 'Translated 1080p',
+    })[key] ?? fallback,
 }));
 
 const fields: StudioField[] = [
@@ -19,7 +23,10 @@ const fields: StudioField[] = [
     type: 'select',
     name: 'audio',
     label: 'Audio',
-    options: [{ value: 'native', label: 'Native audio' }],
+    options: [
+      { value: 'off', label: 'Silent' },
+      { value: 'native', label: 'Native audio' },
+    ],
   },
   {
     type: 'select',
@@ -48,11 +55,11 @@ describe('StudioForm conditional options', () => {
     expect(studioSelectOptions(resolution, { model: 'kling-2.6', audio: 'off' })).toHaveLength(2);
   });
 
-  it('corrects a newly invalid value so the submitted request matches the visible option', async () => {
+  it('preserves base translations and uses the rule label after correcting an invalid value', async () => {
     const Harness = () => {
       const [values, setValues] = useState({
         model: 'kling-2.6',
-        audio: 'native',
+        audio: 'off',
         resolution: '720p',
       });
       return (
@@ -72,7 +79,16 @@ describe('StudioForm conditional options', () => {
     };
 
     render(<Harness />);
+    const resolution = screen.getByLabelText('Resolution') as HTMLSelectElement;
+    expect(resolution.value).toBe('720p');
+    expect(Array.from(resolution.options).map((option) => option.textContent)).toEqual([
+      'Translated 720p',
+      'Translated 1080p',
+    ]);
+
+    fireEvent.change(screen.getByLabelText('Audio'), { target: { value: 'native' } });
     await waitFor(() => expect(screen.getByTestId('resolution').textContent).toBe('1080p'));
-    expect((screen.getByLabelText('Resolution') as HTMLSelectElement).value).toBe('1080p');
+    expect(resolution.value).toBe('1080p');
+    expect(resolution.selectedOptions[0].textContent).toBe('1080p (required for native audio)');
   });
 });
