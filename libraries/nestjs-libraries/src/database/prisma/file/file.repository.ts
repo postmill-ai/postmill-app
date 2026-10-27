@@ -318,6 +318,7 @@ export class FileRepository {
         fileSize: true,
         type: true,
         folderId: true,
+        metadata: true,
       },
     });
   }

@@ -486,9 +486,7 @@ export class ReplicateRunnerService {
     const file = urls.length
       ? await this._fileService.getFileByPath(orgId, urls[0]).catch(() => null)
       : null;
-    const metadata = presentMediaMetadata(
-      (file as { metadata?: unknown } | null)?.metadata,
-    );
+    const metadata = presentMediaMetadata(file?.metadata);
 
     return {
       status: job.status,
