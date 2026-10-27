@@ -28,6 +28,7 @@ overrides:
   shell-quote: ^1.11.0
   '@modelcontextprotocol/sdk': ^1.31.0
   '@mastra/mcp>@modelcontextprotocol/client': 2.2.0
+  '@mastra/mcp>@modelcontextprotocol/node': 2.1.1
   '@mastra/mcp>@modelcontextprotocol/server': ^2.3.0
   '@mastra/core>@modelcontextprotocol/server': ^2.3.0
   graphql-yoga: ^5.24.4
@@ -1302,7 +1303,7 @@ importers:
         version: 1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7)
       '@mastra/mcp':
         specifier: ^1.17.2
-        version: 1.17.2(@cfworker/json-schema@4.1.1)(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(express@5.2.1)(hono@4.12.31)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)
+        version: 1.17.2(@cfworker/json-schema@4.1.1)(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)
       '@mastra/memory':
         specifier: ^1.28.0
         version: 1.28.0(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
@@ -6500,15 +6501,11 @@ packages:
       react-dom:
         optional: true
 
-  '@modelcontextprotocol/node@2.0.0':
-    resolution: {integrity: sha512-Y4hAC2XdGDUdDOCbLDOCA4+aL3NUldjsOWlDL/YwpAxrPhRm1xHd7lZ+mLacvZ9t3PaH28wgNoaLQGrIk1P2pg==}
+  '@modelcontextprotocol/node@2.1.1':
+    resolution: {integrity: sha512-EY92OAXN2xYL7tNS/MVsWJW1v8VHAPwl9B4Ca3pCrjmvqyC+S1C/6UHsMxF2GoFPraS5Yyg56vFz9brVpFojMA==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@modelcontextprotocol/server': ^2.0.0
-      hono: ^4.11.4
-    peerDependenciesMeta:
-      hono:
-        optional: true
+      '@modelcontextprotocol/server': ^2.3.0
 
   '@modelcontextprotocol/sdk@1.32.2':
     resolution: {integrity: sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==}
@@ -16849,8 +16846,8 @@ packages:
   jsc-safe-url@0.2.4:
     resolution: {integrity: sha512-0wM3YBWtYePOjfyXQH5MWQ8H7sdk5EXSwZvmSLKk2RboVQ2Bu239jycHDz5J/8Blf3K0Qnoy2b6xD+z10MFB+Q==}
 
-  jschardet@4.0.0:
-    resolution: {integrity: sha512-EsNiLV+xzeMBtkGL/HeWoUivNkGIr8JmaC5A5j7DBlKnhp4CcBTWKEOtNg6vlmf+mkn9yQ9Wals47u7+LoTr7w==}
+  jschardet@4.1.0:
+    resolution: {integrity: sha512-ighRZ11mb6l4m+xSKoivuqNj44qkObODXsAnnkkfYcY4JfYRnEgAe/w1c3mbnJtTQmLtfebAUfXGsUGUJImexg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -26841,13 +26838,13 @@ snapshots:
       pino: 10.3.1
       pino-pretty: 13.1.3
 
-  '@mastra/mcp@1.17.2(@cfworker/json-schema@4.1.1)(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(express@5.2.1)(hono@4.12.31)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)':
+  '@mastra/mcp@1.17.2(@cfworker/json-schema@4.1.1)(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)':
     dependencies:
       '@mastra/core': 1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7)
       '@modelcontextprotocol/client': 2.2.0
       '@modelcontextprotocol/core': 2.0.0
       '@modelcontextprotocol/ext-apps': 1.7.4(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(zod@4.6.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)
-      '@modelcontextprotocol/node': 2.0.0(@modelcontextprotocol/server@2.3.1)(hono@4.12.31)
+      '@modelcontextprotocol/node': 2.1.1(@modelcontextprotocol/server@2.3.1)
       '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.1)(zod@4.6.7)
       '@modelcontextprotocol/server': 2.3.1
       '@modelcontextprotocol/server-legacy': 2.0.0(express@5.2.1)
@@ -26856,7 +26853,6 @@ snapshots:
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - express
-      - hono
       - react
       - react-dom
       - supports-color
@@ -26943,7 +26939,7 @@ snapshots:
   '@microsoft/eslint-formatter-sarif@3.1.0':
     dependencies:
       eslint: 8.57.1
-      jschardet: 4.0.0
+      jschardet: 4.1.0
       lodash: 4.18.1
       utf8: 3.0.0
     transitivePeerDependencies:
@@ -26982,11 +26978,10 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  '@modelcontextprotocol/node@2.0.0(@modelcontextprotocol/server@2.3.1)(hono@4.12.31)':
+  '@modelcontextprotocol/node@2.1.1(@modelcontextprotocol/server@2.3.1)':
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.31)
       '@modelcontextprotocol/server': 2.3.1
-    optionalDependencies:
       hono: 4.12.31
 
   '@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(zod@3.25.76)':
@@ -29249,7 +29244,7 @@ snapshots:
       '@langchain/openai': 1.7.0(@aws-sdk/credential-provider-node@3.972.88)(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       '@langchain/tavily': 1.2.0(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))
       '@mastra/core': 1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7)
-      '@mastra/mcp': 1.17.2(@cfworker/json-schema@4.1.1)(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(express@5.2.1)(hono@4.12.31)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)
+      '@mastra/mcp': 1.17.2(@cfworker/json-schema@4.1.1)(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)
       '@mastra/memory': 1.28.0(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
       '@mastra/pg': 1.22.0(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
       '@nest-lab/throttler-storage-redis': 1.2.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@nestjs/throttler@6.5.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(reflect-metadata@0.2.2))(ioredis@5.11.1)(reflect-metadata@0.2.2)
@@ -29596,7 +29591,7 @@ snapshots:
       '@langchain/openai': 1.7.0(@aws-sdk/credential-provider-node@3.972.88)(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@10.9.1)(undici@7.30.1)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       '@langchain/tavily': 1.2.0(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@10.9.1)(undici@7.30.1)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))
       '@mastra/core': 1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7)
-      '@mastra/mcp': 1.17.2(@cfworker/json-schema@4.1.1)(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(express@5.2.1)(hono@4.12.31)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)
+      '@mastra/mcp': 1.17.2(@cfworker/json-schema@4.1.1)(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)
       '@mastra/memory': 1.28.0(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
       '@mastra/pg': 1.22.0(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
       '@nest-lab/throttler-storage-redis': 1.2.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@nestjs/throttler@6.5.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(reflect-metadata@0.2.2))(ioredis@5.11.1)(reflect-metadata@0.2.2)
@@ -38335,16 +38330,6 @@ snapshots:
       - debug
       - supports-color
 
-  axios@1.20.0(debug@4.4.3):
-    dependencies:
-      follow-redirects: 1.16.1(debug@4.4.3)
-      form-data: 2.5.6
-      https-proxy-agent: 5.0.1
-      proxy-from-env: 2.1.0
-    transitivePeerDependencies:
-      - debug
-      - supports-color
-
   axobject-query@3.2.4: {}
 
   axobject-query@4.1.0: {}
@@ -41138,10 +41123,6 @@ snapshots:
     optionalDependencies:
       debug: 4.3.7
 
-  follow-redirects@1.16.1(debug@4.4.3):
-    optionalDependencies:
-      debug: 4.4.3(supports-color@5.5.0)
-
   fontkit@1.9.0:
     dependencies:
       '@swc/helpers': 0.3.17
@@ -42112,7 +42093,7 @@ snapshots:
       '@types/debug': 4.1.13
       '@types/node': 18.19.130
       '@types/tough-cookie': 4.0.5
-      axios: 1.20.0(debug@4.4.3)
+      axios: 1.20.0
       camelcase: 6.3.0
       debug: 4.4.3(supports-color@5.5.0)
       dotenv: 16.6.1
@@ -42122,7 +42103,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.3
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.20.0)
+      retry-axios: 2.6.0(axios@1.20.0(debug@4.4.3))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -42719,7 +42700,7 @@ snapshots:
 
   jsc-safe-url@0.2.4: {}
 
-  jschardet@4.0.0: {}
+  jschardet@4.1.0: {}
 
   jsdom@22.1.0(bufferutil@4.1.0)(canvas@3.2.3)(utf-8-validate@6.0.6):
     dependencies:
@@ -46454,7 +46435,7 @@ snapshots:
 
   ret@0.5.0: {}
 
-  retry-axios@2.6.0(axios@1.20.0):
+  retry-axios@2.6.0(axios@1.20.0(debug@4.4.3)):
     dependencies:
       axios: 1.20.0
 
