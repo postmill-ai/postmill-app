@@ -78,6 +78,7 @@ export const MODEL_ALLOWLIST: Record<string, string[]> = {
     'kwaivgi/kling-v2.5-turbo-pro',
   ],
   'image-to-video': [
+    'google/veo-3.1',
     'minimax/video-01',
     'bytedance/seedance-1-pro',
     // kling-v2.1 and kling-v2.1-master were discontinued upstream (error 1203).

@@ -28,4 +28,38 @@ describe('replicate metadata', () => {
     const veo = t2v.find((m) => m.id === 'google/veo-3.1')!;
     expect(veo.fields.map((f) => f.name)).toContain('generate_audio');
   });
+
+  it('declares Veo in both video categories with the 4/6/8 duration contract', () => {
+    const models = metadata.mediaModels as Record<
+      string,
+      { id: string; fields: { name: string; type?: string; default?: unknown; options?: { value: string }[] }[] }[]
+    >;
+    for (const category of ['text-to-video', 'image-to-video']) {
+      const veo = models[category].find((model) => model.id === 'google/veo-3.1')!;
+      expect(veo).toBeDefined();
+      const duration = veo.fields.find((field) => field.name === 'duration')!;
+      expect(duration.type).toBe('select');
+      expect(duration.options?.map((option) => option.value)).toEqual(['4', '6', '8']);
+      expect(duration.default).toBe('8');
+    }
+  });
+
+  it('keeps Seedance and Kling at 5/10 seconds and Video-01 without a duration input', () => {
+    const models = metadata.mediaModels as Record<
+      string,
+      { id: string; fields: { name: string; type?: string; default?: unknown; options?: { value: string }[] }[] }[]
+    >;
+    for (const category of ['text-to-video', 'image-to-video']) {
+      for (const id of ['bytedance/seedance-1-pro', 'kwaivgi/kling-v2.5-turbo-pro']) {
+        const duration = models[category]
+          .find((model) => model.id === id)!
+          .fields.find((field) => field.name === 'duration')!;
+        expect(duration.type).toBe('select');
+        expect(duration.options?.map((option) => option.value)).toEqual(['5', '10']);
+        expect(duration.default).toBe('5');
+      }
+      const video01 = models[category].find((model) => model.id === 'minimax/video-01')!;
+      expect(video01.fields.some((field) => field.name === 'duration')).toBe(false);
+    }
+  });
 });

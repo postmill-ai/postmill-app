@@ -3,9 +3,13 @@
 //
 // Usage:
 //   REPLICATE_API_TOKEN=<token> node tools/codegen/snapshot-replicate-catalog.mjs
+//   node tools/codegen/snapshot-replicate-catalog.mjs --offline
+//   node tools/codegen/snapshot-replicate-catalog.mjs --offline --check
 //
 // Without a token the script still emits model ids (so completeness tests pass)
 // but leaves fields empty; the output is marked NEEDS-LIVE-SMOKE-TEST.
+// Offline mode instead preserves committed fields and notes, applies curated
+// field policies, and never calls Replicate.
 //
 // The committed snapshot is the runtime source of truth — the app never calls
 // Replicate at catalog time.
@@ -32,6 +36,8 @@ const CONVERTER_FILE = path.join(
 
 const BASE = 'https://api.replicate.com/v1';
 const TOKEN = process.env.REPLICATE_API_TOKEN || process.env.REPLICATE_API_KEY;
+const OFFLINE = process.argv.includes('--offline');
+const CHECK = process.argv.includes('--check');
 const require = createRequire(import.meta.url);
 
 const ALLOWLIST_TO_MEDIA_CATEGORY = {
@@ -80,6 +86,48 @@ const MODEL_ALLOWLIST = allowlistModule.MODEL_ALLOWLIST;
 const CATEGORIES = allowlistModule.CATEGORIES;
 const convertReplicateInputSchema = converterModule.convertReplicateInputSchema;
 
+function readExistingMetadata() {
+  const source = fs.readFileSync(METADATA_FILE, 'utf8');
+  const match = source.match(
+    /export\s+const\s+metadata\s*:\s*ProviderMetadata\s*=\s*(\{[\s\S]*\});/,
+  );
+  if (!match) throw new Error('Could not read the committed Replicate metadata snapshot');
+  return JSON.parse(match[1]);
+}
+
+const existingMetadata = readExistingMetadata();
+const existingModelsById = new Map(
+  Object.values(existingMetadata?.mediaModels ?? {})
+    .flat()
+    .map((model) => [model.id, model]),
+);
+
+function applyCuratedFieldPolicies(modelId, fields) {
+  if (modelId === 'minimax/video-01') {
+    return fields.filter((field) => field.name !== 'duration');
+  }
+  const policies = {
+    'google/veo-3.1': { choices: [4, 6, 8], defaultValue: 8 },
+    'bytedance/seedance-1-pro': { choices: [5, 10], defaultValue: 5 },
+    'kwaivgi/kling-v2.5-turbo-pro': { choices: [5, 10], defaultValue: 5 },
+  };
+  const policy = policies[modelId];
+  if (!policy || fields.length === 0) return fields;
+  return fields.map((field) => {
+    if (field.name !== 'duration') return field;
+    const next = {
+      ...field,
+      type: 'select',
+      options: policy.choices.map((value) => ({ value: String(value), label: String(value) })),
+      default: String(policy.defaultValue),
+    };
+    delete next.min;
+    delete next.max;
+    delete next.step;
+    return next;
+  });
+}
+
 function categoryFromAllowlistKey(key) {
   return ALLOWLIST_TO_MEDIA_CATEGORY[key] || null;
 }
@@ -123,10 +171,11 @@ async function main() {
 
     for (const modelId of modelIds) {
       const [owner, name] = modelId.split('/');
-      let fields = [];
-      let modelName = name;
+      const existing = existingModelsById.get(modelId);
+      let fields = OFFLINE ? (existing?.fields ?? []) : [];
+      let modelName = existing?.label ?? name;
 
-      if (TOKEN) {
+      if (TOKEN && !OFFLINE) {
         try {
           const data = await fetchModel(owner, name);
           modelName = data.name || name;
@@ -143,9 +192,10 @@ async function main() {
 
       if (!mediaModels[category]) mediaModels[category] = [];
       mediaModels[category].push({
+        ...existing,
         id: modelId,
         label: modelName,
-        fields,
+        fields: applyCuratedFieldPolicies(modelId, fields),
       });
     }
   }
@@ -172,23 +222,32 @@ async function main() {
     },
   };
 
-  let source = fs.readFileSync(METADATA_FILE, 'utf8');
+  const originalSource = fs.readFileSync(METADATA_FILE, 'utf8');
   let newObject = `export const metadata: ProviderMetadata = ${JSON.stringify(
     metadata,
     null,
     2,
   )};`;
-  if (!TOKEN) {
+  if (!TOKEN && !OFFLINE) {
     newObject =
       '// NEEDS-LIVE-SMOKE-TEST: fields below were emitted without a REPLICATE_API_TOKEN.\n// Re-run this script with a token to populate per-model fields.\n' +
       newObject;
   }
   // Match (and drop) any prior NEEDS-LIVE-SMOKE-TEST banner so a token-backed re-run
   // after a tokenless run doesn't leave a stale, now-inaccurate comment behind.
-  source = source.replace(
+  const source = originalSource.replace(
     /(?:\/\/\s*NEEDS-LIVE-SMOKE-TEST:[^\n]*\n(?:\/\/[^\n]*\n)*)?export\s+const\s+metadata\s*:\s*ProviderMetadata\s*=\s*\{[\s\S]*?\n\};/,
     newObject,
   );
+  if (CHECK) {
+    if (source !== originalSource) {
+      console.error('Replicate metadata is out of date. Run snapshot-replicate-catalog.mjs.');
+      process.exitCode = 1;
+    } else {
+      console.log('Replicate metadata snapshot is up to date.');
+    }
+    return;
+  }
   fs.writeFileSync(METADATA_FILE, source, 'utf8');
 
   console.log(
@@ -196,7 +255,9 @@ async function main() {
       mediaModels,
     ).reduce((s, a) => s + a.length, 0)} models.`,
   );
-  if (TOKEN) {
+  if (OFFLINE) {
+    console.log('Offline mode: preserved committed schemas; no Replicate calls made.');
+  } else if (TOKEN) {
     console.log(`Fetched schemas: ${fetched} ok, ${failed} failed.`);
   } else {
     console.log('No REPLICATE_API_TOKEN provided — model fields are empty.');

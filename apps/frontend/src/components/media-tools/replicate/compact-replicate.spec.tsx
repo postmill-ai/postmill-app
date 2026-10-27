@@ -46,6 +46,26 @@ const MODELS = [
     pricing: 'output',
     price: { kind: 'per', usd: 0.01 },
   },
+  {
+    id: 'google/veo-3.1',
+    name: 'Veo 3.1',
+    description: '',
+    coverImageUrl: null,
+    runCount: 5,
+    warm: true,
+    pricing: 'output',
+    price: { kind: 'per-video-sec', usd: 0.4 },
+  },
+  {
+    id: 'bytedance/seedance-1-pro',
+    name: 'Seedance 1 Pro',
+    description: '',
+    coverImageUrl: null,
+    runCount: 5,
+    warm: true,
+    pricing: 'output',
+    price: { kind: 'per-video-sec', usd: 0.4 },
+  },
 ];
 
 const MODEL_DETAIL = {
@@ -80,15 +100,13 @@ const wrap = (ui: React.ReactElement) =>
 const callsTo = (path: string) =>
   fetchMock.mock.calls.filter(([url]) => String(url).includes(path));
 
-const pickModel = async (categoryKey: string) => {
+const pickModel = async (categoryKey: string, modelId = 'acme/sdxl') => {
   fireEvent.change(await screen.findByLabelText('Category'), {
     target: { value: categoryKey },
   });
   const modelSelect = (await screen.findByLabelText('Model')) as HTMLSelectElement;
-  fireEvent.change(modelSelect, { target: { value: 'acme/sdxl' } });
-  // Wait for the model detail to load and the DynamicForm to render (the seed
-  // field is Advanced, so the section header is the visible marker).
-  await screen.findByText('Advanced settings');
+  fireEvent.change(modelSelect, { target: { value: modelId } });
+  await waitFor(() => expect(useReplicateStore.getState().selectedModel?.id).toBe(modelId));
 };
 
 beforeEach(() => {
@@ -347,6 +365,87 @@ describe('CompactReplicate', () => {
     expect(body.input.aspect_ratio).toBe('1:1');
     expect(body.input.end_image).toEqual({ fileId: 'f1', url: '/uploads/end.png', type: 'image' });
     expect(body.input.mode).toBe('pro');
+  });
+
+  it('submits Veo reference files as an array and keeps reference mode at 16:9 and 8 seconds', async () => {
+    modelDetail = {
+      ...MODEL_DETAIL,
+      id: 'google/veo-3.1',
+      name: 'Veo 3.1',
+      inputSchema: {
+        required: ['prompt'],
+        properties: {
+          prompt: { type: 'string', title: 'Prompt' },
+          aspect_ratio: {
+            type: 'string',
+            title: 'Aspect ratio',
+            enum: ['16:9', '9:16'],
+            default: '16:9',
+          },
+          duration: { type: 'integer', title: 'Duration', enum: [4, 6, 8], default: 6 },
+          reference_images: {
+            type: 'array',
+            title: 'References',
+            items: { type: 'string', format: 'uri' },
+          },
+        },
+      },
+    };
+    wrap(
+      <CompactReplicate operation="video" prompt="a rocket" aspectRatio="9:16" onGenerated={vi.fn()} />
+    );
+    await pickModel('text-to-video', 'google/veo-3.1');
+
+    const references = [
+      { fileId: 'f2', url: '/uploads/two.png', type: 'image' as const },
+      { fileId: 'f1', url: '/uploads/one.png', type: 'image' as const },
+    ];
+    act(() => {
+      useReplicateStore.getState().updateFormField('reference_images', references);
+    });
+    await waitFor(() => {
+      expect(useReplicateStore.getState().formInput.aspect_ratio).toBe('16:9');
+      expect(useReplicateStore.getState().formInput.duration).toBe(8);
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(callsTo('/media/replicate/run/async')).toHaveLength(1));
+    const [, init] = callsTo('/media/replicate/run/async')[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.input.reference_images).toEqual(references);
+    expect(Array.isArray(body.input.reference_images)).toBe(true);
+    expect(body.input.aspect_ratio).toBe('16:9');
+    expect(body.input.duration).toBe(8);
+  });
+
+  it('rejects invalid model input before submitting a compact run', async () => {
+    modelDetail = {
+      ...MODEL_DETAIL,
+      id: 'bytedance/seedance-1-pro',
+      inputSchema: {
+        required: ['prompt'],
+        properties: {
+          prompt: { type: 'string', title: 'Prompt' },
+          duration: { type: 'integer', title: 'Duration', default: 6 },
+        },
+      },
+    };
+    const onError = vi.fn();
+    wrap(
+      <CompactReplicate operation="video" prompt="a rocket" onGenerated={vi.fn()} onError={onError} />
+    );
+    await pickModel('text-to-video', 'bytedance/seedance-1-pro');
+    act(() => {
+      useReplicateStore.getState().updateFormField('duration', 6);
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      'bytedance/seedance-1-pro duration must be 5 or 10 seconds.'
+    );
+    expect(onError).toHaveBeenCalled();
+    expect(callsTo('/media/replicate/run/async')).toHaveLength(0);
   });
 
   it('notes when the model has no prompt field at all', async () => {

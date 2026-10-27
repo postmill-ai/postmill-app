@@ -138,6 +138,8 @@ Escape hatch only when the generic form can't express the UX:
 
 Rule: prefer the descriptor path; go bespoke only for non-artifact outputs, structured multi-step UX, or schema-dynamic catalogs.
 
+**HeyGen avatar-only invariant.** Generic provider routing exposes HeyGen only through `video-avatar`: its metadata omits `text-to-video` and `image-to-video`, and its capabilities are `video: false` with `avatar: true`. `generateVideo` rejects before any network I/O; `generateAvatar` owns the avatar submission path. `hasCompactStudio('heygen', operation)` is true only for `avatar`, although the avatar dialog intentionally renders `CompactHeyGen` through `CompactStudio` with `operation="video"`. Do not gate that direct component path. Dedicated HeyGen `/video` and `/talking-photo` service/controller flows and operation-aware polling are separate and remain unchanged.
+
 ## 7. Database
 
 `libraries/nestjs-libraries/src/database/prisma/schema.prisma`:

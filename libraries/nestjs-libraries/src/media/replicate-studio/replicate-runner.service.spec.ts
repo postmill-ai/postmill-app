@@ -440,6 +440,164 @@ describe('ReplicateRunnerService', () => {
     });
   });
 
+  describe('model input contracts', () => {
+    const runVideo = (modelId: string, input: Record<string, unknown>) =>
+      runner.runAsync('org1', '', { modelId, input, operation: 'video' });
+
+    beforeEach(() => {
+      mockSafeFetch.mockResolvedValue(jsonResponse({ id: 'pred-video', status: 'starting' }));
+    });
+
+    it.each([
+      ['google/veo-3.1', 4],
+      ['google/veo-3.1', '6'],
+      ['google/veo-3.1', 8],
+      ['bytedance/seedance-1-pro', 5],
+      ['bytedance/seedance-1-pro', '10'],
+      ['kwaivgi/kling-v2.5-turbo-pro', 5],
+      ['kwaivgi/kling-v2.5-turbo-pro', 10],
+    ])('accepts %s duration %s before creating a job', async (modelId, duration) => {
+      await runVideo(modelId, { prompt: 'cat', duration });
+      expect(mockLifecycle.createPendingJob).toHaveBeenCalledTimes(1);
+      expect(mockSafeFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['google/veo-3.1', 5],
+      ['bytedance/seedance-1-pro', 6],
+      ['kwaivgi/kling-v2.5-turbo-pro', 2],
+      ['minimax/video-01', 6],
+    ])('rejects %s duration %s before job creation or provider access', async (modelId, duration) => {
+      await expect(runVideo(modelId, { prompt: 'cat', duration })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(mockLifecycle.createPendingJob).not.toHaveBeenCalled();
+      expect(mockCatalog.getReplicateKey).not.toHaveBeenCalled();
+      expect(mockSafeFetch).not.toHaveBeenCalled();
+    });
+
+    it('does not fabricate an upstream duration for Video-01', async () => {
+      await runVideo('minimax/video-01', { prompt: 'cat' });
+      const body = JSON.parse(mockSafeFetch.mock.calls[0][1].body as string);
+      expect(body.input).toEqual({ prompt: 'cat' });
+      expect(body.input).not.toHaveProperty('duration');
+    });
+
+    it('rejects a legacy invalid Seedance media default before any job or provider fetch', async () => {
+      await expect(
+        runVideo('bytedance/seedance-1-pro', { prompt: 'cat', duration: 6 }),
+      ).rejects.toThrow('duration must be 5 or 10 seconds');
+      expect(mockLifecycle.createPendingJob).not.toHaveBeenCalled();
+      expect(mockSafeFetch).not.toHaveBeenCalled();
+    });
+
+    it('resolves a real reference_images array recursively and preserves item order', async () => {
+      mockFileService.getFileById.mockImplementation(async (_orgId: string, fileId: string) => ({
+        id: fileId,
+        path: `uploads/${fileId}.png`,
+        folderId: 'folder-1',
+        organizationId: 'org1',
+      }));
+      mockStorage.resolveAdapterForFolder.mockResolvedValue({
+        getFileUrl: vi.fn((path: string) => `https://public.example.com/${path}`),
+      });
+
+      await runVideo('google/veo-3.1', {
+        prompt: 'cat',
+        aspect_ratio: '16:9',
+        duration: 8,
+        reference_images: [{ fileId: 'one' }, { fileId: 'two' }, { fileId: 'three' }],
+      });
+
+      const body = JSON.parse(mockSafeFetch.mock.calls[0][1].body as string);
+      expect(body.input.reference_images).toEqual([
+        'https://public.example.com/uploads/one.png',
+        'https://public.example.com/uploads/two.png',
+        'https://public.example.com/uploads/three.png',
+      ]);
+      expect(mockFileService.getFileById).toHaveBeenCalledTimes(3);
+    });
+
+    it('enforces org ownership for every nested reference file before job creation', async () => {
+      mockFileService.getFileById.mockImplementation(async (_orgId: string, fileId: string) => ({
+        id: fileId,
+        path: `uploads/${fileId}.png`,
+        folderId: 'folder-1',
+        organizationId: fileId === 'foreign' ? 'org2' : 'org1',
+      }));
+
+      await expect(
+        runVideo('google/veo-3.1', {
+          prompt: 'cat',
+          aspect_ratio: '16:9',
+          duration: 8,
+          reference_images: [{ fileId: 'mine' }, { fileId: 'foreign' }],
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockLifecycle.createPendingJob).not.toHaveBeenCalled();
+      expect(mockSafeFetch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a scalar', 'https://cdn.example.com/one.png'],
+      ['four items', ['1', '2', '3', '4']],
+    ])('rejects %s reference_images input', async (_label, references) => {
+      await expect(
+        runVideo('google/veo-3.1', {
+          prompt: 'cat',
+          aspect_ratio: '16:9',
+          duration: 8,
+          reference_images: references,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockLifecycle.createPendingJob).not.toHaveBeenCalled();
+      expect(mockSafeFetch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['9:16', 8],
+      ['16:9', 6],
+    ])('rejects reference mode with aspect %s and duration %s', async (aspect, duration) => {
+      await expect(
+        runVideo('google/veo-3.1', {
+          prompt: 'cat',
+          aspect_ratio: aspect,
+          duration,
+          reference_images: ['https://cdn.example.com/one.png'],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockLifecycle.createPendingJob).not.toHaveBeenCalled();
+      expect(mockSafeFetch).not.toHaveBeenCalled();
+    });
+
+    it('rejects a last-frame transition combined with references instead of silently ignoring it', async () => {
+      await expect(
+        runVideo('google/veo-3.1', {
+          prompt: 'cat',
+          aspect_ratio: '16:9',
+          duration: 8,
+          reference_images: ['https://cdn.example.com/one.png'],
+          last_frame: 'https://cdn.example.com/last.png',
+        }),
+      ).rejects.toThrow('cannot be combined');
+      expect(mockLifecycle.createPendingJob).not.toHaveBeenCalled();
+      expect(mockSafeFetch).not.toHaveBeenCalled();
+    });
+
+    it.each([[], null])('treats empty/null references as unset (%s)', async (references) => {
+      await runVideo('google/veo-3.1', {
+        prompt: 'cat',
+        aspect_ratio: '9:16',
+        duration: 6,
+        reference_images: references,
+      });
+      const body = JSON.parse(mockSafeFetch.mock.calls[0][1].body as string);
+      expect(body.input).not.toHaveProperty('reference_images');
+      expect(body.input.aspect_ratio).toBe('9:16');
+      expect(body.input.duration).toBe(6);
+    });
+  });
+
   describe('getJob', () => {
     const jobRow = (over: Record<string, unknown> = {}) => ({
       id: 'job-1',

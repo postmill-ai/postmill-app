@@ -56,4 +56,27 @@ describe('sanitizeModelInput', () => {
     const noMode: InputSchema = { properties: { end_image: { type: 'string' } } };
     expect(sanitizeModelInput({ end_image: 'x' }, noMode)).toEqual({ end_image: 'x' });
   });
+
+  it('drops empty optional arrays but retains populated arrays', () => {
+    const arraySchema: InputSchema = {
+      properties: {
+        reference_images: { type: 'array', items: { type: 'string', format: 'uri' } },
+      },
+    };
+    expect(sanitizeModelInput({ reference_images: [] }, arraySchema)).toEqual({});
+    const references = [{ fileId: 'f1' }, { fileId: 'f2' }];
+    expect(sanitizeModelInput({ reference_images: references }, arraySchema)).toEqual({
+      reference_images: references,
+    });
+  });
+
+  it('keeps an empty required array so required-field validation can report it', () => {
+    const requiredArray: InputSchema = {
+      required: ['reference_images'],
+      properties: { reference_images: { type: 'array' } },
+    };
+    expect(sanitizeModelInput({ reference_images: [] }, requiredArray)).toEqual({
+      reference_images: [],
+    });
+  });
 });

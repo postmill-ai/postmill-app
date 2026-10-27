@@ -6,6 +6,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { useReplicateStore } from './replicate.store';
 import { sanitizeModelInput } from './sanitize-input';
 import type { InputSchema } from './field-classification';
+import { validateModelInput } from './model-policy';
 
 // Category → execution routing (mirrors the backend allowlist execution modes).
 const SYNC_CATEGORIES = [
@@ -40,7 +41,8 @@ export const FOLDER_REQUIRED_CATEGORIES = [...ASYNC_CATEGORIES];
 
 function fieldMissing(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true;
-  if (typeof value === 'object' && !Array.isArray(value)) {
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') {
     const obj = value as Record<string, unknown>;
     return !obj.fileId && !obj.url;
   }
@@ -78,6 +80,13 @@ export function useGenerate() {
           fields: missing.join(', '),
         })
       );
+      store.setRunState('error');
+      return;
+    }
+
+    const validationError = validateModelInput(model.id, store.formInput);
+    if (validationError) {
+      store.setError(validationError);
       store.setRunState('error');
       return;
     }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
@@ -128,7 +128,91 @@ describe('DynamicForm per-model hidden fields', () => {
     useReplicateStore.getState().setSelectedModel(VIDEO_01_MODEL);
     render(<DynamicForm />);
 
-    expect(await screen.findByText('First Frame Image')).toBeTruthy();
+    expect(await screen.findByText('First frame')).toBeTruthy();
     expect(screen.queryByText('Subject Reference')).toBeNull();
+  });
+
+  it('shows a read-only fixed duration without adding duration to form input', async () => {
+    useReplicateStore.getState().setSelectedModel(VIDEO_01_MODEL);
+    render(<DynamicForm />);
+
+    const duration = (await screen.findByDisplayValue('~6 seconds (fixed)')) as HTMLInputElement;
+    expect(duration.readOnly).toBe(true);
+    expect(useReplicateStore.getState().formInput.duration).toBeUndefined();
+  });
+});
+
+describe('DynamicForm model-aware video controls', () => {
+  const model = (id: string, properties: Record<string, unknown>) => ({
+    ...WHISPER_MODEL,
+    id,
+    name: id,
+    inputSchema: { required: ['prompt'], properties },
+  });
+
+  it.each([
+    ['google/veo-3.1', ['4', '6', '8'], '8'],
+    ['bytedance/seedance-1-pro', ['5', '10'], '5'],
+    ['kwaivgi/kling-v2.5-turbo-pro', ['5', '10'], '5'],
+  ])('shows %s duration outside Advanced with model defaults', async (id, choices, value) => {
+    useReplicateStore.getState().setCategory('text-to-video');
+    useReplicateStore.getState().setSelectedModel(
+      model(id, {
+        prompt: { type: 'string', title: 'Prompt' },
+        duration: { type: 'integer', title: 'Duration', minimum: 2, maximum: 12, default: 6 },
+      })
+    );
+    render(<DynamicForm />);
+
+    const duration = (await screen.findByRole('combobox')) as HTMLSelectElement;
+    expect(Array.from(duration.options).map((option) => option.value)).toEqual(choices);
+    expect(duration.value).toBe(value);
+    expect(screen.queryByText('Advanced settings')).toBeNull();
+  });
+
+  it('distinguishes Veo first/last frames from reference arrays and enforces reference mode', async () => {
+    useReplicateStore.getState().setCategory('text-to-video');
+    useReplicateStore.getState().setSelectedModel(
+      model('google/veo-3.1', {
+        prompt: { type: 'string', title: 'Prompt' },
+        image: { type: 'string', format: 'uri' },
+        last_frame: { type: 'string', format: 'uri' },
+        reference_images: { type: 'array', items: { type: 'string', format: 'uri' } },
+        aspect_ratio: { type: 'string', enum: ['16:9', '9:16'], default: '9:16' },
+        duration: { type: 'integer', enum: [4, 6, 8], default: 8 },
+      })
+    );
+    render(<DynamicForm />);
+
+    expect(await screen.findByText('First frame')).toBeTruthy();
+    expect(screen.getByText('Last frame (transition)')).toBeTruthy();
+    expect(screen.getByText('Subject/style references (1–3)')).toBeTruthy();
+
+    act(() => {
+      useReplicateStore.getState().updateFormField('reference_images', [
+        { fileId: 'f1', url: '/one.png', type: 'image' },
+      ]);
+    });
+    await waitFor(() => {
+      expect(useReplicateStore.getState().formInput.aspect_ratio).toBe('16:9');
+      expect(useReplicateStore.getState().formInput.duration).toBe(8);
+    });
+  });
+
+  it.each([
+    ['bytedance/seedance-1-pro', 'image', 'last_frame_image'],
+    ['kwaivgi/kling-v2.5-turbo-pro', 'start_image', 'end_image'],
+  ])('labels %s first and last frames as a transition', async (id, first, last) => {
+    useReplicateStore.getState().setSelectedModel(
+      model(id, {
+        prompt: { type: 'string', title: 'Prompt' },
+        [first]: { type: 'string', format: 'uri' },
+        [last]: { type: 'string', format: 'uri' },
+      })
+    );
+    render(<DynamicForm />);
+
+    expect(await screen.findByText('First frame')).toBeTruthy();
+    expect(screen.getByText('Last frame (transition)')).toBeTruthy();
   });
 });

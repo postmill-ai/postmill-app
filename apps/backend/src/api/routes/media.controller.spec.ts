@@ -22,6 +22,8 @@ function build(
     imageToImage: vi.fn().mockResolvedValue('https://cdn/out.png'),
     textToImage: vi.fn().mockResolvedValue('https://cdn/gen.png'),
     lowReasoningText: vi.fn().mockResolvedValue('a vivid cat'),
+    textToVideo: vi.fn().mockResolvedValue('job-t2v'),
+    imageToVideo: vi.fn().mockResolvedValue('job-i2v'),
     videoUpscale: vi.fn().mockResolvedValue('job-up'),
     videoBackground: vi.fn().mockResolvedValue('job-bg'),
     videoToVideo: vi.fn().mockResolvedValue('job-v2v'),
@@ -115,6 +117,33 @@ describe('MediaController — Designer AI-media routes', () => {
   });
 
   describe('generative family', () => {
+    it('generate-video passes the original prompt unchanged when output is present', async () => {
+      const { controller, aiDefaults } = build();
+      const res = await controller.generateVideo(org, {
+        prompt: 'a rocket launch',
+        output: 'vertical',
+      } as any);
+
+      expect(aiDefaults.textToVideo).toHaveBeenCalledWith('org-1', 'a rocket launch');
+      expect(res).toEqual({ id: 'job-t2v', status: 'pending' });
+    });
+
+    it('generate-video does not pad an image-to-video prompt with output aspect prose', async () => {
+      const { controller, aiDefaults } = build();
+      const res = await controller.generateVideo(org, {
+        prompt: 'animate this scene',
+        output: 'horizontal',
+        imageUrl: 'https://x/first.png',
+      } as any);
+
+      expect(aiDefaults.imageToVideo).toHaveBeenCalledWith(
+        'org-1',
+        'animate this scene',
+        'https://x/first.png'
+      );
+      expect(res).toEqual({ id: 'job-i2v', status: 'pending' });
+    });
+
     it('generate-music delegates (org, prompt) and returns { id, status:pending }', async () => {
       const { controller, aiDefaults } = build();
       const res = await controller.generateMusic(org, { prompt: 'lofi beat' } as any);

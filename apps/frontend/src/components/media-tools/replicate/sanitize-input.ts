@@ -1,7 +1,12 @@
 import type { InputSchema } from './field-classification';
 
 function valueUnset(value: unknown): boolean {
-  return value === undefined || value === null || value === '';
+  return (
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  );
 }
 
 function fileValueFilled(value: unknown): boolean {

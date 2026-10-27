@@ -12,8 +12,6 @@ export const metadata: ProviderMetadata = {
     "media"
   ],
   "mediaCategories": [
-    "image-to-video",
-    "text-to-video",
     "video-avatar"
   ],
   "hasModelList": true

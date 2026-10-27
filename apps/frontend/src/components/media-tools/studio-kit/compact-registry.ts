@@ -159,6 +159,7 @@ export function hasCompactStudio(
   provider: string,
   operation?: CompactOperation | 'avatar'
 ): boolean {
+  if (provider === 'heygen') return operation === 'avatar';
   if (BESPOKE_COMPACT_PROVIDERS.includes(provider)) return true;
   const entry = COMPACT_STUDIO_REGISTRY[provider];
   if (!entry) return false;

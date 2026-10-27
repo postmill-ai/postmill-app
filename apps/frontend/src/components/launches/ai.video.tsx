@@ -28,7 +28,6 @@ const AiVideoModal: FC<{
   const toaster = useToaster();
   const setLocked = useLaunchStore((p) => p.setLocked);
   const [prompt, setPrompt] = useState('');
-  const [output, setOutput] = useState('vertical');
   const [polling, setPolling] = useState(false);
 
   useEffect(() => {
@@ -92,7 +91,7 @@ const AiVideoModal: FC<{
     try {
       const res = await fetch('/media/generate-video', {
         method: 'POST',
-        body: JSON.stringify({ prompt, output }),
+        body: JSON.stringify({ prompt }),
       });
 
       if (!res.ok) {
@@ -126,7 +125,7 @@ const AiVideoModal: FC<{
       setLoading(false);
       setPolling(false);
     }
-  }, [prompt, output, fetch, close, setLoading, setLocked, toaster, t, onChange, pollJob]);
+  }, [prompt, fetch, close, setLoading, setLocked, toaster, t, onChange, pollJob]);
 
   return (
     <div className="flex flex-col gap-[16px]">
@@ -141,26 +140,6 @@ const AiVideoModal: FC<{
           )}
           className="bg-input min-h-[150px] p-[16px] outline-hidden border-newTableBorder border rounded-[4px] text-inputText placeholder-inputText"
         />
-      </div>
-      <div className="flex flex-col gap-[6px]">
-        <div className="text-[14px]">{t('aspect_ratio', 'Aspect ratio')}</div>
-        <div className="flex gap-[8px]">
-          {[
-            { key: 'vertical', label: t('vertical', 'Vertical') },
-            { key: 'horizontal', label: t('horizontal', 'Horizontal') },
-            { key: 'square', label: t('square', 'Square') },
-          ].map((o) => (
-            <Button
-              key={o.key}
-              type="button"
-              onClick={() => setOutput(o.key)}
-              secondary={output !== o.key}
-              className="flex-1"
-            >
-              {o.label}
-            </Button>
-          ))}
-        </div>
       </div>
       <div className="flex">
         <Button
