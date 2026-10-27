@@ -62,4 +62,18 @@ describe('replicate metadata', () => {
       expect(video01.fields.some((field) => field.name === 'duration')).toBe(false);
     }
   });
+
+  it('keeps Kling aspect_ratio scoped to text-to-video', () => {
+    const models = metadata.mediaModels as Record<
+      string,
+      { id: string; fields: { name: string }[] }[]
+    >;
+    const fieldNames = (category: string) =>
+      models[category]
+        .find((model) => model.id === 'kwaivgi/kling-v2.5-turbo-pro')!
+        .fields.map((field) => field.name);
+
+    expect(fieldNames('text-to-video')).toContain('aspect_ratio');
+    expect(fieldNames('image-to-video')).not.toContain('aspect_ratio');
+  });
 });

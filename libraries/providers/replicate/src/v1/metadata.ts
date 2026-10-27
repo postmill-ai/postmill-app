@@ -2605,6 +2605,27 @@ export const metadata: ProviderMetadata = {
             "default": ""
           },
           {
+            "name": "aspect_ratio",
+            "label": "aspect_ratio",
+            "help": "Aspect ratio of the video. Ignored if start_image is provided.",
+            "type": "select",
+            "options": [
+              {
+                "value": "16:9",
+                "label": "16:9"
+              },
+              {
+                "value": "9:16",
+                "label": "9:16"
+              },
+              {
+                "value": "1:1",
+                "label": "1:1"
+              }
+            ],
+            "default": "16:9"
+          },
+          {
             "name": "duration",
             "label": "duration",
             "help": "Duration of the video in seconds",

@@ -96,10 +96,11 @@ function readExistingMetadata() {
 }
 
 const existingMetadata = readExistingMetadata();
-const existingModelsById = new Map(
-  Object.values(existingMetadata?.mediaModels ?? {})
-    .flat()
-    .map((model) => [model.id, model]),
+const existingModelsByCategoryAndId = new Map(
+  Object.entries(existingMetadata?.mediaModels ?? {})
+    .flatMap(([category, models]) =>
+      models.map((model) => [`${category}:${model.id}`, model]),
+    ),
 );
 
 function applyCuratedFieldPolicies(modelId, fields) {
@@ -171,7 +172,7 @@ async function main() {
 
     for (const modelId of modelIds) {
       const [owner, name] = modelId.split('/');
-      const existing = existingModelsById.get(modelId);
+      const existing = existingModelsByCategoryAndId.get(`${category}:${modelId}`);
       let fields = OFFLINE ? (existing?.fields ?? []) : [];
       let modelName = existing?.label ?? name;
 
