@@ -9,6 +9,7 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useModals, usePromptModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { VoiceoverDialog } from './voiceover-dialog';
+import { useMediaVoices } from './use-media-voices';
 import { VoiceoverRecordDialog } from './voiceover-record-dialog';
 import { SegmentRegenerateDialog } from './segment-regenerate-dialog';
 import {
@@ -817,30 +818,53 @@ interface AiVideoDialogProps {
     idOrUrl: string | false,
     fileId?: string,
     details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
-  ) => Promise<void>;
-  // Current video output's canvas — seeds the studio schema's aspect_ratio
-  // field (same canvas-derived seeding the slideshow dialog does).
+  ) => Promise<number | false>;
+  onGenerateVoiceover?: (text: string, voiceId: string, instructions?: string, provider?: string, startMs?: number) => Promise<void>;
   outputWidth?: number;
   outputHeight?: number;
 }
 
-export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult, outputWidth, outputHeight }) => {
+export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult, onGenerateVoiceover, outputWidth, outputHeight }) => {
   const t = useT();
   const modals = useModals();
   const [prompt, setPrompt] = useState('');
   const [useImage, setUseImage] = useState(false);
   const [loading, setLoading] = useState(false);
-  // '' = org default provider (legacy path); an explicit provider embeds its
-  // compact studio, which owns generation inside the modal.
   const [provider, setProvider] = useGenerationProviderChoice('video');
+  const [includeVoiceover, setIncludeVoiceover] = useState(false);
+  const [script, setScript] = useState('');
+  const [voiceProvider, setVoiceProvider] = useGenerationProviderChoice('video-voiceover');
+  const [voiceId, setVoiceId] = useState('');
+  const [instructions, setInstructions] = useState('');
+  const { data: voices, isLoading: voicesLoading, error: voicesError } = useMediaVoices(
+    voiceProvider || undefined,
+    includeVoiceover
+  );
   const canvasAspect = useMemo(
     () => closestAspectRatio(outputWidth, outputHeight),
     [outputWidth, outputHeight]
   );
+  const voiceoverReady = !includeVoiceover || !!(onGenerateVoiceover && script.trim() && voiceId);
+
+  const addVoiceover = useCallback(async (startMs: number) => {
+    if (!includeVoiceover || !onGenerateVoiceover) return;
+    await onGenerateVoiceover(
+      script.trim(),
+      voiceId,
+      instructions.trim() || undefined,
+      voiceProvider || undefined,
+      startMs
+    );
+  }, [includeVoiceover, onGenerateVoiceover, script, voiceId, instructions, voiceProvider]);
 
   const generate = useCallback(async () => {
-    if (!prompt.trim()) {
-      toaster.show(t('please_enter_a_prompt', 'Please enter a prompt'), 'warning');
+    if (!prompt.trim() || !voiceoverReady) {
+      toaster.show(
+        prompt.trim()
+          ? t('designer_faceless_voiceover_incomplete', 'Add a narration script and choose a voice')
+          : t('please_enter_a_prompt', 'Please enter a prompt'),
+        'warning'
+      );
       return;
     }
     setLoading(true);
@@ -856,22 +880,22 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
       });
       if (!res.ok) throw new Error(await readErrorMessage(res, t('video_generation_failed', 'Video generation failed')));
       const data = await res.json();
-      await onResult('video', data === false ? false : data.id);
+      const visualStart = await onResult('video', data === false ? false : data.id);
+      if (visualStart !== false) await addVoiceover(visualStart);
     } catch (e) {
       toaster.show((e as Error).message || t('video_generation_failed', 'Video generation failed'), 'warning');
     } finally {
       setLoading(false);
     }
-  }, [fetch, prompt, useImage, selectedImageSrc, onResult, toaster, modals, t]);
+  }, [fetch, prompt, voiceoverReady, useImage, selectedImageSrc, onResult, addVoiceover, toaster, modals, t]);
 
   const handleStudioGenerated = useCallback(
     async (result: CompactStudioResult) => {
-      // Already-complete artifact — land it like a finished landOrPoll (the
-      // artifactUrl takes the no-poll path there).
       modals.closeAll();
-      await onResult('video', result.artifactUrl, result.fileId || undefined, result);
+      const visualStart = await onResult('video', result.artifactUrl, result.fileId || undefined, result);
+      if (visualStart !== false) await addVoiceover(visualStart);
     },
-    [modals, onResult]
+    [modals, onResult, addVoiceover]
   );
 
   return (
@@ -894,9 +918,61 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
         value={provider}
         onChange={setProvider}
       />
+      <label className="flex items-center gap-2 text-[11px] text-textColor cursor-pointer">
+        <input
+          type="checkbox"
+          checked={includeVoiceover}
+          onChange={(e) => {
+            setIncludeVoiceover(e.target.checked);
+            setVoiceId('');
+          }}
+          className="accent-designerAccent w-3 h-3"
+        />
+        {t('designer_faceless_include_voiceover', 'Include voiceover (faceless video)')}
+      </label>
+      {includeVoiceover && (
+        <div className="flex flex-col gap-2 rounded-sm border border-studioBorder p-2">
+          <textarea
+            aria-label={t('designer_faceless_narration_label', 'Narration script')}
+            value={script}
+            onChange={(e) => setScript(e.target.value)}
+            placeholder={t('designer_faceless_narration_placeholder', 'Narration script…')}
+            className="w-full bg-newBgColor border border-studioBorder rounded-sm p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-hidden min-h-[60px]"
+          />
+          <GenerationProviderPicker
+            operation="tts"
+            dialogKey="video-voiceover"
+            value={voiceProvider}
+            onChange={(next) => {
+              setVoiceProvider(next);
+              setVoiceId('');
+            }}
+            requireCompact={false}
+            label={t('designer_faceless_voice_provider', 'Voice provider:')}
+          />
+          {voicesLoading && <span className="text-[11px] text-newTextColor/60">{t('designer_loading_voices', 'Loading voices…')}</span>}
+          {voicesError && <span className="text-[11px] text-dangerText">{t('designer_voiceover_load_error', 'Could not load voices. Make sure a TTS-capable provider is configured.')}</span>}
+          {!voicesLoading && !voicesError && (
+            <select
+              aria-label={t('designer_voice_label', 'Voice')}
+              value={voiceId}
+              onChange={(e) => setVoiceId(e.target.value)}
+              className="w-full px-2 py-1 rounded-lg border border-studioBorder bg-newBgColorInner text-textColor text-xs outline-hidden focus:border-designerAccent"
+            >
+              <option value="" disabled>{t('designer_choose_a_voice_option', 'Choose a voice…')}</option>
+              {(voices || []).map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}
+            </select>
+          )}
+          <input
+            aria-label={t('designer_voiceover_tone_label', 'Tone / style (optional)')}
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            placeholder={t('designer_voiceover_tone_placeholder', 'e.g. warm and conversational, energetic…')}
+            className="w-full px-2 py-1 rounded-lg border border-studioBorder bg-newBgColorInner text-textColor text-xs outline-hidden focus:border-designerAccent"
+          />
+        </div>
+      )}
       {provider ? (
-        // key: remount on provider switch so the previous provider's field
-        // values (model!) can't leak into the new provider's submit.
         <CompactStudio
           key={provider}
           provider={provider}
@@ -904,6 +980,7 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
           prompt={prompt}
           aspectRatio={canvasAspect}
           onGenerated={handleStudioGenerated}
+          submitDisabled={!voiceoverReady}
         />
       ) : (
         <>
@@ -920,7 +997,7 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
           )}
           <button
             onClick={generate}
-            disabled={loading || !prompt.trim()}
+            disabled={loading || !prompt.trim() || !voiceoverReady}
             className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
@@ -939,7 +1016,7 @@ interface MusicDialogProps {
     idOrUrl: string | false,
     fileId?: string,
     details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
-  ) => Promise<void>;
+  ) => Promise<number | false>;
 }
 
 export const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) => {
@@ -1030,7 +1107,7 @@ interface AvatarDialogProps {
     idOrUrl: string | false,
     fileId?: string,
     details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
-  ) => Promise<void>;
+  ) => Promise<number | false>;
 }
 
 export const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult }) => {
@@ -1150,7 +1227,7 @@ interface SlideshowDialogProps {
     idOrUrl: string | false,
     fileId?: string,
     details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
-  ) => Promise<void>;
+  ) => Promise<number | false>;
   // Current video output's canvas — drives the generated frames' aspect and
   // the server-side per-slide normalization. Absent = legacy server behavior.
   outputWidth?: number;
@@ -2808,7 +2885,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   }, [clipMenu, handleFreezeFrame]);
 
   const generateVoiceover = useCallback(
-    async (text: string, voiceId: string, instructions?: string, provider?: string) => {
+    async (text: string, voiceId: string, instructions?: string, provider?: string, startMs?: number) => {
       if (!vo) return;
       try {
         const res = await postTextToSpeech(fetch, { text, voiceId, instructions, provider });
@@ -2827,6 +2904,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         const landed = await addVoiceoverToTimeline(store, {
           url: path,
           fileId: id,
+          startMs,
           voiceover: {
             script: text,
             voice: voiceId,
@@ -3110,7 +3188,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       landedFileId?: string,
       fileType?: string | null,
       metadata?: CompactStudioResult['metadata']
-    ) => {
+    ): Promise<number | false> => {
       // A video-operation job can complete with an image artifact (e.g. a
       // Reel.Farm slideshow that finished without a video export stores its
       // first slide JPG) — land it as an image clip, not a video clip that
@@ -3128,8 +3206,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             translate('generated_clip_couldnt_be_placed', "The generated clip couldn't be placed on the timeline — find it in your media library."),
             'warning'
           );
+          return false;
         }
-        return;
+        const output = store.getState().doc.outputs[store.getState().currentOutput] as VideoOutput;
+        return output.tracks.flatMap((track) => track.clips).find((clip) => clip.id === clipId)?.startMs ?? false;
       }
       const landed = await addMediaToTimeline(store, {
         type,
@@ -3152,23 +3232,23 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           trackId: landed.trackId,
           clipId: landed.clipId,
         });
-      } else {
-        // addClip rejected the insert — the asset itself is safe in Files (the
-        // job lifecycle landed it there), so say where it went instead of
-        // staying silent.
-        toaster.show(
-          translate('generated_clip_couldnt_be_placed', "The generated clip couldn't be placed on the timeline — find it in your media library."),
-          'warning'
-        );
+        return landed.startMs;
       }
+      // addClip rejected the insert — the asset itself is safe in Files (the
+      // job lifecycle landed it there), so say where it went instead of
+      // staying silent.
+      toaster.show(
+        translate('generated_clip_couldnt_be_placed', "The generated clip couldn't be placed on the timeline — find it in your media library."),
+        'warning'
+      );
+      return false;
     };
     if (idOrUrl === false) {
       toaster.show(translate('generation_was_blocked_or_returned_empty', 'Generation was blocked or returned empty.'), 'warning');
-      return;
+      return false;
     }
     if (isArtifactPath(idOrUrl)) {
-      await landAndReveal(idOrUrl, fileId, details?.fileType, details?.metadata);
-      return;
+      return landAndReveal(idOrUrl, fileId, details?.fileType, details?.metadata);
     }
     let outcome: JobPollOutcome;
     try {
@@ -3184,9 +3264,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       });
     } catch (e) {
       if (mountedRef.current) toaster.show((e as Error).message, 'warning');
-      return;
+      return false;
     }
-    if (outcome.kind === 'unmounted') return;
+    if (outcome.kind === 'unmounted') return false;
     if (outcome.kind === 'timeout') {
       // The job may still finish server-side — deep-link the render queue
       // (it re-lists and polls recent jobs) instead of a dead-end toast.
@@ -3196,9 +3276,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         `/media/queue?job=${idOrUrl}`,
         translate('media_queue_view_job', 'View in queue')
       );
-      return;
+      return false;
     }
-    await landAndReveal(outcome.url, outcome.fileId ?? undefined, outcome.fileType, outcome.metadata);
+    return landAndReveal(outcome.url, outcome.fileId ?? undefined, outcome.fileType, outcome.metadata);
   }, [fetch, store, toaster, translate]);
 
   // In-flight generations used to be lost on a designer remount: the server
@@ -3417,12 +3497,13 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           toaster={toaster}
           selectedImageSrc={selectedImageSrc}
           onResult={landOrPoll}
+          onGenerateVoiceover={generateVoiceover}
           outputWidth={vo?.width}
           outputHeight={vo?.height}
         />
       ),
     });
-  }, [modals, fetch, toaster, selectedImageSrc, landOrPoll, translate, vo?.width, vo?.height]);
+  }, [modals, fetch, toaster, selectedImageSrc, landOrPoll, generateVoiceover, translate, vo?.width, vo?.height]);
 
   const handleGenerateMusic = useCallback(() => {
     modals.openModal({

@@ -163,6 +163,10 @@ class ProviderWorkflowMocks {
         await json(route, { voices: [{ voiceId: 'voice-e2e', name: 'E2E voice' }] });
         return;
       }
+      if (pathname === '/media/voices' && method === 'GET') {
+        await json(route, [{ id: 'voice-e2e', label: 'E2E voice' }]);
+        return;
+      }
 
       if (pathname === '/media/replicate/status' && method === 'GET') {
         await json(route, { configured: true });
@@ -400,6 +404,24 @@ test.describe('Provider video workflows (network stubbed)', () => {
     await expect(page.getByText('Pick a photo from Files', { exact: true })).toBeVisible();
     await expect(page.getByText('Pick a voice', { exact: true })).toBeVisible();
     expect(mocks.generationCount(), 'opening either dialog must not submit').toBe(0);
+    mocks.expectNoExternalProviders();
+  });
+
+  test('faceless video loads HeyGen narration choices without auto-generating', async ({ page }) => {
+    const mocks = new ProviderWorkflowMocks();
+    await mocks.install(page);
+    await openDesigner(page);
+    await openVideoDialog(page);
+
+    await page.getByLabel('Include voiceover (faceless video)', { exact: true }).check();
+    await page.getByPlaceholder('Describe the video you want to generate...').fill(PROMPT);
+    await page.getByLabel('Narration script', { exact: true }).fill('A faceless product narration');
+    await expect(page.getByRole('button', { name: 'Generate', exact: true })).toBeDisabled();
+    await page.getByLabel('Voice provider:', { exact: true }).selectOption('heygen');
+    await page.getByLabel('Voice', { exact: true }).selectOption('voice-e2e');
+
+    await expect(page.getByRole('button', { name: 'Generate', exact: true })).toBeEnabled();
+    expect(mocks.generationCount(), 'configuring a faceless video must not submit').toBe(0);
     mocks.expectNoExternalProviders();
   });
 

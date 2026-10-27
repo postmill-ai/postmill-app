@@ -3,7 +3,7 @@ import { ProviderMetadata } from '@postmill-ai/provider-kernel';
 export const metadata: ProviderMetadata = {
   "website": "https://www.heygen.com",
   "description": {
-    "en": "AI video platform for lifelike avatar and talking-photo videos generated from a script."
+    "en": "AI avatar and talking-photo videos plus natural voiceovers generated from a script."
   },
   "id": "heygen",
   "displayName": "heygen",
@@ -12,6 +12,7 @@ export const metadata: ProviderMetadata = {
     "media"
   ],
   "mediaCategories": [
+    "text-to-speech",
     "video-avatar"
   ],
   "hasModelList": true

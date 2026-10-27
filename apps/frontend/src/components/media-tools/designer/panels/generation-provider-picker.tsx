@@ -76,7 +76,8 @@ export const GenerationProviderPicker: FC<{
   // Pass false for dropdown-only operations with no studios (TTS) — every
   // provider the server returns is a valid pin for the generate call.
   requireCompact?: boolean;
-}> = ({ operation, dialogKey, value, onChange, requireCompact = true }) => {
+  label?: string;
+}> = ({ operation, dialogKey, value, onChange, requireCompact = true, label }) => {
   const t = useT();
   const { data } = useGenerationProviders(operation);
 
@@ -106,7 +107,7 @@ export const GenerationProviderPicker: FC<{
   return (
     <div className="flex items-center gap-2">
       <label htmlFor={selectId} className="text-[11px] text-newTextColor/65 shrink-0">
-        {t('provider_label', 'Provider:')}
+        {label || t('provider_label', 'Provider:')}
       </label>
       <select
         id={selectId}

@@ -72,7 +72,8 @@ export const CompactReplicate: FC<{
   aspectRatio?: string;
   onGenerated: (result: CompactStudioResult) => void;
   onError?: (message: string) => void;
-}> = ({ operation, prompt, aspectRatio, onGenerated, onError }) => {
+  submitDisabled?: boolean;
+}> = ({ operation, prompt, aspectRatio, onGenerated, onError, submitDisabled = false }) => {
   const t = useT();
   const fetch = useFetch();
   const { data: status } = useReplicateStatus();
@@ -204,7 +205,7 @@ export const CompactReplicate: FC<{
   }, [jobData, jobId, operation, onGenerated, fail, t]);
 
   const onGenerate = useCallback(async () => {
-    if (!selectedModel || !categoryDef) return;
+    if (submitDisabled || !selectedModel || !categoryDef) return;
     const raw = { ...formInput };
     if (primaryPromptField) raw[primaryPromptField] = prompt;
     const absent = missingRequiredFields(schema, raw);
@@ -280,7 +281,7 @@ export const CompactReplicate: FC<{
     } finally {
       setStarting(false);
     }
-  }, [selectedModel, categoryDef, formInput, primaryPromptField, prompt, schema, fetch, operation, onGenerated, fail, t]);
+  }, [submitDisabled, selectedModel, categoryDef, formInput, primaryPromptField, prompt, schema, fetch, operation, onGenerated, fail, t]);
 
   if (!status) {
     return (
@@ -352,7 +353,7 @@ export const CompactReplicate: FC<{
       <div className="flex items-center gap-[10px]">
         <Button
           onClick={onGenerate}
-          disabled={!selectedModel || missing.length > 0}
+          disabled={submitDisabled || !selectedModel || missing.length > 0}
           loading={busy}
           className="h-[36px] text-[13px]"
         >

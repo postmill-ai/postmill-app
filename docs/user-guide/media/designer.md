@@ -59,7 +59,9 @@ via headless Chromium + FFmpeg.
   (generated, or recorded with your microphone), an **Avatar** video, or a **Slideshow**, and can
   transform, upscale, remove the background of, or regenerate a segment of a selected clip. Each
   generate dialog has a **Provider:** picker: **Default** uses your workspace's media default, or
-  pick a configured provider to use its compact studio inline.
+  pick a configured provider to use its compact studio inline. **AI Video → Include voiceover**
+  creates a faceless product video with independent visual and narration tracks; the visual and
+  voice providers can be selected separately.
 
 ## Canvas tools
 

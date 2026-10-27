@@ -4,10 +4,10 @@
 stack — a `HeyGenAdapter`, a per-org `MediaProviderConfig`, and the async `AIMediaJob` job
 pipeline. Configure your HeyGen API key at **Settings → Media** (no environment-variable fallback).
 
-For shared AI Media routing, HeyGen is **avatar-only**: it supports avatar and talking-photo
+For shared visual-generation routing, HeyGen is **avatar-only**: it supports avatar and talking-photo
 workflows, not ordinary text-to-video or image-to-video generation. It therefore does not appear
-as an ordinary video provider in the Designer. The dedicated HeyGen studio flows below are
-unchanged.
+as an ordinary visual provider in the Designer. HeyGen is also available as a voiceover provider,
+including for faceless product videos with separate visual and narration tracks.
 
 ## Four tabs
 
@@ -23,6 +23,10 @@ unchanged.
 The Designer's **Generate Avatar Video** dialog can use HeyGen as its provider. It embeds a compact
 Talking Photo flow — portrait, HeyGen voice, and dimension — while the dialog's own script box
 supplies the script; the finished clip lands on the video timeline.
+
+For a faceless product ad, open **AI Video**, enable **Include voiceover**, and select HeyGen as
+the voice provider. The visual provider generates the product footage without an avatar, while
+HeyGen generates the narration as a separate editable timeline track.
 
 ## Render queue
 

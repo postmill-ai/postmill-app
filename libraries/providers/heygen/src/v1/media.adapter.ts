@@ -16,6 +16,7 @@ import {
   mediaUpstreamFailure,
   isTransientStatus,
 } from '@postmill-ai/provider-kernel';
+import { generateHeyGenTts, pollHeyGenTts } from './tts';
 
 interface HeyGenGenerateResponse {
   data?: { video_id?: string };
@@ -38,16 +39,6 @@ interface HeyGenTranslateStatusResponse {
   };
 }
 
-interface HeyGenAudioStatusResponse {
-  data?: {
-    status?: string;
-    audio_url?: string;
-    url?: string;
-    duration?: number;
-    error?: { message?: string };
-  };
-}
-
 // 2.1 — a 429/5xx on a status poll is transient: THROW so the lifecycle retries the render
 // rather than permanently failing a job whose generation may still be fine. 4xx / a
 // provider-reported terminal state stays a returned { status: 'failed' }.
@@ -65,7 +56,7 @@ export class HeyGenAdapter implements MediaProviderAdapter {
     video: false,
     audio: false,
     avatar: true,
-    tts: false,
+    tts: true,
     stt: false,
     upscale: false,
     bgRemove: false,
@@ -128,6 +119,27 @@ export class HeyGenAdapter implements MediaProviderAdapter {
     } catch {
       return [];
     }
+  }
+
+  async listVoices(options?: MediaCredentialOptions): Promise<Array<{ id: string; label: string; previewUrl?: string }>> {
+    const res = await this._fetch('https://api.heygen.com/v2/voices', { headers: this._headers(options) });
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'audio');
+    const body = (await res.json()) as {
+      data?: { voices?: Array<{ voice_id?: string; name?: string; preview_audio?: string }> };
+    };
+    return (body.data?.voices || [])
+      .filter((voice) => !!voice.voice_id)
+      .map((voice) => ({
+        id: voice.voice_id!,
+        label: voice.name || voice.voice_id!,
+        previewUrl: voice.preview_audio,
+      }));
+  }
+
+  async textToSpeech(text: string, options?: MediaGenerateOptions): Promise<Buffer> {
+    const voiceId = options?.voiceId || options?.voice;
+    if (!voiceId) throw new Error('HeyGen voice is required');
+    return generateHeyGenTts(this._fetch, { ...options, voiceId, text });
   }
 
   async generateVideo(_prompt: string, _options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
@@ -243,32 +255,8 @@ export class HeyGenAdapter implements MediaProviderAdapter {
     return { status: 'pending' };
   }
 
-  // Text-to-speech status — GET /v1/audio_status.get. Returns a downloadable audio URL on
-  // completion. Wrapped so a not-yet-available endpoint surfaces as a graceful job failure
-  // rather than crashing the polling sweep.
   private async _pollTts(audioId: string, options?: MediaCredentialOptions): Promise<MediaPollResult> {
-    const res = await this._fetch(`https://api.heygen.com/v1/audio_status.get?audio_id=${encodeURIComponent(audioId)}`, {
-      headers: this._headers(options),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      if (isTransientStatus(res.status)) throw new Error(`HeyGen tts poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
-    }
-    const { data } = (await res.json()) as HeyGenAudioStatusResponse;
-
-    if (data?.status === 'completed' || data?.status === 'success') {
-      const url = data.audio_url || data.url;
-      if (!url) return { status: 'failed', error: 'HeyGen audio completed without a URL' };
-      return {
-        status: 'completed',
-        artifactUrl: url,
-        metadata: { provider: this.identifier, mime: 'audio/mpeg', durationSeconds: data.duration },
-      };
-    }
-    if (data?.status === 'failed') return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error?.message) };
-    return { status: 'pending' };
+    return pollHeyGenTts(this._fetch, audioId, options);
   }
 }
 

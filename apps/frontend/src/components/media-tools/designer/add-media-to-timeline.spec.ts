@@ -797,6 +797,22 @@ describe('addVoiceoverToTimeline — shared TTS/recording landing', () => {
     expect(audioTracks[0].clips.map((c) => c.src)).toEqual(['https://example.com/a.webm']);
     expect(audioTracks[1].clips.map((c) => c.src)).toEqual(['https://example.com/b.webm']);
   });
+
+  it('pins voiceover insertion to the supplied visual start instead of the live playhead', async () => {
+    const store = createDesignerStore();
+    toVideoMode(store);
+    store.getState().setPlayhead(7000);
+
+    await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/v.webm',
+      durationMs: 2000,
+      startMs: 1500,
+    });
+
+    const { clip } = firstAudioClip(store);
+    expect(clip!.startMs).toBe(1500);
+    expect(clip!.endMs).toBe(3500);
+  });
 });
 
 describe('voiceover metadata + regenerateVoiceoverClip', () => {
