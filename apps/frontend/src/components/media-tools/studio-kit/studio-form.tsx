@@ -120,6 +120,8 @@ export const StudioForm: FC<StudioFormProps> = ({ fields, values, onChange, prov
           ? t(studioFieldKey(keyNs, tabKey, field.name, 'help'), field.help)
           : undefined;
         const a11yLabel = label ?? field.name;
+        const selectOptions = field.type === 'select' ? studioSelectOptions(field, values) : [];
+        const usesRuleOptions = field.type === 'select' && selectOptions !== field.options;
         return (
           <div key={field.name}>
             <Label label={label} required={field.required} />
@@ -161,9 +163,11 @@ export const StudioForm: FC<StudioFormProps> = ({ fields, values, onChange, prov
                   onChange={(e) => onChange(field.name, e.target.value)}
                   className={inputClass}
                 >
-                  {studioSelectOptions(field, values).map((o, i) => (
+                  {selectOptions.map((o, i) => (
                     <option key={o.value} value={o.value}>
-                      {t(studioOptionKey(keyNs, tabKey, field.name, i), o.label)}
+                      {usesRuleOptions
+                        ? o.label
+                        : t(studioOptionKey(keyNs, tabKey, field.name, i), o.label)}
                     </option>
                   ))}
                 </select>
