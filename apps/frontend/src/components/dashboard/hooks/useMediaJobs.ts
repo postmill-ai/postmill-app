@@ -16,8 +16,8 @@ export interface MediaJob {
   fileId: string | null;
   /**
    * Content-classified type of the stored File ('image' | 'video' | 'audio' | …).
-   * May differ from `operation` — e.g. a Reel.Farm slideshow (video op) that finishes
-   * without a video export stores its first slide as an image. Null until resolved.
+   * May differ from `operation` when a provider returns another content type.
+   * Null until resolved.
    */
   fileType: string | null;
   error: string | null;

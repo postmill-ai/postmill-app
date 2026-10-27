@@ -15,6 +15,7 @@ export type {
   MediaGenerateOptions,
   MediaJobSubmission,
   MediaPollResult,
+  MediaSlideshowResult,
   MediaOperation,
   MediaModelOption,
 } from '@postmill-ai/provider-kernel';

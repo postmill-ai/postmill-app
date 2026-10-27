@@ -116,9 +116,8 @@ export interface StudioJob {
   /**
    * Content-classified type of the stored File ('image' | 'video' | 'audio' | …),
    * resolved from the File row by the backend. May differ from `operation` — a
-   * video-operation job can land an image artifact (e.g. a Reel.Farm slideshow
-   * completed without a video export stores its first slide JPG). Null until the
-   * File row resolves; fall back to `operation` in that case.
+   * video-operation job can land an artifact with a different content type. Null
+   * until the File row resolves; fall back to `operation` in that case.
    */
   fileType: string | null;
   metadata?: GeneratedMediaMetadata | null;

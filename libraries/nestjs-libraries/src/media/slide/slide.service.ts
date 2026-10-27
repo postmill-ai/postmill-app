@@ -9,12 +9,8 @@ import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-
 import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
 import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults.errors';
-import {
-  aspectBucketForDimensions,
-  buildSlideNormalizeFilter,
-  SlideAspect,
-  SlideFitMode,
-} from './slide-aspect';
+import { aspectBucketForDimensions, SlideAspect, SlideFitMode } from './slide-aspect';
+import { encodeImageSequenceToMp4 } from './image-sequence-encoder';
 
 function getFfmpegPath(): string {
   try {
@@ -23,22 +19,6 @@ function getFfmpegPath(): string {
     if (staticPath && fs.existsSync(staticPath)) return staticPath;
   } catch {}
   return 'ffmpeg';
-}
-
-function runFfmpeg(args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const binary = getFfmpegPath();
-    const proc = spawn(binary, args, { stdio: 'pipe' });
-    let stderr = '';
-    proc.stderr?.on('data', (d) => {
-      stderr += d.toString();
-    });
-    proc.on('error', (err) => reject(err));
-    proc.on('close', (code) => {
-      if (code === 0) return resolve();
-      reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-800)}`));
-    });
-  });
 }
 
 interface Slide {
@@ -121,22 +101,18 @@ export class SlideService {
       (options.targetWidth && options.targetHeight
         ? aspectBucketForDimensions(options.targetWidth, options.targetHeight)
         : undefined);
-    const normalize =
-      options.targetWidth && options.targetHeight
-        ? {
-            width: options.targetWidth,
-            height: options.targetHeight,
-            fitMode: options.fitMode ?? ('cover' as SlideFitMode),
-          }
-        : null;
-
     try {
       // 3. Generate assets for each slide in parallel.
-      const slideAssets = await this._generateSlideAssets(orgId, slides, tmpDir, aspect, normalize);
+      const slideAssets = await this._generateSlideAssets(orgId, slides, tmpDir, aspect);
 
       // 4. Assemble into a slideshow video.
       const videoPath = path.join(tmpDir, 'output.mp4');
-      await this._assembleVideo(slideAssets, videoPath, options.durationPerSlideSeconds ?? 5);
+      await encodeImageSequenceToMp4(slideAssets, videoPath, {
+        minDurationSeconds: options.durationPerSlideSeconds ?? 5,
+        targetWidth: options.targetWidth,
+        targetHeight: options.targetHeight,
+        fitMode: options.fitMode,
+      });
 
       const buffer = fs.readFileSync(videoPath);
       const ok = await this._lifecycle.completeJobWithBuffer(
@@ -193,7 +169,6 @@ export class SlideService {
     slides: Slide[],
     tmpDir: string,
     aspect?: SlideAspect,
-    normalize?: { width: number; height: number; fitMode: SlideFitMode } | null,
   ): Promise<Array<{ imagePath: string; audioPath: string; durationSeconds: number }>> {
     const assets: Array<{ imagePath: string; audioPath: string; durationSeconds: number }> = [];
 
@@ -215,121 +190,11 @@ export class SlideService {
       await this._downloadImage(imageUrl, imagePath);
       fs.writeFileSync(audioPath, Buffer.isBuffer(audioBuffer) ? audioBuffer : Buffer.from(audioBuffer, 'base64'));
 
-      // Normalize each frame to the exact target canvas before concat: the
-      // concat demuxer would otherwise scale every slide to the FIRST frame's
-      // dimensions, so mixed-size slides (or square AI frames on a 16:9/9:16
-      // canvas) used to come out stretched or letterboxed at random.
-      let framePath = imagePath;
-      if (normalize) {
-        framePath = path.join(tmpDir, `slide-${i}.norm.png`);
-        await runFfmpeg([
-          '-y',
-          '-i',
-          imagePath,
-          '-vf',
-          buildSlideNormalizeFilter(normalize.width, normalize.height, normalize.fitMode),
-          framePath,
-        ]);
-      }
-
       const durationSeconds = await this._getAudioDurationSeconds(audioPath);
-      assets.push({ imagePath: framePath, audioPath, durationSeconds: Math.max(durationSeconds, 3) });
+      assets.push({ imagePath, audioPath, durationSeconds: Math.max(durationSeconds, 3) });
     }
 
     return assets;
-  }
-
-  private async _assembleVideo(
-    assets: Array<{ imagePath: string; audioPath: string; durationSeconds: number }>,
-    outputPath: string,
-    minDurationSeconds: number,
-  ): Promise<void> {
-    // Build a concat demuxer file for the video stream (one image per slide, held for max(audio, min)).
-    const durations = assets.map((a) => Math.max(a.durationSeconds, minDurationSeconds));
-    const totalDuration = durations.reduce((sum, d) => sum + d, 0);
-
-    const concatLines: string[] = [];
-    for (let i = 0; i < assets.length; i++) {
-      concatLines.push(`file '${assets[i].imagePath.replace(/'/g, "'\\''")}'`);
-      concatLines.push(`duration ${durations[i].toFixed(3)}`);
-    }
-    // Repeat the last frame to the end.
-    concatLines.push(`file '${assets[assets.length - 1].imagePath.replace(/'/g, "'\\''")}'`);
-
-    const concatPath = path.join(path.dirname(outputPath), 'concat.txt');
-    fs.writeFileSync(concatPath, concatLines.join('\n'));
-
-    // Mix all slide audios into a single track aligned to slide starts.
-    const mixedAudioPath = path.join(path.dirname(outputPath), 'mixed-audio.wav');
-    if (assets.length === 1) {
-      await runFfmpeg([
-        '-y',
-        '-i',
-        assets[0].audioPath,
-        '-ac',
-        '2',
-        '-ar',
-        '48000',
-        mixedAudioPath,
-      ]);
-    } else {
-      const inputs: string[] = [];
-      const delays: string[] = [];
-      let offset = 0;
-      for (let i = 0; i < assets.length; i++) {
-        inputs.push('-i', assets[i].audioPath);
-        const delayMs = Math.round(offset * 1000);
-        delays.push(`[${i}:a]adelay=delays=${delayMs}|${delayMs}:all=1[ad${i}]`);
-        offset += durations[i];
-      }
-      const mixLabels = assets.map((_, i) => `[ad${i}]`).join('');
-      await runFfmpeg([
-        '-y',
-        ...inputs,
-        '-filter_complex',
-        `${delays.join(';')};${mixLabels}amix=inputs=${assets.length}:duration=longest:dropout_transition=0[outa]`,
-        '-map',
-        '[outa]',
-        '-ac',
-        '2',
-        '-ar',
-        '48000',
-        mixedAudioPath,
-      ]);
-    }
-
-    // Encode slideshow: images at 30fps + mixed audio, padded to total duration.
-    // Two hard-won ffmpeg behaviors here:
-    // - Frame synthesis MUST be the fps filter, not the `-r` output option: the
-    //   concat demuxer emits one sparse packet per slide image, and `-r` only
-    //   retimes those packets — the video truncates after the first slide.
-    // - No `-shortest`: the mixed narration ends before the slideshow does (each
-    //   slide is held for max(audio, min)), and `-shortest` would cut the video
-    //   to the audio length. `-t` is the exact master-timeline bound.
-    await runFfmpeg([
-      '-y',
-      '-f',
-      'concat',
-      '-safe',
-      '0',
-      '-i',
-      concatPath,
-      '-i',
-      mixedAudioPath,
-      '-vf',
-      'fps=30',
-      '-c:v',
-      'libx264',
-      '-pix_fmt',
-      'yuv420p',
-      '-t',
-      totalDuration.toFixed(3),
-      '-c:a',
-      'aac',
-      '-b:a',
-      '128k',
-      outputPath,
-    ]);
   }
 
   private async _downloadImage(url: string, destPath: string): Promise<void> {

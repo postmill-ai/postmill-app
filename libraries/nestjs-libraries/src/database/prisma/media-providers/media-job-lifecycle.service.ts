@@ -10,6 +10,7 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import {
+  redactError,
   upstreamKindFromText,
   type UpstreamErrorKind,
 } from '@postmill-ai/provider-kernel';
@@ -18,6 +19,10 @@ import { applyAudioOutroFade } from '@postmill-ai/nestjs-libraries/media/audio-o
 import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
 import { prepareVideoArtifact } from '@postmill-ai/nestjs-libraries/media/video-artifact';
+import {
+  reelFarmSlideshowOptions,
+  transformReelFarmSlideshow,
+} from '@postmill-ai/nestjs-libraries/media/reelfarm-slideshow-completion';
 
 // AIMediaJob has no dedicated provider-job-id column; while a job is pending the
 // provider's external reference is stored in `artifactUrl` under this scheme and is
@@ -300,6 +305,11 @@ export class MediaJobLifecycleService {
       await this.failJob(job, errorText, { kind: upstreamKindFromText(errorText) });
       return 'failed';
     }
+    if (poll.status === 'completed' && poll.slideshow) {
+      if (!(await this._claimForCompletion(job.id, job.organizationId))) return 'skipped';
+      const ok = await this._completeSlideshowJob(job, poll.slideshow.slides, poll.metadata);
+      return ok ? 'completed' : 'failed';
+    }
     if (poll.status === 'completed' && poll.artifactUrl) {
       // §3.1: atomically claim the terminal transition before doing any work. Two
       // concurrent invocations both see `completed`; only the one that flips the row
@@ -490,40 +500,72 @@ export class MediaJobLifecycleService {
         metadata,
         folderId,
       });
-
-      await this._aiSettings.updateMediaJob(job.organizationId, job.id, {
-        status: 'completed',
-        artifactUrl: stored.path,
-        error: null,
-      });
-
-      // URL-landed video artifacts never got the buffer-path thumbnail —
-      // generate it async (fire-and-forget; the response is already settled).
-      if (stored.mediaType === 'video') {
-        this._videoThumbnailService.enqueueGenerate(
-          job.organizationId,
-          stored.mediaId
-        );
-      }
-
-      // §6.2: siblings (extra takes) pass notify:false — the primary already told the
-      // user "ready", and a sibling that fails between create and complete must not
-      // fire a spurious failure notification for a take the user never asked for.
-      if (options?.notify !== false) {
-        await this._notify(
-          job,
-          'success',
-          `AI ${job.operation} ready`,
-          `Your generated ${job.operation} is ready in the media library.`,
-        );
-      }
-      return true;
+      return await this._finishJobCompletion(job, stored, options);
     } catch (err) {
-      await this.failJob(job, `Failed to store generated artifact: ${(err as Error).message}`, {
+      await this.failJob(job, `Failed to store generated artifact: ${redactError((err as Error).message, 800)}`, {
         notify: options?.notify,
       });
       return false;
     }
+  }
+
+  private async _completeSlideshowJob(
+    job: AIMediaJob,
+    slides: string[],
+    metadata?: MediaArtifactMetadata,
+  ): Promise<boolean> {
+    try {
+      const transformed = await transformReelFarmSlideshow(
+        slides,
+        reelFarmSlideshowOptions(job.inputJson),
+      );
+      const stored = await this._storeBufferArtifact({
+        organizationId: job.organizationId,
+        provider: job.provider,
+        operation: job.operation,
+        jobId: job.id,
+        buffer: transformed.buffer,
+        mime: transformed.mime,
+        metadata: { ...metadata, ...transformed.metadata },
+        folderId: job.folderId,
+      });
+      return await this._finishJobCompletion(job, stored);
+    } catch (err) {
+      await this.failJob(
+        job,
+        `Failed to store generated artifact: ${redactError((err as Error).message, 800)}`,
+      );
+      return false;
+    }
+  }
+
+  private async _finishJobCompletion(
+    job: AIMediaJob,
+    stored: StoredArtifact,
+    options?: { notify?: boolean },
+  ): Promise<boolean> {
+    await this._aiSettings.updateMediaJob(job.organizationId, job.id, {
+      status: 'completed',
+      artifactUrl: stored.path,
+      error: null,
+    });
+
+    if (stored.mediaType === 'video') {
+      this._videoThumbnailService.enqueueGenerate(job.organizationId, stored.mediaId);
+    }
+
+    // §6.2: siblings (extra takes) pass notify:false — the primary already told the
+    // user "ready", and a sibling that fails between create and complete must not
+    // fire a spurious failure notification for a take the user never asked for.
+    if (options?.notify !== false) {
+      await this._notify(
+        job,
+        'success',
+        `AI ${job.operation} ready`,
+        `Your generated ${job.operation} is ready in the media library.`,
+      );
+    }
+    return true;
   }
 
   async failJob(
@@ -612,10 +654,22 @@ export class MediaJobLifecycleService {
         );
       }
     }
-    const detected = await fromBuffer(buffer).catch(() => undefined);
-    const storedMime = detected?.mime || mime;
-    const prepared = await prepareVideoArtifact(buffer, storedMime);
-    buffer = prepared.buffer;
+    return this._storeBufferArtifact({ ...params, buffer, mime });
+  }
+
+  private async _storeBufferArtifact(params: {
+    organizationId: string;
+    provider: string;
+    operation: string;
+    jobId: string;
+    buffer: Buffer;
+    mime: string;
+    metadata?: MediaArtifactMetadata;
+    folderId?: string | null;
+  }): Promise<StoredArtifact> {
+    const detected = await fromBuffer(params.buffer).catch(() => undefined);
+    const storedMime = detected?.mime || params.mime;
+    const prepared = await prepareVideoArtifact(params.buffer, storedMime);
     const metadata: Record<string, unknown> = {
       ...params.metadata,
       ...prepared.metadata,
@@ -628,7 +682,7 @@ export class MediaJobLifecycleService {
       provider: params.provider,
       operation: params.operation,
       baseName: `${params.operation}-${params.jobId}`,
-      buffer,
+      buffer: prepared.buffer,
       mime: storedMime,
       folderId: params.folderId,
       metadata,

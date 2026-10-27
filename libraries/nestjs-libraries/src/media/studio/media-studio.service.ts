@@ -279,8 +279,7 @@ export class MediaStudioService {
     // The pending `pending://` ref is internal and must never reach the client; only a
     // completed job has a real /files URL. Resolve the File row too: its id backs the
     // composer handoff ("Post"), and its content-classified `type` lets the queue render
-    // the artifact by what it IS — a video-operation job can land an image (e.g. a
-    // Reel.Farm slideshow completed without a video export stores the first slide).
+    // the artifact by what it IS when a provider returns another content type.
     const completed = job.status === 'completed' && job.artifactUrl;
     const file = completed ? fileMap.get(job.artifactUrl!) : undefined;
     return {

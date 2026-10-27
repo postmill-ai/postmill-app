@@ -115,9 +115,14 @@ export interface MediaJobSubmission {
   metadata?: MediaArtifactMetadata;
 }
 
+export interface MediaSlideshowResult {
+  slides: string[];
+}
+
 export interface MediaPollResult {
   status: 'pending' | 'completed' | 'failed';
   artifactUrl?: string;
+  slideshow?: MediaSlideshowResult;
   // Additional finished artifacts from the SAME generation (e.g. Suno returns 2 clips). The
   // primary lands as the job's artifact; each extra is landed by the lifecycle as its own
   // sibling completed job (one render-queue card / File row per clip). Generic — any adapter

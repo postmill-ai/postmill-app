@@ -20,6 +20,25 @@ vi.mock('@postmill-ai/nestjs-libraries/media/video-artifact', () => ({
     mockPrepareVideoArtifact(buffer, mime),
 }));
 
+const mockTransformReelFarmSlideshow = vi.fn((slides: string[], _options: unknown) =>
+  Promise.resolve({
+    buffer: Buffer.from(`mp4:${slides.join(',')}`),
+    mime: 'video/mp4' as const,
+    metadata: { durationSeconds: slides.length * 4 },
+  }),
+);
+const mockReelFarmSlideshowOptions = vi.fn(() => ({
+  aspectRatio: '4:5',
+  durationSeconds: 4,
+  fitMode: 'cover',
+}));
+vi.mock('@postmill-ai/nestjs-libraries/media/reelfarm-slideshow-completion', () => ({
+  transformReelFarmSlideshow: (slides: string[], options: unknown) =>
+    mockTransformReelFarmSlideshow(slides, options),
+  reelFarmSlideshowOptions: (inputJson?: string | null) =>
+    mockReelFarmSlideshowOptions(inputJson),
+}));
+
 import { MediaJobLifecycleService } from './media-job-lifecycle.service';
 import { AIMediaJob } from '@prisma/client';
 
@@ -587,6 +606,81 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
       orgSettings.getConfigForProvider.mockResolvedValue(null);
 
       expect(await service.processJob('job-1')).toBe('failed');
+    });
+  });
+
+  describe('processJob Reel.Farm slideshow completion', () => {
+    function slideshowCtx() {
+      const ctx = makeService();
+      const inputJson = JSON.stringify({
+        operation: 'video',
+        input: { aspect_ratio: '9:16', keep_original_aspect_ratio: true, duration: 6 },
+      });
+      ctx.jobs.set('job-1', makeJob({ provider: 'reelfarm', inputJson }));
+      ctx.pollJob.mockResolvedValue({
+        status: 'completed',
+        slideshow: {
+          slides: [
+            'https://slides.reel.farm/slide-0.jpg',
+            'https://slides.reel.farm/slide-1.jpg',
+          ],
+        },
+        metadata: { provider: 'reelfarm' },
+      });
+      return ctx;
+    }
+
+    it('transforms ordered slides into one MP4 on the original job without JPEG siblings', async () => {
+      const { service, jobs, aiSettings, mediaRepository, storageAdapter, notificationService, videoThumbnailService } = slideshowCtx();
+
+      expect(await service.processJob('job-1')).toBe('completed');
+
+      expect(mockReelFarmSlideshowOptions).toHaveBeenCalledWith(jobs.get('job-1')!.inputJson);
+      expect(mockTransformReelFarmSlideshow).toHaveBeenCalledWith([
+        'https://slides.reel.farm/slide-0.jpg',
+        'https://slides.reel.farm/slide-1.jpg',
+      ], expect.any(Object));
+      expect(mockSafeFetch).not.toHaveBeenCalled();
+      expect(aiSettings.createMediaJob).not.toHaveBeenCalled();
+      expect(storageAdapter.writeBuffer).toHaveBeenCalledTimes(1);
+      expect(storageAdapter.writeBuffer).toHaveBeenCalledWith(expect.any(Buffer), 'video/mp4');
+      expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledTimes(1);
+      expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledWith('org-1', expect.objectContaining({
+        name: 'video-job-1.mp4',
+        type: 'video',
+        metadata: expect.objectContaining({ provider: 'reelfarm', durationSeconds: 8 }),
+      }));
+      expect(jobs.get('job-1')!.status).toBe('completed');
+      expect(jobs.get('job-1')!.artifactUrl).toBe('/uploads/org-1/artifact.mp4');
+      expect(notificationService.notify).toHaveBeenCalledTimes(1);
+      expect(videoThumbnailService.enqueueGenerate).toHaveBeenCalledWith('org-1', 'media-1');
+    });
+
+    it('is claim-idempotent under concurrent completion', async () => {
+      const { service, mediaRepository, notificationService } = slideshowCtx();
+
+      const results = await Promise.all([service.processJob('job-1'), service.processJob('job-1')]);
+
+      expect(results.filter((result) => result === 'completed')).toHaveLength(1);
+      expect(results.filter((result) => result === 'skipped')).toHaveLength(1);
+      expect(mockTransformReelFarmSlideshow).toHaveBeenCalledTimes(1);
+      expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledTimes(1);
+      expect(notificationService.notify).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails conversion errors with redacted details and creates no files or siblings', async () => {
+      const { service, jobs, aiSettings, mediaRepository } = slideshowCtx();
+      mockTransformReelFarmSlideshow.mockRejectedValueOnce(
+        new Error('download failed: https://slides.reel.farm/a.jpg?token=fixture-secret'),
+      );
+
+      expect(await service.processJob('job-1')).toBe('failed');
+
+      expect(jobs.get('job-1')!.status).toBe('failed');
+      expect(jobs.get('job-1')!.error).toContain('token=[REDACTED]');
+      expect(jobs.get('job-1')!.error).not.toContain('fixture-secret');
+      expect(aiSettings.createMediaJob).not.toHaveBeenCalled();
+      expect(mediaRepository.saveGeneratedMedia).not.toHaveBeenCalled();
     });
   });
 
