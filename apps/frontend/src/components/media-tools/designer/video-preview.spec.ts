@@ -193,6 +193,26 @@ describe('VideoPreviewEngine — muted tracks and looping', () => {
     engine.destroy();
   });
 
+  it('starts audible video in the Play gesture instead of losing user activation to rAF', () => {
+    const play = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      value: play,
+      configurable: true,
+    });
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    store.getState().addClip(0, vo.tracks[0].id, clip());
+    const engine = new VideoPreviewEngine(store);
+
+    engine.play({ onTick: () => {}, onEnd: () => {} });
+
+    expect(play).toHaveBeenCalledOnce();
+    expect(document.querySelector('video')?.muted).toBe(false);
+    engine.destroy();
+  });
+
   it('loop playback wraps to 0 instead of ending', async () => {
     vi.useFakeTimers();
     const store = createDesignerStore();

@@ -251,6 +251,11 @@ export class VideoPreviewEngine {
     this.startWallMs = performance.now();
     this.startPlayheadMs = state.playheadMs >= vo.durationMs ? 0 : state.playheadMs;
 
+    // Start audible media inside the Play gesture. Waiting for rAF loses user
+    // activation, and autoplay rejection leaves the wall-clock loop seeking a
+    // paused element instead of producing decoded frames for the canvas.
+    this.seekMediaElements(this.startPlayheadMs, vo);
+
     const tick = () => {
       const elapsed = performance.now() - this.startWallMs;
       const ms = Math.min(vo.durationMs, this.startPlayheadMs + elapsed);

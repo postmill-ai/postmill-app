@@ -327,9 +327,24 @@ async function canvasFingerprint(page: Page): Promise<string> {
   });
 }
 
+async function canvasCenterRgb(page: Page): Promise<number> {
+  return page.locator('.konvajs-content canvas').first().evaluate((canvas) => {
+    const context = canvas.getContext('2d');
+    if (!context || !canvas.width || !canvas.height) return 0;
+    const pixel = context.getImageData(
+      Math.floor(canvas.width / 2),
+      Math.floor(canvas.height / 2),
+      1,
+      1
+    ).data;
+    return pixel[0] + pixel[1] + pixel[2];
+  });
+}
+
 async function expectRealPlayback(page: Page) {
   const video = page.locator('video').first();
   await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState)).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => canvasCenterRgb(page), 'the decoded frame must be visible, not a black artboard').toBeGreaterThan(0);
   const beforeTime = await video.evaluate((element: HTMLVideoElement) => element.currentTime);
   const beforePixels = await canvasFingerprint(page);
 
@@ -337,6 +352,7 @@ async function expectRealPlayback(page: Page) {
   await expect
     .poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime))
     .toBeGreaterThan(beforeTime + 0.25);
+  await expect.poll(() => canvasCenterRgb(page), 'playback must keep painting real frames').toBeGreaterThan(0);
   await expect.poll(() => canvasFingerprint(page)).not.toBe(beforePixels);
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
 }

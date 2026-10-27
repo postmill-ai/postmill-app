@@ -17,7 +17,6 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
-    launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
   },
   projects: [
     {
