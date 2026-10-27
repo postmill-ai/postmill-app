@@ -19,7 +19,8 @@ import {
 } from './compact-registry';
 import { CompactReplicate } from '../replicate/compact-replicate';
 import { CompactHeyGen } from '../heygen/compact-heygen';
-import type { StudioFieldValue } from './types';
+import { UtcToLocalDateRender } from '@postmill-ai/react/helpers/utc.date.render';
+import type { StudioFieldValue, StudioJob } from './types';
 
 export type { CompactStudioResult };
 
@@ -109,6 +110,7 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
   const generate = useStudioGenerate(provider);
   const [starting, setStarting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [resumedJob, setResumedJob] = useState<StudioJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorSettingsUrl, setErrorSettingsUrl] = useState<string | null>(null);
   // True once the mount-time adoption check has run (see below) — jobs polling
@@ -138,8 +140,15 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
     if (adoptChecked || activeJobId || !jobs || !Array.isArray(jobs)) return;
     setAdoptChecked(true);
     const running = jobs.find((j) => j.status === 'pending' || j.status === 'processing');
-    if (running) setActiveJobId(running.id);
-  }, [adoptChecked, activeJobId, jobs]);
+    if (running) {
+      const model =
+        running.model ??
+        active?.tab.model ??
+        (typeof values.model === 'string' ? values.model : undefined);
+      setResumedJob({ ...running, model });
+      setActiveJobId(running.id);
+    }
+  }, [adoptChecked, activeJobId, jobs, active, values]);
 
   useEffect(() => {
     if (!activeJobId || !jobs) return;
@@ -148,6 +157,7 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
     if (job.status === 'completed' && job.artifactUrl) {
       handledJobRef.current = job.id;
       setActiveJobId(null);
+      setResumedJob(null);
       onGenerated({
         operation: (job.operation as CompactOperation) || operation,
         artifactUrl: job.artifactUrl,
@@ -158,6 +168,7 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
     } else if (job.status === 'failed') {
       handledJobRef.current = job.id;
       setActiveJobId(null);
+      setResumedJob(null);
       // Poll-path failures can carry the structured envelope (message +
       // settingsUrl) — unwrap it so the settings link renders (B7).
       const envelope = parseJobError(job.error);
@@ -181,6 +192,7 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
     if (!active || !canGenerate) return;
     setStarting(true);
     setError(null);
+    setResumedJob(null);
     try {
       const body = buildBody(active.tab, values);
       // The dialog's prompt box owns the prompt — inject it into the submitted
@@ -270,6 +282,30 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
         keyNs={active.ns}
         tabKey={active.tab.key}
       />
+
+      {resumedJob && activeJobId === resumedJob.id && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-x-[8px] gap-y-[2px] rounded-[8px] border border-studioBorder bg-newBgColor/40 px-[10px] py-[7px] text-[11px] text-newTextColor/70"
+        >
+          <span className="font-[600] text-textColor">
+            {t('compact_studio_resumed', 'Resumed')}
+          </span>
+          {resumedJob.model && (
+            <span>
+              {t('compact_studio_resumed_model', 'Model: {{model}}', {
+                model: resumedJob.model,
+              })}
+            </span>
+          )}
+          <span>
+            {t('compact_studio_resumed_created', 'Created')}{' '}
+            <time dateTime={resumedJob.createdAt}>
+              <UtcToLocalDateRender date={resumedJob.createdAt} format="YYYY-MM-DD HH:mm" />
+            </time>
+          </span>
+        </div>
+      )}
 
       <div className="flex items-center gap-[10px]">
         <Button onClick={onGenerate} disabled={!canGenerate} loading={busy} className="h-[36px] text-[13px]">

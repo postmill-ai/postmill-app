@@ -84,6 +84,18 @@ export const metadata: ProviderMetadata = {
             "default": true
           }
         ]
+      },
+      {
+        "id": "S2V-01",
+        "label": "Subject Reference",
+        "fields": [
+          {
+            "name": "prompt_optimizer",
+            "type": "toggle",
+            "label": "Prompt optimizer",
+            "default": true
+          }
+        ]
       }
     ]
   },

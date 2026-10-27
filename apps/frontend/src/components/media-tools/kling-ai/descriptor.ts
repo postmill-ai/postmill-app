@@ -42,6 +42,20 @@ const AUDIO = [
   { value: 'off', label: 'Silent' },
   { value: 'native', label: 'Native audio' },
 ];
+const RESOLUTION_FIELD = {
+  type: 'select' as const,
+  name: 'resolution',
+  label: 'Resolution',
+  default: '720p',
+  options: RESOLUTION,
+  optionRules: [
+    {
+      when: { model: 'kling-2.6', audio: 'native' },
+      options: [{ value: '1080p', label: '1080p (required for native audio)' }],
+    },
+  ],
+  help: 'Kling 2.6 requires 1080p when native audio is enabled.',
+};
 
 export const klingAiDescriptor: StudioDescriptor = {
   landing: {
@@ -70,7 +84,7 @@ export const klingAiDescriptor: StudioDescriptor = {
         { type: 'prompt', name: 'prompt', label: 'Prompt', required: true, placeholder: 'Describe the scene…' },
         { type: 'select', name: 'duration', label: 'Duration', default: '5', options: DURATION },
         { type: 'select', name: 'aspect_ratio', label: 'Aspect ratio', default: '16:9', options: VIDEO_ASPECT },
-        { type: 'select', name: 'resolution', label: 'Resolution', default: '720p', options: RESOLUTION },
+        RESOLUTION_FIELD,
         { type: 'select', name: 'audio', label: 'Audio', options: AUDIO, help: 'Kling 3.0 / 2.6 only; 3.0 Turbo always renders native audio.' },
       ],
     },
@@ -85,7 +99,7 @@ export const klingAiDescriptor: StudioDescriptor = {
         { type: 'media', name: 'image_tail', label: 'Last frame (optional)', accept: 'image' },
         { type: 'prompt', name: 'prompt', label: 'Prompt', required: true, placeholder: 'Describe the motion…' },
         { type: 'select', name: 'duration', label: 'Duration', default: '5', options: DURATION },
-        { type: 'select', name: 'resolution', label: 'Resolution', default: '720p', options: RESOLUTION },
+        RESOLUTION_FIELD,
         { type: 'select', name: 'audio', label: 'Audio', options: AUDIO, help: 'Kling 3.0 / 2.6 only; 3.0 Turbo always renders native audio.' },
       ],
     },

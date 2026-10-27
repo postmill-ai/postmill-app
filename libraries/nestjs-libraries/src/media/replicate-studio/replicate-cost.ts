@@ -24,9 +24,6 @@ export const PRICE_MAP: Record<string, PriceEntry> = {
   'google/veo-3.1': { kind: 'per-video-sec', usd: 0.40 },
   'minimax/video-01': { kind: 'per-video-sec', usd: 0.30 },
   'bytedance/seedance-1-pro': { kind: 'per-video-sec', usd: 0.40 },
-  // Replicate lists kling-v2.1-master at $0.28 per second of output video
-  // (official successor to the discontinued kling-v2.1).
-  'kwaivgi/kling-v2.1-master': { kind: 'per-video-sec', usd: 0.28 },
   // Replicate lists kling-v2.5-turbo-pro at $0.07 per second of output video.
   'kwaivgi/kling-v2.5-turbo-pro': { kind: 'per-video-sec', usd: 0.07 },
   // Replicate lists wan-2.7-videoedit at $0.10 per second of output video.

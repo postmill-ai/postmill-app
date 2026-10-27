@@ -105,6 +105,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
     // `subject_reference` array (S2V models).
     const input = (options?.input || {}) as Record<string, unknown>;
     const { subject_image, ...rest } = input;
+    const subjectImage = subject_image || (model === 'S2V-01' ? options?.sourceUrl : undefined);
     // MiniMax validates callback_url at submit time with a challenge-handshake our
     // webhook endpoint doesn't implement, so `options.webhookUrl` is deliberately NOT
     // sent — completion comes from the media-jobs-poll cron.
@@ -116,8 +117,8 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
         model,
         prompt,
         ...rest,
-        ...(typeof subject_image === 'string'
-          ? { subject_reference: [{ type: 'character', image: [subject_image] }] }
+        ...(typeof subjectImage === 'string'
+          ? { subject_reference: [{ type: 'character', image: [subjectImage] }] }
           : {}),
       }),
     });

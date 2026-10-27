@@ -2768,40 +2768,6 @@ export const metadata: ProviderMetadata = {
         ]
       },
       {
-        "id": "kwaivgi/kling-v2.1-master",
-        "label": "kling-v2.1-master",
-        "notes": [
-          "No audio track",
-          "Prompt adherence can be loose; text in video may contain errors"
-        ],
-        "fields": [
-          {
-            "name": "negative_prompt",
-            "label": "Negative Prompt",
-            "help": "Things you do not want to see in the video",
-            "type": "text",
-            "default": ""
-          },
-          {
-            "name": "duration",
-            "label": "duration",
-            "help": "Duration of the video in seconds",
-            "type": "select",
-            "options": [
-              {
-                "value": "5",
-                "label": "5"
-              },
-              {
-                "value": "10",
-                "label": "10"
-              }
-            ],
-            "default": "5"
-          }
-        ]
-      },
-      {
         "id": "kwaivgi/kling-v2.5-turbo-pro",
         "label": "kling-v2.5-turbo-pro",
         "notes": [

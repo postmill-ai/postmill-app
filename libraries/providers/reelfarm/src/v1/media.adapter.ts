@@ -41,6 +41,9 @@ interface ReelFarmStatusResponse {
   status?: 'draft' | 'generating' | 'rendering' | 'completed' | 'failed';
   video_id?: string;
   video_status?: string;
+  error?: string;
+  message?: string;
+  failure?: string;
 }
 
 interface ReelFarmVideoResponse {
@@ -137,7 +140,10 @@ export class ReelFarmAdapter implements MediaProviderAdapter {
     const status = (await statusRes.json()) as ReelFarmStatusResponse;
 
     if (status.status === 'failed') {
-      return { status: 'failed', error: 'Reel.Farm slideshow generation failed' };
+      const slideshowId = redactError(String(status.slideshow_id ?? jobId), 100);
+      const detail = status.error || status.message || status.failure ||
+        `Slideshow ${slideshowId} failed without an upstream error message`;
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, detail, 'video') };
     }
     // The mp4 only exists once a video export has been created; until then keep polling.
     if (!status.video_id) return { status: 'pending' };

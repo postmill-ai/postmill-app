@@ -33,12 +33,29 @@ export interface MediaField extends StudioFieldBase {
  * - `prompt` and `media` are generation-time inputs and never persisted as defaults.
  */
 export type StudioField =
-  | (ModelField & { type: 'select'; source?: 'models' })
+  | (ModelField & {
+      type: 'select';
+      source?: 'models';
+      optionRules?: {
+        when: Record<string, string | number | boolean>;
+        options: NonNullable<ModelField['options']>;
+      }[];
+    })
   | (ModelField & { type: 'number' })
   | (ModelField & { type: 'toggle' })
   | (ModelField & { type: 'text' })
   | PromptField
   | MediaField;
+
+export function studioSelectOptions(
+  field: Extract<StudioField, { type: 'select' }>,
+  values: Record<string, StudioFieldValue>
+) {
+  const rule = field.optionRules?.find(({ when }) =>
+    Object.entries(when).every(([name, expected]) => values[name] === expected)
+  );
+  return rule?.options ?? field.options ?? [];
+}
 
 export interface StudioCustomProps {
   provider: string;
@@ -92,6 +109,7 @@ export interface GeneratedMediaMetadata {
 export interface StudioJob {
   id: string;
   operation: string;
+  model?: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   artifactUrl: string | null;
   fileId: string | null;

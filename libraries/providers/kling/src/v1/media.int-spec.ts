@@ -34,6 +34,27 @@ describe('kling media adapter (official Kling AI API)', () => {
     expect(body.options).toEqual({ callback_url: 'https://postmill.example/webhooks/kling' });
   });
 
+  it('rejects Kling 2.6 native audio below 1080p before submitting a billed job', async () => {
+    const { recs, ctx } = makeCtx(() => res({ code: 0, data: { id: 'should-not-run' } }));
+    const adapter: any = klingMediaModule.create(ctx as any);
+
+    for (const resolution of ['720p', undefined]) {
+      await expect(adapter.generateVideo('coffee pouring', {
+        apiKey: 'kling-key',
+        model: 'kling-2.6',
+        input: { resolution, audio: 'native' },
+      })).rejects.toThrow('Kling 2.6 native audio requires 1080p resolution');
+    }
+    expect(recs).toHaveLength(0);
+
+    await adapter.generateVideo('coffee pouring', {
+      apiKey: 'kling-key',
+      model: 'kling-2.6',
+      input: { resolution: '720p', audio: 'off' },
+    });
+    expect(JSON.parse(recs[0].body).settings).toEqual({ resolution: '720p', audio: 'off' });
+  });
+
   it('submits image-to-video to /image-to-video/<model> with contents[] frames and no aspect_ratio', async () => {
     const { recs, ctx } = makeCtx(() => res({ code: 0, message: '', data: { id: 'task-i2v-1' } }));
     const adapter: any = klingMediaModule.create(ctx as any);

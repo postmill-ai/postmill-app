@@ -36,6 +36,7 @@ const renderStudio = (ui: React.ReactElement) =>
 
 beforeEach(() => {
   jobsPayload = [];
+  fetchMock.mockReset();
   fetchMock.mockImplementation((url: string) => {
     if (url.includes('/status')) return Promise.resolve(ok({ configured: true, enabled: true }));
     if (url.includes('/models')) return Promise.resolve(ok([]));
@@ -47,8 +48,14 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-const generateCall = () =>
-  fetchMock.mock.calls.find(([url]) => String(url).includes('/generate'));
+const generateCalls = (provider: string) =>
+  fetchMock.mock.calls.filter(
+    ([url, init]) =>
+      String(url) === `/media/studio/${provider}/generate` &&
+      (init as RequestInit | undefined)?.method === 'POST'
+  );
+
+const generateCall = () => generateCalls('google')[0];
 
 describe('CompactStudio (descriptor provider)', () => {
   it('renders fields for the matching operation only', async () => {
@@ -156,6 +163,104 @@ describe('CompactStudio (descriptor provider)', () => {
       fileId: 'file-9',
     });
   }, 15000);
+
+  it('only polls adopted fal work across mount, every tab/model switch, and reload', async () => {
+    const createdAt = '2026-10-19T12:34:00.000Z';
+    const model = 'fal-ai/kling-video/v1.6/pro/text-to-video';
+    jobsPayload = [
+      {
+        id: 'fal-job-in-flight',
+        operation: 'video',
+        model,
+        status: 'processing',
+        artifactUrl: null,
+        fileId: null,
+        error: null,
+        createdAt,
+      },
+    ];
+    const studio = (
+      <CompactStudio provider="fal" operation="video" prompt="a rocket" onGenerated={vi.fn()} />
+    );
+    const firstMount = renderStudio(studio);
+
+    expect(await screen.findByText('Resumed')).toBeTruthy();
+    expect(screen.getByText(`Model: ${model}`)).toBeTruthy();
+    const created = document.querySelector(`time[datetime="${createdAt}"]`);
+    expect(created?.textContent).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(generateCalls('fal')).toHaveLength(0);
+
+    for (const label of [
+      'Kling Image → Video',
+      'Pika Text → Video',
+      'Pika Image → Video',
+      'Pikaffects',
+      'Kling Text → Video',
+    ]) {
+      fireEvent.click(screen.getByRole('tab', { name: label }));
+      expect(screen.getByRole('tab', { name: label }).getAttribute('aria-selected')).toBe(
+        'true'
+      );
+      expect(generateCalls('fal')).toHaveLength(0);
+    }
+    expect(screen.getByText(`Model: ${model}`)).toBeTruthy();
+
+    for (const value of [
+      'fal-ai/kling-video/v2/master/text-to-video',
+      'fal-ai/kling-video/v1.6/standard/text-to-video',
+      model,
+    ]) {
+      fireEvent.change(screen.getByLabelText('Model'), { target: { value } });
+      expect(generateCalls('fal')).toHaveLength(0);
+    }
+
+    firstMount.unmount();
+    renderStudio(studio);
+    expect(await screen.findByText('Resumed')).toBeTruthy();
+    expect(generateCalls('fal')).toHaveLength(0);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url) === '/media/studio/fal/jobs').length
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('posts once for explicit Generate and tracks the new job instead of an older job', async () => {
+    const oldJob = {
+      id: 'job-old',
+      operation: 'video',
+      status: 'completed',
+      artifactUrl: '/uploads/old.mp4',
+      fileId: 'file-old',
+      error: null,
+      createdAt: '2026-10-19T00:00:00.000Z',
+    };
+    jobsPayload = [oldJob];
+    const onGenerated = vi.fn();
+    renderStudio(
+      <CompactStudio provider="fal" operation="video" prompt="a rocket" onGenerated={onGenerated} />
+    );
+    const generate = await screen.findByRole('button', { name: 'Generate' });
+    jobsPayload = [
+      oldJob,
+      {
+        id: 'job-1',
+        operation: 'video',
+        status: 'failed',
+        artifactUrl: null,
+        fileId: null,
+        error: 'new explicit render failed',
+        createdAt: '2026-10-20T00:00:00.000Z',
+      },
+    ];
+
+    fireEvent.click(generate);
+
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      'new explicit render failed'
+    );
+    expect(generateCalls('fal')).toHaveLength(1);
+    expect(onGenerated).not.toHaveBeenCalled();
+  });
 
   it('unwraps the structured failure envelope and links Settings', async () => {
     jobsPayload = [

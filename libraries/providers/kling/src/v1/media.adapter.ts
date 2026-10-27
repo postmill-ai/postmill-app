@@ -133,6 +133,9 @@ export class KlingMediaAdapter extends BearerTokenMediaAdapter {
   // descriptor params the current API doesn't have (negative_prompt, cfg_scale, mode) can
   // never leak into the body.
   private _videoSettings(model: string, input: Record<string, MediaInputValue>, withAspect: boolean) {
+    if (model === 'kling-2.6' && input.audio === 'native' && input.resolution !== '1080p') {
+      throw new Error('Kling 2.6 native audio requires 1080p resolution. Choose 1080p or turn off native audio.');
+    }
     const settings: Record<string, MediaInputValue> = {};
     if (input.duration !== undefined && input.duration !== '') {
       const duration = Number(input.duration);

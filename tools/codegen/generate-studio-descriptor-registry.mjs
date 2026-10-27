@@ -168,7 +168,11 @@ function categoryForTab(tab, descriptorTitle) {
   }
 
   if (tab.operation === 'video') {
-    if (tab.key === 'image-to-video' || tab.key.endsWith('-image-to-video')) {
+    if (
+      tab.key === 'image-to-video' ||
+      tab.key.endsWith('-image-to-video') ||
+      tab.key === 'subject-reference'
+    ) {
       return 'image-to-video';
     }
     // Skip one-off VFX / talking-head / audio-to-video tabs that take media
