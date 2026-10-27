@@ -137,6 +137,7 @@
       "shell-quote": "^1.11.0",
       "@modelcontextprotocol/sdk": "^1.31.0",
       "@mastra/mcp>@modelcontextprotocol/client": "2.2.0",
+      "@mastra/mcp>@modelcontextprotocol/node": "2.1.1",
       "@mastra/mcp>@modelcontextprotocol/server": "^2.3.0",
       "@mastra/core>@modelcontextprotocol/server": "^2.3.0",
       "graphql-yoga": "^5.24.4",
