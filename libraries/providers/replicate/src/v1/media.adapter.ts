@@ -97,6 +97,57 @@ function isVersionHash(model: string): boolean {
   return !model.includes('/');
 }
 
+const VIDEO_DURATION_CHOICES: Record<string, number[]> = {
+  'google/veo-3.1': [4, 6, 8],
+  'bytedance/seedance-1-pro': [5, 10],
+  'kwaivgi/kling-v2.5-turbo-pro': [5, 10],
+};
+
+function hasInputValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== '';
+}
+
+function validateVideoInput(modelId: string, input: Record<string, unknown>): void {
+  const duration = input.duration;
+  if (modelId === 'minimax/video-01' && hasInputValue(duration)) {
+    throw new Error(
+      'Video-01 has a fixed duration of approximately 6 seconds; remove the duration from the media default',
+    );
+  }
+  const choices = VIDEO_DURATION_CHOICES[modelId];
+  if (choices && hasInputValue(duration)) {
+    const seconds = Number(duration);
+    if (!Number.isInteger(seconds) || !choices.includes(seconds)) {
+      throw new Error(
+        `${modelId} duration must be ${choices.join(' or ')} seconds; update the media default or selected duration`,
+      );
+    }
+  }
+
+  if (modelId !== 'google/veo-3.1') return;
+  const references = input.reference_images;
+  if (references === undefined || references === null) return;
+  if (!Array.isArray(references)) {
+    throw new Error('Veo reference_images must be an array of 1–3 image URLs');
+  }
+  if (references.length === 0) return;
+  if (references.length > 3) {
+    throw new Error('Veo accepts between 1 and 3 subject/style reference images');
+  }
+  if (references.some((item) => typeof item !== 'string' || !item)) {
+    throw new Error('Each Veo reference image must be a provider-reachable URL');
+  }
+  if (input.aspect_ratio !== '16:9') {
+    throw new Error('Veo subject/style references require a 16:9 aspect ratio');
+  }
+  if (Number(input.duration) !== 8) {
+    throw new Error('Veo subject/style references require an 8-second duration');
+  }
+  if (hasInputValue(input.last_frame)) {
+    throw new Error('Veo last-frame transitions cannot be combined with subject/style references');
+  }
+}
+
 export class ReplicateMediaAdapter implements MediaProviderAdapter {
   constructor(
     private readonly _fetch: SafeFetchPort,
@@ -241,6 +292,10 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     // source handling), even when the metadata field list omits them.
     const i2vField = ReplicateMediaAdapter._I2V_SOURCE_FIELD[model];
     if (i2vField) allowed.add(i2vField);
+    if (model === 'google/veo-3.1') {
+      allowed.add('last_frame');
+      allowed.add('reference_images');
+    }
     const v2vField = ReplicateMediaAdapter._V2V_SOURCE_FIELD[model];
     if (v2vField) allowed.add(v2vField);
     const i2iField = ReplicateMediaAdapter._i2iInputField(model);
@@ -339,6 +394,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   // null — hardcoding `video_url` for every model shipped a 422 for all of
   // them (no allowlisted model accepts that name).
   private static readonly _I2V_SOURCE_FIELD: Record<string, string> = {
+    'google/veo-3.1': 'image',
     'minimax/video-01': 'first_frame_image',
     'bytedance/seedance-1-pro': 'image',
     'kwaivgi/kling-v2.5-turbo-pro': 'start_image',
@@ -521,6 +577,17 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
         passthroughInput = { ...options!.input };
         delete passthroughInput.video_url;
       }
+    }
+
+    if (modelId) validateVideoInput(modelId, { ...input, ...passthroughInput });
+    if (
+      modelId === 'google/veo-3.1' &&
+      (passthroughInput?.reference_images === null ||
+        (Array.isArray(passthroughInput?.reference_images) &&
+          passthroughInput.reference_images.length === 0))
+    ) {
+      passthroughInput = { ...passthroughInput };
+      delete passthroughInput.reference_images;
     }
 
     const opts: MediaGenerateOptions = { ...options, input: passthroughInput, version: modelId };

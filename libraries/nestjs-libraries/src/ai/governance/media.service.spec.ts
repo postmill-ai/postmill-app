@@ -1445,6 +1445,17 @@ describe('AiMediaService', () => {
   });
 
   describe('listGenerationProviders', () => {
+    it('excludes avatar-only HeyGen from ordinary video and retains it for avatar generation', async () => {
+      const heygen = makeAdapter('heygen', { avatar: true });
+      const { service } = setup([heygen]);
+
+      const video = await service.listGenerationProviders('org-1', 'video');
+      const avatar = await service.listGenerationProviders('org-1', 'avatar');
+
+      expect(video.providers).toEqual([]);
+      expect(avatar.providers).toEqual([{ identifier: 'heygen', name: 'heygen' }]);
+    });
+
     it('filters candidates by operation capability (a video-only provider is not listed for image)', async () => {
       const openai = makeAdapter('openai', { image: true });
       const runway = makeAdapter('runway', { video: true });

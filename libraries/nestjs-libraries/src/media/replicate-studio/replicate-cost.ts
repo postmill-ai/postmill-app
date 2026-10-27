@@ -39,6 +39,13 @@ export interface EstimateResult {
   approximate: boolean;
 }
 
+const DEFAULT_VIDEO_SECONDS: Record<string, number> = {
+  'google/veo-3.1': 8,
+  'minimax/video-01': 6,
+  'bytedance/seedance-1-pro': 5,
+  'kwaivgi/kling-v2.5-turbo-pro': 5,
+};
+
 /**
  * Estimate cost for a model given its input.
  * For models in PRICE_MAP, computes a real dollar figure.
@@ -60,7 +67,10 @@ export function estimate(modelId: string, input?: Record<string, unknown>): Esti
       break;
     }
     case 'per-video-sec': {
-      const duration = typeof input?.duration === 'number' ? input.duration : 5;
+      const supplied = Number(input?.duration);
+      const duration = Number.isFinite(supplied) && supplied > 0
+        ? supplied
+        : (DEFAULT_VIDEO_SECONDS[modelId] ?? 5);
       multiplier = Math.max(1, duration);
       break;
     }

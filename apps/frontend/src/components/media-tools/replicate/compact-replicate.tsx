@@ -13,6 +13,7 @@ import { DynamicForm } from './dynamic-form';
 import { classifySchema, type InputSchema } from './field-classification';
 import { missingRequiredFields } from './use-generate';
 import { sanitizeModelInput } from './sanitize-input';
+import { hasVeoReferenceImages, validateModelInput } from './model-policy';
 import type { CompactOperation, CompactStudioResult } from '../studio-kit/compact-registry';
 import type { GeneratedMediaMetadata } from '../studio-kit/types';
 
@@ -137,6 +138,7 @@ export const CompactReplicate: FC<{
   const seededAspectRef = useRef<{ modelId: string; value: string } | null>(null);
   useEffect(() => {
     if (!aspectRatio || !selectedModel) return;
+    if (selectedModel.id === 'google/veo-3.1' && hasVeoReferenceImages(formInput)) return;
     const aspectField = schema?.properties?.['aspect_ratio'];
     if (!aspectField) return;
     const enumValues = Array.isArray(aspectField.enum) ? aspectField.enum : undefined;
@@ -212,6 +214,11 @@ export const CompactReplicate: FC<{
           fields: absent.join(', '),
         })
       );
+      return;
+    }
+    const validationError = validateModelInput(selectedModel.id, raw);
+    if (validationError) {
+      fail(validationError);
       return;
     }
     // Unset optional controls are never sent (a present-but-empty optional

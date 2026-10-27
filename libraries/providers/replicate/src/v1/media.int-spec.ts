@@ -131,6 +131,7 @@ describe('replicate media adapter (async predictions)', () => {
   // schemas: minimax wants `first_frame_image`, seedance `image`, kling
   // `start_image`. The old hardcoded `video_url` 422'd on every one of these.
   it.each([
+    ['google/veo-3.1', 'image'],
     ['minimax/video-01', 'first_frame_image'],
     ['bytedance/seedance-1-pro', 'image'],
     ['kwaivgi/kling-v2.5-turbo-pro', 'start_image'],
@@ -158,11 +159,11 @@ describe('replicate media adapter (async predictions)', () => {
     await expect(
       adapter.generateVideo('animate this', {
         apiKey: 'replicate-key',
-        model: 'google/veo-3.1', // text-to-video only — no declared source field
+        model: 'black-forest-labs/flux-dev',
         sourceUrl: 'https://cdn.example.com/frame.png',
       }),
     ).rejects.toThrow(
-      'Replicate model google/veo-3.1 does not declare an image-to-video or video-to-video source input',
+      'Replicate model black-forest-labs/flux-dev does not declare an image-to-video or video-to-video source input',
     );
     await expect(
       adapter.generateVideo('animate this', {
@@ -173,6 +174,82 @@ describe('replicate media adapter (async predictions)', () => {
     ).rejects.toThrow(
       'Replicate model owner/totally-unknown does not declare an image-to-video or video-to-video source input',
     );
+  });
+
+  it.each([
+    ['google/veo-3.1', 5],
+    ['bytedance/seedance-1-pro', 6],
+    ['kwaivgi/kling-v2.5-turbo-pro', 2],
+    ['minimax/video-01', 6],
+  ])('rejects invalid %s duration %s before submitting', async (model, duration) => {
+    const { recs, ctx } = makeCtx(() => res({ id: 'pred-x', status: 'starting' }));
+    const adapter: any = replicateMediaModule.create(ctx as any);
+
+    await expect(
+      adapter.generateVideo('x', { apiKey: 'replicate-key', model, input: { duration } }),
+    ).rejects.toThrow(/duration/);
+    expect(recs).toHaveLength(0);
+  });
+
+  it('submits Veo reference_images as a true array after validating reference mode', async () => {
+    const { recs, ctx } = makeCtx(() => res({ id: 'pred-veo-ref', status: 'starting' }));
+    const adapter: any = replicateMediaModule.create(ctx as any);
+    const referenceImages = [
+      'https://cdn.example.com/one.png',
+      'https://cdn.example.com/two.png',
+      'https://cdn.example.com/three.png',
+    ];
+
+    await adapter.generateVideo('x', {
+      apiKey: 'replicate-key',
+      model: 'google/veo-3.1',
+      input: { reference_images: referenceImages, aspect_ratio: '16:9', duration: '8' },
+    });
+
+    const body = JSON.parse(recs[0].body);
+    expect(body.input.reference_images).toEqual(referenceImages);
+    expect(body.input.duration).toBe('8');
+    expect(body.input.aspect_ratio).toBe('16:9');
+  });
+
+  it.each([
+    ['scalar', { reference_images: 'one,two', aspect_ratio: '16:9', duration: 8 }],
+    ['too many', { reference_images: ['1', '2', '3', '4'], aspect_ratio: '16:9', duration: 8 }],
+    ['wrong aspect', { reference_images: ['1'], aspect_ratio: '9:16', duration: 8 }],
+    ['wrong duration', { reference_images: ['1'], aspect_ratio: '16:9', duration: 6 }],
+    [
+      'last frame conflict',
+      {
+        reference_images: ['1'],
+        aspect_ratio: '16:9',
+        duration: 8,
+        last_frame: 'https://cdn.example.com/last.png',
+      },
+    ],
+  ])('rejects Veo reference mode with %s before submitting', async (_label, input) => {
+    const { recs, ctx } = makeCtx(() => res({ id: 'pred-x', status: 'starting' }));
+    const adapter: any = replicateMediaModule.create(ctx as any);
+
+    await expect(
+      adapter.generateVideo('x', { apiKey: 'replicate-key', model: 'google/veo-3.1', input }),
+    ).rejects.toThrow();
+    expect(recs).toHaveLength(0);
+  });
+
+  it.each([[], null])('drops empty/null Veo references as unset (%s)', async (references) => {
+    const { recs, ctx } = makeCtx(() => res({ id: 'pred-veo', status: 'starting' }));
+    const adapter: any = replicateMediaModule.create(ctx as any);
+
+    await adapter.generateVideo('x', {
+      apiKey: 'replicate-key',
+      model: 'google/veo-3.1',
+      input: { reference_images: references, aspect_ratio: '9:16', duration: 6 },
+    });
+
+    const body = JSON.parse(recs[0].body);
+    expect(body.input).not.toHaveProperty('reference_images');
+    expect(body.input.aspect_ratio).toBe('9:16');
+    expect(body.input.duration).toBe(6);
   });
 
   it('rejects the discontinued Kling 2.1 Master before submitting', async () => {

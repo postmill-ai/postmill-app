@@ -2567,11 +2567,18 @@ export const metadata: ProviderMetadata = {
             "name": "duration",
             "label": "Duration",
             "help": "Video duration in seconds",
-            "type": "number",
-            "min": 2,
-            "max": 12,
-            "step": 1,
-            "default": 5
+            "type": "select",
+            "default": "5",
+            "options": [
+              {
+                "value": "5",
+                "label": "5"
+              },
+              {
+                "value": "10",
+                "label": "10"
+              }
+            ]
           },
           {
             "name": "camera_fixed",
@@ -2646,6 +2653,87 @@ export const metadata: ProviderMetadata = {
       }
     ],
     "image-to-video": [
+      {
+        "id": "google/veo-3.1",
+        "label": "veo-3.1",
+        "fields": [
+          {
+            "name": "aspect_ratio",
+            "label": "aspect_ratio",
+            "help": "Video aspect ratio",
+            "type": "select",
+            "options": [
+              {
+                "value": "16:9",
+                "label": "16:9"
+              },
+              {
+                "value": "9:16",
+                "label": "9:16"
+              }
+            ],
+            "default": "16:9"
+          },
+          {
+            "name": "duration",
+            "label": "duration",
+            "help": "Video duration in seconds",
+            "type": "select",
+            "options": [
+              {
+                "value": "4",
+                "label": "4"
+              },
+              {
+                "value": "6",
+                "label": "6"
+              },
+              {
+                "value": "8",
+                "label": "8"
+              }
+            ],
+            "default": "8"
+          },
+          {
+            "name": "negative_prompt",
+            "label": "Negative Prompt",
+            "help": "Description of what to exclude from the generated video",
+            "type": "text"
+          },
+          {
+            "name": "resolution",
+            "label": "resolution",
+            "help": "Resolution of the generated video",
+            "type": "select",
+            "options": [
+              {
+                "value": "720p",
+                "label": "720p"
+              },
+              {
+                "value": "1080p",
+                "label": "1080p"
+              }
+            ],
+            "default": "1080p"
+          },
+          {
+            "name": "generate_audio",
+            "label": "Generate Audio",
+            "help": "Generate audio with the video",
+            "type": "toggle",
+            "default": true
+          },
+          {
+            "name": "seed",
+            "label": "Seed",
+            "help": "Random seed. Omit for random generations",
+            "type": "number",
+            "step": 1
+          }
+        ]
+      },
       {
         "id": "minimax/video-01",
         "label": "video-01",
@@ -2752,11 +2840,18 @@ export const metadata: ProviderMetadata = {
             "name": "duration",
             "label": "Duration",
             "help": "Video duration in seconds",
-            "type": "number",
-            "min": 2,
-            "max": 12,
-            "step": 1,
-            "default": 5
+            "type": "select",
+            "default": "5",
+            "options": [
+              {
+                "value": "5",
+                "label": "5"
+              },
+              {
+                "value": "10",
+                "label": "10"
+              }
+            ]
           },
           {
             "name": "camera_fixed",

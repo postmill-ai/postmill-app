@@ -83,6 +83,85 @@ export class ReplicateRunnerService {
     }
   }
 
+  private static readonly _DURATION_CHOICES: Record<string, number[]> = {
+    'google/veo-3.1': [4, 6, 8],
+    'bytedance/seedance-1-pro': [5, 10],
+    'kwaivgi/kling-v2.5-turbo-pro': [5, 10],
+  };
+
+  private static _hasInputValue(value: unknown): boolean {
+    if (value === undefined || value === null || value === '') return false;
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      const file = value as Record<string, unknown>;
+      return Boolean(file.fileId || file.url);
+    }
+    return true;
+  }
+
+  private _validateModelInput(modelId: string, input: Record<string, unknown>): void {
+    const duration = input.duration;
+    const durationProvided = duration !== undefined && duration !== null && duration !== '';
+    if (modelId === 'minimax/video-01' && durationProvided) {
+      throw new BadRequestException(
+        'Video-01 has a fixed duration of approximately 6 seconds; remove the duration input',
+      );
+    }
+
+    const choices = ReplicateRunnerService._DURATION_CHOICES[modelId];
+    if (choices && durationProvided) {
+      const seconds = Number(duration);
+      if (!Number.isInteger(seconds) || !choices.includes(seconds)) {
+        throw new BadRequestException(
+          `${modelId} duration must be ${choices.join(' or ')} seconds; update the media default or selected duration`,
+        );
+      }
+    }
+
+    if (modelId !== 'google/veo-3.1') return;
+    const references = input.reference_images;
+    if (references === undefined || references === null) return;
+    if (!Array.isArray(references)) {
+      throw new BadRequestException('Veo reference_images must be an array of 1–3 images');
+    }
+    if (references.length === 0) return;
+    if (references.length > 3) {
+      throw new BadRequestException('Veo accepts between 1 and 3 subject/style reference images');
+    }
+    if (input.aspect_ratio !== '16:9') {
+      throw new BadRequestException('Veo subject/style references require a 16:9 aspect ratio');
+    }
+    if (Number(input.duration) !== 8) {
+      throw new BadRequestException('Veo subject/style references require an 8-second duration');
+    }
+    if (ReplicateRunnerService._hasInputValue(input.last_frame)) {
+      throw new BadRequestException(
+        'Veo last-frame transitions cannot be combined with subject/style references',
+      );
+    }
+  }
+
+  private _validateResolvedInput(
+    modelId: string,
+    input: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (modelId !== 'google/veo-3.1') return input;
+    const references = input.reference_images;
+    if (references === null || (Array.isArray(references) && references.length === 0)) {
+      const next = { ...input };
+      delete next.reference_images;
+      return next;
+    }
+    if (
+      Array.isArray(references) &&
+      references.some((item) => typeof item !== 'string' || !item)
+    ) {
+      throw new BadRequestException(
+        'Each Veo reference image must be a selected file or provider-reachable URL',
+      );
+    }
+    return input;
+  }
+
   constructor(
     private readonly _catalog: ReplicateCatalogService,
     private readonly _aiSettings: AiSettingsService,
@@ -101,19 +180,26 @@ export class ReplicateRunnerService {
     input: Record<string, unknown>,
     orgId: string,
   ): Promise<Record<string, unknown>> {
-    const resolved: Record<string, unknown> = { ...input };
-    for (const [key, value] of Object.entries(resolved)) {
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
-        const obj = value as Record<string, unknown>;
-        if (obj.fileId && typeof obj.fileId === 'string') {
-          const fileRecord = await this._getFileRecord(obj.fileId, orgId);
-          if (fileRecord) {
-            resolved[key] = fileRecord.publicUrl;
-          }
-        }
+    const resolveValue = async (value: unknown): Promise<unknown> => {
+      if (Array.isArray(value)) {
+        const resolved: unknown[] = [];
+        for (const item of value) resolved.push(await resolveValue(item));
+        return resolved;
       }
-    }
-    return resolved;
+      if (!value || typeof value !== 'object') return value;
+      const obj = value as Record<string, unknown>;
+      if (obj.fileId && typeof obj.fileId === 'string') {
+        const fileRecord = await this._getFileRecord(obj.fileId, orgId);
+        return fileRecord?.publicUrl ?? value;
+      }
+      const resolved: Record<string, unknown> = {};
+      for (const [key, nested] of Object.entries(obj)) {
+        resolved[key] = await resolveValue(nested);
+      }
+      return resolved;
+    };
+
+    return (await resolveValue(input)) as Record<string, unknown>;
   }
 
   private async _getFileRecord(
@@ -327,9 +413,13 @@ export class ReplicateRunnerService {
     opts?: { creditType?: string },
   ): Promise<RunSyncResult> {
     this._assertModelAllowed(params.modelId);
+    this._validateModelInput(params.modelId, params.input);
     return this._withCredit(orgId, opts?.creditType, async () => {
       const apiKey = await this._getApiKey(orgId);
-      const resolvedInput = await this._resolveInputUrls(params.input, orgId);
+      const resolvedInput = this._validateResolvedInput(
+        params.modelId,
+        await this._resolveInputUrls(params.input, orgId),
+      );
 
       const pred = await this._pickCall(params.modelId, resolvedInput, apiKey, orgId, {
         wait: true,
@@ -395,9 +485,13 @@ export class ReplicateRunnerService {
     opts?: { creditType?: string },
   ): Promise<RunAsyncResult> {
     this._assertModelAllowed(params.modelId);
+    this._validateModelInput(params.modelId, params.input);
     return this._withCredit(orgId, opts?.creditType, async () => {
       const apiKey = await this._getApiKey(orgId);
-      const resolvedInput = await this._resolveInputUrls(params.input, orgId);
+      const resolvedInput = this._validateResolvedInput(
+        params.modelId,
+        await this._resolveInputUrls(params.input, orgId),
+      );
 
       const job = await this._lifecycle.createPendingJob({
         organizationId: orgId,

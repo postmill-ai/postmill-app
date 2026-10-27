@@ -37,6 +37,21 @@ can also condition its generated imagery on a reference image — supported for
 `black-forest-labs/flux-kontext-pro` and `black-forest-labs/flux-dev`; other models fall back to
 text-to-image.
 
+## Video duration and image inputs
+
+Duration controls follow the selected model instead of adding timing or aspect instructions to your
+prompt:
+
+- **Veo 3.1:** 4, 6, or 8 seconds (8 by default), in both Text to Video and Image to Video.
+- **Video-01:** approximately 6 seconds, fixed by the model. There is no duration setting to submit.
+- **Seedance 1 Pro and Kling 2.5 Turbo Pro:** 5 or 10 seconds (5 by default).
+
+Image inputs have distinct roles. **First frame** supplies the starting image; **Last frame
+(transition)** supplies the ending image for a transition. Veo also accepts **Subject/style
+references** as an ordered selection of one to three images. Reference mode requires 16:9 and 8
+seconds, and cannot be combined with a last-frame transition. Clearing every reference turns
+reference mode off.
+
 ---
 
 ## Warm vs community models and cost badges

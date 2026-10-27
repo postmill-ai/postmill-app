@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { GeneratedMediaMetadata } from '../studio-kit/types';
+import { schemaWithModelPolicy } from './model-policy';
+import type { InputSchema } from './field-classification';
 
 export interface ModelSummary {
   id: string;
@@ -101,10 +103,10 @@ function defaultsFromSchema(
   model: ModelDetail | null,
   canvasAspectRatio?: string | null
 ): Record<string, unknown> {
-  const schema = model?.inputSchema as
-    | { properties?: Record<string, { default?: unknown; enum?: unknown[] }> }
-    | null
-    | undefined;
+  const schema = schemaWithModelPolicy(
+    model?.id ?? '',
+    model?.inputSchema as InputSchema | null | undefined
+  );
   const props = schema?.properties;
   if (!props) return {};
   const out: Record<string, unknown> = {};

@@ -62,7 +62,7 @@ export class HeyGenAdapter implements MediaProviderAdapter {
   readonly name = 'HeyGen';
   readonly capabilities: MediaProviderCapabilities = {
     image: false,
-    video: true,
+    video: false,
     audio: false,
     avatar: true,
     tts: false,
@@ -106,9 +106,10 @@ export class HeyGenAdapter implements MediaProviderAdapter {
   /**
    * The org's avatar catalog, exposed as the provider's "model list" so Settings →
    * Content → Media Defaults can offer avatars in the model dropdown (the avatar
-   * id is stored as the default's `model`). Avatars only make sense for video
-   * operations; other operations get an empty list. Never throws — an unreachable
-   * API returns [] so callers fall back to a provider-level option.
+   * id is stored as the default's `model`). The generic model-list API uses the
+   * video operation for this avatar catalog; other operations get an empty list.
+   * Never throws — an unreachable API returns [] so callers fall back to a
+   * provider-level option.
    */
   async listModels(operation: MediaOperation, options?: MediaCredentialOptions): Promise<MediaModelOption[]> {
     if (operation !== 'video') return [];
@@ -129,7 +130,19 @@ export class HeyGenAdapter implements MediaProviderAdapter {
     }
   }
 
-  async generateVideo(prompt: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
+  async generateVideo(_prompt: string, _options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
+    throw new Error('HeyGen does not support video generation; use generateAvatar for avatar videos');
+  }
+
+  async generateAudio(_prompt: string, _options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
+    throw new Error('HeyGen does not support standalone audio generation');
+  }
+
+  generateAvatar(prompt: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
+    return this._submitAvatar(prompt, options);
+  }
+
+  private async _submitAvatar(prompt: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
     const res = await this._fetch('https://api.heygen.com/v2/video/generate', {
       method: 'POST',
       headers: this._headers(options),
@@ -151,14 +164,6 @@ export class HeyGenAdapter implements MediaProviderAdapter {
     const { data } = (await res.json()) as HeyGenGenerateResponse;
     if (!data?.video_id) throw new Error('HeyGen returned no video id');
     return { jobId: data.video_id };
-  }
-
-  async generateAudio(_prompt: string, _options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
-    throw new Error('HeyGen does not support standalone audio generation');
-  }
-
-  generateAvatar(prompt: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
-    return this.generateVideo(prompt, options);
   }
 
   // HeyGen has distinct status endpoints per operation (avatar video, video translation,

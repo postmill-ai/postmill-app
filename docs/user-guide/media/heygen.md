@@ -4,6 +4,11 @@
 stack — a `HeyGenAdapter`, a per-org `MediaProviderConfig`, and the async `AIMediaJob` job
 pipeline. Configure your HeyGen API key at **Settings → Media** (no environment-variable fallback).
 
+For shared AI Media routing, HeyGen is **avatar-only**: it supports avatar and talking-photo
+workflows, not ordinary text-to-video or image-to-video generation. It therefore does not appear
+as an ordinary video provider in the Designer. The dedicated HeyGen studio flows below are
+unchanged.
+
 ## Four tabs
 
 | Tab | What it does |

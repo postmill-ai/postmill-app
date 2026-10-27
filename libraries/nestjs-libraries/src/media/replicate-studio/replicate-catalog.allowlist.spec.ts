@@ -44,6 +44,7 @@ describe('Replicate catalog allowlist', () => {
     const allAllowlisted = new Set(Object.values(MODEL_ALLOWLIST).flat());
     expect(allAllowlisted.has('google/veo-3')).toBe(false);
     expect(MODEL_ALLOWLIST['text-to-video']).toContain('google/veo-3.1');
+    expect(MODEL_ALLOWLIST['image-to-video']).toContain('google/veo-3.1');
     expect(OFFICIAL_MODELS.has('google/veo-3.1')).toBe(true);
     expect(OFFICIAL_MODELS.has('google/veo-3')).toBe(false);
   });

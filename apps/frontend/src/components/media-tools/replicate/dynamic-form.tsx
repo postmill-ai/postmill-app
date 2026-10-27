@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore } from './replicate.store';
@@ -16,6 +16,7 @@ import {
   type InputSchema,
   type SchemaField,
 } from './field-classification';
+import { hasVeoReferenceImages, schemaWithModelPolicy } from './model-policy';
 
 function RequiredMark({ required }: { required?: boolean }) {
   return required ? <span className="text-dangerText ml-1">*</span> : null;
@@ -256,6 +257,7 @@ function AdvancedField({
 
 function PrimaryField({ entry }: { entry: ClassifiedField }) {
   const value = useReplicateStore((s) => (s.formInput as Record<string, unknown>)[entry.name]);
+  const modelId = useReplicateStore((s) => s.selectedModel?.id);
   const updateFormField = useReplicateStore((s) => s.updateFormField);
   const onChange = useCallback(
     (v: unknown) => updateFormField(entry.name, v),
@@ -276,10 +278,42 @@ function PrimaryField({ entry }: { entry: ClassifiedField }) {
         <div className="mb-4">
           <FileInput
             label={entry.field.title || entry.name}
+            help={entry.field.description}
             required={entry.required}
             acceptType={entry.acceptType}
-            value={(value as FileValue | string | undefined) || undefined}
+            multiple={entry.name === 'reference_images'}
+            maxFiles={entry.name === 'reference_images' ? 3 : undefined}
+            value={(value as FileValue | string | Array<FileValue | string> | undefined) || undefined}
             onChange={(v) => onChange(v as unknown)}
+          />
+        </div>
+      );
+    case 'duration':
+      if (modelId === 'minimax/video-01') {
+        return (
+          <div className="mb-4">
+            <label className="block text-xs text-newTextColor/70 mb-1" htmlFor="video-01-duration">
+              {entry.field.title || 'Duration'}
+            </label>
+            <input
+              id="video-01-duration"
+              type="text"
+              value="~6 seconds (fixed)"
+              readOnly
+              className={inputClass}
+            />
+            <p className="text-[10px] text-newTextColor/65 mt-1">{entry.field.description}</p>
+          </div>
+        );
+      }
+      return (
+        <div className="mb-4">
+          <AdvancedField
+            name={entry.name}
+            schema={entry.field}
+            value={value}
+            required={entry.required}
+            onChange={onChange}
           />
         </div>
       );
@@ -304,7 +338,15 @@ export function DynamicForm({ hiddenFields }: { hiddenFields?: Set<string> }) {
   const t = useT();
   const selectedModel = useReplicateStore((s) => s.selectedModel);
   const selectedCategory = useReplicateStore((s) => s.selectedCategory);
+  const formInput = useReplicateStore((s) => s.formInput);
+  const updateFormField = useReplicateStore((s) => s.updateFormField);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  useEffect(() => {
+    if (selectedModel?.id !== 'google/veo-3.1' || !hasVeoReferenceImages(formInput)) return;
+    if (formInput.aspect_ratio !== '16:9') updateFormField('aspect_ratio', '16:9');
+    if (Number(formInput.duration) !== 8) updateFormField('duration', 8);
+  }, [selectedModel?.id, formInput, updateFormField]);
 
   const excluded = useMemo(() => {
     const set = new Set<string>(ALWAYS_EXCLUDED);
@@ -320,7 +362,14 @@ export function DynamicForm({ hiddenFields }: { hiddenFields?: Set<string> }) {
   }, [selectedCategory, selectedModel, hiddenFields]);
 
   const { primary, advanced } = useMemo(
-    () => classifySchema(selectedModel?.inputSchema as unknown as InputSchema | null, excluded),
+    () =>
+      classifySchema(
+        schemaWithModelPolicy(
+          selectedModel?.id ?? '',
+          selectedModel?.inputSchema as unknown as InputSchema | null
+        ),
+        excluded
+      ),
     [selectedModel, excluded]
   );
 

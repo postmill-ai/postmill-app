@@ -67,4 +67,25 @@ describe('classifySchema prompt-role detection', () => {
     expect(primary).toEqual([]);
     expect(advanced.map((f) => f.name).sort()).toEqual(['prompt_2', 'prompt_strength']);
   });
+
+  it('keeps duration visible after file inputs and classifies URI arrays as files', () => {
+    const { primary, advanced } = classifySchema(
+      {
+        properties: {
+          duration: { type: 'integer', enum: [4, 6, 8] },
+          reference_images: { type: 'array', items: { type: 'string', format: 'uri' } },
+          prompt: { type: 'string' },
+          aspect_ratio: { type: 'string', enum: ['16:9', '9:16'] },
+        },
+      },
+      new Set()
+    );
+
+    expect(primary.map((field) => [field.name, field.role])).toEqual([
+      ['prompt', 'prompt'],
+      ['reference_images', 'file'],
+      ['duration', 'duration'],
+    ]);
+    expect(advanced.map((field) => field.name)).toEqual(['aspect_ratio']);
+  });
 });

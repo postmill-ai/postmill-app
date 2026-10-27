@@ -12,7 +12,7 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
     const { recs, ctx } = makeCtx(() => res({ data: { video_id: 'vid-123' } }));
     const adapter: any = heygenMediaModule.create(ctx as any);
 
-    const sub = await adapter.generateVideo('hello there', {
+    const sub = await adapter.generateAvatar('hello there', {
       apiKey: 'heygen-key',
       avatarId: 'avatar-7',
     });
@@ -29,6 +29,19 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
         voice: { type: 'text', input_text: 'hello there' },
       },
     ]);
+  });
+
+  it('declares only the video-avatar category and avatar capability', () => {
+    expect(heygenMediaModule.metadata?.mediaCategories).toEqual(['video-avatar']);
+    expect(heygenMediaModule.manifest.capabilities).toMatchObject({ video: false, avatar: true });
+  });
+
+  it('rejects ordinary video before credential resolution or network I/O', async () => {
+    const { recs, ctx } = makeCtx(() => res({}));
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    await expect(adapter.generateVideo('x', {})).rejects.toThrow('does not support video generation');
+    expect(recs).toHaveLength(0);
   });
 
   it('pollJob (bare id = avatar video) hits v1/video_status.get and parses completed → video_url', async () => {
@@ -102,7 +115,7 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
   it('rejects a missing key and unsupported image/audio operations', async () => {
     const { ctx } = makeCtx(() => res({}));
     const adapter: any = heygenMediaModule.create(ctx as any);
-    await expect(adapter.generateVideo('x', {})).rejects.toThrow('HeyGen API key is required');
+    await expect(adapter.generateAvatar('x', {})).rejects.toThrow('HeyGen API key is required');
     await expect(adapter.generateImage('x', { apiKey: 'k' })).rejects.toThrow();
     await expect(adapter.generateAudio('x', { apiKey: 'k' })).rejects.toThrow();
   });
@@ -166,11 +179,11 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
     expect(await adapter.listModels('video', { apiKey: 'k' })).toEqual([]);
   });
 
-  it('generateVideo falls back to options.model as the avatar id (media-defaults resolution)', async () => {
+  it('generateAvatar falls back to options.model as the avatar id (media-defaults resolution)', async () => {
     const { recs, ctx } = makeCtx(() => res({ data: { video_id: 'vid-9' } }));
     const adapter: any = heygenMediaModule.create(ctx as any);
 
-    await adapter.generateVideo('hi', { apiKey: 'heygen-key', model: 'av-1' });
+    await adapter.generateAvatar('hi', { apiKey: 'heygen-key', model: 'av-1' });
 
     const body = JSON.parse(recs[0].body);
     expect(body.video_inputs[0].character).toEqual({ type: 'avatar', avatar_id: 'av-1' });

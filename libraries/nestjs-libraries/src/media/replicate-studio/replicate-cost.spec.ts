@@ -40,6 +40,17 @@ describe('Replicate cost estimation', () => {
     expect(estimate('google/veo-3')).toMatchObject({ basis: 'usage-based', approximate: true });
   });
 
+  it('uses model-aware duration fallbacks for Veo and Video-01', () => {
+    expect(estimate('google/veo-3.1').usd).toBe(3.2);
+    expect(estimate('minimax/video-01').usd).toBe(1.8);
+    expect(estimate('bytedance/seedance-1-pro').usd).toBe(2);
+    expect(estimate('kwaivgi/kling-v2.5-turbo-pro').usd).toBe(0.35);
+  });
+
+  it('accepts numeric-string durations when estimating output seconds', () => {
+    expect(estimate('google/veo-3.1', { duration: '4' }).usd).toBe(1.6);
+  });
+
   it('prices wan-2.7-videoedit per output second', () => {
     expect(estimate('wan-video/wan-2.7-videoedit', { duration: 10 })).toMatchObject({
       usd: 1,

@@ -82,9 +82,7 @@ export class MediaController {
   ) {
     try {
       let artifact: string;
-      const prompt = body.output && body.prompt
-        ? `[${body.output}] ${body.prompt}`
-        : body.prompt || '';
+      const prompt = body.prompt || '';
       if (body.imageUrl) {
         artifact = await this._aiDefaults.imageToVideo(org.id, prompt, body.imageUrl);
       } else {

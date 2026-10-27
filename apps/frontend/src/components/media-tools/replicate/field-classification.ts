@@ -13,6 +13,7 @@ export interface SchemaField {
   maximum?: number;
   'x-order'?: number;
   format?: string;
+  items?: { type?: string; format?: string };
   anyOf?: Array<{ type?: string; format?: string }>;
 }
 
@@ -22,7 +23,7 @@ export interface InputSchema {
   properties?: Record<string, SchemaField>;
 }
 
-export type FieldRole = 'prompt' | 'negative' | 'file';
+export type FieldRole = 'prompt' | 'negative' | 'file' | 'duration';
 
 // Fields hidden per model, on top of the caller's `excluded` set. video-01's
 // `subject_reference` is not an i2v first-frame input: it silently switches
@@ -52,6 +53,7 @@ const PRIMARY_ORDER: Record<FieldRole, number> = {
   prompt: 1,
   negative: 1,
   file: 2,
+  duration: 3,
 };
 
 const FILE_NAME_HINTS = [
@@ -71,6 +73,7 @@ const FILE_NAME_HINTS = [
 function isUriField(name: string, field: SchemaField): boolean {
   if (field.format === 'uri') return true;
   if (field.anyOf?.some((a) => a.format === 'uri')) return true;
+  if (field.type === 'array' && field.items?.format === 'uri') return true;
   // Some schemas omit format but the name clearly denotes a media input.
   const lname = name.toLowerCase();
   return FILE_NAME_HINTS.some((h) => lname === h || lname.endsWith(`_${h}`));
@@ -93,6 +96,7 @@ function roleFor(name: string, field: SchemaField): FieldRole | null {
   // them (the compact embed then had no prompt field to drive from the dialog).
   if (/(^|_)prompt(_[a-z])?$/.test(lname) || lname === 'text') return 'prompt';
 
+  if (lname === 'duration') return 'duration';
   if (isUriField(name, field)) return 'file';
 
   // Everything else (including enum fields like aspect_ratio / output_format)
@@ -125,7 +129,7 @@ export function classifySchema(
     else advanced.push(entry);
   }
 
-  // Primary order: prompts -> files -> sizes -> formats, ties broken by x-order.
+  // Primary order: prompts -> files -> duration, ties broken by x-order.
   primary.sort((a, b) => {
     const oa = PRIMARY_ORDER[a.role as FieldRole];
     const ob = PRIMARY_ORDER[b.role as FieldRole];
