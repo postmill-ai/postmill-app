@@ -10,6 +10,7 @@ import { useModals, usePromptModal } from '@postmill-ai/frontend/components/layo
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { VoiceoverDialog } from './voiceover-dialog';
 import { useMediaVoices } from './use-media-voices';
+import { MediaVoiceSelect } from './media-voice-select';
 import { VoiceoverRecordDialog } from './voiceover-record-dialog';
 import { SegmentRegenerateDialog } from './segment-regenerate-dialog';
 import {
@@ -953,15 +954,13 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
           {voicesLoading && <span className="text-[11px] text-newTextColor/60">{t('designer_loading_voices', 'Loading voices…')}</span>}
           {voicesError && <span className="text-[11px] text-dangerText">{t('designer_voiceover_load_error', 'Could not load voices. Make sure a TTS-capable provider is configured.')}</span>}
           {!voicesLoading && !voicesError && (
-            <select
-              aria-label={t('designer_voice_label', 'Voice')}
+            <MediaVoiceSelect
+              ariaLabel={t('designer_voice_label', 'Voice')}
+              voices={voices || []}
               value={voiceId}
-              onChange={(e) => setVoiceId(e.target.value)}
+              onChange={setVoiceId}
               className="w-full px-2 py-1 rounded-lg border border-studioBorder bg-newBgColorInner text-textColor text-xs outline-hidden focus:border-designerAccent"
-            >
-              <option value="" disabled>{t('designer_choose_a_voice_option', 'Choose a voice…')}</option>
-              {(voices || []).map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}
-            </select>
+            />
           )}
           <input
             aria-label={t('designer_voiceover_tone_label', 'Tone / style (optional)')}

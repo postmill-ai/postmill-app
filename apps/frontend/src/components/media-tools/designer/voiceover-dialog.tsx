@@ -9,6 +9,7 @@ import {
   useGenerationProviderChoice,
 } from '@postmill-ai/frontend/components/media-tools/designer/panels/generation-provider-picker';
 import { useMediaVoices } from './use-media-voices';
+import { MediaVoiceSelect } from './media-voice-select';
 import { readErrorMessage } from './read-error-message';
 
 interface VoiceoverDialogProps {
@@ -142,21 +143,13 @@ export const VoiceoverDialog: FC<VoiceoverDialogProps> = ({
           </div>
         )}
         {!isLoading && !error && (
-          <select
+          <MediaVoiceSelect
             id="voiceover-voice"
+            voices={voices || []}
             value={selectedVoice}
-            onChange={(e) => setSelectedVoice(e.target.value)}
+            onChange={setSelectedVoice}
             className={inputClass}
-          >
-            <option value="" disabled>
-              {t('designer_choose_a_voice_option', 'Choose a voice…')}
-            </option>
-            {(voices || []).map((voice) => (
-              <option key={voice.id} value={voice.id}>
-                {voice.label}
-              </option>
-            ))}
-          </select>
+          />
         )}
       </div>
 
