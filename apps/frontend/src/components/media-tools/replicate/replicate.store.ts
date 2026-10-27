@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { GeneratedMediaMetadata } from '../studio-kit/types';
 
 export interface ModelSummary {
   id: string;
@@ -42,6 +43,9 @@ export interface RunResult {
   text?: string;
   segments?: Array<{ text: string; start?: number; end?: number }>;
   jobId?: string;
+  fileId?: string | null;
+  fileType?: string | null;
+  metadata?: GeneratedMediaMetadata | null;
 }
 
 type RunState = 'idle' | 'running' | 'success' | 'error';

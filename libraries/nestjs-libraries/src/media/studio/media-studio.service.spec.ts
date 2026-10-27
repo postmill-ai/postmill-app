@@ -546,5 +546,89 @@ describe('MediaStudioService', () => {
         ]),
       );
     });
+
+    it('exposes only safe canonical video metadata from the batched file rows', async () => {
+      const { service, aiSettings, fileService } = makeService();
+      aiSettings.getMediaJobsByProvider.mockResolvedValue([
+        {
+          id: 'job-video',
+          status: 'completed',
+          operation: 'video',
+          artifactUrl: '/uploads/org-1/a.mp4',
+          error: null,
+          createdAt: new Date(),
+        },
+      ]);
+      fileService.getFilesByPaths.mockResolvedValue([
+        {
+          id: 'file-video',
+          path: '/uploads/org-1/a.mp4',
+          type: 'video',
+          metadata: {
+            dimensions: { width: 1920, height: 1080 },
+            durationMs: 6250,
+            mime: 'video/mp4',
+            prompt: 'private prompt',
+            provenance: 'internal provenance',
+          },
+        },
+      ]);
+
+      const result = await service.listJobs('org-1', 'test-provider');
+
+      expect(fileService.getFileByPath).not.toHaveBeenCalled();
+      expect(result).toEqual([
+        expect.objectContaining({
+          id: 'job-video',
+          metadata: {
+            dimensions: { width: 1920, height: 1080 },
+            durationMs: 6250,
+            mime: 'video/mp4',
+          },
+        }),
+      ]);
+      expect(result[0].metadata).not.toHaveProperty('prompt');
+      expect(result[0].metadata).not.toHaveProperty('provenance');
+    });
+
+    it('uses batched canonical metadata without another query and returns null for pending jobs', async () => {
+      const { service, aiSettings, fileService } = makeService();
+      aiSettings.getMediaJobsByProvider.mockResolvedValue([
+        {
+          id: 'job-video',
+          status: 'completed',
+          operation: 'video',
+          artifactUrl: '/uploads/org-1/a.mp4',
+          error: null,
+          createdAt: new Date(),
+        },
+        {
+          id: 'job-pending',
+          status: 'pending',
+          operation: 'video',
+          artifactUrl: 'pending://upstream',
+          error: null,
+          createdAt: new Date(),
+        },
+      ]);
+      fileService.getFilesByPaths.mockResolvedValue([
+        {
+          id: 'file-video',
+          path: '/uploads/org-1/a.mp4',
+          type: 'video',
+          metadata: { durationMs: 1000 },
+        },
+      ]);
+
+      const result = await service.listJobs('org-1', 'test-provider');
+
+      expect(fileService.getFileByPath).not.toHaveBeenCalled();
+      expect(result.find((job) => job.id === 'job-video')?.metadata).toEqual({
+        durationMs: 1000,
+      });
+      expect(result.find((job) => job.id === 'job-pending')).toEqual(
+        expect.objectContaining({ artifactUrl: null, metadata: null }),
+      );
+    });
   });
 });

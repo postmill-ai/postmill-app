@@ -233,6 +233,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   was showing. A keyframe sitting under the playhead is edited in place; otherwise the base props
   move. Track types `shape` and `raster` (doc v5) exist so shape and paint tools have somewhere to
   put their output on a timeline.
+- **One video element per clip in the editor.** `video-element-registry.ts` is shared by the
+  playback engine and canvas overlay, with consumer-scoped ownership. The engine plays that element
+  for picture + sound; the overlay paints its frames and seeks only for scrubbing/entry/drift. Never
+  create a second hidden video for canvas drawing, and never let one consumer's teardown destroy the
+  other's element. Same-id `src` changes must reload the shared element.
 
 - **Effects, warp and text metrics are SHARED code, not two implementations.** `designer-doc/`
   carries the painter (`layer-style-render.ts`), the deformation (`warp.ts`), the fitter

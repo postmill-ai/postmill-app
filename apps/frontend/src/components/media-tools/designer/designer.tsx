@@ -116,6 +116,7 @@ interface DesignerProps {
     fileId?: string;
     width?: number;
     height?: number;
+    durationMs?: number;
   };
   designId?: string;
 }

@@ -14,6 +14,7 @@ import { classifySchema, type InputSchema } from './field-classification';
 import { missingRequiredFields } from './use-generate';
 import { sanitizeModelInput } from './sanitize-input';
 import type { CompactOperation, CompactStudioResult } from '../studio-kit/compact-registry';
+import type { GeneratedMediaMetadata } from '../studio-kit/types';
 
 // Compact, chrome-less embed of the Replicate studio for the Designer's
 // generate dialogs: category (filtered to the dialog's medium), ModelPicker,
@@ -44,7 +45,13 @@ function useReplicateJobPoll(jobId: string | null) {
       const res = await fetch(`/media/replicate/jobs/${jobId}`);
       return (await res.json()) as {
         status: string;
-        result: { kind: string; urls: string[] } | null;
+        result: {
+          kind: string;
+          urls: string[];
+          fileId?: string | null;
+          fileType?: string | null;
+          metadata?: GeneratedMediaMetadata | null;
+        } | null;
         error: string | null;
       };
     },
@@ -179,9 +186,13 @@ export const CompactReplicate: FC<{
     if (jobData.status === 'completed' && jobData.result?.urls?.[0]) {
       handledJobRef.current = jobId;
       setJobId(null);
-      // Async runs already land in Files via the job lifecycle; the poll
-      // payload carries the artifact URL but not the file id.
-      onGenerated({ operation, artifactUrl: jobData.result.urls[0], fileId: '' });
+      onGenerated({
+        operation,
+        artifactUrl: jobData.result.urls[0],
+        fileId: jobData.result.fileId ?? '',
+        fileType: jobData.result.fileType,
+        metadata: jobData.result.metadata,
+      });
     } else if (jobData.status === 'failed') {
       handledJobRef.current = jobId;
       setJobId(null);
@@ -238,8 +249,19 @@ export const CompactReplicate: FC<{
         if (!save.ok) {
           throw new Error(await readErrorMessage(save, t('failed_to_save_to_files', 'Failed to save to Files')));
         }
-        const saved = (await save.json()) as { id?: string; path?: string };
-        onGenerated({ operation, artifactUrl: saved.path || url, fileId: saved.id || '' });
+        const saved = (await save.json()) as {
+          id?: string;
+          path?: string;
+          fileType?: string | null;
+          metadata?: GeneratedMediaMetadata | null;
+        };
+        onGenerated({
+          operation,
+          artifactUrl: saved.path || url,
+          fileId: saved.id || '',
+          fileType: saved.fileType ?? data.fileType ?? data.kind,
+          metadata: saved.metadata ?? data.metadata,
+        });
       } else if (data.jobId) {
         // Async (or a sync run that timed out server-side): poll to completion.
         setJobId(data.jobId);

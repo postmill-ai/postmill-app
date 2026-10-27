@@ -50,6 +50,7 @@ interface TimelineHandoff {
   fileId?: string;
   width?: number;
   height?: number;
+  durationMs?: number;
 }
 
 function readHandoff(key: string): unknown {
@@ -107,6 +108,7 @@ function parseTimelineHandoff(raw: unknown): TimelineHandoff | undefined {
     fileId: asStr(raw.fileId),
     width: asNum(raw.width),
     height: asNum(raw.height),
+    durationMs: asNum(raw.durationMs),
   };
 }
 
@@ -119,7 +121,15 @@ function parseTimelineQuery(sp: { get: (k: string) => string | null }): Timeline
   const url = sp.get('mediaUrl');
   const type = sp.get('mediaType');
   if (!url || (type !== 'video' && type !== 'audio')) return undefined;
-  return { type, url, fileId: sp.get('mediaFileId') || undefined };
+  const num = (key: string) => asNum(Number(sp.get(key)));
+  return {
+    type,
+    url,
+    fileId: sp.get('mediaFileId') || undefined,
+    width: num('mediaWidth'),
+    height: num('mediaHeight'),
+    durationMs: num('mediaDurationMs'),
+  };
 }
 
 const DesignerPage = dynamic(

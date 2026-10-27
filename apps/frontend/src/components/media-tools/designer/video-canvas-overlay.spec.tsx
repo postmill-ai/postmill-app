@@ -5,6 +5,8 @@ import { act } from 'react';
 import Konva from 'konva';
 import { Stage, Layer } from 'react-konva';
 import { VideoCanvasOverlay } from './video-canvas-overlay';
+import { VideoPreviewEngine } from './video-preview';
+import { resetVideoElementRegistry } from './video-element-registry';
 import { videoSrcErrored, resetVideoSrcErrors } from './video-src';
 import { createDesignerStore, type VideoOutput } from './designer.store';
 
@@ -26,6 +28,12 @@ let root: Root | null = null;
 beforeAll(() => {
   vi.stubGlobal('requestAnimationFrame', () => 0);
   vi.stubGlobal('cancelAnimationFrame', () => {});
+  for (const method of ['pause', 'load']) {
+    Object.defineProperty(HTMLMediaElement.prototype, method, {
+      value: vi.fn(),
+      configurable: true,
+    });
+  }
 });
 
 afterEach(async () => {
@@ -34,6 +42,7 @@ afterEach(async () => {
   });
   root = null;
   vi.restoreAllMocks();
+  resetVideoElementRegistry();
   document.body.innerHTML = '';
   resetVideoSrcErrors();
 });
@@ -152,5 +161,50 @@ describe('video overlay paint invalidation', () => {
 
     // A src swap (regenerate) clears the error for the same clip id.
     expect(videoSrcErrored({ id: 'c1', src: 'https://example.com/b.mp4?v=2' })).toBe(false);
+  });
+
+  it('shares the same video element with playback and survives engine teardown', async () => {
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      value: vi.fn().mockResolvedValue(undefined),
+      configurable: true,
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+      value: vi.fn(),
+      configurable: true,
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'load', {
+      value: vi.fn(),
+      configurable: true,
+    });
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const store = videoStore();
+    const engine = new VideoPreviewEngine(store);
+    engine.seek(1000);
+    const playbackElement = document.querySelector('video');
+    expect(playbackElement).toBeTruthy();
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={1080} height={1080}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={1080} height={1080} />
+          </Layer>
+        </Stage>
+      );
+    });
+
+    expect(document.querySelectorAll('video')).toHaveLength(1);
+    expect(document.querySelector('video')).toBe(playbackElement);
+    engine.destroy();
+    expect(playbackElement!.isConnected).toBe(true);
+
+    await act(async () => root!.unmount());
+    root = null;
+    expect(playbackElement!.isConnected).toBe(false);
   });
 });

@@ -94,6 +94,8 @@ describe('CompactStudio (descriptor provider)', () => {
         status: 'completed',
         artifactUrl: '/uploads/cat.png',
         fileId: 'file-9',
+        fileType: 'image',
+        metadata: { dimensions: { width: 1024, height: 768 } },
         error: null,
         createdAt: '2026-10-19T00:00:00.000Z',
       },
@@ -108,6 +110,8 @@ describe('CompactStudio (descriptor provider)', () => {
       operation: 'image',
       artifactUrl: '/uploads/cat.png',
       fileId: 'file-9',
+      fileType: 'image',
+      metadata: { dimensions: { width: 1024, height: 768 } },
     });
   });
 

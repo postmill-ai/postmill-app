@@ -7,11 +7,16 @@ node_modules/
 # Test artifacts / outputs
 playwright-report/
 test-results/
+test-results-designer/
 results-*.json
 endpoints.json
 *.png
 test-output.log
-fixtures/
+fixtures/*
+!fixtures/generate-motion-videos.sh
+!fixtures/motion.mp4
+!fixtures/motion-rear-moov.mp4
+!fixtures/replacement.webm
 
 # Local npm lockfile (this is a standalone Playwright project, deps pinned in package.json)
 package-lock.json

@@ -33,16 +33,15 @@
 // on range-ignoring origins a moov-at-end clip stalls outright, so downloaded
 // video assets are remuxed in place (`ffmpeg -c copy -movflags +faststart` — a
 // stream copy, no re-encode) to move the moov atom to the front. The remux is
-// best-effort: ffmpeg missing or a failed remux logs a warning and keeps the
-// ORIGINAL file rather than failing the job. NOTE: the production "wedged
+// best-effort: ffmpeg missing or a failed remux keeps the ORIGINAL file rather
+// than failing the job. NOTE: the production "wedged
 // seek" render failures were ultimately traced to hidden capture pages being
 // unable to create media pipelines (see preload() in frame-renderer-script.ts)
 // — faststart is seek-efficiency hardening, not that fix.
 
-import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Logger } from '@nestjs/common';
+import { remuxVideoToFaststart } from '../video-artifact';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { verifyMediaJobWebhookToken } from '../media-job-token';
@@ -64,66 +63,9 @@ export { RENDER_ASSETS_DIR, isSafeRenderAssetJobId, safeRenderAssetFileName };
 export const RENDER_ASSET_MAX_BYTES = 500 * 1024 * 1024;
 export const RENDER_ASSETS_MAX_TOTAL_BYTES = 1024 * 1024 * 1024;
 
-const logger = new Logger('RenderAssets');
-
 // mp4-family containers only: +faststart relocates the moov atom, a concept
 // webm (Matroska) does not have (and its muxer rejects -movflags).
 const FASTSTART_VIDEO_EXTS = new Set(['mp4', 'm4v', 'mov']);
-const REMUX_TIMEOUT_MS = 60_000;
-
-function runFfmpegFaststart(inputPath: string, outputPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'ffmpeg',
-      [
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-y',
-        '-i',
-        inputPath,
-        '-c',
-        'copy',
-        '-movflags',
-        '+faststart',
-        outputPath,
-      ],
-      { timeout: REMUX_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
-      (error, _stdout, stderr) => {
-        if (!error) return resolve();
-        const detail = (stderr || '').trim();
-        reject(new Error(detail ? `${error.message}: ${detail}` : error.message));
-      },
-    );
-  });
-}
-
-/**
- * Relocate a downloaded clip's moov atom to the front of the file by
- * stream-copying it to a temp sibling and atomically renaming it over the
- * original. Best-effort: any failure (ffmpeg absent, corrupt download,
- * timeout) keeps the original file — the temp never clobbers it.
- */
-async function remuxVideoToFaststart(filePath: string): Promise<void> {
-  const parsed = path.parse(filePath);
-  // Keep the real extension on the temp name so ffmpeg picks the right muxer.
-  const tmpPath = path.join(parsed.dir, `${parsed.name}.faststart-tmp${parsed.ext}`);
-  try {
-    await runFfmpegFaststart(filePath, tmpPath);
-    fs.renameSync(tmpPath, filePath);
-  } catch (err) {
-    logger.warn(
-      `Faststart remux failed for ${parsed.base}; keeping the original file: ${
-        (err as Error)?.message
-      }`,
-    );
-    try {
-      fs.rmSync(tmpPath, { force: true });
-    } catch {
-      /* best effort */
-    }
-  }
-}
 
 function renderBaseUrl(): string {
   return (

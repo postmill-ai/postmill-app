@@ -17,6 +17,7 @@ import { readResponseCapped } from '@postmill-ai/nestjs-libraries/utils/capped-s
 import { applyAudioOutroFade } from '@postmill-ai/nestjs-libraries/media/audio-outro-fade';
 import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
+import { prepareVideoArtifact } from '@postmill-ai/nestjs-libraries/media/video-artifact';
 
 // AIMediaJob has no dedicated provider-job-id column; while a job is pending the
 // provider's external reference is stored in `artifactUrl` under this scheme and is
@@ -611,10 +612,15 @@ export class MediaJobLifecycleService {
         );
       }
     }
+    const detected = await fromBuffer(buffer).catch(() => undefined);
+    const storedMime = detected?.mime || mime;
+    const prepared = await prepareVideoArtifact(buffer, storedMime);
+    buffer = prepared.buffer;
     const metadata: Record<string, unknown> = {
       ...params.metadata,
+      ...prepared.metadata,
       provider: params.metadata?.provider || params.provider,
-      mime,
+      mime: storedMime,
       source: 'ai-media',
     };
     return this._writeToTenantStorage({
@@ -623,7 +629,7 @@ export class MediaJobLifecycleService {
       operation: params.operation,
       baseName: `${params.operation}-${params.jobId}`,
       buffer,
-      mime,
+      mime: storedMime,
       folderId: params.folderId,
       metadata,
     });

@@ -74,6 +74,16 @@ describe('FileRepository — metadata storage', () => {
     expect(typeof data.metadata).toBe('object');
     expect(data.metadata).toEqual({ source: 'test', attribution: { author: 'me' } });
   });
+
+  it('selects metadata when resolving one file by path', async () => {
+    const { repo, model } = makeRepo();
+
+    await repo.getFileByPath('org-1', '/uploads/clip.mp4');
+
+    expect(model.file.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({ metadata: true }),
+    }));
+  });
 });
 
 describe('FileRepository — deleteFolder', () => {

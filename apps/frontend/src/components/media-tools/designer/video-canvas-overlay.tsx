@@ -20,9 +20,14 @@ import {
   clipIsVideo,
   markVideoSrcErrored,
   videoSrcErrored,
-  clearVideoSrcErrors,
   resetVideoSrcErrors,
 } from './video-src';
+import {
+  acquireVideoElement,
+  pruneVideoElements,
+  releaseVideoElements,
+  sharedVideoElement,
+} from './video-element-registry';
 import { captionWordStates } from '@postmill-ai/nestjs-libraries/media/designer-doc/caption-styles';
 import { applyTextReveal } from '@postmill-ai/nestjs-libraries/media/designer-doc/text-reveal';
 import {
@@ -48,7 +53,6 @@ interface VideoCanvasOverlayProps {
   editingTextId?: string | null;
 }
 
-const videoElements = new Map<string, HTMLVideoElement>();
 const imageElements = new Map<string, HTMLImageElement>();
 const filterCanvasCache = new Map<string, HTMLCanvasElement>();
 const captionCanvasCache = new Map<string, HTMLCanvasElement>();
@@ -99,37 +103,15 @@ const getCanvasStore = (canvasId: string): CanvasStore => {
 };
 const deleteCanvasStore = (canvasId: string) => canvasStores.delete(canvasId);
 
-const getOrCreateVideo = (clip: VideoClip): HTMLVideoElement | null => {
-  if (!clip.src) return null;
-  if (videoElements.has(clip.id)) {
-    return videoElements.get(clip.id)!;
-  }
-  const el = document.createElement('video');
-  el.src = clip.src;
-  el.crossOrigin = 'anonymous';
-  el.muted = true;
-  el.playsInline = true;
-  // metadata-only preload would never reach a paintable readyState on its own;
-  // auto loads the first frames so loadeddata can fire without playing.
-  el.preload = 'auto';
-  el.addEventListener('loadeddata', notifyFrameReady);
-  el.addEventListener('seeked', notifyFrameReady);
-  // A video that can't load (404, CORS, bad codec) never fires loadeddata —
-  // without this it paints black forever. Record the failure (keyed by the
-  // src that failed, so a src swap clears it) and repaint so the clip's
-  // placeholder can be drawn instead of the dead element.
-  const failedSrc = clip.src;
-  el.addEventListener('error', () => {
-    markVideoSrcErrored(clip.id, failedSrc);
-    notifyFrameReady();
+const getOrCreateVideo = (consumer: object, clip: VideoClip): HTMLVideoElement | null =>
+  acquireVideoElement(consumer, clip, {
+    sourceAuthority: true,
+    onFrame: notifyFrameReady,
+    onError: (currentClip) => {
+      if (currentClip.src) markVideoSrcErrored(currentClip.id, currentClip.src);
+      notifyFrameReady();
+    },
   });
-  el.style.position = 'fixed';
-  el.style.left = '-10000px';
-  el.style.top = '0';
-  document.body.appendChild(el);
-  videoElements.set(clip.id, el);
-  return el;
-};
 
 const getOrCreateImage = (src?: string): HTMLImageElement | null => {
   if (!src) return null;
@@ -142,37 +124,19 @@ const getOrCreateImage = (src?: string): HTMLImageElement | null => {
   return img;
 };
 
-// Drop the hidden <video> DOM nodes for clips no longer present (evict on clip
-// removal), so the module map doesn't append to document.body forever.
-const evictOverlayVideos = (liveClipIds: Set<string>) => {
-  videoElements.forEach((el, id) => {
-    if (!liveClipIds.has(id)) {
-      el.pause();
-      el.removeAttribute('src');
-      el.load();
-      el.remove();
-      videoElements.delete(id);
-      clearVideoSrcErrors(id);
-    }
-  });
+const evictOverlayVideos = (consumer: object, liveClipIds: Set<string>) => {
+  pruneVideoElements(consumer, liveClipIds);
 };
 
-// Full teardown on overlay unmount (mode switch / designer close).
-const clearOverlayMedia = () => {
-  videoElements.forEach((el) => {
-    el.pause();
-    el.removeAttribute('src');
-    el.load();
-    el.remove();
-  });
-  videoElements.clear();
+const clearOverlayMedia = (consumer: object) => {
+  releaseVideoElements(consumer);
   imageElements.clear();
   resetVideoSrcErrors();
 };
 
-const seekVideo = (clip: VideoClip, playheadMs: number) => {
-  const el = getOrCreateVideo(clip);
-  if (!el) return;
+const seekVideo = (consumer: object, clip: VideoClip, playheadMs: number, isPlaying: boolean) => {
+  const el = getOrCreateVideo(consumer, clip);
+  if (!el || (isPlaying && !el.paused)) return;
   const sourceTime = sourceTimeForPlayhead(clip, playheadMs);
   if (sourceTime === null) return;
   let t = sourceTime / 1000;
@@ -252,7 +216,7 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
   const source = liveBuffer
     ? (liveBuffer as unknown as HTMLImageElement)
     : isVideoClip
-      ? (clipErrored ? null : getOrCreateVideo(clip))
+      ? (clipErrored ? null : sharedVideoElement(clip.id) ?? null)
       : getOrCreateImage(stickerFrameUrl ?? clip.src);
   const filterString = useMemo(
     () => {
@@ -488,6 +452,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   const doc = store((s) => s.doc);
   const currentOutput = store((s) => s.currentOutput);
   const [tick, setTick] = useState(0);
+  const mediaConsumer = useRef({});
 
   // The playhead moves per rAF tick during playback. Subscribing React to it
   // re-rendered the whole overlay AND re-ran every playhead-keyed effect on
@@ -636,31 +601,29 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     };
   }, [needsRaf, redrawLayer]);
 
-  // Seek/pause video elements so the held frame is rendered when paused.
+  // The playback engine drives the shared element. Seek it directly only for
+  // scrubbing or for the initial frame before playback starts.
   useEffect(() => {
     if (!isVideo) return;
     for (const { clip, trackType } of clipsAtPlayhead) {
-      // Include speed:0 (freeze) clips: sourceTimeForPlayhead resolves them to a
-      // constant frame, so seeking shows the held frame instead of frame 0.
       if ((trackType === 'video' || trackType === 'sticker') && clip.src) {
-        seekVideo(clip, playheadRef.current);
+        seekVideo(mediaConsumer.current, clip, playheadRef.current, isPlaying);
       }
     }
-  }, [isVideo, clipsAtPlayhead]);
+  }, [isVideo, isPlaying, clipsAtPlayhead]);
 
-  // Evict hidden <video> nodes for clips that no longer exist in the output.
   useEffect(() => {
     if (!vo) return;
     const liveIds = new Set<string>();
     for (const track of vo.tracks) {
       for (const clip of track.clips) liveIds.add(clip.id);
     }
-    evictOverlayVideos(liveIds);
+    evictOverlayVideos(mediaConsumer.current, liveIds);
   }, [vo]);
 
-  // Full teardown of the module-level media maps on unmount.
   useEffect(() => {
-    return () => clearOverlayMedia();
+    const consumer = mediaConsumer.current;
+    return () => clearOverlayMedia(consumer);
   }, []);
 
   const selectClip = (trackId: string, clipId: string) => {

@@ -12,6 +12,7 @@ import { VideoPlayer } from './players/video-player';
 import { ElapsedTimer } from './elapsed-timer';
 import { useGenerate } from './use-generate';
 import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
+import type { GeneratedMediaMetadata } from '../studio-kit/types';
 
 type Medium = 'image' | 'video' | 'audio';
 
@@ -34,7 +35,13 @@ function useJobPoll(jobId: string | null) {
       const res = await fetch(`/media/replicate/jobs/${jobId}`);
       return (await res.json()) as {
         status: string;
-        result: { kind: string; urls: string[] } | null;
+        result: {
+          kind: string;
+          urls: string[];
+          fileId?: string | null;
+          fileType?: string | null;
+          metadata?: GeneratedMediaMetadata | null;
+        } | null;
         error: string | null;
       };
     },
@@ -184,6 +191,9 @@ export function ResultPanel({ medium }: { medium: Medium }) {
         kind: jobData.result.kind as Medium | 'text',
         urls: jobData.result.urls,
         jobId: resultJobId,
+        fileId: jobData.result.fileId,
+        fileType: jobData.result.fileType,
+        metadata: jobData.result.metadata,
       });
       setRunState('success');
     }
@@ -436,6 +446,9 @@ export function ResultPanel({ medium }: { medium: Medium }) {
                     openInDesigner({
                       operation: result.kind,
                       artifactUrl: savedPaths[urls[0]] || urls[0],
+                      fileId: result.fileId,
+                      fileType: result.fileType,
+                      metadata: result.metadata,
                     })
                   }
                   className="px-3 py-1.5 rounded-lg bg-designerAccent/20 text-btnPrimaryAccent text-xs hover:bg-designerAccent/30 transition-colors"

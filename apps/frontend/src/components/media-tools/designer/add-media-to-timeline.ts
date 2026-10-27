@@ -17,8 +17,19 @@ export const JOB_MAX_POLLS = 400;
 // paid, still-running generation — tolerate a few in a row before giving up.
 export const JOB_MAX_TRANSIENT_FAILURES = 3;
 
+export interface GeneratedMediaMetadata {
+  dimensions?: { width: number; height: number };
+  durationMs?: number;
+}
+
 export type JobPollOutcome =
-  | { kind: 'completed'; url: string; fileId: string | null; fileType: string | null }
+  | {
+      kind: 'completed';
+      url: string;
+      fileId: string | null;
+      fileType: string | null;
+      metadata?: GeneratedMediaMetadata | null;
+    }
   | { kind: 'timeout' }
   | { kind: 'unmounted' };
 
@@ -47,7 +58,12 @@ export async function pollMediaJobArtifact(options: PollMediaJobOptions): Promis
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
   let transientFailures = 0;
-  const check = async (): Promise<{ url: string; fileId: string | null; fileType: string | null } | null> => {
+  const check = async (): Promise<{
+    url: string;
+    fileId: string | null;
+    fileType: string | null;
+    metadata?: GeneratedMediaMetadata | null;
+  } | null> => {
     let res: Pick<Response, 'ok' | 'status' | 'json'>;
     try {
       res = await fetch(`/media/jobs/${jobId}`);
@@ -70,11 +86,17 @@ export async function pollMediaJobArtifact(options: PollMediaJobOptions): Promis
       // Content-classified type of the stored File; a video-operation job can
       // land an image artifact (Reel.Farm slideshow without a video export).
       fileType?: string | null;
+      metadata?: GeneratedMediaMetadata | null;
       error?: string | null;
     };
     if (job.status === 'completed') {
       if (!job.artifactUrl) throw new Error(messages.noArtifact);
-      return { url: job.artifactUrl, fileId: job.fileId ?? null, fileType: job.fileType ?? null };
+      return {
+        url: job.artifactUrl,
+        fileId: job.fileId ?? null,
+        fileType: job.fileType ?? null,
+        metadata: job.metadata,
+      };
     }
     // A failed job's error can be the structured envelope (JSON with
     // message/kind/settingsUrl — see media-job-lifecycle failJob); toast the
@@ -92,7 +114,7 @@ export async function pollMediaJobArtifact(options: PollMediaJobOptions): Promis
       const result = await check();
       transientFailures = 0;
       if (!isMounted()) return { kind: 'unmounted' };
-      if (result) return { kind: 'completed', url: result.url, fileId: result.fileId, fileType: result.fileType };
+      if (result) return { kind: 'completed', ...result };
     } catch (e) {
       const err = e as Error & { transient?: boolean };
       if (err.transient && transientFailures + 1 < JOB_MAX_TRANSIENT_FAILURES) {
@@ -113,6 +135,7 @@ interface AddMediaToTimelineOptions {
   fileId?: string;
   width?: number;
   height?: number;
+  durationMs?: number;
 }
 
 export interface AddImageClipOptions {
@@ -180,30 +203,49 @@ function findOrCreateTrack(
   return track;
 }
 
+export interface VideoMetadata {
+  durationMs: number;
+  width?: number;
+  height?: number;
+  probeFailed?: boolean;
+}
+
 export function probeVideoMetadata(
-  url: string
-): Promise<{ durationMs: number; width?: number; height?: number; probeFailed?: boolean }> {
+  url: string,
+  onLateSuccess?: (metadata: VideoMetadata) => void
+): Promise<VideoMetadata> {
   return new Promise((resolve) => {
-    let settled = false;
-    const finish = (ms: number, width?: number, height?: number, probeFailed = false) => {
-      if (settled) return;
-      settled = true;
-      resolve({ durationMs: ms, width, height, probeFailed });
+    let resolved = false;
+    let succeeded = false;
+    const probe = document.createElement('video');
+    const timeout = window.setTimeout(() => fail(), 5000);
+    const readMetadata = (): VideoMetadata => ({
+      durationMs: Math.max(1000, Math.round((probe.duration || 10) * 1000)),
+      width: probe.videoWidth || undefined,
+      height: probe.videoHeight || undefined,
+    });
+    const fail = () => {
+      if (resolved || succeeded) return;
+      resolved = true;
+      window.clearTimeout(timeout);
+      resolve({ durationMs: 10000, probeFailed: true });
     };
 
-    const probe = document.createElement('video');
     probe.preload = 'metadata';
-    probe.onloadedmetadata = () =>
-      finish(
-        Math.max(1000, Math.round((probe.duration || 10) * 1000)),
-        probe.videoWidth || undefined,
-        probe.videoHeight || undefined
-      );
-    // Error/timeout land the clip with a 10s fallback — flag it so the caller
-    // can tell the user the duration is a guess instead of failing silently.
-    probe.onerror = () => finish(10000, undefined, undefined, true);
+    probe.onloadedmetadata = () => {
+      if (succeeded) return;
+      succeeded = true;
+      window.clearTimeout(timeout);
+      const metadata = readMetadata();
+      if (resolved) onLateSuccess?.(metadata);
+      else {
+        resolved = true;
+        resolve(metadata);
+      }
+    };
+    // A late loadedmetadata event can still recover from an error/timeout.
+    probe.onerror = fail;
     probe.src = url;
-    window.setTimeout(() => finish(10000, undefined, undefined, true), 5000);
   });
 }
 
@@ -517,11 +559,18 @@ export interface LandedClipRef {
   clipId: string;
   startMs: number;
   /**
-   * The metadata probe failed or timed out and the clip landed with the 10s
-   * fallback duration — the caller should surface this (the probe itself is
-   * silent by design, so the drop never blocks on a dead URL).
+   * Required metadata could not be probed, so duration and/or geometry used a
+   * fallback. A later successful video probe may still correct an untouched clip.
    */
   probeFailed?: boolean;
+}
+
+const positiveNumber = (value: number | undefined): number | undefined =>
+  value !== undefined && Number.isFinite(value) && value > 0 ? value : undefined;
+
+function containVideo(natW: number, natH: number, maxW: number, maxH: number) {
+  const scale = Math.min(maxW / natW, maxH / natH);
+  return { width: Math.round(natW * scale), height: Math.round(natH * scale) };
 }
 
 /**
@@ -529,7 +578,7 @@ export interface LandedClipRef {
  *
  * - Switches to video mode if necessary.
  * - Finds or creates the correct track (`video` or `audio`).
- * - Probes the source duration (with a 5 s error/timeout fallback).
+ * - Uses supplied metadata immediately, probing only missing values.
  * - Extends the output duration before adding the clip so long clips are not
  *   silently dropped.
  * - Caps clip end and duration at the store's MAX_VIDEO_DURATION_MS ceiling.
@@ -538,11 +587,18 @@ export interface LandedClipRef {
  * `startMs: 0`, so callers that want the result visible must seek/select it),
  * or null when addClip rejected the insert.
  */
+
 export function addMediaToTimeline(
   store: StoreApi,
   options: AddMediaToTimelineOptions
 ): Promise<LandedClipRef | null> {
   const { type, url, fileId } = options;
+  const knownDurationMs = positiveNumber(options.durationMs);
+  const knownWidth = positiveNumber(options.width);
+  const knownHeight = positiveNumber(options.height);
+  const hasKnownDimensions = type === 'video' && knownWidth !== undefined && knownHeight !== undefined;
+  const needsDuration = knownDurationMs === undefined;
+  const needsDimensions = type === 'video' && !hasKnownDimensions;
 
   return new Promise((resolve, reject) => {
     const state = store.getState();
@@ -551,13 +607,56 @@ export function addMediaToTimeline(
     }
 
     const out = store.getState().currentOutput;
+    let landedSnapshot: string | undefined;
+    let landedTrackId: string | undefined;
+    let landedClipId: string | undefined;
 
-    const probe: Promise<{ durationMs: number; width?: number; height?: number; probeFailed?: boolean }> =
+    const correctLateMetadata = (metadata: VideoMetadata) => {
+      if (!landedSnapshot || !landedTrackId || !landedClipId) return;
+      const cur = store.getState();
+      const curVo = cur.doc.outputs[out] as VideoOutput | undefined;
+      const curClip = curVo?.tracks
+        .find((track) => track.id === landedTrackId)
+        ?.clips.find((clip) => clip.id === landedClipId);
+      if (!curVo || !curClip || JSON.stringify(curClip) !== landedSnapshot) return;
+
+      const updates: Partial<VideoClip> = {};
+      if (needsDuration) {
+        const endMs = Math.min(metadata.durationMs, MAX_TIMELINE_DURATION_MS);
+        if (endMs > curVo.durationMs) cur.setVideoDuration(out, endMs);
+        updates.endMs = endMs;
+      }
+      const width = positiveNumber(metadata.width);
+      const height = positiveNumber(metadata.height);
+      if (needsDimensions && width !== undefined && height !== undefined) {
+        const fit = containVideo(width, height, curVo.width, curVo.height);
+        Object.assign(updates, {
+          x: Math.round((curVo.width - fit.width) / 2),
+          y: Math.round((curVo.height - fit.height) / 2),
+          width: fit.width,
+          height: fit.height,
+          naturalWidth: width,
+          naturalHeight: height,
+        });
+      }
+      if (Object.keys(updates).length > 0) {
+        cur.updateClipSilent(out, landedTrackId, landedClipId, updates);
+      }
+    };
+
+    const probe: Promise<VideoMetadata> =
       type === 'audio'
-        ? probeAudioDuration(url).then((durationMs) => ({ durationMs }))
-        : probeVideoMetadata(url);
+        ? knownDurationMs !== undefined
+          ? Promise.resolve({ durationMs: knownDurationMs })
+          : probeAudioDuration(url).then((durationMs) => ({ durationMs }))
+        : !needsDuration && !needsDimensions
+          ? Promise.resolve({ durationMs: knownDurationMs, width: knownWidth, height: knownHeight })
+          : probeVideoMetadata(url, correctLateMetadata);
 
-    probe.then(({ durationMs, width: natW, height: natH, probeFailed }) => {
+    probe.then(({ durationMs: probedDurationMs, width: probedWidth, height: probedHeight, probeFailed }) => {
+      const durationMs = knownDurationMs ?? probedDurationMs;
+      const natW = hasKnownDimensions ? knownWidth : probedWidth;
+      const natH = hasKnownDimensions ? knownHeight : probedHeight;
       const endMs = Math.min(durationMs, MAX_TIMELINE_DURATION_MS);
 
       // Extend — never shrink — the output duration BEFORE adding the clip;
@@ -601,13 +700,10 @@ export function addMediaToTimeline(
               fadeOutMs: Math.min(AUDIO_CLIP_FADE_OUT_MS, Math.floor(endMs / 2)),
             }
           : (() => {
-              // A clip with no geometry renders at the 1×1 fallback — a blank
-              // artboard. Fit the probed pixels to the canvas, centered,
-              // preserving aspect (same rule as image inserts).
               const vo = store.getState().doc.outputs[out] as VideoOutput;
               const fit =
                 natW && natH
-                  ? fitWithin(natW, natH, vo.width, vo.height)
+                  ? containVideo(natW, natH, vo.width, vo.height)
                   : { width: vo.width, height: vo.height };
               return {
                 ...clipBase,
@@ -629,11 +725,20 @@ export function addMediaToTimeline(
       const landed = (store.getState().doc.outputs[out] as VideoOutput).tracks
         .find((t) => t.id === track.id)
         ?.clips.find((c) => c.id === id);
+      landedTrackId = track.id;
+      landedClipId = id;
+      landedSnapshot = landed ? JSON.stringify(landed) : undefined;
 
       // Note: setVideoDuration and addClip each push a history entry internally,
       // so no explicit pushHistory() is needed here (it would create a redundant
       // undo step for a single logical drop).
-      resolve(landed ? { outputIndex: out, trackId: track.id, clipId: id, startMs: landed.startMs, probeFailed } : null);
+      resolve(landed ? {
+        outputIndex: out,
+        trackId: track.id,
+        clipId: id,
+        startMs: landed.startMs,
+        probeFailed: needsDuration || needsDimensions ? probeFailed : undefined,
+      } : null);
     });
   });
 }

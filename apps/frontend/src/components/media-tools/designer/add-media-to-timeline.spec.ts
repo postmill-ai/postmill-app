@@ -32,6 +32,28 @@ const stubVideoProbe = (
   });
 };
 
+const deferredVideoProbe = () => {
+  const original = document.createElement.bind(document);
+  let probe: HTMLVideoElement | undefined;
+  vi.spyOn(document, 'createElement').mockImplementation((tag: string, ...rest: any[]) => {
+    const el = original(tag, ...(rest as []));
+    if (tag === 'video') {
+      probe = el;
+      Object.defineProperty(el, 'src', { set: () => {} });
+    }
+    return el;
+  });
+  return {
+    fail: () => probe!.onerror?.(new Event('error')),
+    succeed: (meta: { duration: number; videoWidth: number; videoHeight: number }) => {
+      Object.defineProperty(probe!, 'duration', { value: meta.duration });
+      Object.defineProperty(probe!, 'videoWidth', { value: meta.videoWidth });
+      Object.defineProperty(probe!, 'videoHeight', { value: meta.videoHeight });
+      probe!.onloadedmetadata?.(new Event('loadedmetadata'));
+    },
+  };
+};
+
 const firstVideoClip = (store: ReturnType<typeof createDesignerStore>) => {
   const vo = store.getState().doc.outputs[0] as VideoOutput;
   const track = vo.tracks.find((t) => t.type === 'video');
@@ -93,14 +115,17 @@ describe('pollMediaJobArtifact — job-status polling resilience', () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
-  it('carries the content-classified file type through on completion', async () => {
-    // Reel.Farm slideshow: a video-operation job completes with the first slide
-    // JPG; the timeline lands image artifacts as image clips, not video clips.
-    const fetch = vi
-      .fn()
-      .mockResolvedValue(
-        okJob({ status: 'completed', artifactUrl: '/uploads/slide.jpg', fileId: 'file-s', fileType: 'image' })
-      );
+  it('carries the content-classified file type and safe media metadata on completion', async () => {
+    const metadata = { dimensions: { width: 720, height: 1280 }, durationMs: 5000 };
+    const fetch = vi.fn().mockResolvedValue(
+      okJob({
+        status: 'completed',
+        artifactUrl: '/uploads/slide.jpg',
+        fileId: 'file-s',
+        fileType: 'image',
+        metadata,
+      })
+    );
 
     const outcome = await pollMediaJobArtifact({
       jobId: 'job-1',
@@ -115,6 +140,7 @@ describe('pollMediaJobArtifact — job-status polling resilience', () => {
       url: '/uploads/slide.jpg',
       fileId: 'file-s',
       fileType: 'image',
+      metadata,
     });
   });
 
@@ -203,22 +229,87 @@ describe('addMediaToTimeline — clip geometry', () => {
     expect(clip!.fileId).toBe('file-gen-1');
   });
 
-  it('fits a portrait video into the canvas, centered and aspect-preserved', async () => {
-    stubVideoProbe({ duration: 7.32, videoWidth: 1080, videoHeight: 1920 });
-    const store = createDesignerStore();
+  it('upscales a portrait video to contain-fit the portrait canvas', async () => {
+    const store = createDesignerStore(1080, 1920);
 
-    const landed = await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/v.mp4' });
+    await addMediaToTimeline(store, {
+      type: 'video',
+      url: 'https://example.com/v.mp4',
+      durationMs: 5000,
+      width: 720,
+      height: 1280,
+    });
 
-    expect(landed!.probeFailed).toBe(false);
-    const { vo, clip } = firstVideoClip(store);
-    expect(clip).toBeDefined();
-    // fitWithin(1080×1920 into 1080×1080): full height, proportional width.
-    expect(clip!.height).toBe(vo.height);
-    expect(clip!.width).toBe(Math.round(vo.height * (1080 / 1920)));
-    expect(clip!.x).toBe(Math.round((vo.width - clip!.width!) / 2));
-    expect(clip!.y).toBe(0);
-    expect(clip!.naturalWidth).toBe(1080);
-    expect(clip!.naturalHeight).toBe(1920);
+    const { clip } = firstVideoClip(store);
+    expect(clip).toMatchObject({ x: 0, y: 0, width: 1080, height: 1920 });
+  });
+
+  it('letterboxes a landscape video without changing its aspect ratio', async () => {
+    stubVideoProbe({ duration: 7.32, videoWidth: 1920, videoHeight: 1080 });
+    const store = createDesignerStore(1080, 1080);
+
+    await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/v.mp4' });
+
+    const { clip } = firstVideoClip(store);
+    expect(clip).toMatchObject({ x: 0, y: 236, width: 1080, height: 608 });
+    expect(clip!.naturalWidth).toBe(1920);
+    expect(clip!.naturalHeight).toBe(1080);
+  });
+
+  it('downscales a large video to fit inside the canvas', async () => {
+    const store = createDesignerStore(1080, 1920);
+
+    await addMediaToTimeline(store, {
+      type: 'video',
+      url: 'https://example.com/v.mp4',
+      durationMs: 5000,
+      width: 2160,
+      height: 3840,
+    });
+
+    const { clip } = firstVideoClip(store);
+    expect(clip).toMatchObject({ x: 0, y: 0, width: 1080, height: 1920 });
+  });
+
+  it('uses supplied duration and dimensions without creating a probe', async () => {
+    const createElement = vi.spyOn(document, 'createElement');
+    const store = createDesignerStore(1080, 1920);
+
+    const landed = await addMediaToTimeline(store, {
+      type: 'video',
+      url: 'https://example.com/v.mp4',
+      durationMs: 7320,
+      width: 720,
+      height: 1280,
+    });
+
+    const { clip } = firstVideoClip(store);
+    expect(landed!.probeFailed).toBeUndefined();
+    expect(clip!.endMs).toBe(7320);
+    expect(clip!.naturalWidth).toBe(720);
+    expect(clip!.naturalHeight).toBe(1280);
+    expect(createElement.mock.calls.filter(([tag]) => tag === 'video')).toHaveLength(0);
+  });
+
+  it('keeps a supplied duration and probes dimensions as a complete pair', async () => {
+    stubVideoProbe({ duration: 99, videoWidth: 1920, videoHeight: 1080 });
+    const store = createDesignerStore(1080, 1080);
+
+    await addMediaToTimeline(store, {
+      type: 'video',
+      url: 'https://example.com/v.mp4',
+      durationMs: 4000,
+      width: 720,
+    });
+
+    const { clip } = firstVideoClip(store);
+    expect(clip).toMatchObject({
+      endMs: 4000,
+      width: 1080,
+      height: 608,
+      naturalWidth: 1920,
+      naturalHeight: 1080,
+    });
   });
 
   it('falls back to the full canvas when metadata cannot be probed', async () => {
@@ -227,8 +318,6 @@ describe('addMediaToTimeline — clip geometry', () => {
 
     const landed = await addMediaToTimeline(store, { type: 'video', url: 'https://example.com/broken.mp4' });
 
-    // The clip lands with the 10s fallback AND flags the probe failure so the
-    // caller can warn instead of the drop failing silently.
     expect(landed!.probeFailed).toBe(true);
     const { vo, clip } = firstVideoClip(store);
     expect(clip).toBeDefined();
@@ -237,6 +326,50 @@ describe('addMediaToTimeline — clip geometry', () => {
     expect(clip!.height).toBe(vo.height);
     expect(clip!.x).toBe(0);
     expect(clip!.y).toBe(0);
+  });
+
+  it('corrects fallback duration and geometry after a late successful probe', async () => {
+    const probe = deferredVideoProbe();
+    const store = createDesignerStore(1080, 1080);
+    const landing = addMediaToTimeline(store, { type: 'video', url: 'https://example.com/slow.mp4' });
+    probe.fail();
+    const landed = await landing;
+    expect(landed!.probeFailed).toBe(true);
+
+    probe.succeed({ duration: 6.25, videoWidth: 720, videoHeight: 1280 });
+
+    const { clip } = firstVideoClip(store);
+    expect(clip).toMatchObject({
+      endMs: 6250,
+      x: 236,
+      y: 0,
+      width: 608,
+      height: 1080,
+      naturalWidth: 720,
+      naturalHeight: 1280,
+    });
+  });
+
+  it('does not clobber user edits when a late probe succeeds', async () => {
+    const probe = deferredVideoProbe();
+    const store = createDesignerStore(1080, 1080);
+    const landing = addMediaToTimeline(store, { type: 'video', url: 'https://example.com/slow.mp4' });
+    probe.fail();
+    const landed = await landing;
+    store.getState().updateClip(0, landed!.trackId, landed!.clipId, {
+      endMs: 1234,
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 180,
+    });
+
+    probe.succeed({ duration: 6.25, videoWidth: 720, videoHeight: 1280 });
+
+    const { clip } = firstVideoClip(store);
+    expect(clip).toMatchObject({ endMs: 1234, x: 10, y: 20, width: 320, height: 180 });
+    expect(clip!.naturalWidth).toBeUndefined();
+    expect(clip!.naturalHeight).toBeUndefined();
   });
 });
 

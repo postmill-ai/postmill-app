@@ -30,6 +30,20 @@ const realRootFor = (root: string) => {
   }
   return cachedRealRoot.real;
 };
+type ByteRange =
+  | { kind: 'full' }
+  | { kind: 'partial'; start: number; end: number }
+  | { kind: 'unsatisfiable' };
+
+const parseByteRange = (range: string | null, size: number): ByteRange => {
+  const match = range?.match(/^bytes=(\d+)-(\d*)$/);
+  if (!match) return { kind: 'full' };
+  const start = Number(match[1]);
+  const end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  if (start >= size || end < start) return { kind: 'unsatisfiable' };
+  return { kind: 'partial', start, end };
+};
+
 export const GET = async (
   request: NextRequest,
   context: {
@@ -75,26 +89,48 @@ export const GET = async (
   } catch {
     return new NextResponse('Not found', { status: 404 });
   }
-  const response = createReadStream(filePath);
+  const contentType = mime.getType(filePath) || 'application/octet-stream';
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    'Last-Modified': fileStats.mtime.toUTCString(),
+    'Cache-Control': 'public, max-age=31536000, immutable',
+    'Accept-Ranges': 'bytes',
+    // Public no-auth bucket: allow cross-origin anonymous reads so the
+    // headless video-render frame page (api origin) can draw these files
+    // to canvas via crossOrigin='anonymous'.
+    'Access-Control-Allow-Origin': '*',
+  };
+  const byteRange = parseByteRange(request.headers.get('range'), fileStats.size);
+  if (byteRange.kind === 'unsatisfiable') {
+    return new NextResponse(null, {
+      status: 416,
+      headers: {
+        ...headers,
+        'Content-Range': `bytes */${fileStats.size}`,
+        'Content-Length': '0',
+      },
+    });
+  }
+
+  const start = byteRange.kind === 'partial' ? byteRange.start : 0;
+  const end = byteRange.kind === 'partial' ? byteRange.end : fileStats.size - 1;
+  const response = createReadStream(
+    filePath,
+    byteRange.kind === 'partial' ? { start, end } : {},
+  );
   // Swallow late stream errors (e.g. the file is removed between stat and
   // read) instead of an unhandled process-level throw.
   response.on('error', () => {});
-  const contentType = mime.getType(filePath) || 'application/octet-stream';
   const iterator = nodeStreamToIterator(response);
   const webStream = iteratorToStream(iterator);
   return new Response(webStream, {
+    status: byteRange.kind === 'partial' ? 206 : 200,
     headers: {
-      'Content-Type': contentType,
-      // Set the appropriate content-type header
-      'Content-Length': fileStats.size.toString(),
-      // Set the content-length header
-      'Last-Modified': fileStats.mtime.toUTCString(),
-      // Set the last-modified header
-      'Cache-Control': 'public, max-age=31536000, immutable', // Example cache-control header
-      // Public no-auth bucket: allow cross-origin anonymous reads so the
-      // headless video-render frame page (api origin) can draw these files
-      // to canvas via crossOrigin='anonymous'.
-      'Access-Control-Allow-Origin': '*',
+      ...headers,
+      'Content-Length': (end - start + 1).toString(),
+      ...(byteRange.kind === 'partial'
+        ? { 'Content-Range': `bytes ${start}-${end}/${fileStats.size}` }
+        : {}),
     },
   });
 };

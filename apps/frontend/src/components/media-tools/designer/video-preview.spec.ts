@@ -1,8 +1,17 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
 import { composeClipsAtPlayhead, fadeGainAt, findTransitionWindows, sourceTimeForPlayhead, VideoPreviewEngine } from './video-preview';
 import { sourceTimeForPlayhead as sharedSourceTimeForPlayhead } from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
 import { createDesignerStore } from './designer.store';
 import type { VideoClip, VideoOutput, VideoTrack } from './designer.store';
+
+beforeAll(() => {
+  for (const method of ['pause', 'load']) {
+    Object.defineProperty(HTMLMediaElement.prototype, method, {
+      value: vi.fn(),
+      configurable: true,
+    });
+  }
+});
 
 const clip = (over: Partial<VideoClip> = {}): VideoClip =>
   ({ id: 'c1', startMs: 0, endMs: 4000, src: 'a.mp4', ...over }) as VideoClip;
