@@ -163,17 +163,26 @@ export class ReelFarmAdapter implements MediaProviderAdapter {
     if (video.video_url) {
       return { status: 'completed', artifactUrl: video.video_url, metadata: { provider: this.identifier } };
     }
-    // Slideshow exports render slide IMAGES, not an mp4 (confirmed live: `video_url` stays null
-    // and the record carries `slideshow_images` — TikTok slideshows are photo carousels). Land
-    // the first slide as the job artifact and the rest as sibling jobs (one File per slide).
-    const slides = (video.slideshow_images || [])
-      .map((s) => s.image_url)
-      .filter((u): u is string => typeof u === 'string' && u.length > 0);
-    if ((video.status === 'completed' || video.finished === true) && slides.length > 0) {
+    if (video.status === 'completed' || video.finished === true) {
+      const images = video.slideshow_images;
+      if (
+        !Array.isArray(images) ||
+        images.length === 0 ||
+        images.some((slide) => typeof slide?.image_url !== 'string' || !slide.image_url)
+      ) {
+        return {
+          status: 'failed',
+          error: mediaUpstreamFailure(
+            this,
+            undefined,
+            'Completed slideshow returned no usable ordered slide images',
+            'video',
+          ),
+        };
+      }
       return {
         status: 'completed',
-        artifactUrl: slides[0],
-        extraArtifactUrls: slides.slice(1),
+        slideshow: { slides: images.map((slide) => slide.image_url!) },
         metadata: { provider: this.identifier },
       };
     }

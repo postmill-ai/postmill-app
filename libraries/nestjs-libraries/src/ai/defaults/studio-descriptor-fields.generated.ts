@@ -1637,6 +1637,18 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
             "type": "prompt"
           },
           {
+            "name": "aspect_ratio",
+            "type": "select"
+          },
+          {
+            "name": "keep_original_aspect_ratio",
+            "type": "toggle"
+          },
+          {
+            "name": "duration",
+            "type": "number"
+          },
+          {
             "name": "image_1",
             "type": "media"
           },

@@ -12,11 +12,13 @@ See [Settings](../settings) for provider setup.
 
 | Tab | Operation | Key fields | Output |
 |---|---|---|---|
-| **Prompt → Slideshow** | Video | Prompt, optional background images 1–4 from `/files` | TikTok-style slideshow video |
+| **Prompt → Slideshow** | Video | Prompt, aspect ratio, image fit, seconds per slide, optional background images 1–4 from `/files` | One playable MP4 slideshow |
 
 ## Generation flow
 
-The studio follows the standard Studio Kit flow: fill the form, click **Generate**, and the job appears in the **Render Queue**. Slideshow exports render as **slide images** (TikTok slideshows are photo carousels, not mp4s) — when the job completes, each slide lands in `/files` as its own image and can be opened in the [Designer](./designer) or posted directly. See [Media Studios overview](./index.md) for details.
+The studio follows the standard Studio Kit flow: fill the form, click **Generate**, and the job appears in the **Render Queue**. Reel.Farm exports an ordered set of slide images; Postmill downloads them securely and encodes them into **one MP4 on the original job**. The video uses H.264 with silent AAC audio, starts playing quickly on the web, and lands in `/files` ready to open in the [Designer](./designer) or post.
+
+Choose **4:5**, **9:16**, **1:1**, or **16:9** for the MP4 canvas. By default images are cropped to fill the frame; enable **Fit whole images (letterbox)** to preserve their native aspect ratios instead. **Seconds per slide** controls the slideshow timing (1–30 seconds, default 4). See [Media Studios overview](./index.md) for details.
 
 ## Caveats
 

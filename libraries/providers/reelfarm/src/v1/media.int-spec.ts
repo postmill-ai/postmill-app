@@ -45,7 +45,13 @@ describe('reelfarm media adapter (slideshow generate → status → video)', () 
 
     const sub = await adapter.generateVideo('top 5 travel hacks', {
       apiKey: 'rf-key',
-      input: { image_1: 'https://files/a.png', image_2: 'https://files/b.png' },
+      input: {
+        image_1: 'https://files/a.png',
+        image_2: 'https://files/b.png',
+        aspect_ratio: '9:16',
+        keep_original_aspect_ratio: true,
+        duration: 6,
+      },
     });
 
     expect(sub.jobId).toBe('4567');
@@ -53,9 +59,10 @@ describe('reelfarm media adapter (slideshow generate → status → video)', () 
     expect(r.url).toBe('https://reel.farm/api/v1/slideshows/generate');
     expect(r.method).toBe('POST');
     expect(r.headers.Authorization).toBe('Bearer rf-key');
-    const body = JSON.parse(r.body);
-    expect(body.additional_context).toBe('top 5 travel hacks');
-    expect(body.images).toEqual(['https://files/a.png', 'https://files/b.png']);
+    expect(JSON.parse(r.body)).toEqual({
+      additional_context: 'top 5 travel hacks',
+      images: ['https://files/a.png', 'https://files/b.png'],
+    });
   });
 
   it('pollJob stays pending until a video_id exists, then fetches /videos/{id} for video_url', async () => {
@@ -103,7 +110,7 @@ describe('reelfarm media adapter (slideshow generate → status → video)', () 
   });
 
   // Confirmed live 2026-10-22: slideshow exports return video_url: null + slideshow_images.
-  it('pollJob completes a slideshow export from slideshow_images (first = artifact, rest = extras)', async () => {
+  it('pollJob returns a typed ordered slideshow without pretending a JPEG is a video artifact', async () => {
     const { ctx } = makeCtx((url) => {
       if (url.includes('/videos/')) {
         return res({
@@ -122,12 +129,38 @@ describe('reelfarm media adapter (slideshow generate → status → video)', () 
     const adapter: any = reelfarmMediaModule.create(ctx as any);
 
     const done = await adapter.pollJob('4567', { apiKey: 'rf-key' });
-    expect(done.status).toBe('completed');
-    expect(done.artifactUrl).toBe('https://slides.reel.farm/x/image_0.jpg');
-    expect(done.extraArtifactUrls).toEqual([
-      'https://slides.reel.farm/x/image_1.jpg',
-      'https://slides.reel.farm/x/image_2.jpg',
-    ]);
+    expect(done).toEqual({
+      status: 'completed',
+      slideshow: {
+        slides: [
+          'https://slides.reel.farm/x/image_0.jpg',
+          'https://slides.reel.farm/x/image_1.jpg',
+          'https://slides.reel.farm/x/image_2.jpg',
+        ],
+      },
+      metadata: { provider: 'reelfarm' },
+    });
+    expect(done.artifactUrl).toBeUndefined();
+    expect(done.extraArtifactUrls).toBeUndefined();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', []],
+    ['malformed', [{ id: 0 }]],
+  ])('pollJob fails a completed export with %s slides instead of polling forever', async (_name, slideshowImages) => {
+    const { ctx } = makeCtx((url) => {
+      if (url.includes('/videos/')) {
+        return res({ video_id: 'vid-1', status: 'completed', slideshow_images: slideshowImages });
+      }
+      return res({ status: 'completed', video_id: 'vid-1' });
+    });
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+
+    const done = await adapter.pollJob('4567', { apiKey: 'rf-key' });
+    expect(done.status).toBe('failed');
+    expect(done.error).toBe('Reel.Farm returned an error: Completed slideshow returned no usable ordered slide images');
+    expect(done.artifactUrl).toBeUndefined();
   });
 
   it('pollJob stays pending when the export has neither video_url nor finished slides', async () => {
