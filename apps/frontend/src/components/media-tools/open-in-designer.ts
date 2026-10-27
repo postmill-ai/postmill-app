@@ -1,3 +1,5 @@
+import type { GeneratedMediaMetadata } from './studio-kit/types';
+
 interface OpenInDesignerArgs {
   operation: string;
   artifactUrl?: string | null;
@@ -7,6 +9,7 @@ interface OpenInDesignerArgs {
   // artifact (e.g. a Reel.Farm slideshow completed without a video export), and
   // an image must land on the static canvas, not the video timeline.
   fileType?: string | null;
+  metadata?: GeneratedMediaMetadata | null;
   // Optional metadata forwarded for the static-canvas (image) path so attribution,
   // source, and natural dimensions are preserved.
   source?: string;
@@ -21,6 +24,8 @@ interface OpenInDesignerArgs {
 }
 
 const DESIGNER_HANDOFF_KEY = 'designer:timeline-handoff';
+const positiveNumber = (value: number | undefined) =>
+  value !== undefined && Number.isFinite(value) && value > 0 ? value : undefined;
 
 /**
  * Open a generated/downloaded media artifact in the Designer.
@@ -42,6 +47,7 @@ export function openInDesigner(
     artifactUrl,
     fileId,
     fileType,
+    metadata,
     source,
     author,
     authorUrl,
@@ -66,6 +72,9 @@ export function openInDesigner(
       ? fileType
       : operation;
 
+  const safeWidth = positiveNumber(metadata?.dimensions?.width ?? width);
+  const safeHeight = positiveNumber(metadata?.dimensions?.height ?? height);
+  const safeDurationMs = positiveNumber(metadata?.durationMs);
   if (kind === 'image') {
     const params = new URLSearchParams({ url: artifactUrl, type: 'photo' });
     if (source) params.set('source', source);
@@ -73,8 +82,8 @@ export function openInDesigner(
     if (authorUrl) params.set('authorUrl', authorUrl);
     if (downloadLocation) params.set('downloadLocation', downloadLocation);
     if (thumbUrl) params.set('thumbUrl', thumbUrl);
-    if (width) params.set('w', String(width));
-    if (height) params.set('h', String(height));
+    if (safeWidth) params.set('w', String(safeWidth));
+    if (safeHeight) params.set('h', String(safeHeight));
     if (naturalWidth) params.set('nw', String(naturalWidth));
     if (naturalHeight) params.set('nh', String(naturalHeight));
     go(`/media/designer?${params.toString()}`);
@@ -89,6 +98,9 @@ export function openInDesigner(
         type,
         url: artifactUrl,
         fileId: fileId ?? undefined,
+        width: safeWidth,
+        height: safeHeight,
+        durationMs: safeDurationMs,
       })
     );
   } catch {
@@ -96,6 +108,9 @@ export function openInDesigner(
     // carry the (small) payload in the query string instead of dead-clicking.
     const params = new URLSearchParams({ timeline: '1', mediaType: type, mediaUrl: artifactUrl });
     if (fileId) params.set('mediaFileId', fileId);
+    if (safeWidth) params.set('mediaWidth', String(safeWidth));
+    if (safeHeight) params.set('mediaHeight', String(safeHeight));
+    if (safeDurationMs) params.set('mediaDurationMs', String(safeDurationMs));
     go(`/media/designer?${params.toString()}`);
     return;
   }

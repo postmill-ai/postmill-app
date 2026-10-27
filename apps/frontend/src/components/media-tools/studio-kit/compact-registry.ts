@@ -1,4 +1,4 @@
-import type { StudioDescriptor, StudioLanding, StudioTab } from './types';
+import type { GeneratedMediaMetadata, StudioDescriptor, StudioLanding, StudioTab } from './types';
 import { studioNs } from './i18n-keys';
 import { azureDescriptor } from '../azure/descriptor';
 import { bedrockDescriptor } from '../bedrock/descriptor';
@@ -84,6 +84,8 @@ export interface CompactStudioResult {
   operation: CompactOperation;
   artifactUrl: string;
   fileId: string;
+  fileType?: string | null;
+  metadata?: GeneratedMediaMetadata | null;
 }
 
 export interface CompactTab {

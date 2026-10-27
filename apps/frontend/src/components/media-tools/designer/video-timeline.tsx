@@ -812,7 +812,12 @@ interface AiVideoDialogProps {
   fetch: ReturnType<typeof useFetch>;
   toaster: ReturnType<typeof useToaster>;
   selectedImageSrc?: string;
-  onResult: (type: 'video' | 'audio', idOrUrl: string | false, fileId?: string) => Promise<void>;
+  onResult: (
+    type: 'video' | 'audio',
+    idOrUrl: string | false,
+    fileId?: string,
+    details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
+  ) => Promise<void>;
   // Current video output's canvas — seeds the studio schema's aspect_ratio
   // field (same canvas-derived seeding the slideshow dialog does).
   outputWidth?: number;
@@ -864,7 +869,7 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
       // Already-complete artifact — land it like a finished landOrPoll (the
       // artifactUrl takes the no-poll path there).
       modals.closeAll();
-      await onResult('video', result.artifactUrl, result.fileId || undefined);
+      await onResult('video', result.artifactUrl, result.fileId || undefined, result);
     },
     [modals, onResult]
   );
@@ -929,7 +934,12 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
 interface MusicDialogProps {
   fetch: ReturnType<typeof useFetch>;
   toaster: ReturnType<typeof useToaster>;
-  onResult: (type: 'video' | 'audio', idOrUrl: string | false, fileId?: string) => Promise<void>;
+  onResult: (
+    type: 'video' | 'audio',
+    idOrUrl: string | false,
+    fileId?: string,
+    details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
+  ) => Promise<void>;
 }
 
 export const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) => {
@@ -969,7 +979,7 @@ export const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) 
       // Already-complete artifact — land it like a finished landOrPoll (the
       // artifactUrl takes the no-poll path there).
       modals.closeAll();
-      await onResult('audio', result.artifactUrl, result.fileId || undefined);
+      await onResult('audio', result.artifactUrl, result.fileId || undefined, result);
     },
     [modals, onResult]
   );
@@ -1015,7 +1025,12 @@ interface AvatarDialogProps {
   fetch: ReturnType<typeof useFetch>;
   toaster: ReturnType<typeof useToaster>;
   selectedImageSrc?: string;
-  onResult: (type: 'video' | 'audio', idOrUrl: string | false, fileId?: string) => Promise<void>;
+  onResult: (
+    type: 'video' | 'audio',
+    idOrUrl: string | false,
+    fileId?: string,
+    details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
+  ) => Promise<void>;
 }
 
 export const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult }) => {
@@ -1061,7 +1076,7 @@ export const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedIm
       // Already-complete artifact — land it like a finished landOrPoll (the
       // artifactUrl takes the no-poll path there).
       modals.closeAll();
-      await onResult('video', result.artifactUrl, result.fileId || undefined);
+      await onResult('video', result.artifactUrl, result.fileId || undefined, result);
     },
     [modals, onResult]
   );
@@ -1130,7 +1145,12 @@ export const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedIm
 interface SlideshowDialogProps {
   fetch: ReturnType<typeof useFetch>;
   toaster: ReturnType<typeof useToaster>;
-  onResult: (type: 'video' | 'audio', idOrUrl: string | false, fileId?: string) => Promise<void>;
+  onResult: (
+    type: 'video' | 'audio',
+    idOrUrl: string | false,
+    fileId?: string,
+    details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
+  ) => Promise<void>;
   // Current video output's canvas — drives the generated frames' aspect and
   // the server-side per-slide normalization. Absent = legacy server behavior.
   outputWidth?: number;
@@ -3079,19 +3099,30 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const landOrPoll = useCallback(async (
     type: 'video' | 'audio',
     idOrUrl: string | false,
-    fileId?: string
+    fileId?: string,
+    details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
   ) => {
     // Generated clips are inserted at startMs 0 while the canvas previews the
     // playhead — after a land, seek to the clip and select it so the result is
     // visibly on the canvas instead of looking like nothing happened.
-    const landAndReveal = async (url: string, landedFileId?: string, fileType?: string | null) => {
+    const landAndReveal = async (
+      url: string,
+      landedFileId?: string,
+      fileType?: string | null,
+      metadata?: CompactStudioResult['metadata']
+    ) => {
       // A video-operation job can complete with an image artifact (e.g. a
       // Reel.Farm slideshow that finished without a video export stores its
       // first slide JPG) — land it as an image clip, not a video clip that
       // can't decode. addImageClipToTimeline places at the playhead and
       // selects the clip itself.
       if (type === 'video' && fileType === 'image') {
-        const clipId = addImageClipToTimeline(store, { url, fileId: landedFileId });
+        const clipId = addImageClipToTimeline(store, {
+          url,
+          fileId: landedFileId,
+          width: metadata?.dimensions?.width,
+          height: metadata?.dimensions?.height,
+        });
         if (!clipId) {
           toaster.show(
             translate('generated_clip_couldnt_be_placed', "The generated clip couldn't be placed on the timeline — find it in your media library."),
@@ -3100,10 +3131,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         }
         return;
       }
-      const landed = await addMediaToTimeline(store, { type, url, fileId: landedFileId });
+      const landed = await addMediaToTimeline(store, {
+        type,
+        url,
+        fileId: landedFileId,
+        width: metadata?.dimensions?.width,
+        height: metadata?.dimensions?.height,
+        durationMs: metadata?.durationMs,
+      });
       if (landed?.probeFailed) {
         toaster.show(
-          translate('couldnt_read_video_metadata', "Couldn't read the video's metadata — placed with a default duration"),
+          translate('couldnt_read_video_metadata', "Couldn't read the video's metadata — placed with fallback timing or sizing"),
           'warning'
         );
       }
@@ -3129,7 +3167,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       return;
     }
     if (isArtifactPath(idOrUrl)) {
-      await landAndReveal(idOrUrl, fileId);
+      await landAndReveal(idOrUrl, fileId, details?.fileType, details?.metadata);
       return;
     }
     let outcome: JobPollOutcome;
@@ -3160,7 +3198,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       );
       return;
     }
-    await landAndReveal(outcome.url, outcome.fileId ?? undefined, outcome.fileType);
+    await landAndReveal(outcome.url, outcome.fileId ?? undefined, outcome.fileType, outcome.metadata);
   }, [fetch, store, toaster, translate]);
 
   // In-flight generations used to be lost on a designer remount: the server

@@ -54,6 +54,7 @@ import {
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { UseFilters } from '@nestjs/common';
 import { MediaCapabilityFilter } from '@postmill-ai/backend/api/routes/media-capability.filter';
+import { presentMediaMetadata } from '@postmill-ai/nestjs-libraries/media/video-artifact';
 
 @ApiTags('Media')
 @Controller('/media')
@@ -109,21 +110,19 @@ export class MediaController {
       throw new HttpException('Job not found', HttpStatus.NOT_FOUND);
     }
     // Resolve the landed File row so callers (designer timeline) can pin the
-    // clip against retention purge — mirrors the studio's `_presentJob`, which
-    // resolves the same path→File mapping via getFilesByPaths. The row's
-    // content-classified `type` lets the timeline land an image artifact (a
-    // video-operation job can store one, e.g. a Reel.Farm slideshow's first
-    // slide) as an image clip instead of a dead video clip.
+    // clip against retention purge. Its content-classified type and canonical
+    // playback metadata let the timeline land the artifact without a second probe.
     const completed = job.status === 'completed' && job.artifactUrl;
-    const files = completed
-      ? await this._fileService.getFilesByPaths(org.id, [job.artifactUrl!]).catch(() => [])
-      : [];
+    const file = completed
+      ? await this._fileService.getFileByPath(org.id, job.artifactUrl!).catch(() => null)
+      : null;
     return {
       id: job.id,
       status: job.status,
       artifactUrl: job.artifactUrl,
-      fileId: (files[0]?.id as string | undefined) ?? null,
-      fileType: (files[0]?.type as string | undefined) ?? null,
+      fileId: file?.id ?? null,
+      fileType: file?.type ?? null,
+      metadata: presentMediaMetadata(file?.metadata),
       error: job.error,
     };
   }

@@ -84,6 +84,11 @@ export interface StudioDescriptor {
   landing?: StudioLanding;
 }
 
+export interface GeneratedMediaMetadata {
+  dimensions?: { width: number; height: number };
+  durationMs?: number;
+}
+
 export interface StudioJob {
   id: string;
   operation: string;
@@ -98,6 +103,7 @@ export interface StudioJob {
    * File row resolves; fall back to `operation` in that case.
    */
   fileType: string | null;
+  metadata?: GeneratedMediaMetadata | null;
   error: string | null;
   createdAt: string;
 }

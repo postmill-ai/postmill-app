@@ -14,6 +14,12 @@ vi.mock('@postmill-ai/nestjs-libraries/media/audio-outro-fade', () => ({
     mockApplyAudioOutroFade(buffer, mime, durationSeconds),
 }));
 
+const mockPrepareVideoArtifact = vi.fn((buffer: Buffer) => Promise.resolve({ buffer }));
+vi.mock('@postmill-ai/nestjs-libraries/media/video-artifact', () => ({
+  prepareVideoArtifact: (buffer: Buffer, mime: string) =>
+    mockPrepareVideoArtifact(buffer, mime),
+}));
+
 import { MediaJobLifecycleService } from './media-job-lifecycle.service';
 import { AIMediaJob } from '@prisma/client';
 
@@ -434,6 +440,7 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
 
       expect(await service.processJob('job-1')).toBe('completed');
 
+      expect(mockPrepareVideoArtifact).toHaveBeenCalledWith(tinyJpeg, 'image/jpeg');
       expect(storageAdapter.writeBuffer).toHaveBeenCalledWith(tinyJpeg, 'image/jpeg');
       expect(orgSettings.getStandardFolderId).toHaveBeenCalledWith('org-1', 'root-1', 'images');
       expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledWith('org-1', expect.objectContaining({
@@ -482,6 +489,49 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
         metadata: expect.objectContaining({ mime: 'video/mp4' }),
       }));
       expect(videoThumbnailService.enqueueGenerate).toHaveBeenCalledWith('org-1', 'media-1');
+    });
+
+    it('stores remuxed video bytes and canonical actual metadata without dropping provider provenance', async () => {
+      const { service, jobs, pollJob, storageAdapter, mediaRepository } = makeService();
+      const remuxed = Buffer.from('remuxed-video');
+      jobs.set('job-1', makeJob());
+      pollJob.mockResolvedValue({
+        status: 'completed',
+        artifactUrl: `data:application/octet-stream;base64,${tinyMp4.toString('base64')}`,
+        metadata: {
+          provider: 'provider-reported-name',
+          model: 'dream-machine',
+          durationSeconds: 99,
+          mime: 'application/octet-stream',
+        },
+      });
+      mockPrepareVideoArtifact.mockResolvedValueOnce({
+        buffer: remuxed,
+        metadata: {
+          dimensions: { width: 1280, height: 720 },
+          durationMs: 5234,
+        },
+      });
+
+      expect(await service.processJob('job-1')).toBe('completed');
+
+      expect(mockPrepareVideoArtifact).toHaveBeenCalledWith(tinyMp4, 'video/mp4');
+      expect(storageAdapter.writeBuffer).toHaveBeenCalledWith(remuxed, 'video/mp4');
+      expect(mediaRepository.saveGeneratedMedia).toHaveBeenCalledWith(
+        'org-1',
+        expect.objectContaining({
+          fileSize: remuxed.length,
+          metadata: expect.objectContaining({
+            provider: 'provider-reported-name',
+            model: 'dream-machine',
+            durationSeconds: 99,
+            dimensions: { width: 1280, height: 720 },
+            durationMs: 5234,
+            mime: 'video/mp4',
+            source: 'ai-media',
+          }),
+        }),
+      );
     });
 
     it('uses the bound storage provider adapter when configured', async () => {

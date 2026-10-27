@@ -152,6 +152,8 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
         operation: (job.operation as CompactOperation) || operation,
         artifactUrl: job.artifactUrl,
         fileId: job.fileId ?? '',
+        fileType: job.fileType,
+        metadata: job.metadata,
       });
     } else if (job.status === 'failed') {
       handledJobRef.current = job.id;

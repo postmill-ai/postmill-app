@@ -12,6 +12,13 @@ import { MediaGenerateOptions, MediaModelOption, MediaOperation } from '@postmil
 import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { MEDIA_CATEGORY_OPERATION } from '@postmill-ai/nestjs-libraries/ai/defaults/default-categories';
 import { mapWithConcurrency, singleFlight } from '@postmill-ai/nestjs-libraries/utils/concurrency';
+import { presentMediaMetadata } from '@postmill-ai/nestjs-libraries/media/video-artifact';
+
+interface StudioJobFile {
+  id: string;
+  type: string;
+  metadata?: unknown;
+}
 
 // §3.3: cap the drive-on-read completion fan-out. Each processJob may download up to
 // MAX_ARTIFACT_BYTES (512 MB) on completion; an unbounded Promise.all over ~30 pending
@@ -249,7 +256,7 @@ export class MediaStudioService {
     );
     const jobs = await this._aiSettings.getMediaJobsByProvider(orgId, provider, limit);
     // M-03: batch-resolve File rows for all completed jobs in a single findMany,
-    // then map back to jobs, eliminating the N+1 query in _presentJob.
+    // then map back to jobs.
     const fileMap = await this._resolveFileMap(orgId, jobs);
     return jobs.map((j) => this._presentJob(j, fileMap));
   }
@@ -257,18 +264,18 @@ export class MediaStudioService {
   private async _resolveFileMap(
     orgId: string,
     jobs: AIMediaJob[],
-  ): Promise<Map<string, { id: string; type: string }>> {
+  ): Promise<Map<string, StudioJobFile>> {
     const completedPaths = jobs
       .filter((j) => j.status === 'completed' && j.artifactUrl)
       .map((j) => j.artifactUrl!);
-    if (completedPaths.length === 0) return new Map<string, { id: string; type: string }>();
+    if (completedPaths.length === 0) return new Map<string, StudioJobFile>();
     const files = (await this._fileService
       .getFilesByPaths(orgId, completedPaths)
-      .catch(() => [])) as Array<{ path: string; id: string; type: string }>;
+      .catch(() => [])) as Array<{ path: string } & StudioJobFile>;
     return new Map(files.map((f) => [f.path, f]));
   }
 
-  private _presentJob(job: AIMediaJob, fileMap: Map<string, { id: string; type: string }>) {
+  private _presentJob(job: AIMediaJob, fileMap: Map<string, StudioJobFile>) {
     // The pending `pending://` ref is internal and must never reach the client; only a
     // completed job has a real /files URL. Resolve the File row too: its id backs the
     // composer handoff ("Post"), and its content-classified `type` lets the queue render
@@ -283,6 +290,7 @@ export class MediaStudioService {
       artifactUrl: completed ? job.artifactUrl : null,
       fileId: file?.id ?? null,
       fileType: file?.type ?? null,
+      metadata: presentMediaMetadata(file?.metadata),
       error: job.error || null,
       createdAt: job.createdAt,
     };

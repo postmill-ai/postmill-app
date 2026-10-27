@@ -14,6 +14,10 @@ import {
   applyTransitionAdjustment,
   transitionAdjustment,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/transitions';
+import {
+  acquireVideoElement,
+  releaseVideoElements,
+} from './video-element-registry';
 
 interface PlayOptions {
   onTick: (ms: number) => void;
@@ -327,7 +331,8 @@ export class VideoPreviewEngine {
               applySpeed(el, speedAt(clip.speedCurve, Math.max(0, ms - clip.startMs)));
             }
             const seekTime = sourceTime / 1000;
-            if (Math.abs(el.currentTime - seekTime) > 0.1) {
+            const driftTolerance = el.paused ? 0.05 : 0.35;
+            if (Math.abs(el.currentTime - seekTime) > driftTolerance) {
               el.currentTime = seekTime;
             }
             // Keyframed (or base) volume per tick, same composition as the
@@ -435,45 +440,22 @@ export class VideoPreviewEngine {
 
   private getOrCreateVideo(clip: VideoClip): HTMLVideoElement | null {
     if (!clip.src) return null;
-    if (this.videoElements.has(clip.id)) {
-      const el = this.videoElements.get(clip.id)!;
-      // An in-place regenerate (e.g. voiceover/segment re-render) keeps the
-      // clip id and swaps the src — the cached element must follow, or the
-      // preview keeps playing the old media forever. A previously-failed clip
-      // also leaves the demoted set: the new src gets a fresh chance.
-      if (el.getAttribute('src') !== clip.src) {
-        el.src = clip.src;
-        el.load();
-        this.failedMedia.delete(clip.id);
-      }
-      const rate = this.initialRateFor(clip);
-      if (rate !== null) {
-        applySpeed(el, rate);
-      }
-      return el;
+    const previous = this.videoElements.get(clip.id);
+    if (previous && previous.getAttribute('src') !== clip.src) {
+      this.failedMedia.delete(clip.id);
     }
-
-    const el = document.createElement('video');
-    el.src = clip.src;
-    el.addEventListener('error', () => this.markMediaFailed(clip, el));
-    // Recovery: a clip demoted after a transient load failure (CORS blip,
-    // raced range request) rejoins the per-tick path once the element becomes
-    // playable, instead of staying silent for the rest of the session.
-    el.addEventListener('canplay', () => this.failedMedia.delete(clip.id));
-    // Only mute when the volume is explicitly zeroed; an unset volume defaults to
-    // 1 (audible), so the preview no longer silences default video audio. A
-    // keyframed volume overrides this on the next tick (see seekMediaElements).
+    const el = acquireVideoElement(this, clip, {
+      onError: (currentClip) => {
+        const failed = this.videoElements.get(currentClip.id);
+        if (failed) this.markMediaFailed(currentClip, failed);
+      },
+      onCanPlay: (currentClip) => this.failedMedia.delete(currentClip.id),
+    });
+    if (!el) return null;
     el.muted = volumeAtClipTime(clip, 0) <= 0;
     el.volume = clampVolume(volumeAtClipTime(clip, 0));
     const rate = this.initialRateFor(clip);
-    if (rate !== null) {
-      applySpeed(el, rate);
-    }
-    el.style.position = 'fixed';
-    el.style.left = '-10000px';
-    el.style.top = '0';
-    el.style.pointerEvents = 'none';
-    document.body.appendChild(el);
+    if (rate !== null) applySpeed(el, rate);
     this.videoElements.set(clip.id, el);
     return el;
   }
@@ -523,10 +505,7 @@ export class VideoPreviewEngine {
 
   destroy() {
     this.pause();
-    this.videoElements.forEach((el) => {
-      el.pause();
-      el.remove();
-    });
+    releaseVideoElements(this);
     this.audioElements.forEach((el) => {
       el.pause();
       el.remove();

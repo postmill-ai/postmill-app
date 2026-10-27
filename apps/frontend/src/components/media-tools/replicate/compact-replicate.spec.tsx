@@ -159,11 +159,23 @@ describe('CompactReplicate', () => {
         operation: 'image',
         artifactUrl: '/uploads/out.png',
         fileId: 'file-1',
+        fileType: 'image',
       })
     );
   });
 
-  it('polls async jobs to completion and hands back the artifact', async () => {
+  it('polls async jobs and hands back file type and media metadata', async () => {
+    jobPayload = {
+      status: 'completed',
+      result: {
+        kind: 'video',
+        urls: ['/uploads/vid.mp4'],
+        fileId: 'file-v',
+        fileType: 'video',
+        metadata: { dimensions: { width: 720, height: 1280 }, durationMs: 7320 },
+      },
+      error: null,
+    };
     const onGenerated = vi.fn();
     wrap(<CompactReplicate operation="video" prompt="a rocket" onGenerated={onGenerated} />);
     await pickModel('text-to-video');
@@ -174,12 +186,13 @@ describe('CompactReplicate', () => {
     const [, init] = callsTo('/media/replicate/run/async')[0];
     expect(JSON.parse((init as RequestInit).body as string).operation).toBe('video');
 
-    // Async results already land in Files — no save-url round-trip.
     await waitFor(() =>
       expect(onGenerated).toHaveBeenCalledWith({
         operation: 'video',
         artifactUrl: '/uploads/vid.mp4',
-        fileId: '',
+        fileId: 'file-v',
+        fileType: 'video',
+        metadata: { dimensions: { width: 720, height: 1280 }, durationMs: 7320 },
       })
     );
     expect(callsTo('/media/replicate/save-url')).toHaveLength(0);

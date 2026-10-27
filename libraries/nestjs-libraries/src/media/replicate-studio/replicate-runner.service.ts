@@ -17,6 +17,7 @@ import { isWarm, MODEL_ALLOWLIST } from './replicate-catalog.allowlist';
 import { VideoRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
 import { renderWorkDir } from '@postmill-ai/nestjs-libraries/media/design-render/render-job-spec';
 import * as fs from 'fs';
+import { presentMediaMetadata } from '@postmill-ai/nestjs-libraries/media/video-artifact';
 
 const BASE = 'https://api.replicate.com/v1';
 
@@ -55,6 +56,9 @@ export interface GetJobResult {
   result: {
     kind: 'image' | 'video' | 'audio';
     urls: string[];
+    fileId: string | null;
+    fileType: string | null;
+    metadata: ReturnType<typeof presentMediaMetadata>;
   } | null;
   // The real failure reason when status is 'failed' — the compact embeds
   // surface this instead of a generic "Generation failed".
@@ -479,10 +483,24 @@ export class ReplicateRunnerService {
     const kind = kindMap[job.operation as string] || 'image';
     const urls =
       job.status === 'completed' && job.artifactUrl ? [job.artifactUrl] : [];
+    const file = urls.length
+      ? await this._fileService.getFileByPath(orgId, urls[0]).catch(() => null)
+      : null;
+    const metadata = presentMediaMetadata(
+      (file as { metadata?: unknown } | null)?.metadata,
+    );
 
     return {
       status: job.status,
-      result: job.status === 'completed' ? { kind, urls } : null,
+      result: job.status === 'completed'
+        ? {
+            kind,
+            urls,
+            fileId: file?.id ?? null,
+            fileType: file?.type ?? null,
+            metadata,
+          }
+        : null,
       error: job.error ?? null,
     };
   }

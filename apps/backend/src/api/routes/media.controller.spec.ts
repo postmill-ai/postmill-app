@@ -42,7 +42,7 @@ function build(
     ...serviceOverride,
   };
   const fileService = {
-    getFilesByPaths: vi.fn().mockResolvedValue([]),
+    getFileByPath: vi.fn().mockResolvedValue(null),
   };
   const controller = new MediaController(
     aiDefaults as any,
@@ -358,7 +358,7 @@ describe('MediaController — Designer AI-media routes', () => {
   });
 
   describe('getMediaJob', () => {
-    it('returns the landed File id for a completed job (retention-pin handoff)', async () => {
+    it('returns the landed File id and safe canonical playback metadata', async () => {
       const { controller, aiMediaService, fileService } = build();
       aiMediaService.getJob.mockResolvedValue({
         id: 'job-1',
@@ -367,21 +367,35 @@ describe('MediaController — Designer AI-media routes', () => {
         artifactUrl: '/uploads/video-job-1.mp4',
         error: null,
       });
-      fileService.getFilesByPaths.mockResolvedValue([
-        { id: 'file-9', path: '/uploads/video-job-1.mp4', type: 'video' },
-      ]);
+      fileService.getFileByPath.mockResolvedValue({
+        id: 'file-9',
+        path: '/uploads/video-job-1.mp4',
+        type: 'video',
+        metadata: {
+          dimensions: { width: 1280, height: 720 },
+          durationMs: 5000,
+          mime: 'video/mp4',
+          prompt: 'private prompt',
+        },
+      });
 
       const res = await controller.getMediaJob(org, 'job-1');
 
-      expect(fileService.getFilesByPaths).toHaveBeenCalledWith('org-1', [
+      expect(fileService.getFileByPath).toHaveBeenCalledWith(
+        'org-1',
         '/uploads/video-job-1.mp4',
-      ]);
+      );
       expect(res).toEqual({
         id: 'job-1',
         status: 'completed',
         artifactUrl: '/uploads/video-job-1.mp4',
         fileId: 'file-9',
         fileType: 'video',
+        metadata: {
+          dimensions: { width: 1280, height: 720 },
+          durationMs: 5000,
+          mime: 'video/mp4',
+        },
         error: null,
       });
     });
@@ -398,8 +412,9 @@ describe('MediaController — Designer AI-media routes', () => {
 
       const res = await controller.getMediaJob(org, 'job-2');
 
-      expect(fileService.getFilesByPaths).not.toHaveBeenCalled();
+      expect(fileService.getFileByPath).not.toHaveBeenCalled();
       expect(res.fileId).toBeNull();
+      expect(res.metadata).toBeNull();
     });
 
     it('404s for another org’s job', async () => {

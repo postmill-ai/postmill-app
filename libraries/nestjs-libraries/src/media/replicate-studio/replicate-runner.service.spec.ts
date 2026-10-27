@@ -68,6 +68,7 @@ describe('ReplicateRunnerService', () => {
     mockOrgMediaProviderSettings = {};
 
     mockFileService = {
+      getFileByPath: vi.fn().mockResolvedValue(null),
       getFileById: vi.fn().mockResolvedValue({
         id: 'file-1',
         path: 'uploads/file.png',
@@ -471,8 +472,47 @@ describe('ReplicateRunnerService', () => {
 
       expect(result).toEqual({
         status: 'completed',
-        result: { kind: 'video', urls: ['/uploads/x.mp4'] },
+        result: {
+          kind: 'video',
+          urls: ['/uploads/x.mp4'],
+          fileId: null,
+          fileType: null,
+          metadata: null,
+        },
         error: null,
+      });
+    });
+
+    it('returns canonical playback metadata without internal provider fields', async () => {
+      mockAiSettings.getMediaJobById.mockResolvedValue(
+        jobRow({ status: 'completed', artifactUrl: '/uploads/x.mp4', error: null }),
+      );
+      mockFileService.getFileByPath.mockResolvedValue({
+        id: 'file-9',
+        type: 'video',
+        path: '/uploads/x.mp4',
+        metadata: {
+          dimensions: { width: 720, height: 1280 },
+          durationMs: 8000,
+          mime: 'video/mp4',
+          prompt: 'private prompt',
+          provider: 'internal provider detail',
+        },
+      });
+
+      const result = await runner.getJob('org1', 'job-1');
+
+      expect(mockFileService.getFileByPath).toHaveBeenCalledWith('org1', '/uploads/x.mp4');
+      expect(result.result).toEqual({
+        kind: 'video',
+        urls: ['/uploads/x.mp4'],
+        fileId: 'file-9',
+        fileType: 'video',
+        metadata: {
+          dimensions: { width: 720, height: 1280 },
+          durationMs: 8000,
+          mime: 'video/mp4',
+        },
       });
     });
   });
