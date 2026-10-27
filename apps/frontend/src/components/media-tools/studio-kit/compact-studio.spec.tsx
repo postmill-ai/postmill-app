@@ -93,6 +93,16 @@ describe('CompactStudio (descriptor provider)', () => {
     expect(body.input.aspectRatio).toBe('1:1');
   });
 
+  it('keeps the studio mounted but blocks submission while externally disabled', async () => {
+    renderStudio(
+      <CompactStudio provider="google" operation="image" prompt="a cat" onGenerated={vi.fn()} submitDisabled />
+    );
+
+    expect(await screen.findByText('Number of images (Imagen only)')).toBeTruthy();
+    expect((await screen.findByRole('button', { name: 'Generate' })).hasAttribute('disabled')).toBe(true);
+    expect(generateCalls('google')).toHaveLength(0);
+  });
+
   it('calls onGenerated when the tracked job completes', async () => {
     jobsPayload = [
       {

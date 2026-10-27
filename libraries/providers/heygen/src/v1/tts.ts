@@ -5,6 +5,7 @@ import {
   mediaUpstreamError,
   mediaUpstreamFailure,
   mediaUpstreamFromPoll,
+  mediaUpstreamFromUnknown,
   isTransientStatus,
   readCappedArrayBuffer,
   resolveApiKey,
@@ -52,7 +53,9 @@ export async function pollHeyGenTts(
   if (!res.ok) {
     const body = await res.text();
     if (isTransientStatus(res.status)) {
-      throw new Error(`HeyGen tts poll transient error ${res.status}: ${body.slice(0, 200)}`);
+      const error = new Error(`HeyGen tts poll transient error ${res.status}: ${body.slice(0, 200)}`) as Error & { statusCode?: number };
+      error.statusCode = res.status;
+      throw error;
     }
     return { status: 'failed', error: mediaUpstreamFailure(PROVIDER, res.status, body) };
   }
@@ -82,14 +85,23 @@ export async function generateHeyGenTts(
   let artifactUrl: string | undefined;
   for (let attempt = 0; attempt < 60; attempt++) {
     if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
-    const poll = await pollHeyGenTts(fetch, audioId, options);
-    if (poll.status === 'failed') throw mediaUpstreamFromPoll(PROVIDER, poll.error || 'HeyGen TTS failed', 'audio');
-    if (poll.status === 'completed') {
-      artifactUrl = poll.artifactUrl;
-      break;
+    try {
+      const poll = await pollHeyGenTts(fetch, audioId, options);
+      if (poll.status === 'failed') throw mediaUpstreamFromPoll(PROVIDER, poll.error || 'HeyGen TTS failed', 'audio');
+      if (poll.status === 'completed') {
+        artifactUrl = poll.artifactUrl;
+        break;
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('transient error') && attempt < 59) continue;
+      throw mediaUpstreamFromUnknown(PROVIDER, err, 'audio');
     }
   }
-  if (!artifactUrl) throw new Error('HeyGen TTS did not complete after 60 attempts');
+  if (!artifactUrl) {
+    const error = new Error('HeyGen TTS did not complete after 60 attempts') as Error & { statusCode?: number };
+    error.statusCode = 408;
+    throw mediaUpstreamFromUnknown(PROVIDER, error, 'audio');
+  }
   const res = await fetch(artifactUrl);
   if (!res.ok) throw await mediaUpstreamError(PROVIDER, res, 'audio');
   return readCappedArrayBuffer(res, MAX_AUDIO_BYTES);

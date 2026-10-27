@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
 import { makeCtx, res } from '@postmill-ai/provider-kernel/testing/media-int-helpers';
 import { heygenMediaModule } from './media.adapter';
 
@@ -219,6 +220,47 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
     expect(recs[2].url).toBe('https://cdn.heygen/voice.mp3');
     expect(recs[2].headers['x-api-key']).toBeUndefined();
   });
+
+  it('retries a transient TTS status failure instead of aborting the request', async () => {
+    let statusCalls = 0;
+    const { recs, ctx } = makeCtx((url) => {
+      if (url.includes('/audio/generate')) return res({ data: { audio_id: 'audio-1' } });
+      if (url.includes('/audio_status.get')) {
+        statusCalls++;
+        return statusCalls === 1
+          ? res('temporary', false, 503)
+          : res({ data: { status: 'completed', audio_url: 'https://cdn.heygen/voice.mp3' } });
+      }
+      return res('mp3-audio');
+    });
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    const audio = await adapter.textToSpeech('hello', { apiKey: 'heygen-key', voice: 'voice-1' });
+
+    expect(audio.toString()).toBe('mp3-audio');
+    expect(statusCalls).toBe(2);
+    expect(recs).toHaveLength(4);
+  }, 10_000);
+
+  it('classifies a transient failure on the final TTS poll as a provider outage', async () => {
+    vi.useFakeTimers();
+    try {
+      const { ctx } = makeCtx((url) =>
+        url.includes('/audio/generate')
+          ? res({ data: { audio_id: 'audio-1' } })
+          : res('unavailable', false, 503),
+      );
+      const adapter: any = heygenMediaModule.create(ctx as any);
+      const pending = adapter.textToSpeech('hello', { apiKey: 'heygen-key', voice: 'voice-1' });
+      const assertion = expect(pending).rejects.toMatchObject({ kind: 'unavailable' });
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      await assertion;
+      expect(await pending.catch((err) => err)).toBeInstanceOf(ProviderUpstreamError);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 10_000);
 
   it('requires an explicit voice and preserves TTS upstream errors', async () => {
     const { ctx } = makeCtx(() => res({ detail: 'invalid voice' }, false, 400));

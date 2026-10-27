@@ -432,6 +432,8 @@ export interface AddVoiceoverOptions {
   fileId?: string;
   /** Known duration (skips the metadata probe). */
   durationMs?: number;
+  /** Pin insertion to a visual clip's start instead of the live playhead. */
+  startMs?: number;
   /**
    * TTS provenance — persisted on the clip so the inspector can re-voice or
    * re-script it in place later (with the same tone instructions and provider
@@ -482,7 +484,7 @@ export async function addVoiceoverToTimeline(
   // A clip longer than the whole output is clamped to the output, not dropped.
   const clipLen = Math.min(probedMs, vo.durationMs);
 
-  let startMs = Math.max(0, Math.min(current.playheadMs, vo.durationMs));
+  let startMs = Math.max(0, Math.min(options.startMs ?? current.playheadMs, vo.durationMs));
   let landing: Exclude<VoiceoverLanding, false> = 'playhead';
   if (vo.durationMs - startMs < 100) {
     // No room at the playhead. Prefer just after the last audio clip when the

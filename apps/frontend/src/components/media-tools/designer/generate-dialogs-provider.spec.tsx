@@ -158,7 +158,7 @@ describe('AiVideoDialog provider picker wiring', () => {
   });
 
   it('adds the selected narration only after the visual lands successfully', async () => {
-    const onResult = vi.fn().mockResolvedValue(true);
+    const onResult = vi.fn().mockResolvedValue(0);
     const onGenerateVoiceover = vi.fn().mockResolvedValue(undefined);
     wrap(
       <AiVideoDialog
@@ -178,8 +178,30 @@ describe('AiVideoDialog provider picker wiring', () => {
     fireEvent.change(screen.getByLabelText('Tone / style (optional)'), { target: { value: 'warm' } });
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
 
-    await waitFor(() => expect(onGenerateVoiceover).toHaveBeenCalledWith('Try it today', 'voice-1', 'warm', 'heygen'));
+    await waitFor(() => expect(onGenerateVoiceover).toHaveBeenCalledWith('Try it today', 'voice-1', 'warm', 'heygen', 0));
     expect(onResult).toHaveBeenCalledBefore(onGenerateVoiceover);
+  });
+
+  it('keeps default voice generation unpinned so configured model and settings are preserved', async () => {
+    const onGenerateVoiceover = vi.fn().mockResolvedValue(undefined);
+    wrap(
+      <AiVideoDialog
+        fetch={fetchMock as never}
+        toaster={toaster}
+        onResult={vi.fn().mockResolvedValue(0)}
+        onGenerateVoiceover={onGenerateVoiceover}
+      />
+    );
+    fireEvent.change(await screen.findByPlaceholderText('Describe the video you want to generate...'), {
+      target: { value: 'a product commercial' },
+    });
+    fireEvent.click(screen.getByLabelText('Include voiceover (faceless video)'));
+    fireEvent.change(await screen.findByLabelText('Narration script'), { target: { value: 'Try it today' } });
+    fireEvent.change(await screen.findByLabelText('Voice'), { target: { value: 'voice-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(onGenerateVoiceover).toHaveBeenCalledWith('Try it today', 'voice-1', undefined, undefined, 0));
+    expect(callsTo('/media/voices?provider=fal')).toHaveLength(0);
   });
 
   it('requires narration and a voice before allowing a faceless generation', async () => {

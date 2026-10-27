@@ -35,6 +35,7 @@ export interface CompactStudioProps {
   aspectRatio?: string;
   onGenerated: (result: CompactStudioResult) => void;
   onError?: (message: string) => void;
+  submitDisabled?: boolean;
 }
 
 // Chrome-less, embeddable variant of a provider studio: no header, tab bar
@@ -53,6 +54,7 @@ export const CompactStudio: FC<CompactStudioProps> = (props) => {
         aspectRatio={props.aspectRatio}
         onGenerated={props.onGenerated}
         onError={props.onError}
+        submitDisabled={props.submitDisabled}
       />
     );
   }
@@ -75,6 +77,7 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
   prompt,
   onGenerated,
   onError,
+  submitDisabled = false,
 }) => {
   const t = useT();
   const entry: CompactStudioEntry | undefined = COMPACT_STUDIO_REGISTRY[provider];
@@ -186,11 +189,11 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
     [active, provider, values]
   );
   const canGenerate = useMemo(() => {
-    if (!active || validationError) return false;
+    if (!active || validationError || submitDisabled) return false;
     return active.tab.fields
       .filter((f) => f.required)
       .every((f) => (f.type === 'prompt' ? !!prompt.trim() : isFilled(values[f.name])));
-  }, [active, values, prompt, validationError]);
+  }, [active, values, prompt, validationError, submitDisabled]);
 
   const onGenerate = useCallback(async () => {
     if (!active || !canGenerate) return;

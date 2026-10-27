@@ -818,8 +818,8 @@ interface AiVideoDialogProps {
     idOrUrl: string | false,
     fileId?: string,
     details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
-  ) => Promise<boolean>;
-  onGenerateVoiceover?: (text: string, voiceId: string, instructions?: string, provider?: string) => Promise<void>;
+  ) => Promise<number | false>;
+  onGenerateVoiceover?: (text: string, voiceId: string, instructions?: string, provider?: string, startMs?: number) => Promise<void>;
   outputWidth?: number;
   outputHeight?: number;
 }
@@ -846,9 +846,15 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
   );
   const voiceoverReady = !includeVoiceover || !!(onGenerateVoiceover && script.trim() && voiceId);
 
-  const addVoiceover = useCallback(async () => {
+  const addVoiceover = useCallback(async (startMs: number) => {
     if (!includeVoiceover || !onGenerateVoiceover) return;
-    await onGenerateVoiceover(script.trim(), voiceId, instructions.trim() || undefined, voiceProvider || undefined);
+    await onGenerateVoiceover(
+      script.trim(),
+      voiceId,
+      instructions.trim() || undefined,
+      voiceProvider || undefined,
+      startMs
+    );
   }, [includeVoiceover, onGenerateVoiceover, script, voiceId, instructions, voiceProvider]);
 
   const generate = useCallback(async () => {
@@ -874,7 +880,8 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
       });
       if (!res.ok) throw new Error(await readErrorMessage(res, t('video_generation_failed', 'Video generation failed')));
       const data = await res.json();
-      if (await onResult('video', data === false ? false : data.id)) await addVoiceover();
+      const visualStart = await onResult('video', data === false ? false : data.id);
+      if (visualStart !== false) await addVoiceover(visualStart);
     } catch (e) {
       toaster.show((e as Error).message || t('video_generation_failed', 'Video generation failed'), 'warning');
     } finally {
@@ -885,7 +892,8 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
   const handleStudioGenerated = useCallback(
     async (result: CompactStudioResult) => {
       modals.closeAll();
-      if (await onResult('video', result.artifactUrl, result.fileId || undefined, result)) await addVoiceover();
+      const visualStart = await onResult('video', result.artifactUrl, result.fileId || undefined, result);
+      if (visualStart !== false) await addVoiceover(visualStart);
     },
     [modals, onResult, addVoiceover]
   );
@@ -965,16 +973,15 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
         </div>
       )}
       {provider ? (
-        voiceoverReady && (
-          <CompactStudio
-            key={provider}
-            provider={provider}
-            operation="video"
-            prompt={prompt}
-            aspectRatio={canvasAspect}
-            onGenerated={handleStudioGenerated}
-          />
-        )
+        <CompactStudio
+          key={provider}
+          provider={provider}
+          operation="video"
+          prompt={prompt}
+          aspectRatio={canvasAspect}
+          onGenerated={handleStudioGenerated}
+          submitDisabled={!voiceoverReady}
+        />
       ) : (
         <>
           {selectedImageSrc && (
@@ -1009,7 +1016,7 @@ interface MusicDialogProps {
     idOrUrl: string | false,
     fileId?: string,
     details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
-  ) => Promise<boolean>;
+  ) => Promise<number | false>;
 }
 
 export const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) => {
@@ -1100,7 +1107,7 @@ interface AvatarDialogProps {
     idOrUrl: string | false,
     fileId?: string,
     details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
-  ) => Promise<boolean>;
+  ) => Promise<number | false>;
 }
 
 export const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult }) => {
@@ -1220,7 +1227,7 @@ interface SlideshowDialogProps {
     idOrUrl: string | false,
     fileId?: string,
     details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
-  ) => Promise<boolean>;
+  ) => Promise<number | false>;
   // Current video output's canvas — drives the generated frames' aspect and
   // the server-side per-slide normalization. Absent = legacy server behavior.
   outputWidth?: number;
@@ -2878,7 +2885,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   }, [clipMenu, handleFreezeFrame]);
 
   const generateVoiceover = useCallback(
-    async (text: string, voiceId: string, instructions?: string, provider?: string) => {
+    async (text: string, voiceId: string, instructions?: string, provider?: string, startMs?: number) => {
       if (!vo) return;
       try {
         const res = await postTextToSpeech(fetch, { text, voiceId, instructions, provider });
@@ -2897,6 +2904,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         const landed = await addVoiceoverToTimeline(store, {
           url: path,
           fileId: id,
+          startMs,
           voiceover: {
             script: text,
             voice: voiceId,
@@ -3180,7 +3188,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       landedFileId?: string,
       fileType?: string | null,
       metadata?: CompactStudioResult['metadata']
-    ) => {
+    ): Promise<number | false> => {
       // A video-operation job can complete with an image artifact (e.g. a
       // Reel.Farm slideshow that finished without a video export stores its
       // first slide JPG) — land it as an image clip, not a video clip that
@@ -3198,8 +3206,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             translate('generated_clip_couldnt_be_placed', "The generated clip couldn't be placed on the timeline — find it in your media library."),
             'warning'
           );
+          return false;
         }
-        return;
+        const output = store.getState().doc.outputs[store.getState().currentOutput] as VideoOutput;
+        return output.tracks.flatMap((track) => track.clips).find((clip) => clip.id === clipId)?.startMs ?? false;
       }
       const landed = await addMediaToTimeline(store, {
         type,
@@ -3222,23 +3232,23 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           trackId: landed.trackId,
           clipId: landed.clipId,
         });
-      } else {
-        // addClip rejected the insert — the asset itself is safe in Files (the
-        // job lifecycle landed it there), so say where it went instead of
-        // staying silent.
-        toaster.show(
-          translate('generated_clip_couldnt_be_placed', "The generated clip couldn't be placed on the timeline — find it in your media library."),
-          'warning'
-        );
+        return landed.startMs;
       }
+      // addClip rejected the insert — the asset itself is safe in Files (the
+      // job lifecycle landed it there), so say where it went instead of
+      // staying silent.
+      toaster.show(
+        translate('generated_clip_couldnt_be_placed', "The generated clip couldn't be placed on the timeline — find it in your media library."),
+        'warning'
+      );
+      return false;
     };
     if (idOrUrl === false) {
       toaster.show(translate('generation_was_blocked_or_returned_empty', 'Generation was blocked or returned empty.'), 'warning');
       return false;
     }
     if (isArtifactPath(idOrUrl)) {
-      await landAndReveal(idOrUrl, fileId, details?.fileType, details?.metadata);
-      return true;
+      return landAndReveal(idOrUrl, fileId, details?.fileType, details?.metadata);
     }
     let outcome: JobPollOutcome;
     try {
@@ -3268,8 +3278,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       );
       return false;
     }
-    await landAndReveal(outcome.url, outcome.fileId ?? undefined, outcome.fileType, outcome.metadata);
-    return true;
+    return landAndReveal(outcome.url, outcome.fileId ?? undefined, outcome.fileType, outcome.metadata);
   }, [fetch, store, toaster, translate]);
 
   // In-flight generations used to be lost on a designer remount: the server

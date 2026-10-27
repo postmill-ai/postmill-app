@@ -618,6 +618,49 @@ describe('AiMediaService', () => {
     });
   });
 
+  describe('listVoices default resolution', () => {
+    it('uses the configured default provider before fallback providers', async () => {
+      const openai = makeAdapter('openai', { tts: true }, {
+        listVoices: vi.fn().mockResolvedValue([{ id: 'alloy', label: 'Alloy' }]),
+      });
+      const heygen = makeAdapter('heygen', { tts: true }, {
+        listVoices: vi.fn().mockResolvedValue([{ id: 'heygen-voice', label: 'HeyGen voice' }]),
+      });
+      const defaultsResolution = {
+        resolve: vi.fn().mockResolvedValue({
+          providerId: 'openai',
+          model: 'gpt-4o-mini-tts',
+          version: 'v1',
+          settings: {},
+        }),
+      };
+      const { service } = setup([openai, heygen], undefined, defaultsResolution);
+
+      await expect(service.listVoices('org-1')).resolves.toEqual([{ id: 'alloy', label: 'Alloy' }]);
+      expect(openai.listVoices).toHaveBeenCalledWith({ credentials: { apiKey: 'openai-key' } });
+      expect(heygen.listVoices).not.toHaveBeenCalled();
+    });
+
+    it('rejects instead of loading fallback voices for a default provider without listVoices', async () => {
+      const togetherai = makeAdapter('togetherai', { tts: true });
+      const heygen = makeAdapter('heygen', { tts: true }, {
+        listVoices: vi.fn().mockResolvedValue([{ id: 'heygen-voice', label: 'HeyGen voice' }]),
+      });
+      const defaultsResolution = {
+        resolve: vi.fn().mockResolvedValue({
+          providerId: 'togetherai',
+          model: 'default-tts',
+          version: 'v1',
+          settings: {},
+        }),
+      };
+      const { service } = setup([togetherai, heygen], undefined, defaultsResolution);
+
+      await expect(service.listVoices('org-1')).rejects.toThrow(CapabilityNotAvailable);
+      expect(heygen.listVoices).not.toHaveBeenCalled();
+    });
+  });
+
   describe('textToSpeech provider pin', () => {
     const ttsAdapter = (id: string, result: unknown = Buffer.from(`${id}-audio`)) =>
       makeAdapter(id, { tts: true }, {

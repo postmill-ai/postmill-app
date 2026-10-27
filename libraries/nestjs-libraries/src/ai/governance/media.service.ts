@@ -438,25 +438,25 @@ export class AiMediaService {
     orgId: string,
     options?: { provider?: string },
   ): Promise<Array<{ id: string; label: string; previewUrl?: string }>> {
-    const enabled = await this._safeGetEnabledProviders(orgId);
-    const candidates = options?.provider
-      ? enabled.filter((cfg) => cfg.identifier === options.provider)
-      : enabled.filter((cfg) => {
-          const adapter = this._resolveMediaAdapter(cfg.identifier);
-          return !!adapter?.capabilities.tts && typeof adapter.listVoices === 'function';
-        });
-
-    for (const cfg of candidates) {
-      const adapter = this._resolveMediaAdapter(cfg.identifier);
-      if (!adapter?.listVoices) continue;
-      try {
-        const full = await this._orgMediaProviderSettings!.getConfigForProvider(orgId, cfg.identifier);
-        if (!full || Object.keys(full.credentials).length === 0) continue;
-        return await adapter.listVoices({ credentials: full.credentials });
-      } catch (err) {
-        this._logger.warn(
-          `Media provider ${cfg.identifier} voice list failed: ${(err as Error).message} — trying next`,
-        );
+    if (!options?.provider) {
+      const [candidate] = await this._resolveForOperation(orgId, 'tts');
+      if (candidate && typeof candidate.adapter.listVoices === 'function') {
+        return candidate.adapter.listVoices({ credentials: candidate.credentials });
+      }
+    } else {
+      const enabled = await this._safeGetEnabledProviders(orgId);
+      for (const cfg of enabled.filter((cfg) => cfg.identifier === options.provider)) {
+        const adapter = this._resolveMediaAdapter(cfg.identifier);
+        if (!adapter?.listVoices) continue;
+        try {
+          const full = await this._orgMediaProviderSettings!.getConfigForProvider(orgId, cfg.identifier);
+          if (!full || Object.keys(full.credentials).length === 0) continue;
+          return await adapter.listVoices({ credentials: full.credentials });
+        } catch (err) {
+          this._logger.warn(
+            `Media provider ${cfg.identifier} voice list failed: ${(err as Error).message} — trying next`,
+          );
+        }
       }
     }
 
