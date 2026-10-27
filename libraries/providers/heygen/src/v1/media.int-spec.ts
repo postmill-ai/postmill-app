@@ -202,11 +202,10 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
     expect(recs[0].url).toBe('https://api.heygen.com/v2/voices');
   });
 
-  it('submits, polls, and downloads synchronous TTS through the shared provider path', async () => {
+  it('submits documented v3 speech and downloads the returned audio without forwarding the API key', async () => {
     const { recs, ctx } = makeCtx((url) => {
-      if (url.includes('/audio/generate')) return res({ data: { audio_id: 'audio-1' } });
-      if (url.includes('/audio_status.get')) {
-        return res({ data: { status: 'completed', audio_url: 'https://cdn.heygen/voice.mp3' } });
+      if (url.includes('/v3/voices/speech')) {
+        return res({ data: { audio_url: 'https://cdn.heygen/voice.mp3', duration: 2.5 } });
       }
       return res('mp3-audio');
     });
@@ -215,21 +214,23 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
     const audio = await adapter.textToSpeech('A faceless product ad', { apiKey: 'heygen-key', voice: 'voice-1' });
 
     expect(audio.toString()).toBe('mp3-audio');
-    expect(JSON.parse(recs[0].body)).toEqual({ voice_id: 'voice-1', input_text: 'A faceless product ad' });
-    expect(recs[1].url).toBe('https://api.heygen.com/v1/audio_status.get?audio_id=audio-1');
-    expect(recs[2].url).toBe('https://cdn.heygen/voice.mp3');
-    expect(recs[2].headers['x-api-key']).toBeUndefined();
+    expect(recs).toHaveLength(2);
+    expect(recs[0].url).toBe('https://api.heygen.com/v3/voices/speech');
+    expect(recs[0].method).toBe('POST');
+    expect(recs[0].headers['x-api-key']).toBe('heygen-key');
+    expect(JSON.parse(recs[0].body)).toEqual({ voice_id: 'voice-1', text: 'A faceless product ad' });
+    expect(recs[1].url).toBe('https://cdn.heygen/voice.mp3');
+    expect(recs[1].headers['x-api-key']).toBeUndefined();
   });
 
-  it('retries a transient TTS status failure instead of aborting the request', async () => {
-    let statusCalls = 0;
+  it('retries a transient speech submission failure instead of aborting the request', async () => {
+    let submitCalls = 0;
     const { recs, ctx } = makeCtx((url) => {
-      if (url.includes('/audio/generate')) return res({ data: { audio_id: 'audio-1' } });
-      if (url.includes('/audio_status.get')) {
-        statusCalls++;
-        return statusCalls === 1
+      if (url.includes('/v3/voices/speech')) {
+        submitCalls++;
+        return submitCalls === 1
           ? res('temporary', false, 503)
-          : res({ data: { status: 'completed', audio_url: 'https://cdn.heygen/voice.mp3' } });
+          : res({ data: { audio_url: 'https://cdn.heygen/voice.mp3' } });
       }
       return res('mp3-audio');
     });
@@ -238,22 +239,18 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
     const audio = await adapter.textToSpeech('hello', { apiKey: 'heygen-key', voice: 'voice-1' });
 
     expect(audio.toString()).toBe('mp3-audio');
-    expect(statusCalls).toBe(2);
-    expect(recs).toHaveLength(4);
+    expect(submitCalls).toBe(2);
+    expect(recs).toHaveLength(3);
   }, 10_000);
 
-  it('classifies a transient failure on the final TTS poll as a provider outage', async () => {
+  it('classifies a transient failure on the final speech submission attempt as a provider outage', async () => {
     vi.useFakeTimers();
     try {
-      const { ctx } = makeCtx((url) =>
-        url.includes('/audio/generate')
-          ? res({ data: { audio_id: 'audio-1' } })
-          : res('unavailable', false, 503),
-      );
+      const { ctx } = makeCtx(() => res('unavailable', false, 503));
       const adapter: any = heygenMediaModule.create(ctx as any);
       const pending = adapter.textToSpeech('hello', { apiKey: 'heygen-key', voice: 'voice-1' });
       const assertion = expect(pending).rejects.toMatchObject({ kind: 'unavailable' });
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(3_000);
 
       await assertion;
       expect(await pending.catch((err) => err)).toBeInstanceOf(ProviderUpstreamError);
@@ -261,6 +258,22 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
       vi.useRealTimers();
     }
   }, 10_000);
+
+  it('keeps legacy TTS job polling transient and terminal status semantics', async () => {
+    const { recs, ctx } = makeCtx((_url, _init, n) =>
+      n === 1
+        ? res('temporary', false, 503)
+        : res({ data: { status: 'completed', audio_url: 'https://cdn.heygen/legacy.mp3' } }),
+    );
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    await expect(adapter.pollJob('tts:audio-1', { apiKey: 'heygen-key' })).rejects.toThrow(/transient/i);
+    await expect(adapter.pollJob('tts:audio-1', { apiKey: 'heygen-key' })).resolves.toMatchObject({
+      status: 'completed',
+      artifactUrl: 'https://cdn.heygen/legacy.mp3',
+    });
+    expect(recs[0].url).toBe('https://api.heygen.com/v1/audio_status.get?audio_id=audio-1');
+  });
 
   it('requires an explicit voice and preserves TTS upstream errors', async () => {
     const { ctx } = makeCtx(() => res({ detail: 'invalid voice' }, false, 400));
