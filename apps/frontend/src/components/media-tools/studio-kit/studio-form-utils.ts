@@ -36,6 +36,29 @@ export function isFilled(value: StudioFieldValue): boolean {
   return true;
 }
 
+export function validateStudioValues(
+  provider: string,
+  tab: StudioTab,
+  values: Record<string, StudioFieldValue>,
+): string | null {
+  if (provider !== 'elevenlabs' || tab.operation !== 'video') return null;
+  const has = (name: string) => isFilled(values[name]);
+  const hasFrames = has('start_frame') || has('end_frame');
+  const referenceIndexes = [1, 2, 3].filter((index) => has(`reference_image_${index}`));
+  if (has('end_frame') && !has('start_frame')) return 'An end frame requires a start frame.';
+  if (referenceIndexes.length > 0 && hasFrames) {
+    return 'Subject/style references cannot be combined with start or end frames.';
+  }
+  if (referenceIndexes.length > 0 && Number(values.duration_secs) !== 8) {
+    return 'Subject/style reference videos must use an 8-second duration.';
+  }
+  for (const index of referenceIndexes) {
+    const role = values[`reference_image_${index}_role`] ?? 'subject';
+    if (role !== 'subject' && role !== 'style') return 'Reference roles must be subject or style.';
+  }
+  return null;
+}
+
 export function buildBody(tab: StudioTab, values: Record<string, StudioFieldValue>): StudioGenerateBody {
   const input: Record<string, string | number | boolean> = {};
   const mediaInputs: Record<string, string> = {};

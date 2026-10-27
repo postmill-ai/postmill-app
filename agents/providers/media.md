@@ -36,6 +36,8 @@ Poll semantics (enforced across adapters, see `libraries/providers/kernel/src/do
 
 Missing-key on poll → return terminal `{status:'failed', error}` (a config error must not retry to the 24h timeout).
 
+**ElevenLabs Veo reference inputs.** Both `veo-3.1-fast-generate-001` and `veo-3.1-generate-001` support `start_frame`, `end_frame`, and up to three `images: [{image, role}]` entries (`subject` or `style`). Postmill's generic studio boundary resolves org-owned Files, then the ElevenLabs adapter fetches them through `SafeFetchPort` and sends `{type:'inline_base64', content_base64, mime_type}` — never a raw public URL. Inline images allow JPEG/PNG/WebP/HEIC/HEIF and are capped at 25 MB after decoding. An end frame requires a start frame; subject/style references are mutually exclusive with either frame and require `duration_secs: 8`. The full-page/compact forms and adapter enforce these rules before the Flows create call. Successful video polls are coalesced/throttled to one request per job per 10 seconds, while transient throws are not cached and retry normally. `testConnection` uses the free authenticated `GET /v1/user` probe, not a billable image generation.
+
 ## 2. Base adapters (`kernel/src/domains/media-helpers.ts`)
 
 | Base | Use when | Provides |

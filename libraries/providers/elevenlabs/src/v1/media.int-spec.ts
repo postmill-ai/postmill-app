@@ -1,6 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { makeCtx, res } from '@postmill-ai/provider-kernel/testing/media-int-helpers';
 import { elevenlabsMediaModule } from './media.adapter';
+
+const imageRes = (body: string, mime = 'image/png', contentLength?: number) => ({
+  ...res(body),
+  headers: {
+    get: (name: string) => {
+      if (name.toLowerCase() === 'content-type') return mime;
+      if (name.toLowerCase() === 'content-length' && contentLength !== undefined) return String(contentLength);
+      return null;
+    },
+  },
+});
+
+afterEach(() => vi.useRealTimers());
 
 // Recorded-fixture integration test (plan B4) — no network. ElevenLabs TTS is synchronous: a
 // single POST to /v1/text-to-speech/{voiceId} returns audio bytes (read via arrayBuffer), which
@@ -207,7 +220,176 @@ describe('elevenlabs flows video (submit + lifecycle poll)', () => {
     });
   });
 
+  it.each(['veo-3.1-fast-generate-001', 'veo-3.1-generate-001'])(
+    'maps start/end Files to inline_base64 reference objects for %s, never raw URLs',
+    async (model) => {
+      const { recs, ctx } = makeCtx((url) => {
+        if (url.endsWith('/flows/video')) return res({ id: 'vid-frames', status: 'pending' });
+        return imageRes(url.includes('end') ? 'END' : 'START', 'image/webp');
+      });
+      const adapter: any = elevenlabsMediaModule.create(ctx as any);
+
+      await adapter.generateVideo('camera pulls back', {
+        apiKey: 'k',
+        model,
+        input: {
+          duration_secs: 6,
+          start_frame: 'https://files.example/start.webp',
+          end_frame: 'https://files.example/end.webp',
+        },
+      });
+
+      const submit = recs[2];
+      expect(submit.url).toBe('https://api.elevenlabs.io/v1/flows/video');
+      const body = JSON.parse(submit.body);
+      expect(body).toEqual({
+        model_id: model,
+        prompt: 'camera pulls back',
+        duration_secs: 6,
+        start_frame: {
+          type: 'inline_base64',
+          content_base64: Buffer.from('START').toString('base64'),
+          mime_type: 'image/webp',
+        },
+        end_frame: {
+          type: 'inline_base64',
+          content_base64: Buffer.from('END').toString('base64'),
+          mime_type: 'image/webp',
+        },
+      });
+      expect(submit.body).not.toContain('files.example');
+    },
+  );
+
+  it.each(['veo-3.1-fast-generate-001', 'veo-3.1-generate-001'])(
+    'maps up to three role-tagged references for %s with MIME and base64 content',
+    async (model) => {
+      const { recs, ctx } = makeCtx((url) => {
+        if (url.endsWith('/flows/video')) return res({ id: 'vid-refs', status: 'pending' });
+        return imageRes(`IMAGE-${recs.length}`, 'image/png');
+      });
+      const adapter: any = elevenlabsMediaModule.create(ctx as any);
+
+      await adapter.generateVideo('match these references', {
+        apiKey: 'k',
+        model,
+        input: {
+          duration_secs: 8,
+          reference_image_1: 'https://files.example/subject.png',
+          reference_image_1_role: 'subject',
+          reference_image_2: 'https://files.example/style.png',
+          reference_image_2_role: 'style',
+          reference_image_3: 'data:image/jpeg;base64,VEhJUkQ=',
+          reference_image_3_role: 'subject',
+        },
+      });
+
+      const body = JSON.parse(recs[2].body);
+      expect(body.images).toEqual([
+        {
+          image: { type: 'inline_base64', content_base64: Buffer.from('IMAGE-1').toString('base64'), mime_type: 'image/png' },
+          role: 'subject',
+        },
+        {
+          image: { type: 'inline_base64', content_base64: Buffer.from('IMAGE-2').toString('base64'), mime_type: 'image/png' },
+          role: 'style',
+        },
+        {
+          image: { type: 'inline_base64', content_base64: 'VEhJUkQ=', mime_type: 'image/jpeg' },
+          role: 'subject',
+        },
+      ]);
+      expect(body.start_frame).toBeUndefined();
+      expect(body.end_frame).toBeUndefined();
+    },
+  );
+
+  it.each([
+    {
+      name: 'an end frame without a start frame',
+      input: { duration_secs: 8, end_frame: 'https://files.example/end.png' },
+      error: /end frame requires a start frame/i,
+    },
+    {
+      name: 'references combined with a frame',
+      input: {
+        duration_secs: 8,
+        start_frame: 'https://files.example/start.png',
+        reference_image_1: 'https://files.example/ref.png',
+      },
+      error: /cannot be combined/i,
+    },
+    {
+      name: 'reference-to-video below eight seconds',
+      input: { duration_secs: 6, reference_image_1: 'https://files.example/ref.png' },
+      error: /8-second duration/i,
+    },
+  ])('rejects $name before fetching files or creating a billed generation', async ({ input, error }) => {
+    const { recs, ctx } = makeCtx(() => res({ id: 'must-not-start' }));
+    const adapter: any = elevenlabsMediaModule.create(ctx as any);
+    await expect(
+      adapter.generateVideo('invalid', { apiKey: 'k', model: 'veo-3.1-fast-generate-001', input }),
+    ).rejects.toThrow(error);
+    expect(recs).toHaveLength(0);
+  });
+
+  it('rejects an oversize File from its declared length before the Flows create call', async () => {
+    const { recs, ctx } = makeCtx(() => imageRes('not-read', 'image/png', 25 * 1024 * 1024 + 1));
+    const adapter: any = elevenlabsMediaModule.create(ctx as any);
+    await expect(
+      adapter.generateVideo('too large', {
+        apiKey: 'k',
+        model: 'veo-3.1-generate-001',
+        input: { duration_secs: 8, reference_image_1: 'https://files.example/large.png' },
+      }),
+    ).rejects.toThrow(/25 MB/);
+    expect(recs).toHaveLength(1);
+    expect(recs[0].url).toBe('https://files.example/large.png');
+  });
+
+  it('rejects unsupported reference MIME types without creating a generation', async () => {
+    const { recs, ctx } = makeCtx(() => res({ id: 'must-not-start' }));
+    const adapter: any = elevenlabsMediaModule.create(ctx as any);
+    await expect(
+      adapter.generateVideo('bad mime', {
+        apiKey: 'k',
+        input: { duration_secs: 8, reference_image_1: 'data:image/gif;base64,R0lG' },
+      }),
+    ).rejects.toThrow(/MIME type/);
+    expect(recs).toHaveLength(0);
+  });
+
+  it.each([
+    { status: 401, kind: 'auth', detail: 'invalid api key' },
+    { status: 402, kind: 'quota', detail: 'paid_plan_required: Pro plan required' },
+    { status: 422, kind: 'invalid_request', detail: 'reference images require duration_secs=8' },
+  ])('maps video submit HTTP $status to a typed $kind upstream error', async ({ status, kind, detail }) => {
+    const { recs, ctx } = makeCtx(() => res({ detail: { message: detail } }, false, status));
+    const adapter: any = elevenlabsMediaModule.create(ctx as any);
+    await expect(adapter.generateVideo('x', { apiKey: 'k' })).rejects.toMatchObject({
+      name: 'ProviderUpstreamError',
+      kind,
+      upstreamStatus: status,
+      message: expect.stringContaining(detail),
+    });
+    expect(recs).toHaveLength(1);
+  });
+
+  it('uses the free authenticated /v1/user probe instead of generateImage for testConnection', async () => {
+    const { recs, ctx } = makeCtx(() => res({ user_id: 'user-1', workspace_id: 'workspace-1' }));
+    const adapter: any = elevenlabsMediaModule.create(ctx as any);
+    await expect(adapter.testConnection({ apiKey: 'k' })).resolves.toEqual({ ok: true, message: 'Connection successful' });
+    expect(recs).toHaveLength(1);
+    expect(recs[0]).toMatchObject({
+      url: 'https://api.elevenlabs.io/v1/user',
+      method: 'GET',
+      headers: { 'xi-api-key': 'k' },
+    });
+  });
+
   it('pollJob routes on the job-id modality prefix: pending/generating → pending, completed → artifactUrl, failed → failure_reason mapped', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
     const { recs, ctx } = makeCtx((_url, _init, n) => {
       if (n === 1) return res({ id: 'vid-1', status: 'generating' });
       if (n === 2) {
@@ -225,6 +407,7 @@ describe('elevenlabs flows video (submit + lifecycle poll)', () => {
     const pending = await adapter.pollJob('video::vid-1', { apiKey: 'k' });
     expect(pending.status).toBe('pending');
 
+    vi.setSystemTime(10_000);
     const done = await adapter.pollJob('video::vid-1', { apiKey: 'k' });
     expect(done.status).toBe('completed');
     expect(done.artifactUrl).toBe('https://storage.googleapis.com/generations/vid-1');
@@ -239,6 +422,41 @@ describe('elevenlabs flows video (submit + lifecycle poll)', () => {
     expect(recs[2].url).toBe('https://api.elevenlabs.io/v1/flows/video/vid-2');
   });
 
+  it('coalesces concurrent video polls into one upstream request', async () => {
+    let resolvePoll!: (value: unknown) => void;
+    const { recs, ctx } = makeCtx(() => new Promise((resolve) => { resolvePoll = resolve; }));
+    const adapter: any = elevenlabsMediaModule.create(ctx as any);
+
+    const first = adapter.pollJob('video::vid-shared', { apiKey: 'k' });
+    const second = adapter.pollJob('video::vid-shared', { apiKey: 'k' });
+    expect(recs).toHaveLength(1);
+    resolvePoll(res({ id: 'vid-shared', status: 'generating' }));
+    await expect(Promise.all([first, second])).resolves.toEqual([{ status: 'pending' }, { status: 'pending' }]);
+    expect(recs).toHaveLength(1);
+  });
+
+  it('throttles successful video polls to one request per 10 seconds per job', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const { recs, ctx } = makeCtx((_url, _init, n) =>
+      n === 1
+        ? res({ id: 'vid-slow', status: 'generating' })
+        : res({ id: 'vid-slow', status: 'completed', content_url: 'https://cdn.el/video.mp4' }),
+    );
+    const adapter: any = elevenlabsMediaModule.create(ctx as any);
+
+    await adapter.pollJob('video::vid-slow', { apiKey: 'k' });
+    await adapter.pollJob('video::vid-slow', { apiKey: 'k' });
+    vi.setSystemTime(9_999);
+    await adapter.pollJob('video::vid-slow', { apiKey: 'k' });
+    expect(recs).toHaveLength(1);
+
+    vi.setSystemTime(10_000);
+    const done = await adapter.pollJob('video::vid-slow', { apiKey: 'k' });
+    expect(done.status).toBe('completed');
+    expect(recs).toHaveLength(2);
+  });
+
   it('pollJob on the image modality hits /v1/flows/image/{id}', async () => {
     const { recs, ctx } = makeCtx(() => res({ id: 'gen-9', status: 'pending' }));
     const adapter: any = elevenlabsMediaModule.create(ctx as any);
@@ -248,10 +466,16 @@ describe('elevenlabs flows video (submit + lifecycle poll)', () => {
     expect(recs[0].url).toBe('https://api.elevenlabs.io/v1/flows/image/gen-9');
   });
 
-  it('2.1: a 503 on poll THROWS (transient); a 4xx on poll → returned failed', async () => {
+  it('a 503 on poll throws a typed transient error and is retryable immediately; a 4xx is terminal', async () => {
     const t = makeCtx(() => res('busy', false, 503));
     const a1: any = elevenlabsMediaModule.create(t.ctx as any);
-    await expect(a1.pollJob('video::vid-1', { apiKey: 'k' })).rejects.toThrow(/transient/i);
+    await expect(a1.pollJob('video::vid-1', { apiKey: 'k' })).rejects.toMatchObject({
+      name: 'ProviderUpstreamError',
+      kind: 'unavailable',
+      retryable: true,
+    });
+    await expect(a1.pollJob('video::vid-1', { apiKey: 'k' })).rejects.toMatchObject({ kind: 'unavailable' });
+    expect(t.recs).toHaveLength(2);
 
     const four = makeCtx(() => res('gone', false, 404));
     const a2: any = elevenlabsMediaModule.create(four.ctx as any);

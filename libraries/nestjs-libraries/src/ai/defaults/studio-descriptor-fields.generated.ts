@@ -328,6 +328,68 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
             "type": "toggle"
           }
         ]
+      },
+      {
+        "key": "image-to-video",
+        "operation": "video",
+        "fields": [
+          {
+            "name": "model",
+            "type": "select"
+          },
+          {
+            "name": "prompt",
+            "type": "prompt"
+          },
+          {
+            "name": "duration_secs",
+            "type": "number"
+          },
+          {
+            "name": "aspect_ratio",
+            "type": "select"
+          },
+          {
+            "name": "resolution",
+            "type": "select"
+          },
+          {
+            "name": "generate_audio",
+            "type": "toggle"
+          },
+          {
+            "name": "start_frame",
+            "type": "media"
+          },
+          {
+            "name": "end_frame",
+            "type": "media"
+          },
+          {
+            "name": "reference_image_1",
+            "type": "media"
+          },
+          {
+            "name": "reference_image_1_role",
+            "type": "select"
+          },
+          {
+            "name": "reference_image_2",
+            "type": "media"
+          },
+          {
+            "name": "reference_image_2_role",
+            "type": "select"
+          },
+          {
+            "name": "reference_image_3",
+            "type": "media"
+          },
+          {
+            "name": "reference_image_3_role",
+            "type": "select"
+          }
+        ]
       }
     ]
   },
