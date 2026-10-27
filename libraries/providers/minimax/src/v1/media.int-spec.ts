@@ -7,13 +7,18 @@ import { minimaxMediaModule } from './media.adapter';
 // (/query/video_generation → Success + file_id → /files/retrieve → download_url).
 
 describe('minimax media adapter', () => {
+  it('exposes S2V-01 in the image-to-video catalog used by backend validation', () => {
+    const models = minimaxMediaModule.metadata.mediaModels?.['image-to-video'] || [];
+    expect(models.some((model) => model.id === 'S2V-01')).toBe(true);
+  });
+
   it('submits video generation to /video_generation with Bearer auth and folds subject_image into subject_reference', async () => {
     const { recs, ctx } = makeCtx(() => res({ task_id: 'task-123' }));
     const adapter: any = minimaxMediaModule.create(ctx as any);
 
     const sub = await adapter.generateVideo('a cat surfing', {
       apiKey: 'minimax-key',
-      model: 'video-01',
+      model: 'S2V-01',
       webhookUrl: 'https://backend.example/media-jobs/webhook/job-1/tok',
       input: { prompt_optimizer: true, subject_image: 'https://img/me.png' },
     });
@@ -25,7 +30,7 @@ describe('minimax media adapter', () => {
     expect(r.method).toBe('POST');
     expect(r.headers.Authorization).toBe('Bearer minimax-key');
     const body = JSON.parse(r.body);
-    expect(body.model).toBe('video-01');
+    expect(body.model).toBe('S2V-01');
     expect(body.prompt).toBe('a cat surfing');
     expect(body.prompt_optimizer).toBe(true);
     // MiniMax rejects callback URLs it can't challenge-verify, so webhookUrl is never
@@ -33,6 +38,30 @@ describe('minimax media adapter', () => {
     expect(body.callback_url).toBeUndefined();
     // subject_image is flattened into MiniMax's nested subject_reference array.
     expect(body.subject_reference).toEqual([{ type: 'character', image: ['https://img/me.png'] }]);
+  });
+
+  it('maps the generic image-to-video sourceUrl onto the S2V subject reference', async () => {
+    const { recs, ctx } = makeCtx(() => res({ task_id: 'task-s2v' }));
+    const adapter: any = minimaxMediaModule.create(ctx as any);
+
+    await adapter.generateVideo('the presenter holds a coffee cup', {
+      apiKey: 'minimax-key',
+      model: 'S2V-01',
+      sourceUrl: 'https://img/presenter.png',
+    });
+
+    const body = JSON.parse(recs[0].body);
+    expect(body.model).toBe('S2V-01');
+    expect(body.subject_reference).toEqual([
+      { type: 'character', image: ['https://img/presenter.png'] },
+    ]);
+
+    await adapter.generateVideo('animate the product', {
+      apiKey: 'minimax-key',
+      model: 'I2V-01',
+      sourceUrl: 'https://img/product.png',
+    });
+    expect(JSON.parse(recs[1].body).subject_reference).toBeUndefined();
   });
 
   it('generateImage POSTs to /image_generation and parses data.image_urls', async () => {

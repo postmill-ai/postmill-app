@@ -79,6 +79,29 @@ describe('reelfarm media adapter (slideshow generate → status → video)', () 
     expect(recs.some((r) => r.url === 'https://reel.farm/api/v1/videos/vid-1')).toBe(true);
   });
 
+  it.each(['error', 'message', 'failure'])('pollJob preserves and redacts terminal %s details', async (field) => {
+    const detail = 'Rendering failed: https://cdn.reel.farm/result?token=fixture-secret&part=1';
+    const { ctx } = makeCtx(() => res({ slideshow_id: 4567, status: 'failed', [field]: detail }));
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+
+    const failed = await adapter.pollJob('4567', { apiKey: 'rf-key' });
+    expect(failed.status).toBe('failed');
+    expect(failed.error).toBe(
+      'Reel.Farm returned an error: Rendering failed: https://cdn.reel.farm/result?token=[REDACTED]&part=1',
+    );
+  });
+
+  it('pollJob includes the slideshow id when terminal failure has no provider detail', async () => {
+    const { ctx } = makeCtx(() => res({ slideshow_id: 4567, status: 'failed' }));
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+
+    const failed = await adapter.pollJob('4567', { apiKey: 'rf-key' });
+    expect(failed).toEqual({
+      status: 'failed',
+      error: 'Reel.Farm returned an error: Slideshow 4567 failed without an upstream error message',
+    });
+  });
+
   // Confirmed live 2026-10-22: slideshow exports return video_url: null + slideshow_images.
   it('pollJob completes a slideshow export from slideshow_images (first = artifact, rest = extras)', async () => {
     const { ctx } = makeCtx((url) => {

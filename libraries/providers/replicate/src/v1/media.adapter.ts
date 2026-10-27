@@ -341,7 +341,6 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   private static readonly _I2V_SOURCE_FIELD: Record<string, string> = {
     'minimax/video-01': 'first_frame_image',
     'bytedance/seedance-1-pro': 'image',
-    'kwaivgi/kling-v2.1-master': 'start_image',
     'kwaivgi/kling-v2.5-turbo-pro': 'start_image',
   };
   private static readonly _V2V_SOURCE_FIELD: Record<string, string> = {
@@ -369,7 +368,6 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     'riffusion/riffusion': 300,
     'google/veo-3.1': 1024,
     'bytedance/seedance-1-pro': 2000,
-    'kwaivgi/kling-v2.1-master': 2500,
     'kwaivgi/kling-v2.5-turbo-pro': 2500,
   };
 
@@ -492,6 +490,9 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     const sourceUrl = explicitVideoUrl ?? options?.sourceUrl;
 
     const modelId = options?.version || options?.model;
+    if (modelId === 'kwaivgi/kling-v2.1-master') {
+      throw new Error('Replicate model kwaivgi/kling-v2.1-master is discontinued. Use kwaivgi/kling-v2.5-turbo-pro instead.');
+    }
     if (sourceUrl && !modelId) {
       throw new Error(
         'Replicate source-driven video generation requires an explicit model/version; no default is configured',

@@ -74,7 +74,8 @@ export const metadata: ProviderMetadata = {
                 "value": "1080p",
                 "label": "1080p"
               }
-            ]
+            ],
+            "help": "Kling 2.6 requires 1080p when native audio is enabled."
           },
           {
             "name": "audio",
@@ -148,7 +149,8 @@ export const metadata: ProviderMetadata = {
                 "value": "1080p",
                 "label": "1080p"
               }
-            ]
+            ],
+            "help": "Kling 2.6 requires 1080p when native audio is enabled."
           },
           {
             "name": "audio",
@@ -222,7 +224,8 @@ export const metadata: ProviderMetadata = {
                 "value": "1080p",
                 "label": "1080p"
               }
-            ]
+            ],
+            "help": "Kling 2.6 requires 1080p when native audio is enabled."
           },
           {
             "name": "audio",
@@ -296,7 +299,8 @@ export const metadata: ProviderMetadata = {
                 "value": "1080p",
                 "label": "1080p"
               }
-            ]
+            ],
+            "help": "Kling 2.6 requires 1080p when native audio is enabled."
           },
           {
             "name": "audio",
@@ -352,7 +356,8 @@ export const metadata: ProviderMetadata = {
                 "value": "1080p",
                 "label": "1080p"
               }
-            ]
+            ],
+            "help": "Kling 2.6 requires 1080p when native audio is enabled."
           },
           {
             "name": "audio",
@@ -406,7 +411,8 @@ export const metadata: ProviderMetadata = {
                 "value": "1080p",
                 "label": "1080p"
               }
-            ]
+            ],
+            "help": "Kling 2.6 requires 1080p when native audio is enabled."
           },
           {
             "name": "audio",
@@ -460,7 +466,8 @@ export const metadata: ProviderMetadata = {
                 "value": "1080p",
                 "label": "1080p"
               }
-            ]
+            ],
+            "help": "Kling 2.6 requires 1080p when native audio is enabled."
           },
           {
             "name": "audio",
@@ -514,7 +521,8 @@ export const metadata: ProviderMetadata = {
                 "value": "1080p",
                 "label": "1080p"
               }
-            ]
+            ],
+            "help": "Kling 2.6 requires 1080p when native audio is enabled."
           },
           {
             "name": "audio",

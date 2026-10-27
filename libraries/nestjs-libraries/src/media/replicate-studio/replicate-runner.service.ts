@@ -169,7 +169,6 @@ export class ReplicateRunnerService {
     'riffusion/riffusion': 300,
     'google/veo-3.1': 1024,
     'bytedance/seedance-1-pro': 2000,
-    'kwaivgi/kling-v2.1-master': 2500,
     'kwaivgi/kling-v2.5-turbo-pro': 2500,
   };
 

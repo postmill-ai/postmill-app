@@ -511,6 +511,7 @@ describe('MediaStudioService', () => {
           id: 'job-1',
           status: 'completed',
           operation: 'image',
+          model: 'model-a',
           artifactUrl: '/uploads/org-1/a.png',
           error: null,
           createdAt: new Date(),
@@ -541,7 +542,7 @@ describe('MediaStudioService', () => {
       expect(fileService.getFileByPath).not.toHaveBeenCalled();
       expect(result).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: 'job-1', fileId: 'file-1', fileType: 'image' }),
+          expect.objectContaining({ id: 'job-1', model: 'model-a', fileId: 'file-1', fileType: 'image' }),
           expect.objectContaining({ id: 'job-2', fileId: 'file-2', fileType: 'image' }),
         ]),
       );

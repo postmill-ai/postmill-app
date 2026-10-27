@@ -6,6 +6,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { ModelSelect } from './model-select';
 import { studioFieldKey, studioOptionKey } from './i18n-keys';
+import { studioSelectOptions } from './types';
 import type { FileFieldValue, StudioField, StudioFieldValue } from './types';
 
 interface StudioFormProps {
@@ -94,6 +95,16 @@ const MediaPicker: FC<{ field: StudioField & { type: 'media' }; value?: FileFiel
 
 export const StudioForm: FC<StudioFormProps> = ({ fields, values, onChange, provider, operation, keyNs, tabKey }) => {
   const t = useT();
+  React.useEffect(() => {
+    for (const field of fields) {
+      if (field.type !== 'select' || !field.optionRules?.length) continue;
+      const options = studioSelectOptions(field, values);
+      const selected = values[field.name] ?? field.default;
+      if (selected !== undefined && !options.some((option) => option.value === selected)) {
+        onChange(field.name, options[0]?.value);
+      }
+    }
+  }, [fields, values, onChange]);
   return (
     <div className="flex flex-col gap-[16px]">
       {fields.map((field) => {
@@ -150,7 +161,7 @@ export const StudioForm: FC<StudioFormProps> = ({ fields, values, onChange, prov
                   onChange={(e) => onChange(field.name, e.target.value)}
                   className={inputClass}
                 >
-                  {(field.options ?? []).map((o, i) => (
+                  {studioSelectOptions(field, values).map((o, i) => (
                     <option key={o.value} value={o.value}>
                       {t(studioOptionKey(keyNs, tabKey, field.name, i), o.label)}
                     </option>

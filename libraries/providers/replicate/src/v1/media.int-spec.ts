@@ -111,14 +111,11 @@ describe('replicate media adapter (async predictions)', () => {
     const { recs, ctx } = makeCtx(() => res({ id: 'pred-i2v', status: 'starting' }));
     const adapter: any = replicateMediaModule.create(ctx as any);
 
-    // kling-v2.1-master's catalog entry declares no aspect_ratio field (upstream
-    // ignores it when start_image is set) — forwarding the org-wide tunable
-    // 422'd every job on the old kling-v2.1 (QA prod failure).
     const sub = await adapter.generateVideo('animate this', {
       apiKey: 'replicate-key',
-      model: 'kwaivgi/kling-v2.1-master',
+      model: 'kwaivgi/kling-v2.5-turbo-pro',
       sourceUrl: 'https://cdn.example.com/frame.png',
-      input: { aspect_ratio: '16:9', duration: '10' },
+      input: { unsupported_tunable: '16:9', duration: '10' },
     });
 
     expect(sub.jobId).toBe('pred-i2v');
@@ -136,7 +133,7 @@ describe('replicate media adapter (async predictions)', () => {
   it.each([
     ['minimax/video-01', 'first_frame_image'],
     ['bytedance/seedance-1-pro', 'image'],
-    ['kwaivgi/kling-v2.1-master', 'start_image'],
+    ['kwaivgi/kling-v2.5-turbo-pro', 'start_image'],
   ])('maps an image source to %s’s native `%s` input', async (model, field) => {
     const { recs, ctx } = makeCtx(() => res({ id: 'pred-i2v', status: 'starting' }));
     const adapter: any = replicateMediaModule.create(ctx as any);
@@ -178,19 +175,17 @@ describe('replicate media adapter (async predictions)', () => {
     );
   });
 
-  it('rejects an explicit video source for an image-to-video-only model', async () => {
-    const { ctx } = makeCtx(() => res({ id: 'pred-x', status: 'starting' }));
+  it('rejects the discontinued Kling 2.1 Master before submitting', async () => {
+    const { recs, ctx } = makeCtx(() => res({ id: 'pred-x', status: 'starting' }));
     const adapter: any = replicateMediaModule.create(ctx as any);
 
     await expect(
-      adapter.generateVideo('restyle this', {
+      adapter.generateVideo('animate this', {
         apiKey: 'replicate-key',
         model: 'kwaivgi/kling-v2.1-master',
-        input: { video_url: 'https://cdn.example.com/input.mp4' },
       }),
-    ).rejects.toThrow(
-      'Replicate model kwaivgi/kling-v2.1-master does not accept a video source input (image-to-video only)',
-    );
+    ).rejects.toThrow('discontinued. Use kwaivgi/kling-v2.5-turbo-pro instead');
+    expect(recs).toHaveLength(0);
   });
 
   it('knows a source field for every declared i2v/v2v catalog model', () => {

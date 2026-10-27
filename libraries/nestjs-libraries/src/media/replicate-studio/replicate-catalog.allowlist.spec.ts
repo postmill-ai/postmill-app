@@ -29,19 +29,14 @@ describe('Replicate catalog allowlist', () => {
   // the Replicate studio's picker; a model filed under the wrong category
   // produces a picker that asks for the wrong source media and a generation
   // that 422s.
-  it('keeps the discontinued kling-v2.1 OUT of the catalog in favor of kling-v2.1-master', () => {
-    // kling-v2.1 was discontinued upstream (Replicate: "Error code 1203: The
-    // model 'kling-v2-1' has been discontinued and is no longer available").
+  it('keeps discontinued Kling 2.1 models out of the catalog in favor of 2.5 Turbo Pro', () => {
     const allAllowlisted = new Set(Object.values(MODEL_ALLOWLIST).flat());
-    expect(allAllowlisted.has('kwaivgi/kling-v2.1')).toBe(false);
-    expect(OFFICIAL_MODELS.has('kwaivgi/kling-v2.1')).toBe(false);
-    // The official successor (verified live: only `prompt` required, optional
-    // `start_image`) fills the image-to-video slot.
-    expect(MODEL_ALLOWLIST['image-to-video']).toContain('kwaivgi/kling-v2.1-master');
-    expect(OFFICIAL_MODELS.has('kwaivgi/kling-v2.1-master')).toBe(true);
-    // The t2v-capable Kling (verified live: only `prompt` is required) is the
-    // text-to-video entry.
+    for (const retired of ['kwaivgi/kling-v2.1', 'kwaivgi/kling-v2.1-master']) {
+      expect(allAllowlisted.has(retired)).toBe(false);
+      expect(OFFICIAL_MODELS.has(retired)).toBe(false);
+    }
     expect(MODEL_ALLOWLIST['text-to-video']).toContain('kwaivgi/kling-v2.5-turbo-pro');
+    expect(MODEL_ALLOWLIST['image-to-video']).toContain('kwaivgi/kling-v2.5-turbo-pro');
   });
 
   it('keeps the retired google/veo-3 OUT of the catalog in favor of google/veo-3.1', () => {

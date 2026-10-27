@@ -286,6 +286,7 @@ export class MediaStudioService {
     return {
       id: job.id,
       operation: job.operation,
+      model: job.model,
       status: job.status,
       artifactUrl: completed ? job.artifactUrl : null,
       fileId: file?.id ?? null,
