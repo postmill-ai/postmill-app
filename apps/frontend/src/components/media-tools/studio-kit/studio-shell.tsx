@@ -13,7 +13,7 @@ import { StudioLanding } from './studio-landing';
 import { RenderQueue } from './render-queue';
 import { useStudioStatus, useStudioJobs, useStudioGenerate } from './hooks';
 import { studioNs, studioTabKey, studioTabDescKey } from './i18n-keys';
-import { buildBody, defaultsFor, isFilled } from './studio-form-utils';
+import { buildBody, defaultsFor, isFilled, validateStudioValues } from './studio-form-utils';
 import type {
   StudioDescriptor,
   StudioFieldValue,
@@ -46,12 +46,17 @@ export function StudioShell({ descriptor }: { descriptor: StudioDescriptor }) {
   );
   const [generating, setGenerating] = useState(false);
 
+  const validationError = useMemo(() => validateStudioValues(provider, tab, values), [provider, tab, values]);
   const canGenerate = useMemo(
-    () => tab.fields.filter((f) => f.required).every((f) => isFilled(values[f.name])),
-    [tab, values]
+    () => !validationError && tab.fields.filter((f) => f.required).every((f) => isFilled(values[f.name])),
+    [tab, values, validationError]
   );
 
   const onGenerate = async () => {
+    if (validationError) {
+      toaster.show(validationError, 'warning');
+      return;
+    }
     setGenerating(true);
     try {
       await generate(buildBody(tab, values));
@@ -157,6 +162,11 @@ export function StudioShell({ descriptor }: { descriptor: StudioDescriptor }) {
                 keyNs={keyNs}
                 tabKey={tab.key}
               />
+              {validationError && (
+                <div role="alert" className="text-[12px] text-dangerText">
+                  {translate('studio_invalid_input', 'Check inputs: {{message}}', { message: validationError })}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={onGenerate}

@@ -10,7 +10,7 @@ import { parseJobError, providerErrorToastText, type ProviderError } from '@post
 import { StudioForm } from './studio-form';
 import { useStudioStatus, useStudioJobs, useStudioGenerate } from './hooks';
 import { studioTabKey } from './i18n-keys';
-import { buildBody, defaultsFor, isFilled } from './studio-form-utils';
+import { buildBody, defaultsFor, isFilled, validateStudioValues } from './studio-form-utils';
 import {
   COMPACT_STUDIO_REGISTRY,
   type CompactOperation,
@@ -181,12 +181,16 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
 
   const promptField = active?.tab.fields.find((f) => f.type === 'prompt');
 
+  const validationError = useMemo(
+    () => (active ? validateStudioValues(provider, active.tab, values) : null),
+    [active, provider, values]
+  );
   const canGenerate = useMemo(() => {
-    if (!active) return false;
+    if (!active || validationError) return false;
     return active.tab.fields
       .filter((f) => f.required)
       .every((f) => (f.type === 'prompt' ? !!prompt.trim() : isFilled(values[f.name])));
-  }, [active, values, prompt]);
+  }, [active, values, prompt, validationError]);
 
   const onGenerate = useCallback(async () => {
     if (!active || !canGenerate) return;
@@ -304,6 +308,12 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
               <UtcToLocalDateRender date={resumedJob.createdAt} format="YYYY-MM-DD HH:mm" />
             </time>
           </span>
+        </div>
+      )}
+
+      {validationError && (
+        <div role="alert" className="text-[12px] text-dangerText">
+          {t('studio_invalid_input', 'Check inputs: {{message}}', { message: validationError })}
         </div>
       )}
 

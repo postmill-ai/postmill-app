@@ -5,8 +5,9 @@ import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-to
 // (submit → poll; requires an ElevenLabs Pro plan): images complete inside the request
 // via bounded inline polling, videos land via the media-jobs poll cron. Field names are
 // native ElevenLabs params (voice_id + voice_settings for TTS; aspect_ratio / resolution /
-// duration_secs / generate_audio for Flows), so they ride straight into the request body —
-// the adapter whitelists them per model because the Flows API rejects unknown fields.
+// duration_secs / generate_audio for Flows), so they ride straight into the request body.
+// Veo frame/reference Files are converted to inline_base64 objects by the adapter; the
+// descriptor's synthetic reference_image_N fields carry the role alongside each image.
 export const elevenlabsDescriptor: StudioDescriptor = {
   landing: {
     "website": "https://elevenlabs.io",
@@ -22,7 +23,7 @@ export const elevenlabsDescriptor: StudioDescriptor = {
       "Lifelike text-to-speech in 70+ languages",
       "5,000+ voices, plus custom voice cloning",
       "Image generation (Gemini & GPT Image models)",
-      "Veo 3.1 text-to-video with native audio",
+      "Veo 3.1 text/image-to-video with frames, references & native audio",
       "Dubbing that preserves the speaker's emotion"
     ]
   },
@@ -195,6 +196,83 @@ export const elevenlabsDescriptor: StudioDescriptor = {
           ],
         },
         { type: 'toggle', name: 'generate_audio', label: 'Generate audio', default: true, help: 'Veo can synthesize a native soundtrack.' },
+      ],
+    },
+    {
+      key: 'image-to-video',
+      label: 'Image → Video',
+      operation: 'video',
+      description: 'Guide Veo 3.1 with start/end frames or up to three subject/style references. References require 8 seconds and cannot be combined with frames. Requires an ElevenLabs Pro plan.',
+      fields: [
+        {
+          type: 'select',
+          name: 'model',
+          label: 'Model',
+          default: 'veo-3.1-fast-generate-001',
+          options: [
+            { value: 'veo-3.1-fast-generate-001', label: 'Veo 3.1 Fast' },
+            { value: 'veo-3.1-generate-001', label: 'Veo 3.1 (quality)' },
+          ],
+        },
+        { type: 'prompt', name: 'prompt', label: 'Prompt', required: true, placeholder: 'Describe the motion and scene…' },
+        { type: 'number', name: 'duration_secs', label: 'Duration (s)', min: 4, max: 8, step: 2, default: 8, help: 'Frames allow 4, 6, or 8 seconds. Subject/style references require 8 seconds.' },
+        {
+          type: 'select',
+          name: 'aspect_ratio',
+          label: 'Aspect ratio',
+          default: '16:9',
+          options: [
+            { value: '16:9', label: 'Landscape 16:9' },
+            { value: '9:16', label: 'Portrait 9:16' },
+          ],
+        },
+        {
+          type: 'select',
+          name: 'resolution',
+          label: 'Resolution',
+          default: '720p',
+          options: [
+            { value: '720p', label: '720p' },
+            { value: '1080p', label: '1080p' },
+            { value: '4K', label: '4K' },
+          ],
+        },
+        { type: 'toggle', name: 'generate_audio', label: 'Generate audio', default: true, help: 'Veo can synthesize a native soundtrack.' },
+        { type: 'media', name: 'start_frame', label: 'Start frame', accept: 'image', help: 'Optional first frame. Required when using an end frame.' },
+        { type: 'media', name: 'end_frame', label: 'End frame', accept: 'image', help: 'Optional last frame; cannot be combined with subject/style references.' },
+        { type: 'media', name: 'reference_image_1', label: 'Reference image 1', accept: 'image', help: 'Optional subject or style reference. Inline images must be 25 MB or smaller.' },
+        {
+          type: 'select',
+          name: 'reference_image_1_role',
+          label: 'Reference 1 role',
+          default: 'subject',
+          options: [
+            { value: 'subject', label: 'Subject / scene' },
+            { value: 'style', label: 'Visual style' },
+          ],
+        },
+        { type: 'media', name: 'reference_image_2', label: 'Reference image 2', accept: 'image' },
+        {
+          type: 'select',
+          name: 'reference_image_2_role',
+          label: 'Reference 2 role',
+          default: 'subject',
+          options: [
+            { value: 'subject', label: 'Subject / scene' },
+            { value: 'style', label: 'Visual style' },
+          ],
+        },
+        { type: 'media', name: 'reference_image_3', label: 'Reference image 3', accept: 'image' },
+        {
+          type: 'select',
+          name: 'reference_image_3_role',
+          label: 'Reference 3 role',
+          default: 'subject',
+          options: [
+            { value: 'subject', label: 'Subject / scene' },
+            { value: 'style', label: 'Visual style' },
+          ],
+        },
       ],
     },
   ],

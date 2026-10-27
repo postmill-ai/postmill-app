@@ -8,6 +8,7 @@ export const metadata: ProviderMetadata = {
     "media"
   ],
   "mediaCategories": [
+    "image-to-video",
     "text-to-image",
     "text-to-speech",
     "text-to-video"
@@ -660,6 +661,230 @@ export const metadata: ProviderMetadata = {
             "label": "Generate audio",
             "default": true,
             "help": "Veo can synthesize a native soundtrack."
+          }
+        ]
+      }
+    ],
+    "image-to-video": [
+      {
+        "id": "veo-3.1-fast-generate-001",
+        "label": "Veo 3.1 Fast",
+        "notes": [
+          "Requires an ElevenLabs Pro plan or above",
+          "Subject/style references require 8 seconds and cannot be combined with start/end frames; an end frame requires a start frame"
+        ],
+        "fields": [
+          {
+            "name": "duration_secs",
+            "type": "number",
+            "label": "Duration (s)",
+            "default": 8,
+            "min": 4,
+            "max": 8,
+            "step": 2,
+            "help": "Frames allow 4, 6, or 8 seconds. Subject/style references require 8 seconds."
+          },
+          {
+            "name": "aspect_ratio",
+            "type": "select",
+            "label": "Aspect ratio",
+            "default": "16:9",
+            "options": [
+              {
+                "value": "16:9",
+                "label": "Landscape 16:9"
+              },
+              {
+                "value": "9:16",
+                "label": "Portrait 9:16"
+              }
+            ]
+          },
+          {
+            "name": "resolution",
+            "type": "select",
+            "label": "Resolution",
+            "default": "720p",
+            "options": [
+              {
+                "value": "720p",
+                "label": "720p"
+              },
+              {
+                "value": "1080p",
+                "label": "1080p"
+              },
+              {
+                "value": "4K",
+                "label": "4K"
+              }
+            ]
+          },
+          {
+            "name": "generate_audio",
+            "type": "toggle",
+            "label": "Generate audio",
+            "default": true,
+            "help": "Veo can synthesize a native soundtrack."
+          },
+          {
+            "name": "reference_image_1_role",
+            "type": "select",
+            "label": "Reference 1 role",
+            "default": "subject",
+            "options": [
+              {
+                "value": "subject",
+                "label": "Subject / scene"
+              },
+              {
+                "value": "style",
+                "label": "Visual style"
+              }
+            ]
+          },
+          {
+            "name": "reference_image_2_role",
+            "type": "select",
+            "label": "Reference 2 role",
+            "default": "subject",
+            "options": [
+              {
+                "value": "subject",
+                "label": "Subject / scene"
+              },
+              {
+                "value": "style",
+                "label": "Visual style"
+              }
+            ]
+          },
+          {
+            "name": "reference_image_3_role",
+            "type": "select",
+            "label": "Reference 3 role",
+            "default": "subject",
+            "options": [
+              {
+                "value": "subject",
+                "label": "Subject / scene"
+              },
+              {
+                "value": "style",
+                "label": "Visual style"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "veo-3.1-generate-001",
+        "label": "Veo 3.1 (quality)",
+        "notes": [
+          "Requires an ElevenLabs Pro plan or above",
+          "Subject/style references require 8 seconds and cannot be combined with start/end frames; an end frame requires a start frame"
+        ],
+        "fields": [
+          {
+            "name": "duration_secs",
+            "type": "number",
+            "label": "Duration (s)",
+            "default": 8,
+            "min": 4,
+            "max": 8,
+            "step": 2,
+            "help": "Frames allow 4, 6, or 8 seconds. Subject/style references require 8 seconds."
+          },
+          {
+            "name": "aspect_ratio",
+            "type": "select",
+            "label": "Aspect ratio",
+            "default": "16:9",
+            "options": [
+              {
+                "value": "16:9",
+                "label": "Landscape 16:9"
+              },
+              {
+                "value": "9:16",
+                "label": "Portrait 9:16"
+              }
+            ]
+          },
+          {
+            "name": "resolution",
+            "type": "select",
+            "label": "Resolution",
+            "default": "720p",
+            "options": [
+              {
+                "value": "720p",
+                "label": "720p"
+              },
+              {
+                "value": "1080p",
+                "label": "1080p"
+              },
+              {
+                "value": "4K",
+                "label": "4K"
+              }
+            ]
+          },
+          {
+            "name": "generate_audio",
+            "type": "toggle",
+            "label": "Generate audio",
+            "default": true,
+            "help": "Veo can synthesize a native soundtrack."
+          },
+          {
+            "name": "reference_image_1_role",
+            "type": "select",
+            "label": "Reference 1 role",
+            "default": "subject",
+            "options": [
+              {
+                "value": "subject",
+                "label": "Subject / scene"
+              },
+              {
+                "value": "style",
+                "label": "Visual style"
+              }
+            ]
+          },
+          {
+            "name": "reference_image_2_role",
+            "type": "select",
+            "label": "Reference 2 role",
+            "default": "subject",
+            "options": [
+              {
+                "value": "subject",
+                "label": "Subject / scene"
+              },
+              {
+                "value": "style",
+                "label": "Visual style"
+              }
+            ]
+          },
+          {
+            "name": "reference_image_3_role",
+            "type": "select",
+            "label": "Reference 3 role",
+            "default": "subject",
+            "options": [
+              {
+                "value": "subject",
+                "label": "Subject / scene"
+              },
+              {
+                "value": "style",
+                "label": "Visual style"
+              }
+            ]
           }
         ]
       }

@@ -9,7 +9,7 @@ import {
   MediaPollResult,
   MediaInputValue,
   resolveApiKey,
-  redactError,
+  readCappedArrayBuffer,
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
@@ -51,9 +51,14 @@ const VIDEO_MODEL_FIELDS: Record<string, readonly string[]> = {
 
 // Docs polling guidance: images at most once every 2s (most finish in seconds) — the
 // synchronous generateImage contract is kept with a bounded 90s inline poll. Video is
-// polled by the lifecycle (≥10s interval per the docs), never inline.
+// polled by the lifecycle, with successful responses coalesced/throttled to ≥10s.
 const IMAGE_POLL_INTERVAL_MS = 2000;
 const IMAGE_POLL_DEADLINE_MS = 90_000;
+const VIDEO_POLL_INTERVAL_MS = 10_000;
+const MAX_CACHED_VIDEO_POLLS = 256;
+const MAX_INLINE_IMAGE_BYTES = 25 * 1024 * 1024;
+const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+const REFERENCE_IMAGE_INDEXES = [1, 2, 3] as const;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -71,6 +76,18 @@ interface FlowsGeneration {
   error_message?: string;
 }
 
+interface InlineImageReference {
+  type: 'inline_base64';
+  content_base64: string;
+  mime_type: string;
+}
+
+interface VeoMediaFields {
+  start_frame?: InlineImageReference;
+  end_frame?: InlineImageReference;
+  images?: Array<{ image: InlineImageReference; role: 'subject' | 'style' }>;
+}
+
 function pickFields(
   whitelist: Record<string, readonly string[]>,
   model: string,
@@ -86,8 +103,26 @@ function pickFields(
   return out;
 }
 
+function inlineImageReference(bytes: Buffer, mime: string): InlineImageReference {
+  const normalizedMime = mime.toLowerCase();
+  if (!IMAGE_MIME_TYPES.has(normalizedMime)) {
+    throw new Error(`ElevenLabs reference image MIME type "${mime || 'unknown'}" is not supported`);
+  }
+  if (bytes.length === 0) throw new Error('ElevenLabs reference image is empty');
+  if (bytes.length > MAX_INLINE_IMAGE_BYTES) {
+    throw new Error('ElevenLabs reference images must be 25 MB or smaller');
+  }
+  return {
+    type: 'inline_base64',
+    content_base64: bytes.toString('base64'),
+    mime_type: normalizedMime,
+  };
+}
+
 export class ElevenLabsAdapter implements MediaProviderAdapter {
   constructor(private readonly _fetch: SafeFetchPort) {}
+  private readonly _videoPollCache = new Map<string, { at: number; result: MediaPollResult }>();
+  private readonly _videoPollFlights = new Map<string, Promise<MediaPollResult>>();
   readonly identifier = 'elevenlabs';
   readonly name = 'ElevenLabs';
   readonly capabilities: MediaProviderCapabilities = {
@@ -109,6 +144,68 @@ export class ElevenLabsAdapter implements MediaProviderAdapter {
     return apiKey;
   }
 
+  private async _readImageReference(value: string): Promise<InlineImageReference> {
+    if (value.startsWith('data:')) {
+      const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/.exec(value);
+      if (!match) throw new Error('ElevenLabs reference image data URL is invalid');
+      return inlineImageReference(Buffer.from(match[2], 'base64'), match[1]);
+    }
+    if (!/^https?:\/\//.test(value)) {
+      throw new Error('ElevenLabs reference image must resolve to a file URL');
+    }
+    const res = await this._fetch(value);
+    if (!res.ok) throw new Error(`ElevenLabs reference image fetch failed (HTTP ${res.status})`);
+    let bytes: Buffer;
+    try {
+      bytes = await readCappedArrayBuffer(res, MAX_INLINE_IMAGE_BYTES);
+    } catch (err) {
+      if (/too large|exceeded cap/i.test((err as Error).message)) {
+        throw new Error('ElevenLabs reference images must be 25 MB or smaller');
+      }
+      throw err;
+    }
+    return inlineImageReference(bytes, res.headers.get('content-type')?.split(';')[0].trim() || '');
+  }
+
+  private async _veoMediaFields(model: string, input: Record<string, MediaInputValue>): Promise<VeoMediaFields> {
+    const imageValue = (name: string): string | undefined => {
+      const value = input[name];
+      if (value === undefined || value === '') return undefined;
+      if (typeof value !== 'string') throw new Error(`ElevenLabs ${name} must be an image file`);
+      return value;
+    };
+    const start = imageValue('start_frame');
+    const end = imageValue('end_frame');
+    const references = REFERENCE_IMAGE_INDEXES.map((index) => ({
+      index,
+      value: imageValue(`reference_image_${index}`),
+    })).filter((entry): entry is { index: 1 | 2 | 3; value: string } => !!entry.value);
+    if (!start && !end && references.length === 0) return {};
+    if (!VIDEO_MODEL_FIELDS[model]) throw new Error(`ElevenLabs model ${model} does not support Veo image inputs`);
+    if (end && !start) throw new Error('ElevenLabs end frame requires a start frame');
+    if (references.length > 0 && (start || end)) {
+      throw new Error('ElevenLabs reference images cannot be combined with start or end frames');
+    }
+    if (references.length > 0 && Number(input.duration_secs) !== 8) {
+      throw new Error('ElevenLabs reference-to-video requires an 8-second duration');
+    }
+
+    const out: VeoMediaFields = {};
+    if (start) out.start_frame = await this._readImageReference(start);
+    if (end) out.end_frame = await this._readImageReference(end);
+    if (references.length > 0) {
+      out.images = [];
+      for (const { index, value } of references) {
+        const role = input[`reference_image_${index}_role`] ?? 'subject';
+        if (role !== 'subject' && role !== 'style') {
+          throw new Error(`ElevenLabs reference image ${index} role must be subject or style`);
+        }
+        out.images.push({ image: await this._readImageReference(value), role });
+      }
+    }
+    return out;
+  }
+
   private async _submitFlow(
     modality: 'image' | 'video',
     model: string,
@@ -116,6 +213,8 @@ export class ElevenLabsAdapter implements MediaProviderAdapter {
     options?: MediaGenerateOptions,
   ): Promise<string> {
     const apiKey = this._key(options);
+    const input = options?.input || {};
+    const mediaFields = modality === 'video' ? await this._veoMediaFields(model, input) : {};
     const res = await this._fetch(`${FLOWS_BASE}/${modality}`, {
       method: 'POST',
       headers: {
@@ -125,7 +224,8 @@ export class ElevenLabsAdapter implements MediaProviderAdapter {
       body: JSON.stringify({
         model_id: model,
         prompt,
-        ...pickFields(modality === 'image' ? IMAGE_MODEL_FIELDS : VIDEO_MODEL_FIELDS, model, options?.input || {}),
+        ...pickFields(modality === 'image' ? IMAGE_MODEL_FIELDS : VIDEO_MODEL_FIELDS, model, input),
+        ...mediaFields,
       }),
     });
     if (!res.ok) throw await mediaUpstreamError(this, res, modality);
@@ -193,17 +293,39 @@ export class ElevenLabsAdapter implements MediaProviderAdapter {
     if ((modality !== 'image' && modality !== 'video') || !/^[A-Za-z0-9_-]+$/.test(id)) {
       return { status: 'failed', error: 'ElevenLabs job id is malformed (expected "image::<id>" or "video::<id>")' };
     }
+    return modality === 'video' ? this._pollVideo(id, apiKey) : this._pollFlow(modality, id, apiKey);
+  }
 
+  private async _pollVideo(id: string, apiKey: string): Promise<MediaPollResult> {
+    const cached = this._videoPollCache.get(id);
+    if (cached && Date.now() - cached.at < VIDEO_POLL_INTERVAL_MS) return cached.result;
+    const existing = this._videoPollFlights.get(id);
+    if (existing) return existing;
+
+    const flight = this._pollFlow('video', id, apiKey)
+      .then((result) => {
+        this._videoPollCache.delete(id);
+        this._videoPollCache.set(id, { at: Date.now(), result });
+        while (this._videoPollCache.size > MAX_CACHED_VIDEO_POLLS) {
+          const oldest = this._videoPollCache.keys().next().value;
+          if (oldest !== undefined) this._videoPollCache.delete(oldest);
+        }
+        return result;
+      })
+      .finally(() => this._videoPollFlights.delete(id));
+    this._videoPollFlights.set(id, flight);
+    return flight;
+  }
+
+  private async _pollFlow(modality: 'image' | 'video', id: string, apiKey: string): Promise<MediaPollResult> {
     const res = await this._fetch(`${FLOWS_BASE}/${modality}/${id}`, {
       headers: { 'xi-api-key': apiKey },
     });
     if (!res.ok) {
-      const body = await res.text();
-      // 429/5xx on a status poll is transient: THROW so the lifecycle retries.
-      if (isTransientStatus(res.status)) {
-        throw new Error(`ElevenLabs poll transient error ${res.status}: ${redactError(body, 200)}`);
-      }
-      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body, modality) };
+      const error = await mediaUpstreamError(this, res, modality);
+      // Transient failures are never cached or converted to a terminal result.
+      if (isTransientStatus(res.status)) throw error;
+      return { status: 'failed', error: error.message };
     }
     const data = (await res.json()) as FlowsGeneration;
 
@@ -224,6 +346,16 @@ export class ElevenLabsAdapter implements MediaProviderAdapter {
     }
     // pending | generating
     return { status: 'pending' };
+  }
+
+  async testConnection(options?: MediaCredentialOptions): Promise<{ ok: boolean; message: string }> {
+    const apiKey = resolveApiKey(options);
+    if (!apiKey) return { ok: false, message: 'ElevenLabs API key is required' };
+    const res = await this._fetch('https://api.elevenlabs.io/v1/user', {
+      headers: { 'xi-api-key': apiKey },
+    });
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'audio');
+    return { ok: true, message: 'Connection successful' };
   }
 
   async listVoices(options?: MediaGenerateOptions): Promise<Array<{ id: string; label: string; previewUrl?: string }>> {
