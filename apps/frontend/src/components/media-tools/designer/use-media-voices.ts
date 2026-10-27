@@ -10,7 +10,7 @@ export interface MediaVoice {
   previewUrl?: string;
 }
 
-export const useMediaVoices = (provider?: string) => {
+export const useMediaVoices = (provider?: string, enabled = true) => {
   const fetch = useFetch();
 
   const load = useCallback(async () => {
@@ -24,7 +24,7 @@ export const useMediaVoices = (provider?: string) => {
 
   const key = provider ? `media-voices-${provider}` : 'media-voices';
 
-  return useSWR<MediaVoice[]>(key, load, {
+  return useSWR<MediaVoice[]>(enabled ? key : null, load, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     revalidateIfStale: false,

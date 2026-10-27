@@ -8,6 +8,7 @@ import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { redactError } from '@postmill-ai/provider-kernel';
+import { submitHeyGenTts } from '@postmill-ai/provider-heygen/v1';
 
 const BASE = 'https://api.heygen.com';
 
@@ -284,16 +285,11 @@ export class HeyGenService {
     });
 
     try {
-      const res = await safeFetch(`${BASE}/v2/audio/generate`, {
-        method: 'POST',
-        headers: this._headers(apiKey),
-        body: JSON.stringify({ voice_id: params.voiceId, input_text: params.text }),
+      const audioId = await submitHeyGenTts((url, init) => safeFetch(String(url), init), {
+        apiKey,
+        voiceId: params.voiceId,
+        text: params.text,
       });
-      if (!res.ok) throw new Error(`HeyGen TTS failed: ${redactError(await res.text())}`);
-      const body = (await res.json()) as { data?: { audio_id?: string; id?: string } };
-      const audioId = body.data?.audio_id || body.data?.id;
-      if (!audioId) throw new Error('HeyGen returned no audio id');
-
       await this._lifecycle.attachProviderJob(job.id, `tts:${audioId}`, orgId);
       return { jobId: job.id };
     } catch (err) {

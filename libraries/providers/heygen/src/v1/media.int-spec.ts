@@ -31,9 +31,9 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
     ]);
   });
 
-  it('declares only the video-avatar category and avatar capability', () => {
-    expect(heygenMediaModule.metadata?.mediaCategories).toEqual(['video-avatar']);
-    expect(heygenMediaModule.manifest.capabilities).toMatchObject({ video: false, avatar: true });
+  it('declares avatar video and TTS without enabling ordinary video or music generation', () => {
+    expect(heygenMediaModule.metadata?.mediaCategories).toEqual(['text-to-speech', 'video-avatar']);
+    expect(heygenMediaModule.manifest.capabilities).toMatchObject({ video: false, audio: false, avatar: true, tts: true });
   });
 
   it('rejects ordinary video before credential resolution or network I/O', async () => {
@@ -187,5 +187,44 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
 
     const body = JSON.parse(recs[0].body);
     expect(body.video_inputs[0].character).toEqual({ type: 'avatar', avatar_id: 'av-1' });
+  });
+
+  it('lists HeyGen voices for the shared Designer voice picker', async () => {
+    const { recs, ctx } = makeCtx(() => res({
+      data: { voices: [{ voice_id: 'voice-1', name: 'Ava', preview_audio: 'https://cdn.heygen/ava.mp3' }] },
+    }));
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    await expect(adapter.listVoices({ apiKey: 'heygen-key' })).resolves.toEqual([
+      { id: 'voice-1', label: 'Ava', previewUrl: 'https://cdn.heygen/ava.mp3' },
+    ]);
+    expect(recs[0].url).toBe('https://api.heygen.com/v2/voices');
+  });
+
+  it('submits, polls, and downloads synchronous TTS through the shared provider path', async () => {
+    const { recs, ctx } = makeCtx((url) => {
+      if (url.includes('/audio/generate')) return res({ data: { audio_id: 'audio-1' } });
+      if (url.includes('/audio_status.get')) {
+        return res({ data: { status: 'completed', audio_url: 'https://cdn.heygen/voice.mp3' } });
+      }
+      return res('mp3-audio');
+    });
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    const audio = await adapter.textToSpeech('A faceless product ad', { apiKey: 'heygen-key', voice: 'voice-1' });
+
+    expect(audio.toString()).toBe('mp3-audio');
+    expect(JSON.parse(recs[0].body)).toEqual({ voice_id: 'voice-1', input_text: 'A faceless product ad' });
+    expect(recs[1].url).toBe('https://api.heygen.com/v1/audio_status.get?audio_id=audio-1');
+    expect(recs[2].url).toBe('https://cdn.heygen/voice.mp3');
+    expect(recs[2].headers['x-api-key']).toBeUndefined();
+  });
+
+  it('requires an explicit voice and preserves TTS upstream errors', async () => {
+    const { ctx } = makeCtx(() => res({ detail: 'invalid voice' }, false, 400));
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    await expect(adapter.textToSpeech('hello', { apiKey: 'heygen-key' })).rejects.toThrow('voice is required');
+    await expect(adapter.textToSpeech('hello', { apiKey: 'heygen-key', voice: 'bad' })).rejects.toThrow('HeyGen rejected');
   });
 });

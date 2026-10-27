@@ -89,14 +89,20 @@ beforeEach(() => {
   fetchMock.mockImplementation((url: string) => {
     if (url.includes('/media/generation-providers')) {
       const audio = url.includes('operation=audio');
+      const tts = url.includes('operation=tts');
       return Promise.resolve(
         ok({
           providers: audio
             ? [{ identifier: 'suno', name: 'Suno' }]
-            : [{ identifier: 'google', name: 'Google AI Studio' }],
+            : tts
+              ? [{ identifier: 'heygen', name: 'HeyGen' }]
+              : [{ identifier: 'google', name: 'Google AI Studio' }],
           default: { providerId: 'fal', model: 'kling-2.1' },
         })
       );
+    }
+    if (url.includes('/media/voices')) {
+      return Promise.resolve(ok([{ id: 'voice-1', label: 'Ava' }]));
     }
     if (url.includes('/media/studio/suno/status')) {
       return Promise.resolve(ok({ configured: true, enabled: true }));
@@ -149,6 +155,73 @@ describe('AiVideoDialog provider picker wiring', () => {
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body.operation).toBe('video');
     expect(body.input.prompt).toBe('a rocket launch');
+  });
+
+  it('adds the selected narration only after the visual lands successfully', async () => {
+    const onResult = vi.fn().mockResolvedValue(true);
+    const onGenerateVoiceover = vi.fn().mockResolvedValue(undefined);
+    wrap(
+      <AiVideoDialog
+        fetch={fetchMock as never}
+        toaster={toaster}
+        onResult={onResult}
+        onGenerateVoiceover={onGenerateVoiceover}
+      />
+    );
+    fireEvent.change(await screen.findByPlaceholderText('Describe the video you want to generate...'), {
+      target: { value: 'a product commercial' },
+    });
+    fireEvent.click(screen.getByLabelText('Include voiceover (faceless video)'));
+    fireEvent.change(await screen.findByLabelText('Narration script'), { target: { value: 'Try it today' } });
+    fireEvent.change(await screen.findByLabelText('Voice provider:'), { target: { value: 'heygen' } });
+    fireEvent.change(await screen.findByLabelText('Voice'), { target: { value: 'voice-1' } });
+    fireEvent.change(screen.getByLabelText('Tone / style (optional)'), { target: { value: 'warm' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(onGenerateVoiceover).toHaveBeenCalledWith('Try it today', 'voice-1', 'warm', 'heygen'));
+    expect(onResult).toHaveBeenCalledBefore(onGenerateVoiceover);
+  });
+
+  it('requires narration and a voice before allowing a faceless generation', async () => {
+    wrap(
+      <AiVideoDialog
+        fetch={fetchMock as never}
+        toaster={toaster}
+        onResult={vi.fn()}
+        onGenerateVoiceover={vi.fn()}
+      />
+    );
+    fireEvent.change(await screen.findByPlaceholderText('Describe the video you want to generate...'), {
+      target: { value: 'a product commercial' },
+    });
+    fireEvent.click(screen.getByLabelText('Include voiceover (faceless video)'));
+    fireEvent.change(await screen.findByLabelText('Narration script'), { target: { value: 'Try it today' } });
+
+    expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(callsTo('/media/generate-video')).toHaveLength(0);
+  });
+
+  it('does not bill a voiceover when the visual generation fails', async () => {
+    const onResult = vi.fn().mockResolvedValue(false);
+    const onGenerateVoiceover = vi.fn().mockResolvedValue(undefined);
+    wrap(
+      <AiVideoDialog
+        fetch={fetchMock as never}
+        toaster={toaster}
+        onResult={onResult}
+        onGenerateVoiceover={onGenerateVoiceover}
+      />
+    );
+    fireEvent.change(await screen.findByPlaceholderText('Describe the video you want to generate...'), {
+      target: { value: 'a product commercial' },
+    });
+    fireEvent.click(screen.getByLabelText('Include voiceover (faceless video)'));
+    fireEvent.change(await screen.findByLabelText('Narration script'), { target: { value: 'Try it today' } });
+    fireEvent.change(await screen.findByLabelText('Voice'), { target: { value: 'voice-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(onResult).toHaveBeenCalled());
+    expect(onGenerateVoiceover).not.toHaveBeenCalled();
   });
 });
 
