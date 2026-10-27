@@ -31,8 +31,9 @@ HeyGen generates the narration as a separate editable timeline track.
 ## Render queue
 
 A live **Render queue** (polling `GET /media/heygen/jobs`) tracks every submission across all four
-tabs. HeyGen internally namespaces the provider job reference by operation (`video:`, `tts:`,
-`translate:`) so the poller can route status checks to the right HeyGen endpoint per job type.
+tabs. HeyGen internally namespaces asynchronous provider job references by operation (`video:`,
+`translate:`, and legacy `tts:`) so the poller can route status checks to the right HeyGen endpoint.
+New Voiceover speech returns its audio URL synchronously and is stored directly in `/files`.
 
 ## Output
 

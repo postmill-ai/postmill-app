@@ -285,12 +285,17 @@ export class HeyGenService {
     });
 
     try {
-      const audioId = await submitHeyGenTts((url, init) => safeFetch(String(url), init), {
+      const speech = await submitHeyGenTts((url, init) => safeFetch(String(url), init), {
         apiKey,
         voiceId: params.voiceId,
         text: params.text,
       });
-      await this._lifecycle.attachProviderJob(job.id, `tts:${audioId}`, orgId);
+      await this._lifecycle.completeJob(
+        job,
+        speech.artifactUrl,
+        { provider: 'heygen', mime: 'audio/mpeg', durationSeconds: speech.durationSeconds },
+        params.folderId,
+      );
       return { jobId: job.id };
     } catch (err) {
       await this._lifecycle.failJob(job, (err as Error).message, { notify: false });

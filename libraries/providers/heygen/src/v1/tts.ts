@@ -4,8 +4,6 @@ import {
   SafeFetchPort,
   mediaUpstreamError,
   mediaUpstreamFailure,
-  mediaUpstreamFromPoll,
-  mediaUpstreamFromUnknown,
   isTransientStatus,
   readCappedArrayBuffer,
   resolveApiKey,
@@ -13,6 +11,7 @@ import {
 
 const PROVIDER = { identifier: 'heygen', name: 'HeyGen' } as const;
 const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+const MAX_SUBMIT_ATTEMPTS = 3;
 
 function headers(options?: MediaCredentialOptions): Record<string, string> {
   const apiKey = resolveApiKey(options);
@@ -24,23 +23,36 @@ function headers(options?: MediaCredentialOptions): Record<string, string> {
   };
 }
 
+export interface HeyGenTtsSubmission {
+  artifactUrl: string;
+  durationSeconds?: number;
+}
+
 export async function submitHeyGenTts(
   fetch: SafeFetchPort,
   options: MediaCredentialOptions & { voiceId: string; text: string },
-): Promise<string> {
+): Promise<HeyGenTtsSubmission> {
   if (!options.voiceId) throw new Error('HeyGen voice is required');
-  const res = await fetch('https://api.heygen.com/v2/audio/generate', {
-    method: 'POST',
-    headers: headers(options),
-    body: JSON.stringify({ voice_id: options.voiceId, input_text: options.text }),
-  });
-  if (!res.ok) throw await mediaUpstreamError(PROVIDER, res, 'audio');
-  const body = (await res.json()) as { data?: { audio_id?: string; id?: string } };
-  const audioId = body.data?.audio_id || body.data?.id;
-  if (!audioId) throw new Error('HeyGen returned no audio id');
-  return audioId;
+  for (let attempt = 0; attempt < MAX_SUBMIT_ATTEMPTS; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
+    const res = await fetch('https://api.heygen.com/v3/voices/speech', {
+      method: 'POST',
+      headers: headers(options),
+      body: JSON.stringify({ voice_id: options.voiceId, text: options.text }),
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { data?: { audio_url?: string; duration?: number } };
+      if (!body.data?.audio_url) throw new Error('HeyGen returned no audio URL');
+      return { artifactUrl: body.data.audio_url, durationSeconds: body.data.duration };
+    }
+
+    const error = await mediaUpstreamError(PROVIDER, res, 'audio');
+    if (!isTransientStatus(res.status) || attempt === MAX_SUBMIT_ATTEMPTS - 1) throw error;
+  }
+  throw new Error('HeyGen TTS submission failed');
 }
 
+// Retained for jobs submitted through the legacy asynchronous audio endpoint.
 export async function pollHeyGenTts(
   fetch: SafeFetchPort,
   audioId: string,
@@ -81,27 +93,7 @@ export async function generateHeyGenTts(
   fetch: SafeFetchPort,
   options: MediaCredentialOptions & { voiceId: string; text: string },
 ): Promise<Buffer> {
-  const audioId = await submitHeyGenTts(fetch, options);
-  let artifactUrl: string | undefined;
-  for (let attempt = 0; attempt < 60; attempt++) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
-    try {
-      const poll = await pollHeyGenTts(fetch, audioId, options);
-      if (poll.status === 'failed') throw mediaUpstreamFromPoll(PROVIDER, poll.error || 'HeyGen TTS failed', 'audio');
-      if (poll.status === 'completed') {
-        artifactUrl = poll.artifactUrl;
-        break;
-      }
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('transient error') && attempt < 59) continue;
-      throw mediaUpstreamFromUnknown(PROVIDER, err, 'audio');
-    }
-  }
-  if (!artifactUrl) {
-    const error = new Error('HeyGen TTS did not complete after 60 attempts') as Error & { statusCode?: number };
-    error.statusCode = 408;
-    throw mediaUpstreamFromUnknown(PROVIDER, error, 'audio');
-  }
+  const { artifactUrl } = await submitHeyGenTts(fetch, options);
   const res = await fetch(artifactUrl);
   if (!res.ok) throw await mediaUpstreamError(PROVIDER, res, 'audio');
   return readCappedArrayBuffer(res, MAX_AUDIO_BYTES);
