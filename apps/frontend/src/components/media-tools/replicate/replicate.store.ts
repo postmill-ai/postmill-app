@@ -66,7 +66,8 @@ interface ReplicateState {
   // Settings snapshot captured at generate time, shown in the result details card.
   resultMeta: { modelName: string; input: Record<string, unknown> } | null;
   error: string | null;
-  saveFolderId: string | null;
+  // null is the Files root; undefined means no destination has been selected.
+  saveFolderId: string | null | undefined;
   /**
    * The hosting Designer canvas's aspect ratio (e.g. '9:16'), set by an
    * embedded studio host. `defaultsFromSchema` seeds it into `aspect_ratio`

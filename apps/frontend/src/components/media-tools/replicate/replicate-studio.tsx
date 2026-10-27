@@ -204,7 +204,7 @@ function CategoryPanel({
   );
 }
 
-function GenerateButton({ category }: { category: string }) {
+export function GenerateButton({ category }: { category: string }) {
   const t = useT();
   const selectedModel = useReplicateStore((s) => s.selectedModel);
   const formInput = useReplicateStore((s) => s.formInput);
@@ -214,7 +214,7 @@ function GenerateButton({ category }: { category: string }) {
 
   const schema = selectedModel?.inputSchema as { required?: string[] } | undefined;
   const missing = useMemo(() => missingRequiredFields(schema, formInput), [schema, formInput]);
-  const needsFolder = FOLDER_REQUIRED_CATEGORIES.includes(category) && !saveFolderId;
+  const needsFolder = FOLDER_REQUIRED_CATEGORIES.includes(category) && saveFolderId === undefined;
   const disabled = !selectedModel || runState === 'running' || missing.length > 0 || needsFolder;
 
   return (
