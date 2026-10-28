@@ -33,7 +33,7 @@ approval), and supports cancelling an in-flight run.
 AI Designer needs **vision**, **high-reasoning**, and **low-reasoning** AI model defaults set under
 **Settings → AI → Model Defaults**, plus a **Text to Image** media default under
 **Settings → Content → Media Defaults**. If any is missing, the run is blocked and the chat names
-the missing default(s) (its message points at Settings → AI → Model Defaults). If a text-to-image
+the missing default(s) (its message points at the settings screen where each default lives). If a text-to-image
 default is configured but its provider has since been disabled, the run continues with a warning
 and falls back to stock imagery where generation was planned.
 

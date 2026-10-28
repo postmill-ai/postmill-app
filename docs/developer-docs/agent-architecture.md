@@ -179,7 +179,7 @@ The same `LoadToolsService.loadTools()` output is used by:
 
 > **A2A (`/a2a`) is deferred / not mounted.** The prior bridge was written against an `@reaatech/a2a-reference-mcp-bridge` API that does not exist in the installed version (`A2aAsMcpServer` has no `handleRequest`), so every request 500-ed. It is tracked as a future feature rather than shipped broken — a correct build needs an in-process MCP transport pair + an A2A JSON-RPC HTTP layer over `McpToolAdapter.executeTask`, verified against a live consumer.
 
-The `ToolFirewallService` wraps every execution, so budget, guardrail, and permission checks apply regardless of caller. `startMcp` returns early when either `DEV_DISABLE_MCP` or `DEV_DISABLE_AGENT` is set, so with `DEV_DISABLE_AGENT` the MCP endpoints are not mounted either (see [MCP Server](./mcp.md)).
+The `ToolFirewallService` wraps every execution, so budget, guardrail, and permission checks apply regardless of caller. `startMcp` returns early when `DEV_DISABLE_MCP` is set; with `DEV_DISABLE_AGENT` the MCP endpoints stay mounted and only the Mastra agent map is skipped (see [MCP Server](./mcp.md)).
 
 ---
 

@@ -2,7 +2,7 @@
 
 Postmill exposes an MCP (Model Context Protocol) server with multiple entrypoints for AI agent integration. The server is bootstrapped in `libraries/nestjs-libraries/src/chat/start.mcp.ts` and provides access to the Mastra chat agent's tools and sub-agents.
 
-MCP startup is gated by feature flags: `DEV_DISABLE_MCP` and `DEV_DISABLE_AGENT` both skip mounting the surface.
+MCP startup is gated by feature flags: `DEV_DISABLE_MCP` skips mounting the surface entirely. `DEV_DISABLE_AGENT` keeps every MCP endpoint mounted and only skips advertising the Mastra agents on the MCP server.
 
 ## Entrypoints
 

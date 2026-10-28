@@ -11,7 +11,7 @@ The Team page is available when your subscription tier includes team members. Fr
 - **Remove a member** (`DELETE /settings/team/:id`) — removes the membership; the user's account itself is untouched. Bulk remove is available from the data table selection.
 - **Change a member's role** via the per-row selector or `PUT /settings/roles/team/:userId/role`.
 
-On the API, inviting, creating, and removing members (`/settings/team/*`) requires `settings:update`; role assignment and role management (`/settings/roles/*`) require `members:manage`. Only an **Owner** can change or remove another Owner.
+On the API, inviting, creating, and removing members (`/settings/team/*`) and role assignment (`/settings/roles/*`) all require `members:manage`. Only an **Owner** can change or remove another Owner.
 
 If a former member later deletes their account, the designs they created are deleted with it, but the design versions they saved on teammates' designs are kept — anonymized, with no creator attached.
 

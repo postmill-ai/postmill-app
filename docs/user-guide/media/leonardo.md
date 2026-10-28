@@ -24,7 +24,7 @@ Leonardo's API is asynchronous (create → `generationId` → poll), but the ada
 
 - **Image-only:** this provider does not generate video or audio.
 - **Async-then-poll:** the Leonardo API creates a generation job and returns results on poll; the adapter handles this internally, with a bounded retry loop.
-- **Multi-image output:** `Number of images` can be set from 1 to 8, but the studio currently saves only the first returned image to `/files`.
+- **Multi-image output:** `Number of images` can be set from 1 to 8; every returned image is saved as its own file (the queue card exposes the first as primary and the rest as extras).
 - **Model UUIDs:** the model selector shows readable names, but the value sent to Leonardo is the underlying model UUID.
 - **Test connection is free:** Settings → Content → AI Media → **Test connection** reads your Leonardo profile (`/me`); no generation is billed.
 

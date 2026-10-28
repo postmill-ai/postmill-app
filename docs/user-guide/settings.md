@@ -491,13 +491,13 @@ migrations initiated, and quota events.
 
 Available when your subscription tier includes webhooks.
 
-- **Add webhook** — define a name and endpoint URL, select event types to subscribe to, choose all
-  or specific integrations, and optionally configure an HMAC secret for payload verification.
+- **Add webhook** — define a name and endpoint URL, select event types to subscribe to, and choose all
+  or specific integrations. Payload signing uses the deployment-wide `WEBHOOK_SIGNING_SECRET`, not a per-webhook key.
 - **Manage** — edit or delete existing webhook endpoints.
 - **Test Webhook** — send a test payload to verify your endpoint receives and processes webhooks
   correctly.
-- **Event types** — `post.published`, `comment.new`, `comment.reply`, and
-  `analytics.snapshot_complete`.
+- **Event types** — `post.published`, `post.failed`, `comment.new`, `comment.reply`,
+  `analytics.snapshot_complete`, and `analytics.anomaly_detected`.
 
 See [Webhooks](../developer-docs/webhooks.md) for the developer reference on payload format and
 HMAC verification.
