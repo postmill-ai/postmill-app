@@ -321,11 +321,7 @@ export class MediaJobLifecycleService {
       // guarantees a single winner, so siblings are created exactly once. (Primary-first ordering
       // means a mid-fan-out crash loses an extra clip rather than duplicating the set on retry.)
       if (ok && poll.extraArtifactUrls?.length) {
-        await this._landExtraArtifacts(
-          job,
-          poll.extraArtifactUrls.slice(0, MAX_EXTRA_ARTIFACTS),
-          poll.metadata,
-        );
+        await this.landExtraArtifacts(job, poll.extraArtifactUrls, poll.metadata);
       }
       return ok ? 'completed' : 'failed';
     }
@@ -352,6 +348,19 @@ export class MediaJobLifecycleService {
       'landing',
     );
     return count === 1;
+  }
+
+  // Land extra artifacts from a single generation as independent sibling completed jobs.
+  // Public entry point shared by the async poll path (extraArtifactUrls) and the sync
+  // studio path (a multi-image generateImage returns the full set inline); applies the
+  // §6.2 fan-out cap in one place.
+  async landExtraArtifacts(
+    primary: AIMediaJob,
+    urls: string[],
+    metadata?: MediaArtifactMetadata,
+  ): Promise<void> {
+    if (!urls.length) return;
+    await this._landExtraArtifacts(primary, urls.slice(0, MAX_EXTRA_ARTIFACTS), metadata);
   }
 
   // Land extra artifacts from a single provider job (e.g. a music provider returning multiple

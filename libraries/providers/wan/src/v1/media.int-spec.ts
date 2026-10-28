@@ -92,6 +92,42 @@ describe('wan media adapter (DashScope async task API)', () => {
     const out = await adapter.generateImage('a sunset', { apiKey: 'wan-key', model: 'wan2.2-t2i-flash' });
     expect(recs[0].url).toBe('https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis');
     expect(out.image).toBe('https://cdn.wan/img.png');
+    expect(out.images).toEqual(['https://cdn.wan/img.png']);
+    expect(out.multi).toBe(false);
+  }, 15000);
+
+  it('pollJob surfaces every image of an n>1 batch (artifactUrl + extraArtifactUrls)', async () => {
+    const { ctx } = makeCtx(() =>
+      res({
+        output: {
+          task_status: 'SUCCEEDED',
+          results: [{ url: 'https://cdn.wan/1.png' }, { url: 'https://cdn.wan/2.png' }, { url: 'https://cdn.wan/3.png' }],
+        },
+      }),
+    );
+    const adapter: any = wanMediaModule.create(ctx as any);
+
+    const done = await adapter.pollJob('task-123', { apiKey: 'wan-key' });
+    expect(done.status).toBe('completed');
+    expect(done.artifactUrl).toBe('https://cdn.wan/1.png');
+    expect(done.extraArtifactUrls).toEqual(['https://cdn.wan/2.png', 'https://cdn.wan/3.png']);
+  });
+
+  it('generateImage returns the full images array for an n>1 batch (multi: true)', async () => {
+    const { ctx } = makeCtx((url) => {
+      if (url.endsWith('/image-synthesis')) return res({ output: { task_id: 'img-1' } });
+      return res({
+        output: {
+          task_status: 'SUCCEEDED',
+          results: [{ url: 'https://cdn.wan/1.png' }, { url: 'https://cdn.wan/2.png' }],
+        },
+      });
+    });
+    const adapter: any = wanMediaModule.create(ctx as any);
+    const out = await adapter.generateImage('a sunset', { apiKey: 'wan-key', model: 'wan2.2-t2i-flash', input: { n: 2 } });
+    expect(out.multi).toBe(true);
+    expect(out.image).toBe('https://cdn.wan/1.png');
+    expect(out.images).toEqual(['https://cdn.wan/1.png', 'https://cdn.wan/2.png']);
   }, 15000);
 
   it('testConnection succeeds against the OpenAI-compatible models list', async () => {

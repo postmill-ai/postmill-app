@@ -187,8 +187,9 @@ export class GenviralAdapter implements MediaProviderAdapter {
     }
     try {
       const res = await this._fetch(`${BASE}/studio/models`, { headers });
+      if (res.ok) return { ok: true, message: 'Connection successful' };
       if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid Genviral API key' };
-      return { ok: true, message: 'Connection successful' };
+      return { ok: false, message: `Genviral returned ${res.status}` };
     } catch (err) {
       return { ok: false, message: (err as Error).message };
     }

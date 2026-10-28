@@ -26,10 +26,14 @@ const AZURE_CREDENTIAL_FIELDS: CredentialField[] = [
   { key: 'apiVersion', label: 'API Version', type: 'string', required: false, placeholder: '2024-10-01-preview' },
 ];
 
+// Only genuine image-generation deployments carry `image`/`kind: 'image'` — chat LLMs
+// flagged image-capable would surface in media image dropdowns and fail at imageModel().
 const AZURE_MODELS: ModelInfo[] = [
-  { id: 'gpt-4o', label: 'GPT-4o', kind: 'text', capabilities: { ...AZURE_CAPABILITIES, image: true } },
-  { id: 'gpt-4o-mini', label: 'GPT-4o Mini', kind: 'text', capabilities: { ...AZURE_CAPABILITIES, image: true } },
+  { id: 'gpt-4o', label: 'GPT-4o', kind: 'text', capabilities: { ...AZURE_CAPABILITIES, image: false } },
+  { id: 'gpt-4o-mini', label: 'GPT-4o Mini', kind: 'text', capabilities: { ...AZURE_CAPABILITIES, image: false } },
   { id: 'gpt-4.1', label: 'GPT-4.1', kind: 'text', capabilities: { ...AZURE_CAPABILITIES, image: false, embeddings: false } },
+  { id: 'dall-e-3', label: 'DALL·E 3', kind: 'image', capabilities: { text: false, image: true, vision: false, embeddings: false, speech: false, tools: false } },
+  { id: 'gpt-image-1', label: 'gpt-image-1', kind: 'image', capabilities: { text: false, image: true, vision: false, embeddings: false, speech: false, tools: false } },
   { id: 'text-embedding-3-small', label: 'Text Embedding 3 Small', kind: 'embedding', dimension: 1536, capabilities: { text: false, image: false, vision: false, embeddings: true, speech: false, tools: false } },
   { id: 'text-embedding-3-large', label: 'Text Embedding 3 Large', kind: 'embedding', dimension: 3072, capabilities: { text: false, image: false, vision: false, embeddings: true, speech: false, tools: false } },
 ];

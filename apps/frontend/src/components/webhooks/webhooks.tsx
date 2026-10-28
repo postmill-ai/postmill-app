@@ -25,13 +25,13 @@ const EVENT_OPTIONS = [
   { value: 'comment.new', labelKey: 'event_new_comment', label: 'New Comment' },
   { value: 'comment.reply', labelKey: 'event_comment_reply', label: 'Comment Reply' },
   { value: 'analytics.snapshot_complete', labelKey: 'event_analytics_snapshot', label: 'Analytics Snapshot' },
+  { value: 'analytics.anomaly_detected', labelKey: 'event_analytics_anomaly_detected', label: 'Analytics Anomaly Detected' },
 ];
 
 const webhookDetails = (t: (key: string, fallback: string) => string) =>
   object().shape({
     name: string().required(t('webhook_name_required', 'Name is required')),
     url: string().url(t('webhook_url_invalid', 'Must be a valid URL')).required(t('webhook_url_required', 'URL is required')),
-    secret: string().optional(),
     events: array().of(string().required()).min(1, t('webhook_events_required', 'Select at least one event')),
     integrations: array(),
   });
@@ -60,7 +60,6 @@ const AddOrEditWebhook: FC<{ data?: any; reload: () => void }> = ({ data, reload
     values: {
       name: data?.name || '',
       url: data?.url || '',
-      secret: data?.secret || '',
       events: data?.events || ['post.published'],
       integrations: data?.integrations || [],
     },
@@ -127,7 +126,6 @@ const AddOrEditWebhook: FC<{ data?: any; reload: () => void }> = ({ data, reload
         <div>
           <Input label={t('label_name', 'Name')} translationKey="label_name" {...form.register('name')} />
           <Input label={t('label_url', 'URL')} translationKey="label_url" {...form.register('url')} />
-          <Input label={t('label_secret_hmac', 'Secret (HMAC key)')} translationKey="label_secret_hmac" {...form.register('secret')} />
 
           <div className="flex flex-col gap-[6px] mb-[16px]">
             <div className="text-[14px]">{t('events', 'Events')}</div>

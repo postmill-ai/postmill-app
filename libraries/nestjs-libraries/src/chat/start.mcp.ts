@@ -262,15 +262,18 @@ export function requireScopes(authResult: AuthResult, required: string[]): boole
 }
 
 export const startMcp = async (app: INestApplication) => {
+  let agentDisabled = false;
   try {
     const flags = app.get(FeatureFlagsService, { strict: false });
     if (flags?.isDisabled('mcp')) {
       new Logger('startMcp').log('MCP is disabled via DEV_DISABLE_MCP; skipping MCP/A2A startup');
       return;
     }
-    if (flags?.isDisabled('agent')) {
+    // DEV_DISABLE_AGENT gates only the agent surface: the MCP endpoints and tool
+    // union stay up; the Mastra agent map on the MCP server is skipped below.
+    agentDisabled = flags?.isDisabled('agent') ?? false;
+    if (agentDisabled) {
       new Logger('startMcp').log('Agent is disabled via DEV_DISABLE_AGENT; skipping MCP/A2A agent surface');
-      return;
     }
   } catch {
     // FeatureFlagsService may not be available in some test contexts — proceed normally.
@@ -358,9 +361,6 @@ export const startMcp = async (app: INestApplication) => {
   };
 
   // ── Boot-time tool snapshot (hot provider/model changes are OK; tool-set changes need restart) ──
-  const mastra = await mastraService.mastra();
-  const agent = mastra.getAgent('postmill');
-
   // Build the MCP/A2A tool union from the in-repo inventory (LoadToolsService),
   // NOT by reflecting Mastra's private `__getStaticAgents()`. Under the supervisor
   // topology `agent.listTools()` returns only the supervisor's two tools; the old
@@ -372,11 +372,17 @@ export const startMcp = async (app: INestApplication) => {
 
   // Agent-resource surface: expose the supervisor plus any registered sub-agents.
   // This only affects the MCP *agents* map (not the tool union above), so the
-  // private-internal fallback here is non-load-bearing.
-  const staticAgents = ((agent as any).__getStaticAgents?.() ?? {}) as Record<string, any>;
-  const mcpAgents: Record<string, any> = { postmill: agent };
-  for (const [key, sub] of Object.entries(staticAgents)) {
-    mcpAgents[key] = sub;
+  // private-internal fallback here is non-load-bearing. DEV_DISABLE_AGENT skips
+  // this block entirely — MCP keeps serving tools with no agents advertised.
+  const mcpAgents: Record<string, any> = {};
+  if (!agentDisabled) {
+    const mastra = await mastraService.mastra();
+    const agent = mastra.getAgent('postmill');
+    const staticAgents = ((agent as any).__getStaticAgents?.() ?? {}) as Record<string, any>;
+    mcpAgents.postmill = agent;
+    for (const [key, sub] of Object.entries(staticAgents)) {
+      mcpAgents[key] = sub;
+    }
   }
 
   const serverConfig = {

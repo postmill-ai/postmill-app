@@ -72,6 +72,24 @@ describe('AiDesignerDefaultsGate', () => {
     expect(gate.missingDefaultsMarkdown(result.missing)).toContain(
       'image generation (text-to-image)'
     );
+    // The text-to-image default lives under Content → Media Defaults, not AI.
+    expect(gate.missingDefaultsMarkdown(result.missing)).toContain(
+      'Settings → Content → Media Defaults'
+    );
+    expect(gate.missingDefaultsMarkdown(result.missing)).not.toContain(
+      'Settings → AI → Model Defaults'
+    );
+  });
+
+  it('routes mixed missing defaults to their respective settings screens', async () => {
+    resolution.resolve.mockResolvedValue(null);
+    resolution.storedDefault.mockResolvedValue(null);
+
+    const result = await gate.missingDefaults(ORG_ID);
+
+    const md = gate.missingDefaultsMarkdown(result.missing);
+    expect(md).toContain('Settings → AI → Model Defaults');
+    expect(md).toContain('Settings → Content → Media Defaults');
   });
 
   it('warns (and does not block) when a text-to-image default is configured but no longer resolves', async () => {
@@ -97,6 +115,9 @@ describe('AiDesignerDefaultsGate', () => {
     expect(result.warnings).toEqual(['image generation (text-to-image)']);
     expect(gate.defaultsWarningMarkdown(result.warnings)).toContain(
       'disabled or unavailable'
+    );
+    expect(gate.defaultsWarningMarkdown(result.warnings)).toContain(
+      'Settings → Content → Media Defaults'
     );
   });
 });
