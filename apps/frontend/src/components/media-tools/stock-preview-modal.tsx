@@ -103,10 +103,13 @@ export const StockPreviewModal: FC<StockPreviewModalProps> = ({ item: initialIte
     );
   }, [router, modal, item, type]);
 
+  // Related lookups hit Unsplash (photos) / Pexels (videos) upstream with the item id —
+  // content-pack ids (vecteezy, envato, …) are meaningless there, so only real stock
+  // provider items get a related fetch.
   const relatedKey =
-    type === 'photo'
+    type === 'photo' && item.source === 'unsplash'
       ? `stock-photos-${(item as StockPhotoItem).id}-related`
-      : type === 'video'
+      : type === 'video' && item.source === 'pexels'
       ? `stock-videos-${(item as StockVideoItem).id}-related`
       : null;
 

@@ -1395,29 +1395,6 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
         ]
       },
       {
-        "key": "dalle-3",
-        "operation": "image",
-        "model": "dall-e-3",
-        "fields": [
-          {
-            "name": "prompt",
-            "type": "prompt"
-          },
-          {
-            "name": "size",
-            "type": "select"
-          },
-          {
-            "name": "quality",
-            "type": "select"
-          },
-          {
-            "name": "style",
-            "type": "select"
-          }
-        ]
-      },
-      {
         "key": "text-to-speech",
         "operation": "audio",
         "fields": [

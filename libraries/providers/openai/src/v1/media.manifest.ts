@@ -2,7 +2,7 @@ import { ProviderManifest, type MediaCapability, type MediaProviderCapabilities 
 
 export const OPENAI_MEDIA_CAPABILITIES: MediaProviderCapabilities = {
   image: true,
-  video: true,
+  video: false,
   audio: true,
   avatar: false,
   tts: true,

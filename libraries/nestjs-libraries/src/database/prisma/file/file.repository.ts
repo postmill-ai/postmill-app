@@ -119,7 +119,11 @@ export class FileRepository {
     originalName?: string,
     folderId?: string,
     fileSize?: number,
-    options?: { internal?: 'design-preview' }
+    options?: {
+      internal?: 'design-preview';
+      source?: string;
+      attribution?: Record<string, unknown>;
+    }
   ) {
     const mimeType = mimeFromName(fileName);
     const fileType = mediaCategoryFromMime(mimeType);
@@ -130,6 +134,9 @@ export class FileRepository {
     // System artifacts (design/template preview thumbnails) are real File rows
     // — designs reference them by FK — but they are not library content.
     if (options?.internal) meta.internal = options.internal;
+    // Stock provenance, same metadata keys FileService.importFromUrl writes.
+    if (options?.source) meta.source = options.source;
+    if (options?.attribution) meta.attribution = options.attribution;
 
     let resolvedFileSize = fileSize ?? 0;
 
