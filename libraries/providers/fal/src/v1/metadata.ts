@@ -94,8 +94,8 @@ export const metadata: ProviderMetadata = {
     ],
     "text-to-video": [
       {
-        "id": "fal-ai/kling-video/v1.6/standard/text-to-video",
-        "label": "Kling 1.6 Standard",
+        "id": "fal-ai/kling-video/v2.5-turbo/pro/text-to-video",
+        "label": "Kling 2.5 Turbo Pro",
         "fields": [
           {
             "name": "negative_prompt",
@@ -150,8 +150,8 @@ export const metadata: ProviderMetadata = {
         ]
       },
       {
-        "id": "fal-ai/kling-video/v1.6/pro/text-to-video",
-        "label": "Kling 1.6 Pro",
+        "id": "fal-ai/kling-video/v2.6/pro/text-to-video",
+        "label": "Kling 2.6 Pro",
         "fields": [
           {
             "name": "negative_prompt",
@@ -195,69 +195,10 @@ export const metadata: ProviderMetadata = {
             ]
           },
           {
-            "name": "cfg_scale",
-            "type": "number",
-            "label": "CFG scale",
-            "default": 0.5,
-            "min": 0,
-            "max": 1,
-            "step": 0.1
-          }
-        ]
-      },
-      {
-        "id": "fal-ai/kling-video/v2/master/text-to-video",
-        "label": "Kling 2.0 Master",
-        "fields": [
-          {
-            "name": "negative_prompt",
-            "type": "text",
-            "label": "Negative prompt"
-          },
-          {
-            "name": "duration",
-            "type": "select",
-            "label": "Duration",
-            "default": "5",
-            "options": [
-              {
-                "value": "5",
-                "label": "5 seconds"
-              },
-              {
-                "value": "10",
-                "label": "10 seconds"
-              }
-            ]
-          },
-          {
-            "name": "aspect_ratio",
-            "type": "select",
-            "label": "Aspect ratio",
-            "default": "16:9",
-            "options": [
-              {
-                "value": "16:9",
-                "label": "Landscape 16:9"
-              },
-              {
-                "value": "9:16",
-                "label": "Portrait 9:16"
-              },
-              {
-                "value": "1:1",
-                "label": "Square 1:1"
-              }
-            ]
-          },
-          {
-            "name": "cfg_scale",
-            "type": "number",
-            "label": "CFG scale",
-            "default": 0.5,
-            "min": 0,
-            "max": 1,
-            "step": 0.1
+            "name": "generate_audio",
+            "type": "toggle",
+            "label": "Generate audio",
+            "default": false
           }
         ]
       },
@@ -349,8 +290,8 @@ export const metadata: ProviderMetadata = {
     ],
     "image-to-video": [
       {
-        "id": "fal-ai/kling-video/v1.6/standard/image-to-video",
-        "label": "Kling 1.6 Standard",
+        "id": "fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
+        "label": "Kling 2.5 Turbo Pro",
         "fields": [
           {
             "name": "negative_prompt",
@@ -385,8 +326,8 @@ export const metadata: ProviderMetadata = {
         ]
       },
       {
-        "id": "fal-ai/kling-video/v1.6/pro/image-to-video",
-        "label": "Kling 1.6 Pro",
+        "id": "fal-ai/kling-video/v2.6/pro/image-to-video",
+        "label": "Kling 2.6 Pro",
         "fields": [
           {
             "name": "negative_prompt",
@@ -410,49 +351,10 @@ export const metadata: ProviderMetadata = {
             ]
           },
           {
-            "name": "cfg_scale",
-            "type": "number",
-            "label": "CFG scale",
-            "default": 0.5,
-            "min": 0,
-            "max": 1,
-            "step": 0.1
-          }
-        ]
-      },
-      {
-        "id": "fal-ai/kling-video/v2/master/image-to-video",
-        "label": "Kling 2.0 Master",
-        "fields": [
-          {
-            "name": "negative_prompt",
-            "type": "text",
-            "label": "Negative prompt"
-          },
-          {
-            "name": "duration",
-            "type": "select",
-            "label": "Duration",
-            "default": "5",
-            "options": [
-              {
-                "value": "5",
-                "label": "5 seconds"
-              },
-              {
-                "value": "10",
-                "label": "10 seconds"
-              }
-            ]
-          },
-          {
-            "name": "cfg_scale",
-            "type": "number",
-            "label": "CFG scale",
-            "default": 0.5,
-            "min": 0,
-            "max": 1,
-            "step": 0.1
+            "name": "generate_audio",
+            "type": "toggle",
+            "label": "Generate audio",
+            "default": false
           }
         ]
       },

@@ -185,10 +185,17 @@ function categoryForTab(tab, descriptorTitle) {
   return null;
 }
 
-function modelFieldsFromTab(tab) {
+function fieldVisible(field, model) {
+  return !field.visibleWhen || Object.entries(field.visibleWhen).every(
+    ([name, expected]) => name !== 'model' || model === expected,
+  );
+}
+
+function modelFieldsFromTab(tab, model) {
   return (tab.fields || [])
     .filter(
       (f) =>
+        fieldVisible(f, model) &&
         f.type !== 'prompt' &&
         f.type !== 'media' &&
         !(f.type === 'select' && f.name === 'model'),
@@ -248,8 +255,6 @@ function buildProviderCatalog(descriptors) {
       const category = categoryForTab(tab, descriptor.title);
       if (!category) continue;
 
-      const fields = modelFieldsFromTab(tab);
-
       if (tab.model) {
         const genericLabels = new Set([
           'Text → Video',
@@ -267,7 +272,7 @@ function buildProviderCatalog(descriptors) {
         addModel(category, {
           id: tab.model,
           label,
-          fields,
+          fields: modelFieldsFromTab(tab, tab.model),
         });
       } else {
         const modelField = tab.fields.find(
@@ -278,7 +283,7 @@ function buildProviderCatalog(descriptors) {
             addModel(category, {
               id: opt.value,
               label: opt.label || opt.value,
-              fields,
+              fields: modelFieldsFromTab(tab, opt.value),
             });
           }
         }

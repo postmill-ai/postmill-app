@@ -65,6 +65,11 @@ export class BackfillService {
       true,
     );
     await this._runStep(
+      'fal Kling default models',
+      (tx) => this.backfillFalKlingDefaultModels(tx),
+      true,
+    );
+    await this._runStep(
       'file metadata JSON object',
       (tx) => this.backfillFileMetadataJson(tx),
       true,
@@ -329,6 +334,21 @@ export class BackfillService {
         this._logger.warn(
           `Default-model backfill failed for org ${org.id}: ${(err as Error).message}`,
         );
+      }
+    }
+  }
+
+  private async backfillFalKlingDefaultModels(tx: Prisma.TransactionClient) {
+    for (const operation of ['text-to-video', 'image-to-video']) {
+      for (const legacyModel of [
+        `fal-ai/kling-video/v1.6/standard/${operation}`,
+        `fal-ai/kling-video/v1.6/pro/${operation}`,
+        `fal-ai/kling-video/v2/master/${operation}`,
+      ]) {
+        await tx.orgDefaultModel.updateMany({
+          where: { domain: 'media', providerId: 'fal', model: legacyModel },
+          data: { model: `fal-ai/kling-video/v2.5-turbo/pro/${operation}` },
+        });
       }
     }
   }

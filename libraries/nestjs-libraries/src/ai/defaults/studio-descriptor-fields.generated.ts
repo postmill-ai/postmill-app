@@ -454,6 +454,10 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
           {
             "name": "cfg_scale",
             "type": "number"
+          },
+          {
+            "name": "generate_audio",
+            "type": "toggle"
           }
         ]
       },
@@ -484,6 +488,10 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
           {
             "name": "cfg_scale",
             "type": "number"
+          },
+          {
+            "name": "generate_audio",
+            "type": "toggle"
           }
         ]
       },

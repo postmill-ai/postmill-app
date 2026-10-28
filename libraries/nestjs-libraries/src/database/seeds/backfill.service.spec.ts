@@ -20,6 +20,7 @@ type Tx = {
   };
   aIOrgProviderConfig: { findMany: ReturnType<typeof vi.fn> };
   mediaProviderConfig: { upsert: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
+  orgDefaultModel: { updateMany: ReturnType<typeof vi.fn> };
   organization: { updateMany: ReturnType<typeof vi.fn> };
   // legacy secret re-encryption targets not already listed above
   // (findMany returns [] = nothing to rewrite)
@@ -48,6 +49,7 @@ const makeTx = (): Tx => ({
   },
   aIOrgProviderConfig: { findMany: vi.fn().mockResolvedValue([]) },
   mediaProviderConfig: { upsert: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+  orgDefaultModel: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
   organization: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
   integration: { findMany: vi.fn().mockResolvedValue([]) },
   orgProviderConfiguration: { findMany: vi.fn().mockResolvedValue([]) },
@@ -394,5 +396,29 @@ describe('BackfillService — AI/media default models', () => {
     await makeServiceWithSeed().backfill();
 
     expect(mockMarkApplied).toHaveBeenCalledWith('backfill:AI/media default models');
+  });
+});
+
+describe('BackfillService — fal Kling default models', () => {
+  it('moves every retired fal default to v2.5 without rewriting other settings or jobs', async () => {
+    const tx = makeTx();
+    await makeService(tx).backfill();
+
+    expect(tx.orgDefaultModel.updateMany).toHaveBeenCalledTimes(6);
+    for (const operation of ['text-to-video', 'image-to-video']) {
+      for (const legacyModel of [
+        `fal-ai/kling-video/v1.6/standard/${operation}`,
+        `fal-ai/kling-video/v1.6/pro/${operation}`,
+        `fal-ai/kling-video/v2/master/${operation}`,
+      ]) {
+        expect(tx.orgDefaultModel.updateMany).toHaveBeenCalledWith({
+          where: { domain: 'media', providerId: 'fal', model: legacyModel },
+          data: { model: `fal-ai/kling-video/v2.5-turbo/pro/${operation}` },
+        });
+      }
+    }
+    for (const [args] of tx.orgDefaultModel.updateMany.mock.calls) {
+      expect(Object.keys(args.data)).toEqual(['model']);
+    }
   });
 });

@@ -15,6 +15,7 @@ interface StudioFieldBase {
   label?: string;
   required?: boolean;
   help?: string;
+  visibleWhen?: Record<string, string | number | boolean>;
 }
 
 export interface PromptField extends StudioFieldBase {
@@ -33,7 +34,7 @@ export interface MediaField extends StudioFieldBase {
  * - `prompt` and `media` are generation-time inputs and never persisted as defaults.
  */
 export type StudioField =
-  | (ModelField & {
+  | (StudioFieldBase & ModelField & {
       type: 'select';
       source?: 'models';
       optionRules?: {
@@ -41,11 +42,20 @@ export type StudioField =
         options: NonNullable<ModelField['options']>;
       }[];
     })
-  | (ModelField & { type: 'number' })
-  | (ModelField & { type: 'toggle' })
-  | (ModelField & { type: 'text' })
+  | (StudioFieldBase & ModelField & { type: 'number' })
+  | (StudioFieldBase & ModelField & { type: 'toggle' })
+  | (StudioFieldBase & ModelField & { type: 'text' })
   | PromptField
   | MediaField;
+
+export function studioFieldVisible(
+  field: StudioField,
+  values: Record<string, StudioFieldValue>
+) {
+  return !field.visibleWhen || Object.entries(field.visibleWhen).every(
+    ([name, expected]) => values[name] === expected
+  );
+}
 
 export function studioSelectOptions(
   field: Extract<StudioField, { type: 'select' }>,

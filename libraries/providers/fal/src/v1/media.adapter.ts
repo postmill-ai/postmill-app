@@ -41,7 +41,7 @@ interface FalResultResponse {
 // render rather than permanently failing a job whose generation may still be fine.
 
 const DEFAULT_IMAGE_MODEL = 'fal-ai/flux/schnell';
-const DEFAULT_VIDEO_MODEL = 'fal-ai/kling-video/v1.6/standard/text-to-video';
+const DEFAULT_VIDEO_MODEL = 'fal-ai/kling-video/v2.5-turbo/pro/text-to-video';
 const DEFAULT_AUDIO_MODEL = 'fal-ai/stable-audio';
 
 const PIKA_2_2_MODELS = new Set([
@@ -52,14 +52,44 @@ const PIKA_DURATION_SECONDS = new Map([
   ['5', 5],
   ['10', 10],
 ]);
+const KLING_V2_5_MODELS = new Set([
+  'fal-ai/kling-video/v2.5-turbo/pro/text-to-video',
+  'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
+]);
+const KLING_V2_6_MODELS = new Set([
+  'fal-ai/kling-video/v2.6/pro/text-to-video',
+  'fal-ai/kling-video/v2.6/pro/image-to-video',
+]);
+const KLING_V2_6_IMAGE_TO_VIDEO = 'fal-ai/kling-video/v2.6/pro/image-to-video';
 
 function normalizeVideoInput(
   model: string,
   input: MediaGenerateOptions['input'],
 ): MediaGenerateOptions['input'] {
-  if (!input || input.duration === undefined || !PIKA_2_2_MODELS.has(model)) return input;
-  const duration = PIKA_DURATION_SECONDS.get(String(input.duration));
-  return duration === undefined ? input : { ...input, duration };
+  if (PIKA_2_2_MODELS.has(model)) {
+    if (!input || input.duration === undefined) return input;
+    const duration = PIKA_DURATION_SECONDS.get(String(input.duration));
+    return duration === undefined ? input : { ...input, duration };
+  }
+
+  if (KLING_V2_6_MODELS.has(model)) {
+    const { cfg_scale: _cfgScale, ...withoutCfgScale } = input ?? {};
+    if (model === KLING_V2_6_IMAGE_TO_VIDEO) {
+      const { image_url: imageUrl, ...rest } = withoutCfgScale;
+      return {
+        ...rest,
+        ...(imageUrl !== undefined ? { start_image_url: imageUrl } : {}),
+        generate_audio: input?.generate_audio ?? false,
+      };
+    }
+    return { ...withoutCfgScale, generate_audio: input?.generate_audio ?? false };
+  }
+
+  if (KLING_V2_5_MODELS.has(model) && input?.generate_audio !== undefined) {
+    const { generate_audio: _generateAudio, ...rest } = input;
+    return rest;
+  }
+  return input;
 }
 
 const FAL_QUEUE_HOST = 'queue.fal.run';
@@ -95,7 +125,7 @@ function pollBaseFromResponseUrl(responseUrl?: string): string | null {
 }
 
 // fal's queue endpoints live under the two-segment app id (`<owner>/<app>`); deeper model
-// paths (e.g. `fal-ai/kling-video/v1.6/standard/text-to-video`) are submit-only.
+// paths (e.g. `fal-ai/kling-video/v2.5-turbo/pro/text-to-video`) are submit-only.
 function pollBaseFromModel(model: string): string {
   const app = model.split('/').slice(0, 2).join('/');
   return `https://${FAL_QUEUE_HOST}/${app}`;

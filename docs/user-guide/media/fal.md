@@ -13,15 +13,15 @@ Configure one fal.ai API key at **Settings → Media → fal.ai**. The fal.ai pr
 | Tab | Operation | Model(s) | Produces |
 |---|---|---|---|
 | **Text → Image** | `image` | `fal-ai/flux/schnell` | FLUX.1 Schnell images |
-| **Kling Text → Video** | `video` | Kling 1.6 Standard / Pro and 2.0 Master | Text-conditioned Kling clips |
-| **Kling Image → Video** | `video` | Kling 1.6 Standard / Pro and 2.0 Master | Kling clips animated from a source image |
+| **Kling Text → Video** | `video` | Kling 2.5 Turbo Pro and 2.6 Pro | Text-conditioned Kling clips |
+| **Kling Image → Video** | `video` | Kling 2.5 Turbo Pro and 2.6 Pro | Kling clips animated from a source image |
 | **Pika Text → Video** | `video` | `fal-ai/pika/v2.2/text-to-video` | Pika 2.2 clips |
 | **Pika Image → Video** | `video` | `fal-ai/pika/v2.2/image-to-video` | Pika 2.2 clips from a source image |
 | **Text → Music** | `audio` | `fal-ai/stable-audio` | Stable Audio music and audio |
 
 ## Generation flow
 
-Flux images use fal.ai's synchronous generation endpoint. Kling, Pika, and Stable Audio jobs use the fal.ai queue and appear in the **Render Queue**. Completed artifacts are saved to `/files` and can be opened in the [Designer](./designer) or posted directly. When webhooks are unavailable, the shared media-jobs poll cron provides completion fallback.
+Flux images use fal.ai's synchronous generation endpoint. Kling, Pika, and Stable Audio jobs use the fal.ai queue and appear in the **Render Queue**. Kling 2.6 can optionally generate native audio; it is off by default to avoid unexpected audio charges. Completed artifacts are saved to `/files` and can be opened in the [Designer](./designer) or posted directly. When webhooks are unavailable, the shared media-jobs poll cron provides completion fallback.
 
 ## Related docs
 

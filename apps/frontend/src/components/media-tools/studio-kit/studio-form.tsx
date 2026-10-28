@@ -6,7 +6,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { ModelSelect } from './model-select';
 import { studioFieldKey, studioOptionKey } from './i18n-keys';
-import { studioSelectOptions } from './types';
+import { studioFieldVisible, studioSelectOptions } from './types';
 import type { FileFieldValue, StudioField, StudioFieldValue } from './types';
 
 interface StudioFormProps {
@@ -107,7 +107,7 @@ export const StudioForm: FC<StudioFormProps> = ({ fields, values, onChange, prov
   }, [fields, values, onChange]);
   return (
     <div className="flex flex-col gap-[16px]">
-      {fields.map((field) => {
+      {fields.filter((field) => studioFieldVisible(field, values)).map((field) => {
         const value = values[field.name];
         const label = field.label
           ? t(studioFieldKey(keyNs, tabKey, field.name, 'label'), field.label)
