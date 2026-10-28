@@ -1,7 +1,10 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const DESIGN_ID = 'provider-video-workflows-e2e';
 const PROMPT = 'A presenter walks through a sunlit studio';
+const REELFARM_VIDEO_URL = '/mock-storage/reelfarm-completed.mp4';
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwAEhgGAhKmMIQAAAABJRU5ErkJggg==',
   'base64'
@@ -10,13 +13,18 @@ const PNG = Buffer.from(
 interface StudioJob {
   id: string;
   operation: string;
-  model: string;
-  status: 'processing';
-  artifactUrl: null;
-  fileId: null;
-  fileType: null;
-  error: null;
+  model?: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  artifactUrl: string | null;
+  fileId: string | null;
+  fileType: string | null;
+  error: string | null;
   createdAt: string;
+  metadata?: {
+    dimensions?: { width: number; height: number };
+    durationMs?: number;
+    mime?: string;
+  };
 }
 
 const apiPath = (rawUrl: string): string => {
@@ -58,18 +66,52 @@ const FILES = [
 
 class ProviderWorkflowMocks {
   private readonly posts = new Map<string, Record<string, unknown>[]>();
-  private readonly jobs: Record<string, StudioJob[]> = { kling: [], minimax: [] };
+  private readonly generationErrors = new Map<string, Record<string, unknown>>();
+  private readonly jobs: Record<string, StudioJob[]> = {
+    fal: [],
+    kling: [],
+    minimax: [],
+    elevenlabs: [],
+    reelfarm: [
+      {
+        id: 'reelfarm-completed-e2e',
+        operation: 'video',
+        model: 'slideshow',
+        status: 'completed',
+        artifactUrl: REELFARM_VIDEO_URL,
+        fileId: 'file-reelfarm-completed',
+        fileType: 'video',
+        error: null,
+        createdAt: '2026-10-27T12:00:00.000Z',
+        metadata: { dimensions: { width: 720, height: 1280 }, durationMs: 4000, mime: 'video/mp4' },
+      },
+    ],
+  };
+  private doc: Record<string, unknown> = {
+    version: 8,
+    mode: 'video',
+    outputs: [{ width: 1080, height: 1920, durationMs: 10_000, tracks: [] }],
+  };
+  private designName = 'Provider video workflows E2E';
   readonly unexpectedGenerationPosts: string[] = [];
   readonly externalProviderCalls: string[] = [];
 
+  failGeneration(provider: string, body: Record<string, unknown>) {
+    this.generationErrors.set(provider, body);
+  }
+
   async install(page: Page) {
-    await page.route('**/*', async (route) => {
+    await page.context().route('**/*', async (route) => {
       const request = route.request();
       const method = request.method();
       const url = new URL(request.url());
       const pathname = apiPath(request.url());
 
-      if (/^(api\.minimax\.io|api\.replicate\.com|api\.heygen\.com|api\.klingai\.com)$/.test(url.hostname)) {
+      if (
+        /^(api\.minimax\.io|api\.replicate\.com|api\.heygen\.com|api\.klingai\.com|api\.fal\.ai|queue\.fal\.run|api\.elevenlabs\.io|api\.reel\.farm)$/.test(
+          url.hostname
+        )
+      ) {
         this.externalProviderCalls.push(`${method} ${url.href}`);
         await json(route, { message: 'External provider access blocked by E2E' }, 503);
         return;
@@ -80,6 +122,10 @@ class ProviderWorkflowMocks {
       }
       if (url.hostname.endsWith('.ingest.us.sentry.io')) {
         await json(route, {});
+        return;
+      }
+      if (pathname === REELFARM_VIDEO_URL && method === 'GET') {
+        await fulfillVideo(route);
         return;
       }
       if (pathname.startsWith('/mock-storage/') && method === 'GET') {
@@ -109,20 +155,22 @@ class ProviderWorkflowMocks {
         await json(route, { jobs: [] });
         return;
       }
+      if (pathname === '/media/designs' && method === 'POST') {
+        const body = request.postDataJSON() as { name?: string; doc: Record<string, unknown> };
+        this.designName = body.name ?? this.designName;
+        this.doc = body.doc;
+        await json(route, { id: DESIGN_ID, name: this.designName, doc: this.doc });
+        return;
+      }
       if (pathname === `/media/designs/${DESIGN_ID}` && method === 'GET') {
-        await json(route, {
-          id: DESIGN_ID,
-          name: 'Provider video workflows E2E',
-          doc: {
-            version: 8,
-            mode: 'video',
-            outputs: [{ width: 1080, height: 1920, durationMs: 10_000, tracks: [] }],
-          },
-        });
+        await json(route, { id: DESIGN_ID, name: this.designName, doc: this.doc });
         return;
       }
       if (pathname === `/media/designs/${DESIGN_ID}` && method === 'PUT') {
-        await json(route, request.postDataJSON());
+        const body = request.postDataJSON() as { name?: string; doc: Record<string, unknown> };
+        this.designName = body.name ?? this.designName;
+        this.doc = body.doc;
+        await json(route, { id: DESIGN_ID, name: this.designName, doc: this.doc });
         return;
       }
       if (pathname === '/media/generation-providers' && method === 'GET') {
@@ -131,8 +179,10 @@ class ProviderWorkflowMocks {
           providers: avatar
             ? [{ identifier: 'heygen', name: 'HeyGen' }]
             : [
+                { identifier: 'fal', name: 'fal.ai' },
                 { identifier: 'kling', name: 'Kling AI' },
                 { identifier: 'minimax', name: 'MiniMax' },
+                { identifier: 'elevenlabs', name: 'ElevenLabs' },
                 { identifier: 'replicate', name: 'Replicate' },
                 { identifier: 'heygen', name: 'HeyGen' },
               ],
@@ -141,7 +191,7 @@ class ProviderWorkflowMocks {
         return;
       }
 
-      const studioStatus = /^\/media\/studio\/(kling|minimax)\/status$/.exec(pathname);
+      const studioStatus = /^\/media\/studio\/(fal|kling|minimax|elevenlabs|reelfarm)\/status$/.exec(pathname);
       if (studioStatus && method === 'GET') {
         await json(route, { configured: true, enabled: true });
         return;
@@ -150,7 +200,7 @@ class ProviderWorkflowMocks {
         await json(route, []);
         return;
       }
-      const studioJobs = /^\/media\/studio\/(kling|minimax)\/jobs$/.exec(pathname);
+      const studioJobs = /^\/media\/studio\/(fal|kling|minimax|elevenlabs|reelfarm)\/jobs$/.exec(pathname);
       if (studioJobs && method === 'GET') {
         await json(route, this.jobs[studioJobs[1]]);
         return;
@@ -236,10 +286,8 @@ class ProviderWorkflowMocks {
         return;
       }
 
-      if (
-        method === 'POST' &&
-        ['/media/studio/kling/generate', '/media/studio/minimax/generate', '/media/replicate/run/async'].includes(pathname)
-      ) {
+      const studioGenerate = /^\/media\/studio\/(fal|kling|minimax|elevenlabs)\/generate$/.exec(pathname);
+      if (method === 'POST' && (studioGenerate || pathname === '/media/replicate/run/async')) {
         const body = request.postDataJSON() as Record<string, unknown>;
         const bodies = this.posts.get(pathname) ?? [];
         bodies.push(body);
@@ -248,7 +296,12 @@ class ProviderWorkflowMocks {
           await json(route, { jobId: 'replicate-e2e-job' });
           return;
         }
-        const provider = pathname.split('/')[3];
+        const provider = studioGenerate![1];
+        const generationError = this.generationErrors.get(provider);
+        if (generationError) {
+          await json(route, generationError, 502);
+          return;
+        }
         const jobId = `${provider}-e2e-job`;
         this.jobs[provider].push({
           id: jobId,
@@ -277,6 +330,38 @@ class ProviderWorkflowMocks {
         return;
       }
 
+      const backendOrigin = process.env.E2E_BACKEND_ORIGIN;
+      const backend = backendOrigin ? new URL(backendOrigin) : null;
+      if (backend && (url.origin === 'https://api.postmill.ai' || url.origin === backend.origin)) {
+        if (backend.protocol !== 'http:' || !['localhost', '127.0.0.1', '::1'].includes(backend.hostname)) {
+          throw new Error('E2E_BACKEND_ORIGIN must be a loopback HTTP origin');
+        }
+        const headers = { ...request.headers() };
+        delete headers.host;
+        delete headers['content-length'];
+        const localCookies = await page.context().cookies(page.url());
+        headers.cookie = localCookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ');
+        const response = await fetch(`${backendOrigin}${pathname}${url.search}`, {
+          method,
+          headers,
+          body: request.postDataBuffer() ?? undefined,
+        });
+        const responseHeaders: Record<string, string> = {};
+        response.headers.forEach((value, key) => {
+          if (!['content-encoding', 'content-length', 'transfer-encoding', 'connection'].includes(key)) {
+            responseHeaders[key] = value;
+          }
+        });
+        if (headers.origin) responseHeaders['access-control-allow-origin'] = headers.origin;
+        responseHeaders['access-control-allow-credentials'] = 'true';
+        await route.fulfill({
+          status: response.status,
+          headers: responseHeaders,
+          body: Buffer.from(await response.arrayBuffer()),
+        });
+        return;
+      }
+
       await route.continue();
     });
   }
@@ -289,10 +374,56 @@ class ProviderWorkflowMocks {
     return [...this.posts.values()].reduce((count, bodies) => count + bodies.length, 0) + this.unexpectedGenerationPosts.length;
   }
 
+  savedClips(): Record<string, unknown>[] {
+    const outputs = this.doc.outputs as Array<{ tracks: Array<{ clips: Record<string, unknown>[] }> }>;
+    return outputs[0].tracks.flatMap((track) => track.clips);
+  }
+
   expectNoExternalProviders() {
     expect(this.externalProviderCalls, 'no browser-to-provider calls').toEqual([]);
     expect(this.unexpectedGenerationPosts, 'no unmocked generation POSTs').toEqual([]);
   }
+}
+
+async function fulfillVideo(route: Route) {
+  const body = fs.readFileSync(path.join(__dirname, '../fixtures/motion-rear-moov.mp4'));
+  const range = route.request().headers()['range'];
+  const headers = {
+    'accept-ranges': 'bytes',
+    'content-type': 'video/mp4',
+    'cache-control': 'no-store',
+  };
+  if (!range) {
+    await route.fulfill({ status: 200, headers, body });
+    return;
+  }
+  const match = /^bytes=(\d+)-(\d*)$/.exec(range);
+  const start = match ? Number(match[1]) : -1;
+  const end = match ? Math.min(match[2] ? Number(match[2]) : body.length - 1, body.length - 1) : -1;
+  if (start < 0 || start >= body.length || end < start) {
+    await route.fulfill({ status: 416, headers: { 'content-range': `bytes */${body.length}` } });
+    return;
+  }
+  await route.fulfill({
+    status: 206,
+    headers: { ...headers, 'content-range': `bytes ${start}-${end}/${body.length}` },
+    body: body.subarray(start, end + 1),
+  });
+}
+
+async function expectPreviewPlayback(page: Page) {
+  const video = page.getByLabel('Generated video preview', { exact: true });
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState)).toBeGreaterThanOrEqual(2);
+  expect(await video.evaluate((element: HTMLVideoElement) => element.videoWidth)).toBeGreaterThan(0);
+  const before = await video.evaluate((element: HTMLVideoElement) => element.currentTime);
+  await video.click();
+  await video.evaluate((element: HTMLVideoElement) => element.play());
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(before + 0.25);
+  await video.evaluate((element: HTMLVideoElement) => {
+    element.pause();
+    element.currentTime = Math.min(1, element.duration / 2);
+  });
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(0.5);
 }
 
 async function openDesigner(page: Page) {
@@ -318,6 +449,224 @@ async function pickFile(page: Page, name: string) {
 }
 
 test.describe('Provider video workflows (network stubbed)', () => {
+  test('full-page fal Pika 2.2 submits the current duration string once without mount, tab, or reload generation', async ({ page }) => {
+    const mocks = new ProviderWorkflowMocks();
+    await mocks.install(page);
+    await page.goto('/media/fal', { waitUntil: 'domcontentloaded' });
+    const generate = page.getByRole('button', { name: 'Generate', exact: true });
+    await expect(generate).toBeVisible({ timeout: 90_000 });
+    expect(mocks.generationCount(), 'studio mount must not generate').toBe(0);
+    await expect(page.getByText(/pikaffects/i)).toHaveCount(0);
+
+    await page.getByRole('tab', { name: 'Pika Text → Video', exact: true }).click();
+    await expect(page.getByLabel('Duration', { exact: true })).toHaveValue('5');
+    expect(mocks.generationCount(), 'selecting Pika must not generate').toBe(0);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(generate).toBeVisible({ timeout: 90_000 });
+    expect(mocks.generationCount(), 'studio reload must not generate').toBe(0);
+    await page.getByRole('tab', { name: 'Pika Text → Video', exact: true }).click();
+    await page.getByLabel('Prompt', { exact: true }).fill(PROMPT);
+    await page.getByLabel('Duration', { exact: true }).selectOption('10');
+    await expect(page.getByLabel('Duration', { exact: true })).toHaveValue('10');
+    expect(mocks.generationCount(), 'form edits must not generate').toBe(0);
+
+    await generate.click();
+    await expect.poll(() => mocks.bodies('/media/studio/fal/generate').length).toBe(1);
+    expect(mocks.bodies('/media/studio/fal/generate')[0]).toEqual({
+      operation: 'video',
+      model: 'fal-ai/pika/v2.2/text-to-video',
+      input: { prompt: PROMPT, aspect_ratio: '16:9', resolution: '720p', duration: '10' },
+    });
+    expect(mocks.generationCount(), 'exactly one explicit Generate POST').toBe(1);
+    mocks.expectNoExternalProviders();
+  });
+
+  test('standalone Pika 2.2 requires source media and submits image-to-video duration as a form string', async ({ page }) => {
+    const mocks = new ProviderWorkflowMocks();
+    await mocks.install(page);
+    await page.goto('/media/pika', { waitUntil: 'domcontentloaded' });
+    const generate = page.getByRole('button', { name: 'Generate', exact: true });
+    await expect(generate).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText(/pikaffects/i)).toHaveCount(0);
+    expect(mocks.generationCount(), 'Pika mount must not generate').toBe(0);
+
+    await page.getByRole('tab', { name: 'Image → Video', exact: true }).click();
+    await page.getByLabel('Prompt', { exact: true }).fill(PROMPT);
+    await page.getByLabel('Duration', { exact: true }).selectOption('10');
+    await expect(generate).toBeDisabled();
+    expect(mocks.generationCount(), 'missing source image must not submit').toBe(0);
+
+    await page.getByRole('button', { name: 'Choose image…', exact: true }).click();
+    await pickFile(page, 'subject-portrait.png');
+    await expect(page.getByTestId('media-picker')).toHaveCount(0);
+    await expect(generate).toBeEnabled();
+    expect(mocks.generationCount(), 'source selection must not auto-generate').toBe(0);
+
+    await generate.click();
+    await expect.poll(() => mocks.bodies('/media/studio/fal/generate').length).toBe(1);
+    expect(mocks.bodies('/media/studio/fal/generate')[0]).toEqual({
+      operation: 'video',
+      model: 'fal-ai/pika/v2.2/image-to-video',
+      input: { prompt: PROMPT, resolution: '720p', duration: '10' },
+      mediaInputs: { image_url: 'file-subject' },
+    });
+    expect(mocks.generationCount(), 'exactly one explicit Generate POST').toBe(1);
+    mocks.expectNoExternalProviders();
+  });
+
+  test('MiniMax generic I2V submits the selected first frame without disturbing S2V', async ({ page }) => {
+    const mocks = new ProviderWorkflowMocks();
+    await mocks.install(page);
+    await openDesigner(page);
+    await openVideoDialog(page);
+
+    await page.getByLabel('Provider:').selectOption('minimax');
+    await page.getByRole('tab', { name: 'Image → Video', exact: true }).click();
+    await expect(page.getByLabel('Model', { exact: true })).toHaveValue('I2V-01');
+    await page.getByPlaceholder('Describe the video you want to generate...').fill(PROMPT);
+    const generate = page.getByRole('button', { name: 'Generate', exact: true });
+    await expect(generate).toBeDisabled();
+    await page.getByRole('button', { name: 'Choose image…', exact: true }).click();
+    await pickFile(page, 'subject-portrait.png');
+    await expect(generate).toBeEnabled();
+    expect(mocks.generationCount(), 'first-frame selection must not auto-generate').toBe(0);
+
+    await generate.click();
+    await expect.poll(() => mocks.bodies('/media/studio/minimax/generate').length).toBe(1);
+    expect(mocks.bodies('/media/studio/minimax/generate')[0]).toEqual({
+      operation: 'video',
+      model: 'I2V-01',
+      input: { model: 'I2V-01', prompt_optimizer: true, prompt: PROMPT },
+      mediaInputs: { first_frame_image: 'file-subject' },
+    });
+    mocks.expectNoExternalProviders();
+  });
+
+  for (const scenario of [
+    {
+      provider: 'fal',
+      providerName: 'fal.ai',
+      kind: 'quota',
+      upstreamStatus: 429,
+      message: 'fal.ai rejected the request: fal account quota exhausted',
+    },
+    {
+      provider: 'minimax',
+      providerName: 'MiniMax',
+      kind: 'quota',
+      upstreamStatus: 402,
+      message: 'MiniMax rejected the request: account balance is insufficient',
+    },
+    {
+      provider: 'kling',
+      providerName: 'Kling AI',
+      kind: 'quota',
+      upstreamStatus: 402,
+      message: 'Kling AI rejected the request: resource pack exhausted',
+    },
+    {
+      provider: 'elevenlabs',
+      providerName: 'ElevenLabs',
+      kind: 'invalid_request',
+      upstreamStatus: 402,
+      message: 'ElevenLabs rejected the request: video generation requires a paid plan',
+    },
+  ]) {
+    test(`${scenario.providerName} 502 stays provider-attributed in compact Designer without retry or clip insertion`, async ({ page }) => {
+      const mocks = new ProviderWorkflowMocks();
+      mocks.failGeneration(scenario.provider, {
+        error: 'ProviderUpstreamError',
+        provider: scenario.provider,
+        providerName: scenario.providerName,
+        domain: 'media',
+        operation: 'video',
+        kind: scenario.kind,
+        upstreamStatus: scenario.upstreamStatus,
+        retryable: false,
+        message: scenario.message,
+        settingsUrl: '/settings/content/ai-media',
+      });
+      await mocks.install(page);
+      await openDesigner(page);
+      await openVideoDialog(page);
+      await page.getByLabel('Provider:').selectOption(scenario.provider);
+      if (scenario.provider === 'kling') await chooseKlingModel(page);
+      if (scenario.provider === 'fal') await expect(page.getByText(/pikaffects/i)).toHaveCount(0);
+      await page.getByPlaceholder('Describe the video you want to generate...').fill(PROMPT);
+
+      await page.getByRole('button', { name: 'Generate', exact: true }).click();
+      const alert = page.getByRole('dialog', { name: 'AI Video', exact: true }).getByRole('alert');
+      await expect(alert).toContainText(scenario.message);
+      await expect(alert).toContainText(scenario.providerName);
+      const settings = alert.getByRole('link', { name: 'Open settings', exact: true });
+      await expect(settings).toHaveAttribute('href', '/settings/content/ai-media');
+      await expect(settings).not.toHaveAttribute('href', /billing/i);
+      await expect(page).toHaveURL(/\/media\/designer\?designId=/);
+      await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(0);
+      await page.waitForTimeout(1_000);
+      expect(mocks.bodies(`/media/studio/${scenario.provider}/generate`), 'one POST and no retry storm').toHaveLength(1);
+      expect(mocks.generationCount()).toBe(1);
+      expect(mocks.savedClips()).toHaveLength(0);
+      mocks.expectNoExternalProviders();
+    });
+  }
+
+  test('Reel.Farm completed job decodes, plays, seeks, opens in Designer, and reloads without regeneration', async ({ page }) => {
+    test.setTimeout(120_000);
+    const mocks = new ProviderWorkflowMocks();
+    await mocks.install(page);
+    await page.goto('/media/reelfarm', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('Ready', { exact: true })).toBeVisible({ timeout: 90_000 });
+    await expectPreviewPlayback(page);
+    expect(mocks.generationCount(), 'completed-job preview must not generate').toBe(0);
+
+    await page.evaluate(() => {
+      window.open = () => null;
+    });
+    await page.getByRole('button', { name: 'Edit in Designer', exact: true }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.sessionStorage.getItem('designer:timeline-handoff') !== null))
+      .toBe(true);
+    const handoff = await page.evaluate(() => JSON.parse(window.sessionStorage.getItem('designer:timeline-handoff')!));
+    expect(handoff).toMatchObject({ type: 'video', url: REELFARM_VIDEO_URL, fileId: 'file-reelfarm-completed' });
+    const params = new URLSearchParams({
+      timeline: '1',
+      mediaType: handoff.type,
+      mediaUrl: handoff.url,
+      mediaFileId: handoff.fileId,
+      mediaWidth: String(handoff.width),
+      mediaHeight: String(handoff.height),
+      mediaDurationMs: String(handoff.durationMs),
+    });
+    await page.evaluate(() => window.sessionStorage.removeItem('designer:timeline-handoff'));
+    const designer = page;
+    await designer.goto(`/media/designer?${params}`, { waitUntil: 'domcontentloaded' });
+    await expect(designer.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1, { timeout: 90_000 });
+    await expect(designer.locator('video')).toHaveCount(1);
+    await expect.poll(() => mocks.savedClips().length, 'Designer handoff autosaves the real video clip').toBe(1);
+    await expect.poll(() => designer.locator('video').evaluate((element: HTMLVideoElement) => element.readyState)).toBeGreaterThanOrEqual(2);
+
+    const video = designer.locator('video').first();
+    const before = await video.evaluate((element: HTMLVideoElement) => element.currentTime);
+    await designer.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(before + 0.25);
+    await designer.getByRole('button', { name: 'Pause', exact: true }).click();
+    const seek = designer.getByRole('slider', { name: 'Seek timeline', exact: true });
+    await seek.press('Home');
+    await seek.press('ArrowRight');
+    await expect.poll(async () => Number(await seek.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+
+    await designer.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(designer.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1, { timeout: 90_000 });
+    await designer.reload({ waitUntil: 'domcontentloaded' });
+    await expect(designer.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1, { timeout: 90_000 });
+    await expect(designer.locator('video')).toHaveCount(1);
+    expect(mocks.savedClips()).toHaveLength(1);
+    expect(mocks.generationCount(), 'handoff, reopen, and reload must not regenerate').toBe(0);
+    mocks.expectNoExternalProviders();
+  });
+
   test('direct Kling 2.6 native audio forces 1080p and an empty prompt never POSTs', async ({ page }) => {
     const mocks = new ProviderWorkflowMocks();
     await mocks.install(page);
