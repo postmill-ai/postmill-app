@@ -286,7 +286,7 @@ export class AiDesignerGateway
       );
       if (defaultsCheck.blocked) {
         // Plan §11: post a markdown chat message naming the missing categories and
-        // routing to Settings → AI → Model Defaults, then do not proceed. (The
+        // routing to the settings screen each lives on, then do not proceed. (The
         // error event is also emitted for programmatic clients.)
         client.emit('message', {
           id: 'missing-defaults',
@@ -303,7 +303,7 @@ export class AiDesignerGateway
         await reject(`missing_defaults:${defaultsCheck.missing.join(',')}`, {
           message: `AI Designer needs these model defaults configured: ${defaultsCheck.missing.join(
             ', '
-          )}. Set them under Settings → AI → Model Defaults.`,
+          )}. Set AI model defaults under Settings → AI → Model Defaults and the text-to-image default under Settings → Content → Media Defaults.`,
         });
         return;
       }
