@@ -621,27 +621,11 @@ test.describe('Provider video workflows (network stubbed)', () => {
     await expectPreviewPlayback(page);
     expect(mocks.generationCount(), 'completed-job preview must not generate').toBe(0);
 
-    await page.evaluate(() => {
-      window.open = () => null;
-    });
+    const popup = page.waitForEvent('popup');
     await page.getByRole('button', { name: 'Edit in Designer', exact: true }).click();
-    await expect
-      .poll(() => page.evaluate(() => window.sessionStorage.getItem('designer:timeline-handoff') !== null))
-      .toBe(true);
-    const handoff = await page.evaluate(() => JSON.parse(window.sessionStorage.getItem('designer:timeline-handoff')!));
-    expect(handoff).toMatchObject({ type: 'video', url: REELFARM_VIDEO_URL, fileId: 'file-reelfarm-completed' });
-    const params = new URLSearchParams({
-      timeline: '1',
-      mediaType: handoff.type,
-      mediaUrl: handoff.url,
-      mediaFileId: handoff.fileId,
-      mediaWidth: String(handoff.width),
-      mediaHeight: String(handoff.height),
-      mediaDurationMs: String(handoff.durationMs),
-    });
-    await page.evaluate(() => window.sessionStorage.removeItem('designer:timeline-handoff'));
-    const designer = page;
-    await designer.goto(`/media/designer?${params}`, { waitUntil: 'domcontentloaded' });
+    const designer = await popup;
+    await designer.waitForLoadState('domcontentloaded');
+    await expect(designer).toHaveURL(/\/media\/designer\?timeline=1&handoff=[0-9a-f-]{36}$/);
     await expect(designer.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1, { timeout: 90_000 });
     await expect(designer.locator('video')).toHaveCount(1);
     await expect.poll(() => mocks.savedClips().length, 'Designer handoff autosaves the real video clip').toBe(1);

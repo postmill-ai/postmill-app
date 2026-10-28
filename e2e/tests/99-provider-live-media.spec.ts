@@ -131,19 +131,10 @@ test.describe('Opt-in live provider media playback', () => {
     const queueMetadata = await expectDecodeAdvanceAndSeek(card);
     logArtifact(provider, model, status, queueMetadata);
 
-    await page.evaluate(() => {
-      window.open = () => null;
-    });
+    const popup = page.waitForEvent('popup');
     await card.getByRole('button', { name: 'Edit in Designer', exact: true }).click();
-    await expect
-      .poll(() => page.evaluate(() => window.sessionStorage.getItem('designer:timeline-handoff') !== null))
-      .toBe(true);
-    const handoff = await page.evaluate(() => JSON.parse(window.sessionStorage.getItem('designer:timeline-handoff')!));
-    const designer = page;
-    await designer.addInitScript((value) => {
-      window.sessionStorage.setItem('designer:timeline-handoff', JSON.stringify(value));
-    }, handoff);
-    await designer.goto('/media/designer?timeline=1', { waitUntil: 'domcontentloaded' });
+    const designer = await popup;
+    await designer.waitForLoadState('domcontentloaded');
     await expect(designer.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1, { timeout: 90_000 });
     const designerMetadata = await expectDecodeAdvanceAndSeek(designer, true);
     logArtifact(provider, model, status, designerMetadata);

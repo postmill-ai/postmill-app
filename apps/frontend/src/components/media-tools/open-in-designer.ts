@@ -91,29 +91,43 @@ export function openInDesigner(
   }
 
   const type = kind === 'audio' ? 'audio' : 'video';
-  try {
-    window.sessionStorage.setItem(
-      DESIGNER_HANDOFF_KEY,
-      JSON.stringify({
-        type,
-        url: artifactUrl,
-        fileId: fileId ?? undefined,
-        width: safeWidth,
-        height: safeHeight,
-        durationMs: safeDurationMs,
-      })
-    );
-  } catch {
-    // sessionStorage can throw in private mode or when quota is exceeded —
-    // carry the (small) payload in the query string instead of dead-clicking.
+  const payload = {
+    type,
+    url: artifactUrl,
+    fileId: fileId ?? undefined,
+    width: safeWidth,
+    height: safeHeight,
+    durationMs: safeDurationMs,
+  };
+  const openQueryFallback = () => {
     const params = new URLSearchParams({ timeline: '1', mediaType: type, mediaUrl: artifactUrl });
     if (fileId) params.set('mediaFileId', fileId);
     if (safeWidth) params.set('mediaWidth', String(safeWidth));
     if (safeHeight) params.set('mediaHeight', String(safeHeight));
     if (safeDurationMs) params.set('mediaDurationMs', String(safeDurationMs));
     go(`/media/designer?${params.toString()}`);
+  };
+
+  if (navigate) {
+    try {
+      window.sessionStorage.setItem(DESIGNER_HANDOFF_KEY, JSON.stringify(payload));
+    } catch {
+      openQueryFallback();
+      return;
+    }
+    go('/media/designer?timeline=1');
     return;
   }
 
-  go('/media/designer?timeline=1');
+  try {
+    const handoffId = window.crypto.randomUUID();
+    window.localStorage.setItem(
+      `${DESIGNER_HANDOFF_KEY}:${handoffId}`,
+      JSON.stringify({ ...payload, expiresAt: Date.now() + 5 * 60 * 1000 })
+    );
+    const params = new URLSearchParams({ timeline: '1', handoff: handoffId });
+    go(`/media/designer?${params.toString()}`);
+  } catch {
+    openQueryFallback();
+  }
 }
