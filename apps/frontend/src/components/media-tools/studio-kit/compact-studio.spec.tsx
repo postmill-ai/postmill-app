@@ -204,7 +204,6 @@ describe('CompactStudio (descriptor provider)', () => {
       'Kling Image → Video',
       'Pika Text → Video',
       'Pika Image → Video',
-      'Pikaffects',
       'Kling Text → Video',
     ]) {
       fireEvent.click(screen.getByRole('tab', { name: label }));

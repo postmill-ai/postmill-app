@@ -6,10 +6,9 @@ export const pikaDescriptor: StudioDescriptor = {
     icon: 'pika',
     website: 'https://pika.art',
     tagline: 'Fun, fast AI video for everyone',
-    description: 'Create Pika videos and one-tap Pikaffects from text or images. This studio uses your configured fal.ai connection and API key; no separate Pika credentials are required.',
+    description: 'Create Pika 2.2 videos from text or images. This studio uses your configured fal.ai connection and API key; no separate Pika credentials are required.',
     badges: ['Video', 'Image'],
     highlights: [
-      'Pikaffects: one-tap surreal video effects',
       'Text-to-video and image-to-video generation',
       'Uses the existing fal.ai connection in Settings → Media',
       'Pika 2.2 video generation',

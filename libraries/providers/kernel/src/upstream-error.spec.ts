@@ -25,6 +25,9 @@ describe('classifyUpstream', () => {
   it.each([
     [401, '', 'auth'],
     [403, '', 'auth'],
+    [403, 'Forbidden', 'auth'],
+    [401, 'User is locked. Reason: Exhausted balance. Top up your balance at fal.ai/dashboard/billing.', 'quota'],
+    [403, 'User is locked. Reason: Exhausted balance. Top up your balance at fal.ai/dashboard/billing.', 'quota'],
     [402, '', 'quota'],
     [429, GOOGLE_429, 'quota'],
     [429, '{"error":"Rate limit reached for requests"}', 'rate_limit'],

@@ -10,7 +10,6 @@ describe('generated studio descriptor fields', () => {
       'image-to-video',
       'pika-text-to-video',
       'pika-image-to-video',
-      'pika-pikaffects',
       'text-to-music',
     ]));
     expect(fal.tabs.find((tab) => tab.key === 'text-to-image')?.model).toBe('fal-ai/flux/schnell');

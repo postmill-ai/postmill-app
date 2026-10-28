@@ -110,7 +110,7 @@ export function upstreamKindFromText(text: string): UpstreamErrorKind | undefine
 }
 
 const QUOTA_HINT = /quota|billing|credit|balance|insufficient|exceeded your|plan/i;
-const ACCOUNT_LIMIT_HINT = /insufficient\s+(?:balance|credits?)|(?:quota|billing|credits?|balance)\s+(?:limit\s+)?(?:was\s+|has\s+been\s+)?(?:exceeded|reached)|(?:exceeded|reached)\s+(?:your\s+)?(?:quota|billing|credits?|balance)/i;
+const ACCOUNT_LIMIT_HINT = /insufficient\s+(?:balance|credits?)|exhausted\s+(?:your\s+)?balance|(?:quota|billing|credits?|balance)\s+(?:limit\s+)?(?:was\s+|has\s+been\s+)?(?:exceeded|reached)|(?:exceeded|reached)\s+(?:your\s+)?(?:quota|billing|credits?|balance)/i;
 // Some providers answer a bad key with 400 (Google: API_KEY_INVALID) or 403.
 const AUTH_HINT = /api[ _-]?key|invalid[ _-]?key|unauthenticated|unauthori[sz]ed|API_KEY_INVALID|PERMISSION_DENIED|incorrect.*key/i;
 
@@ -118,9 +118,9 @@ export function classifyUpstream(
   status: number | undefined,
   body = '',
 ): UpstreamErrorKind {
+  if (status === 402 || ((status === undefined || status < 500) && ACCOUNT_LIMIT_HINT.test(body))) return 'quota';
   if (status === 401 || status === 403) return 'auth';
   if (status === 400 && AUTH_HINT.test(body)) return 'auth';
-  if (status === 402 || ((status === undefined || status < 500) && ACCOUNT_LIMIT_HINT.test(body))) return 'quota';
   if (status === 429) return QUOTA_HINT.test(body) ? 'quota' : 'rate_limit';
   if (status === 408 || status === 504) return 'timeout';
   if (status !== undefined && status >= 500) return 'unavailable';

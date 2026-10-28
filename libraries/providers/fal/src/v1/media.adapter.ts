@@ -44,6 +44,24 @@ const DEFAULT_IMAGE_MODEL = 'fal-ai/flux/schnell';
 const DEFAULT_VIDEO_MODEL = 'fal-ai/kling-video/v1.6/standard/text-to-video';
 const DEFAULT_AUDIO_MODEL = 'fal-ai/stable-audio';
 
+const PIKA_2_2_MODELS = new Set([
+  'fal-ai/pika/v2.2/text-to-video',
+  'fal-ai/pika/v2.2/image-to-video',
+]);
+const PIKA_DURATION_SECONDS = new Map([
+  ['5', 5],
+  ['10', 10],
+]);
+
+function normalizeVideoInput(
+  model: string,
+  input: MediaGenerateOptions['input'],
+): MediaGenerateOptions['input'] {
+  if (!input || input.duration === undefined || !PIKA_2_2_MODELS.has(model)) return input;
+  const duration = PIKA_DURATION_SECONDS.get(String(input.duration));
+  return duration === undefined ? input : { ...input, duration };
+}
+
 const FAL_QUEUE_HOST = 'queue.fal.run';
 
 // fal queue job ids carry the model path plus the poll base fal returns at submit time:
@@ -174,7 +192,7 @@ export class FalAdapter implements MediaProviderAdapter {
     const res = await this._fetch(url.toString(), {
       method: 'POST',
       headers: this._headers(options),
-      body: JSON.stringify({ prompt, ...options?.input }),
+      body: JSON.stringify({ prompt, ...normalizeVideoInput(model, options?.input) }),
     });
     if (!res.ok) throw await mediaUpstreamError(this, res);
     const data = (await res.json()) as FalQueueSubmitResponse;
