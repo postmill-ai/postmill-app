@@ -173,4 +173,33 @@ describe('minimax media adapter', () => {
       message: 'MiniMax API key is required',
     });
   });
+
+  it.each([
+    ['video', (adapter: any) => adapter.generateVideo('a product ad', { apiKey: 'k' })],
+    ['image', (adapter: any) => adapter.generateImage('a product photo', { apiKey: 'k' })],
+    ['audio', (adapter: any) => adapter.generateAudio('a product jingle', { apiKey: 'k' })],
+  ] as const)('classifies an embedded %s balance failure as a non-retryable upstream quota error', async (operation, generate) => {
+    const { ctx } = makeCtx(() => res({ base_resp: { status_code: 1008, status_msg: 'insufficient balance' } }));
+    const adapter: any = minimaxMediaModule.create(ctx as any);
+
+    const error = await generate(adapter).catch((err: unknown) => err);
+    expect(error).toMatchObject({
+      name: 'ProviderUpstreamError',
+      kind: 'quota',
+      retryable: false,
+      upstreamStatus: undefined,
+    });
+    expect(error.message).toBe(`MiniMax reports the account's quota or billing limit was reached: insufficient balance`);
+    expect(error.ctx.operation).toBe(operation);
+  });
+
+  it('keeps a missing result without a provider error message as an application error', async () => {
+    const { ctx } = makeCtx(() => res({}));
+    const adapter: any = minimaxMediaModule.create(ctx as any);
+
+    const error = await adapter.generateVideo('a product ad', { apiKey: 'k' }).catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe('Error');
+    expect(error.message).toBe('MiniMax returned no task id: unknown error');
+  });
 });

@@ -14,6 +14,7 @@ import {
   ProviderModule,
   mediaUpstreamError,
   mediaUpstreamFailure,
+  mediaUpstreamFromBody,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.minimax.io/v1';
@@ -88,7 +89,10 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
     const data = (await res.json()) as MiniMaxImageResponse;
     const urls = (data.data?.image_urls || []).filter((u) => typeof u === 'string' && u.length > 0);
     if (urls.length === 0) {
-      throw new Error(`MiniMax returned no images: ${data.base_resp?.status_msg || 'unknown error'}`);
+      if (data.base_resp?.status_msg) {
+        throw mediaUpstreamFromBody(this, undefined, data.base_resp.status_msg, 'image');
+      }
+      throw new Error('MiniMax returned no images: unknown error');
     }
     return {
       multi: urls.length > 1,
@@ -125,7 +129,10 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
     if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const data = (await res.json()) as MiniMaxVideoSubmitResponse;
     if (!data.task_id) {
-      throw new Error(`MiniMax returned no task id: ${data.base_resp?.status_msg || 'unknown error'}`);
+      if (data.base_resp?.status_msg) {
+        throw mediaUpstreamFromBody(this, undefined, data.base_resp.status_msg, 'video');
+      }
+      throw new Error('MiniMax returned no task id: unknown error');
     }
     return { jobId: data.task_id };
   }
@@ -148,7 +155,10 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
     if (!res.ok) throw await mediaUpstreamError(this, res, 'audio');
     const data = (await res.json()) as MiniMaxAudioResponse;
     if (!data.data?.audio) {
-      throw new Error(`MiniMax returned no audio: ${data.base_resp?.status_msg || 'unknown error'}`);
+      if (data.base_resp?.status_msg) {
+        throw mediaUpstreamFromBody(this, undefined, data.base_resp.status_msg, 'audio');
+      }
+      throw new Error('MiniMax returned no audio: unknown error');
     }
     // MiniMax returns hex-encoded audio bytes. Validate the hex shape and cap the size before
     // decoding so a malformed/oversized payload can't corrupt the clip or exhaust memory (6.1e).
