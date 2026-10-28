@@ -48,8 +48,7 @@ export const ltxDescriptor: StudioDescriptor = {
     "tagline": "The AI platform for video production",
     "description": "LTX Studio by Lightricks is an end-to-end AI video production platform. Powered by the open-source LTX-2 model, it takes you from script to storyboard to finished video.",
     "badges": [
-      "Video",
-      "Image"
+      "Video"
     ],
     "highlights": [
       "LTX-2: open-source multimodal video model",

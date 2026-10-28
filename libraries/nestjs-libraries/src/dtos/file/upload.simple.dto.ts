@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UploadSimpleBodyDto {
@@ -30,4 +30,26 @@ export class UploadSimpleBodyDto {
   // are hidden from the default listing. Client-settable, same trust level as
   // ImportFromUrlDto.aiDesigner='reference' — org-scoped, listing-only.
   internal?: 'design-preview';
+
+  // Stock provenance, matching ImportFromUrlDto (`/files/import`): the locally
+  // rasterized stock-icon save rides this endpoint, and CC-BY icon sets need the
+  // attribution persisted on the stored File row's metadata.
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  source?: string;
+
+  @IsOptional()
+  @IsObject()
+  // Multipart bodies carry strings only, so the client sends attribution as a
+  // JSON string; parse it here and let @IsObject reject a malformed payload.
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  })
+  attribution?: Record<string, unknown>;
 }

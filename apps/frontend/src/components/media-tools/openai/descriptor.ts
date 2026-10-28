@@ -1,9 +1,10 @@
 import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
-// OpenAI media (registry/config identifier `openai`). gpt-image-1 and DALL·E 3 take different
-// param sets, so each is its own image tab with a fixed model and its own correct fields; a
-// third tab covers TTS (operation `audio`, synchronous data-URL artifact). Field names are
-// native OpenAI params and ride straight into the request body.
+// OpenAI media (registry/config identifier `openai`). gpt-image-1 is the image tab; a
+// second tab covers TTS (operation `audio`, synchronous data-URL artifact). The DALL·E 3
+// tab was removed — the model 404s for new API keys; the adapter still honors an explicit
+// `options.model: 'dall-e-3'` for orgs already configured for it. Field names are native
+// OpenAI params and ride straight into the request body.
 export const openaiDescriptor: StudioDescriptor = {
   landing: {
     "website": "https://openai.com",
@@ -80,47 +81,6 @@ export const openaiDescriptor: StudioDescriptor = {
           ],
         },
         { type: 'number', name: 'n', label: 'Number of images', min: 1, max: 4, step: 1, default: 1 },
-      ],
-    },
-    {
-      key: 'dalle-3',
-      label: 'DALL·E 3',
-      operation: 'image',
-      model: 'dall-e-3',
-      description: 'Generate a still image with DALL·E 3.',
-      fields: [
-        { type: 'prompt', name: 'prompt', label: 'Prompt', required: true, placeholder: 'Describe the image…' },
-        {
-          type: 'select',
-          name: 'size',
-          label: 'Size',
-          default: '1024x1024',
-          options: [
-            { value: '1024x1024', label: 'Square 1024×1024' },
-            { value: '1792x1024', label: 'Landscape 1792×1024' },
-            { value: '1024x1792', label: 'Portrait 1024×1792' },
-          ],
-        },
-        {
-          type: 'select',
-          name: 'quality',
-          label: 'Quality',
-          default: 'standard',
-          options: [
-            { value: 'standard', label: 'Standard' },
-            { value: 'hd', label: 'HD' },
-          ],
-        },
-        {
-          type: 'select',
-          name: 'style',
-          label: 'Style',
-          default: 'vivid',
-          options: [
-            { value: 'vivid', label: 'Vivid' },
-            { value: 'natural', label: 'Natural' },
-          ],
-        },
       ],
     },
     {

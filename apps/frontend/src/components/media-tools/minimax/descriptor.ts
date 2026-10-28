@@ -9,8 +9,7 @@ export const minimaxDescriptor: StudioDescriptor = {
     "tagline": "Turn your imagination into video",
     "description": "Hailuo, MiniMax's AI video generator, is known for striking cinematic motion and strong prompt following from text or a single image — with templates for dance, effects, and character animation.",
     "badges": [
-      "Video",
-      "Image"
+      "Video"
     ],
     "highlights": [
       "Cinematic motion with strong prompt adherence",

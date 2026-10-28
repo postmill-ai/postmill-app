@@ -6,66 +6,13 @@ import {
   MediaGenerateOptions,
   MediaCredentialOptions,
   MediaJobSubmission,
-  MediaPollResult,
   MediaInputValue,
   resolveApiKey,
   redactError,
   SafeFetchPort,
   ProviderModule,
   mediaUpstreamError,
-  mediaUpstreamCtx,
-  mediaUpstreamFailure,
-  isTransientStatus,
-  ProviderUpstreamError,
 } from '@postmill-ai/provider-kernel';
-
-// Sora video models (sora-2 / sora-2-pro) on the async Videos API. The finished MP4 is auth-only
-// bytes at /v1/videos/{id}/content (no public URL), so pollJob downloads it with the key and
-// returns it inline as a data URL — see pollJob.
-const SORA_BASE = 'https://api.openai.com/v1/videos';
-
-// 2.1 — a 429/5xx on a status poll is transient: THROW so the lifecycle retries the render
-// rather than permanently failing a job whose generation may still be fine.
-
-// 5.7 — the auth-only MP4 is buffered then base64-inflated (~2.3× resident); reject via the
-// content-length header BEFORE buffering so a huge render can't blow the 2 GB heap. Matches the
-// lifecycle's MAX_ARTIFACT_BYTES so nothing that passes here is rejected later.
-const MAX_ARTIFACT_BYTES = 512 * 1024 * 1024;
-
-// 6.1j — cap a fetched source frame before buffering it into the multipart upload.
-const MAX_SOURCE_IMAGE_BYTES = 32 * 1024 * 1024;
-
-// 2.3 — stream the body with a running byte counter, aborting once it passes the cap, so a
-// chunked / no-content-length body can't be fully buffered into the heap before the size check.
-// Returns null when the cap is exceeded (the caller maps that to a terminal failure).
-async function readCapped(res: Response, cap: number): Promise<Buffer | null> {
-  const reader = res.body?.getReader();
-  if (!reader) {
-    const buf = Buffer.from(await res.arrayBuffer());
-    return buf.length > cap ? null : buf;
-  }
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      total += value.byteLength;
-      if (total > cap) {
-        await reader.cancel();
-        return null;
-      }
-      chunks.push(Buffer.from(value));
-    }
-  }
-  return Buffer.concat(chunks);
-}
-
-interface SoraJob {
-  id?: string;
-  status?: 'queued' | 'in_progress' | 'completed' | 'failed';
-  error?: { message?: string } | null;
-}
 
 // Map a TTS response_format to the data-URL mime so the artifact lands with the right type.
 const TTS_MIME: Record<string, string> = {
@@ -105,7 +52,7 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
   readonly name = 'OpenAI';
   readonly capabilities: MediaProviderCapabilities = {
     image: true,
-    video: true,
+    video: false,
     audio: true,
     avatar: false,
     tts: true,
@@ -170,124 +117,9 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
     };
   }
 
-  // Sora text-to-video and image-to-video via the async Videos API. POST /v1/videos returns a job
-  // id; the poll-cron drives pollJob to completion (no webhook). Native params (size, seconds)
-  // ride through `options.input`. A source frame (`input_reference`, resolved to a URL server-side)
-  // is uploaded as the multipart `input_reference` field; text-to-video sends a plain JSON body.
-  async generateVideo(prompt: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
-    const apiKey = this._apiKey(options);
-    const model = options?.model || 'sora-2';
-    const input = (options?.input || {}) as Record<string, MediaInputValue>;
-    const { input_reference, ...rest } = input;
-
-    const params: Record<string, string> = {
-      model,
-      prompt,
-      size: String(rest.size || options?.size || '1280x720'),
-      seconds: String(rest.seconds || '8'),
-    };
-    for (const [k, v] of Object.entries(rest)) {
-      if (k === 'size' || k === 'seconds') continue;
-      if (v !== undefined && v !== '') params[k] = String(v);
-    }
-
-    let res;
-    if (typeof input_reference === 'string' && input_reference) {
-      // Image-to-video: fetch the source frame and upload it as a multipart file.
-      const imgRes = await this._fetch(input_reference);
-      if (!imgRes.ok) throw new Error(`Sora reference image fetch failed (${imgRes.status})`);
-      // 6.1j — content-length pre-check + streamed cap so an oversized source frame can't be
-      // fully buffered before the size check.
-      const declaredLen = Number(imgRes.headers.get('content-length') || '0');
-      if (declaredLen && declaredLen > MAX_SOURCE_IMAGE_BYTES) {
-        throw new Error('Sora reference image exceeds the size limit');
-      }
-      const bytes = await readCapped(imgRes as unknown as Response, MAX_SOURCE_IMAGE_BYTES);
-      if (!bytes) throw new Error('Sora reference image exceeds the size limit');
-      const mime = imgRes.headers.get('content-type')?.split(';')[0] || 'image/png';
-      const ext = mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png';
-      const form = new FormData();
-      for (const [k, v] of Object.entries(params)) form.append(k, v);
-      form.append('input_reference', new Blob([new Uint8Array(bytes)], { type: mime }), `reference.${ext}`);
-      res = await this._fetch(SORA_BASE, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: form,
-      });
-    } else {
-      res = await this._fetch(SORA_BASE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(params),
-      });
-    }
-
-    if (!res.ok) {
-      // Sora video access is provisioned separately from the rest of the
-      // OpenAI API: a key without it earns a 404 ("The model `sora-2` does
-      // not exist or you do not have access to it") or 403. Say so plainly —
-      // the generic invalid_request advice ("check the model and inputs")
-      // sends the user debugging a request that can never succeed.
-      if (res.status === 404 || res.status === 403) {
-        throw new ProviderUpstreamError(
-          mediaUpstreamCtx(this, 'video'),
-          'invalid_request',
-          `This OpenAI account does not have access to the Sora video API (model \`${model}\`). Enable Sora on the OpenAI account (platform limits / usage tier) or pick another video provider in Settings → Media.`,
-          res.status,
-          false,
-        );
-      }
-      throw await mediaUpstreamError(this, res, 'video');
-    }
-    const data = (await res.json()) as SoraJob;
-    if (!data.id) throw new Error('Sora returned no job id');
-    return { jobId: data.id, metadata: { provider: this.identifier, model } };
-  }
-
-  async pollJob(jobId: string, options?: MediaCredentialOptions): Promise<MediaPollResult> {
-    const apiKey = resolveApiKey(options);
-    if (!apiKey) return { status: 'failed', error: 'OpenAI API key is required' };
-    const headers = { Authorization: `Bearer ${apiKey}` };
-
-    const res = await this._fetch(`${SORA_BASE}/${jobId}`, { headers });
-    if (!res.ok) {
-      const body = await res.text();
-      if (isTransientStatus(res.status)) throw new Error(`Sora poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
-    }
-    const data = (await res.json()) as SoraJob;
-
-    if (data.status === 'completed') {
-      // The finished MP4 is auth-only bytes at /content (no public URL). Download it with the key
-      // and return it inline as a data URL — the lifecycle decodes data URLs, whereas the default
-      // unauthenticated re-download of a provider URL would 401 here.
-      const contentRes = await this._fetch(`${SORA_BASE}/${jobId}/content`, { headers });
-      // 2.2 — classify the download leg: a 429/5xx is transient (THROW to retry the paid render),
-      // but a permanent 4xx (expired/deleted clip) is terminal — return failed rather than
-      // re-polling every sweep for 24h.
-      if (!contentRes.ok) {
-        if (isTransientStatus(contentRes.status)) {
-          const body = await contentRes.text();
-          throw new Error(`Sora content download transient error ${contentRes.status}: ${body.slice(0, 200)}`);
-        }
-        return { status: 'failed', error: `Sora content download failed (${contentRes.status})` };
-      }
-      // 5.7 — reject oversize via content-length before buffering + base64-inflating.
-      const declared = Number(contentRes.headers.get('content-length') || 0);
-      if (declared > MAX_ARTIFACT_BYTES) return { status: 'failed', error: 'Sora video exceeds the size limit' };
-      const buffer = await readCapped(contentRes, MAX_ARTIFACT_BYTES);
-      if (!buffer) return { status: 'failed', error: 'Sora video exceeds the size limit' };
-      const base64 = buffer.toString('base64');
-      return {
-        status: 'completed',
-        artifactUrl: `data:video/mp4;base64,${base64}`,
-        metadata: { provider: this.identifier, mime: 'video/mp4' },
-      };
-    }
-    if (data.status === 'failed') {
-      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error?.message || 'Sora generation failed') };
-    }
-    return { status: 'pending' };
+  // OpenAI retired the Sora video API and the Sora studio was removed; video stays unsupported.
+  async generateVideo(_prompt: string, _options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
+    throw new Error('OpenAI does not support video generation');
   }
 
   // OpenAI TTS is synchronous — return the artifact inline.

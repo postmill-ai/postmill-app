@@ -2,9 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { makeCtx, res } from '@postmill-ai/provider-kernel/testing/media-int-helpers';
 import { openaiMediaModule } from './media.adapter';
 
-// Recorded-fixture integration test (plan B4) — no network. The Sora video paths are covered
-// in sora.int-spec.ts; this spec pins the free testConnection probe (the settings Test button
-// must never fall back to a billed image render).
+// Recorded-fixture integration test (plan B4) — no network. This spec pins the free
+// testConnection probe (the settings Test button must never fall back to a billed image render).
 
 describe('openai media adapter testConnection', () => {
   it('GETs /v1/models with Bearer auth — 200 ok, 401 Invalid API key, 500 throws, missing key', async () => {

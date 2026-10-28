@@ -64,6 +64,9 @@ export const SaveToFilesModal: FC<SaveToFilesModalProps> = ({ url, name, source,
         const form = new FormData();
         form.append('file', blob, fileName);
         if (selectedFolderId) form.append('folderId', selectedFolderId);
+        // Stock provenance — CC-BY icon sets need attribution persisted on the File row.
+        if (source) form.append('source', source);
+        if (attribution) form.append('attribution', JSON.stringify(attribution));
         res = await fetch('/files/upload-simple', { method: 'POST', body: form });
       } else {
         res = await fetch('/files/import', {

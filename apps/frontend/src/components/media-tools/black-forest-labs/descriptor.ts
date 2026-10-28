@@ -12,7 +12,7 @@ export const blackForestLabsDescriptor: StudioDescriptor = {
       "Image"
     ],
     "highlights": [
-      "FLUX.2 family: base, [max] quality, [klein] fast",
+      "FLUX 1.1 Pro & Ultra, FLUX Pro, FLUX Dev",
       "Production-grade character & style consistency",
       "Physically accurate lighting and realism",
       "Multi-image reference for style & object edits",

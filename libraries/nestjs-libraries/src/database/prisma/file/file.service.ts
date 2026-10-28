@@ -173,7 +173,11 @@ export class FileService {
     originalName?: string,
     folderId?: string,
     fileSize?: number,
-    options?: { internal?: 'design-preview' }
+    options?: {
+      internal?: 'design-preview';
+      source?: string;
+      attribution?: Record<string, unknown>;
+    }
   ) {
     await this._storageService.assertWithinQuota(org, fileSize ?? 0);
     const ownedFolderId = await this.resolveOwnedFolderId(org, folderId);

@@ -32,8 +32,7 @@ export const lumaDescriptor: StudioDescriptor = {
     "tagline": "Dream Machine: ideas into video, fast",
     "description": "Luma AI's Dream Machine turns text and images into realistic, fluid video. Its Ray models are known for natural motion, strong physics, and fast, prolific creative iteration.",
     "badges": [
-      "Video",
-      "Image"
+      "Video"
     ],
     "highlights": [
       "Ray models for high-quality, lifelike motion",
