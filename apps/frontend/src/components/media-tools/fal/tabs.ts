@@ -22,11 +22,6 @@ const RESOLUTION = [
   { value: '720p', label: '720p' },
   { value: '1080p', label: '1080p' },
 ];
-const PIKAFFECTS = [
-  'Cake-ify', 'Crumble', 'Crush', 'Decapitate', 'Deflate', 'Dissolve', 'Explode', 'Eye-pop',
-  'Inflate', 'Levitate', 'Melt', 'Peel', 'Poke', 'Squish', 'Ta-da', 'Tear',
-].map((effect) => ({ value: effect, label: effect }));
-
 export const FLUX_IMAGE_TAB: StudioTab = {
   key: 'text-to-image',
   label: 'Text → Image',
@@ -132,19 +127,6 @@ export const FAL_PIKA_TABS: StudioTab[] = [
       { type: 'text', name: 'negative_prompt', label: 'Negative prompt' },
       { type: 'select', name: 'resolution', label: 'Resolution', default: '720p', options: RESOLUTION },
       { type: 'select', name: 'duration', label: 'Duration', default: '5', options: DURATION },
-      { type: 'number', name: 'seed', label: 'Seed (optional)' },
-    ],
-  },
-  {
-    key: 'pikaffects',
-    label: 'Pikaffects',
-    operation: 'video',
-    model: 'fal-ai/pika/v1.5/pikaffects',
-    description: 'Apply a one-click Pika VFX to an image (cake-ify, crush, inflate, melt…).',
-    fields: [
-      { type: 'media', name: 'image_url', label: 'Source image', accept: 'image', required: true },
-      { type: 'select', name: 'pikaffect', label: 'Effect', default: 'Cake-ify', options: PIKAFFECTS },
-      { type: 'prompt', name: 'prompt', label: 'Prompt (optional)', placeholder: 'Optional guidance…' },
       { type: 'number', name: 'seed', label: 'Seed (optional)' },
     ],
   },

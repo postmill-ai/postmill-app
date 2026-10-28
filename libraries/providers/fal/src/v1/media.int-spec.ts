@@ -149,7 +149,12 @@ describe('fal media adapter (sync image + queued video)', () => {
     ).rejects.toThrow(/Invalid model id/);
   });
 
-  it('keeps the Pika video request shape unchanged', async () => {
+  it.each([
+    { model: 'fal-ai/pika/v2.2/text-to-video', duration: '5', expectedDuration: 5 },
+    { model: 'fal-ai/pika/v2.2/text-to-video', duration: '10', expectedDuration: 10 },
+    { model: 'fal-ai/pika/v2.2/image-to-video', duration: '5', expectedDuration: 5 },
+    { model: 'fal-ai/pika/v2.2/image-to-video', duration: '10', expectedDuration: 10 },
+  ])('submits $model with numeric duration $duration', async ({ model, duration, expectedDuration }) => {
     const pollBase = 'https://queue.fal.run/fal-ai/pika';
     const { recs, ctx } = makeCtx(() =>
       res({ request_id: 'pika-1', response_url: `${pollBase}/requests/pika-1` }),
@@ -157,18 +162,47 @@ describe('fal media adapter (sync image + queued video)', () => {
     const adapter: any = falMediaModule.create(ctx as any);
     await adapter.generateVideo('a dancing cat', {
       apiKey: 'fal-key',
-      model: 'fal-ai/pika/v2.2/text-to-video',
-      input: { negative_prompt: 'blurry', aspect_ratio: '16:9', resolution: '720p', duration: '5', seed: 7 },
+      model,
+      input: {
+        ...(model.endsWith('/image-to-video') ? { image_url: 'https://cdn.fal/source.png' } : {}),
+        negative_prompt: 'blurry',
+        resolution: '720p',
+        duration,
+        seed: 7,
+      },
     });
-    expect(recs[0].url).toBe('https://queue.fal.run/fal-ai/pika/v2.2/text-to-video');
-    expect(JSON.parse(recs[0].body)).toEqual({
-      prompt: 'a dancing cat',
-      negative_prompt: 'blurry',
-      aspect_ratio: '16:9',
-      resolution: '720p',
-      duration: '5',
-      seed: 7,
-    });
+
+    expect(recs[0].url).toBe(`https://queue.fal.run/${model}`);
+    const body = JSON.parse(recs[0].body);
+    expect(body.duration).toBe(expectedDuration);
+    expect(typeof body.duration).toBe('number');
+    if (model.endsWith('/image-to-video')) {
+      expect(body.image_url).toBe('https://cdn.fal/source.png');
+    }
+  });
+
+  it.each([
+    'fal-ai/kling-video/v1.6/standard/image-to-video',
+    'fal-ai/kling-video/v1.6/pro/image-to-video',
+    'fal-ai/kling-video/v2/master/image-to-video',
+  ])('preserves Kling string durations for %s', async (model) => {
+    const { recs, ctx } = makeCtx(() => res({ request_id: 'kling-1' }));
+    const adapter: any = falMediaModule.create(ctx as any);
+    for (const duration of ['5', '10']) {
+      await adapter.generateVideo('make the cat dance', {
+        apiKey: 'fal-key',
+        model,
+        input: { image_url: 'https://cdn.fal/source.png', duration },
+      });
+    }
+
+    for (const [index, duration] of ['5', '10'].entries()) {
+      expect(recs[index].url).toBe(`https://queue.fal.run/${model}`);
+      const body = JSON.parse(recs[index].body);
+      expect(body.image_url).toBe('https://cdn.fal/source.png');
+      expect(body.duration).toBe(duration);
+      expect(typeof body.duration).toBe('string');
+    }
   });
 
   it('submits Stable Audio and polls its audio_file artifact', async () => {

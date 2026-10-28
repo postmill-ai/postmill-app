@@ -27,9 +27,8 @@ describe('canonical fal.ai studio', () => {
       'fal-ai/kling-video/v2/master/image-to-video',
       'fal-ai/pika/v2.2/text-to-video',
       'fal-ai/pika/v2.2/image-to-video',
-      'fal-ai/pika/v1.5/pikaffects',
     ]));
-    expect(modelIds()).toHaveLength(11);
+    expect(modelIds()).toHaveLength(10);
   });
 
   it('keeps Pika fal-backed and shares the standalone studio tab definitions', () => {
@@ -49,7 +48,6 @@ describe('canonical fal.ai studio', () => {
     for (const model of [
       'fal-ai/pika/v2.2/text-to-video',
       'fal-ai/pika/v2.2/image-to-video',
-      'fal-ai/pika/v1.5/pikaffects',
     ]) {
       expect(COMPACT_STUDIO_REGISTRY.fal.tabs.filter(({ tab }) => tab.model === model)).toHaveLength(1);
     }

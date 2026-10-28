@@ -539,6 +539,6 @@ export const metadata: ProviderMetadata = {
   },
   "website": "https://fal.ai",
   "description": {
-    "en": "Generate images, video, music, and audio with fal.ai. This studio includes FLUX, Stable Audio, fal-hosted Kling, Pika, and Pikaffects using your configured fal.ai API key."
+    "en": "Generate images, video, music, and audio with fal.ai. This studio includes FLUX, Stable Audio, fal-hosted Kling, and Pika using your configured fal.ai API key."
   }
 };

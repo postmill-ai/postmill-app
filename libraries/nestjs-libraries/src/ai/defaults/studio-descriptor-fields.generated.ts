@@ -550,29 +550,6 @@ export const STUDIO_DESCRIPTOR_REGISTRY: Record<string, StudioDescriptorSchema> 
         ]
       },
       {
-        "key": "pika-pikaffects",
-        "operation": "video",
-        "model": "fal-ai/pika/v1.5/pikaffects",
-        "fields": [
-          {
-            "name": "image_url",
-            "type": "media"
-          },
-          {
-            "name": "pikaffect",
-            "type": "select"
-          },
-          {
-            "name": "prompt",
-            "type": "prompt"
-          },
-          {
-            "name": "seed",
-            "type": "number"
-          }
-        ]
-      },
-      {
         "key": "text-to-music",
         "operation": "audio",
         "model": "fal-ai/stable-audio",
