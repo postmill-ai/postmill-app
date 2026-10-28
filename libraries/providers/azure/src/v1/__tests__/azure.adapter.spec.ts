@@ -70,6 +70,17 @@ describe('AzureAdapter', () => {
       const gpt4o = models.find((m) => m.id === 'gpt-4o');
       expect(gpt4o).toBeDefined();
       expect(gpt4o?.kind).toBe('text');
+      // Chat LLMs must not be image-flagged — they would surface in media
+      // image dropdowns and fail at imageModel().
+      expect(gpt4o?.capabilities?.image).toBe(false);
+
+      const dallE = models.find((m) => m.id === 'dall-e-3');
+      expect(dallE).toBeDefined();
+      expect(dallE?.kind).toBe('image');
+      expect(dallE?.capabilities?.image).toBe(true);
+
+      const gptImage = models.find((m) => m.id === 'gpt-image-1');
+      expect(gptImage?.kind).toBe('image');
 
       const embedding = models.find((m) => m.id === 'text-embedding-3-small');
       expect(embedding).toBeDefined();
