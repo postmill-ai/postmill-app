@@ -774,6 +774,69 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
     });
   });
 
+  describe('landExtraArtifacts (sync fan-out entry point)', () => {
+    function imagePrimary() {
+      const ctx = makeService();
+      const primary = makeJob({ provider: 'ideogram', operation: 'image', status: 'completed' });
+      ctx.orgSettings.getConfigForProvider.mockResolvedValue({
+        credentials: { apiKey: 'ideogram-key' },
+        storageProviderId: null,
+        storageRootFolderId: 'root-1',
+        version: 'v1',
+      });
+      mockSafeFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers({ 'content-type': 'image/png', 'content-length': '3' }),
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      });
+      return { ctx, primary };
+    }
+
+    it('lands each extra URL as its own sibling completed job on the primary provider/operation', async () => {
+      const { ctx, primary } = imagePrimary();
+      await ctx.service.landExtraArtifacts(primary, ['https://cdn.test/b.png'], { mime: 'image/png' });
+
+      expect(ctx.aiSettings.createMediaJob).toHaveBeenCalledTimes(1);
+      expect(ctx.aiSettings.createMediaJob).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'ideogram', operation: 'image', status: 'pending' }),
+      );
+      expect(ctx.mediaRepository.saveGeneratedMedia).toHaveBeenCalledTimes(1);
+      expect(ctx.aiSettings.updateMediaJob).toHaveBeenCalledWith(
+        'org-1',
+        'created-1',
+        expect.objectContaining({ status: 'completed' }),
+      );
+      // siblings complete silently — the caller's primary already notified
+      expect(ctx.notificationService.notify).not.toHaveBeenCalled();
+    });
+
+    it('caps the fan-out at 8 siblings (§6.2) when called directly', async () => {
+      const { ctx, primary } = imagePrimary();
+      await ctx.service.landExtraArtifacts(
+        primary,
+        Array.from({ length: 12 }, (_, i) => `https://cdn.test/extra-${i}.png`),
+      );
+      expect(ctx.aiSettings.createMediaJob).toHaveBeenCalledTimes(8);
+    });
+
+    it('is a no-op for an empty url list', async () => {
+      const { ctx, primary } = imagePrimary();
+      await ctx.service.landExtraArtifacts(primary, []);
+      expect(ctx.aiSettings.createMediaJob).not.toHaveBeenCalled();
+    });
+
+    it('a failed sibling is logged and does not abort the rest of the fan-out', async () => {
+      const { ctx, primary } = imagePrimary();
+      ctx.mediaRepository.saveGeneratedMedia
+        .mockRejectedValueOnce(new Error('storage down'))
+        .mockResolvedValue({ id: 'media-2', path: '/uploads/org-1/b.png' });
+
+      await ctx.service.landExtraArtifacts(primary, ['https://cdn.test/a.png', 'https://cdn.test/b.png']);
+
+      expect(ctx.aiSettings.createMediaJob).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('processJob atomic completion claim (§3.1)', () => {
     function completedJob() {
       const ctx = makeService();
