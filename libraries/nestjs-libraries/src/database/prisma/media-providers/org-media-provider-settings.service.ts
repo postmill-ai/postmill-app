@@ -17,9 +17,7 @@ const STANDARD_FOLDERS = ['documents', 'audio', 'images', 'video', 'other'];
 
 // Providers whose media credential is the SAME key as their AI/LLM provider (Qwen on
 // DashScope). When no dedicated media credential exists, fall back to the org's AI
-// provider key — configure once, works for both surfaces. (openai/minimax instead
-// write-mirror both ways via ProviderCredentialLinkService; Qwen has no media-side
-// settings flow yet, so a read-fallback is the lighter, immediate path.)
+// provider key — configure once, works for both surfaces.
 const UNIVERSAL_AI_CREDENTIAL = new Set([
   'qwen',
   'google',

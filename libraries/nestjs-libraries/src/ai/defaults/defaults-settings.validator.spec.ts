@@ -129,23 +129,23 @@ describe('DefaultsSettingsValidator', () => {
       ).toThrowError(/Unknown media default setting key for category 'text-to-image'/);
     });
 
-    it('picks the tab matching the fixed model id', () => {
+    it('scopes fields to the provider tab for the fixed model', () => {
       expect(
         validator.validate(
           'media',
           'text-to-image',
-          { size: '1024x1024', style: 'vivid' },
-          { providerId: 'openai', model: 'dall-e-3' },
+          { size: '1024x1024', background: 'transparent' },
+          { providerId: 'openai', model: 'gpt-image-1' },
         ),
-      ).toEqual({ size: '1024x1024', style: 'vivid' });
+      ).toEqual({ size: '1024x1024', background: 'transparent' });
 
-      // `background` only exists on the gpt-image-1 tab.
+      // `style` only existed on the removed DALL·E 3 tab.
       expect(() =>
         validator.validate(
           'media',
           'text-to-image',
-          { background: 'transparent' },
-          { providerId: 'openai', model: 'dall-e-3' },
+          { style: 'vivid' },
+          { providerId: 'openai', model: 'gpt-image-1' },
         ),
       ).toThrowError(/Unknown media default setting key for category 'text-to-image'/);
     });

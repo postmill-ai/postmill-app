@@ -11137,6 +11137,11 @@ components:
           type: string
           enum:
             - design-preview
+        source:
+          type: string
+          maxLength: 64
+        attribution:
+          type: object
     SaveMediaDto:
       type: object
       properties:

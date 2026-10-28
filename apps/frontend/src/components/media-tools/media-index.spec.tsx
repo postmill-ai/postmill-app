@@ -91,10 +91,10 @@ describe('MediaIndex studios', () => {
   });
 
   it('renders capability chips from the studio badges', () => {
-    enabled = new Set(['luma']);
+    enabled = new Set(['higgsfield']);
     renderIndex();
 
-    // Luma is Video + Image.
+    // Higgsfield is Image + Video.
     expect(screen.getAllByText('Video').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Image').length).toBeGreaterThan(0);
   });

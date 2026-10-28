@@ -150,64 +150,6 @@ export const metadata: ProviderMetadata = {
             "step": 1
           }
         ]
-      },
-      {
-        "id": "dall-e-3",
-        "label": "DALL·E 3",
-        "fields": [
-          {
-            "name": "size",
-            "type": "select",
-            "label": "Size",
-            "default": "1024x1024",
-            "options": [
-              {
-                "value": "1024x1024",
-                "label": "Square 1024×1024"
-              },
-              {
-                "value": "1792x1024",
-                "label": "Landscape 1792×1024"
-              },
-              {
-                "value": "1024x1792",
-                "label": "Portrait 1024×1792"
-              }
-            ]
-          },
-          {
-            "name": "quality",
-            "type": "select",
-            "label": "Quality",
-            "default": "standard",
-            "options": [
-              {
-                "value": "standard",
-                "label": "Standard"
-              },
-              {
-                "value": "hd",
-                "label": "HD"
-              }
-            ]
-          },
-          {
-            "name": "style",
-            "type": "select",
-            "label": "Style",
-            "default": "vivid",
-            "options": [
-              {
-                "value": "vivid",
-                "label": "Vivid"
-              },
-              {
-                "value": "natural",
-                "label": "Natural"
-              }
-            ]
-          }
-        ]
       }
     ],
     "text-to-speech": [

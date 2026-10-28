@@ -167,7 +167,7 @@ export const MEDIA_TABS: MediaTab[] = [
   },
   {
     href: '/media/ltx',
-    badges: ['Video', 'Image'],
+    badges: ['Video'],
     label: 'LTX Studio',
     section: 'Providers',
     icon: (
@@ -178,7 +178,7 @@ export const MEDIA_TABS: MediaTab[] = [
   },
   {
     href: '/media/luma',
-    badges: ['Video', 'Image'],
+    badges: ['Video'],
     label: 'Luma',
     section: 'Providers',
     icon: (
@@ -191,7 +191,7 @@ export const MEDIA_TABS: MediaTab[] = [
   },
   {
     href: '/media/minimax',
-    badges: ['Video', 'Image'],
+    badges: ['Video'],
     label: 'MiniMax',
     section: 'Providers',
     icon: (
