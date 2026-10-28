@@ -709,6 +709,7 @@ model Webhooks {
   name           String
   organizationId String
   url            String
+  events         String[]      @default([])
   deletedAt      DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

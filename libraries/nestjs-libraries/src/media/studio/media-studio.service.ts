@@ -220,6 +220,12 @@ export class MediaStudioService {
         if (!url) throw new Error('Provider returned no image');
         const ok = await this._lifecycle.completeJob(job, url, result.metadata, job.folderId);
         if (!ok) throw new Error('Failed to store generated image');
+        // Multi-image generations bill for the whole batch (Higgsfield Soul, Ideogram/Recraft
+        // n>1, OpenAI-compatible hubs, …): land every extra image as its own sibling completed
+        // job — primary-first, exactly like the async poll path's extraArtifactUrls fan-out.
+        if (result.images && result.images.length > 1) {
+          await this._lifecycle.landExtraArtifacts(job, result.images.slice(1), result.metadata);
+        }
         return { jobId: job.id };
       }
 

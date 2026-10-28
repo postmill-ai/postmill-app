@@ -1,7 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
+
+const mcpServerConfigs = vi.hoisted(() => ({ captured: [] as any[] }));
 
 vi.mock('@mastra/mcp', () => ({
-  MCPServer: class MockMCPServer {},
+  MCPServer: class MockMCPServer {
+    constructor(config: any) {
+      mcpServerConfigs.captured.push(config);
+    }
+  },
 }));
 
 vi.mock('@postmill-ai/nestjs-libraries/chat/mastra.service', () => ({
@@ -62,7 +68,17 @@ vi.mock('./oauth-types', () => ({
   extractBearerToken: vi.fn(),
 }));
 
-import { createMcpScopeStrategy, requireScopes, mapPersistedScopes } from './start.mcp';
+import {
+  startMcp,
+  createMcpScopeStrategy,
+  requireScopes,
+  mapPersistedScopes,
+} from './start.mcp';
+import { FeatureFlagsService } from '@postmill-ai/nestjs-libraries/feature-flags';
+import { MastraService } from '@postmill-ai/nestjs-libraries/chat/mastra.service';
+import { LoadToolsService } from '@postmill-ai/nestjs-libraries/chat/load.tools.service';
+import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
+import { IdempotencyFactory } from '@postmill-ai/nestjs-libraries/ai/governance/idempotency.factory';
 import { requireWrite } from './tools/tool.helpers';
 
 // The per-tool write gate reads `access.scopes` — the exact set the entrypoints
@@ -138,6 +154,76 @@ describe('startMcp auth helpers', () => {
   it('requires every requested scope', () => {
     expect(requireScopes({ authenticated: true, scopes: ['mcp:read'] }, ['mcp:read'])).toBe(true);
     expect(requireScopes({ authenticated: true, scopes: ['mcp:read'] }, ['mcp:read', 'mcp:admin'])).toBe(false);
+  });
+});
+
+describe('startMcp feature-flag scoping', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    mcpServerConfigs.captured.length = 0;
+  });
+
+  const makeApp = (isDisabled: (flag: string) => boolean) => {
+    const mounts: string[] = [];
+    const mastraFn = vi.fn(async () => ({
+      getAgent: () => ({ __getStaticAgents: () => ({}) }),
+    }));
+    const app = {
+      get: (token: any) => {
+        if (token === FeatureFlagsService) return { isDisabled };
+        if (token === MastraService) return { mastra: mastraFn };
+        if (token === AiSettingsManager) return { getSettings: async () => ({}) };
+        if (token === LoadToolsService) return { loadTools: async () => ({ toolA: {} }) };
+        if (token === IdempotencyFactory) return { getMiddleware: () => null };
+        return {};
+      },
+      use: (path: string | string[]) => {
+        mounts.push(...(Array.isArray(path) ? path : [path]));
+      },
+    } as any;
+    return { app, mounts, mastraFn };
+  };
+
+  it('keeps the MCP surface mounted when only the agent is disabled', async () => {
+    vi.stubEnv('BACKEND_URL', 'http://localhost:3000');
+    const { app, mounts, mastraFn } = makeApp((flag) => flag === 'agent');
+
+    await startMcp(app);
+
+    expect(mounts).toEqual(
+      expect.arrayContaining([
+        '/mcp',
+        '/mcp-oauth',
+        '/mcp/:id',
+        '/sse/:id',
+        '/message/:id',
+        '/.well-known/oauth-protected-resource',
+        '/.well-known/oauth-authorization-server',
+      ])
+    );
+    const config = mcpServerConfigs.captured.at(-1);
+    expect(config.tools).toEqual({ toolA: {} });
+    expect(config.agents).toEqual({});
+    expect(mastraFn).not.toHaveBeenCalled();
+  });
+
+  it('advertises the Mastra agents when the agent is enabled', async () => {
+    vi.stubEnv('BACKEND_URL', 'http://localhost:3000');
+    const { app, mastraFn } = makeApp(() => false);
+
+    await startMcp(app);
+
+    expect(mastraFn).toHaveBeenCalled();
+    expect(mcpServerConfigs.captured.at(-1).agents).toHaveProperty('postmill');
+  });
+
+  it('mounts nothing when MCP itself is disabled', async () => {
+    const { app, mounts } = makeApp((flag) => flag === 'mcp');
+
+    await startMcp(app);
+
+    expect(mounts).toEqual([]);
+    expect(mcpServerConfigs.captured).toEqual([]);
   });
 });
 

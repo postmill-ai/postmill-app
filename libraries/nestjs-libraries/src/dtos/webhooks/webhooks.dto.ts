@@ -1,6 +1,14 @@
-import { IsDefined, IsOptional, IsString, IsUrl } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsDefined,
+  IsIn,
+  IsString,
+  IsUrl,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { IsSafeWebhookUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
+import { SUPPORTED_WEBHOOK_EVENTS } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhooks.events';
 
 export class WebhooksIntegrationDto {
   @IsString()
@@ -8,7 +16,16 @@ export class WebhooksIntegrationDto {
   id: string;
 }
 
-export class WebhooksDto {
+class WebhookEventsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  @IsIn([...SUPPORTED_WEBHOOK_EVENTS], { each: true })
+  @IsDefined()
+  events: string[];
+}
+
+export class WebhooksDto extends WebhookEventsDto {
   id: string;
 
   @IsString()
@@ -42,7 +59,7 @@ export class OnlyURL {
 
 export class SendWebhookDto {}
 
-export class UpdateDto {
+export class UpdateDto extends WebhookEventsDto {
   @IsString()
   @IsDefined()
   id: string;

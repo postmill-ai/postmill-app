@@ -9,6 +9,13 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
   isInngestEnabled: () => true,
 }));
 
+const safeFetchMock = vi.fn().mockResolvedValue({ status: 200 });
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
+  safeFetch: (...args: any[]) => safeFetchMock(...args),
+  webhookSignature: () => 'sha256=test',
+  webhookTimeoutMs: () => 10000,
+}));
+
 import { PostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/post.activity';
 import { XDto } from '@postmill-ai/provider-kernel/domains/social-dtos';
 
@@ -294,6 +301,114 @@ describe('postSocial/postComment delete-after-claim guard', () => {
     expect(isDeleted).toHaveBeenCalledWith('p2');
     expect(result).toEqual([]);
     expect(getSocialIntegration).not.toHaveBeenCalled();
+  });
+});
+
+describe('PostActivity.sendWebhooks event subscription filter', () => {
+  const webhook = (over: Partial<Record<string, any>> = {}) => ({
+    id: 'hook-1',
+    url: 'https://example.com/hook',
+    events: [],
+    integrations: [],
+    ...over,
+  });
+
+  const buildForSend = (webhooks: any[]) =>
+    build({
+      _webhookService: { getWebhooks: vi.fn().mockResolvedValue(webhooks) },
+      _postService: {
+        getPostByForWebhookId: vi.fn().mockResolvedValue({
+          id: 'p1',
+          content: 'hi',
+          releaseURL: 'https://x.com/post/1',
+          state: 'PUBLISHED',
+          publishDate: new Date('2026-06-09T00:00:00.000Z'),
+          integration: { providerIdentifier: 'x', name: 'My X' },
+        }),
+      },
+    });
+
+  it('delivers to legacy (empty events) and post.published-subscribed webhooks, skips the rest', async () => {
+    const { activity } = buildForSend([
+      webhook({ id: 'legacy', url: 'https://example.com/legacy', events: [] }),
+      webhook({ id: 'sub', url: 'https://example.com/sub', events: ['post.published'] }),
+      webhook({ id: 'other', url: 'https://example.com/other', events: ['comment.new'] }),
+    ]);
+
+    await activity.sendWebhooks('p1', 'org-1', 'int-1');
+
+    const urls = safeFetchMock.mock.calls.map((c) => c[0]);
+    expect(urls).toEqual([
+      'https://example.com/legacy',
+      'https://example.com/sub',
+    ]);
+    const body = JSON.parse(safeFetchMock.mock.calls[0][1].body);
+    expect(body.event).toBe('post.published');
+    expect(body.data.postId).toBe('p1');
+  });
+
+  it('keeps integration scoping for post.published', async () => {
+    const { activity } = buildForSend([
+      webhook({
+        id: 'match',
+        url: 'https://example.com/match',
+        events: ['post.published'],
+        integrations: [{ id: 'int-1' }],
+      }),
+      webhook({
+        id: 'mismatch',
+        url: 'https://example.com/mismatch',
+        events: ['post.published'],
+        integrations: [{ id: 'int-2' }],
+      }),
+    ]);
+
+    await activity.sendWebhooks('p1', 'org-1', 'int-1');
+
+    expect(safeFetchMock.mock.calls.map((c) => c[0])).toEqual([
+      'https://example.com/match',
+    ]);
+  });
+});
+
+describe('PostActivity.notifyPostFailed post.failed dispatch', () => {
+  it('notifies and dispatches a post.failed webhook event', async () => {
+    const notifyPostPublishFailure = vi.fn().mockResolvedValue(undefined);
+    const dispatchEvent = vi.fn().mockResolvedValue(undefined);
+    const { activity } = build({
+      _notificationService: { notifyPostPublishFailure },
+      _webhookService: { dispatchEvent },
+    });
+
+    await activity.notifyPostFailed('org-1', 'My X', 'p1', undefined, 'boom');
+
+    expect(notifyPostPublishFailure).toHaveBeenCalledWith(
+      'org-1',
+      'My X',
+      'p1',
+      undefined,
+      'boom'
+    );
+    expect(dispatchEvent).toHaveBeenCalledWith('org-1', 'post.failed', {
+      postId: 'p1',
+      integrationName: 'My X',
+      error: 'boom',
+    });
+  });
+
+  it('still resolves when the webhook dispatch throws', async () => {
+    const { activity } = build({
+      _notificationService: {
+        notifyPostPublishFailure: vi.fn().mockResolvedValue(undefined),
+      },
+      _webhookService: {
+        dispatchEvent: vi.fn().mockRejectedValue(new Error('db down')),
+      },
+    });
+
+    await expect(
+      activity.notifyPostFailed('org-1', 'My X', 'p1', 'comment', 'boom')
+    ).resolves.toBeUndefined();
   });
 });
 

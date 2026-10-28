@@ -113,9 +113,9 @@ export class WanAdapter implements MediaProviderAdapter {
       const poll = await this.pollJob(taskId, options);
       if (poll.status === 'completed' && poll.artifactUrl) {
         return {
-          multi: false,
+          multi: (poll.extraArtifactUrls?.length ?? 0) > 0,
           image: poll.artifactUrl,
-          images: [poll.artifactUrl],
+          images: [poll.artifactUrl, ...(poll.extraArtifactUrls || [])],
           metadata: { provider: this.identifier, model },
         };
       }
@@ -164,10 +164,22 @@ export class WanAdapter implements MediaProviderAdapter {
     const status = data.output?.task_status;
 
     if (status === 'SUCCEEDED') {
-      // Video → output.video_url; image → output.results[0].url.
-      const artifactUrl = data.output?.video_url || data.output?.results?.[0]?.url;
+      // Video → output.video_url; image → output.results[].url (n>1 returns several).
+      const videoUrl = data.output?.video_url;
+      const images = (data.output?.results || [])
+        .map((r) => r.url)
+        .filter((u): u is string => !!u);
+      const artifactUrl = videoUrl || images[0];
       if (!artifactUrl) return { status: 'failed', error: 'Wan task succeeded without output' };
-      return { status: 'completed', artifactUrl, metadata: { provider: this.identifier } };
+      // Surface extra takes of the same batch via the generic extraArtifactUrls (Suno pattern)
+      // so the lifecycle / sync fan-out lands each as its own File instead of dropping them.
+      const extras = videoUrl ? [] : images.slice(1);
+      return {
+        status: 'completed',
+        artifactUrl,
+        ...(extras.length ? { extraArtifactUrls: extras } : {}),
+        metadata: { provider: this.identifier },
+      };
     }
     if (status === 'FAILED' || status === 'CANCELED' || status === 'UNKNOWN') {
       return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.output?.message || data.message || 'Wan task failed') };

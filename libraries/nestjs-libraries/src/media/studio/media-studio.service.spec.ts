@@ -19,6 +19,7 @@ function makeService() {
   const lifecycle = {
     createPendingJob: vi.fn().mockResolvedValue({ id: 'job-1' }),
     completeJob: vi.fn().mockResolvedValue(true),
+    landExtraArtifacts: vi.fn().mockResolvedValue(undefined),
     attachProviderJob: vi.fn().mockResolvedValue(undefined),
     failJob: vi.fn().mockResolvedValue(undefined),
     webhookUrlFor: vi.fn().mockReturnValue('https://api.example.com/webhook/job-1'),
@@ -304,6 +305,76 @@ describe('MediaStudioService', () => {
       // never reaches credential resolution / adapter dispatch
       expect(orgSettings.getConfigForProvider).not.toHaveBeenCalled();
       expect(resolution.resolveMedia).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generate sync image multi-artifact fan-out', () => {
+    it('lands every extra image from result.images as a sibling job after the primary completes', async () => {
+      const { service, lifecycle, adapter } = makeService();
+      const metadata = { provider: 'test-provider', model: 'm1' };
+      adapter.generateImage.mockResolvedValue({
+        multi: true,
+        image: 'https://provider.test/a.png',
+        images: ['https://provider.test/a.png', 'https://provider.test/b.png', 'https://provider.test/c.png'],
+        metadata,
+      });
+
+      const result = await service.generate('org-1', 'user-1', 'test-provider', {
+        operation: 'image',
+        input: { prompt: 'a cat' },
+      });
+
+      expect(result).toEqual({ jobId: 'job-1' });
+      expect(lifecycle.completeJob).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'job-1' }),
+        'https://provider.test/a.png',
+        metadata,
+        undefined,
+      );
+      expect(lifecycle.landExtraArtifacts).toHaveBeenCalledTimes(1);
+      expect(lifecycle.landExtraArtifacts).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'job-1' }),
+        ['https://provider.test/b.png', 'https://provider.test/c.png'],
+        metadata,
+      );
+      // primary-first: the extra fan-out only runs after the primary completed
+      expect(lifecycle.completeJob.mock.invocationCallOrder[0]).toBeLessThan(
+        lifecycle.landExtraArtifacts.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('does not fan out when the provider returns a single image', async () => {
+      const { service, lifecycle, adapter } = makeService();
+      adapter.generateImage.mockResolvedValue({
+        multi: false,
+        image: 'https://provider.test/a.png',
+        images: ['https://provider.test/a.png'],
+      });
+
+      await service.generate('org-1', 'user-1', 'test-provider', {
+        operation: 'image',
+        input: { prompt: 'a cat' },
+      });
+
+      expect(lifecycle.landExtraArtifacts).not.toHaveBeenCalled();
+    });
+
+    it('does not fan out extras when the primary completion fails', async () => {
+      const { service, lifecycle, adapter } = makeService();
+      lifecycle.completeJob.mockResolvedValue(false);
+      adapter.generateImage.mockResolvedValue({
+        multi: true,
+        image: 'https://provider.test/a.png',
+        images: ['https://provider.test/a.png', 'https://provider.test/b.png'],
+      });
+
+      await expect(
+        service.generate('org-1', 'user-1', 'test-provider', {
+          operation: 'image',
+          input: { prompt: 'a cat' },
+        }),
+      ).rejects.toThrow('Failed to store generated image');
+      expect(lifecycle.landExtraArtifacts).not.toHaveBeenCalled();
     });
   });
 

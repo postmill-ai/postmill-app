@@ -26,7 +26,7 @@ export class SettingsController {
   }
 
   @Post('/team')
-  @RequirePermission('settings', 'update')
+  @RequirePermission('members', 'manage')
   @CheckPolicies([AuthorizationActions.Create, Sections.TEAM_MEMBERS])
   async inviteTeamMember(
     @GetOrgFromRequest() org: Organization,
@@ -37,7 +37,7 @@ export class SettingsController {
   }
 
   @Put('/team/:id/role')
-  @RequirePermission('settings', 'update')
+  @RequirePermission('members', 'manage')
   @CheckPolicies([AuthorizationActions.Create, Sections.TEAM_MEMBERS])
   changeTeamMemberRole(
     @GetOrgFromRequest() org: Organization,
@@ -56,7 +56,7 @@ export class SettingsController {
   }
 
   @Post('/team/create-user')
-  @RequirePermission('settings', 'update')
+  @RequirePermission('members', 'manage')
   @CheckPolicies([AuthorizationActions.Create, Sections.TEAM_MEMBERS])
   async createTeamUser(
     @GetOrgFromRequest() org: Organization,
@@ -74,7 +74,7 @@ export class SettingsController {
   }
 
   @Delete('/team/:id')
-  @RequirePermission('settings', 'update')
+  @RequirePermission('members', 'manage')
   @CheckPolicies([AuthorizationActions.Create, Sections.TEAM_MEMBERS])
   deleteTeamMember(
     @GetOrgFromRequest() org: Organization,
