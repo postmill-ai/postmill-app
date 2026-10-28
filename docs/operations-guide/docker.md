@@ -24,20 +24,21 @@ The application will be available at `http://localhost:4007`.
 
 ## Container images
 
-Postmill publishes the same all-in-one image to two registries. Both are official; pull from
-whichever suits your environment.
+Postmill publishes the all-in-one image to GitHub Container Registry on every release, and also
+copies it to Docker Hub as a convenience mirror. Both are official; pull from whichever suits your
+environment.
 
 | Registry | Image | Notes |
 |---|---|---|
-| GitHub Container Registry | `ghcr.io/postmill-ai/postmill-app` | Used by the shipped `docker-compose.yaml`. No anonymous pull rate limit |
-| Docker Hub | `postmillai/postmill-app` | The same image. Anonymous pulls are subject to Docker Hub's rate limits |
+| GitHub Container Registry | `ghcr.io/postmill-ai/postmill-app` | Published automatically by the release workflow. Used by the shipped `docker-compose.yaml`. No anonymous pull rate limit |
+| Docker Hub | `postmillai/postmill-app` | The same image, copied over manually at release time — it may lag GHCR briefly. Anonymous pulls are subject to Docker Hub's rate limits |
 
 ```bash
 docker pull ghcr.io/postmill-ai/postmill-app:v1.4.0   # GitHub Container Registry
 docker pull postmillai/postmill-app:v1.4.0            # Docker Hub
 ```
 
-Every release is published to both as `:vX.Y.Z` and `:latest`, built for `linux/amd64` only.
+Each release is available on both as `:vX.Y.Z` and `:latest`, built for `linux/amd64` only.
 
 ::: tip Pinning by digest
 The two registries serve identical layers, but the top-level manifest digest differs between them
