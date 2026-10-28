@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import 'reflect-metadata';
 
 const mockCreateTeamUser = vi.fn();
 const mockInviteTeamMember = vi.fn();
@@ -26,8 +27,12 @@ vi.mock(
 import { SettingsController } from './settings.controller';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import { CreateTeamUserDto } from '@postmill-ai/nestjs-libraries/dtos/settings/create-team-user.dto';
+import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 
 const org = { id: 'org-1' } as any;
+
+const permissionOf = (method: string) =>
+  Reflect.getMetadata(REQUIRE_PERMISSION_KEY, SettingsController.prototype[method]);
 
 describe('SettingsController', () => {
   let controller: SettingsController;
@@ -61,5 +66,26 @@ describe('SettingsController', () => {
       undefined,
     );
     expect(result).toEqual({ id: 'u-1' });
+  });
+
+  it('gates every team-mutating route on members:manage, matching the UI and RolesController', () => {
+    for (const method of [
+      'inviteTeamMember',
+      'changeTeamMemberRole',
+      'createTeamUser',
+      'deleteTeamMember',
+    ]) {
+      expect(permissionOf(method), method).toEqual({
+        resource: 'members',
+        action: 'manage',
+      });
+    }
+  });
+
+  it('keeps the team read route on settings:read', () => {
+    expect(permissionOf('getTeam')).toEqual({
+      resource: 'settings',
+      action: 'read',
+    });
   });
 });
