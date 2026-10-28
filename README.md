@@ -12,7 +12,7 @@
     <img src="https://img.shields.io/badge/License-AGPL%203.0-blue.svg" alt="License: AGPL-3.0">
   </a>
   <a href="https://postmill.ai">
-    <img src="https://img.shields.io/badge/version-v1.3.0-2B5CD3.svg" alt="Version v1.3.0">
+    <img src="https://img.shields.io/badge/version-v1.4.0-2B5CD3.svg" alt="Version v1.4.0">
   </a>
   <a href="https://docs.postmill.ai">
     <img src="https://img.shields.io/badge/docs-docs.postmill.ai-2B5CD3.svg" alt="Documentation">
@@ -41,7 +41,7 @@ Postmill brings **design**, **publishing**, **analytics**, and **engagement** in
   <tr>
     <td width="50%" align="center" valign="top">
       <a href="https://postmill.ai/ss/postmill-ss-design.jpg"><img src="https://postmill.ai/ss/postmill-ss-design-thumb.jpg" width="100%" alt="Design — the Postmill designer: canvas with a multi-track video timeline"></a><br>
-      <sub><b>Design</b> — designer canvas + video timeline, 45 media tools</sub>
+      <sub><b>Design</b> — designer canvas + video timeline, 46 media tools</sub>
     </td>
     <td width="50%" align="center" valign="top">
       <a href="https://postmill.ai/ss/postmill-ss-post.jpg"><img src="https://postmill.ai/ss/postmill-ss-post-thumb.jpg" width="100%" alt="Post — the posts calendar with scheduled posts across channels"></a><br>

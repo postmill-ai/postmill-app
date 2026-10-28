@@ -28,7 +28,8 @@ Each card shows the sticker preview and author credit. Clicking a card opens the
 - **Save & Post** — because the [Designer](./designer) flattens animation to frame 1, stickers are
   imported into `/files` and then opened directly in the composer pre-attached to a new post. This
   preserves the animation through publishing.
-- **Save to Files** — imports the sticker into `/files` for later use.
+- **Save to Files** — imports the sticker into `/files` for later use. The dialog lets you rename
+  the file and pick or create a destination folder.
 
 When a sticker is selected through a media picker, it returns as `image` by default, or as `video`
 when an MP4 fallback is available.
@@ -41,4 +42,4 @@ when an MP4 fallback is available.
 
 ---
 
-> Verified against v1.3.0
+> Verified against v1.4.0

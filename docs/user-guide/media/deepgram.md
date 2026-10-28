@@ -5,8 +5,10 @@ audio or video file from your [Media Library](../media-library) into text, word 
 caption segments. It does not produce an image/video/audio artifact, so it does not follow the
 standard [Studio Kit](./index) generation flow.
 
-Configure your Deepgram API key at **Settings → Media**. There is no environment-variable fallback;
+Configure your Deepgram API key at **Settings → Content → AI Media**. There is no environment-variable fallback;
 if the provider is not configured, the studio shows the standard "isn't configured" empty state.
+**Test connection** in Settings → Content → AI Media only confirms the key was saved — there is no live Deepgram
+probe, so a wrong key surfaces on the first transcription.
 
 ## Pick a source
 
@@ -57,9 +59,10 @@ The result panel shows an editable transcript and a timecoded segment list. The 
   **To composer** buttons only — no preview, no Edit-in-Designer/Post handoff.
 - **Send to composer** — opens the composer pre-filled with the transcript text.
 - **Edit in Designer** — for a **video** source, stashes `{ url, fileId, width, height, words }` and
-  opens `/media/designer?captions=1`. The Designer builds a video project from the clip and burns
-  in a caption track from the word timings, with no re-transcription. For an **audio** source, the
-  clip is opened directly on the timeline's audio track instead.
+  opens `/media/designer?captions=1` in a new tab. The Designer builds a video project from the
+  clip and burns in a caption track from the word timings, with no re-transcription. For an
+  **audio** source, the clip is opened directly on the timeline's audio track instead (also in a
+  new tab).
 
 ## Related docs
 
@@ -70,4 +73,4 @@ The result panel shows an editable transcript and a timecoded segment list. The 
 
 ---
 
-> Verified against v1.3.0
+> Verified against v1.4.0

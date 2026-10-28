@@ -100,4 +100,4 @@ creation. This means:
 - **Date formats** — ISO 8601 (`2026-06-09T14:30:00Z`) is required. Include timezone offsets to
   avoid ambiguity.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

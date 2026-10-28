@@ -1,6 +1,6 @@
 # Plugs
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 Plugs are automation hooks attached to social channel providers. They allow providers to define custom actions that run either on a schedule after publish (auto plugs) or immediately after a post is published (post plugs). Both are configured in the composer's per-channel settings panel.
 

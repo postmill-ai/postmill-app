@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure the Fireworks AI provider once under **Settings → AI**. Fireworks is a universal-credential provider, so the same API key serves both LLM and media generation; no separate **Settings → Media** entry is required. See [Settings](../settings) for provider setup.
+Configure the Fireworks AI provider once under **Settings → AI**. Fireworks is a universal-credential provider, so the same API key serves both LLM and media generation; no separate **Settings → Content → AI Media** entry is required. **Test connection** is a free catalog read (`GET /inference/v1/models`). See [Settings](../settings) for provider setup.
 
 ## Tabs / operations
 
@@ -29,4 +29,4 @@ The studio calls Fireworks' workflow endpoint with `Accept: application/json` an
 - [Settings](../settings) — configuring AI providers.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

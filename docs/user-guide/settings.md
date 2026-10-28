@@ -37,8 +37,8 @@ organisation:
 
 - **Invite Member** — send an email invitation (or copy the invitation link instead). Invited users
   receive a registration link valid for one hour.
-- **Create User** — create an activated local account with a password and role directly (members
-  with `members:manage`).
+- **Create User** — create an activated local account with a password and role directly (the
+  button shows for members with `members:manage`; the API requires `settings:update`).
 - **Roles** — membership is governed by a full role-based access control (RBAC) system.
   Five system roles are seeded for every organisation:
 
@@ -153,8 +153,14 @@ Configure AI providers, models, spending, and prompt management.
   which carry a **Hub** chip), with its brand icon and capability chips (text, image, vision,
   embeddings, speech, tools). A search box and capability filter chips narrow the list. If no
   provider is enabled, AI features are disabled across all surfaces.
-- **Configure** — click a provider's row to open its configuration: API credentials (encrypted at
-  rest; a base URL only for OpenAI-compatible endpoints). Image models are not part of AI provider
+- **Configure** — click a provider's row to open its configuration modal, which shows the
+  provider's description and, once set up, a **Configured** status with the last-updated time.
+  Enter the API credentials (encrypted at rest). Providers that support an endpoint override —
+  OpenAI, OpenRouter, Vercel AI Gateway, and the OpenAI-compatible family (Qwen Cloud, MiniMax,
+  DeepInfra, SiliconFlow, Kimi, NVIDIA, …) — also show an optional **Base URL** (required only for
+  the generic OpenAI-compatible provider); it must be a public HTTPS URL. When you reopen a
+  configured provider, non-secret values such as the Base URL are prefilled; secrets are never
+  returned and must be re-entered to change them. Image models are not part of AI provider
   configuration — image/video/audio generation is configured in the [Content tab](#content-tab).
   Popular providers show a **Where do I get my API key?** link to their keys page. Saving tests
   the connection first: if the test fails, nothing is saved and the provider's error is shown,
@@ -355,7 +361,14 @@ browser pages under [Media Studios](./media/index.md) for how packs affect searc
 A pluggable per-organisation media-provider page that mirrors the AI tab: provider cards with brand
 icons and capability chips, a search box and capability filter chips, an **On/Off** switch and
 **Make Primary** per configured provider, and **Test / Remove** actions. Click a provider's row to
-enter its API credentials (encrypted at rest).
+enter its API credentials (encrypted at rest); the same modal shows the provider's description
+and, once set up, its **Configured** / last-updated status.
+
+**Test** calls the provider's own lightweight auth check and is free for most providers (OpenAI,
+Replicate, Stability, Runway, Leonardo, Recraft, fal.ai, Kling AI, Black Forest Labs, Ideogram,
+Together AI, SiliconFlow, Vercel AI Gateway, Azure OpenAI, MiniMax, ElevenLabs, HeyGen, …); a
+provider without a probe falls back to rendering a small test image when it can. Testing a
+provider that has no saved configuration returns **404**.
 
 It lists every AI media provider — fal.ai, direct Kling AI, OpenAI, ElevenLabs, HeyGen, Runway,
 Black Forest Labs, Google, Replicate, Stability AI, MiniMax, Luma, and more; see
@@ -483,7 +496,7 @@ Available when your subscription tier includes webhooks.
 - **Manage** — edit or delete existing webhook endpoints.
 - **Test Webhook** — send a test payload to verify your endpoint receives and processes webhooks
   correctly.
-- **Event types** — `post.published`, `post.failed`, `comment.new`, `comment.reply`, and
+- **Event types** — `post.published`, `comment.new`, `comment.reply`, and
   `analytics.snapshot_complete`.
 
 See [Webhooks](../developer-docs/webhooks.md) for the developer reference on payload format and
@@ -574,4 +587,4 @@ Settings access is permission-gated: reading and changing the org-level settings
 permissions. A member whose role lacks the grant receives **HTTP 403**; an org can grant these
 permissions to a custom role. Billing management is owner-only.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

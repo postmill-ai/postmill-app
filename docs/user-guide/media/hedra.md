@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure a Hedra API key under **Settings → Media → Hedra**. This is an own-key provider and does **not** reuse an AI key. See [Settings](../settings) for credential setup.
+Configure a Hedra API key under **Settings → Content → AI Media → Hedra**. This is an own-key provider and does **not** reuse an AI key. **Test connection** only confirms the key was saved — there is no live Hedra probe, so a wrong key surfaces on the first render. See [Settings](../settings) for credential setup.
 
 ## Tabs
 
@@ -23,4 +23,4 @@ Jobs follow the standard [Media Studios flow](./index.md): submit the form, trac
 - Only one tab/operation is exposed: character video from a keyframe.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

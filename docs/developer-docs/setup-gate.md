@@ -16,12 +16,12 @@ const mustSetup = !user.setupCompleted;
 
 `LayoutComponent` (the authenticated app chrome) redirects incomplete users to `/setup` and renders nothing while redirecting to avoid a chrome flash. `/setup` lives in its own route segment under `apps/frontend/src/app/(app)/setup/` so it is outside `LayoutComponent` and cannot redirect itself.
 
-Only users who can complete the required LLM step stay in the wizard. Members without owner/admin role are redirected to `/dashboard` because they cannot save org-level AI provider settings.
+Only users who can complete the required LLM step stay in the wizard. Once the permissions fetch has **loaded** (resolved or failed), anyone who is not a super-admin, owner or admin is redirected to `/dashboard` because they cannot save org-level AI provider settings; gating on "loaded" rather than "resolved" means a backend restart mid-session (a failed `/settings/roles/me`) no longer strands members on the wizard.
 
 ## Backend surface
 
 - `GET /user/self` includes `setupCompleted: boolean`.
-- `POST /settings/setup/complete` (auth + org-scoped) calls `OrganizationService.completeSetup(orgId)`.
+- `POST /settings/setup/complete` (auth + org-scoped + `@RequirePermission('settings', 'update')`, no billing gate) calls `OrganizationService.completeSetup(orgId)`. A member cannot mark setup done for the whole organization.
 - `OrganizationService.completeSetup` rejects the call with a 400 if the organization has no active LLM provider.
 - `OrgAiSettingsService.upsert` auto-activates the first saved LLM provider when no active provider exists, so the wizard's LLM step can proceed after a single save.
 
@@ -58,4 +58,4 @@ The wizard has seven steps. Only the first step is required; the rest can be ski
 
 After completion, the org can still change every configured provider from the corresponding Settings tab.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

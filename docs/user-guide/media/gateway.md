@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure the Vercel AI Gateway provider once under **Settings → AI**. Gateway is a universal-credential provider, so the same API key drives both LLM and media generation; no separate **Settings → Media** entry is needed. See [Settings](../settings) for provider setup.
+Configure the Vercel AI Gateway provider once under **Settings → AI**. Gateway is a universal-credential provider, so the same API key drives both LLM and media generation; no separate **Settings → Content → AI Media** entry is needed. **Test connection** is a free catalog read (`GET /v1/models`). See [Settings](../settings) for provider setup.
 
 ## Tabs / operations
 
@@ -31,4 +31,4 @@ Images are delegated to the matching AI-SDK provider and complete synchronously.
 - [Settings](../settings) — configuring AI providers.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

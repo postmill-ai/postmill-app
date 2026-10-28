@@ -315,4 +315,4 @@ Common status codes:
 - `410` — Requested provider version has been retired.
 - `429` — Rate limit exceeded.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

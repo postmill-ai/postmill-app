@@ -4,7 +4,7 @@ Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves i
 
 > For the end-user view, see [AI Tools](../user-guide/ai-tools.md).
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 ---
 
@@ -118,7 +118,8 @@ Tenants may configure multiple providers (`enabled` per row); one row per org is
 Media generation is a separate, pluggable per-org system in `libraries/nestjs-libraries/src/media/`:
 
 - **`MediaProviderAdapter`** interface — each adapter declares `identifier`, `name`, a capability matrix (`image`/`video`/`audio`/`avatar`/`tts`/`stt`/`upscale`/`bgRemove`/`inpaint`/`outpaint`), and implements generation per media type.
-- **Registered adapters** — `fal`, `openai`, `elevenlabs`, `heygen`, `runway`, `black-forest-labs`, `vertex`, `replicate`, `stability-ai`, `tavus`, `did`, `hedra`, `minimax`, `deepgram`, `luma`, `ltx`, `suno`, `qwen`, `wan`, `higgsfield`, `genviral`, `reelfarm`, `google`, `recraft`, `ideogram`, `leonardo`, `togetherai`, `siliconflow`, `groq`, `openrouter`, `fireworks`, `deepinfra`, `gateway`, `bedrock`, `azure`, `xai`.
+- **Registered adapters (37)** — `fal`, `kling`, `openai`, `elevenlabs`, `heygen`, `runway`, `black-forest-labs`, `vertex`, `replicate`, `stability-ai`, `tavus`, `did`, `hedra`, `minimax`, `deepgram`, `luma`, `ltx`, `suno`, `qwen`, `wan`, `higgsfield`, `genviral`, `reelfarm`, `google`, `recraft`, `ideogram`, `leonardo`, `togetherai`, `siliconflow`, `groq`, `openrouter`, `fireworks`, `deepinfra`, `gateway`, `bedrock`, `azure`, `xai`. `fal` (fal.ai) backs the `/media/fal` and `/media/pika` studios; `kling` is the direct Kling AI API at `/media/kling-ai`.
+- **Upstream errors** — adapters convert a non-OK provider response or SDK error into a kernel `ProviderUpstreamError` (`libraries/providers/kernel/src/upstream-error.ts`; `mediaUpstreamError(this, res, operation)` for the fetch case). It deliberately carries no `statusCode`, so Nest never replays the provider's 401/402/429 as Postmill's own; `ProviderExceptionFilter` maps it to a **502** envelope (`provider`, `providerName`, `domain`, `operation`, `kind`, `upstreamStatus`, `retryable`, `message`, `settingsUrl`). Only `unavailable` / `timeout` / `unknown` kinds are reported to Sentry (as warnings); account-explained kinds (`auth`, `quota`, `rate_limit`, `invalid_request`) are not.
 - **Delivery semantics** — images are synchronous; video/audio/avatar are asynchronous, tracked in `AIMediaJob` with webhook-preferred completion and a `pollJob` fallback.
 - **`MediaProviderConfig`** — per-org config row with encrypted credentials and a storage binding (`storageProviderId`, `storageRootFolderId`).
 - **API** — `/settings/media` routes are gated with `@RequirePermission('media-config', 'manage')`.

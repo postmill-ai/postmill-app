@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-The Qwen media key is **shared with the Qwen LLM provider**. Configure your DashScope API key in **Settings → AI** (or **Settings → Media**) and both surfaces work. See [Settings](../settings.md) for provider setup.
+The Qwen media key is **shared with the Qwen LLM provider**. Configure your DashScope API key in **Settings → AI** (or **Settings → Content → AI Media**) and both surfaces work. See [Settings](../settings.md) for provider setup.
 
 ## Tabs / operations
 
@@ -25,6 +25,8 @@ Completed artifacts land in `/files` via the **Render Queue**. Images finish syn
 - There is no completion webhook; video jobs rely on the poll cron.
 - 1080p resolutions require a Plus Wan model.
 - Qwen-Image handles long prompts (up to roughly 1,000 tokens), so detailed scene descriptions are supported.
+- A DashScope key that is disabled under **Settings → AI** no longer powers the studio either, unless a dedicated media credential is stored.
+- **Test connection is free:** Settings → Content → AI Media → **Test connection** lists models on DashScope's OpenAI-compatible endpoint; no generation is billed.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

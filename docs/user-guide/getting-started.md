@@ -17,6 +17,9 @@ log in. The first user of an organization becomes its **Owner** (full access inc
 see [team roles](./team-and-roles.md)). Depending on how your instance is configured, you may
 also be able to sign in with Google, GitHub, or your company's OIDC identity provider.
 
+A brand-new organization first lands on the one-time `/setup` wizard, where an owner or admin
+connects at least one AI provider before the app opens — see [First-run Setup](./first-run-setup.md).
+
 ## 2. Connect Your First Channel
 
 Navigate to **Settings** (`/settings`) and open the **Channels** tab. Postmill supports 45
@@ -120,4 +123,4 @@ Postmill is organized into these sections, accessible from the left sidebar:
 - Set up campaigns to organize posts into themed folders: [Campaigns](./campaigns.md).
 - Explore the full composer capabilities: [Composer](./composer.md).
 
-> Verified against v1.3.0
+> Verified against v1.4.0

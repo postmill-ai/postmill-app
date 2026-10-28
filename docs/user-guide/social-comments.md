@@ -17,9 +17,9 @@ their own unread count.
 
 For operational setup details, see [Inngest and Cron](../operations-guide/inngest-and-cron.md).
 
-## Unified Inbox (`/comments`)
+## Unified Inbox (`/replies`)
 
-The comments page provides a single view of all incoming comments across channels. The inbox is a
+The **Replies** page (`/replies`; the older `/comments` URL redirects there) provides a single view of all incoming comments across channels. The inbox is a
 Pro, Team, and Agency feature; on other plans it shows an upgrade prompt. A **Sync now** button
 (with a "Last synced" time) triggers an immediate sync.
 
@@ -139,4 +139,4 @@ the post detail modal with the comments section.
 
 See [Schedule](./calendar.md) for details on post cards and the post detail modal.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

@@ -29,8 +29,23 @@ speech-to-text mode and two native editors (mask painting, video merge) and a ca
 | Voice Clone | Audio | Async | Clone a voice from a short audio sample. |
 | Speech to Text | Audio → Text | Sync | Transcribe an audio file to text. |
 
-Every run uses the org's own Replicate token, configured in **Settings → Media**. The category and
-model allowlist is curated server-side — Replicate hosts far more models than are exposed here.
+Every run uses the org's own Replicate token, configured in **Settings → Content → AI Media**
+(**Test connection** there is free — it lists `GET /v1/models` and never runs a prediction). The
+category and model allowlist is curated server-side — Replicate hosts far more models than are
+exposed here. Current video line-up: **Veo 3.1** (`google/veo-3.1`, which replaced the retired
+`google/veo-3`), **Video-01**, **Seedance 1 Pro**, and **Kling 2.5 Turbo Pro**
+(`kwaivgi/kling-v2.5-turbo-pro`, in both Text to Video and Image to Video — the discontinued
+`kling-v2.1` / `kling-v2.1-master` are gone); Video to Video runs `wan-video/wan-2.7-videoedit`;
+Video Background offers `lucataco/rembg-video` (general objects, the default) and
+`arielreplicate/robust_video_matting` (people only).
+
+Under the **Model** dropdown the studio shows curated capability notes for the selected model
+(for example "No audio track", or that text rendered into a video is baked in and may contain
+spelling errors — add text in the Designer instead). Prompt fields carry an **Enhance** action that
+rewrites the prompt with your workspace's AI provider (it needs AI configured under
+**Settings → AI**). Over-long prompts are truncated server-side to each model's upstream limit
+rather than failing the paid job: 1,024 characters for Veo 3.1, 2,000 for Seedance 1 Pro, 2,500 for
+Kling 2.5 Turbo Pro, and 300 for Riffusion.
 
 When Replicate is your workspace's **image-to-image** model default, [AI Designer](./ai-designer)
 can also condition its generated imagery on a reference image — supported for
@@ -72,8 +87,9 @@ fields are marked; optional fields can be left at their defaults.
 ## Save-folder requirement for async jobs
 
 Every category marked **Async** above runs in the background. Before generating, choose a **Save
-folder** in the Files library — the finished asset imports into that folder automatically when the
-job completes. If no folder is selected, **Generate** stays disabled.
+folder** in the Files library — **Files root…** is a valid choice — and the finished asset imports
+into that destination automatically when the job completes. Until a destination is chosen,
+**Generate** stays disabled.
 
 **Sync** categories (image generations, plus Speech to Text) complete immediately. If Replicate
 ends up queuing a sync prediction anyway, the studio silently falls back to registering an async
@@ -140,4 +156,4 @@ The meme editor is a native canvas tool:
 - [Settings](../settings) — configuring the Replicate media provider.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

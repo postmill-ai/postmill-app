@@ -8,10 +8,12 @@ The Team page is available when your subscription tier includes team members. Fr
 
 - **Invite by email** (`POST /settings/team`) — sends a registration link. You can also choose to copy the link instead of emailing it. The invitation link is valid for one hour and can be used once.
 - **Create a user directly** (`POST /settings/team/create-user`) — creates an activated local account with a password and assigns a role immediately. If an account with that email already exists, the request is refused (HTTP 409) — invite the existing user instead.
-- **Remove a member** (`DELETE /settings/team/:id`) — disables the membership; bulk remove is available from the data table selection.
+- **Remove a member** (`DELETE /settings/team/:id`) — removes the membership; the user's account itself is untouched. Bulk remove is available from the data table selection.
 - **Change a member's role** via the per-row selector or `PUT /settings/roles/team/:userId/role`.
 
-Managing members requires `members:manage` (or `settings:update` for some paths). Only an **Owner** can change or remove another Owner.
+On the API, inviting, creating, and removing members (`/settings/team/*`) requires `settings:update`; role assignment and role management (`/settings/roles/*`) require `members:manage`. Only an **Owner** can change or remove another Owner.
+
+If a former member later deletes their account, the designs they created are deleted with it, but the design versions they saved on teammates' designs are kept — anonymized, with no creator attached.
 
 ## System roles
 
@@ -67,4 +69,4 @@ Role creates/updates/deletes and member role assignments are written to the orga
 
 > See also [Settings](./settings.md) for the settings layout, [Subscription & Billing](./subscription-and-billing.md) for team-member limits, and [Operations Guide → Security](../operations-guide/security.md) for access-control invariants.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

@@ -24,7 +24,7 @@ convention, contract, or invariant, update the matching `agents/` doc in the sam
 
 ## Version
 
-The current release version is tracked in [`version.txt`](./version.txt) (now `v1.3.0`). **Bump it on
+The current release version is tracked in [`version.txt`](./version.txt) (now `v1.4.0`). **Bump it on
 every release.** Root docs speak only of `v1.0.0` as the first public release; the inherited 3.x/4.x
 numbering was pre-release internal development. An app release is a `vX.Y.Z` tag: `build-containers.yml`
 refuses to publish a container image whose tag does not match `version.txt`, then creates the GitHub

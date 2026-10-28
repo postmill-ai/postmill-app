@@ -108,4 +108,4 @@ This is a benign, macOS-only conflict between the native modules `sharp` and `ca
 packages register the same macOS notification-delegate class independently; the warning does not
 affect Linux production images or runtime correctness. No operator action is required.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

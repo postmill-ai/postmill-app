@@ -130,4 +130,4 @@ indicator (a red line in week/day views) also follows your timezone. Clicking an
 slot opens the create-post page (`/posts/post`) with the slot's date and time prefilled in
 your timezone; the post is saved in UTC.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure a dedicated Wan key under **Settings → Media**. Wan is an own-key provider — it does not reuse the Qwen AI credential, even though both use DashScope. See [Settings](../settings) for provider setup.
+Configure a dedicated Wan key under **Settings → Content → AI Media**. Wan is an own-key provider — it does not reuse the Qwen AI credential, even though both use DashScope. See [Settings](../settings) for provider setup.
 
 ## Tabs / operations
 
@@ -16,7 +16,7 @@ Configure a dedicated Wan key under **Settings → Media**. Wan is an own-key pr
 
 ## Generation flow
 
-Image generations complete synchronously via bounded internal polling, so the result appears in the render queue almost immediately. Video generations submit an async DashScope task and complete through the shared poll cron. Finished artifacts land in `/files` and can be opened in the [Designer](./designer) or posted directly. See [Media Studios overview](./index) for the common flow.
+Image generations complete synchronously via bounded internal polling (the adapter polls DashScope for up to about a minute), so the result appears in the render queue shortly after you click Generate. Video generations submit an async DashScope task and complete through the shared poll cron. Finished artifacts land in `/files` and can be opened in the [Designer](./designer) or posted directly. See [Media Studios overview](./index) for the common flow.
 
 ## Caveats
 
@@ -25,6 +25,7 @@ Image generations complete synchronously via bounded internal polling, so the re
 - The model dropdowns are fixed curated lists because DashScope has no clean per-modality catalog; there is no live catalog lookup or typed-model-id entry.
 - Field names are native DashScope params: `negative_prompt` and `img_url` route into `input`, while size, resolution, duration, `n`, and `prompt_extend` ride into `parameters`.
 - Wan does not support audio or avatar generation.
+- **Test** on the settings card calls the free DashScope `compatible-mode/v1/models` list — no generation is billed.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

@@ -147,4 +147,4 @@ every page you change.
 Contributors must sign the Contributor License Agreement before a PR can be merged: email your
 acceptance to legal@postmill.ai (`ICLA.md` for individuals, `CCLA.md` for entities).
 
-> Verified against v1.3.0
+> Verified against v1.4.0

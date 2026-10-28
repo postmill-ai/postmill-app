@@ -5,7 +5,7 @@ Postmill's chat agent is a Mastra/CopilotKit agent that lives at `/agents`. It u
 > For the end-user view of what the agent can do, see [Agent User Guide](../user-guide/agent.md).
 > For the MCP/A2A surfaces that expose the same tools to external clients, see [MCP Server](./mcp.md).
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 ---
 
@@ -179,7 +179,7 @@ The same `LoadToolsService.loadTools()` output is used by:
 
 > **A2A (`/a2a`) is deferred / not mounted.** The prior bridge was written against an `@reaatech/a2a-reference-mcp-bridge` API that does not exist in the installed version (`A2aAsMcpServer` has no `handleRequest`), so every request 500-ed. It is tracked as a future feature rather than shipped broken — a correct build needs an in-process MCP transport pair + an A2A JSON-RPC HTTP layer over `McpToolAdapter.executeTask`, verified against a live consumer.
 
-The `ToolFirewallService` wraps every execution, so budget, guardrail, and permission checks apply regardless of caller. `DEV_DISABLE_AGENT` only skips the agent-graph startup in `start.mcp.ts`; the MCP endpoints themselves remain available unless explicitly disabled separately.
+The `ToolFirewallService` wraps every execution, so budget, guardrail, and permission checks apply regardless of caller. `startMcp` returns early when either `DEV_DISABLE_MCP` or `DEV_DISABLE_AGENT` is set, so with `DEV_DISABLE_AGENT` the MCP endpoints are not mounted either (see [MCP Server](./mcp.md)).
 
 ---
 

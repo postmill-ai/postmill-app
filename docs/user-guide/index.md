@@ -43,4 +43,4 @@ Misskey, Sharkey, LINE, Matrix, Discourse, Odysee.
 | [Subscription & Billing](./subscription-and-billing.md) | Plans, trials, metered caps, add-ons, payment providers, payment methods, and invoices. |
 | [Supported Channels](./supported-channels.md) | Capability matrix for every provider — analytics, comments, first comment, polls, video, carousel, alt text, and more. |
 
-> Verified against v1.3.0
+> Verified against v1.4.0

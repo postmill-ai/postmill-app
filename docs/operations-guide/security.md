@@ -11,7 +11,7 @@ Applied in production via `helmet()` middleware. **Bypassed in development** —
 `NOT_SECURED` in production does not strip these headers.
 
 ```typescript
-// apps/backend/src/main.ts:138-163
+// apps/backend/src/main.ts:156-181
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -364,4 +364,4 @@ fields on all DTOs. Declare new optional fields explicitly on their DTO.
 - [Configuration](./configuration.md) — `ENCRYPTION_KEY`, `SSRF_ALLOWED_PRIVATE_CIDRS`,
   `INTEGRATION_RETURN_URL_ALLOWLIST`, `NOT_SECURED`
 
-> Verified against v1.3.0
+> Verified against v1.4.0

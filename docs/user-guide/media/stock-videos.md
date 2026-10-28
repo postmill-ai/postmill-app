@@ -8,7 +8,7 @@
 
 The free default catalog is **Pexels**, gated by the operator environment variable `PEXELS_API_KEY`.
 
-If your organization has an active [Content Pack](../settings) that declares `videos` — currently
+If your organization has an active [Content Pack](../settings) (Settings → Content → Content Packs) that declares `videos` — currently
 **Magnific**, **Vecteezy**, **Adobe Stock**, or **Envato Elements** — that premium catalog is shown
 first. Otherwise Postmill falls back to Pexels. A Content Pack daily-cap error is surfaced as a 402
 instead of silently falling back.
@@ -32,7 +32,8 @@ and attribution.
 - **Open in Designer** — opens the video on the [Designer](./designer) video timeline so you can add
   captions, audio, or additional clips.
 - **Save to Files** — imports the MP4 into `/files`. For Content Pack assets, a licensed download URL
-  is minted from the item id before import.
+  is minted from the item id before import. The Save to Files dialog lets you rename the file,
+  pick or create a destination folder, and choose **Save File** or **Save & Post**.
 
 Saved files carry `source` and `attribution` metadata.
 
@@ -50,4 +51,4 @@ current preview.
 
 ---
 
-> Verified against v1.2.0
+> Verified against v1.4.0

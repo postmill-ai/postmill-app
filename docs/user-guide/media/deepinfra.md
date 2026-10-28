@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure your DeepInfra AI provider once under **Settings → AI**. DeepInfra is a universal-credential provider: the same API key drives both LLM and media generation, so no separate **Settings → Media** entry is needed. See [Settings](../settings) for provider setup.
+Configure your DeepInfra AI provider once under **Settings → AI**. DeepInfra is a universal-credential provider: the same API key drives both LLM and media generation, so no separate **Settings → Content → AI Media** entry is needed. **Test connection** is a free catalog read (`GET /v1/openai/models`). See [Settings](../settings) for provider setup.
 
 ## Tabs / operations
 
@@ -12,7 +12,7 @@ Configure your DeepInfra AI provider once under **Settings → AI**. DeepInfra i
 |---|---|---|---|
 | **Text → Image** | Image | Model (FLUX.1 schnell/dev), prompt, width, height, steps, seed | Image(s) in `/files` |
 | **Text → Video** | Video | Model (Veo 3.1 / PixVerse V6), prompt | MP4 clip in `/files` |
-| **Text → Speech** | Audio | Model (Kokoro 82M), text, voice preset | Audio file in `/files` |
+| **Text → Speech** | Audio | Model (Kokoro 82M), text, voice (e.g. `af_bella`) | Audio file in `/files` |
 
 ## Generation flow
 
@@ -31,4 +31,4 @@ All three tabs post to DeepInfra's synchronous `/v1/inference/{model}` endpoint.
 - [Settings](../settings) — configuring AI providers.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

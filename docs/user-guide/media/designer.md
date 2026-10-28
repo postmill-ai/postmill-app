@@ -32,6 +32,10 @@ saved.
 - **Templates** — **Save as Template** stores the current design (image or video) as a template;
   **Browse Templates…** filters templates by category and organises them into folders. Applying a
   video template switches the design to video mode (and vice versa).
+- **Design files** — **File ▸ Export .pdesign…** bundles the *saved* design and all its assets into
+  a portable `.pdesign` file (an async job; save the design first) and downloads it. **File ▸ Import
+  Design File…** — or **Import .pdesign** in the Start a design dialog — opens a `.pdesign` or raw
+  `.json` design file as a **new** design.
 
 ## Video timeline
 
@@ -59,9 +63,18 @@ via headless Chromium + FFmpeg.
   (generated, or recorded with your microphone), an **Avatar** video, or a **Slideshow**, and can
   transform, upscale, remove the background of, or regenerate a segment of a selected clip. Each
   generate dialog has a **Provider:** picker: **Default** uses your workspace's media default, or
-  pick a configured provider to use its compact studio inline. **AI Video → Include voiceover**
-  creates a faceless product video with independent visual and narration tracks; the visual and
-  voice providers can be selected separately.
+  pick a configured provider to use its compact studio inline. **AI Video → Include voiceover
+  (faceless video)** creates a faceless product video with independent visual and narration tracks;
+  the visual provider and the **Voice provider:** (any TTS-capable provider) are selected separately,
+  and the narration lands as its own editable audio clip. A generated video is placed paused — press
+  **Play** to start playback.
+- **Video background removal** — the clip inspector's **Background removal** section and the
+  timeline clip menu's **Remove background** submenu offer three choices: **White background**
+  (`lucataco/rembg-video`, general object segmentation — products, pets), **Green screen**
+  (`arielreplicate/robust_video_matting`, people only), or **Auto (org default)**, which uses the
+  model pinned under **Settings → Content → Media Defaults** (falling back to `rembg-video`). The
+  clip is replaced with the background-free render when the job finishes; both models run on
+  [Replicate](./replicate), and any other model id is rejected server-side.
 
 ## Canvas tools
 
@@ -81,7 +94,7 @@ The Designer accepts a few different entry points, all via the `/media/designer`
 |---|---|---|
 | **Single asset** | `?url=&type=&w=&h=` query params (from a studio's Edit in Designer, or a stock browser's Open in Designer). | An image drops onto the static canvas as a thumbnail; audio/video route to the timeline handoff below. |
 | **Bulk handoff** | Files → select multiple → **Open all in Designer** stashes the selection in `sessionStorage` and navigates to `?bulk=1`. | All selected assets load onto the static canvas at once. |
-| **Timeline handoff** | Any studio's render-queue **Edit in Designer** for audio/video stashes `{ type, url, fileId }` in `sessionStorage` and opens `?timeline=1`. | The asset loads directly onto the video timeline. |
+| **Timeline handoff** | Any studio's render-queue **Edit in Designer** for audio/video. Same-tab opens stash `{ type, url, fileId, width, height, durationMs }` in `sessionStorage` and open `?timeline=1`; new-tab opens (the render-queue default) stash it in `localStorage` under a one-time id that expires after 5 minutes and open `?timeline=1&handoff=<id>`. If storage is unavailable the payload rides as `mediaType`/`mediaUrl` query params instead. | The asset loads directly onto the video timeline. |
 | **Caption handoff** | [Deepgram](./deepgram)'s **Edit in Designer** button (video sources only) stashes `{ url, fileId, width, height, words }` and opens `?captions=1`. | The video loads onto the timeline **and** a caption track is built from the word timings — no re-transcription. |
 
 The caption handoff is the only path (together with the general timeline handoff) that puts a real
@@ -115,4 +128,4 @@ After a static-canvas export, the done step also lists each exported file as a d
 can save a copy to your computer.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

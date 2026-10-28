@@ -71,7 +71,7 @@ Postmill's schema is managed with committed Prisma migrations:
 - `pnpm run prisma-migrate-deploy` applies migrations in order and is forward-only.
 - Adding a nullable or defaulted column is safe.
 - Renaming or dropping a column is destructive and should be done as a contract step in an expand/contract plan.
-- The destructive-diff guard (`tools/db/schema-destructive-guard.mjs`) rejects `DROP TABLE`/`DROP COLUMN` and `ADD COLUMN … NOT NULL` without a default unless `ALLOW_DESTRUCTIVE_SCHEMA=true`.
+- The destructive-diff guard (`tools/db/schema-destructive-guard.mjs`, run by `pnpm run prisma-schema-check` and the CI schema gate — not by `migrate deploy`) rejects `DROP TABLE`/`DROP COLUMN`/`DROP CONSTRAINT` and `ADD COLUMN … NOT NULL` without a default unless `ALLOW_DESTRUCTIVE_SCHEMA=true`.
 
 `prisma db push` is for local prototyping only. The `tools/db/postmill-migrate.sh` helper runs `prisma migrate deploy` inside a running container (never `db push`). Always back up before any manual schema operation or contract deploy.
 
@@ -114,4 +114,4 @@ find "$BACKUP_DIR" -name '*.sql' -mtime +7 -delete
 find "$BACKUP_DIR" -name '*.tar.gz' -mtime +7 -delete
 ```
 
-> Verified against v1.3.0
+> Verified against v1.4.0

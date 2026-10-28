@@ -30,9 +30,10 @@ approval), and supports cancelling an in-flight run.
 
 ## Before you start
 
-AI Designer needs model defaults set under **Settings → AI → Model Defaults**: **vision**,
-**high-reasoning**, and **low-reasoning** AI models, plus a **text-to-image** media model. If any
-is missing, the run is blocked and the chat tells you which default to set. If a text-to-image
+AI Designer needs **vision**, **high-reasoning**, and **low-reasoning** AI model defaults set under
+**Settings → AI → Model Defaults**, plus a **Text to Image** media default under
+**Settings → Content → Media Defaults**. If any is missing, the run is blocked and the chat names
+the missing default(s) (its message points at Settings → AI → Model Defaults). If a text-to-image
 default is configured but its provider has since been disabled, the run continues with a warning
 and falls back to stock imagery where generation was planned.
 
@@ -93,4 +94,4 @@ thumbnails are kept out of the [Media Library](../media-library) listing. Deleti
 its intermediates, except any a delivered design still uses.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

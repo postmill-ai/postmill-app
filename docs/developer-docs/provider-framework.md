@@ -1,6 +1,6 @@
 # Provider framework
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 Postmill integrates with external services across AI, media generation, social channels, short-links, VPN egress, storage, email, auth, content packs, chat comms, and payments. The **unified provider framework** replaces the previous collection of bespoke registries with a single `ProviderKernel` and a consistent package-per-provider model.
 
@@ -110,6 +110,12 @@ Usage:
 The kernel is the **sole** resolution path for every domain — there is no fallback registry.
 
 `ProviderResolutionService` exposes typed helpers for each domain (`resolveAI`, `resolveMedia`, `resolveShortLink`, `resolveVpn`, `resolveEmail`, `resolveStorage`, `resolveSocial`, `resolveContentPack`, `resolveComms`, `resolvePayments`). Each call returns a telemetry-wrapped capability instance cached by `(domain/providerId@version, orgId, credentials/extras fingerprint)`. Config-mutation services must call `invalidate()` or `invalidateOrg()` after credential changes so the next resolve rebuilds the capability with fresh credentials.
+
+## Upstream provider errors
+
+A failure inside the org's own provider account (OpenAI said 429, Google rejected the key, Runway is down) is not a Postmill failure, and the kernel keeps the two apart. Adapters convert a non-OK upstream response or SDK error into `ProviderUpstreamError` (`libraries/providers/kernel/src/upstream-error.ts`; helpers `upstreamErrorFromResponse`, `upstreamErrorFromUnknown`, and the media one-liners `mediaUpstreamError` / `mediaUpstreamFailure`). The class deliberately has **no** `statusCode` property — Nest's default handler would otherwise replay the provider's 401/402/429 as Postmill's own and log the user out or open billing. `classifyUpstream` maps status + body to a `kind` (`auth`, `quota`, `rate_limit`, `invalid_request`, `timeout`, `unavailable`, `unknown`); `retryable` defaults to `true` for `rate_limit`/`timeout`/`unavailable`.
+
+`ProviderExceptionFilter` (`apps/backend/src/api/filters/provider-exception.filter.ts`) answers **502 Bad Gateway** with `{ statusCode, error: 'ProviderUpstreamError', provider, providerName, domain, operation, kind, upstreamStatus, retryable, message, settingsUrl }`, logs one warning, and reports only `unavailable` / `timeout` / `unknown` kinds to Sentry (warning level, fingerprinted per provider + kind). The same filter maps the lifecycle errors: retired version → `410` (with `latestActive`), deprecated-for-write / credential error → `400`, unknown provider → `404`, content-pack daily cap → `402`. Anything that escapes every typed filter is captured by the Sentry catch-all (`SentryReportFilter`) as a real 500.
 
 ## Catalog & health endpoints
 

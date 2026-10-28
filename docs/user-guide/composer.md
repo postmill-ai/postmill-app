@@ -20,12 +20,13 @@ Create and edit share the same composer form.
 
 The top section lists all channels you have connected. Select one or more channels to publish
 across multiple platforms simultaneously. Each selected channel shows its icon in the multi-select
-bar. The 36 supported providers are:
+bar. The 45 supported providers are:
 
 X, LinkedIn, LinkedIn Page, Reddit, Instagram Business, Instagram Standalone, Facebook Page,
 Threads, YouTube, Google My Business, TikTok, Pinterest, Dribbble, Discord, Slack, Kick, Twitch,
 Mastodon, Bluesky, Lemmy, Farcaster, Telegram, Nostr, VK, Medium, Dev.to, Hashnode, WordPress,
-ListMonk, Moltbook, Whop, Skool, MeWe, Tumblr, Pixelfed, PeerTube.
+ListMonk, Moltbook, Whop, Skool, MeWe, Tumblr, Pixelfed, PeerTube, GoToSocial, Akkoma, Friendica,
+Misskey, Sharkey, LINE, Matrix, Discourse, Odysee.
 
 ## Text Editor
 
@@ -161,8 +162,8 @@ Each platform has a character limit. The preflight panel shows:
 
 ### Alt Text
 
-Alt text is supported on platforms with `altText: true`: Slack, Mastodon, Bluesky, Tumblr, and
-Pixelfed. The preflight panel warns if you attach images to these platforms without providing alt
+Alt text is supported on platforms with `altText: true`: Slack, Mastodon, Bluesky, Tumblr,
+Pixelfed, GoToSocial, Akkoma, Friendica, Misskey, Sharkey, Matrix, and Discourse. The preflight panel warns if you attach images to these platforms without providing alt
 text. You can add alt text per image in the media attachment section.
 
 ### Media Format Compatibility
@@ -197,4 +198,4 @@ You can import multiple posts at once via CSV. Each row is validated and created
 and per-row successes, warnings, and errors are reported. Failed rows do not block successful rows. See [Bulk Import](./bulk-import.md)
 for details.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

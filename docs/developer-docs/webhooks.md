@@ -215,4 +215,4 @@ The secret is deployment-wide, not per-webhook.
 | `OUTBOUND_HTTP_TIMEOUT_MS` | `30000` | Default `safeFetch` timeout |
 | `SSRF_ALLOWED_PRIVATE_CIDRS` | — | Opt-in allowlist of private CIDRs for self-hosted internal targets |
 
-> Verified against v1.3.0
+> Verified against v1.4.0

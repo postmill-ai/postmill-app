@@ -77,4 +77,4 @@ appear in the Overview, Channels, Posts, or Insights tabs.
 You can manage your watched accounts (enable/disable, remove) from the Watchlist tab, or edit the
 display name too via the watchlist API endpoints under `/public/v1/analytics/watchlist`.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

@@ -49,7 +49,11 @@ Files upload into the currently selected folder. Two upload methods are supporte
   images, videos, audio, and documents.
 - **File picker**: click the upload button in the toolbar to browse and select files.
 
-Uploads show progress indicators and complete with a success notification.
+Uploads show progress indicators and complete with a success notification. A video's poster
+thumbnail is generated in the background after the upload (and after a generation job completes),
+so it appears a moment later; the upload itself never waits for it. A file's type (image, video,
+audio, document) comes from its actual content, not from how it was produced — a generation job
+that finishes with a JPG files as an image.
 
 ## Grid / list toggle
 
@@ -67,6 +71,17 @@ The selected view mode persists for your session.
 Click any file to open a **preview** with **Details**, **Download**, and **Open in Designer**
 buttons. Right-click a file (or long-press on touch) for a context menu with **Preview**, **Open in
 Designer**, **Details**, **Rename**, **Download**, and **Delete**.
+
+Video files and video designs carry a **duration badge** on their tile.
+
+### Design files (`.pdesign`)
+
+A `.pdesign` file is a self-contained Designer export (document, media, and custom fonts bundled)
+produced from a saved design or template. In the library it shows the design's thumbnail and a
+label such as **Image design**, **Video design**, **Image template**, or **Video template**.
+**Open in Designer** on a `.pdesign` imports it as a **new design** in your organisation
+(`POST /media/designs/import-library`) and opens it; the library file is left as is. To bring in a
+`.pdesign` from outside the library, use the Designer's own import (`POST /media/designs/import`).
 
 **Details** opens the details panel on the right side. This panel provides:
 
@@ -140,4 +155,4 @@ cloud object storage.
 Configure storage providers in **Settings → File Storage**. See
 [Storage Setup](../operations-guide/storage.md) for provider configuration and quota management.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

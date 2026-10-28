@@ -113,7 +113,8 @@ CSRF middleware is applied to all cookie-authenticated mutating routes (POST, PU
 **Exemptions:**
 - Routes authenticated via `Authorization` header (API keys, OAuth tokens).
 - Routes authenticated via browser extension JWT (different session model).
-- All routes when `NOT_SECURED` env var is set (dev/local only).
+
+`NOT_SECURED` does **not** exempt anything from the CSRF check; with `NODE_ENV=development` it only drops the `Secure`/`sameSite` flags on the auth and CSRF cookies (`csrf.middleware.ts`, `auth.middleware.ts`).
 
 ---
 
@@ -150,12 +151,13 @@ Use NestJS `Logger.warn(message)` / `Logger.error(message)` — never `console.l
 
 ### NOT_SECURED bypass
 
-When `NOT_SECURED=true` (dev/local only):
-- HSTS and CSP headers are skipped.
-- CSRF middleware is disabled.
-- CopilotKit policy gate is bypassed.
+`NOT_SECURED` is honoured only when `NODE_ENV=development` (a stray production value changes nothing). In development it:
+- skips Helmet (HSTS/CSP and the other headers) in `main.ts`;
+- drops the `Secure`/`sameSite` flags on the auth and CSRF cookies;
+- suppresses the production fail-fast config exit;
+- bypasses only the handshake CSRF check on the `/ai-designer` socket (never RBAC or billing).
 
-Response headers never expose JWTs, even under `NOT_SECURED`.
+It does **not** disable the HTTP CSRF middleware. Response headers never expose JWTs, even under `NOT_SECURED`.
 
 ---
 
@@ -185,6 +187,7 @@ Each domain has its own directory under `database/prisma/<domain>/`:
 
 ```
 database/prisma/
+├── ai-designer/       → AI Designer sessions/messages
 ├── ai-rag/            → ai-rag.repository.ts
 ├── ai-settings/       → ai-settings.repository.ts, org-ai-settings.repository.ts
 ├── analytics/         → analytics.repository.ts
@@ -195,18 +198,24 @@ database/prisma/
 ├── autopost/          → autopost.repository.ts
 ├── brands/            → brands.repository.ts
 ├── campaigns/         → campaigns.repository.ts
+├── content-packs/     → content-pack config
+├── design/            → designs, versions, templates, template folders
 ├── emails/            → email-log.repository.ts
 ├── featured-providers/→ featured-provider.repository.ts
 ├── federation/        → federation.repository.ts
 ├── file/              → file.repository.ts
+├── health/            → readiness ping
+├── inngest-runs/      → InngestFunctionRun
 ├── integrations/      → integration.repository.ts
 ├── media/             → multipart-upload.repository.ts
 ├── media-providers/   → org-media-provider-settings.repository.ts
+├── migration-ledger/  → MigrationLedger
 ├── notifications/     → notifications.repository.ts
 ├── oauth/             → oauth.repository.ts
 ├── organizations/     → organization.repository.ts
 ├── posts/             → posts.repository.ts
 ├── provider-configs/  → org-provider-config.repository.ts
+├── retention/         → retention-purge queries
 ├── roles/             → roles.repository.ts
 ├── sets/              → sets.repository.ts
 ├── short-links/       → org-shortlink-settings.repository.ts
@@ -215,9 +224,12 @@ database/prisma/
 ├── storage/           → storage.repository.ts
 ├── subscriptions/     → subscription.repository.ts, payment-event.repository.ts
 ├── users/             → users.repository.ts
+├── vpn/               → OrgVpnConfig
 ├── watchlist/         → watchlist.repository.ts
 └── webhooks/          → webhooks.repository.ts
 ```
+
+The one-line purpose of every directory is in [Database → Available repository directories](./database.md#available-repository-directories).
 
 Each repository typically has a companion service file in the same directory (e.g., `posts.service.ts`).
 
@@ -231,4 +243,4 @@ Resolution is through `ProviderResolutionService` — the kernel is the sole res
 
 See [Architecture](./architecture.md) and [Provider Framework](./provider-framework.md).
 
-> Verified against v1.3.0
+> Verified against v1.4.0

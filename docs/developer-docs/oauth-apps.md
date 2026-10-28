@@ -183,4 +183,4 @@ In the MCP server, token resolution works as follows:
 - Redirect URIs are matched exactly.
 - PKCE is required for authorizations.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

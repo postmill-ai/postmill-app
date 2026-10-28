@@ -31,8 +31,8 @@ docker exec postmill-postgres pg_dump -U postmill-user postmill-db-local > pre_u
 # docker-compose.yaml or your deployment config
 services:
   postmill:
-    image: ghcr.io/postmill-ai/postmill-app:v1.3.0  # pin a specific tag, not :latest
-    # image: postmillai/postmill-app:v1.3.0         # the same image on Docker Hub
+    image: ghcr.io/postmill-ai/postmill-app:v1.4.0  # pin a specific tag, not :latest
+    # image: postmillai/postmill-app:v1.4.0         # the same image on Docker Hub
 ```
 
 Pinning specific tags gives you a known rollback target. Using `:latest` means every restart may
@@ -77,6 +77,23 @@ CHANGELOG carefully, take a backup, and follow the expand-contract path document
 
 Check the CHANGELOG for any new env vars required by the release. Add them to your `.env` file,
 Docker Compose environment, or deployment config, then redeploy if needed.
+
+## v1.4.0
+
+- **Migrations.** v1.4.0 adds one migration, `20261021000000_design_version_creator_setnull`. It only relaxes `DesignVersion.createdById` to nullable and re-creates its foreign key with `ON DELETE SET NULL`, so design versions a deleted member saved on teammates' designs survive with `createdById = NULL`. It drops and re-adds a constraint but deletes no rows; `ALLOW_DESTRUCTIVE_SCHEMA` is not needed.
+- **No new required env vars.** Two optional Sentry tunables are new:
+  - `SENTRY_TRACES_SAMPLE_RATE` (backend) — production default `0.2` (was 1.0).
+  - `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` (frontend) — production default `0.25` (was 1.0). Like `NEXT_PUBLIC_SENTRY_DSN`, it is baked in at build time, so a change needs a frontend rebuild.
+  - Both accept `0`–`1`; anything else falls back to the default, and development always samples at 1.0.
+- **fal Kling defaults are rewritten on first boot.** The ledger-gated backfill `fal Kling default models` runs once and rewrites organization media defaults for the `fal` provider that still point at `fal-ai/kling-video/v1.6/standard/*`, `fal-ai/kling-video/v1.6/pro/*` or `fal-ai/kling-video/v2/master/*` (text-to-video and image-to-video) to `fal-ai/kling-video/v2.5-turbo/pro/<operation>`. In-flight jobs are not touched. No manual step.
+- **Media routes.** `/media/kling` now redirects to the new fal.ai studio at `/media/fal`; the provider card that was labelled **Kling** is now **fal.ai** (same `fal` identifier and key, nothing to re-enter). The new direct **Kling AI** provider at `/media/kling-ai` needs its own klingai.com API key under **Settings → Content → AI Media → Kling AI**. `/media/pika` is unchanged and still uses the fal.ai key. Update any bookmarks or proxy path allowlists that named `/media/kling`.
+- **Rebuild the render image when using Podman renders.** `docker/Containerfile.render` itself is unchanged, but it compiles the whole backend into the image and the frame renderer changed: it now honours the clip `mediaType` hint, so extensionless AI-generated videos render as video in exports instead of a static first frame. A stale `localhost/postmill-render:latest` keeps the old behaviour.
+- **Reverse-proxy body size.** `.pdesign` imports (`POST /media/designs/import`, `POST /federation/install-template`) accept up to 1 GB and are disk-spooled. A proxy with a smaller body limit returns 413. The bundled nginx configs allow 2 GB.
+- **Video seeking uses range requests.** Designer render assets (`GET /media/designs/render-asset/:jobId/:file`) answer HTTP `Range` requests with 206. A proxy that strips `Range` or `Accept-Ranges` headers breaks seeking in the Designer.
+- **Repair black design thumbnails after upgrading.** `POST /media/designs/maintenance/regen-previews` now backfills missing video thumbnails, reclassifies legacy media rows and regenerates previews; it accepts optional `designIds`, `templateIds` and `forceSourceThumbnails` for a targeted repair. Run it once per affected organization if designs showed black thumbnails on 1.3.0.
+- **Sentry volume changes.** Uncaught controller 500s are now reported to Sentry (they were not before), so expect issues that were previously invisible. Provider upstream errors return the 502 `ProviderUpstreamError` envelope again, and account-explained kinds (quota, billing, bad key) no longer create Sentry issues.
+- **Postmill ID federation.** A first write-capable scope, `templates:install`, and `POST /federation/install-template` exist for trusted template stores. The scope is never granted unless a client asks for it and the user consents; existing clients are unaffected.
+- **Setup completion is role-checked.** `POST /settings/setup/complete` requires `settings:update`; owners and admins are unaffected.
 
 ## v1.3.0
 
@@ -129,8 +146,9 @@ v1.0.0 ships with zero legacy support. Note these points when upgrading into it:
   `activeProvider`/`activeModel`/`scopeModels`/`rateLimitSettings`, and the `UserProfile`
   columns `sendSuccessEmails`/`sendFailureEmails`/`sendStreakEmails`. It also removes
   `mastra_ai_spans`/`mastra_evals` from the Prisma schema (Mastra still owns those tables at
-  runtime). Applying it requires `ALLOW_DESTRUCTIVE_SCHEMA=true` on `migrate deploy`. **Take
-  the pre-upgrade `pg_dump` first** — rollback means restoring that backup.
+  runtime). `migrate deploy` applies it unconditionally; `ALLOW_DESTRUCTIVE_SCHEMA=true` is only
+  needed to pass the destructive-schema guard (`pnpm run prisma-schema-check` / CI) when you diff
+  it yourself. **Take the pre-upgrade `pg_dump` first** — rollback means restoring that backup.
 - **Automatic backfills** — no manual data steps are needed. A ledger-gated boot step
   (`backfill:legacy secret re-encryption`) re-encrypts any secrets stored under an older
   encryption format to AES-256-GCM `v2:` — now the only accepted ciphertext — before strict
@@ -231,4 +249,4 @@ If an upgrade causes issues:
 - [Backup & Retention](./backup-and-retention.md) — backup before upgrade
 - [Developer Docs: Database](../developer-docs/database.md) — schema management and safety
 
-> Verified against v1.3.0
+> Verified against v1.4.0

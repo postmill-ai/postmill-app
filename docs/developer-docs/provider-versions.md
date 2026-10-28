@@ -1,6 +1,6 @@
 # Provider versions catalog
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 This page lists every provider currently registered in the unified provider framework, grouped by domain. All current providers are at version `v1`.
 
@@ -103,14 +103,14 @@ The table below shows each provider's registered domains. A provider that appear
 | D-ID | `did` | media | action; image-to-video, text-to-video, video-avatar |
 | Deepgram | `deepgram` | media | action; video-caption |
 | DeepInfra | `deepinfra` | ai, media | hub; image-slide, image-to-image, image-to-video, text-to-image, text-to-music, text-to-speech, text-to-video |
-| ElevenLabs | `elevenlabs` | media | direct; text-to-speech |
+| ElevenLabs | `elevenlabs` | media | direct; image-to-video, text-to-image, text-to-speech, text-to-video |
 | Fireworks AI | `fireworks` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, image-to-image, text-to-image |
 | Genviral | `genviral` | media | hub; image-to-video, text-to-video |
 | Google AI Studio | `google` | ai, auth, media, payments | direct; image-slide, text-to-image, text-to-video |
 | Google Vertex | `vertex` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, text-to-image, text-to-video |
 | Groq | `groq` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, text-to-speech |
 | Hedra | `hedra` | media | action; image-to-video, text-to-video, video-avatar |
-| HeyGen | `heygen` | media | direct; image-to-video, text-to-video, video-avatar |
+| HeyGen | `heygen` | media | direct; text-to-speech, video-avatar |
 | Higgsfield | `higgsfield` | media | direct; image-slide, image-to-video, text-to-image |
 | Ideogram | `ideogram` | media | action; image-slide, image-to-image, text-to-image |
 | fal.ai | `fal` | media | direct; image-slide, image-to-video, text-to-image, text-to-music, text-to-video |

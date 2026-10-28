@@ -9,7 +9,7 @@
 The free default catalog is **Unsplash**, gated by the operator environment variable
 `UNSPLASH_ACCESS_KEY`.
 
-If your organization has an active [Content Pack](../settings) that declares `photos` — currently
+If your organization has an active [Content Pack](../settings) (Settings → Content → Content Packs) that declares `photos` — currently
 **Magnific**, **Vecteezy**, **Adobe Stock**, or **Envato Elements** — that premium catalog is shown
 first for the same search. If the pack is absent, does not cover photos, or errors, Postmill falls
 back to Unsplash. A Content Pack daily-cap error is surfaced as a 402 instead of silently falling
@@ -36,7 +36,9 @@ preview modal with a larger view, dimensions, author link, source, and any requi
 - **Save to Files** — imports the photo into `/files` via `POST /files/import`. For Unsplash assets,
   this also triggers the required download-location ping back to `api.unsplash.com` using the
   deployment's access key. For Content Pack assets, Postmill first mints a licensed download URL
-  from the item id and then imports the resulting file.
+  from the item id and then imports the resulting file. The Save to Files dialog lets you rename
+  the file, pick or create a destination folder, and choose **Save File** or **Save & Post** (opens
+  the composer with the file attached).
 
 Saved files carry `source` and `attribution` metadata so the original creator stays traceable.
 
@@ -54,4 +56,4 @@ replaces the current preview.
 
 ---
 
-> Verified against v1.3.0
+> Verified against v1.4.0

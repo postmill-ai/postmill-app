@@ -2,7 +2,7 @@
 
 Postmill's AI layer supports 30 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 ---
 
@@ -313,7 +313,7 @@ export const providerModules = [
 
 `ProvidersBootstrap` registers every module into the kernel at boot. If the `ai` feature flag is enabled (`DEV_DISABLE_AI` is not set), your provider appears in the catalog and can be selected in **Settings → AI**.
 
-> **Base URL visibility:** the Settings → AI form hides the `baseURL` credential field for every provider *except* endpoint-bringing ones allowlisted in `BASE_URL_PROVIDERS` (`apps/frontend/src/components/settings/shared/kit/descriptors/ai.descriptor.ts`) — currently only `openai-compatible`. If your provider has no canonical endpoint of its own, add its id there (and pass `{ requireBaseURL: true }` to `OpenAICompatibleAdapter`). Saved `baseURL` values must still be public HTTPS URLs — `OrgAiSettingsService._assertBaseURLSafe` rejects private/loopback/non-HTTPS hosts.
+> **Base URL visibility:** the Settings → AI form renders every credential field the adapter declares (`credentialFieldsFromMeta` in `apps/frontend/src/components/settings/shared/kit/descriptors/ai.descriptor.ts`), so a `baseURL` field is shown whenever your adapter lists one — optional for hosted providers that offer a regional or MaaS endpoint override (Qwen Cloud, MiniMax China), required only where the adapter marks it so (`openai-compatible`). Non-secret stored values such as `baseURL` are prefilled when editing. Saved `baseURL` values must be public HTTPS URLs — `OrgAiSettingsService._assertBaseURLSafe` rejects private/loopback/non-HTTPS hosts.
 
 ---
 

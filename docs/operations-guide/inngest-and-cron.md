@@ -74,6 +74,8 @@ Without this, the analytics dashboard, comment inbox, media render queue, and wa
 | `digest-send-one` | `digest/send-one` | Send a single daily/weekly digest email |
 | `agent-digest-org` | `agent/digest-org` | Generate and notify the weekly headless AI digest for one org |
 | `media-render` | `media/render` | Local video render (Designer timeline + clip-merge), capped at `VIDEO_RENDER_CONCURRENCY` |
+| `media-design-export` | `media/design-export` | Build a `.pdesign` bundle export (doc + referenced assets + custom fonts) for `POST /media/designs/:id/export` / `POST /media/design-templates/:id/export`; storage-I/O bound, so it shares the `VIDEO_RENDER_CONCURRENCY` cap. Never consumes credits |
+| `media-video-thumbnail` | `media/video-thumbnail.generate` | Generate a poster thumbnail for an uploaded or generated video file in the background (concurrency 5) |
 | `media-jobs-poll-job` | `media/poll-job` | Poll a single external media job |
 | `comms-inbound` | `comms/inbound.message` | Process one inbound chat message (connect-code claim or agent turn + reply); serialized per comms config |
 | `comms-matrix-sync-one` | `comms/matrix.sync-one` | One Matrix `/sync` round for one comms config |
@@ -149,7 +151,7 @@ In the Inngest dashboard (Cloud or local dev server) you should see scheduled ru
 - `agent-digest` — weekly (only when enabled)
 - `comms-matrix-sync` — every minute
 
-Event-triggered functions (`post-publish-*`, `autopost-process`, `refresh-token`, `streak-tracker`, `send-email`, `digest-send-one`, `analytics-backfill`, `media-render`, `media-jobs-poll-job`, `agent-digest-org`, `analytics-sync-org`, `analytics-sync-integration`, `comments-sync-org`, `comms-inbound`, `comms-matrix-sync-one`) appear as they are triggered.
+Event-triggered functions (`post-publish-*`, `autopost-process`, `refresh-token`, `streak-tracker`, `send-email`, `digest-send-one`, `analytics-backfill`, `media-render`, `media-design-export`, `media-video-thumbnail`, `media-jobs-poll-job`, `agent-digest-org`, `analytics-sync-org`, `analytics-sync-integration`, `comments-sync-org`, `comms-inbound`, `comms-matrix-sync-one`) appear as they are triggered.
 
 If scheduled functions are not running, check that `USE_INNGEST=true` is set and that the backend `/api/inngest` endpoint returns HTTP 200.
 
@@ -175,4 +177,4 @@ Enable in `.env`:
 AGENT_DIGEST_ENABLED=true
 ```
 
-> Verified against v1.3.0
+> Verified against v1.4.0

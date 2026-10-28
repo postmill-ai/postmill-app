@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure your Stability AI API key under **Settings → Media**. This is an own-key provider; there is no environment-variable fallback. See [Settings](../settings) for credential setup.
+Configure your Stability AI API key under **Settings → Content → AI Media**. This is an own-key provider; there is no environment-variable fallback. See [Settings](../settings) for credential setup.
 
 ## Tabs / operations
 
@@ -16,13 +16,14 @@ The **Engine** select chooses the Stable Image endpoint. Remaining parameters ar
 
 ## Generation flow
 
-Stable Image completes **synchronously**, so the generated image appears in the Render Queue almost immediately and is saved to `/files`. From the queue card you can open it in the [Designer](./index.md) or pre-fill a post. For the standard pick-source → generate → queue → hand-off flow, see [Media Studios overview](./index.md).
+Stable Image completes **synchronously**, so the generated image appears in the Render Queue almost immediately and is saved to `/files`. From the queue card you can open it in the [Designer](./designer) or pre-fill a post. For the standard pick-source → generate → queue → hand-off flow, see [Media Studios overview](./index.md).
 
 ## Caveats
 
 - The descriptor currently exposes only the **Text → Image** tab, even though the adapter also supports image-to-video and audio under the hood.
 - **Style presets** are supported by Core and Ultra; selecting a preset with SD3 may be ignored by the provider.
 - Output can be **PNG**, **JPEG**, or **WebP**.
+- **Test connection is free** — Settings → Content → AI Media → **Test connection** reads your account (`/v1/user/account`); no image is billed.
 
 ## Related docs
 
@@ -31,4 +32,4 @@ Stable Image completes **synchronously**, so the generated image appears in the 
 - [Settings](../settings)
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

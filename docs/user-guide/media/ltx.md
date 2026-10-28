@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure your LTX Studio API key at **Settings → Media**. Postmill stores the key encrypted at rest; there is no environment-variable fallback.
+Configure your LTX Studio API key at **Settings → Content → AI Media**. Postmill stores the key encrypted at rest; there is no environment-variable fallback.
 
 See [Settings](../settings) for provider setup and the media capability matrix.
 
@@ -29,6 +29,7 @@ All LTX jobs are async: `POST /v2/<op>` returns an id, then Postmill polls `GET 
 - **Namespaced job ids:** job ids are stored as `<op>:<id>` (text-to-video, image-to-video, or audio-to-video) so the poller can hit the correct status endpoint.
 - **Operation routing:** the backend chooses the submit endpoint by the media inputs present — `audio_uri` → audio-to-video, `image_uri` → image-to-video, otherwise text-to-video.
 - **Resolution strings:** resolution is sent as a native `WxH` string (e.g. `1920x1080`), not as named presets.
+- **Test connection is free:** Settings → Content → AI Media → **Test connection** probes a job-status endpoint with your key; no video is billed.
 
 ## Related docs
 
@@ -37,4 +38,4 @@ All LTX jobs are async: `POST /v2/<op>` returns an id, then Postmill polls `GET 
 - [Settings](../settings) — configuring the LTX Studio media provider.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

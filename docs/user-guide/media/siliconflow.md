@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-SiliconFlow reuses your org's existing **Settings → AI** SiliconFlow key as a universal credential, so no separate **Settings → Media** entry is required. You can still add a dedicated media credential there if you prefer.
+SiliconFlow reuses your org's existing **Settings → AI** SiliconFlow key as a universal credential, so no separate **Settings → Content → AI Media** entry is required. You can still add a dedicated media credential there if you prefer.
 
 See [Settings](../settings) for provider setup.
 
@@ -19,7 +19,7 @@ See [Settings](../settings) for provider setup.
 
 ## Generation flow
 
-The studio follows the standard Studio Kit flow: fill the form, click **Generate**, track the job in the **Render Queue**, and open the finished asset in the [Designer](./index.md) or the composer. See [Media Studios overview](./index.md) for details.
+The studio follows the standard Studio Kit flow: fill the form, click **Generate**, track the job in the **Render Queue**, and open the finished asset in the [Designer](./designer) or the composer. See [Media Studios overview](./index.md) for details.
 
 ## Caveats
 
@@ -27,6 +27,8 @@ The studio follows the standard Studio Kit flow: fill the form, click **Generate
 - **Video is async** and has no webhook; completion is driven by the media-jobs poll cron.
 - Image-to-video base64-encodes the source frame before sending it to SiliconFlow.
 - Image models are discovered from the provider catalog; video/audio models use a curated fallback list.
+- Disabling the SiliconFlow key under **Settings → AI** also switches the studio off, unless a dedicated media credential is stored.
+- **Test connection is free** — Settings → Content → AI Media → **Test connection** reads the model catalog; no generation is billed.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

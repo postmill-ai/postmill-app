@@ -96,7 +96,7 @@ From the dashboard or `/campaigns/:id/report`:
 ## Composer and Bulk Import
 
 - The composer sidebar includes a **Campaign** dropdown. Assigning a post records `campaignId` on the post.
-- Bulk import accepts a `campaign` column; rows with an invalid campaign value report a warning but do not block the import. See [Bulk Import](./bulk-import.md).
+- Bulk import accepts a `campaign_id` column; a problem with a row's campaign value is reported in that row's results and does not block the rest of the import. See [Bulk Import](./bulk-import.md).
 
 ## Media and Comments Grouping
 
@@ -106,4 +106,4 @@ Campaign-aware filters derive through the post's `campaignId`: the [Media Librar
 
 A daily cron (`campaign-tag-purge`) deletes a finished campaign's tagged items `CAMPAIGN_PURGE_DAYS` (default 30) after its `endDate`. Ongoing campaigns with no end date are never purged.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

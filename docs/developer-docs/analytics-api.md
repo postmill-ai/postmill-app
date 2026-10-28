@@ -221,4 +221,4 @@ Connecting a new social channel emits an `analytics/backfill` Inngest event, gat
 | `ANALYTICS_DAILY_RETENTION_DAYS` | `548` | Keep raw daily channel snapshots this long before weekly rollup |
 | `ANALYTICS_POST_RETENTION_DAYS` | `90` | Prune per-post daily snapshots older than this |
 
-> Verified against v1.3.0
+> Verified against v1.4.0

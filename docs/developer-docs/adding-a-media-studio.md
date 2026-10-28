@@ -2,7 +2,7 @@
 
 Most generative media providers in Postmill are implemented through the **Studio Kit**: a descriptor-driven scaffold that lets you add a new `/media/<provider>` studio with a frontend descriptor, a backend adapter, and a route page. This page walks through the recipe using Qwen as the worked example.
 
-For the bespoke studios that do not fit the kit — Designer, AI Designer, HeyGen, Replicate, and Deepgram — see their dedicated docs and source paths.
+For the bespoke studios that do not fit the kit — Designer, AI Designer, HeyGen and Replicate — see their dedicated docs and source paths. (Deepgram runs on the kit: its descriptor renders a `custom` tab component.) In total there are 46 media tools: Designer, AI Designer, 38 provider studios (36 kit descriptors plus HeyGen and Replicate) and 6 stock browsers.
 
 ## What the Studio Kit provides
 
@@ -49,6 +49,11 @@ Field types:
 | `media` | Source image/video/audio from `/files`; resolved server-side to a provider-reachable URL. |
 
 Field names are the provider's **native API parameter names**. They are sent straight through to the adapter's `input` object, so the descriptor is the feature surface.
+
+Two data-only modifiers keep model-dependent forms declarative (types in `studio-kit/types.ts`):
+
+- `visibleWhen: { field: value }` on any field — the field is rendered **and submitted** only while the current values match (e.g. a `duration` select that exists only for one model). The descriptor-registry generator applies the same `model` conditions when it emits per-model field lists, so Media Defaults validation sees exactly the fields that model accepts.
+- `optionRules: [{ when: { field: value }, options }]` on a `select` — swaps the option list when another field matches; `StudioForm` corrects a value that becomes invalid so the visible and submitted options stay aligned, and rule-specific option labels are shown as written.
 
 ### Example: Qwen descriptor
 
@@ -173,7 +178,9 @@ Every provider package must ship `src/v1/metadata.ts` exporting a `ProviderMetad
 > `mediaModels`, `website`, `description.en`, and reconciled `mediaCategories`/`kind` from the
 > frontend descriptors into each provider's `metadata.ts`. It also regenerates
 > `libraries/nestjs-libraries/src/ai/defaults/studio-descriptor-fields.generated.ts` for media-default
-> settings validation. CI runs the same script with `--check` (`.github/workflows/test.yml`, "Studio
+> settings validation — one field list **per model**, filtered through each field's `visibleWhen`
+> (`fieldVisible` / `modelFieldsFromTab` in the generator), minus `prompt`, `media` and the `model`
+> select itself. CI runs the same script with `--check` (`.github/workflows/test.yml`, "Studio
 > descriptor metadata drift gate") and fails the build if either committed artifact has drifted.
 
 ```ts
@@ -280,10 +287,11 @@ The combobox accepts typed model ids as well, so an incomplete provider catalog 
 
 Use a bespoke studio when the workflow does not match "form inputs → media artifact in `/files`":
 
-- **Deepgram** returns text/captions, not a media artifact.
 - **HeyGen** has structured multi-scene avatar video, talking-photo, voiceover, and translate workflows.
 - **Replicate** exposes a large catalog of community models and video-editing operations.
 - **Designer / AI Designer** are canvas tools, not generative providers.
+
+A workflow that returns something other than a media artifact (Deepgram's captions) can still stay on the kit by giving the tab a `custom` component instead of `fields`.
 
 ## Testing a new studio
 
@@ -302,4 +310,4 @@ Use a bespoke studio when the workflow does not match "form inputs → media art
 - [User Guide: Media studios](../user-guide/media/index.md)
 - [Backend conventions](./backend-conventions.md)
 
-> Verified against v1.3.0
+> Verified against v1.4.0

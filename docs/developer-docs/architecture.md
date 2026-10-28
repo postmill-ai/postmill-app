@@ -139,28 +139,27 @@ All scheduled and async work runs on Inngest. The backend serves the handler at 
 
 | Function | Trigger | Purpose |
 |----------|---------|---------|
-| `post-publish-${taskQueue}` | Event | Sleep until publish date, post, post thread items, first comment, webhooks, plugs. One function per task queue. |
-| `autopost/process` | Event | RSS/feed autoposting. |
-| `integration/refresh-token` | Event | Refresh channel OAuth tokens. Each cycle reschedules with a unique idempotency id; `integration/refresh-token/cancel` (channel delete / reconnect) stops the chain, which also terminates on a missing expiry, a `refreshNeeded` flag, or 5 failed cycles. |
-| `email/send` | Event | Send transactional email (global 1/sec). |
-| `email/digest` | Event | Daily/weekly digest flush. |
-| `agent/digest` | Event | Per-org agent digest. |
-| `analytics/backfill` | Event | Backfill analytics for a channel or post. |
-| `analytics/collection` | Cron | Daily snapshot sweep. |
-| `analytics/sync-org` | Cron | Org-level analytics sync. |
-| `analytics/sync-integration` | Cron | Per-integration analytics sync. |
-| `comments-collection` | Cron | Sync comments, dispatch webhooks, prune, notify. |
-| `media-jobs-poll` | Cron | Poll pending external media jobs; re-enqueue stuck local renders. |
-| `media/render` | Event | Local video render (Designer timeline + clip merge). |
-| `media-jobs-poll-job` | Event | Individual media job poll helper. |
-| `missing-post-finder` | Cron | Recover posts that should have published. |
-| `streak-tracker` | Cron | Streak notifications. |
+| `post-publish-${taskQueue}` | Event `post/publish` | Sleep until publish date, post, post thread items, first comment, webhooks, plugs. One function per task queue. |
+| `autopost-process` | Event `autopost/process` | RSS/feed autoposting; re-enqueues itself hourly. |
+| `refresh-token` | Event `integration/refresh-token` | Refresh channel OAuth tokens. Each cycle reschedules with a unique idempotency id; `integration/refresh-token/cancel` (channel delete / reconnect) stops the chain, which also terminates on a missing expiry, a `refreshNeeded` flag, or 5 failed cycles. |
+| `send-email` | Event `email/send` | Send transactional email (no function-level rate limit; flood control is the 24h notification dedup at the source). |
+| `digest-email-daily` / `digest-email-weekly` | Cron | Fan out one `digest/send-one` event per target (`digest-send-one` sends a single digest). |
+| `agent-digest` | Cron (Mondays, opt-in via `AGENT_DIGEST_ENABLED`) | Fan out one `agent/digest-org` event per org (`agent-digest-org` runs the headless digest). |
+| `analytics-backfill` | Event `analytics/backfill` | Backfill analytics for a channel or post. |
+| `analytics-collection` | Cron (daily) | Fan out one `analytics/sync-org` event per org; `analytics-sync-org` / `analytics-sync-integration` do the per-org / per-channel snapshot work. |
+| `comments-collection` | Cron | Fan out `comments/sync-org`; `comments-sync-org` syncs comments, dispatches webhooks, prunes, notifies. |
+| `media-jobs-poll` | Cron | Poll pending external media jobs; re-enqueue stuck local renders (`media-jobs-poll-job` polls one job). |
+| `media-render` | Event `media/render` | Local video render (Designer timeline + clip merge). |
+| `media-design-export` | Event `media/design-export` | Build a `.pdesign` bundle export in the background (shares the render concurrency cap). |
+| `media-video-thumbnail` | Event `media/video-thumbnail.generate` | Generate a poster thumbnail for a video file. |
+| `missing-post-finder` | Cron (hourly) | Recover posts that should have published. |
+| `streak-tracker` | Event `streak/start` | Streak notifications. |
 | `campaign-tag-purge` | Cron | Purge tagged campaign items for ended campaigns. |
-| `retention-purge` | Cron | Prune analytics, email logs, and other retention-bound data. |
-| `refresh-token` | Cron | Bulk token refresh sweep. |
+| `retention-purge` | Cron | Prune errors, notifications, uploads, traces, soft-deleted rows and other retention-bound data. |
 | `payments-expire-canceled` | Cron | Daily teardown of cancelled subscriptions past their scheduled end (non-Stripe providers). |
+| `comms-inbound` / `comms-matrix-sync` | Event / Cron | Inbound chat-app messages; Matrix `/sync` polling. |
 
-Events are only sent when `USE_INNGEST=true`. Locally, run the Inngest dev server with `INNGEST_DEV=1`; in production, set `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
+The full inventory with schedules is in [Inngest & Cron](../operations-guide/inngest-and-cron.md). Events are only sent when `USE_INNGEST=true`. Locally, run the Inngest dev server with `INNGEST_DEV=1`; in production, set `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
 
 ## Cross-cutting concerns
 
@@ -171,7 +170,7 @@ Events are only sent when `USE_INNGEST=true`. Locally, run the Inngest dev serve
 | **CSRF** | CSRF middleware on cookie-authenticated mutating routes. Bypassed under `NOT_SECURED` (dev only). Header/API-key clients are unaffected. |
 | **Helmet** | HSTS (1 year, includeSubDomains, preload), `noSniff`, `referrerPolicy`, `frameguard: deny`, conservative CSP. Gated by `NOT_SECURED`. |
 | **Throttling** | `ThrottlerBehindProxyGuard` applies default per-route limits. Global default: `API_LIMIT` env var (600/hour). |
-| **Sentry** | `beforeSend`/`beforeBreadcrumb` scrubs auth headers, tokens, PII. OpenAI capture disabled (`recordInputs: false`). |
+| **Sentry** | `beforeSend`/`beforeBreadcrumb` scrubs auth headers, tokens, PII. OpenAI capture disabled (`recordInputs: false`). `SentryReportFilter` (the first `APP_FILTER`, i.e. the last-match catch-all) captures uncaught controller 500s; typed filters win first, so a `ProviderUpstreamError` becomes a structured **502** (`provider`, `kind`, `upstreamStatus`, `retryable`, `settingsUrl`) and only outage-class kinds reach Sentry. |
 | **JWT** | Algorithm pinned to `HS256`. New tokens carry `exp` with sliding renewal. |
 | **Validation** | Global `ValidationPipe` rejects unknown fields (`whitelist` + `forbidNonWhitelisted`). |
 
@@ -230,4 +229,4 @@ The AI, Media, Storage, and Shortlinks settings surfaces share one foundation:
 
 The post composer lives on dedicated routes: `/posts/post` (create — accepts `date`/`channel`/`content` query params) and `/posts/post/:id` (edit). Both render the shared `PostComposer` component; the time picker displays in the user's IANA timezone and saves UTC.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

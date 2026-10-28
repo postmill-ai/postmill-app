@@ -151,4 +151,4 @@ Tool dispatch is whitelisted: only methods decorated with `@Tool` plus the speci
 - [Public API](./public-api.md)
 - [Operations: configuration](../operations-guide/configuration.md)
 
-> Verified against v1.3.0
+> Verified against v1.4.0

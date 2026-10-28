@@ -30,7 +30,7 @@ features:
     details: "Content generation, hashtags, brand compliance, RAG memory, image/video/TTS — through pluggable AI providers with governance."
     link: /user-guide/ai-tools
   - title: "Media Library & Studios"
-    details: "Folder tree, tags, multi-cloud storage, and 46 media tools — the Designer, AI Designer, generative studios, and stock browsers for image, video, audio, avatar, and stock content."
+    details: "Folder tree, tags, multi-cloud storage, and 46 built-in media tools — the Designer, AI Designer, 38 provider studios, and 6 stock browsers for image, video, audio, avatar, and stock content."
     link: /user-guide/media-library
   - title: "Team Management"
     details: "Invite team members, assign RBAC roles, and configure channels, AI providers, storage, webhooks, and OAuth apps."
@@ -44,4 +44,4 @@ features:
 - [Operations Guide](/operations-guide/) — self-host, configure, and operate
 :::
 
-> Verified against v1.3.0
+> Verified against v1.4.0

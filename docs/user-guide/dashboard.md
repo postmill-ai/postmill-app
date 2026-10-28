@@ -2,7 +2,7 @@
 
 The **Dashboard** (`/dashboard`) is the post-login landing page. It is designed as a command center that answers "what needs my attention now?" first and shows performance second.
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 ## Layout
 

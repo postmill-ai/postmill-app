@@ -6,7 +6,7 @@ import { INestApplication } from '@nestjs/common';
 // is what lands in the published openapi.yml. Resolving package.json by relative
 // path from here is not viable — the compiled file sits under
 // apps/backend/dist/libraries/helpers/..., so the path differs from source layout.
-const FALLBACK_VERSION = '1.3.0';
+const FALLBACK_VERSION = '1.4.0';
 
 /**
  * Builds the OpenAPI document. Split out from `loadSwagger` so the generator can

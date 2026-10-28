@@ -72,4 +72,4 @@ explicitly acknowledged with `ALLOW_DESTRUCTIVE_SCHEMA=true`. CI runs the same g
 > the *only* path back to dropped data — the forward "rollback" migration restores structure, not
 > rows.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

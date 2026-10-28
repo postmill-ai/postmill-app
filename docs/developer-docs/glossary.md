@@ -1,6 +1,6 @@
 # Glossary
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 Terminology reference for the Postmill platform.
 
