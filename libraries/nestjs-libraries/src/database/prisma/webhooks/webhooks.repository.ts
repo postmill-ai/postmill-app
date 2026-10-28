@@ -56,10 +56,12 @@ export class WebhooksRepository {
         organizationId: orgId,
         url: body.url,
         name: body.name,
+        events: body.events,
       },
       update: {
         url: body.url,
         name: body.name,
+        events: body.events,
       },
     });
 
