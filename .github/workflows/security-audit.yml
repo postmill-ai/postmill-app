@@ -86,6 +86,13 @@ jobs:
         #                                     (channels-teams 0.11.x drops agents-hosting entirely), which needs
         #                                     product-level validation of the /chat surface — tracked as a follow-up.
         #                                     Only reachable when the Teams channel is active.
+        #   GHSA-x8rm-f576-gq67  graphql-scalars — ReDoS in the PhoneNumber scalar, via @copilotkit/runtime
+        #                                     (^1.23.0; patched 2.0.1 is outside that range, and a forced 1→2
+        #                                     major under the parent is unsafe). UNREACHABLE: @copilotkit/runtime
+        #                                     imports only GraphQLJSON/GraphQLJSONObject from graphql-scalars
+        #                                     (verified 2026-10-28 across dist/); GraphQLPhoneNumber is never
+        #                                     registered in the /chat schema, so the exponential-backtracking
+        #                                     regex never runs. The CopilotKit bump follow-up removes this too.
         # Drop entries the moment a patched release exists. Any NON-allowlisted
         # high/critical advisory fails the job.
         run: |
@@ -105,7 +112,8 @@ jobs:
             "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
             "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
             "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
-            "https://github.com/advisories/GHSA-xcx6-jx8p-x3h5"
+            "https://github.com/advisories/GHSA-xcx6-jx8p-x3h5",
+            "https://github.com/advisories/GHSA-x8rm-f576-gq67"
           ]'
           REMAINING=$(echo "$OUT" | jq -c --argjson allowed "$ALLOWED" \
             '[.advisories[] | select(.url as $u | $allowed | index($u) | not) | {module: .module_name, severity, url}]')
@@ -114,7 +122,7 @@ jobs:
             echo "::error::high/critical advisories present (see above)"
             exit 1
           fi
-          echo "::warning::Only allowlisted unfixable advisories remain (braces, http-cache-semantics, node-forge, zod, msal-node — see step comment). Revisit when patched releases ship."
+          echo "::warning::Only allowlisted unfixable advisories remain (braces, http-cache-semantics, node-forge, zod, msal-node, graphql-scalars — see step comment). Revisit when patched releases ship."
           exit 0
 
       - name: Check for reintroduced channel env reads
