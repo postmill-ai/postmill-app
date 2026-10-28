@@ -186,10 +186,9 @@ export const RenderQueue: FC<RenderQueueProps> = ({
         const highlighted = !!highlightJobId && job.id === highlightJobId;
         const isStt = job.operation === 'stt';
         // The stored File is classified by content; the requested operation is only
-        // a hint — a video-operation job can land an image artifact (e.g. a Reel.Farm
-        // slideshow completed without a video export stores its first slide JPG).
-        // Prefer the classified type; fall back to the operation until the File row
-        // resolves.
+        // a hint — a legacy or provider-specific video-operation job can land an image
+        // artifact. Prefer the classified type; fall back to the operation until the
+        // File row resolves.
         const previewKind = job.fileType ?? job.operation;
         const isAudio = previewKind === 'audio';
         const isImage = previewKind === 'image';

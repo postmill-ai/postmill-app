@@ -172,8 +172,52 @@ describe('reelfarm media adapter (slideshow generate → status → video)', () 
     expect((await adapter.pollJob('4567', { apiKey: 'rf-key' })).status).toBe('pending');
   });
 
+  it('pollJob fails a completed status without video_id instead of polling forever', async () => {
+    const { ctx } = makeCtx(() => res({ status: 'completed' }));
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+
+    expect(await adapter.pollJob('4567', { apiKey: 'rf-key' })).toEqual({
+      status: 'failed',
+      error: 'Reel.Farm returned an error: Completed slideshow returned no video id',
+    });
+  });
+
+  it.each([{ failed: true }, { status: 'failed' }])('pollJob attributes terminal video failure %j', async (video) => {
+    const { ctx } = makeCtx((url) => url.includes('/videos/')
+      ? res(video)
+      : res({ status: 'completed', video_id: 'vid-1' }));
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+
+    expect(await adapter.pollJob('4567', { apiKey: 'rf-key' })).toEqual({
+      status: 'failed',
+      error: 'Reel.Farm returned an error: Video render failed',
+    });
+  });
+
+  it('pollJob turns a definitive video fetch failure into an attributed terminal failure', async () => {
+    const { ctx } = makeCtx((url) => url.includes('/videos/')
+      ? res('missing video', false, 404)
+      : res({ status: 'completed', video_id: 'vid-1' }));
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+
+    expect(await adapter.pollJob('4567', { apiKey: 'rf-key' })).toEqual({
+      status: 'failed',
+      error: 'Reel.Farm rejected the request (HTTP 404): missing video',
+    });
+  });
+
+  it.each([429, 500, 503])('pollJob throws for transient video fetch status %s', async (status) => {
+    const { ctx } = makeCtx((url) => url.includes('/videos/')
+      ? res('try again', false, status)
+      : res({ status: 'completed', video_id: 'vid-1' }));
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+
+    await expect(adapter.pollJob('4567', { apiKey: 'rf-key' }))
+      .rejects.toThrow(`Reel.Farm video fetch transient error ${status}: try again`);
+  });
+
   it('testConnection ok; image/audio/avatar and missing key/prompt throw', async () => {
-    const { ctx } = makeCtx(() => res('', true, 404));
+    const { ctx } = makeCtx(() => res({}, true, 200));
     const adapter: any = reelfarmMediaModule.create(ctx as any);
     const tc = await adapter.testConnection({ apiKey: 'rf-key' });
     expect(tc.ok).toBe(true);
@@ -182,5 +226,25 @@ describe('reelfarm media adapter (slideshow generate → status → video)', () 
     await expect(adapter.generateAvatar('x', { apiKey: 'rf-key' })).rejects.toThrow();
     await expect(adapter.generateVideo('x', {})).rejects.toThrow('API key is required');
     await expect(adapter.generateVideo('', { apiKey: 'rf-key' })).rejects.toThrow('requires a prompt');
+  });
+
+  it.each([404, 429, 500])('testConnection does not report HTTP %s as success', async (status) => {
+    const { ctx } = makeCtx(() => res('upstream failure', false, status));
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+
+    expect(await adapter.testConnection({ apiKey: 'rf-key' })).toEqual({
+      ok: false,
+      message: `Reel.Farm connection test failed (${status}): upstream failure`,
+    });
+  });
+
+  it.each([401, 403])('testConnection preserves invalid-key handling for HTTP %s', async (status) => {
+    const { ctx } = makeCtx(() => res('unauthorized', false, status));
+    const adapter: any = reelfarmMediaModule.create(ctx as any);
+
+    expect(await adapter.testConnection({ apiKey: 'bad' })).toEqual({
+      ok: false,
+      message: 'Invalid Reel.Farm API key',
+    });
   });
 });

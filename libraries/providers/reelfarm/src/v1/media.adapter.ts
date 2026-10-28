@@ -145,21 +145,35 @@ export class ReelFarmAdapter implements MediaProviderAdapter {
         `Slideshow ${slideshowId} failed without an upstream error message`;
       return { status: 'failed', error: mediaUpstreamFailure(this, undefined, detail, 'video') };
     }
-    // The mp4 only exists once a video export has been created; until then keep polling.
-    if (!status.video_id) return { status: 'pending' };
-
-    const videoRes = await this._fetch(`${BASE}/videos/${status.video_id}`, { headers });
-    // The render already succeeded; a transient error must retry, not fail. A non-transient
-    // error stays pending (the export may still be finalizing).
-    if (!videoRes.ok) {
-      if (isTransientStatus(videoRes.status)) {
-        throw new Error(`Reel.Farm video fetch transient error ${videoRes.status}`);
+    if (!status.video_id) {
+      if (status.status === 'completed') {
+        return {
+          status: 'failed',
+          error: mediaUpstreamFailure(this, undefined, 'Completed slideshow returned no video id', 'video'),
+        };
       }
       return { status: 'pending' };
     }
+
+    const videoRes = await this._fetch(`${BASE}/videos/${status.video_id}`, { headers });
+    if (!videoRes.ok) {
+      const body = await videoRes.text();
+      if (isTransientStatus(videoRes.status)) {
+        throw new Error(`Reel.Farm video fetch transient error ${videoRes.status}: ${redactError(body, 200)}`);
+      }
+      return {
+        status: 'failed',
+        error: mediaUpstreamFailure(this, videoRes.status, body, 'video'),
+      };
+    }
     const video = (await videoRes.json()) as ReelFarmVideoResponse;
 
-    if (video.failed) return { status: 'failed', error: 'Reel.Farm video render failed' };
+    if (video.failed || video.status === 'failed') {
+      return {
+        status: 'failed',
+        error: mediaUpstreamFailure(this, undefined, 'Video render failed', 'video'),
+      };
+    }
     if (video.video_url) {
       return { status: 'completed', artifactUrl: video.video_url, metadata: { provider: this.identifier } };
     }
@@ -199,8 +213,13 @@ export class ReelFarmAdapter implements MediaProviderAdapter {
     }
     try {
       const res = await this._fetch(`${BASE}/account`, { headers });
+      if (res.ok) return { ok: true, message: 'Connection successful' };
       if (res.status === 401 || res.status === 403) return { ok: false, message: 'Invalid Reel.Farm API key' };
-      return { ok: true, message: 'Connection successful' };
+      const detail = redactError(await res.text(), 200);
+      return {
+        ok: false,
+        message: `Reel.Farm connection test failed (${res.status})${detail ? `: ${detail}` : ''}`,
+      };
     } catch (err) {
       return { ok: false, message: (err as Error).message };
     }

@@ -734,7 +734,7 @@ describe('DashboardService.getMediaJobs', () => {
   });
 
   it('surfaces the content-classified file type when it differs from the operation', async () => {
-    // Reel.Farm slideshows: a 'video' job can complete with the first slide JPG;
+    // A legacy or provider-specific 'video' job can store an image artifact;
     // the stored File row is classified 'image' and the queue must see that.
     const { service, aiSettingsService, fileRepository } = buildService();
     aiSettingsService.getMediaJobsWithCounts = vi.fn().mockResolvedValue({
