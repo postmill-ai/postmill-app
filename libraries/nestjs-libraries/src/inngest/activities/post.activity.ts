@@ -627,6 +627,21 @@ export class PostActivity {
       subStep,
       errMessage
     );
+
+    // Same error-swallowed posture as the other dispatch sites — a webhook
+    // failure must not mask the notification above or fail the publish step.
+    try {
+      await this._webhookService.dispatchEvent(orgId, 'post.failed', {
+        postId,
+        integrationName,
+        ...(subStep ? { subStep } : {}),
+        error: errMessage ?? null,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `post.failed webhook dispatch failed: ${(err as Error)?.message}`
+      );
+    }
   }
 
   async notifyFirstCommentUnsupported(
@@ -686,8 +701,9 @@ export class PostActivity {
     const webhooks = (await this._webhookService.getWebhooks(orgId)).filter(
       (f) => {
         return (
-          f.integrations.length === 0 ||
-          f.integrations.some((i) => i.id === integrationId)
+          (f.events.length === 0 || f.events.includes('post.published')) &&
+          (f.integrations.length === 0 ||
+            f.integrations.some((i) => i.id === integrationId))
         );
       }
     );

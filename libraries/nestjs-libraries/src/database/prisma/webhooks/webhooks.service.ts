@@ -3,15 +3,12 @@ import { WebhooksRepository } from '@postmill-ai/nestjs-libraries/database/prism
 import { IntegrationRepository } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.repository';
 import { WebhooksDto } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhooks.dto';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import {
+  SUPPORTED_WEBHOOK_EVENTS,
+  WebhookEventType,
+} from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhooks.events';
 
-const SUPPORTED_EVENT_TYPES = [
-  'post.published',
-  'comment.new',
-  'comment.reply',
-  'analytics.snapshot_complete',
-] as const;
-
-export type WebhookEventType = (typeof SUPPORTED_EVENT_TYPES)[number];
+export { WebhookEventType };
 
 @Injectable()
 export class WebhooksService {
@@ -25,7 +22,7 @@ export class WebhooksService {
   ) {}
 
   getSupportedEventTypes(): string[] {
-    return [...SUPPORTED_EVENT_TYPES];
+    return [...SUPPORTED_WEBHOOK_EVENTS];
   }
 
   getTotal(orgId: string) {
@@ -52,8 +49,12 @@ export class WebhooksService {
   }
 
   async dispatchEvent(orgId: string, eventType: string, payload: Record<string, any>): Promise<void> {
+    // A webhook with an empty events list predates event subscriptions and
+    // receives every event; otherwise it must be subscribed to eventType.
     const webhooks = (await this._webhooksRepository.getWebhooks(orgId)).filter(
-      (w) => w.integrations.length === 0 || eventType === 'post.published'
+      (w) =>
+        (w.events.length === 0 || w.events.includes(eventType)) &&
+        (w.integrations.length === 0 || eventType === 'post.published')
     );
 
     if (!webhooks.length) return;
