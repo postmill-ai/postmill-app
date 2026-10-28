@@ -4,7 +4,10 @@ import { openInDesigner } from './open-in-designer';
 const TIMELINE_KEY = 'designer:timeline-handoff';
 
 describe('openInDesigner', () => {
-  beforeEach(() => window.sessionStorage.clear());
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it('routes a HeyGen avatar render onto the video timeline (avatar → video)', () => {
@@ -16,6 +19,30 @@ describe('openInDesigner', () => {
     expect(navigate).toHaveBeenCalledWith('/media/designer?timeline=1');
     const handoff = JSON.parse(window.sessionStorage.getItem(TIMELINE_KEY)!);
     expect(handoff).toMatchObject({ type: 'video', url: 'https://cdn.example/v.mp4', fileId: 'f1' });
+  });
+
+  it('uses a short-lived local handoff for a new tab without putting the artifact URL in the query', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    openInDesigner({
+      operation: 'video',
+      artifactUrl: 'https://cdn.example/v.mp4?signature=secret',
+      fileId: 'f1',
+      fileType: 'video',
+    });
+
+    const url = new URL(open.mock.calls[0][0] as string, 'https://app.example');
+    const handoffId = url.searchParams.get('handoff');
+    expect(handoffId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(url.searchParams.has('mediaUrl')).toBe(false);
+    expect(url.toString()).not.toContain('signature');
+    const handoff = JSON.parse(window.localStorage.getItem(`${TIMELINE_KEY}:${handoffId}`)!);
+    expect(handoff).toMatchObject({
+      type: 'video',
+      url: 'https://cdn.example/v.mp4?signature=secret',
+      fileId: 'f1',
+    });
+    expect(handoff.expiresAt).toBeGreaterThan(Date.now());
+    expect(window.sessionStorage.getItem(TIMELINE_KEY)).toBeNull();
   });
 
   it('sends audio to the timeline as audio', () => {

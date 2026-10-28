@@ -19,7 +19,7 @@ export default defineConfig({
     { name: 'setup', testMatch: '**/auth.setup.ts' },
     {
       name: 'admin',
-      use: { ...devices['Desktop Chrome'], storageState: '.auth/admin.json' },
+      use: { ...devices['Desktop Chrome'], storageState: process.env.E2E_AUTH_STATE || '.auth/admin.json' },
       dependencies: ['setup'],
     },
   ],

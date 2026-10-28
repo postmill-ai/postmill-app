@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -58,6 +58,28 @@ function readHandoff(key: string): unknown {
   try {
     const raw = window.sessionStorage.getItem(key);
     return raw ? JSON.parse(raw) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readCrossTabTimelineHandoff(id: string | null): unknown {
+  if (
+    typeof window === 'undefined' ||
+    !id ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+  ) {
+    return undefined;
+  }
+  const key = `designer:timeline-handoff:${id}`;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return undefined;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isObj(parsed) || asNum(parsed.expiresAt) === undefined || Number(parsed.expiresAt) < Date.now()) {
+      return undefined;
+    }
+    return parsed;
   } catch {
     return undefined;
   }
@@ -165,27 +187,35 @@ function DesignerWithParams() {
       }
     : undefined;
 
-  // Parse + clear the sessionStorage handoffs ONCE (lazy state initializer), not
-  // during every render, and validate each shape before trusting it. "Open all in
-  // Designer" (?bulk=1), the Deepgram caption handoff (?captions=1), and the
-  // timeline handoff (?timeline=1) each stash JSON too large/complex for the query
-  // string; the keys are removed so a refresh doesn't re-apply them.
+  // Read handoffs once and validate each shape before trusting it. New-tab timeline
+  // handoffs use short-lived localStorage because sessionStorage is tab-scoped; same-tab
+  // handoffs retain sessionStorage. Deletion happens after mount so development double
+  // initialization cannot consume the payload before the Designer receives it.
+  const timelineHandoffId = sp.get('handoff');
   const [handoffs] = useState(() => {
     const bulk = sp.get('bulk') ? parseBulkAssets(readHandoff('designer:bulk-assets')) : undefined;
     const captions = sp.get('captions')
       ? parseCaptionHandoff(readHandoff('designer:caption-handoff'))
       : undefined;
     const timeline = sp.get('timeline')
-      ? parseTimelineHandoff(readHandoff('designer:timeline-handoff')) ?? parseTimelineQuery(sp)
+      ? parseTimelineHandoff(readCrossTabTimelineHandoff(timelineHandoffId)) ??
+        parseTimelineHandoff(readHandoff('designer:timeline-handoff')) ??
+        parseTimelineQuery(sp)
       : undefined;
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.removeItem('designer:timeline-handoff');
-      window.sessionStorage.removeItem('designer:caption-handoff');
-      window.sessionStorage.removeItem('designer:bulk-assets');
-    }
     return { initialAssets: bulk, initialCaptionVideo: captions, initialTimelineMedia: timeline };
   });
   const { initialAssets, initialCaptionVideo, initialTimelineMedia } = handoffs;
+  useEffect(() => {
+    const cleanup = window.setTimeout(() => {
+      window.sessionStorage.removeItem('designer:timeline-handoff');
+      window.sessionStorage.removeItem('designer:caption-handoff');
+      window.sessionStorage.removeItem('designer:bulk-assets');
+      if (timelineHandoffId) {
+        window.localStorage.removeItem(`designer:timeline-handoff:${timelineHandoffId}`);
+      }
+    }, 1000);
+    return () => window.clearTimeout(cleanup);
+  }, [timelineHandoffId]);
 
   // The Designer initialises its store once from initialAsset, so remount it
   // when the asset changes (navigating straight from one asset to another).

@@ -111,6 +111,47 @@ to; use the `seed:demo` fixtures (Solstice cast) with `E2E_MEMBER_EMAIL` /
 unit/integration tests can't cover (auth flows, composer end-to-end, settings CRUD
 round-trips); keep component-level behavior in vitest.
 
+### Opt-in live provider playback (never default CI)
+
+`99-provider-live-media.spec.ts` and `playwright.provider-live.config.ts` are a separate,
+one-worker/zero-retry suite for non-billing playback against an existing QA deployment.
+They require **both** `E2E_LIVE_MEDIA=1` and one explicit `E2E_LIVE_CASE`; without either,
+every case skips. The config has no auth-setup or seed dependency: pass an existing QA
+storage state with `E2E_AUTH_STATE` (default `.auth/admin.json`) and set `E2E_BASE` when
+not using `https://app.postmill.ai`. Do not put provider keys in the environment and never
+run the destructive seed. The suite blocks generation POSTs and only reuses existing
+artifacts; it does not submit paid generations. Logs are limited to provider, model, job
+status, sanitized errors, and decoded artifact metadata (never artifact URLs or secrets).
+
+Run from `e2e/` after `pnpm install --ignore-workspace`. To exercise an existing completed
+video job, its queue preview, and the Designer handoff:
+
+```bash
+E2E_LIVE_MEDIA=1 \
+E2E_LIVE_CASE=studio-completed-video \
+E2E_LIVE_PROVIDER=reelfarm \
+E2E_LIVE_JOB_ID=<completed-qa-job-id> \
+E2E_AUTH_STATE=.auth/admin.json \
+E2E_BASE=https://app.postmill.ai \
+pnpm exec playwright test --config playwright.provider-live.config.ts
+```
+
+To exercise playback and seeking in an existing saved Designer containing a video:
+
+```bash
+E2E_LIVE_MEDIA=1 \
+E2E_LIVE_CASE=designer-saved-video \
+E2E_LIVE_DESIGN_ID=<saved-qa-design-id> \
+E2E_AUTH_STATE=.auth/admin.json \
+E2E_BASE=https://app.postmill.ai \
+pnpm exec playwright test --config playwright.provider-live.config.ts
+```
+
+The job/design IDs must belong to the authenticated QA organization. Select one case per
+invocation; the other case skips. This config is not referenced by CI or the default
+Playwright projects, and the live suite must not be run as part of ordinary mocked E2E
+validation.
+
 ## Lint
 
 - **One flat config at the repo root only**: `eslint.config.mjs` — **ESLint 9** (`^9.39.4`)
