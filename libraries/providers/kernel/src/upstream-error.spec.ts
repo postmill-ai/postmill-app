@@ -38,6 +38,10 @@ describe('classifyUpstream', () => {
     [503, '', 'unavailable'],
     [418, '', 'unknown'],
     [undefined, '', 'unknown'],
+    [200, 'insufficient balance', 'quota'],
+    [undefined, 'Your credit limit was reached', 'quota'],
+    [200, 'The selected plan is invalid', 'unknown'],
+    [400, 'The plan parameter is invalid', 'invalid_request'],
   ])('%s → %s', (status, body, kind) => {
     expect(classifyUpstream(status as number | undefined, body as string)).toBe(kind);
   });
