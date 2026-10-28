@@ -27,12 +27,17 @@ const BEDROCK_CREDENTIAL_FIELDS: CredentialField[] = [
   { key: 'sessionToken', label: 'AWS Session Token', type: 'password', required: false, placeholder: 'Optional temporary token' },
 ];
 
+// Only genuine image models carry `image`/`kind: 'image'` (Nova Canvas / Titan Image —
+// what the SDK's imageModel() supports); Nova Lite/Pro are chat models and flagging them
+// image-capable surfaced them in media image dropdowns, failing at imageModel().
 const BEDROCK_MODELS: ModelInfo[] = [
   { id: 'anthropic.claude-sonnet-4-20250514', label: 'Claude Sonnet 4', kind: 'text', capabilities: { ...BEDROCK_CAPABILITIES, image: false, embeddings: false } },
   { id: 'anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2', kind: 'text', capabilities: { ...BEDROCK_CAPABILITIES, image: false, embeddings: false } },
   { id: 'anthropic.claude-3-haiku-20240307-v1:0', label: 'Claude 3 Haiku', kind: 'text', capabilities: { ...BEDROCK_CAPABILITIES, image: false, embeddings: false } },
-  { id: 'amazon.nova-lite-v1:0', label: 'Amazon Nova Lite', kind: 'text', capabilities: { ...BEDROCK_CAPABILITIES, image: true } },
-  { id: 'amazon.nova-pro-v1:0', label: 'Amazon Nova Pro', kind: 'text', capabilities: { ...BEDROCK_CAPABILITIES, image: true } },
+  { id: 'amazon.nova-lite-v1:0', label: 'Amazon Nova Lite', kind: 'text', capabilities: { ...BEDROCK_CAPABILITIES, image: false } },
+  { id: 'amazon.nova-pro-v1:0', label: 'Amazon Nova Pro', kind: 'text', capabilities: { ...BEDROCK_CAPABILITIES, image: false } },
+  { id: 'amazon.nova-canvas-v1:0', label: 'Amazon Nova Canvas', kind: 'image', capabilities: { text: false, image: true, vision: false, embeddings: false, speech: false, tools: false } },
+  { id: 'amazon.titan-image-generator-v2:0', label: 'Titan Image Generator v2', kind: 'image', capabilities: { text: false, image: true, vision: false, embeddings: false, speech: false, tools: false } },
   { id: 'amazon.titan-embed-text-v2:0', label: 'Titan Embedding v2', kind: 'embedding', dimension: 1024, capabilities: { text: false, image: false, vision: false, embeddings: true, speech: false, tools: false } },
   { id: 'cohere.embed-english-v3', label: 'Cohere Embed English v3', kind: 'embedding', dimension: 1024, capabilities: { text: false, image: false, vision: false, embeddings: true, speech: false, tools: false } },
 ];

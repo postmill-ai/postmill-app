@@ -105,6 +105,30 @@ describe('genviral media adapter (studio videos envelope)', () => {
     await expect(adapter.generateVideo('x', { apiKey: 'gv-key' })).rejects.toThrow('requires a model');
   });
 
+  // Non-2xx is a failure, not a success: 401/403 → invalid key, 404/5xx → failure.
+  it('testConnection reports non-2xx responses as failure', async () => {
+    const unauthorized: any = genviralMediaModule.create(
+      makeCtx(() => res({ message: 'unauthorized' }, false, 401)).ctx as any,
+    );
+    expect(await unauthorized.testConnection({ apiKey: 'bad' })).toEqual({
+      ok: false,
+      message: 'Invalid Genviral API key',
+    });
+
+    const notFound: any = genviralMediaModule.create(
+      makeCtx(() => res({ message: 'not found' }, false, 404)).ctx as any,
+    );
+    expect(await notFound.testConnection({ apiKey: 'gv-key' })).toEqual({
+      ok: false,
+      message: 'Genviral returned 404',
+    });
+
+    const serverError: any = genviralMediaModule.create(
+      makeCtx(() => res({ message: 'boom' }, false, 500)).ctx as any,
+    );
+    expect((await serverError.testConnection({ apiKey: 'gv-key' })).ok).toBe(false);
+  });
+
   // 6.1g — a 200 body with `ok:false` is a terminal application error, surfaced as failure.
   it('generateVideo throws on an ok:false envelope', async () => {
     const { ctx } = makeCtx(() => res({ ok: false, message: 'quota exceeded' }));

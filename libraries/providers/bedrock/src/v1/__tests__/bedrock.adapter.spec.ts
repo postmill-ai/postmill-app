@@ -72,6 +72,14 @@ describe('BedrockAdapter', () => {
 
       const nova = models.find((m) => m.id === 'amazon.nova-pro-v1:0');
       expect(nova).toBeDefined();
+      // Nova Lite/Pro are chat models — not image-flagged (they would surface
+      // in media image dropdowns and fail at imageModel()).
+      expect(nova?.capabilities?.image).toBe(false);
+
+      const novaCanvas = models.find((m) => m.id === 'amazon.nova-canvas-v1:0');
+      expect(novaCanvas).toBeDefined();
+      expect(novaCanvas?.kind).toBe('image');
+      expect(novaCanvas?.capabilities?.image).toBe(true);
 
       const titan = models.find((m) => m.id === 'amazon.titan-embed-text-v2:0');
       expect(titan).toBeDefined();
@@ -135,7 +143,7 @@ describe('BedrockAdapter', () => {
     it('returns an image model', () => {
       const model = adapter.createImageModel(
         { region: 'us-east-1', accessKeyId: 'AKIA-test', secretAccessKey: 'secret' },
-        'amazon.nova-pro-v1:0',
+        'amazon.nova-canvas-v1:0',
       );
       expect(model).toBeDefined();
     });
