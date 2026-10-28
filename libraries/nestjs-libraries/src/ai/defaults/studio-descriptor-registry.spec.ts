@@ -14,6 +14,10 @@ describe('generated studio descriptor fields', () => {
     ]));
     expect(fal.tabs.find((tab) => tab.key === 'text-to-image')?.model).toBe('fal-ai/flux/schnell');
     expect(fal.tabs.find((tab) => tab.key === 'text-to-music')?.model).toBe('fal-ai/stable-audio');
+    for (const key of ['text-to-video', 'image-to-video']) {
+      const fields = fal.tabs.find((tab) => tab.key === key)?.fields.map((field) => field.name);
+      expect(fields).toEqual(expect.arrayContaining(['cfg_scale', 'generate_audio']));
+    }
   });
 
   it('includes direct Kling descriptor fields', () => {

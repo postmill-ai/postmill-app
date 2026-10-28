@@ -1,3 +1,4 @@
+import { studioFieldVisible } from './types';
 import type {
   FileFieldValue,
   StudioFieldValue,
@@ -63,6 +64,7 @@ export function buildBody(tab: StudioTab, values: Record<string, StudioFieldValu
   const input: Record<string, string | number | boolean> = {};
   const mediaInputs: Record<string, string> = {};
   for (const f of tab.fields) {
+    if (!studioFieldVisible(f, values)) continue;
     const v = values[f.name];
     if (f.type === 'media') {
       const fv = v as FileFieldValue | undefined;

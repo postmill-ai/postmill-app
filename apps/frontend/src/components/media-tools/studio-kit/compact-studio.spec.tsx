@@ -215,8 +215,8 @@ describe('CompactStudio (descriptor provider)', () => {
     expect(screen.getByText(`Model: ${model}`)).toBeTruthy();
 
     for (const value of [
-      'fal-ai/kling-video/v2/master/text-to-video',
-      'fal-ai/kling-video/v1.6/standard/text-to-video',
+      'fal-ai/kling-video/v2.6/pro/text-to-video',
+      'fal-ai/kling-video/v2.5-turbo/pro/text-to-video',
       model,
     ]) {
       fireEvent.change(screen.getByLabelText('Model'), { target: { value } });
@@ -375,7 +375,7 @@ describe('CompactStudio (descriptor provider)', () => {
     // Switch to fal — the remount must drop the ElevenLabs values entirely.
     fireEvent.click(screen.getByText('switch provider'));
     const falModel = (await screen.findByLabelText('Model')) as HTMLSelectElement;
-    expect(falModel.value).toBe('fal-ai/kling-video/v1.6/standard/text-to-video');
+    expect(falModel.value).toBe('fal-ai/kling-video/v2.5-turbo/pro/text-to-video');
 
     // And the submitted body carries fal's model, never the stale ElevenLabs id.
     // (fetchMock calls accumulate across tests — match the fal call specifically.)
@@ -385,6 +385,6 @@ describe('CompactStudio (descriptor provider)', () => {
     await waitFor(() => expect(falGenerateCall()).toBeTruthy());
     const [, init] = falGenerateCall()!;
     const body = JSON.parse((init as RequestInit).body as string);
-    expect(body.model).toBe('fal-ai/kling-video/v1.6/standard/text-to-video');
+    expect(body.model).toBe('fal-ai/kling-video/v2.5-turbo/pro/text-to-video');
   });
 });

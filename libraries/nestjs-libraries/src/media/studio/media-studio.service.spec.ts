@@ -312,8 +312,8 @@ describe('MediaStudioService', () => {
       hasModelList: false,
       mediaModels: {
         'text-to-video': [
-          { id: 'fal-ai/kling-video/v1.6/standard/text-to-video', label: 'Kling 1.6 Standard', fields: [] },
-          { id: 'fal-ai/kling-video/v2/master/text-to-video', label: 'Kling 2.0 Master', fields: [] },
+          { id: 'fal-ai/kling-video/v2.5-turbo/pro/text-to-video', label: 'Kling 2.5 Turbo Pro', fields: [] },
+          { id: 'fal-ai/kling-video/v2.6/pro/text-to-video', label: 'Kling 2.6 Pro', fields: [] },
         ],
       },
     };
@@ -343,14 +343,14 @@ describe('MediaStudioService', () => {
 
       const result = await service.generate('org-1', 'user-1', 'test-provider', {
         operation: 'video',
-        model: 'fal-ai/kling-video/v2/master/text-to-video',
+        model: 'fal-ai/kling-video/v2.6/pro/text-to-video',
         input: { prompt: 'a rocket' },
       });
 
       expect(result).toEqual({ jobId: 'job-1' });
       expect(adapter.generateVideo).toHaveBeenCalledWith(
         'a rocket',
-        expect.objectContaining({ model: 'fal-ai/kling-video/v2/master/text-to-video' }),
+        expect.objectContaining({ model: 'fal-ai/kling-video/v2.6/pro/text-to-video' }),
       );
       expect(lifecycle.attachProviderJob).toHaveBeenCalledWith('job-1', 'upstream-1', 'org-1');
     });

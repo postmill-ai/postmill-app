@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeCtx, res } from '@postmill-ai/provider-kernel/testing/media-int-helpers';
 import { falMediaModule } from './media.adapter';
+import { metadata } from './metadata';
 
 // Recorded-fixture integration test (plan B4) — no network. fal has a synchronous image path
 // (`POST https://fal.run/<model>`) and an async queue for video/audio
@@ -8,7 +9,7 @@ import { falMediaModule } from './media.adapter';
 // response returns, which live under the two-segment app base, not the full model path).
 
 const b64url = (s: string) => Buffer.from(s).toString('base64url');
-const KLING_MODEL = 'fal-ai/kling-video/v1.6/standard/text-to-video';
+const KLING_MODEL = 'fal-ai/kling-video/v2.5-turbo/pro/text-to-video';
 const KLING_POLL_BASE = 'https://queue.fal.run/fal-ai/kling-video';
 const KLING_JOB_ID = `${KLING_MODEL}::req-1::${b64url(KLING_POLL_BASE)}`;
 
@@ -22,25 +23,25 @@ describe('fal media adapter (sync image + queued video)', () => {
     const sub = await adapter.generateVideo('a cat surfing', {
       apiKey: 'fal-key',
       model: KLING_MODEL,
-      input: { duration: 5, aspect_ratio: '16:9' },
+      input: { duration: '5', aspect_ratio: '16:9' },
     });
 
     // job ids pin the submit response's poll base: `<model>::<request_id>::<base64url(base)>`.
     expect(sub.jobId).toBe(KLING_JOB_ID);
     const r = recs[0];
-    expect(r.url).toBe('https://queue.fal.run/fal-ai/kling-video/v1.6/standard/text-to-video');
+    expect(r.url).toBe('https://queue.fal.run/fal-ai/kling-video/v2.5-turbo/pro/text-to-video');
     expect(r.method).toBe('POST');
     expect(r.headers.Authorization).toBe('Key fal-key');
     const body = JSON.parse(r.body);
     expect(body.prompt).toBe('a cat surfing');
-    expect(body.duration).toBe(5);
+    expect(body.duration).toBe('5');
     expect(body.aspect_ratio).toBe('16:9');
   });
 
-  it('submit without a response_url falls back to the two-segment app base', async () => {
+  it('defaults video submissions to Kling 2.5 and falls back to the two-segment poll base', async () => {
     const { ctx } = makeCtx(() => res({ request_id: 'req-1' }));
     const adapter: any = falMediaModule.create(ctx as any);
-    const sub = await adapter.generateVideo('a cat surfing', { apiKey: 'fal-key', model: KLING_MODEL });
+    const sub = await adapter.generateVideo('a cat surfing', { apiKey: 'fal-key' });
     expect(sub.jobId).toBe(KLING_JOB_ID);
   });
 
@@ -182,27 +183,77 @@ describe('fal media adapter (sync image + queued video)', () => {
   });
 
   it.each([
-    'fal-ai/kling-video/v1.6/standard/image-to-video',
-    'fal-ai/kling-video/v1.6/pro/image-to-video',
-    'fal-ai/kling-video/v2/master/image-to-video',
-  ])('preserves Kling string durations for %s', async (model) => {
+    'fal-ai/kling-video/v2.5-turbo/pro/text-to-video',
+    'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
+  ])('submits Kling 2.5 with string duration, image_url, and cfg_scale for %s', async (model) => {
     const { recs, ctx } = makeCtx(() => res({ request_id: 'kling-1' }));
     const adapter: any = falMediaModule.create(ctx as any);
-    for (const duration of ['5', '10']) {
-      await adapter.generateVideo('make the cat dance', {
-        apiKey: 'fal-key',
-        model,
-        input: { image_url: 'https://cdn.fal/source.png', duration },
-      });
-    }
+    await adapter.generateVideo('make the cat dance', {
+      apiKey: 'fal-key',
+      model,
+      input: {
+        ...(model.endsWith('/image-to-video') ? { image_url: 'https://cdn.fal/source.png' } : {}),
+        duration: '5',
+        negative_prompt: 'blurry',
+        cfg_scale: 0.5,
+        generate_audio: true,
+      },
+    });
 
-    for (const [index, duration] of ['5', '10'].entries()) {
-      expect(recs[index].url).toBe(`https://queue.fal.run/${model}`);
-      const body = JSON.parse(recs[index].body);
+    expect(recs[0].url).toBe(`https://queue.fal.run/${model}`);
+    const body = JSON.parse(recs[0].body);
+    expect(body.duration).toBe('5');
+    expect(body.negative_prompt).toBe('blurry');
+    expect(body.cfg_scale).toBe(0.5);
+    expect(body.generate_audio).toBeUndefined();
+    if (model.endsWith('/image-to-video')) {
       expect(body.image_url).toBe('https://cdn.fal/source.png');
-      expect(body.duration).toBe(duration);
-      expect(typeof body.duration).toBe('string');
+      expect(body.start_image_url).toBeUndefined();
     }
+  });
+
+  it.each([
+    { operation: 'text-to-video', generateAudio: undefined },
+    { operation: 'text-to-video', generateAudio: true },
+    { operation: 'image-to-video', generateAudio: undefined },
+    { operation: 'image-to-video', generateAudio: true },
+  ])('normalizes Kling 2.6 $operation with generate_audio=$generateAudio', async ({ operation, generateAudio }) => {
+    const model = `fal-ai/kling-video/v2.6/pro/${operation}`;
+    const { recs, ctx } = makeCtx(() => res({ request_id: 'kling-1' }));
+    const adapter: any = falMediaModule.create(ctx as any);
+    await adapter.generateVideo('make the cat dance', {
+      apiKey: 'fal-key',
+      model,
+      input: {
+        ...(operation === 'image-to-video' ? { image_url: 'https://cdn.fal/source.png' } : {}),
+        duration: '10',
+        negative_prompt: 'blurry',
+        cfg_scale: 0.5,
+        ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
+      },
+    });
+
+    expect(recs[0].url).toBe(`https://queue.fal.run/${model}`);
+    const body = JSON.parse(recs[0].body);
+    expect(body.duration).toBe('10');
+    expect(body.negative_prompt).toBe('blurry');
+    expect(body.cfg_scale).toBeUndefined();
+    expect(body.generate_audio).toBe(generateAudio ?? false);
+    expect(body.image_url).toBeUndefined();
+    if (operation === 'image-to-video') {
+      expect(body.start_image_url).toBe('https://cdn.fal/source.png');
+    } else {
+      expect(body.start_image_url).toBeUndefined();
+    }
+  });
+
+  it('keeps polling in-flight jobs submitted with retired Kling model ids', async () => {
+    const legacyModel = 'fal-ai/kling-video/v1.6/standard/image-to-video';
+    const { recs, ctx } = makeCtx(() => res({ status: 'IN_PROGRESS' }));
+    const adapter: any = falMediaModule.create(ctx as any);
+    const result = await adapter.pollJob(`${legacyModel}::legacy-req`, { apiKey: 'fal-key' });
+    expect(result.status).toBe('pending');
+    expect(recs[0].url).toBe(`${KLING_POLL_BASE}/requests/legacy-req/status`);
   });
 
   it('submits Stable Audio and polls its audio_file artifact', async () => {
@@ -262,5 +313,37 @@ describe('fal media adapter testConnection', () => {
     const a4: any = falMediaModule.create(noKey.ctx as any);
     expect(await a4.testConnection({})).toEqual({ ok: false, message: 'fal.ai API key is required' });
     expect(noKey.recs).toHaveLength(0);
+  });
+});
+
+describe('fal Kling generated catalog', () => {
+  it('exposes only current models with model-specific fields', () => {
+    const models = Object.values(metadata.mediaModels ?? {}).flat();
+    const ids = models.map((model) => model.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      'fal-ai/kling-video/v2.5-turbo/pro/text-to-video',
+      'fal-ai/kling-video/v2.6/pro/text-to-video',
+      'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
+      'fal-ai/kling-video/v2.6/pro/image-to-video',
+    ]));
+    for (const retired of [
+      'fal-ai/kling-video/v1.6/standard/text-to-video',
+      'fal-ai/kling-video/v1.6/pro/text-to-video',
+      'fal-ai/kling-video/v2/master/text-to-video',
+      'fal-ai/kling-video/v1.6/standard/image-to-video',
+      'fal-ai/kling-video/v1.6/pro/image-to-video',
+      'fal-ai/kling-video/v2/master/image-to-video',
+    ]) {
+      expect(ids).not.toContain(retired);
+    }
+
+    for (const operation of ['text-to-video', 'image-to-video']) {
+      const v25 = models.find((model) => model.id === `fal-ai/kling-video/v2.5-turbo/pro/${operation}`);
+      const v26 = models.find((model) => model.id === `fal-ai/kling-video/v2.6/pro/${operation}`);
+      expect(v25?.fields?.map((field) => field.name)).toContain('cfg_scale');
+      expect(v25?.fields?.map((field) => field.name)).not.toContain('generate_audio');
+      expect(v26?.fields?.map((field) => field.name)).toContain('generate_audio');
+      expect(v26?.fields?.map((field) => field.name)).not.toContain('cfg_scale');
+    }
   });
 });
