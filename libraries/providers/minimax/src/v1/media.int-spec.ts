@@ -40,7 +40,7 @@ describe('minimax media adapter', () => {
     expect(body.subject_reference).toEqual([{ type: 'character', image: ['https://img/me.png'] }]);
   });
 
-  it('maps the generic image-to-video sourceUrl onto the S2V subject reference', async () => {
+  it('maps the generic S2V sourceUrl to subject_reference without a first frame', async () => {
     const { recs, ctx } = makeCtx(() => res({ task_id: 'task-s2v' }));
     const adapter: any = minimaxMediaModule.create(ctx as any);
 
@@ -48,6 +48,7 @@ describe('minimax media adapter', () => {
       apiKey: 'minimax-key',
       model: 'S2V-01',
       sourceUrl: 'https://img/presenter.png',
+      input: { first_frame_image: 'https://img/wrong-field.png' },
     });
 
     const body = JSON.parse(recs[0].body);
@@ -55,13 +56,50 @@ describe('minimax media adapter', () => {
     expect(body.subject_reference).toEqual([
       { type: 'character', image: ['https://img/presenter.png'] },
     ]);
+    expect(body.first_frame_image).toBeUndefined();
+  });
+
+  it.each(['I2V-01', 'I2V-01-live'])('maps generic sourceUrl to first_frame_image for %s', async (model) => {
+    const { recs, ctx } = makeCtx(() => res({ task_id: 'task-i2v' }));
+    const adapter: any = minimaxMediaModule.create(ctx as any);
 
     await adapter.generateVideo('animate the product', {
       apiKey: 'minimax-key',
-      model: 'I2V-01',
+      model,
       sourceUrl: 'https://img/product.png',
+      input: { subject_reference: [{ type: 'character', image: ['https://img/wrong-field.png'] }] },
     });
-    expect(JSON.parse(recs[1].body).subject_reference).toBeUndefined();
+
+    const body = JSON.parse(recs[0].body);
+    expect(body.first_frame_image).toBe('https://img/product.png');
+    expect(body.subject_reference).toBeUndefined();
+  });
+
+  it('rejects S2V-01 without a subject before making a request', async () => {
+    const { recs, ctx } = makeCtx(() => res({ task_id: 'unused' }));
+    const adapter: any = minimaxMediaModule.create(ctx as any);
+
+    await expect(adapter.generateVideo('animate the presenter', {
+      apiKey: 'minimax-key',
+      model: 'S2V-01',
+    })).rejects.toThrow('Invalid MiniMax video request: S2V-01 requires a subject image');
+    expect(recs).toHaveLength(0);
+  });
+
+  it.each([
+    ['rejected fetch', new TypeError('fetch failed'), 'unavailable'],
+    ['timeout', new Error('safeFetch request timed out after 30000ms'), 'timeout'],
+  ])('classifies video-submit %s as a typed upstream error', async (_name, failure, kind) => {
+    const { ctx } = makeCtx(() => { throw failure; });
+    const adapter: any = minimaxMediaModule.create(ctx as any);
+
+    const error = await adapter.generateVideo('a product ad', { apiKey: 'k' }).catch((err: unknown) => err);
+    expect(error).toMatchObject({
+      name: 'ProviderUpstreamError',
+      kind,
+      retryable: true,
+    });
+    expect(error.ctx.operation).toBe('video');
   });
 
   it('generateImage POSTs to /image_generation and parses data.image_urls', async () => {

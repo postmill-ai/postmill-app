@@ -3188,11 +3188,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       fileType?: string | null,
       metadata?: CompactStudioResult['metadata']
     ): Promise<number | false> => {
-      // A video-operation job can complete with an image artifact (e.g. a
-      // Reel.Farm slideshow that finished without a video export stores its
-      // first slide JPG) — land it as an image clip, not a video clip that
-      // can't decode. addImageClipToTimeline places at the playhead and
-      // selects the clip itself.
+      // A legacy or provider-specific video-operation job can complete with an
+      // image artifact — land it as an image clip, not a video clip that can't
+      // decode. addImageClipToTimeline places at the playhead and selects the
+      // clip itself.
       if (type === 'video' && fileType === 'image') {
         const clipId = addImageClipToTimeline(store, {
           url,

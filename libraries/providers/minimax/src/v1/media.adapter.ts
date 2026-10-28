@@ -15,6 +15,7 @@ import {
   mediaUpstreamError,
   mediaUpstreamFailure,
   mediaUpstreamFromBody,
+  mediaUpstreamFromUnknown,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.minimax.io/v1';
@@ -104,28 +105,47 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
 
   async generateVideo(prompt: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
     const model = options?.model || 'video-01';
-    // Native params (first_frame_image, prompt_optimizer, …) ride `options.input`.
-    // `subject_image` is a flattened convenience field folded into MiniMax's nested
-    // `subject_reference` array (S2V models).
+    // Native params ride `options.input`; generic source images use each model family's field.
     const input = (options?.input || {}) as Record<string, unknown>;
-    const { subject_image, ...rest } = input;
+    const { subject_image, subject_reference, first_frame_image, ...rest } = input;
     const subjectImage = subject_image || (model === 'S2V-01' ? options?.sourceUrl : undefined);
+    const generatedSubjectReference = typeof subjectImage === 'string' && subjectImage
+      ? [{ type: 'character', image: [subjectImage] }]
+      : undefined;
+    const subjectReference = generatedSubjectReference || subject_reference;
+    if (
+      model === 'S2V-01' &&
+      (!subjectReference || (Array.isArray(subjectReference) && subjectReference.length === 0))
+    ) {
+      throw new Error(
+        'Invalid MiniMax video request: S2V-01 requires a subject image via sourceUrl or input.subject_image',
+      );
+    }
+    const firstFrameImage = model.startsWith('I2V-01')
+      ? options?.sourceUrl || first_frame_image
+      : model === 'S2V-01'
+        ? undefined
+        : first_frame_image;
     // MiniMax validates callback_url at submit time with a challenge-handshake our
     // webhook endpoint doesn't implement, so `options.webhookUrl` is deliberately NOT
     // sent — completion comes from the media-jobs-poll cron.
-    const res = await this._fetch(`${BASE}/video_generation`, {
-      method: 'POST',
-      headers: this._headers(options),
-      ipFamily: 4,
-      body: JSON.stringify({
-        model,
-        prompt,
-        ...rest,
-        ...(typeof subjectImage === 'string'
-          ? { subject_reference: [{ type: 'character', image: [subjectImage] }] }
-          : {}),
-      }),
-    });
+    let res: Response;
+    try {
+      res = await this._fetch(`${BASE}/video_generation`, {
+        method: 'POST',
+        headers: this._headers(options),
+        ipFamily: 4,
+        body: JSON.stringify({
+          model,
+          prompt,
+          ...rest,
+          ...(model === 'S2V-01' ? { subject_reference: subjectReference } : {}),
+          ...(firstFrameImage !== undefined ? { first_frame_image: firstFrameImage } : {}),
+        }),
+      });
+    } catch (err) {
+      throw mediaUpstreamFromUnknown(this, err, 'video');
+    }
     if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const data = (await res.json()) as MiniMaxVideoSubmitResponse;
     if (!data.task_id) {

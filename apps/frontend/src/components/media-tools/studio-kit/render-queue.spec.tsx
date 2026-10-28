@@ -117,10 +117,9 @@ describe('RenderQueue', () => {
   });
 
   it('previews a video-operation job as an image when the stored file is one', () => {
-    // Reel.Farm slideshows: the API creates a slideshow; when it finishes without
-    // a video export the job completes with the first slide JPG. The stored File
-    // is content-classified as 'image' — key the preview off that, not the
-    // requested operation, else <video src="…slide.jpg"> fails to decode.
+    // A legacy or provider-specific video job can store an image artifact. The File
+    // is content-classified as 'image' — key the preview off that, not the requested
+    // operation, else <video src="…slide.jpg"> fails to decode.
     const { container } = render(
       <RenderQueue
         jobs={[
