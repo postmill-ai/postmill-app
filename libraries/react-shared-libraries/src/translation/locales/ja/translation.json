@@ -4681,5 +4681,15 @@
   "studio_kling_kling_ai_landing_hl0": "直接統合 — お客様のklingai.com APIキーを使用し、アグリゲーターの上乗せはありません",
   "studio_kling_kling_ai_landing_hl1": "Kling 3.0 / 2.6動画はオプションのネイティブオーディオに対応し、最大1080p",
   "studio_kling_kling_ai_landing_hl2": "最初/最後のフレームを制御できるテキスト・画像からの動画生成",
-  "studio_kling_kling_ai_landing_hl3": "Kling V3は8種類のアスペクト比で最大2Kのテキストからの画像生成に対応"
+  "studio_kling_kling_ai_landing_hl3": "Kling V3は8種類のアスペクト比で最大2Kのテキストからの画像生成に対応",
+  "designer_character_reference_picker": "キャラクターの参照画像を選択",
+  "designer_character_references": "キャラクター参照",
+  "designer_character_reference_help": "同じ人物、キャラクター、商品を複数のシーンで再利用します。対応モデルに自動的に適用されますが、一貫性は保証されません。",
+  "designer_character_reference_limit": "参照画像は最大{{count}}枚まで選択できます。",
+  "designer_character_reference_image": "キャラクター参照 {{index}}",
+  "designer_remove_character_reference": "{{name}}を削除",
+  "designer_change_character_references": "参照画像を変更",
+  "designer_add_character_references": "参照画像を追加",
+  "designer_character_references_default_not_used": "デフォルトのプロバイダーは保存済みのキャラクター参照を使用しません。使用するには、MiniMax Subject Reference、Replicate Veo 3.1、または ElevenLabs Veo 3.1 を選択してください。",
+  "designer_character_references_model_not_used": "このプロバイダーまたはモデルは保存済みのキャラクター参照を使用しません。キャラクター参照を利用するには、MiniMax Subject Reference、Replicate Veo 3.1、または ElevenLabs Veo 3.1 を選択してください。"
 }

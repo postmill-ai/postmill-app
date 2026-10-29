@@ -4681,5 +4681,15 @@
   "studio_kling_kling_ai_landing_hl0": "Doğrudan entegrasyon — klingai.com API anahtarınız, toplayıcı fiyat farkı olmadan",
   "studio_kling_kling_ai_landing_hl1": "Kling 3.0 / 2.6 video, isteğe bağlı yerleşik ses ve 1080p’ye kadar çözünürlük",
   "studio_kling_kling_ai_landing_hl2": "İlk/son kare kontrolüyle metinden ve görselden video oluşturma",
-  "studio_kling_kling_ai_landing_hl3": "Kling V3 ile sekiz en boy oranında 2K’ya kadar metinden görsel oluşturma"
+  "studio_kling_kling_ai_landing_hl3": "Kling V3 ile sekiz en boy oranında 2K’ya kadar metinden görsel oluşturma",
+  "designer_character_reference_picker": "Karakter referans görsellerini seç",
+  "designer_character_references": "Karakter referansları",
+  "designer_character_reference_help": "Aynı kişiyi, karakteri veya ürünü farklı sahnelerde yeniden kullan. Desteklenen modellere otomatik olarak uygulanır; süreklilik garanti edilmez.",
+  "designer_character_reference_limit": "En fazla {{count}} referans görseli seç.",
+  "designer_character_reference_image": "Karakter referansı {{index}}",
+  "designer_remove_character_reference": "{{name}} öğesini kaldır",
+  "designer_change_character_references": "Referans görselleri değiştir",
+  "designer_add_character_references": "Referans görseller ekle",
+  "designer_character_references_default_not_used": "Varsayılan sağlayıcı kayıtlı karakter referanslarını kullanmaz. Bunları kullanmak için MiniMax Subject Reference, Replicate Veo 3.1 veya ElevenLabs Veo 3.1 seç.",
+  "designer_character_references_model_not_used": "Bu sağlayıcı veya model kayıtlı karakter referanslarını kullanmaz. Bunları uygulamak için MiniMax Subject Reference, Replicate Veo 3.1 veya ElevenLabs Veo 3.1 seç."
 }

@@ -84,5 +84,6 @@ export const migrateDoc = (raw: any): DesignerDoc => {
     // Symbol definitions live on the doc; omitting them here would drop every
     // symbol instance in the document on the next load.
     ...(Array.isArray(raw.symbols) ? { symbols: raw.symbols } : {}),
+    ...(Array.isArray(raw.characterReferences) ? { characterReferences: raw.characterReferences } : {}),
   } as DesignerDoc;
 };

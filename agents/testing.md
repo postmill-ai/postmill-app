@@ -117,7 +117,7 @@ organization data, set `E2E_SKIP_AUTH_SETUP=1` to bypass the real login setup an
 to the local frontend (default `http://localhost:4201`). The skip flag is only for these mocked
 routes; never use it to bypass authentication for unmocked or live-provider tests.
 
-For Designer spec 96, optional `E2E_FRONTEND_ORIGIN` proxies only document/static requests from
+For Designer specs 96 and 97, optional `E2E_FRONTEND_ORIGIN` proxies only document/static requests from
 `E2E_BASE` to a loopback HTTP worktree server while the saved auth origin and mocked API behavior
 stay unchanged. It must be `http://localhost`, `127.0.0.1`, or `::1`; API/provider calls are never
 proxied by this setting. `E2E_BACKEND_ORIGIN` remains the separate opt-in loopback API proxy.

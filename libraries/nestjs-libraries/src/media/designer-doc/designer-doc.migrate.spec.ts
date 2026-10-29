@@ -43,6 +43,20 @@ describe('doc-level symbols (v6)', () => {
   });
 });
 
+describe('video character references', () => {
+  it('carries saved references through a re-normalise and omits malformed values', () => {
+    const characterReferences = [{ fileId: 'file-1', src: '/uploads/hero.png', name: 'Hero' }];
+    const raw = {
+      version: 9,
+      mode: 'video',
+      outputs: [],
+      characterReferences,
+    };
+    expect(migrateDoc(raw).characterReferences).toEqual(characterReferences);
+    expect('characterReferences' in migrateDoc({ ...raw, characterReferences: 'nope' })).toBe(false);
+  });
+});
+
 describe('zero legacy support', () => {
   it('does not rewrite a legacy root shape — it passes through for the schema to reject', () => {
     const legacy = { version: 1, width: 1080, height: 1080, pages: [] };

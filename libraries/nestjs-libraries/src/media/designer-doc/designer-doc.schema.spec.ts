@@ -125,6 +125,57 @@ describe('DesignerDoc schema', () => {
     expect(parsed.outputs[0].tracks[0].clips[0].fontWeight).toBe(700);
   });
 
+  it('accepts video characterReferences in strict and lenient parsers', () => {
+    const characterReferences = [
+      { fileId: 'character-1', src: '/uploads/org/character-1.png', name: 'Hero' },
+      { fileId: 'character-2', src: 'https://example.com/character-2.png' },
+    ];
+    for (const schema of [DesignerDocStrictSchema, DesignerDocLenientSchema]) {
+      const parsed = schema.parse({ ...videoDocFixture, characterReferences });
+      expect(parsed.characterReferences).toEqual(characterReferences);
+    }
+  });
+
+  it('rejects characterReferences on image docs in strict and lenient parsers', () => {
+    const doc = {
+      ...imageDocFixture,
+      characterReferences: [{ fileId: 'character-1', src: '/uploads/org/character-1.png' }],
+    };
+    expect(DesignerDocStrictSchema.safeParse(doc).success).toBe(false);
+    expect(DesignerDocLenientSchema.safeParse(doc).success).toBe(false);
+  });
+
+  it('allows at most three characterReferences in both parsers', () => {
+    const characterReferences = Array.from({ length: 4 }, (_, i) => ({
+      fileId: `character-${i}`,
+      src: `/uploads/org/character-${i}.png`,
+    }));
+    for (const schema of [DesignerDocStrictSchema, DesignerDocLenientSchema]) {
+      expect(
+        schema.safeParse({ ...videoDocFixture, characterReferences: characterReferences.slice(0, 3) })
+          .success
+      ).toBe(true);
+      expect(schema.safeParse({ ...videoDocFixture, characterReferences }).success).toBe(false);
+    }
+  });
+
+  it.each([
+    ['missing fileId', { src: '/uploads/org/character.png' }],
+    ['missing src', { fileId: 'character-1' }],
+    ['empty fileId', { fileId: '', src: '/uploads/org/character.png' }],
+    ['empty name', { fileId: 'character-1', src: '/uploads/org/character.png', name: '' }],
+    ['invalid src', { fileId: 'character-1', src: 'file:///etc/passwd' }],
+    ['overlong fileId', { fileId: 'x'.repeat(201), src: '/uploads/org/character.png' }],
+    [
+      'overlong name',
+      { fileId: 'character-1', src: '/uploads/org/character.png', name: 'x'.repeat(201) },
+    ],
+  ])('rejects a characterReference with %s in both parsers', (_label, characterReference) => {
+    const doc = { ...videoDocFixture, characterReferences: [characterReference] };
+    expect(DesignerDocStrictSchema.safeParse(doc).success).toBe(false);
+    expect(DesignerDocLenientSchema.safeParse(doc).success).toBe(false);
+  });
+
   it('accepts optional v9 clip gradients and all text alignments in both parsers', () => {
     for (const align of ['left', 'center', 'right', 'justify'] as const) {
       const doc = JSON.parse(JSON.stringify(videoDocFixture));

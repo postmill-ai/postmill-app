@@ -15,6 +15,7 @@ import { classifySchema, type InputSchema } from './field-classification';
 import { missingRequiredFields } from './use-generate';
 import { sanitizeModelInput } from './sanitize-input';
 import { hasVeoReferenceImages, validateModelInput } from './model-policy';
+import { replicateCharacterReferences, type CharacterReference } from '../designer/character-references';
 import type { CompactOperation, CompactStudioResult } from '../studio-kit/compact-registry';
 import type { GeneratedMediaMetadata } from '../studio-kit/types';
 
@@ -71,10 +72,11 @@ export const CompactReplicate: FC<{
    * overriding a value the user picked in Advanced settings.
    */
   aspectRatio?: string;
+  characterReferences?: CharacterReference[];
   onGenerated: (result: CompactStudioResult) => void;
   onError?: (message: string) => void;
   submitDisabled?: boolean;
-}> = ({ operation, prompt, aspectRatio, onGenerated, onError, submitDisabled = false }) => {
+}> = ({ operation, prompt, aspectRatio, characterReferences, onGenerated, onError, submitDisabled = false }) => {
   const t = useT();
   const fetch = useFetch();
   const { data: status } = useReplicateStatus();
@@ -117,6 +119,14 @@ export const CompactReplicate: FC<{
   );
 
   const schema = selectedModel?.inputSchema as InputSchema | null | undefined;
+  const sharedReferences = useMemo(
+    () => replicateCharacterReferences(selectedModel?.id, characterReferences),
+    [selectedModel?.id, characterReferences]
+  );
+  const effectiveFormInput = useMemo(
+    () => sharedReferences ? { ...formInput, reference_images: sharedReferences } : formInput,
+    [formInput, sharedReferences]
+  );
 
   // The dialog owns the prompt box: hide ALL prompt-role fields from the
   // DynamicForm (they're driven, not user-edited here), but inject the prop
@@ -128,7 +138,21 @@ export const CompactReplicate: FC<{
     [schema]
   );
   const primaryPromptField = promptFields[0]?.name;
-  const hiddenFields = useMemo(() => new Set(promptFields.map((f) => f.name)), [promptFields]);
+  const hiddenFields = useMemo(() => {
+    const fields = new Set(promptFields.map((f) => f.name));
+    if (sharedReferences) fields.add('reference_images');
+    return fields;
+  }, [promptFields, sharedReferences]);
+  const syncedReferencesRef = useRef(false);
+  useEffect(() => {
+    if (sharedReferences) {
+      updateFormField('reference_images', sharedReferences);
+      syncedReferencesRef.current = true;
+    } else if (syncedReferencesRef.current) {
+      updateFormField('reference_images', undefined);
+      syncedReferencesRef.current = false;
+    }
+  }, [sharedReferences, updateFormField]);
   useEffect(() => {
     if (primaryPromptField) updateFormField(primaryPromptField, prompt);
   }, [primaryPromptField, prompt, updateFormField]);
@@ -140,12 +164,12 @@ export const CompactReplicate: FC<{
   const seededAspectRef = useRef<{ modelId: string; value: string } | null>(null);
   useEffect(() => {
     if (!aspectRatio || !selectedModel) return;
-    if (selectedModel.id === 'google/veo-3.1' && hasVeoReferenceImages(formInput)) return;
+    if (selectedModel.id === 'google/veo-3.1' && hasVeoReferenceImages(effectiveFormInput)) return;
     const aspectField = schema?.properties?.['aspect_ratio'];
     if (!aspectField) return;
     const enumValues = Array.isArray(aspectField.enum) ? aspectField.enum : undefined;
     if (enumValues && !enumValues.includes(aspectRatio)) return;
-    const current = (formInput as Record<string, unknown>)['aspect_ratio'];
+    const current = (effectiveFormInput as Record<string, unknown>)['aspect_ratio'];
     const previousSeed =
       seededAspectRef.current?.modelId === selectedModel.id
         ? seededAspectRef.current.value
@@ -155,13 +179,13 @@ export const CompactReplicate: FC<{
     if (!untouched || current === aspectRatio) return;
     updateFormField('aspect_ratio', aspectRatio);
     seededAspectRef.current = { modelId: selectedModel.id, value: aspectRatio };
-  }, [aspectRatio, selectedModel, schema, formInput, updateFormField]);
+  }, [aspectRatio, selectedModel, schema, effectiveFormInput, updateFormField]);
 
   const missing = useMemo(() => {
-    const merged = { ...formInput };
+    const merged = { ...effectiveFormInput };
     if (primaryPromptField) merged[primaryPromptField] = prompt;
     return selectedModel ? missingRequiredFields(schema, merged) : [];
-  }, [selectedModel, schema, formInput, primaryPromptField, prompt]);
+  }, [selectedModel, schema, effectiveFormInput, primaryPromptField, prompt]);
 
   // Async runs poll the shared job endpoint to completion.
   const { data: jobData } = useReplicateJobPoll(jobId);
@@ -206,7 +230,7 @@ export const CompactReplicate: FC<{
 
   const onGenerate = useCallback(async () => {
     if (submitDisabled || !selectedModel || !categoryDef) return;
-    const raw = { ...formInput };
+    const raw = { ...effectiveFormInput };
     if (primaryPromptField) raw[primaryPromptField] = prompt;
     const absent = missingRequiredFields(schema, raw);
     if (absent.length > 0) {
@@ -281,7 +305,7 @@ export const CompactReplicate: FC<{
     } finally {
       setStarting(false);
     }
-  }, [submitDisabled, selectedModel, categoryDef, formInput, primaryPromptField, prompt, schema, fetch, operation, onGenerated, fail, t]);
+  }, [submitDisabled, selectedModel, categoryDef, effectiveFormInput, primaryPromptField, prompt, schema, fetch, operation, onGenerated, fail, t]);
 
   if (!status) {
     return (
@@ -333,6 +357,11 @@ export const CompactReplicate: FC<{
       </div>
 
       {categoryDef && <ModelPicker categoryKey={categoryDef.key} />}
+      {selectedModel && !!characterReferences?.length && !sharedReferences && (
+        <p className="text-[11px] text-newTextColor/60" role="note">
+          {t('designer_character_references_model_not_used', 'This provider or model does not use saved character references. Use MiniMax Subject Reference, Replicate Veo 3.1, or ElevenLabs Veo 3.1 to use them.')}
+        </p>
+      )}
       {categoryDef && selectedModel && <DynamicForm hiddenFields={hiddenFields} />}
 
       {selectedModel && !primaryPromptField && (

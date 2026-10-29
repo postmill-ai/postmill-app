@@ -418,6 +418,47 @@ describe('CompactReplicate', () => {
     expect(body.input.duration).toBe(8);
   });
 
+  it('uses saved Designer references for Veo in order and hides the duplicate native control', async () => {
+    modelDetail = {
+      ...MODEL_DETAIL,
+      id: 'google/veo-3.1',
+      name: 'Veo 3.1',
+      inputSchema: {
+        required: ['prompt'],
+        properties: {
+          prompt: { type: 'string', title: 'Prompt' },
+          aspect_ratio: { type: 'string', title: 'Aspect ratio', enum: ['16:9', '9:16'], default: '16:9' },
+          duration: { type: 'integer', title: 'Duration', enum: [4, 6, 8], default: 6 },
+          reference_images: { type: 'array', title: 'References', items: { type: 'string', format: 'uri' } },
+        },
+      },
+    };
+    const characterReferences = [
+      { fileId: 'char-1', src: '/uploads/char-1.png', name: 'Hero front' },
+      { fileId: 'char-2', src: '/uploads/char-2.png', name: 'Hero side' },
+    ];
+    wrap(
+      <CompactReplicate operation="video" prompt="hero in a cafe" aspectRatio="9:16" characterReferences={characterReferences} onGenerated={vi.fn()} />
+    );
+    await pickModel('text-to-video', 'google/veo-3.1');
+    expect(screen.queryByText('References')).toBeNull();
+    await waitFor(() => {
+      expect(useReplicateStore.getState().formInput.aspect_ratio).toBe('16:9');
+      expect(useReplicateStore.getState().formInput.duration).toBe(8);
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(callsTo('/media/replicate/run/async')).toHaveLength(1));
+    const [, init] = callsTo('/media/replicate/run/async')[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.input.reference_images).toEqual([
+      { fileId: 'char-1', url: '/uploads/char-1.png', type: 'image' },
+      { fileId: 'char-2', url: '/uploads/char-2.png', type: 'image' },
+    ]);
+    expect(body.input.aspect_ratio).toBe('16:9');
+    expect(body.input.duration).toBe(8);
+  });
+
   it('rejects invalid model input before submitting a compact run', async () => {
     modelDetail = {
       ...MODEL_DETAIL,

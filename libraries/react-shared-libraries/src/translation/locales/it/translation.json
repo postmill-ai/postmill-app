@@ -4681,5 +4681,15 @@
   "studio_kling_kling_ai_landing_hl0": "Integrazione diretta — la tua chiave API di klingai.com, senza maggiorazioni dell’aggregatore",
   "studio_kling_kling_ai_landing_hl1": "Video Kling 3.0 / 2.6 con audio nativo opzionale, fino a 1080p",
   "studio_kling_kling_ai_landing_hl2": "Generazione di video da testo e immagini con controllo del primo e dell’ultimo fotogramma",
-  "studio_kling_kling_ai_landing_hl3": "Generazione di immagini da testo con Kling V3 fino a 2K in otto proporzioni"
+  "studio_kling_kling_ai_landing_hl3": "Generazione di immagini da testo con Kling V3 fino a 2K in otto proporzioni",
+  "designer_character_reference_picker": "Scegli immagini di riferimento dei personaggi",
+  "designer_character_references": "Riferimenti dei personaggi",
+  "designer_character_reference_help": "Riutilizza la stessa persona, lo stesso personaggio o lo stesso prodotto in scene diverse. Applicato automaticamente ai modelli supportati; la continuità non è garantita.",
+  "designer_character_reference_limit": "Scegli fino a {{count}} immagini di riferimento.",
+  "designer_character_reference_image": "Riferimento del personaggio {{index}}",
+  "designer_remove_character_reference": "Rimuovi {{name}}",
+  "designer_change_character_references": "Cambia immagini di riferimento",
+  "designer_add_character_references": "Aggiungi immagini di riferimento",
+  "designer_character_references_default_not_used": "Il provider predefinito non utilizza i riferimenti dei personaggi salvati. Scegli MiniMax Subject Reference, Replicate Veo 3.1 o ElevenLabs Veo 3.1 per utilizzarli.",
+  "designer_character_references_model_not_used": "Questo provider o modello non utilizza i riferimenti dei personaggi salvati. Usa MiniMax Subject Reference, Replicate Veo 3.1 o ElevenLabs Veo 3.1 per utilizzarli."
 }

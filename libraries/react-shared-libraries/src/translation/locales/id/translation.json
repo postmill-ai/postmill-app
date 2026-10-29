@@ -4680,5 +4680,15 @@
   "studio_kling_kling_ai_landing_hl0": "Integrasi langsung — kunci API klingai.com Anda, tanpa markup agregator",
   "studio_kling_kling_ai_landing_hl1": "Video Kling 3.0 / 2.6 dengan audio asli opsional, hingga 1080p",
   "studio_kling_kling_ai_landing_hl2": "Pembuatan video dari teks dan gambar dengan kontrol frame pertama/terakhir",
-  "studio_kling_kling_ai_landing_hl3": "Pembuatan gambar dari teks dengan Kling V3 hingga 2K dalam delapan rasio aspek"
+  "studio_kling_kling_ai_landing_hl3": "Pembuatan gambar dari teks dengan Kling V3 hingga 2K dalam delapan rasio aspek",
+  "designer_character_reference_picker": "Pilih gambar referensi karakter",
+  "designer_character_references": "Referensi karakter",
+  "designer_character_reference_help": "Gunakan kembali orang, karakter, atau produk yang sama di berbagai adegan. Diterapkan secara otomatis pada model yang didukung; kesinambungan tidak dijamin.",
+  "designer_character_reference_limit": "Pilih hingga {{count}} gambar referensi.",
+  "designer_character_reference_image": "Referensi karakter {{index}}",
+  "designer_remove_character_reference": "Hapus {{name}}",
+  "designer_change_character_references": "Ubah gambar referensi",
+  "designer_add_character_references": "Tambahkan gambar referensi",
+  "designer_character_references_default_not_used": "Penyedia default tidak menggunakan referensi karakter tersimpan. Pilih MiniMax Subject Reference, Replicate Veo 3.1, atau ElevenLabs Veo 3.1 untuk menggunakannya.",
+  "designer_character_references_model_not_used": "Penyedia atau model ini tidak menggunakan referensi karakter tersimpan. Gunakan MiniMax Subject Reference, Replicate Veo 3.1, atau ElevenLabs Veo 3.1 untuk menggunakannya."
 }

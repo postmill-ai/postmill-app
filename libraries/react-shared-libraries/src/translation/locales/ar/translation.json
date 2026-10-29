@@ -4681,5 +4681,15 @@
   "studio_kling_kling_ai_landing_hl0": "تكامل مباشر — مفتاح klingai.com API الخاص بك، دون هامش ربح من مجمع",
   "studio_kling_kling_ai_landing_hl1": "فيديو Kling 3.0 / 2.6 مع صوت أصلي اختياري، حتى 1080p",
   "studio_kling_kling_ai_landing_hl2": "إنشاء فيديو من النص والصور مع التحكم في الإطار الأول/الأخير",
-  "studio_kling_kling_ai_landing_hl3": "إنشاء صور من النص باستخدام Kling V3 بدقة تصل إلى 2K وثماني نسب أبعاد"
+  "studio_kling_kling_ai_landing_hl3": "إنشاء صور من النص باستخدام Kling V3 بدقة تصل إلى 2K وثماني نسب أبعاد",
+  "designer_character_reference_picker": "اختر صورًا مرجعية للشخصيات",
+  "designer_character_references": "مراجع الشخصيات",
+  "designer_character_reference_help": "أعد استخدام الشخص أو الشخصية أو المنتج نفسه في مختلف المشاهد. يُطبَّق تلقائيًا على النماذج المدعومة؛ ولا يُضمن الحفاظ على الاتساق.",
+  "designer_character_reference_limit": "اختر ما يصل إلى {{count}} من الصور المرجعية.",
+  "designer_character_reference_image": "مرجع الشخصية {{index}}",
+  "designer_remove_character_reference": "إزالة {{name}}",
+  "designer_change_character_references": "تغيير الصور المرجعية",
+  "designer_add_character_references": "إضافة صور مرجعية",
+  "designer_character_references_default_not_used": "لا يستخدم المزوّد الافتراضي مراجع الشخصيات المحفوظة. اختر MiniMax Subject Reference أو Replicate Veo 3.1 أو ElevenLabs Veo 3.1 لاستخدامها.",
+  "designer_character_references_model_not_used": "لا يستخدم هذا المزوّد أو هذا النموذج مراجع الشخصيات المحفوظة. استخدم MiniMax Subject Reference أو Replicate Veo 3.1 أو ElevenLabs Veo 3.1 لاستخدامها."
 }

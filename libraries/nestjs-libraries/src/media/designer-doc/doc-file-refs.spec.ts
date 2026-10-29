@@ -5,6 +5,18 @@ import {
   rewriteDocFileRefs,
 } from './doc-file-refs';
 
+describe('collectDocFileIds', () => {
+  it('collects character reference file ids', () => {
+    const doc = {
+      characterReferences: [
+        { fileId: 'character-1', src: '/uploads/org/character-1.png' },
+        { fileId: 'character-2', src: '/uploads/org/character-2.png', name: 'Hero' },
+      ],
+    };
+    expect(collectDocFileIds(doc)).toEqual(new Set(['character-1', 'character-2']));
+  });
+});
+
 describe('collectDocFontFamilies', () => {
   it('collects fontFamily values from anywhere in the doc', () => {
     const doc = {
@@ -33,6 +45,21 @@ describe('rewriteDocFileRefs', () => {
     ['old-1', { id: 'new-1', path: '/uploads/org-b/aaaa.mp4' }],
     ['old-2', { id: 'new-2', path: 'https://host.example/uploads/org-b/bbbb.png' }],
   ]);
+
+  it('rewrites character reference ids and srcs after a .pdesign import', () => {
+    const doc = {
+      characterReferences: [
+        { fileId: 'old-2', src: '/uploads/org-a/character.png', name: 'Hero' },
+      ],
+    };
+    const out = rewriteDocFileRefs(doc, map);
+    expect(out.characterReferences[0]).toEqual({
+      fileId: 'new-2',
+      src: 'https://host.example/uploads/org-b/bbbb.png',
+      name: 'Hero',
+    });
+    expect(doc.characterReferences[0].fileId).toBe('old-2');
+  });
 
   it('rewrites fileId/originalFileId/maskFileId and their paired uploads srcs', () => {
     const doc = {
