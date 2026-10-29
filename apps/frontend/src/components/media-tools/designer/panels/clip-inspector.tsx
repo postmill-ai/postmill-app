@@ -1,7 +1,14 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ColorSwatch, Slider, Stepper } from '../controls';
+import { ColorSwatch, SegmentedControl, Slider, Stepper } from '../controls';
+import { FillSection } from './fill-section';
+import {
+  AlignCenterIcon,
+  AlignJustifyIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
+} from '@postmill-ai/frontend/components/ui/icons';
 import type { VideoClip } from '../designer.store';
 import { TEXT_ANIMATION_PRESETS, ANIMATION_TRACK_TYPES, buildTextAnimationUpdate, matchTextAnimationPreset } from '../text-animation-presets';
 import { GraphEditor, GRAPH_PROPS } from '../graph-editor';
@@ -1086,6 +1093,18 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         />
       </div>
 
+      {clipTrackType === 'shape' && (
+        <div className="pt-1 border-t border-studioBorder space-y-2">
+          <div className="text-[11px] text-textColor/50">{translate('fill_button', 'Fill')}</div>
+          <FillSection
+            element={clip}
+            set={(patch) => updateClip(patch)}
+            label={translate('fill_button', 'Fill')}
+            brandEnforcement={brandEnforcement}
+          />
+        </div>
+      )}
+
       {/* Looks — named bundles of the filter tokens below. Picking one writes
           its tokens onto the clip (both renderers already apply them); clicking
           the active look clears. A look shows as active only while the tokens
@@ -1260,6 +1279,29 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
                 ))}
               </select>
             </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="clip-text-align" className="text-[11px] text-newTextColor/60">
+              {translate('designer_label_align', 'Align')}
+            </label>
+            <SegmentedControl
+              id="clip-text-align"
+              value={clip.align || 'left'}
+              options={([
+                ['left', AlignLeftIcon, translate('designer_align_left', 'Align left')],
+                ['center', AlignCenterIcon, translate('designer_align_center', 'Align center')],
+                ['right', AlignRightIcon, translate('designer_align_right', 'Align right')],
+                ['justify', AlignJustifyIcon, translate('designer_align_justify', 'Justify')],
+              ] as const).map(([value, Icon, label]) => ({
+                value,
+                label: (
+                  <span title={label} aria-label={label} className="flex items-center">
+                    <Icon size={14} />
+                  </span>
+                ),
+              }))}
+              onChange={(align) => updateClip({ align: align as VideoClip['align'] })}
+            />
           </div>
           <ColorSwatch
             label={translate('color', 'Color')}

@@ -1169,12 +1169,21 @@ describe('DesignerDocService clip ops (video outputs)', () => {
         op: 'updateClip',
         outputIndex: 0,
         clipId: 'clip-1',
-        patch: { text: 'New headline', fill: '#ff0000', fontSize: 80, y: 700 },
+        patch: {
+          text: 'New headline',
+          fill: '#ff0000',
+          fillGradient: { type: 'linear', stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#00ff00' }] },
+          align: 'justify',
+          fontSize: 80,
+          y: 700,
+        },
       },
     ]);
     const clip = (result.outputs[0] as any).tracks[0].clips[0];
     expect(clip.text).toBe('New headline');
     expect(clip.fill).toBe('#ff0000');
+    expect(clip.fillGradient.stops).toHaveLength(2);
+    expect(clip.align).toBe('justify');
     expect(clip.fontSize).toBe(80);
     expect(clip.y).toBe(700);
     expect(clip.startMs).toBe(500); // timing untouched

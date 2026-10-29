@@ -54,6 +54,41 @@ describe('buildPostmillFile / parsePostmillFile round-trip', () => {
     });
     expect(typeof manifest.exportedAt).toBe('string');
   });
+
+  it('round-trips v9 video clip fillGradient and align verbatim', () => {
+    const doc = {
+      version: 9,
+      mode: 'video',
+      outputs: [{
+        id: 'video-out',
+        formatId: 'square',
+        name: 'Square',
+        width: 1080,
+        height: 1080,
+        fps: 30,
+        durationMs: 1000,
+        tracks: [{
+          id: 'shape-track',
+          type: 'shape',
+          clips: [{
+            id: 'shape-clip',
+            startMs: 0,
+            endMs: 1000,
+            shape: 'rect',
+            align: 'justify',
+            fillGradient: {
+              type: 'radial',
+              stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#FFFFFF80' }],
+            },
+          }],
+        }],
+      }],
+    } as unknown as DesignerDoc;
+
+    const parsed = parsePostmillFile(buildPostmillFile(doc, 'Motion'));
+    expect(parsed.manifest.docVersion).toBe(9);
+    expect(parsed.doc).toEqual(doc);
+  });
 });
 
 describe('format v2 (bundled assets + fonts)', () => {

@@ -40,6 +40,9 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * additional pages. Additive: v7 documents keep validating. Pages are
  * image-mode only; video outputs reject the field.
  *
+ * v9 adds optional `fillGradient` and `align` on video clips. Additive: v8
+ * documents keep validating without a rewrite.
+ *
  * v4 adds Photoshop-parity layers: `group`/`fill`/`adjustment` element types,
  * `parentId`, blend modes and layer styles. Also additive — no rewrite.
  *
@@ -57,7 +60,7 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * every AI-generated design under dozens of folders it never asked for. When a
  * user makes a layer group we set both, so a folder also reflows as a unit.
  */
-export const DESIGNER_DOC_VERSION = 8;
+export const DESIGNER_DOC_VERSION = 9;
 
 /**
  * Maximum pages per image output, INCLUDING page 1 (`output.children` itself).

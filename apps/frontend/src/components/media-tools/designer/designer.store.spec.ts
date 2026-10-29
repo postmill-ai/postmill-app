@@ -847,6 +847,18 @@ describe('duplicateClip', () => {
     expect(store.getState().duplicateClip(0, trackId, 'src')).toBeNull();
     expect(vo(store).tracks[0].clips).toHaveLength(1);
   });
+
+  it('refuses to duplicate a clip on a locked track', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'src', startMs: 0, endMs: 2000 } as never);
+    store.getState().setTrackLocked(0, trackId, true);
+    const depth = store.getState().history.length;
+
+    expect(store.getState().duplicateClip(0, trackId, 'src')).toBeNull();
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+    expect(store.getState().history.length).toBe(depth);
+  });
 });
 
 describe('multi-clip selection', () => {
@@ -868,6 +880,22 @@ describe('multi-clip selection', () => {
 
     store.getState().setSelectedClip(null);
     expect(store.getState().selectedClips).toEqual([]);
+  });
+
+  it('paste skips locked tracks and creates an unlocked compatible track only when needed', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 1000 } as never);
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'a' });
+    store.getState().copySelectedClips();
+    store.getState().setTrackLocked(0, trackId, true);
+    const depth = store.getState().history.length;
+
+    store.getState().pasteClips(2000);
+    expect(vo(store).tracks).toHaveLength(2);
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+    expect(vo(store).tracks[1].clips[0]).toMatchObject({ startMs: 2000, endMs: 3000 });
+    expect(store.getState().history.length).toBe(depth + 1);
   });
 
   it('toggleClipSelection adds/removes members and moves the primary', () => {

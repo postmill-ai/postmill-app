@@ -2031,7 +2031,7 @@ export const createDesignerStore = (
         if (!vo || doc.mode !== 'video') return;
         const track = vo.tracks.find((t) => t.id === trackId);
         const source = track?.clips.find((c) => c.id === clipId);
-        if (!track || !source) return null;
+        if (!track || !source || track.locked) return null;
 
         // Start at the source's VISUAL end (freeze extension included) so the
         // copy never overlaps the original's held frame.
@@ -2211,13 +2211,15 @@ export const createDesignerStore = (
         const pastedRefs: { trackId: string; clipId: string }[] = [];
         for (const p of fits) {
           const track =
-            tracks.find((t) => t.id === p.entry.trackId) ??
-            tracks.find((t) => t.type === p.entry.trackType) ??
+            tracks.find((t) => t.id === p.entry.trackId && !t.locked) ??
+            tracks.find((t) => t.type === p.entry.trackType && !t.locked) ??
             (() => {
+              if (tracks.length >= MAX_TRACKS) return undefined;
               const created = { id: genId(), type: p.entry.trackType, clips: [] as VideoClip[] };
               tracks.push(created);
               return created;
             })();
+          if (!track) continue;
           const clip: VideoClip = {
             ...JSON.parse(JSON.stringify(p.entry.clip)),
             id: genId(),
@@ -2227,6 +2229,7 @@ export const createDesignerStore = (
           track.clips.push(clip);
           pastedRefs.push({ trackId: track.id, clipId: clip.id });
         }
+        if (!pastedRefs.length) return;
 
         const updated: VideoOutput = { ...vo, durationMs, tracks };
         const outs = [...doc.outputs];

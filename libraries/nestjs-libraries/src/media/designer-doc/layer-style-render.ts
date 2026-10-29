@@ -192,6 +192,10 @@ export const buildStyleGradient = (
   return grad;
 };
 
+/** The fill-gradient builder and its colour normaliser as frame-script source. */
+export const styleGradientSource = (): string =>
+  `const canvasColor = ${String(canvasColor)};\nconst buildStyleGradient = ${String(buildStyleGradient)};`;
+
 /** Drop Shadow / Outer Glow — the layer's silhouette, blurred behind it. */
 export const drawUnderStyle = (
   ctx: any,

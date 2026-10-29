@@ -232,7 +232,14 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame
   was showing. A keyframe sitting under the playhead is edited in place; otherwise the base props
   move. Track types `shape` and `raster` (doc v5) exist so shape and paint tools have somewhere to
-  put their output on a timeline.
+  put their output on a timeline. Doc v9 adds optional `fillGradient`/`align`; both are style fields
+  for linked propagation and the clip-op whitelist, never geometry. Text corner transforms scale the
+  rendered `fontSize` through that same base/keyframe path, while side handles only re-wrap.
+- **Timeline hit-testing starts at the scroll viewport.** `timeline-geometry.ts` owns row/new-track
+  geometry, duration-preserving keyboard moves, and the separate zoom-aware snap and collision
+  thresholds. Never measure drop rows from the toolbar wrapper or reuse edge-snap tolerance to
+  relocate collisions. Inserts use the playhead's first free compatible unlocked track; only an
+  occupied set of compatible tracks or the explicit below-last-row zone creates another track.
 - **One video element per clip in the editor.** `video-element-registry.ts` is shared by the
   playback engine and canvas overlay, with consumer-scoped ownership. The engine plays that element
   for picture + sound; the overlay paints its frames and seeks only for scrubbing/entry/drift. Never
@@ -245,7 +252,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   filter stack (`filter-pixels.ts`), the curved-text arc (`curved-text.ts`) and the SVG path parser
   (`svg-path-parse.ts`); the canvas and `design-render.service` both call them. Adding a lookalike copy on
   one side is how the two renderers drift — that is exactly how seven layer styles ended up drawing
-  in PDFs and nowhere else.
+  in PDFs and nowhere else. Video text has its own Konva-authoritative wrapper/painter,
+  `video-text-layout.ts`: paragraphs, long-token splitting, fixed-box overflow, one-fontSize line
+  height, centred baselines and justified offsets. The frame script receives it through
+  `videoTextLayoutSource()`; never reintroduce a second `wrapText` there. Shape clips use the same
+  `buildStyleGradient` and `gradientFillProps` as image shapes.
 - **node-canvas is not a browser canvas.** `ctx.filter = 'blur(…)'` is accepted and ignored, and
   `ctx.scale()` does not condense glyphs — text is rasterised at the font size with only the origin
   moving. Anything that needs either must work in pixel space (`blurCanvas`) or squeeze a rendered

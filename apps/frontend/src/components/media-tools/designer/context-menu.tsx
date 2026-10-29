@@ -13,7 +13,7 @@ import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/d
 interface ContextMenuProps {
   x: number;
   y: number;
-  targetType: 'element' | 'canvas';
+  targetType: 'element' | 'canvas' | 'clip';
   elementId?: string;
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
   onClose: () => void;
@@ -38,6 +38,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
   const el = elementId
     ? imageOut?.children.find((c: { id: string }) => c.id === elementId) ?? null
     : null;
+  const clipTrack = targetType === 'clip' && 'tracks' in out
+    ? out.tracks.find((track) => track.clips.some((clip) => clip.id === elementId))
+    : undefined;
+  const videoClip = clipTrack?.clips.find((clip) => clip.id === elementId);
 
   // Selection order matters to Pathfinder (Minus Front consumes the top one),
   // so the ops read the selected elements in selectedIds order, like the
@@ -91,7 +95,29 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
   }, []);
 
   const items: MenuItem[] =
-    targetType === 'element' && el
+    targetType === 'clip' && clipTrack && videoClip
+      ? [
+          {
+            label: t('copy', 'Copy'),
+            action: () => {
+              store.getState().setSelectedClip({
+                outputIndex: s.currentOutput,
+                trackId: clipTrack.id,
+                clipId: videoClip.id,
+              });
+              store.getState().copySelectedClips();
+            },
+          },
+          {
+            label: t('designer_action_paste_paste', 'Paste'),
+            action: () => store.getState().pasteClips(store.getState().playheadMs),
+          },
+          {
+            label: t('designer_action_duplicate_duplicate', 'Duplicate'),
+            action: () => store.getState().duplicateClip(s.currentOutput, clipTrack.id, videoClip.id),
+          },
+        ]
+      : targetType === 'element' && el
       ? (() => {
           // Right-clicking a member of a multi-selection keeps the selection —
           // collapsing it made Cut/Copy/Group act on one layer out of five.

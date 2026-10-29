@@ -188,7 +188,7 @@ function findOrCreateTrack(
   const vo = state.doc.outputs[outputIndex] as VideoOutput;
   if (state.doc.mode !== 'video') return undefined;
 
-  const sameType = vo.tracks.filter((t) => t.type === type);
+  const sameType = vo.tracks.filter((t) => t.type === type && !t.locked);
   let track = window
     ? sameType.find(
         (t) => resolveClipPlacement(t.clips, window, 0, vo.durationMs) !== null
@@ -588,9 +588,10 @@ function containVideo(natW: number, natH: number, maxW: number, maxH: number) {
  *   silently dropped.
  * - Caps clip end and duration at the store's MAX_VIDEO_DURATION_MS ceiling.
  *
- * Resolves with the landed clip's identity (the clip is inserted at
- * `startMs: 0`, so callers that want the result visible must seek/select it),
- * or null when addClip rejected the insert.
+ * Resolves with the landed clip's identity. The intended window starts at the
+ * playhead and reuses the first compatible unlocked track that is free there;
+ * a new track is created only when every compatible track is occupied.
+ * Returns null when addClip rejected the insert.
  */
 
 export function addMediaToTimeline(
@@ -627,7 +628,10 @@ export function addMediaToTimeline(
 
       const updates: Partial<VideoClip> = {};
       if (needsDuration) {
-        const endMs = Math.min(metadata.durationMs, MAX_TIMELINE_DURATION_MS);
+        const endMs = Math.min(
+          curClip.startMs + metadata.durationMs,
+          MAX_TIMELINE_DURATION_MS
+        );
         if (endMs > curVo.durationMs) cur.setVideoDuration(out, endMs);
         updates.endMs = endMs;
       }
@@ -662,7 +666,15 @@ export function addMediaToTimeline(
       const durationMs = knownDurationMs ?? probedDurationMs;
       const natW = hasKnownDimensions ? knownWidth : probedWidth;
       const natH = hasKnownDimensions ? knownHeight : probedHeight;
-      const endMs = Math.min(durationMs, MAX_TIMELINE_DURATION_MS);
+      const startMs = Math.max(
+        0,
+        Math.min(store.getState().playheadMs, MAX_TIMELINE_DURATION_MS - 100)
+      );
+      const endMs = Math.min(startMs + durationMs, MAX_TIMELINE_DURATION_MS);
+      if (endMs <= startMs) {
+        resolve(null);
+        return;
+      }
 
       // Extend — never shrink — the output duration BEFORE adding the clip;
       // addClip silently drops clips whose endMs exceeds the current duration.
@@ -673,9 +685,7 @@ export function addMediaToTimeline(
         store.getState().setVideoDuration(out, endMs);
       }
 
-      // Land on the first same-type track free at [0, endMs] — a fresh drop
-      // must not stack on top of a clip already sitting at the timeline start.
-      const track = findOrCreateTrack(store, out, type, { startMs: 0, endMs });
+      const track = findOrCreateTrack(store, out, type, { startMs, endMs });
       if (!track) {
         reject(new Error(`Could not create ${type} track`));
         return;
@@ -696,13 +706,13 @@ export function addMediaToTimeline(
           ? {
               ...clipBase,
               id,
-              startMs: 0,
+              startMs,
               endMs,
               volume: 1,
               // Cap the fades at half the clip so a very short drop keeps
               // audible body instead of being all ramp.
-              fadeInMs: Math.min(AUDIO_CLIP_FADE_IN_MS, Math.floor(endMs / 2)),
-              fadeOutMs: Math.min(AUDIO_CLIP_FADE_OUT_MS, Math.floor(endMs / 2)),
+              fadeInMs: Math.min(AUDIO_CLIP_FADE_IN_MS, Math.floor((endMs - startMs) / 2)),
+              fadeOutMs: Math.min(AUDIO_CLIP_FADE_OUT_MS, Math.floor((endMs - startMs) / 2)),
             }
           : (() => {
               const vo = store.getState().doc.outputs[out] as VideoOutput;
@@ -713,7 +723,7 @@ export function addMediaToTimeline(
               return {
                 ...clipBase,
                 id,
-                startMs: 0,
+                startMs,
                 endMs,
                 x: Math.round((vo.width - fit.width) / 2),
                 y: Math.round((vo.height - fit.height) / 2),

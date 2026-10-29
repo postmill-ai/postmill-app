@@ -315,7 +315,7 @@ describe('DesignController', () => {
     it('propagates the dedicated 400 for a newer-version file', async () => {
       designService.importDesign.mockRejectedValue(
         new BadRequestException(
-          'This design was saved by a newer version of Postmill (document v9, supported up to v8)'
+          'This design was saved by a newer version of Postmill (document v10, supported up to v9)'
         )
       );
 

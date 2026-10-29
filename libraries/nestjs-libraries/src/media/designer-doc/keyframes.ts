@@ -32,6 +32,7 @@ export interface KeyframeProps {
   height?: number;
   rotation?: number;
   opacity?: number;
+  fontSize?: number;
   /**
    * Audio level, 0–1. Unlike the transform props this one is heard, not seen —
    * the preview applies it to the media element and the export bakes it into
@@ -150,6 +151,8 @@ export interface InterpolatedProps {
   height: number;
   rotation: number;
   opacity: number;
+  /** Always resolved — the base font size when no keyframe sets it. */
+  fontSize: number;
   /** Always resolved — the base `volume` when no keyframe sets it. */
   volume: number;
 }
@@ -170,6 +173,7 @@ export const interpolateClipKeyframes = (
     height: clip.height == null ? 1 : clip.height,
     rotation: clip.rotation == null ? 0 : clip.rotation,
     opacity: clip.opacity == null ? 1 : clip.opacity,
+    fontSize: clip.fontSize == null ? 16 : clip.fontSize,
     volume: clip.volume == null ? 1 : clip.volume,
   };
 
@@ -184,6 +188,7 @@ export const interpolateClipKeyframes = (
     height: kf.props.height == null ? defaults.height : kf.props.height,
     rotation: kf.props.rotation == null ? defaults.rotation : kf.props.rotation,
     opacity: kf.props.opacity == null ? defaults.opacity : kf.props.opacity,
+    fontSize: kf.props.fontSize == null ? defaults.fontSize : kf.props.fontSize,
     volume: kf.props.volume == null ? defaults.volume : kf.props.volume,
   });
 
@@ -213,6 +218,7 @@ export const interpolateClipKeyframes = (
     height: lerp(a.height, b.height, t),
     rotation: lerp(a.rotation, b.rotation, t),
     opacity: lerp(a.opacity, b.opacity, t),
+    fontSize: lerp(a.fontSize, b.fontSize, t),
     volume: lerp(a.volume, b.volume, t),
   };
 };

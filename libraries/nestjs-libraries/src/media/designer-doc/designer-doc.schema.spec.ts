@@ -125,6 +125,34 @@ describe('DesignerDoc schema', () => {
     expect(parsed.outputs[0].tracks[0].clips[0].fontWeight).toBe(700);
   });
 
+  it('accepts optional v9 clip gradients and all text alignments in both parsers', () => {
+    for (const align of ['left', 'center', 'right', 'justify'] as const) {
+      const doc = JSON.parse(JSON.stringify(videoDocFixture));
+      doc.version = 9;
+      doc.outputs[0].tracks[0].clips[0].align = align;
+      doc.outputs[0].tracks[0].clips[0].fillGradient = {
+        type: 'linear',
+        angle: 45,
+        stops: [
+          { offset: 0, color: '#112233' },
+          { offset: 1, color: '#FFFFFF80' },
+        ],
+      };
+      for (const schema of [DesignerDocLenientSchema, DesignerDocStrictSchema]) {
+        const clip = schema.parse(migrateDoc(doc)).outputs[0].tracks[0].clips[0];
+        expect(clip.align).toBe(align);
+        expect(clip.fillGradient?.angle).toBe(45);
+        expect(clip.fillGradient?.stops[1].color).toBe('#FFFFFF80');
+      }
+    }
+  });
+
+  it('keeps v8 clips valid without the optional v9 fields', () => {
+    const doc = { ...JSON.parse(JSON.stringify(videoDocFixture)), version: 8 };
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(true);
+    expect(DesignerDocLenientSchema.safeParse(migrateDoc(doc)).success).toBe(true);
+  });
+
   it('round-trips voiceover provenance with tone instructions and provider pin', () => {
     const doc = JSON.parse(JSON.stringify(videoDocFixture));
     doc.outputs[0].tracks[0].clips[0].voiceover = {

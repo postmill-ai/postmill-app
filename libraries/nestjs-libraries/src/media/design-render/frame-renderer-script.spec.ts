@@ -54,8 +54,8 @@ describe('FRAME_RENDERER_SCRIPT', () => {
       }
     );
 
-  const run = (output: unknown) => {
-    const canvas = { width: 0, height: 0, getContext: () => stubContext() };
+  const run = (output: unknown, context = stubContext()) => {
+    const canvas = { width: 0, height: 0, getContext: () => context };
     const win: Record<string, unknown> = {
       __DATA: { output, baseUrl: 'https://example.test' },
     };
@@ -145,6 +145,82 @@ describe('FRAME_RENDERER_SCRIPT', () => {
   it('renders a frame without throwing', async () => {
     const api = run(output);
     await expect(api.renderFrame(500)).resolves.toBeUndefined();
+  });
+
+  it('uses shared Konva-style wrapping, centered baselines and keyframed font size', async () => {
+    const calls: { text: string; x: number; y: number }[] = [];
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
+      fillText: (text: string, x: number, y: number) => calls.push({ text, x, y }),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const textOutput = {
+      ...output,
+      tracks: [{
+        id: 'text-track',
+        type: 'text',
+        clips: [{
+          id: 'text-clip',
+          startMs: 0,
+          endMs: 1000,
+          text: 'ab cd',
+          x: 0,
+          y: 0,
+          width: 45,
+          height: 30,
+          fontSize: 10,
+          align: 'center',
+          keyframes: [{ tMs: 0, props: { fontSize: 10 } }],
+        }],
+      }],
+    };
+    const api = run(textOutput, context as never);
+    await api.renderFrame(0);
+
+    expect(state.textBaseline).toBe('middle');
+    expect(state.textAlign).toBe('left');
+    expect(state.font).toBe('400 10px "Arial"');
+    expect(calls).toEqual([
+      { text: 'ab', x: 12.5, y: 5 },
+      { text: 'cd', x: 12.5, y: 15 },
+    ]);
+  });
+
+  it('builds shape fill gradients through the shared gradient painter', async () => {
+    const stops: [number, string][] = [];
+    const gradient = { addColorStop: (offset: number, color: string) => stops.push([offset, color]) };
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      createLinearGradient: () => gradient,
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const gradientOutput = {
+      ...output,
+      tracks: [{
+        ...output.tracks[0],
+        clips: [{
+          ...output.tracks[0].clips[0],
+          keyframes: undefined,
+          fillGradient: {
+            type: 'linear',
+            angle: 0,
+            stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#FFFFFF80' }],
+          },
+        }],
+      }],
+    };
+    const api = run(gradientOutput, context as never);
+    await api.renderFrame(0);
+
+    expect(state.fillStyle).toBe(gradient);
+    expect(stops).toEqual([[0, '#000000'], [1, 'rgba(255, 255, 255, 0.5019607843137255)']]);
   });
 
   it('paints a background texture with the SHARED generator, not a copy', async () => {

@@ -734,6 +734,9 @@ export interface VideoClip {
   // drift-resolved: fontWeight present in frontend, absent server copy
   fontWeight?: number;
   fill?: string;
+  /** Optional-additive doc v9: solid/gradient shape fills and text alignment. */
+  fillGradient?: DesignerGradient;
+  align?: 'left' | 'center' | 'right' | 'justify';
   volume?: number;
   fadeInMs?: number;
   fadeOutMs?: number;
@@ -1686,6 +1689,9 @@ const clipCommon = {
     .optional(),
   fontFamily: z.string().max(200).optional(),
   fill: ColorSchema.optional(),
+  // Optional-additive doc v9: text clips accept the same four alignments as
+  // image text. Shape gradients live in the strict/lenient nested maps below.
+  align: z.enum(['left', 'center', 'right', 'justify']).optional(),
   reverse: z.boolean().optional(),
   // The frame renderer already honours these on clips; they were only ever
   // missing from the contract.
@@ -1789,6 +1795,7 @@ const clipLenientNumeric = {
 const clipStrictNested = {
   crop: StrictDesignerCropSchema.optional(),
   focalPoint: StrictFocalPointSchema.optional(),
+  fillGradient: StrictDesignerGradientSchema.optional(),
   keyframes: z.array(StrictKeyframeSchema).max(1000).optional(),
   // Speed ramp points (doc v7) — additive, so earlier clips keep validating.
   speedCurve: z.array(StrictSpeedCurvePointSchema).max(100).optional(),
@@ -1804,6 +1811,7 @@ const clipStrictNested = {
 const clipLenientNested = {
   crop: LenientDesignerCropSchema.optional(),
   focalPoint: LenientFocalPointSchema.optional(),
+  fillGradient: LenientDesignerGradientSchema.optional(),
   keyframes: z.array(LenientKeyframeSchema).max(1000).optional(),
   speedCurve: z.array(LenientSpeedCurvePointSchema).max(100).optional(),
   transitionIn: LenientTransitionSchema.optional(),

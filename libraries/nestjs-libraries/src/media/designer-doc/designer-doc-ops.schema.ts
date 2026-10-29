@@ -11,6 +11,7 @@ import {
   DesignerDocStrictSchema,
   StrictDesignerBackgroundSchema,
   StrictDesignerElementBaseSchema,
+  StrictDesignerGradientSchema,
   SrcSchema,
   withIconSrcGuard,
 } from './designer-doc.schema';
@@ -203,6 +204,8 @@ const UpdateClipPatchSchema = z
   .object({
     text: z.string().max(MAX_TEXT_LEN).optional(),
     fill: ColorSchema.optional(),
+    fillGradient: StrictDesignerGradientSchema.optional(),
+    align: z.enum(['left', 'center', 'right', 'justify']).optional(),
     fontFamily: z.string().max(200).optional(),
     fontSize: strictNum(1, MAX_FONT_SIZE).optional(),
     fontWeight: strictNum(1, 1000).optional(),
