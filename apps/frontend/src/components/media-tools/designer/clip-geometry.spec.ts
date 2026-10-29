@@ -90,6 +90,49 @@ describe('clipGeometryUpdate', () => {
     expect(update?.rotation).toBe(45);
   });
 
+  it('scales text and its box together from a corner handle', () => {
+    const update = clipGeometryUpdate(
+      clip({ fontSize: 20 }),
+      box(),
+      box({ width: 200, height: 100 }),
+      2000,
+      { trackType: 'text', anchor: 'bottom-right', fontSize: 20 }
+    );
+    expect(update).toMatchObject({ width: 200, height: 100, fontSize: 40 });
+  });
+
+  it('re-wraps from a side handle without scaling text', () => {
+    const update = clipGeometryUpdate(
+      clip({ fontSize: 20 }),
+      box(),
+      box({ width: 200, height: 50 }),
+      2000,
+      { trackType: 'text', anchor: 'middle-right', fontSize: 20 }
+    );
+    expect(update?.width).toBe(200);
+    expect(update?.fontSize).toBeUndefined();
+  });
+
+  it('scales the keyframed font size at the playhead without collapsing motion', () => {
+    const animated = clip({
+      fontSize: 20,
+      keyframes: [
+        { tMs: 0, props: { x: 0, fontSize: 20 } },
+        { tMs: 1000, props: { x: 100, fontSize: 30 } },
+      ],
+    });
+    const update = clipGeometryUpdate(
+      animated,
+      box({ x: 100 }),
+      box({ x: 100, width: 200, height: 100 }),
+      2000,
+      { trackType: 'text', anchor: 'bottom-right', fontSize: 30 }
+    );
+    expect(update?.x).toBeUndefined();
+    expect(update?.keyframes?.[0]).toEqual({ tMs: 0, props: { x: 0, fontSize: 20 } });
+    expect(update?.keyframes?.[1].props).toMatchObject({ x: 100, fontSize: 60 });
+  });
+
   it('seeds absent keyframe props from the rendered box', () => {
     // The keyframe only animates x; resizing at that instant must still record a
     // height rather than dropping the gesture.

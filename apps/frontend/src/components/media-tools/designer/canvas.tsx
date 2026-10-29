@@ -172,7 +172,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       : 0
   );
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetType: 'element' | 'canvas'; elementId?: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetType: 'element' | 'canvas' | 'clip'; elementId?: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -1393,13 +1393,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         }
       } else if (mod && e.key.toLowerCase() === 'c') {
         e.preventDefault();
-        st.copySelection();
+        if (isVideo) st.copySelectedClips();
+        else st.copySelection();
       } else if (mod && e.key.toLowerCase() === 'x') {
         e.preventDefault();
         st.cutSelection();
       } else if (mod && e.key.toLowerCase() === 'v') {
         e.preventDefault();
-        st.paste();
+        if (isVideo) st.pasteClips(st.playheadMs);
+        else st.paste();
       } else if (mod && e.key.toLowerCase() === 'g') {
         e.preventDefault();
         if (e.shiftKey) st.ungroupSelection();
@@ -1418,7 +1420,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       } else if (mod && e.key.toLowerCase() === 'j') {
         e.preventDefault();
         // The shortcut the Edit ▸ Duplicate menu item advertises.
-        selectedIds.forEach((id) => st.duplicateElement(id));
+        if (isVideo) {
+          const sel = st.selectedClip;
+          if (sel?.outputIndex === st.currentOutput) {
+            st.duplicateClip(sel.outputIndex, sel.trackId, sel.clipId);
+          }
+        } else {
+          selectedIds.forEach((id) => st.duplicateElement(id));
+        }
       } else if (mod && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
         st.setZoom(st.zoom * 1.2);
@@ -1818,6 +1827,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               interactive={effectiveTool === 'move' && !isSpacePressed}
               onEditText={setEditingTextId}
               editingTextId={editingTextId}
+              getTransformAnchor={() => transformerRef.current?.getActiveAnchor()}
+              onClipContextMenu={(clipId, clientX, clientY) =>
+                setContextMenu({ x: clientX, y: clientY, targetType: 'clip', elementId: clipId })
+              }
             />
           )}
           {/* Artboard edge. Overflow is unclipped, so paint past the edge
@@ -2127,6 +2140,38 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           )}
         </Layer>
       </Stage>
+
+      {isVideo && selectedClip && (
+        <div className="absolute top-2 end-2 z-30 flex gap-1 rounded-md border border-studioBorder bg-newBgColorInner p-1 shadow-menu">
+          <button
+            type="button"
+            className="px-2 py-1 rounded-sm text-[11px] text-textColor hover:bg-boxHover"
+            onClick={() => store.getState().copySelectedClips()}
+          >
+            {t('copy', 'Copy')}
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1 rounded-sm text-[11px] text-textColor hover:bg-boxHover"
+            onClick={() => store.getState().pasteClips(store.getState().playheadMs)}
+          >
+            {t('designer_action_paste_paste', 'Paste')}
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1 rounded-sm text-[11px] text-textColor hover:bg-boxHover"
+            onClick={() =>
+              store.getState().duplicateClip(
+                selectedClip.outputIndex,
+                selectedClip.trackId,
+                selectedClip.clipId
+              )
+            }
+          >
+            {t('designer_action_duplicate_duplicate', 'Duplicate')}
+          </button>
+        </div>
+      )}
 
       {dragOver && !uploadingFile && (
         <div

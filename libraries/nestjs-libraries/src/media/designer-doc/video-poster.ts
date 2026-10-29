@@ -122,6 +122,7 @@ const clipToElement = (
         ...(fontSize ? { fontSize } : {}),
         ...(clip.fontWeight ? { fontWeight: clip.fontWeight } : {}),
         ...(clip.fill ? { fill: clip.fill } : {}),
+        ...(clip.align ? { align: clip.align } : {}),
       } as DesignerElement;
     }
     case 'shape': {
@@ -132,6 +133,7 @@ const clipToElement = (
         ...(clip.sides ? { sides: clip.sides } : {}),
         ...(clip.innerRatio ? { innerRatio: clip.innerRatio } : {}),
         ...(clip.fill ? { fill: clip.fill } : {}),
+        ...(clip.fillGradient ? { fillGradient: clip.fillGradient } : {}),
         ...(clip.stroke ? { stroke: clip.stroke } : {}),
         ...(clip.strokeWidth ? { strokeWidth: clip.strokeWidth } : {}),
         ...(clip.borderRadius !== undefined

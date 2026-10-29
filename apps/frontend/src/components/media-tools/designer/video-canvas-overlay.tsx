@@ -34,6 +34,7 @@ import {
   pointsForShape,
   flattenPoints,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
+import { gradientFillProps } from './elements';
 
 interface VideoCanvasOverlayProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -51,6 +52,9 @@ interface VideoCanvasOverlayProps {
    * while the DOM overlay is up, or the two paint the same string doubled.
    */
   editingTextId?: string | null;
+  /** Active Transformer anchor, read when a resize commits. */
+  getTransformAnchor?: () => string | null | undefined;
+  onClipContextMenu?: (clipId: string, clientX: number, clientY: number) => void;
 }
 
 const imageElements = new Map<string, HTMLImageElement>();
@@ -448,6 +452,8 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   interactive = false,
   onEditText,
   editingTextId,
+  getTransformAnchor,
+  onClipContextMenu,
 }) => {
   const doc = store((s) => s.doc);
   const currentOutput = store((s) => s.currentOutput);
@@ -641,7 +647,9 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     trackId: string,
     clip: VideoClip,
     before: ClipBox,
-    node: Konva.Node
+    node: Konva.Node,
+    trackType: VideoOutput['tracks'][number]['type'],
+    fontSize: number
   ) => {
     const after: ClipBox = {
       x: node.x(),
@@ -653,7 +661,11 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     node.scaleX(1);
     node.scaleY(1);
 
-    const update = clipGeometryUpdate(clip, before, after, playheadRef.current);
+    const update = clipGeometryUpdate(clip, before, after, playheadRef.current, {
+      trackType,
+      anchor: getTransformAnchor?.(),
+      fontSize,
+    });
     if (!update) return;
     store.getState().updateClip(currentOutput, trackId, clip.id, update);
   };
@@ -684,10 +696,15 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           onClick: () => selectClip(trackId, clip.id),
           onTap: () => selectClip(trackId, clip.id),
           onDragStart: () => selectClip(trackId, clip.id),
+          onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => {
+            e.evt.preventDefault();
+            selectClip(trackId, clip.id);
+            onClipContextMenu?.(clip.id, e.evt.clientX, e.evt.clientY);
+          },
           onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) =>
-            commitGeometry(trackId, clip, box, e.target),
+            commitGeometry(trackId, clip, box, e.target, trackType, props.fontSize),
           onTransformEnd: (e: Konva.KonvaEventObject<Event>) =>
-            commitGeometry(trackId, clip, box, e.target),
+            commitGeometry(trackId, clip, box, e.target, trackType, props.fontSize),
           // Text and caption clips both open the inline text editor on
           // double-click; a caption commit re-derives clip.words (canvas.tsx).
           ...((trackType === 'text' || trackType === 'caption') && onEditText
@@ -752,7 +769,12 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               opacity={props.opacity}
             >
               {points ? (
-                <KonvaLine points={flattenPoints(points)} closed {...common} />
+                <KonvaLine
+                  points={flattenPoints(points)}
+                  closed
+                  {...common}
+                  {...gradientFillProps(clip.fillGradient, props.width, props.height)}
+                />
               ) : clip.shape === 'ellipse' ? (
                 <KonvaEllipse
                   x={props.width / 2}
@@ -760,6 +782,10 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
                   radiusX={props.width / 2}
                   radiusY={props.height / 2}
                   {...common}
+                  {...gradientFillProps(clip.fillGradient, props.width, props.height, {
+                    x: props.width / 2,
+                    y: props.height / 2,
+                  })}
                 />
               ) : clip.shape === 'line' ? (
                 <KonvaLine
@@ -774,6 +800,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
                   height={props.height}
                   cornerRadius={clip.borderRadius || 0}
                   {...common}
+                  {...gradientFillProps(clip.fillGradient, props.width, props.height)}
                 />
               )}
             </Group>
@@ -801,7 +828,9 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
                 clip.endMs - clip.startMs
               )}
               fontFamily={clip.fontFamily || 'Arial'}
-              fontSize={clip.fontSize || 16}
+              fontSize={props.fontSize}
+              lineHeight={1}
+              align={clip.align || 'left'}
               // Numeric weight straight through, the same as an element's text.
               fontStyle={String(clip.fontWeight ?? 400)}
               fill={canvasColor(clip.fill || '#000000')}

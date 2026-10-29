@@ -240,6 +240,20 @@ describe('videoOutputToPosterOutput', () => {
     expect(poster.children.some((el) => el.id === 'clip-headline')).toBe(false);
   });
 
+  it('projects v9 text alignment and shape gradients', () => {
+    const out = makeVideoOutput();
+    const text = out.tracks[1].clips[0];
+    text.align = 'justify';
+    const shape = out.tracks[2].clips[0];
+    shape.fillGradient = {
+      type: 'linear',
+      stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }],
+    };
+    const poster = videoOutputToPosterOutput(out);
+    expect(poster.children.find((el) => el.id === text.id)?.align).toBe('justify');
+    expect(poster.children.find((el) => el.id === shape.id)?.fillGradient).toEqual(shape.fillGradient);
+  });
+
   it('the projection validates as a renderable image-mode doc', () => {
     const doc = {
       version: 8,

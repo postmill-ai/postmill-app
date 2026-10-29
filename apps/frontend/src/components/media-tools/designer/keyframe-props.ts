@@ -26,7 +26,8 @@ export const PROP_DOT_COLORS: Record<GraphProp, string> = {
   height: 'var(--chart-4)',
   rotation: 'var(--chart-5)',
   opacity: 'var(--chart-6)',
-  volume: 'var(--chart-7)',
+  fontSize: 'var(--chart-7)',
+  volume: 'var(--chart-8)',
 };
 
 /** Two keyframes at the same prop within this window are the SAME keyframe. */

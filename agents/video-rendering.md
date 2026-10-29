@@ -391,6 +391,11 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
   encoder, frame capture, Podman runner, config, spec). The controller stays thin; new
   render ops extend `RenderJobSpec` + the worker CLI + `processRenderJob` routing
   together.
+- Video text layout is canvas-authoritative and shared through `designer-doc/video-text-layout.ts`.
+  The injected frame script must use `videoTextLayoutSource()` (paragraphs, long tokens, box overflow,
+  one-fontSize line height, middle baselines, all four alignments and reveal prefixes), never a local
+  wrapper or top baseline. `fontSize` is a numeric keyframe channel like geometry. Shape gradients use
+  injected `buildStyleGradient`; doc v9 `fillGradient`/`align` also project through `video-poster.ts`.
 - Never bypass the composition bounds (`validateVideoComposition`, 180 s cap) — they are
   the resource-DoS boundary for attacker-controlled compositions. The cap lives in THREE
   lockstep places (`MAX_DURATION_MS` in video-render.service.ts, `MAX_VIDEO_DURATION_MS`

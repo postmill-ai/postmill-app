@@ -104,7 +104,7 @@ describe('interpolateClipKeyframes', () => {
 
   it('returns the clip’s own transform when there are no keyframes', () => {
     expect(interpolateClipKeyframes({ x: 5, y: 6, width: 7, height: 8 }, 500)).toEqual({
-      x: 5, y: 6, width: 7, height: 8, rotation: 0, opacity: 1, volume: 1,
+      x: 5, y: 6, width: 7, height: 8, rotation: 0, opacity: 1, fontSize: 16, volume: 1,
     });
   });
 
@@ -119,6 +119,19 @@ describe('interpolateClipKeyframes', () => {
   it('interpolates linearly in between', () => {
     expect(interpolateClipKeyframes(clip, 500).x).toBeCloseTo(100);
     expect(interpolateClipKeyframes(clip, 500).opacity).toBeCloseTo(0.5);
+  });
+
+  it('interpolates fontSize and otherwise preserves the clip base size', () => {
+    expect(interpolateClipKeyframes(clip, 500).fontSize).toBe(16);
+    const animated = {
+      ...clip,
+      fontSize: 20,
+      keyframes: [
+        { tMs: 0, props: { fontSize: 20 } },
+        { tMs: 1000, props: { fontSize: 60 } },
+      ],
+    };
+    expect(interpolateClipKeyframes(animated, 500).fontSize).toBe(40);
   });
 
   it('falls back to the clip value for a property no keyframe sets', () => {

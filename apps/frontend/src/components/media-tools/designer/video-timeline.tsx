@@ -28,6 +28,13 @@ import { postTextToSpeech } from './text-to-speech';
 import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, planTrackDrop, resolveClipPlacement } from './clip-geometry';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
+import {
+  moveClipPreservingDuration,
+  timelineCollisionToleranceMs,
+  timelineIsNewTrackZone,
+  timelineSnapThresholdMs,
+  timelineTrackAtClientY,
+} from './timeline-geometry';
 import { directFetchForAbsoluteUrls, type WaveformFetch } from './waveform-fetch';
 import { KeyframeLane } from './keyframe-lane';
 import { timelineBeats } from './beat-sync';
@@ -72,7 +79,7 @@ const TRACK_GAP = 4;
 const RULER_HEIGHT = 22;
 const LABEL_WIDTH = 64;
 const MS_PER_PIXEL_DEFAULT = 4;
-const SNAP_THRESHOLD_MS = 80;
+const TIMELINE_ROW_GEOMETRY = { rulerHeight: RULER_HEIGHT, trackHeight: TRACK_HEIGHT, trackGap: TRACK_GAP };
 const TRANSITION_MIN_MS = 100;
 const TRANSITION_MAX_MS = 2000;
 const TRANSITION_DEFAULT_MS = 500;
@@ -1501,7 +1508,6 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const [dragOverNewTrack, setDragOverNewTrack] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<VideoPreviewEngine | null>(null);
-  const timelineRef = useRef<HTMLDivElement>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
 
   const fetch = useFetch();
@@ -1755,7 +1761,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const state = store.getState();
       if (state.timelineSnap) {
         const markers = (state.doc.outputs[currentOutput] as VideoOutput | undefined)?.markers || [];
-        const threshold = SNAP_THRESHOLD_MS / pixelsPerMs;
+        const threshold = timelineSnapThresholdMs(pixelsPerMs);
         for (const m of markers) {
           if (Math.abs(m.tMs - ms) <= threshold) {
             ms = m.tMs;
@@ -1911,14 +1917,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const step =
         (e.shiftKey ? SLIDER_BIG_STEP_MS : SLIDER_STEP_MS) *
         (e.key === 'ArrowLeft' ? -1 : 1);
-      const duration = clip.endMs - clip.startMs;
-      const nextStart = Math.max(
-        0,
-        Math.min(max - duration, clip.startMs + step)
+      state.updateClipSilent(
+        currentOutput,
+        trackId,
+        clip.id,
+        moveClipPreservingDuration(clip, step, max)
       );
-      state.updateClipSilent(currentOutput, trackId, clip.id, {
-        startMs: Math.round(nextStart),
-      });
     },
     [currentOutput, setSelectedClip, store]
   );
@@ -2042,21 +2046,30 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   useEffect(() => {
     if (!dragging || !isVideo || !vo) return;
 
-    const trackIndexAtY = (clientY: number): number => {
-      if (!timelineRef.current) return -1;
-      const rect = timelineRef.current.getBoundingClientRect();
-      const tracksTop = rect.top + RULER_HEIGHT;
-      const relY = clientY - tracksTop + (scrollRef.current?.scrollTop ?? 0);
-      return Math.floor(relY / (TRACK_HEIGHT + TRACK_GAP));
-    };
     const trackAtY = (clientY: number): VideoTrack | undefined => {
-      const idx = trackIndexAtY(clientY);
-      return idx >= 0 && idx < vo.tracks.length ? vo.tracks[idx] : undefined;
+      const viewport = scrollRef.current;
+      if (!viewport) return undefined;
+      return timelineTrackAtClientY(
+        vo.tracks,
+        clientY,
+        viewport.getBoundingClientRect().top,
+        viewport.scrollTop,
+        TIMELINE_ROW_GEOMETRY
+      );
     };
     // Exactly one virtual row below the last track is the "drop here to create
     // a track" zone; further down is outside the affordance.
-    const isNewTrackZone = (clientY: number): boolean =>
-      vo.tracks.length < MAX_TRACKS && trackIndexAtY(clientY) === vo.tracks.length;
+    const isNewTrackZone = (clientY: number): boolean => {
+      const viewport = scrollRef.current;
+      return !!viewport && timelineIsNewTrackZone(
+        vo.tracks.length,
+        MAX_TRACKS,
+        clientY,
+        viewport.getBoundingClientRect().top,
+        viewport.scrollTop,
+        TIMELINE_ROW_GEOMETRY
+      );
+    };
 
     // The drop's proposed members: mousedown geometry (orig*, for reverts)
     // plus the CURRENT dragged timing read off the live tracks.
@@ -2093,7 +2106,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       snapCandidates.push(...timelineBeats(vo.tracks));
       // Markers are snap targets too (CapCut parity).
       for (const m of vo.markers || []) snapCandidates.push(m.tMs);
-      const threshold = SNAP_THRESHOLD_MS / pixelsPerMs;
+      const threshold = timelineSnapThresholdMs(pixelsPerMs);
       let best = value;
       let bestDelta = threshold;
       for (const target of snapCandidates) {
@@ -2113,7 +2126,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       // delta over — planTrackDrop with allowOverlap is the structural check;
       // collision resolution itself happens at the drop. Below the last track
       // the virtual new-track row lights up instead (single clips only).
-      const snapMs = SNAP_THRESHOLD_MS / pixelsPerMs;
+      const snapMs = timelineCollisionToleranceMs(pixelsPerMs);
       const dropPlan =
         dragging.edge === 'move' && hovered
           ? planTrackDrop(vo.tracks, dropMembers(vo.tracks), dragging.trackId, hovered.id, {
@@ -2180,9 +2193,15 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
     const handleMouseUp = (e: MouseEvent) => {
       const hovered = trackAtY(e.clientY);
-      const newTrackZone = dragging.edge === 'move' && !dragging.group && isNewTrackZone(e.clientY);
+      // Rendering the virtual row can scroll it into view before mouseup. The
+      // active hover state still identifies the intentional drop zone when that
+      // scroll shifts the pointer onto the following computed row index.
+      const newTrackZone =
+        dragging.edge === 'move' &&
+        !dragging.group &&
+        (dragOverNewTrack || isNewTrackZone(e.clientY));
       const allowOverlap = e.altKey;
-      const snapMs = SNAP_THRESHOLD_MS / pixelsPerMs;
+      const snapMs = timelineCollisionToleranceMs(pixelsPerMs);
       const state = store.getState();
       const liveVo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
       setDragging(null);
@@ -2750,7 +2769,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const rect = scrollRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left + scrollRef.current.scrollLeft - LABEL_WIDTH;
       const ms = Math.max(0, Math.min(vo?.durationMs ?? MAX_VIDEO_DURATION_MS, x / pixelsPerMs));
-      const threshold = SNAP_THRESHOLD_MS / pixelsPerMs;
+      const threshold = timelineSnapThresholdMs(pixelsPerMs);
       const near = (vo?.markers || []).find((m) => Math.abs(m.tMs - ms) <= threshold);
       setRulerMenu({ x: e.clientX, y: e.clientY, ms: near ? near.tMs : Math.round(ms), markerId: near?.id ?? null });
     },
@@ -3179,8 +3198,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     fileId?: string,
     details?: Pick<CompactStudioResult, 'fileType' | 'metadata'>
   ) => {
-    // Generated clips are inserted at startMs 0 while the canvas previews the
-    // playhead — after a land, seek to the clip and select it so the result is
+    // Generated clips land at the playhead. Seek/select the result so it is
     // visibly on the canvas instead of looking like nothing happened.
     const landAndReveal = async (
       url: string,
@@ -3578,7 +3596,6 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   return (
     <div
-      ref={timelineRef}
       className="shrink-0 border-t border-studioBorder bg-newBgColorInner flex flex-col"
       role="toolbar"
       tabIndex={0}

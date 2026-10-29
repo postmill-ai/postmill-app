@@ -208,3 +208,68 @@ describe('video overlay paint invalidation', () => {
     expect(playbackElement!.isConnected).toBe(false);
   });
 });
+
+
+describe('video overlay v9 styles and keyframed text', () => {
+  it('passes gradient, alignment and interpolated font size to Konva', async () => {
+    const store = createDesignerStore(500, 500);
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'shape');
+    store.getState().addTrack(0, 'text');
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const shapeTrack = vo.tracks.find((track) => track.type === 'shape')!;
+    const textTrack = vo.tracks.find((track) => track.type === 'text')!;
+    store.getState().addClip(0, shapeTrack.id, {
+      id: 'gradient-shape',
+      startMs: 0,
+      endMs: 1000,
+      shape: 'rect',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      fillGradient: {
+        type: 'linear',
+        angle: 0,
+        stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }],
+      },
+    } as never);
+    store.getState().addClip(0, textTrack.id, {
+      id: 'aligned-text',
+      startMs: 0,
+      endMs: 1000,
+      text: 'Aligned',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 60,
+      align: 'justify',
+      fontSize: 20,
+      keyframes: [{ tMs: 0, props: { fontSize: 48 } }],
+    } as never);
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={500} height={500}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={500} height={500} />
+          </Layer>
+        </Stage>
+      );
+    });
+
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const shape = stage.findOne('#gradient-shape')!.findOne('Rect') as Konva.Rect;
+    const text = stage.findOne('#aligned-text') as Konva.Text;
+    expect(shape.fillLinearGradientColorStops()).toEqual([0, '#000000', 1, '#ffffff']);
+    expect(text.align()).toBe('justify');
+    expect(text.fontSize()).toBe(48);
+    expect(text.lineHeight()).toBe(1);
+  });
+});

@@ -29,18 +29,23 @@ import { captionStylesSource } from '../designer-doc/caption-styles';
 import { backgroundTextureSource } from '../designer-doc/background-texture';
 import { transitionsSource } from '../designer-doc/transitions';
 import { textRevealSource } from '../designer-doc/text-reveal';
+import { styleGradientSource } from '../designer-doc/layer-style-render';
+import { videoTextLayoutSource } from '../designer-doc/video-text-layout';
 
 /**
  * The ...Source() helpers serialize functions with String(fn). The backend runs
  * the CJS-compiled build, where tsc rewrites references to exported bindings as
- * `exports.X` — but `exports` does not exist in the frame page, so any leaked
- * reference throws ReferenceError the first time that code path runs (shapes,
- * easing helpers hit by keyframes/caption word-pop, …). Every `exports.X` name
- * is one of the module's own helpers, all declared locally in the injected
- * block, so stripping the prefix restores the intended reference.
+ * `exports.X` and imported bindings as `module_name_N.X`; Vite's SSR transform
+ * uses `__vite_ssr_import_N__.X`. None of these namespaces exists in the frame
+ * page, so a leaked reference throws on first use. Every name is one of the
+ * module's own helpers, all declared locally in the injected block, so stripping
+ * the prefix restores the intended reference.
  */
-const stripExportsNamespace = (source: string): string =>
-  source.replace(/\bexports\./g, '');
+export const stripExportsNamespace = (source: string): string =>
+  source
+    .replace(/\bexports\./g, '')
+    .replace(/\b__vite_ssr_import_\d+__\./g, '')
+    .replace(/\b[A-Za-z_$][\w$]*_\d+\./g, '');
 
 export const FRAME_RENDERER_SCRIPT = /* js */ `
 (function () {
@@ -52,6 +57,8 @@ ${stripExportsNamespace(captionStylesSource())}
 ${stripExportsNamespace(backgroundTextureSource())}
 ${stripExportsNamespace(transitionsSource())}
 ${stripExportsNamespace(textRevealSource())}
+${stripExportsNamespace(styleGradientSource())}
+${stripExportsNamespace(videoTextLayoutSource())}
 
   const output = window.__DATA.output;
   const baseUrl = window.__DATA.baseUrl || '';
@@ -435,24 +442,6 @@ ${stripExportsNamespace(textRevealSource())}
   }
 
 
-
-  function wrapText(ctx, text, maxWidth) {
-    const words = (text || '').split(' ');
-    const lines = [];
-    let current = '';
-    for (const word of words) {
-      const test = current ? current + ' ' + word : word;
-      if (ctx.measureText(test).width > maxWidth && current) {
-        lines.push(current);
-        current = word;
-      } else {
-        current = test;
-      }
-    }
-    if (current) lines.push(current);
-    return lines;
-  }
-
   // Shape clips. Polygon geometry comes from the injected shape-geometry
   // source, so this traces exactly what the canvas and the PDF renderer trace.
   function drawShapeClip(ctx, clip, props) {
@@ -460,8 +449,10 @@ ${stripExportsNamespace(textRevealSource())}
     const h = props.height;
     ctx.save();
     ctx.globalAlpha = props.opacity;
-    ctx.fillStyle = clip.fill || '#2B5CD3';
-    ctx.strokeStyle = clip.stroke || clip.fill || '#2B5CD3';
+    ctx.fillStyle = clip.fillGradient && clip.fillGradient.stops && clip.fillGradient.stops.length
+      ? buildStyleGradient(ctx, clip.fillGradient, w, h)
+      : canvasColor(clip.fill || '#2B5CD3');
+    ctx.strokeStyle = canvasColor(clip.stroke || clip.fill || '#2B5CD3');
     ctx.lineWidth = clip.strokeWidth || 0;
 
     const points = pointsForShape(clip.shape, w, h, clip.sides, clip.innerRatio);
@@ -509,24 +500,16 @@ ${stripExportsNamespace(textRevealSource())}
     if (!text) return;
     ctx.save();
     ctx.globalAlpha = props.opacity;
-    const fontSize = clip.fontSize || 32;
-    // Quoted: an unquoted multi-word family ("Bebas Neue") makes the whole
-    // shorthand invalid, and the assignment is then silently ignored.
-    ctx.font = \`\${clip.fontWeight || 400} \${fontSize}px "\${clip.fontFamily || 'sans-serif'}"\`;
-    ctx.fillStyle = clip.fill || '#ffffff';
-    ctx.textBaseline = 'top';
-    const align = clip.align || 'left';
-    ctx.textAlign = align;
-    const lineHeight = fontSize * 1.2;
-    const lines = wrapText(ctx, text, props.width);
-    let y = 0;
-    for (const line of lines) {
-      let x = 0;
-      if (align === 'center') x = props.width / 2;
-      else if (align === 'right') x = props.width;
-      ctx.fillText(line, x, y);
-      y += lineHeight;
-    }
+    drawVideoText(ctx, {
+      text,
+      width: props.width,
+      height: props.height,
+      fontSize: props.fontSize,
+      fontFamily: clip.fontFamily || 'Arial',
+      fontWeight: clip.fontWeight || 400,
+      fill: clip.fill || '#000000',
+      align: clip.align || 'left',
+    });
     ctx.restore();
   }
 

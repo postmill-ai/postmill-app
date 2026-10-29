@@ -1,4 +1,6 @@
 import type { VideoClip, VideoTrack } from './designer.store';
+import { MAX_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { MIN_FIT_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 
 /**
  * Writing a canvas drag or resize back onto a video clip.
@@ -177,8 +179,15 @@ export const planTrackDrop = (
 };
 
 export type ClipGeometry = Partial<
-  Pick<VideoClip, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'keyframes'>
+  Pick<VideoClip, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'fontSize' | 'keyframes'>
 >;
+
+export interface ClipGeometryOptions {
+  trackType?: VideoTrack['type'];
+  anchor?: string | null;
+  /** Rendered font size at the playhead, including any keyframe value. */
+  fontSize?: number;
+}
 
 /**
  * Timeline edge trims.
@@ -278,20 +287,41 @@ export const clipGeometryUpdate = (
   clip: VideoClip,
   before: ClipBox,
   after: ClipBox,
-  playheadMs: number
+  playheadMs: number,
+  options: ClipGeometryOptions = {}
 ): ClipGeometry | null => {
   const dx = after.x - before.x;
   const dy = after.y - before.y;
   const dw = after.width - before.width;
   const dh = after.height - before.height;
   const dr = after.rotation - before.rotation;
+  const scalesText =
+    options.trackType === 'text' &&
+    options.anchor !== 'middle-left' &&
+    options.anchor !== 'middle-right' &&
+    options.anchor !== 'top-center' &&
+    options.anchor !== 'bottom-center';
+  const fontScale = scalesText
+    ? Math.sqrt(
+        Math.max(0.0001, after.width / Math.max(1, before.width)) *
+        Math.max(0.0001, after.height / Math.max(1, before.height))
+      )
+    : 1;
+  const scaleFont = scalesText && Math.abs(fontScale - 1) > 0.0001;
+  const renderedFontSize = options.fontSize ?? clip.fontSize ?? 16;
+  const afterFontSize = Math.min(
+    MAX_FONT_SIZE,
+    Math.max(MIN_FIT_FONT_SIZE, Math.round(renderedFontSize * fontScale))
+  );
+  const fontChanged = scalesText && afterFontSize !== renderedFontSize;
 
   const moved =
     Math.abs(dx) > 0.01 ||
     Math.abs(dy) > 0.01 ||
     Math.abs(dw) > 0.01 ||
     Math.abs(dh) > 0.01 ||
-    Math.abs(dr) > 0.01;
+    Math.abs(dr) > 0.01 ||
+    fontChanged;
   if (!moved) return null;
 
   const relativeMs = Math.max(0, playheadMs - clip.startMs);
@@ -314,6 +344,7 @@ export const clipGeometryUpdate = (
         width: before.width + dw,
         height: before.height + dh,
         rotation: before.rotation + dr,
+        ...(scaleFont ? { fontSize: afterFontSize } : {}),
       },
     };
     return { keyframes: next };
@@ -325,5 +356,13 @@ export const clipGeometryUpdate = (
     width: Math.max(1, (clip.width ?? before.width) + dw),
     height: Math.max(1, (clip.height ?? before.height) + dh),
     rotation: (clip.rotation ?? 0) + dr,
+    ...(scaleFont
+      ? {
+          fontSize: Math.min(
+            MAX_FONT_SIZE,
+            Math.max(MIN_FIT_FONT_SIZE, Math.round((clip.fontSize ?? 16) * fontScale))
+          ),
+        }
+      : {}),
   };
 };

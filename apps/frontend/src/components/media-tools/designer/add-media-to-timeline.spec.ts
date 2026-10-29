@@ -250,6 +250,44 @@ describe('addMediaToTimeline — clip geometry', () => {
     expect(clip!.fileId).toBe('file-gen-1');
   });
 
+  it('inserts at the playhead on a free compatible track, creating a track only when occupied', async () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().setPlayhead(2500);
+    const options = {
+      type: 'video' as const,
+      url: 'https://example.com/v.mp4',
+      durationMs: 2000,
+      width: 1080,
+      height: 1080,
+    };
+
+    await addMediaToTimeline(store, options);
+    let vo = store.getState().doc.outputs[0] as VideoOutput;
+    expect(vo.tracks).toHaveLength(1);
+    expect(vo.tracks[0].clips[0]).toMatchObject({ startMs: 2500, endMs: 4500 });
+
+    store.getState().setPlayhead(6000);
+    await addMediaToTimeline(store, options);
+    vo = store.getState().doc.outputs[0] as VideoOutput;
+    expect(vo.tracks).toHaveLength(1);
+    expect(vo.tracks[0].clips).toHaveLength(2);
+    expect(vo.tracks[0].clips[1]).toMatchObject({ startMs: 6000, endMs: 8000 });
+
+    store.getState().setPlayhead(2500);
+    await addMediaToTimeline(store, options);
+    vo = store.getState().doc.outputs[0] as VideoOutput;
+    expect(vo.tracks).toHaveLength(2);
+    expect(vo.tracks[1].clips[0]).toMatchObject({ startMs: 2500, endMs: 4500 });
+
+    store.getState().setTrackLocked(0, vo.tracks[0].id, true);
+    store.getState().setTrackLocked(0, vo.tracks[1].id, true);
+    await addMediaToTimeline(store, options);
+    vo = store.getState().doc.outputs[0] as VideoOutput;
+    expect(vo.tracks).toHaveLength(3);
+    expect(vo.tracks[2].locked).toBeUndefined();
+  });
+
   it('upscales a portrait video to contain-fit the portrait canvas', async () => {
     const store = createDesignerStore(1080, 1920);
 

@@ -15,9 +15,11 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
  * — which hardcoded two stops — so the inspector offered a flat colour and
  * nothing else. Text ignored the field entirely until this round.
  */
+type FillFields = Pick<DesignerElement, 'fill' | 'fillGradient'>;
+
 export const FillSection: FC<{
-  element: DesignerElement;
-  set: (patch: Partial<DesignerElement>) => void;
+  element: FillFields;
+  set: (patch: Partial<FillFields>) => void;
   label?: string;
   brandColors?: string[];
   brandEnforcement?: boolean;

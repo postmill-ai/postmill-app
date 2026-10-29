@@ -9,15 +9,24 @@ const GENERATE_PATH = '/media/generate-video';
 
 interface VideoClipSnapshot {
   id: string;
-  src: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  naturalWidth: number;
-  naturalHeight: number;
+  src?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
   startMs: number;
   endMs: number;
+  text?: string;
+  fontSize?: number;
+  shape?: string;
+  fill?: string;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  fillGradient?: {
+    type: 'linear' | 'radial';
+    stops: Array<{ offset: number; color: string }>;
+  };
 }
 
 interface DesignerDocSnapshot {
@@ -32,7 +41,7 @@ interface DesignerDocSnapshot {
 }
 
 const blankDoc = (): DesignerDocSnapshot => ({
-  version: 8,
+  version: 9,
   mode: 'video',
   outputs: [
     {
@@ -206,8 +215,40 @@ class DesignerMocks {
         return;
       }
 
-      const backendOrigin = process.env.E2E_BACKEND_ORIGIN;
+      const frontendOrigin = process.env.E2E_FRONTEND_ORIGIN;
       const requestUrl = new URL(request.url());
+      if (
+        frontendOrigin &&
+        requestUrl.origin === 'https://app.postmill.ai' &&
+        !pathname.startsWith('/api/')
+      ) {
+        const frontend = new URL(frontendOrigin);
+        if (frontend.protocol !== 'http:' || !['localhost', '127.0.0.1', '::1'].includes(frontend.hostname)) {
+          throw new Error('E2E_FRONTEND_ORIGIN must be a loopback HTTP origin');
+        }
+        const headers = { ...request.headers() };
+        delete headers.host;
+        delete headers['content-length'];
+        const response = await fetch(`${frontendOrigin}${pathname}${requestUrl.search}`, {
+          method,
+          headers,
+          body: request.postDataBuffer() ?? undefined,
+        });
+        const responseHeaders: Record<string, string> = {};
+        response.headers.forEach((value, key) => {
+          if (!['content-encoding', 'content-length', 'transfer-encoding', 'connection'].includes(key)) {
+            responseHeaders[key] = value;
+          }
+        });
+        await route.fulfill({
+          status: response.status,
+          headers: responseHeaders,
+          body: Buffer.from(await response.arrayBuffer()),
+        });
+        return;
+      }
+
+      const backendOrigin = process.env.E2E_BACKEND_ORIGIN;
       const backend = backendOrigin ? new URL(backendOrigin) : null;
       if (backend && (requestUrl.origin === 'https://api.postmill.ai' || requestUrl.origin === backend.origin)) {
         if (backend.protocol !== 'http:' || !['localhost', '127.0.0.1', '::1'].includes(backend.hostname)) {
@@ -391,7 +432,7 @@ test.describe('Designer generated video (fully mocked provider and storage)', ()
       startMs: 0,
       endMs: 4000,
     });
-    expect(inserted.width / inserted.height).toBeCloseTo(720 / 1280, 8);
+    expect(inserted.width! / inserted.height!).toBeCloseTo(720 / 1280, 8);
     await expectRealPlayback(page);
 
     await saveDesign(page);
@@ -440,6 +481,163 @@ test.describe('Designer generated video (fully mocked provider and storage)', ()
     await page.getByLabel('Category').selectOption({ label: 'Text to Video' });
     expect(mocks.generatePosts, 'reopening or switching provider must not retry').toHaveLength(1);
     expect(mocks.savedClips()).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
+
+const motionDoc = (): DesignerDocSnapshot => ({
+  version: 9,
+  mode: 'video',
+  outputs: [{
+    width: 1080,
+    height: 1920,
+    durationMs: 12_000,
+    tracks: [
+      {
+        id: 'video-a',
+        type: 'video',
+        clips: [{
+          id: 'clip-a',
+          src: GENERATED_URL,
+          startMs: 0,
+          endMs: 2000,
+          x: 0,
+          y: 0,
+          width: 1080,
+          height: 1920,
+          naturalWidth: 720,
+          naturalHeight: 1280,
+        }],
+      },
+      { id: 'video-b', type: 'video', clips: [] },
+      {
+        id: 'shape-a',
+        type: 'shape',
+        clips: [{
+          id: 'shape-1',
+          shape: 'rect',
+          startMs: 0,
+          endMs: 8000,
+          x: 40,
+          y: 40,
+          width: 220,
+          height: 120,
+          fill: '#ff0000',
+        }],
+      },
+      {
+        id: 'text-a',
+        type: 'text',
+        clips: [{
+          id: 'text-1',
+          text: 'Resize me',
+          startMs: 0,
+          endMs: 8000,
+          x: 60,
+          y: 300,
+          width: 220,
+          height: 50,
+          fontSize: 32,
+          align: 'left',
+          fill: '#ffffff',
+        }],
+      },
+    ],
+  }],
+});
+
+const clipOnTrack = (page: Page, label: string) =>
+  page
+    .getByTitle(label.toLowerCase(), { exact: true })
+    .first()
+    .locator('xpath=ancestor::div[contains(@class,"items-stretch")][1]')
+    .getByRole('slider', { name: 'Clip', exact: true });
+
+test.describe('Designer motion graphics editing (mocked local document)', () => {
+  test('track drops, keyboard moves, canvas resize/style/duplicate, and reload persistence', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = motionDoc();
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(3);
+
+    await clipOnTrack(page, 'Video 1').first().click();
+    await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips.length).toBe(2);
+    const duplicateId = mocks.doc.outputs[0].tracks[0].clips[1].id;
+    expect(duplicateId).not.toBe('clip-a');
+
+    let source = await clipOnTrack(page, 'Video 1').nth(1).boundingBox();
+    const target = await page.getByTitle('video 2', { exact: true }).boundingBox();
+    expect(source).not.toBeNull();
+    expect(target).not.toBeNull();
+    await page.mouse.move(source!.x + source!.width / 2, source!.y + source!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[1].clips[0]?.id).toBe(duplicateId);
+    expect(mocks.doc.outputs[0].tracks.filter((track) => track.type === 'video')).toHaveLength(2);
+
+    source = await clipOnTrack(page, 'Video 2').first().boundingBox();
+    const lastTrack = await page.getByTitle('text', { exact: true }).boundingBox();
+    expect(source).not.toBeNull();
+    expect(lastTrack).not.toBeNull();
+    await page.mouse.move(source!.x + source!.width / 2, source!.y + source!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(source!.x + source!.width / 2, lastTrack!.y + 40, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(() => mocks.doc.outputs[0].tracks.filter((track) => track.type === 'video').length).toBe(3);
+
+    const moved = clipOnTrack(page, 'Video 3').first();
+    await moved.focus();
+    await moved.press('ArrowRight');
+    await expect.poll(() => {
+      const clip = mocks.savedClips().find((item) => item.id === duplicateId);
+      return clip ? [clip.startMs, clip.endMs] : [];
+    }).toEqual([100, 2100]);
+
+    await clipOnTrack(page, 'Text').first().click();
+    const stage = await page.locator('.konvajs-content').first().boundingBox();
+    expect(stage).not.toBeNull();
+    const zoom = Math.min(stage!.width / 1080, stage!.height / 1920) * 0.85;
+    const viewportX = (stage!.width - 1080 * zoom) / 2;
+    const viewportY = (stage!.height - 1920 * zoom) / 2;
+    const handleX = stage!.x + viewportX + 280 * zoom;
+    const handleY = stage!.y + viewportY + 350 * zoom;
+    await page.mouse.move(handleX, handleY);
+    await page.mouse.down();
+    await page.mouse.move(handleX + 110 * zoom, handleY + 25 * zoom, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-1')?.fontSize).toBe(48);
+    const resizedText = mocks.savedClips().find((clip) => clip.id === 'text-1');
+    expect(resizedText?.width).toBeGreaterThan(320);
+    expect(resizedText?.width).toBeLessThan(340);
+    expect(resizedText?.height).toBeGreaterThan(70);
+    expect(resizedText?.height).toBeLessThan(80);
+
+    await clipOnTrack(page, 'Shape').first().click();
+    await page.getByRole('radio', { name: 'Gradient', exact: true }).click();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-1')?.fillGradient?.stops.length).toBe(2);
+
+    await clipOnTrack(page, 'Text').first().click();
+    await page.getByRole('radio', { name: 'Justify', exact: true }).click();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-1')?.align).toBe('justify');
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(4);
+    expect(mocks.doc.version).toBe(9);
+    expect(mocks.doc.outputs[0].tracks.filter((track) => track.type === 'video')).toHaveLength(3);
+    expect(mocks.savedClips().find((clip) => clip.id === duplicateId)).toMatchObject({ startMs: 100, endMs: 2100 });
+    const persistedText = mocks.savedClips().find((clip) => clip.id === 'text-1');
+    expect(persistedText).toMatchObject({ fontSize: 48, align: 'justify' });
+    expect(persistedText?.width).toBeGreaterThan(320);
+    expect(persistedText?.width).toBeLessThan(340);
+    expect(persistedText?.height).toBeGreaterThan(70);
+    expect(persistedText?.height).toBeLessThan(80);
+    expect(mocks.savedClips().find((clip) => clip.id === 'shape-1')?.fillGradient?.stops).toHaveLength(2);
+    expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });
 });

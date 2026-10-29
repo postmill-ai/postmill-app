@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyLinked } from './apply-linked';
+import { applyLinked, applyLinkedVideoClip } from './apply-linked';
 import type { DesignerDoc } from './designer-doc.schema';
 
 const makeDoc = (): DesignerDoc =>
@@ -203,5 +203,56 @@ describe('applyLinked symbol overrides', () => {
     expect((outputs[1] as any).children[0].symbolOverrides.label).toEqual({
       text: 'Shop the sale',
     });
+  });
+});
+
+
+describe('applyLinkedVideoClip v9 styles', () => {
+  it('propagates fillGradient and align without copying geometry or timing', () => {
+    const doc = {
+      mode: 'video',
+      outputs: [0, 1].map((index) => ({
+        id: `video-${index}`,
+        formatId: 'square',
+        name: 'Square',
+        width: 1080,
+        height: 1080,
+        fps: 30,
+        durationMs: 5000,
+        tracks: [{
+          id: `track-${index}`,
+          type: 'shape',
+          clips: [{
+            id: `clip-${index}`,
+            originId: 'shared-shape',
+            startMs: index * 500,
+            endMs: 4000,
+            x: index * 100,
+            y: 0,
+            width: 200,
+            height: 100,
+          }],
+        }],
+      })),
+    } as unknown as DesignerDoc;
+    const fillGradient = {
+      type: 'linear' as const,
+      stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }],
+    };
+
+    const { outputs, affected } = applyLinkedVideoClip(
+      doc,
+      0,
+      'track-0',
+      'clip-0',
+      { fillGradient, align: 'justify', x: 999 },
+      false
+    );
+    const sibling = (outputs[1] as any).tracks[0].clips[0];
+    expect(affected).toEqual([1]);
+    expect(sibling.fillGradient).toEqual(fillGradient);
+    expect(sibling.align).toBe('justify');
+    expect(sibling.x).toBe(100);
+    expect(sibling.startMs).toBe(500);
   });
 });
