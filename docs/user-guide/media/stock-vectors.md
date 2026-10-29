@@ -9,7 +9,7 @@
 The free default catalog is **Pixabay**, gated by the operator environment variable
 `PIXABAY_API_KEY`.
 
-If your organization has an active [Content Pack](../settings) that declares `vectors` — currently
+If your organization has an active [Content Pack](../settings) (Settings → Content → Content Packs) that declares `vectors` — currently
 **Magnific**, **Vecteezy**, **Adobe Stock**, or **Envato Elements** — that premium catalog is shown
 first. Otherwise Postmill falls back to Pixabay. A Content Pack daily-cap error is surfaced as a 402.
 
@@ -32,7 +32,8 @@ larger view, dimensions, author, and a "Powered by Pixabay" attribution line for
 - **Open in Designer** — opens the vector on the [Designer](./designer) static canvas as an image
   layer.
 - **Save to Files** — imports the preview file into `/files`. For Content Pack assets, a licensed
-  download URL is minted from the item id before import.
+  download URL is minted from the item id before import. The Save to Files dialog lets you rename
+  the file, pick or create a destination folder, and choose **Save File** or **Save & Post**.
 
 Saved files carry `source` and `attribution` metadata.
 
@@ -45,4 +46,4 @@ Saved files carry `source` and `attribution` metadata.
 
 ---
 
-> Verified against v1.3.0
+> Verified against v1.4.0

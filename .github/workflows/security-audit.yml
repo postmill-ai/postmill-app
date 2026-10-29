@@ -68,24 +68,27 @@ jobs:
         # — any real high/critical advisory still fails the job. Restore the
         # hard gate once pnpm supports the bulk advisory endpoint.
         #
-        # Advisory allowlist (2026-10): advisories with NO patched version
+        # Advisory allowlist (2026-10-28): advisories with NO patched version
         # ("patched: <0.0.0"), each unreachable in practice:
-        #   GHSA-vfj7-8cjw-p6xm  braces       — dev-only: eslint-config-next → fast-glob → micromatch (lint tooling, never ships)
         #   GHSA-ch52-4w7c-c8xp  http-cache-semantics — dev-only: @swc/cli → bin-wrapper → got (build tooling, never ships)
         #   GHSA-86w9-cpqp-85rv  node-forge   — @copilotkit/runtime → @langchain/google-gauth → gtoken → google-p12-pem;
         #                                     the LangChain Google-auth path is never exercised (Google provider uses the AI SDK)
         #   GHSA-mrhx-c7xc-m3w5  zod          — the repo's own zod is 4.6.7 (patched ≥4.6.6); the flagged instances are the
         #                                     zod 3.25.x line pinned by @copilotkit/* and `ai` peer requirements, and no
         #                                     patched 3.x release exists (latest 3.25.76 is still flagged)
-        #   GHSA-xcx6-jx8p-x3h5  @azure/msal-node — transitive: @copilotkit/runtime@1.69.3 → channels-intelligence →
+        #   GHSA-xcx6-jx8p-x3h5  @azure/msal-node — transitive: @copilotkit/runtime → channels-intelligence →
         #                                     channels-teams → @microsoft/agents-hosting, which pins msal-node 5.x
         #                                     EXACTLY in every release incl. latest stable 1.9.1 (5.6.0) and the
         #                                     1.10.0-beta line — no patched 5.x exists (fix is ≥7.1.0). A 5→7
         #                                     double-major override of an auth library under a parent built against
-        #                                     5.x is unsafe; the real fix is the CopilotKit family bump to 1.79.x
-        #                                     (channels-teams 0.11.x drops agents-hosting entirely), which needs
-        #                                     product-level validation of the /chat surface — tracked as a follow-up.
-        #                                     Only reachable when the Teams channel is active.
+        #                                     5.x is unsafe. Verified 2026-10-28: bumping the CopilotKit family to
+        #                                     1.83.x does NOT remove it — channels-teams 0.12.x only demotes
+        #                                     agents-hosting to an OPTIONAL peer, and pnpm keeps resolving an
+        #                                     optional peer that is already in the lockfile graph (@ag-ui/mastra
+        #                                     also depends on the runtime). A pnpm `-` removal override prunes
+        #                                     node_modules only; it is not recorded in the lockfile this audit
+        #                                     reads. Only reachable when the Teams channel is active, which
+        #                                     Postmill never enables.
         #   GHSA-x8rm-f576-gq67  graphql-scalars — ReDoS in the PhoneNumber scalar, via @copilotkit/runtime
         #                                     (^1.23.0; patched 2.0.1 is outside that range, and a forced 1→2
         #                                     major under the parent is unsafe). UNREACHABLE: @copilotkit/runtime
@@ -108,7 +111,6 @@ jobs:
             exit 0
           fi
           ALLOWED='[
-            "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
             "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
             "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
             "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
@@ -122,7 +124,7 @@ jobs:
             echo "::error::high/critical advisories present (see above)"
             exit 1
           fi
-          echo "::warning::Only allowlisted unfixable advisories remain (braces, http-cache-semantics, node-forge, zod, msal-node, graphql-scalars — see step comment). Revisit when patched releases ship."
+          echo "::warning::Only allowlisted unfixable advisories remain (http-cache-semantics, node-forge, zod, msal-node, graphql-scalars — see step comment). Revisit when patched releases ship."
           exit 0
 
       - name: Check for reintroduced channel env reads

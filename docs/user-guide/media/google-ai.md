@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-This is a **universal-credential** provider: it reuses the same Gemini API key you configure under **Settings → AI → Google Gemini**. No separate media credential is required. See [Settings](../settings) for AI provider setup.
+This is a **universal-credential** provider: it reuses the same Gemini API key you configure under **Settings → AI → Google Gemini**. No separate media credential is required. **Test connection** on the media side is a free model-list read (`GET /v1beta/models`) and never spends a generation. See [Settings](../settings) for AI provider setup.
 
 ## Tabs
 
@@ -25,4 +25,4 @@ Generations follow the standard [Media Studios flow](./index.md): the job enters
 - One Gemini key drives both the LLM and media surfaces; configure it once.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

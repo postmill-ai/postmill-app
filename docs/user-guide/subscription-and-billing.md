@@ -94,4 +94,4 @@ An organisation stays **locked to the provider it first subscribed through**, ev
 
 Card details are entered in the provider's own payment form (Stripe's embedded form, or PayPal's or the app store's checkout) and never touch Postmill's servers. With Stripe, the **Update Payment Method / Invoices History** button opens Stripe's customer portal, where you can add, update, or remove cards, set the default payment method, and download past invoices.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

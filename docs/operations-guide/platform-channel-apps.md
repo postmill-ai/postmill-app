@@ -765,4 +765,4 @@ steps), **PeerTube**, **Skool**, **Hashnode**, **Medium**, **WordPress**,
 - [Configuration](./configuration.md#channel-oauth-apps-platform-click-connect) — the full env var table
 - [OAuth / SSO](./oauth-sso.md) — login providers, callback routing, registration policy
 
-> Verified against v1.3.0
+> Verified against v1.4.0

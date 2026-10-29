@@ -49,7 +49,7 @@
 | `MediaProviderConfig` | Per-org AI media-generation provider config — encrypted credentials, storage binding (`storageProviderId`, null = LOCAL; `storageRootFolderId`) | FK → `Organization`, `StorageProviderConfig` (nullable); unique on `(organizationId, identifier, version)` |
 | `MultipartUpload` | Tracks ownership and state of multipart S3 uploads | FK → `Organization` |
 | `Design` | Editable Designer (Konva) document — doc JSON, dimensions, preview | FK → `Organization`, `User`, `Campaign`; preview `File` |
-| `DesignVersion` | Named or automatic snapshot of a `Design`'s doc (the Designer's version history); `auto` marks the safety snapshot taken before a restore | FK → `Design` (cascade), `Organization` (cascade), `User` |
+| `DesignVersion` | Named or automatic snapshot of a `Design`'s doc (the Designer's version history); `auto` marks the safety snapshot taken before a restore | FK → `Design` (cascade), `Organization` (cascade), `User` (nullable `createdById`, `onDelete: SetNull` since `20261021000000_design_version_creator_setnull` — a deleted member's snapshots survive anonymized) |
 | `DesignTemplate` | System-seeded or org-saved templates for the Designer Templates panel | FK → `Organization` (nullable), `DesignTemplateFolder` (nullable `folderId` = unfiled); thumbnail `File` |
 | `DesignTemplateFolder` | Org-defined folder tree for grouping design templates (system templates are never foldered) | FK → `Organization` (cascade), parent `DesignTemplateFolder`; has many `DesignTemplate` |
 | `AiDesignerSession` | Persistent chat thread for the AI Designer (`/media/ai-designer`) | FK → `Organization`, `User`; has many `AiDesignerMessage` |
@@ -236,4 +236,4 @@ All 6 models are managed by the Mastra framework. They are **not** accessed thro
 `20260714150606_add_medialocker_storage_type` (`ALTER TYPE ... ADD VALUE` — backward-compatible, no
 data rewrite).
 
-> Verified against v1.3.0
+> Verified against v1.4.0

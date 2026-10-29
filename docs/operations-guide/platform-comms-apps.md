@@ -207,4 +207,4 @@ platform app. Matrix, having no platform app, is always configured this way.
   platform apps the comms apps reuse
 - [Configuration](./configuration.md#channel-oauth-apps-platform-click-connect) — the full env var table
 
-> Verified against v1.3.0
+> Verified against v1.4.0

@@ -86,4 +86,4 @@ local compute; without bounds a backlog can starve the host.
 | `VIDEO_RENDER_FRAME_TIMEOUT_MS` | `30000` | Per-frame capture watchdog; a wedged frame is retried once, then the render fails fast. Passed through to the container |
 | `VIDEO_RENDER_SPLIT_FALLBACK` | `true` | Even-split caps if the pod can't be created |
 
-> Verified against v1.3.0
+> Verified against v1.4.0

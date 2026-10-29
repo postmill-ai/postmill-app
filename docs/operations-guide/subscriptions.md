@@ -328,4 +328,4 @@ Most billing-management routes require the `billing:manage` RBAC permission, but
 - [Settings](../user-guide/settings.md) — the Team & Roles tab where the `billing:manage` permission is granted
 - [Subscription & Billing](../user-guide/subscription-and-billing.md) — end-user guide to plans, add-ons, and the `/billing` UI
 
-> Verified against v1.3.0 (2026-10-21)
+> Verified against v1.4.0

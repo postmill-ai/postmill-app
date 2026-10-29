@@ -48,4 +48,4 @@ through Inngest, and media can live on local disk or cloud object storage.
 | [OAuth / SSO](./oauth-sso.md) | Generic OIDC provider setup (Authentik, Keycloak, etc.) |
 | [Subscriptions & payment providers](./subscriptions.md) | Payment provider config (Stripe and others), plans, metered caps, add-ons, and self-host defaults |
 
-> Verified against v1.3.0
+> Verified against v1.4.0

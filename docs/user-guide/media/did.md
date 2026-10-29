@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure your D-ID API key under **Settings → Media**. See [Settings](../settings) for provider setup.
+Configure your D-ID API key under **Settings → Content → AI Media**. **Test connection** only confirms the key was saved — there is no live D-ID probe, so a wrong key surfaces on the first render. See [Settings](../settings) for provider setup.
 
 ## Tabs / operations
 
@@ -19,9 +19,9 @@ D-ID creates a `talk` job and returns a talk id. The job renders in the backgrou
 ## Caveats
 
 - A **portrait image** is required. The source image is resolved server-side to a provider-reachable URL before being sent to D-ID.
-- Completion is **webhook-first** with a poll-cron fallback; transient poll errors are retried automatically.
+- Completion is **webhook-first** with a poll-cron fallback (the webhook is only registered when the backend's public URL is HTTPS); transient poll errors are retried automatically.
 - D-ID uses **Basic** authorization (`Authorization: Basic <apiKey>`), not Bearer.
-- Voice provider and voice id are optional; when blank, D-ID uses its default voice. Supported providers are Microsoft, Amazon, and ElevenLabs.
+- **Voice provider** defaults to Microsoft and **Voice id** is optional. The voice block is only sent to D-ID when a voice id is filled in; otherwise D-ID uses its default voice. Supported providers are Microsoft, Amazon, and ElevenLabs.
 - The `stitch` toggle blends the generated head back into the source frame.
 
 ## Related docs
@@ -31,4 +31,4 @@ D-ID creates a `talk` job and returns a talk id. The job renders in the backgrou
 - [Settings](../settings) — configuring media providers.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

@@ -388,4 +388,4 @@ Existing users can still log in. Create new users through the Teams settings pag
 - [Platform Channel Apps](./platform-channel-apps.md) — the shared channel-OAuth apps the Facebook/X/LinkedIn/Google logins dual-use
 - [Security](./security.md) — OAuth 2.0 / PKCE hardening, open-redirect allowlisting
 
-> Verified against v1.3.0
+> Verified against v1.4.0

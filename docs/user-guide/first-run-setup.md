@@ -1,6 +1,6 @@
 # First-run setup
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 When a brand-new organization is created, Postmill shows a one-time onboarding wizard at **`/setup`**. The wizard walks the first user through the minimum configuration needed before the app is usable:
 
@@ -14,7 +14,7 @@ When a brand-new organization is created, Postmill shows a one-time onboarding w
 
 The wizard reuses the same [Settings](./settings.md) panels you will see later, so anything skipped can be configured afterward from **Settings**.
 
-Setup configures organization-level providers, so only an owner or admin can complete it. A member who opens `/setup` is sent to `/dashboard` instead.
+Setup configures organization-level providers, so only an owner or admin can complete it: finishing calls `POST /settings/setup/complete`, which requires the `settings:update` permission. A member who opens `/setup` is sent to `/dashboard` instead — also when the permission lookup itself fails (for example while the backend restarts), rather than being stranded on the wizard. If the backend restarts during your session, the wizard keeps retrying its permission and account lookups and revalidates when the connection is back, so **Finish setup** recovers on its own.
 
 Every step except **LLM** has a **Skip** button. The wizard footer links back to this guide (**Need help? Read the setup guide**) and to **Contact support**.
 
@@ -33,7 +33,7 @@ The first provider you save is activated automatically, which unlocks **Next**.
 
 The **Finish setup** button appears only after the LLM step has an active provider. Clicking it:
 
-- calls `POST /settings/setup/complete`,
+- calls `POST /settings/setup/complete` (owners/admins — `settings:update`),
 - sets `Organization.setupCompletedAt` to the current time,
 - redirects to `/dashboard`.
 

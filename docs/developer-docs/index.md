@@ -101,4 +101,4 @@ openapi.yml          Generated from the controllers — never hand-edited
 Root `scripts/` is maintainer-local and gitignored; a fresh clone does not have it. Anything CI or a
 documented workflow needs lives in `tools/`.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

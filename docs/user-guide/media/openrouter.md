@@ -21,7 +21,8 @@ Image generation is synchronous. The finished image lands in `/files` via the **
 - **Image only** — OpenRouter does not expose video or audio generation through this studio.
 - The model picker is populated live from `GET /api/v1/models`, filtered to models that advertise image output. If the live catalog fails or a model is missing, the picker falls back to a static list and still allows you to type a model id directly.
 - Generation uses OpenRouter's dedicated `POST /api/v1/images` endpoint, which returns `b64_json` data. Each request waits up to 120 seconds (slow models such as `gpt-image-1` often need over a minute); a timeout or upstream failure is reported as an OpenRouter error naming the cause.
-- Because the credential is shared with the LLM provider, the studio is marked configured as soon as the OpenRouter AI key is present.
+- Because the credential is shared with the LLM provider, the studio is marked configured as soon as the OpenRouter AI key is present and enabled; disabling the key under **Settings → AI** also switches the studio off.
+- **Test connection is free** — Settings → Content → AI Media → **Test connection** reads the OpenRouter model catalog; no image is billed.
 - The studio itself is text-to-image only. When OpenRouter is your workspace's **image-to-image** model default, [AI Designer](./ai-designer.md) can condition generation on a reference image — supported for the Gemini image models (e.g. `google/gemini-2.5-flash-image`), sent through OpenRouter's chat-completions endpoint; other models fall back to text-to-image.
 
 ## Related docs
@@ -30,4 +31,4 @@ Image generation is synchronous. The finished image lands in `/files` via the **
 - [Settings](../settings.md) — configuring AI and media providers.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

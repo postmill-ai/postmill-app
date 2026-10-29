@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure your Black Forest Labs API key at **Settings → Media**. Postmill stores the key encrypted at rest; there is no environment-variable fallback.
+Configure your Black Forest Labs API key at **Settings → Content → AI Media**. Postmill stores the key encrypted at rest; there is no environment-variable fallback. **Test connection** is a free account read (`GET /v1/credits`) — it never bills a render.
 
 See [Settings](../settings) for provider setup and the media capability matrix.
 
@@ -23,9 +23,9 @@ After you click **Generate**, the image is produced synchronously (the adapter p
 ## Caveats
 
 - **Image-only:** this provider does not generate video or audio.
-- **Synchronous contract:** FLUX generation is submit-and-poll under the hood, but the page waits for the result so the card appears in the render queue as completed.
+- **Synchronous contract:** FLUX generation is submit-and-poll under the hood, but the page waits for the result so the card appears in the render queue as completed. The internal poll is bounded to about 60 seconds (40 polls, 1.5 s apart); past that the job fails with a timeout instead of staying pending.
 - **Model-specific sizing:** width and height are applied to all models except FLUX 1.1 Pro Ultra, which uses its own aspect-ratio control.
-- **Safety tolerance:** the 0–6 slider maps to FLUX's native moderation setting.
+- **Safety tolerance:** the 0–6 field (default 2) maps to FLUX's native moderation setting.
 
 ## Related docs
 
@@ -34,4 +34,4 @@ After you click **Generate**, the image is produced synchronously (the adapter p
 - [Settings](../settings) — configuring the Black Forest Labs media provider.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

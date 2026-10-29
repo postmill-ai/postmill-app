@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure your Azure AI provider once under **Settings → AI**. Azure is a universal-credential provider: the same key drives both the LLM and media studio, so you do not need a separate **Settings → Media** entry. The credential asks for your **API Key**, **Resource Name**, and an optional **API Version**. See [Settings](../settings) for provider setup.
+Configure your Azure AI provider once under **Settings → AI**. Azure is a universal-credential provider: the same key drives both the LLM and media studio, so you do not need a separate **Settings → Content → AI Media** entry. The Settings → AI form asks for your **API Key**, **Azure Resource Name**, and an optional **API Version**. **Test connection** on the media side is a free probe — it lists your resource's deployments (`GET https://<resource>.openai.azure.com/openai/models`) and never bills a generation. See [Settings](../settings) for provider setup.
 
 ## Tabs / operations
 
@@ -29,4 +29,4 @@ The studio posts the job through the shared Studio Kit pipeline. Completed image
 - [Settings](../settings) — configuring AI providers.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

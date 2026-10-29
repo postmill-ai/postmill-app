@@ -9,7 +9,7 @@
 The free default catalog is **Jamendo**, gated by the operator environment variable
 `JAMENDO_CLIENT_ID`.
 
-If your organization has an active [Content Pack](../settings) that declares `audio` — currently
+If your organization has an active [Content Pack](../settings) (Settings → Content → Content Packs) that declares `audio` — currently
 **Envato Elements** — that premium catalog is shown first. Otherwise Postmill falls back to Jamendo.
 A Content Pack daily-cap error is surfaced as a 402.
 
@@ -24,8 +24,9 @@ includes the track name, author, an inline audio player, and a **Save** button.
 ## Save behavior
 
 Jamendo returns two URLs: a streaming URL with an expiring token (used for the preview player) and a
-stable `audiodownload` URL used for saving. When you save, Postmill imports the stable URL into
-`/files`. The importer also sniffs the content type because Jamendo sometimes serves MP3s with a
+stable `audiodownload` URL used for saving. **Save** opens the Save to Files dialog (rename the
+file, pick or create a destination folder — there is no Save & Post for bare audio), and Postmill
+imports the stable URL into `/files`. The importer also sniffs the content type because Jamendo sometimes serves MP3s with a
 `text/html` label.
 
 In select mode (for example, picking audio for the Designer timeline), the row shows **Use** and
@@ -44,4 +45,4 @@ both the player and the import; no separate download URL is minted from the item
 
 ---
 
-> Verified against v1.3.0
+> Verified against v1.4.0

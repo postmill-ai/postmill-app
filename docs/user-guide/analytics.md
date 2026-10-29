@@ -160,4 +160,4 @@ Competitor tracking integrates with the analytics dashboard. Watched accounts ar
 the analytics collection sweep, and their follower metrics appear on the **Watchlist** tab, charted
 against your own. See [Watchlist](watchlist.md) for setup and configuration.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

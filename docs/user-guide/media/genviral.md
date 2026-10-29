@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure your Genviral Partner API key under **Settings → Media**. The key is a single `public_id.secret` Bearer token. See [Settings](../settings) for provider setup.
+Configure your Genviral Partner API key under **Settings → Content → AI Media**. The key is a single `public_id.secret` Bearer token. **Test connection** is a free catalog read (`GET /studio/models`). See [Settings](../settings) for provider setup.
 
 ## Tabs / operations
 
@@ -29,4 +29,4 @@ Genviral video generation is **async**. The studio submits the job to Genviral's
 - [Settings](../settings) — configuring media providers.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

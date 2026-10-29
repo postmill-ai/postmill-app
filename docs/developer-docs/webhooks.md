@@ -3,7 +3,7 @@
 Postmill webhooks let you receive real-time notifications when events occur in your org. Webhooks are delivered via HTTP POST, dispatched through `safeFetch` for SSRF protection.
 
 > **Two delivery paths.** `post.published` (plus the `test-ping` and `/webhooks/send` routes) uses a
-> **signed, enveloped, retried** delivery. The comment and analytics events go through a separate,
+> **signed, enveloped, retried** delivery. The `post.failed`, comment and analytics events go through a separate,
 > lighter dispatcher (`WebhooksService.dispatchEvent`) that is **unsigned, flat-bodied, and
 > best-effort**. The differences are called out per-section below — don't assume `post.published`'s
 > behavior applies to the other events.
@@ -30,13 +30,16 @@ Content-Type: application/json
 {
   "name": "My webhook",
   "url": "https://your-server.com/webhook",
+  "events": ["post.published", "post.failed"],
   "integrations": [
     { "id": "cly..." }
   ]
 }
 ```
 
-The `integrations` array scopes which channels the webhook listens to. For `post.published`, only webhooks whose integration list is empty or contains the published channel receive the event. For **all other event types** (comment and analytics), the dispatcher only delivers to webhooks whose integration list is **empty** — an integration-scoped webhook does **not** receive comment or analytics events (`WebhooksService.dispatchEvent`, `webhooks.service.ts:55-57`).
+The `events` array is required (at least one entry) and names the event types the webhook subscribes to; each entry must be one of the supported types in the [Event types](#event-types) table. One exception exists for backward compatibility: rows created before event subscriptions existed store an **empty** `events` array, and an empty array receives **every** event.
+
+The `integrations` array scopes which channels the webhook listens to. For `post.published`, only webhooks whose integration list is empty or contains the published channel receive the event. For **all other event types** (`post.failed`, comment and analytics), the dispatcher only delivers to webhooks whose integration list is **empty** — an integration-scoped webhook does **not** receive them (`WebhooksService.dispatchEvent`, `webhooks.service.ts:51-58`).
 
 ### Updating a webhook
 
@@ -48,6 +51,7 @@ Content-Type: application/json
   "id": "cly...",
   "name": "My webhook",
   "url": "https://your-server.com/webhook",
+  "events": ["post.published"],
   "integrations": []
 }
 ```
@@ -75,6 +79,7 @@ Returns `{ success: true, status: 200 }` on success, or `{ success: false, statu
 | Event | Description |
 |-------|-------------|
 | `post.published` | A post has been successfully published to a channel. |
+| `post.failed` | A post failed to publish. Flat payload: `{ event, postId, integrationName, subStep?, error }`. |
 | `comment.new` | A new comment was received on a published post (per-comment during sync, or batched digest). |
 | `comment.reply` | A reply was posted to an existing comment. |
 | `analytics.snapshot_complete` | The daily analytics snapshot collection has completed for the org. |
@@ -97,8 +102,8 @@ Private CIDRs can be allowed via `SSRF_ALLOWED_PRIVATE_CIDRS` (opt-in for self-h
 The raw Prisma row is never shipped. **The envelope shape differs by delivery path:**
 
 - **`post.published`** wraps its fields in a `{ event, timestamp, data: {...} }` envelope.
-- **The comment and analytics events** are emitted **flat** — `{ event, ...fields }`, with the event
-  fields spread at the top level and **no `data` wrapper** (`webhooks.service.ts:67`). The comment
+- **The `post.failed`, comment and analytics events** are emitted **flat** — `{ event, ...fields }`, with the event
+  fields spread at the top level and **no `data` wrapper** (`webhooks.service.ts:68`). The comment
   events also carry **no `timestamp`** field.
 
 `post.published` (enveloped):
@@ -117,6 +122,17 @@ The raw Prisma row is never shipped. **The envelope shape differs by delivery pa
     "state": "PUBLISHED",
     "publishDate": "2026-06-09T00:00:00.000Z"
   }
+}
+```
+
+`post.failed` (flat, no `timestamp`):
+
+```json
+{
+  "event": "post.failed",
+  "postId": "clx...",
+  "integrationName": "My X account",
+  "error": "..."
 }
 ```
 
@@ -182,11 +198,11 @@ The batched digest path emits a different flat shape — `{ "event": "comment.ne
 
 ### Retries
 
-`post.published` deliveries are retried up to **3 times** with exponential backoff (1s, 2s) inside a durable Inngest `step.run`, and each attempt is bounded by `WEBHOOK_TIMEOUT_MS` (default `10000`). The comment and analytics dispatches are **best-effort without retry**, and they pass no timeout signal — they fall back to `safeFetch`'s default `OUTBOUND_HTTP_TIMEOUT_MS` (default `30000`), not `WEBHOOK_TIMEOUT_MS`.
+`post.published` deliveries are retried up to **3 times** with exponential backoff (1s, 2s) inside a durable Inngest `step.run`, and each attempt is bounded by `WEBHOOK_TIMEOUT_MS` (default `10000`). The `post.failed`, comment and analytics dispatches are **best-effort without retry**, and they pass no timeout signal — they fall back to `safeFetch`'s default `OUTBOUND_HTTP_TIMEOUT_MS` (default `30000`), not `WEBHOOK_TIMEOUT_MS`.
 
 ### HMAC signing
 
-**Signing is not universal.** Only three deliveries are signed with an HMAC-SHA256 `X-Postmill-Signature` header (formatted `sha256=<hex>`): **`post.published`** (`post.activity.ts:716,730`), the **test-ping**, and **`/webhooks/send`**. The comment and analytics events dispatched through `WebhooksService.dispatchEvent` are sent with **only** a `Content-Type` header and carry **no signature** (`webhooks.service.ts:64-68`) — receivers of those events cannot verify a signature.
+**Signing is not universal.** Only three deliveries are signed with an HMAC-SHA256 `X-Postmill-Signature` header (formatted `sha256=<hex>`): **`post.published`** (`post.activity.ts:742-746`), the **test-ping**, and **`/webhooks/send`**. The `post.failed`, comment and analytics events dispatched through `WebhooksService.dispatchEvent` are sent with **only** a `Content-Type` header and carry **no signature** (`webhooks.service.ts:65-68`) — receivers of those events cannot verify a signature.
 
 For the signed deliveries, the signature is computed over the **exact serialized JSON body** using a **deployment-wide secret** — `WEBHOOK_SIGNING_SECRET`. When that env var is unset, the secret falls back to `JWT_SECRET`, so signing is always available for the paths that use it.
 
@@ -199,7 +215,7 @@ constant_time_equals(expected, header["X-Postmill-Signature"])
 
 Use the raw request body bytes exactly as received (do not re-serialize), and a constant-time comparison.
 
-The secret is deployment-wide, not per-webhook.
+The secret is deployment-wide, not per-webhook. (The management UI once showed a per-webhook "Secret (HMAC key)" field; it was never stored or used and was removed in v1.4.0.)
 
 ## Data model
 
@@ -215,4 +231,4 @@ The secret is deployment-wide, not per-webhook.
 | `OUTBOUND_HTTP_TIMEOUT_MS` | `30000` | Default `safeFetch` timeout |
 | `SSRF_ALLOWED_PRIVATE_CIDRS` | — | Opt-in allowlist of private CIDRs for self-hosted internal targets |
 
-> Verified against v1.3.0
+> Verified against v1.4.0

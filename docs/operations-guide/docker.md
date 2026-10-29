@@ -24,20 +24,21 @@ The application will be available at `http://localhost:4007`.
 
 ## Container images
 
-Postmill publishes the same all-in-one image to two registries. Both are official; pull from
-whichever suits your environment.
+Postmill publishes the all-in-one image to GitHub Container Registry on every release, and also
+copies it to Docker Hub as a convenience mirror. Both are official; pull from whichever suits your
+environment.
 
 | Registry | Image | Notes |
 |---|---|---|
-| GitHub Container Registry | `ghcr.io/postmill-ai/postmill-app` | Used by the shipped `docker-compose.yaml`. No anonymous pull rate limit |
-| Docker Hub | `postmillai/postmill-app` | The same image. Anonymous pulls are subject to Docker Hub's rate limits |
+| GitHub Container Registry | `ghcr.io/postmill-ai/postmill-app` | Published automatically by the release workflow. Used by the shipped `docker-compose.yaml`. No anonymous pull rate limit |
+| Docker Hub | `postmillai/postmill-app` | The same image, copied over manually at release time — it may lag GHCR briefly. Anonymous pulls are subject to Docker Hub's rate limits |
 
 ```bash
-docker pull ghcr.io/postmill-ai/postmill-app:v1.3.0   # GitHub Container Registry
-docker pull postmillai/postmill-app:v1.3.0            # Docker Hub
+docker pull ghcr.io/postmill-ai/postmill-app:v1.4.0   # GitHub Container Registry
+docker pull postmillai/postmill-app:v1.4.0            # Docker Hub
 ```
 
-Every release is published to both as `:vX.Y.Z` and `:latest`, built for `linux/amd64` only.
+Each release is available on both as `:vX.Y.Z` and `:latest`, built for `linux/amd64` only.
 
 ::: tip Pinning by digest
 The two registries serve identical layers, but the top-level manifest digest differs between them
@@ -88,7 +89,7 @@ API_LIMIT: 600
 | `postmill-uploads`   | `/uploads/`               | Uploaded media (always local) |
 
 The `:latest` tag shown above is suitable for quick-start only. In production, pin a specific
-version tag (for example, `ghcr.io/postmill-ai/postmill-app:v1.3.0`, or `postmillai/postmill-app:v1.3.0`
+version tag (for example, `ghcr.io/postmill-ai/postmill-app:v1.4.0`, or `postmillai/postmill-app:v1.4.0`
 on Docker Hub) to get a known rollback target.
 
 ## Background jobs
@@ -170,15 +171,18 @@ services:
 The container does **not** apply migrations (or run `prisma-generate`) on boot — the Prisma client is
 generated at image build time and migrations are applied explicitly. Apply migrations after deploy
 using the canonical path described in [Database](../developer-docs/database.md). `pnpm` is not
-installed in the runtime image, so use `npx`:
+installed in the runtime image, but the pinned Prisma CLI (6.5.0) is, so no download is needed:
 
 ```bash
 # Run inside the container once the image is up
-docker exec postmill npx --yes prisma@6.5.0 migrate deploy \
+docker exec -w /app postmill node_modules/.bin/prisma migrate deploy \
   --schema ./libraries/nestjs-libraries/src/database/prisma/schema.prisma
+
+# Or, from a source checkout, the helper that runs the same command for you
+./tools/db/postmill-migrate.sh
 ```
 
 For local prototyping or reset only, `pnpm run prisma-db-push` is available; never use it against a
 shared or production database.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

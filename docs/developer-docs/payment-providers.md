@@ -158,4 +158,4 @@ that a row appears in the payment-event ledger (`StripeEvent` table — it now s
 provider). An organization is bound to the provider it subscribed through; switching providers is
 cancel + resubscribe.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

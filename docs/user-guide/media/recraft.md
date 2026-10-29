@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Add your Recraft API key in **Settings → Media → Recraft**. This is an own-key provider — there is no environment fallback.
+Add your Recraft API key in **Settings → Content → AI Media → Recraft**. This is an own-key provider — there is no environment fallback.
 
 See [Settings](../settings) for provider setup.
 
@@ -24,7 +24,8 @@ Image generation is synchronous, so results usually appear immediately.
 
 - **Image only** — Recraft does not generate video or audio.
 - Choose **Vector illustration** or **Icon** in the **Style** field for SVG-style outputs.
-- Extra native Recraft parameters (for example `substyle` or `response_format`) ride through automatically when supplied by the descriptor defaults; the visible form covers the common cases.
+- The visible form covers model, style, size, and image count; other native Recraft parameters (for example `substyle` or `response_format`) are not exposed in the studio.
+- **Test connection is free** — Settings → Content → AI Media → **Test connection** reads your Recraft profile (`/users/me`); no image is billed.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

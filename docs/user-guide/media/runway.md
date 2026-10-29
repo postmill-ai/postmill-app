@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Add your Runway API key in **Settings → Media → Runway**. This is an own-key provider — there is no environment fallback.
+Add your Runway API key in **Settings → Content → AI Media → Runway**. This is an own-key provider — there is no environment fallback.
 
 See [Settings](../settings) for provider setup.
 
@@ -24,7 +24,8 @@ The studio follows the standard Studio Kit flow: pick inputs, click **Generate**
 - **Image → Video requires a source image** — there is no raw text-to-video tab.
 - Video jobs are async and complete via polling; Runway does not send a webhook.
 - **Text → Image** runs on Runway's task API, but the studio polls internally so the result appears synchronous.
-- A small number of native Runway parameters pass through automatically beyond the visible form.
+- Requests are pinned to Runway API version `2024-11-06`.
+- **Test connection is free** — Settings → Content → AI Media → **Test connection** reads your organization's credit/tier info; no task is billed.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

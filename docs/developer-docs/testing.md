@@ -2,7 +2,7 @@
 
 Postmill uses **Vitest** for all tests. The old root `jest.config.ts` has been deleted — do not add Jest-style configuration.
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 ---
 
@@ -169,7 +169,7 @@ AI adapter tests mock the underlying SDK package (e.g. `@ai-sdk/openai`, `@langc
 pnpm audit --audit-level=high
 ```
 
-The check fails if any high or critical advisory is found.
+The check fails if any high or critical advisory is found, with two documented exceptions in the workflow: a small allowlist of advisories that have **no patched release** and are unreachable in practice (listed by GHSA id in the step comment — drop an entry as soon as a fix ships), and the npm quick-audit endpoint outage (`ERR_PNPM_AUDIT_BAD_RESPONSE`), which is tolerated as a warning. Any non-allowlisted high/critical advisory still fails the job. The same workflow also greps for reintroduced channel/short-link/email/storage env reads and bare `fetch()` in short-link adapters.
 
 ### Lint
 

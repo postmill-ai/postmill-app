@@ -1,6 +1,6 @@
 # Adding a social channel provider
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 Social channel providers are now package-per-provider like every other domain. This guide walks through adding a new social provider to Postmill. The system currently supports 45 social providers. Recent reference implementations include **Tumblr**, **Pixelfed**, and **PeerTube**.
 

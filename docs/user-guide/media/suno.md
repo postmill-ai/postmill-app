@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure your Suno API key under **Settings → Media**. This is an own-key provider; there is no environment-variable fallback. See [Settings](../settings) for credential setup.
+Configure your Suno API key under **Settings → Content → AI Media**. This is an own-key provider; there is no environment-variable fallback. See [Settings](../settings) for credential setup.
 
 ## Tabs / operations
 
@@ -17,12 +17,13 @@ The **Song** tab defaults to vocal generation; the **Instrumental** tab defaults
 
 ## Generation flow
 
-Suno generations are **asynchronous**. After you click **Generate**, the job enters the Render Queue and polls until the tracks are ready. The finished MP3s are saved to `/files` and can be opened in the [Designer](./index.md) or used in a post. For the shared queue and hand-off flow, see [Media Studios overview](./index.md).
+Suno generations are **asynchronous**. After you click **Generate**, the job enters the Render Queue and polls until the tracks are ready. The finished MP3s are saved to `/files` and can be opened in the [Designer](./designer) or used in a post. For the shared queue and hand-off flow, see [Media Studios overview](./index.md).
 
 ## Caveats
 
 - Suno returns **two clips** per generation. The first clip becomes the main job artifact; the second clip lands as a sibling render-queue card, so you get two separate files.
 - There is **no completion webhook**; jobs finish via the `media-jobs-poll` cron.
+- **Test** on the settings card calls Suno's free credits endpoint — it verifies the key without spending a generation.
 - The integration was built from the sunoapi.org API reference without a live key — exact status strings and field behavior may need a quick smoke test.
 
 ## Related docs
@@ -32,4 +33,4 @@ Suno generations are **asynchronous**. After you click **Generate**, the job ent
 - [Settings](../settings)
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

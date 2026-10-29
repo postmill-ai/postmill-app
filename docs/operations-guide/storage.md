@@ -237,4 +237,4 @@ size-capped. `LOCAL` storage is same-origin and needs no CORS.
 - [Requirements](./requirements.md) — object storage options
 - [Designer](../developer-docs/designer.md) — editor architecture & endpoints
 
-> Verified against v1.3.0
+> Verified against v1.4.0

@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure Higgsfield under **Settings → Media → Higgsfield**. It uses a **two-part credential** — API Key ID and API Key Secret — rather than a single key. See [Settings](../settings) for credential setup.
+Configure Higgsfield under **Settings → Content → AI Media → Higgsfield**. It uses a **two-part credential** — API Key ID and API Key Secret — rather than a single key. See [Settings](../settings) for credential setup.
 
 ## Tabs
 
@@ -21,10 +21,11 @@ All three tabs follow the standard [Media Studios flow](./index.md): jobs appear
 ## Caveats
 
 - **Two-part auth.** Credentials are sent as `Authorization: Key <id>:<secret>`. As a fallback, a single string in `KEY_ID:KEY_SECRET` form is accepted.
-- **Image is synchronous.** Soul completes via bounded internal polling; `batch_size: 4` returns multiple images, and each is saved as its own file.
+- **Image is synchronous.** Soul completes via bounded internal polling. `batch_size: 4` returns multiple images, and each is saved as its own file.
 - **Video is asynchronous.** DoP and Speak rely on the `media-jobs-poll` cron — Higgsfield provides no completion webhook.
 - **NSFW filter.** A generation flagged as `nsfw` is reported as failed.
 - Source image and audio media fields are resolved server-side to provider-reachable URLs.
+- **Test connection is free.** Settings → Content → AI Media → **Test connection** probes a status endpoint with your key pair; no generation is billed.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

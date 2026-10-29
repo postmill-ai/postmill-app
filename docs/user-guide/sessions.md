@@ -54,4 +54,4 @@ In a multi-replica deployment the job grabs a distributed lock so only one insta
 
 > See also [Settings](./settings.md) for the settings layout, [Operations Guide → Security](../operations-guide/security.md) for the full security model, and [Operations Guide → Configuration](../operations-guide/configuration.md) for authentication environment variables.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

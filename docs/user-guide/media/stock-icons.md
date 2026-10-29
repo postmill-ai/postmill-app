@@ -8,7 +8,7 @@ is not a generation studio.
 
 The free default catalog is **Iconify**, which uses a public API and requires no operator key.
 
-If your organization has an active [Content Pack](../settings) that declares `icons` — currently
+If your organization has an active [Content Pack](../settings) (Settings → Content → Content Packs) that declares `icons` — currently
 **Magnific** — that premium catalog is shown first. Otherwise Postmill falls back to Iconify. A
 Content Pack daily-cap error is surfaced as a 402.
 
@@ -23,8 +23,8 @@ theme-aware mask so they remain visible in both light and dark modes.
 
 ## Result cards and preview
 
-Each card shows the icon, its set prefix, and author/set credit. The preview modal displays a larger
-icon preview, dimensions, author, source badge, and the per-set license. CC-BY licenses are flagged
+Each card shows the icon with its author/set credit and source badge. The preview modal displays a
+larger icon preview, dimensions, author, source badge, the set prefix, and the per-set license. CC-BY licenses are flagged
 with **Attribution required**.
 
 ## Preview actions
@@ -32,9 +32,11 @@ with **Attribution required**.
 - **Open in Designer** — opens the SVG on the [Designer](./designer) static canvas.
 - **Save to Files** — `/files/import` rejects raw SVG for security reasons, so the icon is
   rasterized client-side to a 512×512 PNG before being uploaded. The saved file is a PNG, not an
-  SVG.
+  SVG. The dialog lets you rename the file and pick or create a destination folder.
 
-Saved files carry `source` and `attribution` metadata.
+Because the icon is uploaded as a local PNG (not imported from a URL), the saved file does **not**
+carry `source`/`attribution` metadata — the set and license are shown in the save dialog only, so
+note any required attribution yourself.
 
 ## Related docs
 
@@ -45,4 +47,4 @@ Saved files carry `source` and `attribution` metadata.
 
 ---
 
-> Verified against v1.3.0
+> Verified against v1.4.0

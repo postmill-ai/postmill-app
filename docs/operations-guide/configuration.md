@@ -317,7 +317,10 @@ Three opt-in flags add the platform channel apps as **login providers** (the log
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `NEXT_PUBLIC_SENTRY_DSN` | — | Sentry DSN for error tracking (frontend) |
+| `NEXT_PUBLIC_SENTRY_DSN` | — | Sentry DSN for error tracking (frontend browser/server **and** backend — one variable). Unset = Sentry off. The frontend value is baked in at build time |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.2` (production) | Backend trace sample rate, `0`–`1`. Development always samples at `1.0`; an unset, non-numeric or out-of-range value falls back to the default |
+| `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | `0.25` (production) | Frontend trace sample rate, `0`–`1`. Same rules as above; baked into the frontend bundle at build time, so a change needs a frontend rebuild |
+| `SENTRY_PROFILING` | — | Set to `1` to enable backend (`@sentry/profiling-node`) profiling in development; production always profiles |
 | `SENTRY_SPOTLIGHT` | — | Set to `1` to enable Spotlight debug proxy |
 | `DATAFAST_API_KEY` | — | Datafast API key. Posts a `register` goal to datafa.st when a new user signs up carrying a `datafast_visitor_id` |
 | `FACEBOOK_PIXEL_ACCESS_TOKEN` | — | Meta Conversions API access token for server-side pixel events |
@@ -327,13 +330,18 @@ Three opt-in flags add the platform channel apps as **login providers** (the log
 **Provider errors vs. Postmill errors.** When an organization's own AI / media provider
 (OpenAI, Gemini, Runway, …) rejects a request — bad key, quota or billing limit, rate limit,
 invalid request, outage — the API answers **502** with
-`{ error: "ProviderUpstreamError", provider, providerName, kind, upstreamStatus, message, settingsUrl }`
+`{ statusCode: 502, error: "ProviderUpstreamError", provider, providerName, domain, operation, kind, upstreamStatus, retryable, message, settingsUrl }`
 and the UI shows the provider's name and message ("Google AI Studio reports the account's quota or
 billing limit was reached (HTTP 429): …"). `kind` is one of `auth`, `quota`, `rate_limit`,
-`invalid_request`, `timeout`, `unavailable`, `unknown`. The backend logs one `provider upstream error <domain>/<provider> <kind> HTTP <status>` warning per occurrence. Sentry receives **only**
-`unavailable` / `timeout` / `unknown` kinds, as warnings tagged `provider` + `kind` (provider outages
-are worth seeing; a user's expired key or exhausted plan is not an application error). A 500 from
-the API therefore always means a Postmill-side failure.
+`invalid_request`, `timeout`, `unavailable`, `unknown`; `retryable` is `true` for `rate_limit`,
+`timeout` and `unavailable` unless the provider SDK says otherwise; `settingsUrl` points at the
+settings page where the org fixes the key or plan (`/settings/ai`, `/settings/content/ai-media`, …).
+The backend logs one `provider upstream error <domain>/<provider> <kind> HTTP <status>` warning per
+occurrence. Sentry receives **only** `unavailable` / `timeout` / `unknown` kinds, as warnings tagged
+`provider` + `kind` (provider outages are worth seeing; a user's expired key or exhausted plan is not
+an application error). A 500 from the API therefore always means a Postmill-side failure — and since
+v1.4.0 every uncaught controller 500 is captured by the Sentry catch-all filter
+(`SentryReportFilter`), so expect such issues to appear in Sentry where they were previously silent.
 
 ## AI Designer chatbot
 
@@ -376,7 +384,8 @@ Set any of these to `true` or `1` to disable the corresponding subsystem during 
 | `CONTENT_PIPELINE_AGENT_TIMEOUT_MS` | `120000` | Per-agent LLM dispatch deadline inside a `runContentPipeline` run |
 | `BACKEND_URL` | Server-side backend URL used by the MCP surface. Falls back to `NEXT_PUBLIC_BACKEND_URL` |
 | `MEDIA_MCP_AUDIT_LOG_PATH` | `/tmp/media-mcp-audit.log` | File path for the media-MCP audit logger |
-| `SENTRY_PROFILING` | Set to `1` to enable browser profiling in dev |
+| `SENTRY_PROFILING` | Set to `1` to enable backend Node profiling in dev (production always profiles) |
+| `SENTRY_TRACES_SAMPLE_RATE` / `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | Production trace sample rates (see [Monitoring](#monitoring)); ignored in development, which always samples at `1.0` |
 | `FRONTEND_PROFILING` | Set to `1` to enable `Document-Policy: js-profiling` in dev |
 | `DEV_SEED_DEMO` | Populate the target org with placeholder demo data at backend boot (dev only) |
 | `DEV_SEED_DEMO_RESET` | Wipe and reseed demo data (dev only) |
@@ -398,7 +407,7 @@ Set any of these to `true` or `1` to disable the corresponding subsystem during 
 | `OTEL_SERVICE_NAME` | `postmill-backend` | OpenTelemetry service name |
 | `DATABASE_CONNECTION_LIMIT` | — | Prisma connection pool size appended to `DATABASE_URL` |
 | `DATABASE_POOL_TIMEOUT` | — | Prisma pool timeout appended to `DATABASE_URL` |
-| `ALLOW_DESTRUCTIVE_SCHEMA` | `false` | Allow `prisma db push` to perform destructive diffs |
+| `ALLOW_DESTRUCTIVE_SCHEMA` | `false` | Acknowledges a destructive schema diff for the guard (`tools/db/schema-destructive-guard.mjs`, run by `pnpm run prisma-schema-check` and the CI schema gate). It is not read by `prisma migrate deploy`, which applies committed migrations unconditionally |
 | `ERRORS_RETENTION_DAYS` | `90` | Retention for `Errors` rows |
 | `NOTIFICATIONS_RETENTION_DAYS` | `180` | Retention for Notifications (+ `NotificationRead`) |
 | `MULTIPART_UPLOAD_RETENTION_DAYS` | `7` | Retention for abandoned multipart uploads |
@@ -437,4 +446,4 @@ See [Video Rendering](./video-rendering.md) for the full list of `VIDEO_RENDER_*
 | `PUPPETEER_EXECUTABLE_PATH` | (bundled Chromium) | Path to a system/distro Chromium binary for design frame capture (used by the render-worker container). Unset = Puppeteer's bundled Chromium |
 | `PUPPETEER_DISABLE_SANDBOX` | `false` | Set to `true` to launch the campaign-report PDF Chromium with `--no-sandbox` (for CI/containers without user namespaces; also disabled automatically when `CI=true`). Production defaults to sandboxed mode |
 
-> Verified against v1.3.0
+> Verified against v1.4.0

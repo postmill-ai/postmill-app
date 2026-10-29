@@ -157,4 +157,4 @@ When enabled, Node auto-instrumentations (HTTP, Express/Nest, Postgres, Redis, u
 are registered and traces are shut down cleanly on `SIGTERM`/`SIGINT` alongside the
 graceful-shutdown path.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

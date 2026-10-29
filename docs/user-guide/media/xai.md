@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure xAI under **Settings → AI**. The media studio is a universal-credential surface: it reuses the org's existing Grok API key, so no separate Settings → Media config is needed. See [Settings](../settings).
+Configure xAI under **Settings → AI**. The media studio is a universal-credential surface: it reuses the org's existing Grok API key, so no separate Settings → Content → AI Media config is needed. See [Settings](../settings).
 
 ## Tabs / operations
 
@@ -21,6 +21,7 @@ xAI image generation is synchronous. The studio posts to the OpenAI-compatible `
 - The image API accepts only `model`, `prompt`, and `n`; size/quality/style parameters are ignored by xAI, so the form stays minimal.
 - The model list is discovered live from xAI's `/image-generation-models` endpoint; if the live catalog is empty, the fallback default is `grok-2-image-1212`.
 - xAI does not support video or audio generation.
+- **Test** on the settings card calls xAI's free `/v1/models` list — no image is billed.
 
 ## Related docs
 
@@ -29,4 +30,4 @@ xAI image generation is synchronous. The studio posts to the OpenAI-compatible `
 - [Settings](../settings) — configuring AI and media providers.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

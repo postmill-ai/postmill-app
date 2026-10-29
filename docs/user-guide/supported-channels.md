@@ -155,4 +155,4 @@ the adapter classes in `libraries/providers/<id>/src/v1/`.
 - [Adding a Provider](../developer-docs/adding-a-provider.md) — How to register capability flags when adding a new channel provider.
 - [Short-link Providers](#short-link-providers) — Short-link provider capability matrix (above).
 
-> Verified against v1.3.0
+> Verified against v1.4.0

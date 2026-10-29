@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure an Ideogram API key under **Settings → Media → Ideogram**. This is an own-key provider and does **not** reuse an AI key. See [Settings](../settings) for credential setup.
+Configure an Ideogram API key under **Settings → Content → AI Media → Ideogram**. This is an own-key provider and does **not** reuse an AI key. See [Settings](../settings) for credential setup.
 
 ## Tabs
 
@@ -22,6 +22,7 @@ Ideogram follows the standard [Media Studios flow](./index.md): generate, watch 
 - **Api-Key header.** Ideogram authenticates with an `Api-Key` header, not a Bearer token.
 - **Multipart form body.** Native parameters ride as form fields, including `style_type`, `rendering_speed`, and `magic_prompt`.
 - The v3 endpoint has no model selector; the studio targets `ideogram-v3/generate` directly.
+- **Test connection is free.** Settings → Content → AI Media → **Test connection** reads your account's API-key list; no image is billed.
 
 ---
-> Verified against v1.3.0
+> Verified against v1.4.0

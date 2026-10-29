@@ -19,8 +19,8 @@ There is no deployment-wide `OPENAI_API_KEY` fallback — each organisation uses
 The same AI facade resolves the right provider across four user-facing surfaces:
 
 1. **Utility AI** — inline composer assist, general CopilotKit chat, content repurposing, variants, translation, hashtags, comment tools, compliance checks, best-time analysis, and brand-voice generation.
-2. **`/agents` generator** — the LangGraph-based conversational agent that can schedule posts, generate media, check analytics, manage campaigns, and reply to comments. See [AI Agent](./agent.md).
-3. **Mastra chat agent** — the function-form model used by the MCP server and tool-calling paths.
+2. **Generator** — the LangGraph-based post generator (`AgentGraphService`) behind `POST /posts/generator`, auto-post rules, and the agent's "run generator" tool.
+3. **Mastra chat agent** — the tool-calling agent that powers the `/agents` conversation (through `/copilot/agent`) and the MCP server. See [AI Agent](./agent.md).
 4. **CopilotKit runtime** — the `/copilot/chat` and `/copilot/agent` endpoints. `/copilot/chat` runs an agent on the organisation's governed model (so the AI budget, guardrails, and spend tracking apply); `/copilot/agent` runs the Mastra agent. Both are gated by policy and budget.
 
 ## Text generation
@@ -219,7 +219,11 @@ When C2PA provenance signing is enabled in Media Provider settings, generated me
 
 ## Agents page
 
-The `/agents/[id]` page provides a LangGraph-based post generator powered by the `AgentGraphService`. Each agent resolves the configured AI provider per-call. Agents can be configured with custom prompts and workflows to automate post generation at scale. See [AI Agent](./agent.md).
+The `/agents` page (and `/agents/<thread>` for a saved thread) is the conversational Mastra agent served through `/copilot/agent`; it resolves the organisation's configured AI provider per call. See [AI Agent](./agent.md).
+
+## Provider errors
+
+When your own provider account refuses a call (bad key, quota or billing exhausted, upstream outage), the API answers **HTTP 502** with a structured envelope instead of a generic 500: `provider`, `providerName`, `domain`, `operation`, `kind` (`auth`, `quota`, `rate_limit`, `invalid_request`, `timeout`, `unavailable`, or `unknown`), `upstreamStatus`, `retryable`, `message`, and a `settingsUrl` pointing at the settings page where the key is managed. Account-side errors are not reported to Sentry.
 
 ## Usage dashboard
 
@@ -263,4 +267,4 @@ All AI operations are subject to three governance layers:
 
 All AI operations log to the spend ledger (`AISpendLog`) for audit and cost tracking.
 
-> Verified against v1.3.0
+> Verified against v1.4.0

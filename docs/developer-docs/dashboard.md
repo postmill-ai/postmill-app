@@ -2,7 +2,7 @@
 
 The `/dashboard` surface is a thin composition layer over existing domain services. All aggregation lives in `libraries/nestjs-libraries/src/dashboard/`; the backend controller (`apps/backend/src/api/routes/dashboard.controller.ts`) is responsible only for auth, RBAC mapping, and wiring.
 
-> Verified against v1.3.0
+> Verified against v1.4.0
 
 ## Architecture
 
