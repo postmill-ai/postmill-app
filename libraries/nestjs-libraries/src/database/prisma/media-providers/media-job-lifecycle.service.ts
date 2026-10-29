@@ -55,7 +55,7 @@ function canonicalTerminalMessage(error: string): string {
       /((?:api[_-]?key|authorization|access[_-]?token|secret|password)\s*[:=]\s*)[^\s,;]+/gi,
       '$1[REDACTED]',
     )
-    .replace(/((?:prompt|input|request body)\s*[:=]\s*)[\s\S]*/gi, '$1[REDACTED]');
+    .replace(/((?<!invalid\s)(?<!\.)\b(?:prompt|request body)\s*[:=]\s*)[\s\S]*/gi, '$1[REDACTED]');
 }
 
 // 'stt' jobs are created already-complete (transcript stored inline via

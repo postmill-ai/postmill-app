@@ -1040,6 +1040,21 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
       expect(redacted).toContain('token=[REDACTED]');
       expect(redacted).not.toContain('JSON omitted');
     });
+
+    it.each([
+      'Replicate rejected the request (HTTP 422): Invalid input: width must be divisible by 16',
+      '- input.prompt: field required',
+      'Invalid prompt: your prompt was flagged',
+    ])('preserves actionable provider validation: %s', async (message) => {
+      const { service } = makeService();
+      const warn = vi.spyOn((service as any)._logger, 'warn').mockImplementation(() => {});
+
+      await service.failJob(makeJob(), message, { notify: false, kind: 'quota' });
+
+      const terminal = warn.mock.calls.map(([line]) => line).find((line) => line.includes('terminal failure'))!;
+      expect(terminal).toContain(message);
+      expect(terminal).not.toContain('[REDACTED]');
+    });
   });
 
   describe('storeTranscript (§11.1)', () => {
