@@ -77,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **Dependency advisories:** `next` 16.4.2 (RCE in `use cache`), `@sentry/nextjs` ^10.75.2 (tunnel-route middleware bypass), `dompurify` ^3.4.17 (override), `multer` ^2.5.0, `undici` ^7.30.1, `happy-dom` ^21.0.4, and `@modelcontextprotocol/node` 2.1.1 (override under `@mastra/mcp`, enables request-body and JSON-RPC batch limits).
+- **Dependency advisories:** `next` 16.4.2 (RCE in `use cache`), `@sentry/nextjs` ^10.75.2 (tunnel-route middleware bypass), `dompurify` ^3.4.17 (override), `multer` ^2.5.0, `undici` ^7.30.1, `happy-dom` ^21.0.4, and `@modelcontextprotocol/node` 2.1.1 (override under `@mastra/mcp`, enables request-body and JSON-RPC batch limits). The newly published `graphql-scalars` PhoneNumber ReDoS advisory (GHSA-x8rm-f576-gq67, via `@copilotkit/runtime`) was assessed as unreachable — only the JSON scalars are used, the PhoneNumber scalar is never registered — and allowlisted with that evidence (#307).
 - `POST /settings/setup/complete` now requires `settings:update` in addition to a session, so a member cannot mark setup done for the whole organization.
 - Generated media handed to a new Designer tab no longer places artifact URLs in the query string.
 
