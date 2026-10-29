@@ -35,13 +35,17 @@ import { videoTextLayoutSource } from '../designer-doc/video-text-layout';
 /**
  * The ...Source() helpers serialize functions with String(fn). The backend runs
  * the CJS-compiled build, where tsc rewrites references to exported bindings as
- * `exports.X`; Vite's SSR transform uses `__vite_ssr_import_N__.X`. Neither
- * namespace exists in the frame page, so a leaked reference throws on first use.
- * Every name is one of the module's own helpers, all declared locally in the
- * injected block, so stripping the prefix restores the intended reference.
+ * `exports.X` and imported bindings as `module_name_N.X`; Vite's SSR transform
+ * uses `__vite_ssr_import_N__.X`. None of these namespaces exists in the frame
+ * page, so a leaked reference throws on first use. Every name is one of the
+ * module's own helpers, all declared locally in the injected block, so stripping
+ * the prefix restores the intended reference.
  */
-const stripExportsNamespace = (source: string): string =>
-  source.replace(/\bexports\./g, '').replace(/\b__vite_ssr_import_\d+__\./g, '');
+export const stripExportsNamespace = (source: string): string =>
+  source
+    .replace(/\bexports\./g, '')
+    .replace(/\b__vite_ssr_import_\d+__\./g, '')
+    .replace(/\b[A-Za-z_$][\w$]*_\d+\./g, '');
 
 export const FRAME_RENDERER_SCRIPT = /* js */ `
 (function () {

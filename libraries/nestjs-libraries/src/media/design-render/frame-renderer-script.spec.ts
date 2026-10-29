@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { escapeForScriptTag, FRAME_RENDERER_SCRIPT } from './frame-renderer-script';
+import { escapeForScriptTag, FRAME_RENDERER_SCRIPT, stripExportsNamespace } from './frame-renderer-script';
 import { interpolateClipKeyframes } from '../designer-doc/keyframes';
 import { sourceTimeForPlayhead } from '../designer-doc/speed-curve';
 import { transitionAdjustment } from '../designer-doc/transitions';
@@ -115,6 +115,11 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     // geometry, caption karaoke). Guard the assembled script.
     expect(FRAME_RENDERER_SCRIPT).not.toMatch(/\bexports\./);
     expect(FRAME_RENDERER_SCRIPT).not.toMatch(/\brequire\(/);
+  });
+
+  it('strips tsc CommonJS import aliases from injected function source', () => {
+    const source = 'const build = (x) => (0, canvas_color_1.canvasColor)(x);';
+    expect(stripExportsNamespace(source)).toBe('const build = (x) => (0, canvasColor)(x);');
   });
 
   it('eases keyframes that carry NO explicit ease (default-handle path)', async () => {
