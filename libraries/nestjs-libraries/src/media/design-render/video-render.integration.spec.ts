@@ -97,6 +97,30 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
     encoder.cleanup(path.dirname(result.videoPath));
   }, 120000);
 
+  it('renders an odd scaled raster as an even-dimension MP4', async () => {
+    const capture = new ChromiumFrameCaptureService();
+    const encoder = new FfmpegVideoEncoderService(capture);
+
+    const result = await encoder.encode(
+      { ...redVideo(), width: 1080, height: 1920 },
+      { fps: 5, scale: 0.56, bitrateKbps: 500, format: 'mp4' },
+    );
+
+    const fs = await import('fs');
+    const { execFileSync } = await import('child_process');
+    const metadata = JSON.parse(execFileSync('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=width,height',
+      '-of', 'json',
+      result.videoPath,
+    ], { encoding: 'utf8' }));
+    expect(metadata.streams[0]).toMatchObject({ width: 604, height: 1074 });
+    expect(fs.statSync(result.videoPath).size).toBeGreaterThan(1000);
+
+    encoder.cleanup(path.dirname(result.videoPath));
+  }, 120000);
+
   it('renders a 1-second red animated GIF with a thumbnail', async () => {
     const capture = new ChromiumFrameCaptureService();
     const encoder = new FfmpegVideoEncoderService(capture);
