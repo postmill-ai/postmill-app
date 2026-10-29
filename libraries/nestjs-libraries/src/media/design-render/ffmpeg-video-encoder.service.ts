@@ -27,6 +27,16 @@ function getFfmpegPath(): string {
   return 'ffmpeg';
 }
 
+export function ffmpegErrorDetail(stderr: string): string {
+  const rootCause = stderr
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) =>
+      /width not divisible|height not divisible|No such filter|Error parsing options|Error initializing output stream|Error while opening encoder|Invalid (?:argument|data)/i.test(line)
+    );
+  return (rootCause || stderr.trim().slice(-800)).slice(0, 800);
+}
+
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const binary = getFfmpegPath();
@@ -38,7 +48,7 @@ function runFfmpeg(args: string[]): Promise<void> {
     proc.on('error', (err) => reject(err));
     proc.on('close', (code) => {
       if (code === 0) return resolve();
-      reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-800)}`));
+      reject(new Error(`ffmpeg exited ${code}: ${ffmpegErrorDetail(stderr)}`));
     });
   });
 }
@@ -219,6 +229,8 @@ export class FfmpegVideoEncoderService {
           // as INPUT options for the wav and abort with "Error parsing
           // options for input file".
           ...audioInput,
+          '-vf',
+          'scale=trunc(iw/2)*2:trunc(ih/2)*2',
           '-c:v',
           isWebm ? 'libvpx-vp9' : 'libx264',
           ...(isWebm
@@ -283,6 +295,14 @@ export class FfmpegVideoEncoderService {
 
       return { videoPath, thumbnailPath };
     } catch (err) {
+      const detail = err instanceof Error && err.message.startsWith('ffmpeg exited')
+        ? ffmpegErrorDetail(err.message)
+        : err instanceof Error
+          ? err.name
+          : 'unknown error';
+      this._logger.warn(
+        `Video encode failed (${outWidth}x${outHeight}, scale=${scale}, fps=${fps}, format=${format}, bitrate=${bitrateKbps}k): ${detail}`
+      );
       this.cleanup(tmpDir);
       throw err;
     }

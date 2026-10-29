@@ -40,6 +40,7 @@ overrides:
   body-parser@>=2.0.0 <2.4.0: 2.4.0
   multer@>=2.0.0 <2.5.0: 2.5.0
   undici@>=7.30.0 <7.30.1: 7.30.1
+  systeminformation: ^5.33.16
 
 importers:
 
@@ -20500,9 +20501,9 @@ packages:
     resolution: {integrity: sha512-0OJWD12D7XX3KUg1DYkMaTTjSTo2k/mhIYI3HlBlceXSMcJhW/1qO735fPKS5prcyjvn57Ub151vvASYXpQrEw==}
     engines: {node: '>=18'}
 
-  systeminformation@5.31.9:
-    resolution: {integrity: sha512-aqepyutSy94zJB552q3LGV2nPfUGZV7LoGhUUjLjs36aLzW3ghpKI7BEpEoQ/OOM+0On4RsyVp1+v6dfYQbqdw==}
-    engines: {node: '>=8.0.0'}
+  systeminformation@5.33.18:
+    resolution: {integrity: sha512-SF8DBQx3ypa8zDqZlezpHQ6M2g7TrqSEWpAtC4OsHCdLmi7J2WdxaSbA8/DJyEn2l/CHPrW0VFenoqoDccrw6g==}
+    engines: {node: '>=10.0.0'}
     os: [darwin, linux, win32, freebsd, openbsd, netbsd, sunos, android]
     hasBin: true
 
@@ -28250,7 +28251,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/instrumentation': 0.219.0(@opentelemetry/api@1.10.0)
-      systeminformation: 5.31.9
+      systeminformation: 5.33.18
     transitivePeerDependencies:
       - supports-color
 
@@ -45288,7 +45289,7 @@ snapshots:
       async: 3.2.6
       debug: 4.4.3(supports-color@5.5.0)
       pidusage: 2.0.21
-      systeminformation: 5.31.9
+      systeminformation: 5.33.18
       tx2: 1.0.5
     transitivePeerDependencies:
       - supports-color
@@ -47477,7 +47478,7 @@ snapshots:
 
   system-architecture@1.0.0: {}
 
-  systeminformation@5.31.9: {}
+  systeminformation@5.33.18: {}
 
   tabbable@6.4.0: {}
 

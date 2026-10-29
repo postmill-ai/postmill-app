@@ -21,7 +21,27 @@ vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
   })),
 }));
 
-import { FfmpegVideoEncoderService } from './ffmpeg-video-encoder.service';
+import {
+  FfmpegVideoEncoderService,
+  ffmpegErrorDetail,
+} from './ffmpeg-video-encoder.service';
+
+describe('ffmpegErrorDetail', () => {
+  it('retains the encoder root cause instead of the generic final failure', () => {
+    const stderr = [
+      '[libx264 @ 0x123] width not divisible by 2 (605x1075)',
+      'Error initializing output stream 0:0 -- Error while opening encoder for output stream #0:0',
+      '[vf#0:0 @ 0x456] Error sending frames to consumers: Generic error in an external library',
+      'Conversion failed!',
+    ].join('\n');
+
+    expect(ffmpegErrorDetail(stderr)).toBe('[libx264 @ 0x123] width not divisible by 2 (605x1075)');
+  });
+
+  it('falls back to a bounded stderr tail when no known root cause is present', () => {
+    expect(ffmpegErrorDetail(`prefix\n${'x'.repeat(1000)}`)).toHaveLength(800);
+  });
+});
 
 describe('FfmpegVideoEncoderService.mixAudio filter graph', () => {
   beforeEach(() => {
@@ -91,6 +111,23 @@ describe('FfmpegVideoEncoderService.mixAudio filter graph', () => {
     expect(cvIdx).toBeGreaterThan(audioInputIdx);
     const caIdx = args.indexOf('-c:a');
     expect(caIdx).toBeGreaterThan(audioInputIdx);
+  });
+
+  it.each(['mp4', 'webm'] as const)('normalizes odd %s frame dimensions for 4:2:0 encoding', async (format) => {
+    const frameCapture = { captureFrames: vi.fn().mockResolvedValue(30) };
+    const service = new FfmpegVideoEncoderService(frameCapture as any);
+    vi.spyOn(service as any, 'mixAudio').mockResolvedValue(null);
+
+    await service.encode(
+      { ...output, width: 1080, height: 1920 },
+      { fps: 30, scale: 0.56, format },
+    );
+
+    const muxCall = spawnCalls.find((c) =>
+      c.args.some((a) => a.includes('frame-%05d')),
+    );
+    const args = muxCall!.args;
+    expect(args[args.indexOf('-vf') + 1]).toBe('scale=trunc(iw/2)*2:trunc(ih/2)*2');
   });
 
   const mixGraph = async (out: any): Promise<string> => {

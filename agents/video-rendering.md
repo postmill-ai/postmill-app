@@ -96,7 +96,12 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      shorthands and platform presets resolve to one) and `normalizeLoudness`
      (default off) appends `loudnorm=I=-14:TP=-1.5` to the FINAL `amix` leg of
      the audio filtergraph (single-pass), riding the payload +
-     `DesignRenderJobSpec.options` like scale/fps/bitrate.
+     `DesignRenderJobSpec.options` like scale/fps/bitrate. MP4/WebM encoding
+     normalizes odd scaled frames to even dimensions (`trunc(iw/2)*2` ×
+     `trunc(ih/2)*2`) because their 4:2:0 codecs reject odd rasters; animated
+     GIF/WebP dimensions are unchanged. FFmpeg failures retain the first known
+     encoder/filter diagnostic and log only safe render parameters, not design
+     content or asset URLs.
    - Clip `volume` is keyframable: keyframes REPLACE the base volume where they span
      (both sides evaluate the shared `volumeAtClipTime`), and the mixer bakes the
      eased curve into `volume='<expr>':eval=frame` sampled at 100 ms steps
