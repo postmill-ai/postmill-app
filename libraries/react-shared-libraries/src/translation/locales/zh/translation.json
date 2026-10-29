@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "缺少必填字段：{{fields}}",
   "unknown_category": "未知类别",
   "generation_failed": "生成失败",
+  "provider_error_open_settings": "打开设置",
+  "provider_error_quota": "已达到账户配额或账单限额。请检查提供商方面的套餐和账单。",
   "image": "图像",
   "video": "视频",
   "go_to_category": "前往 {{label}}",

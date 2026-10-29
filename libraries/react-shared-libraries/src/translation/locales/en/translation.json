@@ -3029,6 +3029,8 @@
   "missing_required_fields_note": "Missing required fields: {{fields}}",
   "unknown_category": "Unknown category",
   "generation_failed": "Generation failed",
+  "provider_error_open_settings": "Open settings",
+  "provider_error_quota": "The account's quota or billing limit was reached. Check the plan and billing on the provider's side.",
   "image": "Image",
   "video": "Video",
   "go_to_category": "Go to {{label}}",

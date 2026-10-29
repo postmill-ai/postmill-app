@@ -387,6 +387,43 @@ describe('NotificationService', () => {
     expect(mockCreateNotification).not.toHaveBeenCalled();
   });
 
+  describe('notifyMediaProviderQuota', () => {
+    it('targets all active owners with a fixed settings link and preference-gated channels', async () => {
+      const notifySpy = vi.spyOn(service, 'notify').mockResolvedValue(undefined);
+      mockGetTeam.mockResolvedValue({
+        users: [
+          { user: { id: 'owner-1', email: 'one@b.com' }, roleRef: { key: 'owner' } },
+          { user: { id: 'owner-2', email: 'two@b.com' }, roleRef: { key: 'owner' } },
+          { disabled: true, user: { id: 'owner-off', email: 'off@b.com' }, roleRef: { key: 'owner' } },
+          { user: { id: 'inactive', email: 'inactive@b.com', activated: false }, roleRef: { key: 'owner' } },
+          { user: { id: 'admin', email: 'admin@b.com' }, roleRef: { key: 'admin' } },
+        ],
+      });
+
+      await service.notifyMediaProviderQuota('org-1', 'replicate');
+
+      expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({
+        orgId: 'org-1',
+        category: 'media',
+        link: '/settings/content/ai-media',
+        targetUserIds: ['owner-1', 'owner-2'],
+        channels: { email: true, push: false, inApp: true, comms: false },
+      }));
+      expect(notifySpy.mock.calls[0][0].override).toBeUndefined();
+      expect(notifySpy.mock.calls[0][0].message).toContain('replicate');
+    });
+
+    it('does not call notify when the organization has no active owners', async () => {
+      const notifySpy = vi.spyOn(service, 'notify').mockResolvedValue(undefined);
+      mockGetTeam.mockResolvedValue({
+        users: [{ user: { id: 'admin', email: 'admin@b.com' }, roleRef: { key: 'admin' } }],
+      });
+
+      await service.notifyMediaProviderQuota('org-1', 'fal');
+      expect(notifySpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('broadcast', () => {
     it('A-06: sends to all members when no filters are provided', async () => {
       const notifySpy = vi.spyOn(service, 'notify').mockResolvedValue(undefined);

@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "Eksik zorunlu alanlar: {{fields}}",
   "unknown_category": "Bilinmeyen kategori",
   "generation_failed": "Üretim başarısız oldu",
+  "provider_error_open_settings": "Ayarları aç",
+  "provider_error_quota": "Hesabın kotasına veya faturalandırma sınırına ulaşıldı. Sağlayıcı tarafındaki planı ve faturalandırmayı kontrol edin.",
   "image": "Görsel",
   "video": "Video",
   "go_to_category": "{{label}} kategorisine git",

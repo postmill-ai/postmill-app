@@ -1,7 +1,12 @@
 'use client';
-import { ProviderError, providerErrorToastText } from '@postmill-ai/frontend/components/ai/provider-error';
+import {
+  presentJobError,
+  ProviderError,
+  providerErrorAdvice,
+  providerErrorToastText,
+} from '@postmill-ai/frontend/components/ai/provider-error';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
@@ -45,6 +50,36 @@ export function StudioShell({ descriptor }: { descriptor: StudioDescriptor }) {
     'rounded-[12px] overflow-hidden mobile:h-[calc(100vh-200px)]'
   );
   const [generating, setGenerating] = useState(false);
+  const jobStatusesRef = useRef<Map<string, string> | null>(null);
+  const toastedJobsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!jobs) return;
+    const previous = jobStatusesRef.current;
+    if (previous) {
+      for (const job of jobs) {
+        const wasRunning = previous.get(job.id) === 'pending' || previous.get(job.id) === 'processing';
+        if (!wasRunning || job.status !== 'failed' || toastedJobsRef.current.has(job.id)) continue;
+        toastedJobsRef.current.add(job.id);
+        const presented = presentJobError(translate, job.error);
+        const advice = providerErrorAdvice(translate, {
+          provider,
+          providerName: title,
+          kind: presented.kind ?? 'unknown',
+          message: presented.message,
+        });
+        toaster.show(
+          `${presented.message} — ${advice}`,
+          'warning',
+          presented.settingsUrl,
+          presented.settingsUrl
+            ? translate('provider_error_open_settings', 'Open settings')
+            : undefined,
+        );
+      }
+    }
+    jobStatusesRef.current = new Map(jobs.map((job) => [job.id, job.status]));
+  }, [jobs, provider, title, toaster, translate]);
 
   const validationError = useMemo(() => validateStudioValues(provider, tab, values), [provider, tab, values]);
   const canGenerate = useMemo(

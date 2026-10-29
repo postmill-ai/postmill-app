@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "Thiếu trường bắt buộc: {{fields}}",
   "unknown_category": "Danh mục không xác định",
   "generation_failed": "Tạo nội dung thất bại",
+  "provider_error_open_settings": "Mở cài đặt",
+  "provider_error_quota": "Đã đạt đến hạn ngạch hoặc giới hạn thanh toán của tài khoản. Kiểm tra gói và thanh toán phía nhà cung cấp.",
   "image": "Hình ảnh",
   "video": "Video",
   "go_to_category": "Đi đến {{label}}",

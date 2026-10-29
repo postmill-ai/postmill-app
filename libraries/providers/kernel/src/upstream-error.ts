@@ -110,7 +110,8 @@ export function upstreamKindFromText(text: string): UpstreamErrorKind | undefine
 }
 
 const QUOTA_HINT = /quota|billing|credit|balance|insufficient|exceeded your|plan/i;
-const ACCOUNT_LIMIT_HINT = /insufficient\s+(?:balance|credits?)|exhausted\s+(?:your\s+)?balance|(?:quota|billing|credits?|balance)\s+(?:limit\s+)?(?:was\s+|has\s+been\s+)?(?:exceeded|reached)|(?:exceeded|reached)\s+(?:your\s+)?(?:quota|billing|credits?|balance)/i;
+const ACCOUNT_LIMIT_HINT = /(?:insufficient|not enough|out of|exhausted|depleted)(?:\s+\w+){0,3}\s+(?:balance|credits?|resource packs?)|(?:balance|credits?|resource packs?)(?:\s+\w+){0,3}\s+(?:insufficient|exhausted|depleted)|(?:quota|billing|credits?|balance)\s+(?:limit\s+)?(?:was\s+|has\s+been\s+)?(?:exceeded|reached)|(?:exceeded|reached)\s+(?:your\s+)?(?:quota|billing|credits?|balance)/i;
+const RATE_LIMIT_HINT = /rate[ _-]?limit|too many requests|requests per (?:second|minute|hour|day)/i;
 // Some providers answer a bad key with 400 (Google: API_KEY_INVALID) or 403.
 const AUTH_HINT = /api[ _-]?key|invalid[ _-]?key|unauthenticated|unauthori[sz]ed|API_KEY_INVALID|PERMISSION_DENIED|incorrect.*key/i;
 
@@ -121,7 +122,10 @@ export function classifyUpstream(
   if (status === 402 || ((status === undefined || status < 500) && ACCOUNT_LIMIT_HINT.test(body))) return 'quota';
   if (status === 401 || status === 403) return 'auth';
   if (status === 400 && AUTH_HINT.test(body)) return 'auth';
-  if (status === 429) return QUOTA_HINT.test(body) ? 'quota' : 'rate_limit';
+  if (status === 429) {
+    if (RATE_LIMIT_HINT.test(body)) return 'rate_limit';
+    return QUOTA_HINT.test(body) ? 'quota' : 'rate_limit';
+  }
   if (status === 408 || status === 504) return 'timeout';
   if (status !== undefined && status >= 500) return 'unavailable';
   if (
@@ -140,17 +144,17 @@ export function classifyUpstream(
 // One human line out of the usual JSON error shapes:
 //   {error:{message}} (Google, OpenAI), {error:"…"}, {message}, {detail} (X, FastAPI),
 //   {detail:{message|code|type}} (ElevenLabs), {errors:[{message|title}]}, {title}.
-//   Falls back to the raw body. Always redacted (signed-URL params) and bounded.
+// JSON without a recognized human message yields no detail, never the whole document.
 export function extractUpstreamDetail(body: string): string {
   const raw = (body || '').trim();
   let candidate = raw;
   if (raw.startsWith('{') || raw.startsWith('[')) {
+    candidate = '';
     try {
       const parsed = JSON.parse(raw);
-      const found = pickMessage(parsed);
-      if (found) candidate = found;
+      candidate = pickMessage(parsed) || '';
     } catch {
-      /* not JSON */
+      /* malformed JSON has no safe human detail */
     }
   }
   const firstLine = candidate.split(/\r?\n/).find((l) => l.trim()) || '';
@@ -362,6 +366,6 @@ export function mediaUpstreamFromPoll(
 ): ProviderUpstreamError {
   const ctx = mediaUpstreamCtx(adapter, operation);
   return text.startsWith(`${adapter.name} `)
-    ? ProviderUpstreamError.fromAttributedText(ctx, text)
+    ? ProviderUpstreamError.fromAttributedText(ctx, text, upstreamKindFromText(text) ?? 'unknown')
     : upstreamErrorFromBody(ctx, undefined, text);
 }

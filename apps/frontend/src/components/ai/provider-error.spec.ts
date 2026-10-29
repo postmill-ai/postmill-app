@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseJobError,
+  presentJobError,
   providerErrorFromBody,
   providerErrorToastText,
   readApiError,
@@ -86,5 +87,45 @@ describe('parseJobError', () => {
     expect(parseJobError('{')).toBeNull();
     expect(parseJobError(null)).toBeNull();
     expect(parseJobError(undefined)).toBeNull();
+  });
+
+  it('rejects an arbitrary JSON message without a Postmill kind', () => {
+    expect(parseJobError('{"message":"provider internals","secret":"do-not-render"}')).toBeNull();
+  });
+});
+
+describe('presentJobError', () => {
+  it('preserves valid envelopes and ordinary string errors', () => {
+    expect(presentJobError(t, JSON.stringify({
+      message: 'Quota exhausted',
+      kind: 'quota',
+      settingsUrl: '/settings/content/ai-media',
+    }))).toEqual({
+      message: 'Quota exhausted',
+      kind: 'quota',
+      settingsUrl: '/settings/content/ai-media',
+    });
+    expect(presentJobError(t, 'Provider rejected the prompt')).toEqual({
+      message: 'Provider rejected the prompt',
+    });
+  });
+
+  it.each(['{"code":"OUT_OF_CREDITS","secret":"do-not-render"}', '{malformed', '["raw"]']) (
+    'uses the translated generic failure for unsafe JSON: %s',
+    (error) => {
+      expect(presentJobError(t, error)).toEqual({ message: 'Generation failed' });
+    }
+  );
+
+  it('drops unsafe settings links and redacts control characters, URL tokens, and credentials', () => {
+    expect(presentJobError(t, JSON.stringify({
+      message: 'Quota\u0000 exhausted https://h/f?token=fixture-secret apiKey=sk-secret',
+      kind: 'quota',
+      settingsUrl: 'https://evil.example/phish',
+    }))).toEqual({
+      message: 'Quota exhausted https://h/f?token=[REDACTED] apiKey=[REDACTED]',
+      kind: 'quota',
+      settingsUrl: undefined,
+    });
   });
 });

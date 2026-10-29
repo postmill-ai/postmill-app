@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "필수 항목 누락: {{fields}}",
   "unknown_category": "알 수 없는 카테고리",
   "generation_failed": "생성 실패",
+  "provider_error_open_settings": "설정 열기",
+  "provider_error_quota": "계정의 할당량 또는 결제 한도에 도달했습니다. 제공업체 측의 요금제와 결제 정보를 확인하세요.",
   "image": "이미지",
   "video": "동영상",
   "go_to_category": "{{label}}로 이동",

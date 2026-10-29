@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "Отсутствуют обязательные поля: {{fields}}",
   "unknown_category": "Неизвестная категория",
   "generation_failed": "Ошибка генерации",
+  "provider_error_open_settings": "Открыть настройки",
+  "provider_error_quota": "Достигнут лимит квоты или оплаты аккаунта. Проверьте тариф и оплату на стороне провайдера.",
   "image": "Изображение",
   "video": "Видео",
   "go_to_category": "Перейти к {{label}}",

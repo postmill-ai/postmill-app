@@ -7,7 +7,12 @@ import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/st
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
-import { ProviderKernel } from '@postmill-ai/provider-kernel';
+import {
+  classifyUpstream,
+  ProviderKernel,
+  ProviderUpstreamError,
+  upstreamErrorFromBody,
+} from '@postmill-ai/provider-kernel';
 import { MediaGenerateOptions, MediaModelOption, MediaOperation } from '@postmill-ai/nestjs-libraries/media/media-provider-adapter.interface';
 import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { MEDIA_CATEGORY_OPERATION } from '@postmill-ai/nestjs-libraries/ai/defaults/default-categories';
@@ -244,8 +249,27 @@ export class MediaStudioService {
       await this._lifecycle.attachProviderJob(job.id, submit.jobId, orgId);
       return { jobId: job.id };
     } catch (err) {
-      await this._lifecycle.failJob(job, (err as Error).message, { notify: false });
-      throw err;
+      const original = err as Error;
+      const failure =
+        original instanceof ProviderUpstreamError
+          ? original
+          : classifyUpstream(undefined, original.message) === 'quota'
+            ? upstreamErrorFromBody(
+                {
+                  domain: 'media',
+                  providerId: provider,
+                  providerName: adapter.name || provider,
+                  operation: params.operation,
+                },
+                undefined,
+                original.message,
+              )
+            : original;
+      await this._lifecycle.failJob(job, failure.message, {
+        notify: false,
+        ...(failure instanceof ProviderUpstreamError ? { kind: failure.kind } : {}),
+      });
+      throw failure;
     }
   }
 

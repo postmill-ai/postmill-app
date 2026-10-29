@@ -271,7 +271,25 @@ describe('MediaStudioService', () => {
       expect(lifecycle.failJob).toHaveBeenCalledWith(
         { id: 'job-1' },
         "Test Provider reports the account's quota or billing limit was reached (HTTP 429): You exceeded your current quota",
-        { notify: false },
+        { notify: false, kind: 'quota' },
+      );
+    });
+
+    it('normalizes an unstructured exhausted-balance failure and rethrows the typed error', async () => {
+      const { service, adapter, lifecycle } = makeService();
+      adapter.generateVideo.mockRejectedValue(new Error('Account balance is insufficient'));
+
+      await expect(
+        service.generate('org-1', 'user-1', 'test-provider', {
+          operation: 'video',
+          input: { prompt: 'a cat' },
+        }),
+      ).rejects.toMatchObject({ name: 'ProviderUpstreamError', kind: 'quota' });
+
+      expect(lifecycle.failJob).toHaveBeenCalledWith(
+        { id: 'job-1' },
+        expect.stringContaining('quota or billing limit'),
+        { notify: false, kind: 'quota' },
       );
     });
 

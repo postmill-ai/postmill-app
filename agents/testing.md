@@ -111,6 +111,12 @@ to; use the `seed:demo` fixtures (Solstice cast) with `E2E_MEMBER_EMAIL` /
 unit/integration tests can't cover (auth flows, composer end-to-end, settings CRUD
 round-trips); keep component-level behavior in vitest.
 
+`97-provider-video-workflows.spec.ts` and `playwright.provider-video.config.ts` are the
+network-stubbed provider workflow suite. For a local run whose routes also mock identity and
+organization data, set `E2E_SKIP_AUTH_SETUP=1` to bypass the real login setup and `E2E_BASE`
+to the local frontend (default `http://localhost:4201`). The skip flag is only for these mocked
+routes; never use it to bypass authentication for unmocked or live-provider tests.
+
 ### Opt-in live provider playback (never default CI)
 
 `99-provider-live-media.spec.ts` and `playwright.provider-live.config.ts` are a separate,

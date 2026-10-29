@@ -3029,6 +3029,8 @@
   "missing_required_fields_note": "Kolom wajib belum diisi: {{fields}}",
   "unknown_category": "Kategori tidak dikenal",
   "generation_failed": "Pembuatan gagal",
+  "provider_error_open_settings": "Buka pengaturan",
+  "provider_error_quota": "Kuota atau batas penagihan akun telah tercapai. Periksa paket dan penagihan di sisi penyedia.",
   "image": "Gambar",
   "video": "Video",
   "go_to_category": "Buka {{label}}",

@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "حقول مطلوبة مفقودة: {{fields}}",
   "unknown_category": "فئة غير معروفة",
   "generation_failed": "فشل الإنشاء",
+  "provider_error_open_settings": "فتح الإعدادات",
+  "provider_error_quota": "تم بلوغ حصة الحساب أو حد الفوترة. تحقق من الخطة والفوترة لدى المزود.",
   "image": "صورة",
   "video": "فيديو",
   "go_to_category": "الانتقال إلى {{label}}",

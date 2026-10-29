@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "Fehlende Pflichtfelder: {{fields}}",
   "unknown_category": "Unbekannte Kategorie",
   "generation_failed": "Generierung fehlgeschlagen",
+  "provider_error_open_settings": "Einstellungen öffnen",
+  "provider_error_quota": "Das Kontingent oder das Abrechnungslimit des Kontos wurde erreicht. Prüfen Sie Tarif und Abrechnung beim Anbieter.",
   "image": "Bild",
   "video": "Video",
   "go_to_category": "Zu {{label}} wechseln",

@@ -20,7 +20,7 @@ export default defineConfig({
     {
       name: 'admin',
       use: { ...devices['Desktop Chrome'], storageState: process.env.E2E_AUTH_STATE || '.auth/admin.json' },
-      dependencies: ['setup'],
+      dependencies: process.env.E2E_SKIP_AUTH_SETUP === '1' ? [] : ['setup'],
     },
   ],
 });

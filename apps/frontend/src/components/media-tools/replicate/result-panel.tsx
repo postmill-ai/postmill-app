@@ -11,6 +11,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { VideoPlayer } from './players/video-player';
 import { ElapsedTimer } from './elapsed-timer';
 import { useGenerate } from './use-generate';
+import { presentJobError } from '@postmill-ai/frontend/components/ai/provider-error';
 import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
 import type { GeneratedMediaMetadata } from '../studio-kit/types';
 
@@ -198,9 +199,7 @@ export function ResultPanel({ medium }: { medium: Medium }) {
       setRunState('success');
     }
     if (jobData?.status === 'failed') {
-      // The jobs endpoint carries the real failure reason — show it (same
-      // rule as the compact studio), not a bare "Generation failed".
-      setError(jobData.error || t('generation_failed', 'Generation failed'));
+      setError(presentJobError(t, jobData.error).message);
       setRunState('error');
     }
   }, [jobData, setResult, setRunState, setError, resultJobId, t]);
