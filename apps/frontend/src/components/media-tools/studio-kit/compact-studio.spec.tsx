@@ -301,6 +301,26 @@ describe('CompactStudio (descriptor provider)', () => {
     expect(onGenerated).not.toHaveBeenCalled();
   });
 
+  it('uses the generic failure instead of raw unrecognized job JSON', async () => {
+    jobsPayload = [
+      {
+        id: 'job-1',
+        operation: 'image',
+        status: 'failed',
+        artifactUrl: null,
+        fileId: null,
+        error: '{"code":"OUT_OF_CREDITS","secret":"do-not-render"}',
+        createdAt: '2026-10-19T00:00:00.000Z',
+      },
+    ];
+    renderStudio(
+      <CompactStudio provider="google" operation="image" prompt="a cat" onGenerated={vi.fn()} />
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Generation failed');
+    expect(screen.queryByText(/do-not-render/)).toBeNull();
+  });
+
   it('surfaces the job error when generation fails', async () => {
     jobsPayload = [
       {

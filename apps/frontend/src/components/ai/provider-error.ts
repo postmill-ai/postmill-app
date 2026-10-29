@@ -127,13 +127,37 @@ export function providerErrorToastText(t: Translate, pe: ProviderError): string 
 
 // Poll-path media-job failures store a structured envelope as JSON in the
 // job's error column (media-job-lifecycle.service.ts `failJob`) so quota /
-// billing failures keep their settings link. Plain-string errors (anything
-// not matching this shape) must render verbatim — readers: the studio render
-// queues, the compact studios, and the designer's job poller.
+// billing failures keep their settings link.
 export interface JobErrorEnvelope {
   message: string;
-  kind?: string;
+  kind?: ProviderErrorKind;
   settingsUrl?: string;
+}
+
+const JOB_ERROR_KINDS = new Set<ProviderErrorKind>([
+  'auth',
+  'quota',
+  'rate_limit',
+  'invalid_request',
+  'timeout',
+  'unavailable',
+  'unknown',
+]);
+
+function sanitizeJobErrorMessage(message: string): string {
+  return message
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(
+      /([?&](?:x-amz-signature|x-amz-credential|x-amz-security-token|x-goog-signature|signature|sig|token|access_token|apikey|api_key|key)=)[^&\s"']+/gi,
+      '$1[REDACTED]'
+    )
+    .replace(
+      /((?:api[_-]?key|authorization|access[_-]?token|secret|password)\s*[:=]\s*)[^\s,;]+/gi,
+      '$1[REDACTED]'
+    )
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 900);
 }
 
 export function parseJobError(error: string | null | undefined): JobErrorEnvelope | null {
@@ -142,15 +166,40 @@ export function parseJobError(error: string | null | undefined): JobErrorEnvelop
   if (!trimmed.startsWith('{')) return null;
   try {
     const parsed = JSON.parse(trimmed);
-    if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      typeof parsed.message === 'string' &&
+      parsed.message.trim() &&
+      JOB_ERROR_KINDS.has(parsed.kind)
+    ) {
       return {
-        message: parsed.message,
-        kind: typeof parsed.kind === 'string' ? parsed.kind : undefined,
-        settingsUrl: typeof parsed.settingsUrl === 'string' ? parsed.settingsUrl : undefined,
+        message: sanitizeJobErrorMessage(parsed.message),
+        kind: parsed.kind,
+        settingsUrl:
+          typeof parsed.settingsUrl === 'string' && /^\/settings(?:\/|$)/.test(parsed.settingsUrl)
+            ? parsed.settingsUrl
+            : undefined,
       };
     }
   } catch {
-    /* plain string */
+    /* handled by the generic presenter */
   }
   return null;
+}
+
+export function presentJobError(
+  t: Translate,
+  error: string | null | undefined,
+  fallbackKey = 'generation_failed',
+  fallback = 'Generation failed'
+): JobErrorEnvelope {
+  const envelope = parseJobError(error);
+  if (envelope) return envelope;
+  const trimmed = error?.trim() ?? '';
+  if (trimmed && !trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return { message: error! };
+  }
+  return { message: t(fallbackKey, fallback) };
 }

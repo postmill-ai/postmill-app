@@ -1,6 +1,6 @@
 import { JOB_MAX_POLLS, JOB_POLL_INTERVAL_MS } from './add-media-to-timeline';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
-import { parseJobError } from '@postmill-ai/frontend/components/ai/provider-error';
+import { presentJobError } from '@postmill-ai/frontend/components/ai/provider-error';
 import type { createDesignerStore, VideoOutput } from './designer.store';
 
 type StoreApi = ReturnType<typeof createDesignerStore>;
@@ -86,7 +86,9 @@ export async function runClipTransformRequest(options: RunClipTransformOptions):
           state.pushHistory();
           break;
         }
-        if (job.status === 'failed') throw new Error(parseJobError(job.error)?.message ?? job.error ?? translate('transform_failed', 'Transform failed'));
+        if (job.status === 'failed') {
+          throw new Error(presentJobError(translate, job.error, 'transform_failed', 'Transform failed').message);
+        }
         polls++;
         await new Promise((r) => setTimeout(r, JOB_POLL_INTERVAL_MS));
       }

@@ -6,7 +6,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { Button } from '@postmill-ai/react/form/button';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { MEDIA_SETUP_HREF } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
-import { parseJobError, providerErrorToastText, type ProviderError } from '@postmill-ai/frontend/components/ai/provider-error';
+import { presentJobError, providerErrorToastText, type ProviderError } from '@postmill-ai/frontend/components/ai/provider-error';
 import { StudioForm } from './studio-form';
 import { useStudioStatus, useStudioJobs, useStudioGenerate } from './hooks';
 import { studioTabKey } from './i18n-keys';
@@ -172,13 +172,8 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
       handledJobRef.current = job.id;
       setActiveJobId(null);
       setResumedJob(null);
-      // Poll-path failures can carry the structured envelope (message +
-      // settingsUrl) — unwrap it so the settings link renders (B7).
-      const envelope = parseJobError(job.error);
-      fail(
-        envelope?.message ?? job.error ?? t('generation_failed', 'Generation failed'),
-        envelope?.settingsUrl
-      );
+      const envelope = presentJobError(t, job.error);
+      fail(envelope.message, envelope.settingsUrl);
     }
   }, [jobs, activeJobId, onGenerated, operation, fail, t]);
 

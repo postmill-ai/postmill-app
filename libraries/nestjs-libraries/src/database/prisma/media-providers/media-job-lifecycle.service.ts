@@ -8,6 +8,7 @@ import { mediaJobWebhookToken } from '@postmill-ai/nestjs-libraries/media/media-
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
+import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import {
   redactError,
@@ -45,6 +46,17 @@ const MAX_ARTIFACT_BYTES = 512 * 1024 * 1024;
 // returning many takes) so a runaway/malicious `extraArtifactUrls` can't spawn an
 // unbounded set of sibling downloads + File rows.
 const MAX_EXTRA_ARTIFACTS = 8;
+
+function canonicalTerminalMessage(error: string): string {
+  return redactError(error, 900)
+    .replace(/\{[\s\S]*\}/g, '[provider JSON omitted]')
+    .replace(/\[\s*(?:\{|"|-?\d|true\b|false\b|null\b)[\s\S]*\]/g, '[provider JSON omitted]')
+    .replace(
+      /((?:api[_-]?key|authorization|access[_-]?token|secret|password)\s*[:=]\s*)[^\s,;]+/gi,
+      '$1[REDACTED]',
+    )
+    .replace(/((?<!invalid\s)(?<!\.)\b(?:prompt|request body)\s*[:=]\s*)[\s\S]*/gi, '$1[REDACTED]');
+}
 
 // 'stt' jobs are created already-complete (transcript stored inline via
 // completeJobWithBuffer), so they never enter the async poll path — but the type must
@@ -138,6 +150,7 @@ export class MediaJobLifecycleService {
     private _fileService: FileService,
     private _notificationService: NotificationService,
     private _videoThumbnailService: VideoThumbnailService,
+    private _redis: RedisService,
   ) {}
 
   // ── Job creation / provider-reference tracking ──
@@ -582,16 +595,16 @@ export class MediaJobLifecycleService {
     error: string,
     options?: { notify?: boolean; kind?: UpstreamErrorKind },
   ): Promise<void> {
-    // A kind means the text is provider-attributed — store the structured
-    // envelope (JSON with message/kind/settingsUrl) so render queues can link
-    // straight to the fix; the notification below keeps the PLAIN text.
-    // Plain-string errors (no recovered kind) are stored verbatim, exactly as
-    // before. settingsUrl mirrors SETTINGS_URL_BY_DOMAIN['media'] in
-    // provider-exception.filter.ts.
-    const stored = options?.kind
+    const attributedKind = options?.kind ?? upstreamKindFromText(error);
+    const kind = attributedKind ?? 'unknown';
+    const canonicalMessage = canonicalTerminalMessage(error);
+    this._logger.warn(
+      `Media job terminal failure provider=${job.provider} job=${job.id} operation=${job.operation} kind=${kind} message=${canonicalMessage}`,
+    );
+    const stored = attributedKind
       ? JSON.stringify({
-          message: error.slice(0, 900),
-          kind: options.kind,
+          message: canonicalMessage,
+          kind: attributedKind,
           settingsUrl: '/settings/content/ai-media',
         })
       : error;
@@ -600,13 +613,32 @@ export class MediaJobLifecycleService {
       error: stored.slice(0, 1000),
       ...(this.providerJobRef(job) ? { artifactUrl: null } : {}),
     });
+    if (kind === 'quota') await this._notifyQuotaOwners(job);
     if (options?.notify === false) return;
     await this._notify(
       job,
       'fail',
       `AI ${job.operation} failed`,
-      `Your ${job.operation} generation with ${job.provider} failed: ${error.slice(0, 200)}`,
+      `Your ${job.operation} generation with ${job.provider} failed: ${canonicalMessage.slice(0, 200)}`,
     );
+  }
+
+  private async _notifyQuotaOwners(job: AIMediaJob): Promise<void> {
+    try {
+      const claimed = await this._redis.client.set(
+        `media:quota-owner-alert:${job.organizationId}:${job.provider}`,
+        '1',
+        'EX',
+        24 * 60 * 60,
+        'NX',
+      );
+      if (claimed !== 'OK') return;
+      await this._notificationService.notifyMediaProviderQuota(job.organizationId, job.provider);
+    } catch {
+      this._logger.warn(
+        `Media quota owner alert failed provider=${job.provider} job=${job.id} operation=${job.operation}`,
+      );
+    }
   }
 
   // ── Artifact / transcript storage (§11.5) ──

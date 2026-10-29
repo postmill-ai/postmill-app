@@ -129,9 +129,13 @@ function makeService() {
     resolveOwnedFolderId: vi.fn().mockResolvedValue(null),
   };
 
-  const notificationService = { notify: vi.fn().mockResolvedValue(undefined) };
+  const notificationService = {
+    notify: vi.fn().mockResolvedValue(undefined),
+    notifyMediaProviderQuota: vi.fn().mockResolvedValue(undefined),
+  };
 
   const videoThumbnailService = { enqueueGenerate: vi.fn() };
+  const redis = { client: { set: vi.fn().mockResolvedValue('OK') } };
 
   const service = new MediaJobLifecycleService(
     aiSettings as never,
@@ -141,6 +145,7 @@ function makeService() {
     mediaRepository as never,
     notificationService as never,
     videoThumbnailService as never,
+    redis as never,
   );
 
   return {
@@ -155,6 +160,7 @@ function makeService() {
     mediaRepository,
     notificationService,
     videoThumbnailService,
+    redis,
   };
 }
 
@@ -938,12 +944,116 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
     });
   });
 
-  describe('failJob notify option', () => {
-    it('suppresses the notification when notify=false', async () => {
-      const { service, jobs, notificationService } = makeService();
+  describe('failJob terminal handling', () => {
+    it('suppresses ordinary and owner notifications for a non-quota notify=false failure', async () => {
+      const { service, jobs, notificationService, redis } = makeService();
       jobs.set('job-1', makeJob());
       await service.failJob(makeJob(), 'provider down', { notify: false });
       expect(notificationService.notify).not.toHaveBeenCalled();
+      expect(notificationService.notifyMediaProviderQuota).not.toHaveBeenCalled();
+      expect(redis.client.set).not.toHaveBeenCalled();
+    });
+
+    it('alerts owners for quota even when ordinary notify=false, using a 24h org+provider NX claim', async () => {
+      const { service, notificationService, redis } = makeService();
+      await service.failJob(makeJob({ provider: 'replicate' }), 'insufficient credits', {
+        notify: false,
+        kind: 'quota',
+      });
+
+      expect(redis.client.set).toHaveBeenCalledWith(
+        'media:quota-owner-alert:org-1:replicate',
+        '1',
+        'EX',
+        86400,
+        'NX',
+      );
+      expect(notificationService.notifyMediaProviderQuota).toHaveBeenCalledWith('org-1', 'replicate');
+      expect(notificationService.notify).not.toHaveBeenCalled();
+    });
+
+    it('infers attributed quota failures from custom provider submission paths', async () => {
+      const { service, jobs, notificationService } = makeService();
+      jobs.set('job-1', makeJob({ provider: 'heygen' }));
+      const message = "HeyGen reports the account's quota or billing limit was reached (HTTP 402): insufficient credits";
+
+      await service.failJob(makeJob({ provider: 'heygen' }), message, { notify: false });
+
+      expect(notificationService.notifyMediaProviderQuota).toHaveBeenCalledWith('org-1', 'heygen');
+      expect(JSON.parse(jobs.get('job-1')!.error!)).toMatchObject({
+        message,
+        kind: 'quota',
+        settingsUrl: '/settings/content/ai-media',
+      });
+      expect(notificationService.notify).not.toHaveBeenCalled();
+    });
+
+    it('throttles repeated provider failures and isolates different providers', async () => {
+      const { service, notificationService, redis } = makeService();
+      redis.client.set
+        .mockResolvedValueOnce('OK')
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('OK');
+
+      await service.failJob(makeJob({ id: 'job-1', provider: 'fal' }), 'quota', { notify: false, kind: 'quota' });
+      await service.failJob(makeJob({ id: 'job-2', provider: 'fal' }), 'quota', { notify: false, kind: 'quota' });
+      await service.failJob(makeJob({ id: 'job-3', provider: 'minimax' }), 'quota', { notify: false, kind: 'quota' });
+
+      expect(notificationService.notifyMediaProviderQuota).toHaveBeenCalledTimes(2);
+      expect(notificationService.notifyMediaProviderQuota).toHaveBeenNthCalledWith(1, 'org-1', 'fal');
+      expect(notificationService.notifyMediaProviderQuota).toHaveBeenNthCalledWith(2, 'org-1', 'minimax');
+    });
+
+    it('keeps the terminal job result when owner notification or Redis fails', async () => {
+      const first = makeService();
+      first.notificationService.notifyMediaProviderQuota.mockRejectedValue(new Error('mail transport failed'));
+      await expect(first.service.failJob(makeJob(), 'quota', { notify: false, kind: 'quota' })).resolves.toBeUndefined();
+
+      const second = makeService();
+      second.redis.client.set.mockRejectedValue(new Error('redis offline'));
+      await expect(second.service.failJob(makeJob(), 'quota', { notify: false, kind: 'quota' })).resolves.toBeUndefined();
+      expect(second.notificationService.notifyMediaProviderQuota).not.toHaveBeenCalled();
+    });
+
+    it('logs only canonical fields and a redacted message, never the raw provider body', async () => {
+      const { service } = makeService();
+      const warn = vi.spyOn((service as any)._logger, 'warn').mockImplementation(() => {});
+      const raw = 'Replicate quota exhausted; download https://provider.test/out?token=fixture-secret; prompt: private user text; {"apiKey":"sk-secret"}';
+      await service.failJob(makeJob({ provider: 'replicate' }), raw, { notify: false, kind: 'quota' });
+
+      const terminal = warn.mock.calls.map(([line]) => line).find((line) => line.includes('terminal failure'))!;
+      expect(terminal).toContain('provider=replicate');
+      expect(terminal).toContain('job=job-1');
+      expect(terminal).toContain('operation=video');
+      expect(terminal).toContain('kind=quota');
+      expect(terminal).toContain('token=[REDACTED]');
+      expect(terminal).not.toContain('fixture-secret');
+      expect(terminal).not.toContain('sk-secret');
+      expect(terminal).not.toContain('private user text');
+
+      await service.failJob(
+        makeJob({ id: 'job-2', provider: 'reelfarm' }),
+        'Failed to store generated artifact: https://slides.reel.farm/a.jpg?token=[REDACTED]',
+        { notify: false },
+      );
+      const redacted = warn.mock.calls.map(([line]) => line).find((line) => line.includes('job=job-2'))!;
+      expect(redacted).toContain('token=[REDACTED]');
+      expect(redacted).not.toContain('JSON omitted');
+    });
+
+    it.each([
+      'Replicate rejected the request (HTTP 422): Invalid input: width must be divisible by 16',
+      '- input.prompt: field required',
+      'Invalid prompt: your prompt was flagged',
+    ])('preserves actionable provider validation: %s', async (message) => {
+      const { service } = makeService();
+      const warn = vi.spyOn((service as any)._logger, 'warn').mockImplementation(() => {});
+
+      await service.failJob(makeJob(), message, { notify: false, kind: 'quota' });
+
+      const terminal = warn.mock.calls.map(([line]) => line).find((line) => line.includes('terminal failure'))!;
+      expect(terminal).toContain(message);
+      expect(terminal).not.toContain('[REDACTED]');
     });
   });
 

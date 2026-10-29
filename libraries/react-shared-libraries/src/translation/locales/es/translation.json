@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "Faltan campos obligatorios: {{fields}}",
   "unknown_category": "Categoría desconocida",
   "generation_failed": "Error en la generación",
+  "provider_error_open_settings": "Abrir configuración",
+  "provider_error_quota": "Se alcanzó la cuota o el límite de facturación de la cuenta. Revisa el plan y la facturación del proveedor.",
   "image": "Imagen",
   "video": "Video",
   "go_to_category": "Ir a {{label}}",

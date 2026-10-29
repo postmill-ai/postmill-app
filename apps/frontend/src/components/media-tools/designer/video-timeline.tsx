@@ -32,7 +32,7 @@ import { directFetchForAbsoluteUrls, type WaveformFetch } from './waveform-fetch
 import { KeyframeLane } from './keyframe-lane';
 import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
-import { parseJobError } from '@postmill-ai/frontend/components/ai/provider-error';
+import { presentJobError } from '@postmill-ai/frontend/components/ai/provider-error';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { aspectBucketForDimensions } from '@postmill-ai/nestjs-libraries/media/slide/slide-aspect';
@@ -3451,7 +3451,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           await finish(job.artifactUrl);
           break;
         }
-        if (job.status === 'failed') throw new Error(parseJobError(job.error)?.message ?? job.error ?? translate('transform_failed', 'Transform failed'));
+        if (job.status === 'failed') {
+          throw new Error(presentJobError(translate, job.error, 'transform_failed', 'Transform failed').message);
+        }
         polls++;
         await new Promise((r) => setTimeout(r, JOB_POLL_INTERVAL_MS));
       }

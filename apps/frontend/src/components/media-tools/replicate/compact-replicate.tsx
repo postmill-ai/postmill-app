@@ -7,6 +7,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { Button } from '@postmill-ai/react/form/button';
 import { MEDIA_SETUP_HREF } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { readErrorMessage } from '@postmill-ai/frontend/components/media-tools/designer/read-error-message';
+import { presentJobError } from '@postmill-ai/frontend/components/ai/provider-error';
 import { useReplicateStore, type CategoryDefinition } from './replicate.store';
 import { ModelPicker } from './model-picker';
 import { DynamicForm } from './dynamic-form';
@@ -199,8 +200,7 @@ export const CompactReplicate: FC<{
     } else if (jobData.status === 'failed') {
       handledJobRef.current = jobId;
       setJobId(null);
-      // The jobs endpoint carries the real failure reason — show it.
-      fail(jobData.error || t('generation_failed', 'Generation failed'));
+      fail(presentJobError(t, jobData.error).message);
     }
   }, [jobData, jobId, operation, onGenerated, fail, t]);
 
@@ -274,7 +274,7 @@ export const CompactReplicate: FC<{
         // Async (or a sync run that timed out server-side): poll to completion.
         setJobId(data.jobId);
       } else {
-        throw new Error(data.error || t('generation_failed', 'Generation failed'));
+        throw new Error(presentJobError(t, data.error).message);
       }
     } catch (err) {
       fail((err as Error)?.message || t('generation_failed', 'Generation failed'));

@@ -58,11 +58,18 @@ Fan-out mechanics (`notify`, :105-194):
 Convenience senders already on the service — use them when they fit instead of raw
 `notify`: `notifyPostPublishFailure`, `notifyPostPublished` (digest),
 `notifyChannelError`, `notifyFirstCommentUnsupported/Failed`,
-`notifyBudgetThreshold`, `notifyAnalyticsAnomaly` (digest),
+`notifyBudgetThreshold`, `notifyMediaProviderQuota`, `notifyAnalyticsAnomaly` (digest),
 `notifyWeeklyAnalyticsSummary`, `notifyCommentDigest` (digest, escapes user content via
 `_escapeHtml`, NOTIF-01), `notifyStreakReminder` (:293-566). Also `broadcast(orgId,
 BroadcastNotificationDto)` (:201-240): `announcements` category, `override: true`,
 optional `targetUserIds`/`targetRoles` filters.
+
+`notifyMediaProviderQuota(orgId, provider)` targets only active organization owners, uses the
+`media` category, links to `/settings/content/ai-media`, and respects normal delivery preferences
+(no `override`). The media-job lifecycle claims a Redis `SET NX EX` marker per org + provider for
+24 hours before calling it, including when the ordinary failure notification is suppressed with
+`notify: false`. Redis and notification errors are best-effort and must not change job completion
+or failure behavior.
 
 ## The 10 categories — three lockstep places
 

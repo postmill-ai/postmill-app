@@ -67,6 +67,8 @@ const FILES = [
 class ProviderWorkflowMocks {
   private readonly posts = new Map<string, Record<string, unknown>[]>();
   private readonly generationErrors = new Map<string, Record<string, unknown>>();
+  private readonly asyncFailures = new Map<string, { error: string; afterPoll: number }>();
+  private readonly jobPolls = new Map<string, number>();
   private readonly jobs: Record<string, StudioJob[]> = {
     fal: [],
     kling: [],
@@ -100,6 +102,10 @@ class ProviderWorkflowMocks {
     this.generationErrors.set(provider, body);
   }
 
+  failAsyncJob(provider: string, error: string, afterPoll = 3) {
+    this.asyncFailures.set(provider, { error, afterPoll });
+  }
+
   async install(page: Page) {
     await page.context().route('**/*', async (route) => {
       const request = route.request();
@@ -130,6 +136,36 @@ class ProviderWorkflowMocks {
       }
       if (pathname.startsWith('/mock-storage/') && method === 'GET') {
         await route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
+        return;
+      }
+
+      if (method === 'GET' && pathname === '/user/self') {
+        await json(route, {
+          id: 'e2e-user',
+          email: 'qa@example.test',
+          orgId: 'e2e-org',
+          role: 'owner',
+          isSuperAdmin: true,
+          activated: true,
+          setupCompleted: true,
+          profile: {},
+        });
+        return;
+      }
+      if (method === 'GET' && pathname === '/settings/roles/me') {
+        await json(route, { role: 'owner', permissions: [], isSuperAdmin: true });
+        return;
+      }
+      if (method === 'GET' && pathname === '/user/organizations') {
+        await json(route, [{ id: 'e2e-org', name: 'E2E Org', users: [{ disabled: false }] }]);
+        return;
+      }
+      if (method === 'GET' && ['/announcements', '/notifications', '/brands', '/integrations/list'].includes(pathname)) {
+        await json(route, []);
+        return;
+      }
+      if (method === 'GET' && ['/settings/media/config', '/settings/ai/config', '/media/fonts'].includes(pathname)) {
+        await json(route, pathname === '/media/fonts' ? [] : {});
         return;
       }
 
@@ -202,7 +238,19 @@ class ProviderWorkflowMocks {
       }
       const studioJobs = /^\/media\/studio\/(fal|kling|minimax|elevenlabs|reelfarm)\/jobs$/.exec(pathname);
       if (studioJobs && method === 'GET') {
-        await json(route, this.jobs[studioJobs[1]]);
+        const provider = studioJobs[1];
+        const poll = (this.jobPolls.get(provider) ?? 0) + 1;
+        this.jobPolls.set(provider, poll);
+        const failure = this.asyncFailures.get(provider);
+        if (failure && poll >= failure.afterPoll) {
+          for (const job of this.jobs[provider]) {
+            if (job.status === 'pending' || job.status === 'processing') {
+              job.status = 'failed';
+              job.error = failure.error;
+            }
+          }
+        }
+        await json(route, this.jobs[provider]);
         return;
       }
       if (pathname === '/media/heygen/status' && method === 'GET') {
@@ -611,6 +659,77 @@ test.describe('Provider video workflows (network stubbed)', () => {
       mocks.expectNoExternalProviders();
     });
   }
+
+  test('full-page immediate quota 502 shows one clear toast and settings action without raw JSON', async ({ page }) => {
+    test.setTimeout(120_000);
+    const mocks = new ProviderWorkflowMocks();
+    const message = "fal.ai reports the account's quota or billing limit was reached (HTTP 402): insufficient credits";
+    mocks.failGeneration('fal', {
+      error: 'ProviderUpstreamError',
+      provider: 'fal',
+      providerName: 'fal.ai',
+      domain: 'media',
+      operation: 'video',
+      kind: 'quota',
+      upstreamStatus: 402,
+      retryable: false,
+      message,
+      settingsUrl: '/settings/content/ai-media',
+      providerSecret: 'never-render-this-secret',
+    });
+    await mocks.install(page);
+    await page.goto('/media/fal', { waitUntil: 'domcontentloaded' });
+    const generate = page.getByRole('button', { name: 'Generate', exact: true });
+    await expect(generate).toBeVisible({ timeout: 90_000 });
+    await page.getByLabel('Prompt', { exact: true }).fill(PROMPT);
+    await generate.click();
+
+    const toastText = page.getByText(message, { exact: false });
+    await expect(toastText).toBeVisible();
+    await expect(toastText).toContainText("The account's quota or billing limit was reached");
+    const settings = page.getByRole('link', { name: 'Open settings', exact: true });
+    await expect(settings).toHaveAttribute('href', '/settings/content/ai-media');
+    await expect(page.getByText(/never-render-this-secret|"providerSecret"|"kind"/)).toHaveCount(0);
+    expect(mocks.generationCount()).toBe(1);
+    mocks.expectNoExternalProviders();
+  });
+
+  test('async quota transition toasts once with settings and does not repeat on polls or historical reload', async ({ page }) => {
+    test.setTimeout(120_000);
+    const mocks = new ProviderWorkflowMocks();
+    const message = "fal.ai reports the account's quota or billing limit was reached (HTTP 402): insufficient credits";
+    mocks.failAsyncJob('fal', JSON.stringify({
+      message,
+      kind: 'quota',
+      settingsUrl: '/settings/content/ai-media',
+      providerSecret: 'never-render-this-secret',
+    }));
+    await mocks.install(page);
+    await page.goto('/media/fal', { waitUntil: 'domcontentloaded' });
+    const generate = page.getByRole('button', { name: 'Generate', exact: true });
+    await expect(generate).toBeVisible({ timeout: 90_000 });
+    await page.getByLabel('Prompt', { exact: true }).fill(PROMPT);
+    await generate.click();
+    await expect(page.getByText('Render started', { exact: true })).toBeVisible();
+
+    const failureText = page.getByText(message, { exact: false });
+    await expect(failureText).toHaveCount(2, { timeout: 20_000 });
+    const toast = failureText.last().locator('..');
+    await expect(toast.getByRole('link', { name: 'Open settings', exact: true })).toHaveAttribute(
+      'href',
+      '/settings/content/ai-media'
+    );
+    await expect(toast).toContainText("The account's quota or billing limit was reached");
+    await expect(page.getByText(/never-render-this-secret|"providerSecret"|"kind"/)).toHaveCount(0);
+
+    await page.waitForTimeout(5_500);
+    await expect(failureText).toHaveCount(1);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByText(message, { exact: false })).toHaveCount(1, { timeout: 90_000 });
+    await expect(page.getByRole('link', { name: 'Open settings', exact: true })).toHaveCount(1);
+    expect(mocks.generationCount()).toBe(1);
+    mocks.expectNoExternalProviders();
+  });
 
   test('Reel.Farm completed job decodes, plays, seeks, opens in Designer, and reloads without regeneration', async ({ page }) => {
     test.setTimeout(120_000);

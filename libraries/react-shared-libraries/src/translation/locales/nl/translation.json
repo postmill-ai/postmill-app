@@ -3029,6 +3029,8 @@
   "missing_required_fields_note": "Ontbrekende verplichte velden: {{fields}}",
   "unknown_category": "Onbekende categorie",
   "generation_failed": "Genereren mislukt",
+  "provider_error_open_settings": "Instellingen openen",
+  "provider_error_quota": "Het quotum of de factureringslimiet van het account is bereikt. Controleer het abonnement en de facturering bij de provider.",
   "image": "Afbeelding",
   "video": "Video",
   "go_to_category": "Ga naar {{label}}",

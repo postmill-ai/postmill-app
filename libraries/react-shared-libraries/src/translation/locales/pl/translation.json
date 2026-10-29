@@ -3031,6 +3031,8 @@
   "missing_required_fields_note": "Brak wymaganych pól: {{fields}}",
   "unknown_category": "Nieznana kategoria",
   "generation_failed": "Generowanie nie powiodło się",
+  "provider_error_open_settings": "Otwórz ustawienia",
+  "provider_error_quota": "Osiągnięto limit przydziału lub rozliczeń konta. Sprawdź plan i rozliczenia po stronie dostawcy.",
   "image": "Obraz",
   "video": "Wideo",
   "go_to_category": "Przejdź do: {{label}}",

@@ -189,6 +189,27 @@ describe('pollMediaJobArtifact — job-status polling resilience', () => {
     ).rejects.toThrow('provider exploded');
   });
 
+  it('unwraps valid job envelopes and hides unrecognized JSON', async () => {
+    const envelopeFetch = vi.fn().mockResolvedValue(okJob({
+      status: 'failed',
+      error: JSON.stringify({ message: 'Quota exhausted', kind: 'quota', settingsUrl: '/settings/content/ai-media' }),
+    }));
+    await expect(
+      pollMediaJobArtifact({ jobId: 'job-1', fetch: envelopeFetch, isMounted: () => true, messages, sleep: noSleep })
+    ).rejects.toThrow('Quota exhausted');
+
+    const jsonFetch = vi.fn().mockResolvedValue(okJob({
+      status: 'failed',
+      error: '{"code":"OUT_OF_CREDITS","secret":"do-not-render"}',
+    }));
+    await expect(
+      pollMediaJobArtifact({ jobId: 'job-1', fetch: jsonFetch, isMounted: () => true, messages, sleep: noSleep })
+    ).rejects.toThrow('Generation failed');
+    await expect(
+      pollMediaJobArtifact({ jobId: 'job-1', fetch: jsonFetch, isMounted: () => true, messages, sleep: noSleep })
+    ).rejects.not.toThrow('do-not-render');
+  });
+
   it('throws when the job completes without an artifact', async () => {
     const fetch = vi.fn().mockResolvedValue(okJob({ status: 'completed' }));
 

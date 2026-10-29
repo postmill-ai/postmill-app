@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "必須項目が未入力です：{{fields}}",
   "unknown_category": "不明なカテゴリー",
   "generation_failed": "生成に失敗しました",
+  "provider_error_open_settings": "設定を開く",
+  "provider_error_quota": "アカウントの割り当て量または請求上限に達しました。プロバイダー側のプランと請求を確認してください。",
   "image": "画像",
   "video": "動画",
   "go_to_category": "{{label}}へ移動",

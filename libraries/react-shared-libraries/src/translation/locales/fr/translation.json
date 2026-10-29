@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "Champs requis manquants : {{fields}}",
   "unknown_category": "Catégorie inconnue",
   "generation_failed": "Échec de la génération",
+  "provider_error_open_settings": "Ouvrir les paramètres",
+  "provider_error_quota": "Le quota ou la limite de facturation du compte a été atteint. Vérifiez l’abonnement et la facturation auprès du fournisseur.",
   "image": "Image",
   "video": "Vidéo",
   "go_to_category": "Aller à {{label}}",

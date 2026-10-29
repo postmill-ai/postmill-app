@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "Campi obbligatori mancanti: {{fields}}",
   "unknown_category": "Categoria sconosciuta",
   "generation_failed": "Generazione non riuscita",
+  "provider_error_open_settings": "Apri impostazioni",
+  "provider_error_quota": "È stata raggiunta la quota o il limite di fatturazione dell’account. Controlla piano e fatturazione sul lato del provider.",
   "image": "Immagine",
   "video": "Video",
   "go_to_category": "Vai a {{label}}",

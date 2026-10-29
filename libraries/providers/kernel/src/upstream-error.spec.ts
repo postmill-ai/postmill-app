@@ -3,6 +3,7 @@ import {
   ProviderUpstreamError,
   classifyUpstream,
   extractUpstreamDetail,
+  mediaUpstreamFromPoll,
   upstreamErrorFromBody,
   upstreamErrorFromResponse,
   upstreamErrorFromUnknown,
@@ -42,7 +43,12 @@ describe('classifyUpstream', () => {
     [418, '', 'unknown'],
     [undefined, '', 'unknown'],
     [200, 'insufficient balance', 'quota'],
+    [200, 'Account balance is insufficient', 'quota'],
+    [200, 'Not enough credits', 'quota'],
+    [200, 'Your credits are exhausted', 'quota'],
+    [200, 'Resource pack exhausted', 'quota'],
     [undefined, 'Your credit limit was reached', 'quota'],
+    [429, 'Rate limit reached for your current plan', 'rate_limit'],
     [200, 'The selected plan is invalid', 'unknown'],
     [400, 'The plan parameter is invalid', 'invalid_request'],
   ])('%s → %s', (status, body, kind) => {
@@ -103,6 +109,35 @@ describe('extractUpstreamDetail', () => {
     const long = 'x'.repeat(1000);
     expect(extractUpstreamDetail(long)).toHaveLength(300);
     expect(extractUpstreamDetail('see https://h/f?X-Amz-Signature=abc&x=1')).toContain('X-Amz-Signature=[REDACTED]');
+  });
+  it.each([
+    '{"code":"OUT_OF_CREDITS","apiKey":"sk-secret"}',
+    '{"nested":{"message":"not a recognized top-level message"}}',
+    '{malformed-secret',
+    '["raw-secret"]',
+  ])('never falls back to the whole JSON document: %s', (body) => {
+    expect(extractUpstreamDetail(body)).toBe('');
+    expect(upstreamErrorFromBody(ctx, 400, body).message).not.toContain('secret');
+  });
+});
+
+describe('mediaUpstreamFromPoll', () => {
+  it('preserves quota and other canonical kinds from attributed poll text', () => {
+    const quota = mediaUpstreamFromPoll(
+      { identifier: 'replicate', name: 'Replicate' },
+      "Replicate reports the account's quota or billing limit was reached (HTTP 402): insufficient credits",
+      'video',
+    );
+    expect(quota.kind).toBe('quota');
+    expect(quota.retryable).toBe(false);
+
+    const rateLimit = mediaUpstreamFromPoll(
+      { identifier: 'replicate', name: 'Replicate' },
+      'Replicate is rate-limiting requests (HTTP 429): slow down',
+      'video',
+    );
+    expect(rateLimit.kind).toBe('rate_limit');
+    expect(rateLimit.retryable).toBe(true);
   });
 });
 

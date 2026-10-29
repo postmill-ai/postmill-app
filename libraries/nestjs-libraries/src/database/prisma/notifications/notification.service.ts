@@ -435,6 +435,30 @@ export class NotificationService {
     });
   }
 
+  async notifyMediaProviderQuota(orgId: string, provider: string) {
+    const team = await this._organizationRepository.getTeam(orgId);
+    const ownerIds = (team?.users ?? [])
+      .filter(
+        (member) =>
+          member.roleRef?.key === 'owner' &&
+          !member.disabled &&
+          member.user.activated !== false
+      )
+      .map((member) => member.user.id);
+    if (ownerIds.length === 0) return;
+
+    await this.notify({
+      orgId,
+      category: 'media',
+      title: 'Media provider quota reached',
+      message: `${provider} reported that its quota or billing limit was reached. Review the provider plan or credentials in AI media settings before retrying.`,
+      link: '/settings/content/ai-media',
+      metadata: { provider, reason: 'quota' },
+      targetUserIds: ownerIds,
+      channels: { email: true, push: false, inApp: true, comms: false },
+    });
+  }
+
   async notifyBudgetThreshold(orgId: string, scope: string, usagePct: number, provider?: string) {
     const providerLabel = provider ? `provider "${provider}"` : 'your AI budget';
     const title = `AI budget alert: ${usagePct.toFixed(0)}% used`;

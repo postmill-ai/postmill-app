@@ -3016,6 +3016,8 @@
   "missing_required_fields_note": "Campos obrigatórios ausentes: {{fields}}",
   "unknown_category": "Categoria desconhecida",
   "generation_failed": "Falha na geração",
+  "provider_error_open_settings": "Abrir configurações",
+  "provider_error_quota": "A cota ou o limite de faturação da conta foi atingido. Verifique o plano e a faturação no lado do provedor.",
   "image": "Imagem",
   "video": "Vídeo",
   "go_to_category": "Ir para {{label}}",

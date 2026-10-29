@@ -136,6 +136,32 @@ describe('RenderQueue', () => {
     expect(container.querySelector('video')).toBeNull();
   });
 
+  it('renders a valid provider envelope with its settings action', () => {
+    render(
+      <RenderQueue
+        jobs={[job({ status: 'failed', artifactUrl: null, error: JSON.stringify({
+          message: 'Replicate quota exhausted',
+          kind: 'quota',
+          settingsUrl: '/settings/content/ai-media',
+        }) })]}
+        isLoading={false}
+      />
+    );
+    expect(screen.getByText('Replicate quota exhausted')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open settings' }).getAttribute('href')).toBe(
+      '/settings/content/ai-media'
+    );
+  });
+
+  it.each(['{"code":"OUT_OF_CREDITS","secret":"do-not-render"}', '{malformed']) (
+    'never renders malformed or unrecognized job JSON: %s',
+    (error) => {
+      render(<RenderQueue jobs={[job({ status: 'failed', artifactUrl: null, error })]} isLoading={false} />);
+      expect(screen.getByText('Generation failed')).toBeTruthy();
+      expect(screen.queryByText(/do-not-render|malformed/)).toBeNull();
+    }
+  );
+
   it('falls back to the operation while the file type is unresolved', () => {
     const { container } = render(
       <RenderQueue
