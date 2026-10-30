@@ -556,6 +556,7 @@ const clipOnTrack = (page: Page, label: string) =>
 
 test.describe('Designer motion graphics editing (mocked local document)', () => {
   test('track drops, keyboard moves, canvas resize/style/duplicate, and reload persistence', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
     const mocks = new DesignerMocks();
     mocks.doc = motionDoc();
     await mocks.install(page);
@@ -598,6 +599,8 @@ test.describe('Designer motion graphics editing (mocked local document)', () => 
     }).toEqual([100, 2100]);
 
     await clipOnTrack(page, 'Text').first().click();
+    await page.keyboard.press('Control+0');
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     const stage = await page.locator('.konvajs-content').first().boundingBox();
     expect(stage).not.toBeNull();
     const zoom = Math.min(stage!.width / 1080, stage!.height / 1920) * 0.85;
