@@ -231,8 +231,9 @@ Invariants:
    (must be first import).
 2. `initializeOtel()` — before Sentry/Nest so auto-instrumentations patch modules on load.
 3. `initializeSentry('backend', true)`.
-4. `NestFactory.create(AppModule, { rawBody: true, cors: ... })`; `enableShutdownHooks()`;
-   Socket.IO `IoAdapter`.
+4. `NestFactory.create(AppModule, { rawBody: true, cors: ... })`; single-run SIGTERM/SIGINT
+   handler closes idle/websocket connections and bounds the HTTP drain to 5 seconds before
+   `app.close()`; Socket.IO `IoAdapter`.
 5. `startMcp(app)`.
 6. Global `ValidationPipe` (`transform`, `whitelist`, `forbidNonWhitelisted`).
 7. 50mb JSON limit on `/copilot/{*splat}`, `/posts`, and the design save routes

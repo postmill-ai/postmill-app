@@ -43,6 +43,16 @@ export class CollaborationGateway {
     });
   }
 
+  async close() {
+    const wss = this.wss;
+    if (!wss) return;
+    this.wss = null;
+    for (const client of wss.clients) {
+      client.terminate();
+    }
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+  }
+
   private _handleConnection(socket: ws.WebSocket, req: http.IncomingMessage, url: URL, orgId?: string) {
       const rawRoom = url.searchParams.get('room') || 'default';
       const roomName = orgId ? `${orgId}:${rawRoom}` : rawRoom;
