@@ -17,6 +17,7 @@ fixtures/*
 !fixtures/motion.mp4
 !fixtures/motion-rear-moov.mp4
 !fixtures/replacement.webm
+!fixtures/asymmetric-8x2.png
 
 # Local npm lockfile (this is a standalone Playwright project, deps pinned in package.json)
 package-lock.json

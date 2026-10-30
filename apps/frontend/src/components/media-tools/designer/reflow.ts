@@ -8,29 +8,7 @@ export {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 export type { Anchor } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 
-export const computeCoverCrop = (
-  srcW: number,
-  srcH: number,
-  targetW: number,
-  targetH: number,
-  focalPoint?: { x: number; y: number }
-): { x: number; y: number; width: number; height: number } => {
-  const fp = focalPoint || { x: 0.5, y: 0.5 };
-  const targetRatio = targetW / targetH;
-  const srcRatio = srcW / srcH;
-  let sw: number;
-  let sh: number;
-  if (srcRatio > targetRatio) {
-    sh = srcH;
-    sw = srcH * targetRatio;
-  } else {
-    sw = srcW;
-    sh = srcW / targetRatio;
-  }
-  const x = (srcW - sw) * Math.min(1, Math.max(0, fp.x));
-  const y = (srcH - sh) * Math.min(1, Math.max(0, fp.y));
-  return { x, y, width: sw, height: sh };
-};
+export { computeCoverCrop } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 
 /**
  * Lightweight client-side focal-point detection.

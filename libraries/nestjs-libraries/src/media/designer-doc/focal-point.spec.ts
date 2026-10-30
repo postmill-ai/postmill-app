@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { subjectPointToFocalPoint } from './focal-point';
+import { computeCoverCrop } from './media-geometry';
 
-// The renderer's own cover-crop, replicated so a test can assert what the
-// painted window actually contains — a focal point is the crop WINDOW's
-// position within the slack, NOT "put this point at the centre", so an
-// assertion on the raw number alone can pass while cropping the wrong way.
+// Assert what the painted window contains, not only the raw focal number.
 const cropWindow = (
   srcW: number,
   srcH: number,
@@ -12,11 +10,8 @@ const cropWindow = (
   targetH: number,
   fp: { x: number; y: number }
 ) => {
-  const targetRatio = targetW / targetH;
-  const wider = srcW / srcH > targetRatio;
-  const sw = wider ? srcH * targetRatio : srcW;
-  const sh = wider ? srcH : srcW / targetRatio;
-  return { sx: (srcW - sw) * fp.x, sy: (srcH - sh) * fp.y, sw, sh };
+  const crop = computeCoverCrop(srcW, srcH, targetW, targetH, fp);
+  return { sx: crop.x, sy: crop.y, sw: crop.width, sh: crop.height };
 };
 
 describe('subjectPointToFocalPoint', () => {

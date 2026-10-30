@@ -9,6 +9,7 @@ import {
   constrainFractionToRatio,
   normaliseFraction,
   parseCropRatio,
+  cropDisplayBox,
   type BoxFraction,
 } from './crop-geometry';
 
@@ -59,6 +60,7 @@ export const CropOverlay: FC<CropOverlayProps> = ({
   // element id, so targeting a different element remounts it and the crop
   // resets — no reset-in-effect needed.
   const [frac, setFrac] = useState<BoxFraction>(FULL);
+  const [lastHandle, setLastHandle] = useState<HandleId>();
   const ratioValue = parseCropRatio(ratio);
 
   const commit = useCallback(() => {
@@ -68,8 +70,8 @@ export const CropOverlay: FC<CropOverlayProps> = ({
       onCancel();
       return;
     }
-    onCommit(cropFromBoxFraction(element, natural, f));
-  }, [frac, element, natural, onCommit, onCancel]);
+    onCommit(cropFromBoxFraction(element, natural, f, lastHandle));
+  }, [frac, lastHandle, element, natural, onCommit, onCancel]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -85,14 +87,16 @@ export const CropOverlay: FC<CropOverlayProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [commit, onCancel]);
 
+  const display = cropDisplayBox(element, natural);
   const box = {
-    x: element.x + frac.x * element.width,
-    y: element.y + frac.y * element.height,
-    width: frac.width * element.width,
-    height: frac.height * element.height,
+    x: display.x + frac.x * display.width,
+    y: display.y + frac.y * display.height,
+    width: frac.width * display.width,
+    height: frac.height * display.height,
   };
 
   const moveHandle = (id: HandleId, dxFrac: number, dyFrac: number) => {
+    setLastHandle(id);
     setFrac((prev) => {
       let { x, y, width, height } = prev;
       if (id.includes('left')) { x += dxFrac; width -= dxFrac; }
@@ -100,7 +104,7 @@ export const CropOverlay: FC<CropOverlayProps> = ({
       if (id.includes('top')) { y += dyFrac; height -= dyFrac; }
       if (id.includes('bottom')) { height += dyFrac; }
       const next = normaliseFraction({ x, y, width, height });
-      return constrainFractionToRatio(next, ratioValue, element.width, element.height);
+      return constrainFractionToRatio(next, ratioValue, display.width, display.height);
     });
   };
 
@@ -184,8 +188,8 @@ export const CropOverlay: FC<CropOverlayProps> = ({
               const target = handlePos(id);
               moveHandle(
                 id,
-                (nx - target.x) / element.width,
-                (ny - target.y) / element.height
+                (nx - target.x) / display.width,
+                (ny - target.y) / display.height
               );
               // The overlay re-renders from state, so snap the node back and let
               // the derived position win — otherwise it drifts from the box.

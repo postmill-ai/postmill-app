@@ -14,7 +14,7 @@ import Konva from 'konva';
 import { isNativeBlend } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
 import { canvasColor } from '@postmill-ai/nestjs-libraries/media/designer-doc/canvas-color';
 import type { DesignerElement, DesignerGradient, TextRun } from './designer.store';
-import { computeCoverCrop } from './reflow';
+import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 import { fittedFontSize, fitDesignerText, measureForElement } from './measure-text';
 import { measureLineWidth, applyTextTransform, justifyLineWords } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import {
@@ -599,32 +599,17 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, inter
     return () => clearInterval(timer);
   }, [image, element.src]);
 
-  // `contain` letterboxes inside the box; every other mode fills it. The canvas
-  // used to handle only `cover`, so picking "Fit" changed nothing here while it
-  // letterboxed in the export.
-  let drawBox = { x: 0, y: 0, width: element.width, height: element.height };
-  if (element.fitMode === 'contain' && image && !element.crop) {
-    const natW = image.naturalWidth || element.width;
-    const natH = image.naturalHeight || element.height;
-    const scale = Math.min(element.width / natW, element.height / natH);
-    const w = natW * scale;
-    const h = natH * scale;
-    drawBox = { x: (element.width - w) / 2, y: (element.height - h) / 2, width: w, height: h };
-  }
-
-  let crop: { x: number; y: number; width: number; height: number } | undefined;
-  if (element.crop) {
-    crop = { x: element.crop.x, y: element.crop.y, width: element.crop.width, height: element.crop.height };
-  } else if (element.fitMode === 'cover' && image) {
-    const c = computeCoverCrop(
-      image.naturalWidth,
-      image.naturalHeight,
-      element.width,
-      element.height,
-      element.focalPoint,
-    );
-    crop = { x: c.x, y: c.y, width: c.width, height: c.height };
-  }
+  const geometry = computeMediaDraw({
+    sourceWidth: image?.naturalWidth || element.naturalWidth || element.width,
+    sourceHeight: image?.naturalHeight || element.naturalHeight || element.height,
+    targetWidth: element.width,
+    targetHeight: element.height,
+    crop: element.crop,
+    fitMode: element.fitMode,
+    focalPoint: element.focalPoint,
+  });
+  const drawBox = geometry.destination;
+  const crop = geometry.source;
 
   useEffect(() => {
     const node = imageRef.current;

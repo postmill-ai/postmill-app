@@ -396,6 +396,11 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
   one-fontSize line height, middle baselines, all four alignments and reveal prefixes), never a local
   wrapper or top baseline. `fontSize` is a numeric keyframe channel like geometry. Shape gradients use
   injected `buildStyleGradient`; doc v9 `fillGradient`/`align` also project through `video-poster.ts`.
+- Visual clip crop/fit geometry is shared through `designer-doc/media-geometry.ts` and injected with
+  `mediaGeometrySource()`. Preview (including the filtered canvas branch) and frame export must use
+  the same source/destination rectangles. Absent `fitMode` means aspect-preserving `cover`; only
+  explicit `fill` stretches. Crop edits carry `naturalWidth`/`naturalHeight`/`fitMode`/`focalPoint`
+  through the clip adapter rather than consulting the image-only cache.
 - Never bypass the composition bounds (`validateVideoComposition`, 180 s cap) — they are
   the resource-DoS boundary for attacker-controlled compositions. The cap lives in THREE
   lockstep places (`MAX_DURATION_MS` in video-render.service.ts, `MAX_VIDEO_DURATION_MS`

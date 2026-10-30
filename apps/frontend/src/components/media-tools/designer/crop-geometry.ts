@@ -1,5 +1,6 @@
 import type { DesignerElement } from './designer.store';
 import type { DesignerCrop } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { computeCoverCrop, computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 
 /**
  * Crop maths for the on-canvas Crop tool.
@@ -42,49 +43,131 @@ export const normaliseFraction = (f: BoxFraction): BoxFraction => {
   };
 };
 
+type CropElement = Pick<
+  DesignerElement,
+  'x' | 'y' | 'width' | 'height' | 'crop' | 'fitMode' | 'focalPoint'
+>;
+
+export type CropResizeHandle =
+  | 'top-left' | 'top' | 'top-right'
+  | 'right' | 'bottom-right' | 'bottom'
+  | 'bottom-left' | 'left';
+
+/** The effective source window, including an automatic cover crop. */
+export const currentSourceWindow = (
+  el: Pick<DesignerElement, 'width' | 'height' | 'crop' | 'fitMode' | 'focalPoint'>,
+  natural: { width: number; height: number }
+): DesignerCrop => {
+  if (el.crop) return el.crop;
+  if (el.fitMode === 'cover') {
+    return computeCoverCrop(
+      natural.width,
+      natural.height,
+      el.width,
+      el.height,
+      el.focalPoint
+    );
+  }
+  return { x: 0, y: 0, width: natural.width, height: natural.height };
+};
+
+const FULL_BOX: BoxFraction = { x: 0, y: 0, width: 1, height: 1 };
+
 /**
- * Apply a crop expressed as a fraction of the element's displayed box.
- *
- * Returns the element's new position/size plus the composed source-space crop.
- * When the element has no natural size (not an image, or not loaded yet) the
- * box is still adjusted but no crop is emitted — cropping a shape just resizes
- * it.
+ * Fit a source crop into the selected destination box without changing its
+ * aspect. The manipulated handle stays on the selected edge; the opposite
+ * edge is the stationary resize anchor.
  */
-export const cropFromBoxFraction = (
-  el: Pick<DesignerElement, 'x' | 'y' | 'width' | 'height' | 'crop'>,
-  natural: { width: number; height: number } | null,
-  fraction: BoxFraction
+export const cropFromSourceRect = (
+  el: Pick<DesignerElement, 'x' | 'y' | 'width' | 'height'>,
+  crop: DesignerCrop,
+  fraction: BoxFraction = FULL_BOX,
+  handle?: CropResizeHandle
 ): CropResult => {
   const f = normaliseFraction(fraction);
-
-  const box = {
+  const raw = {
     x: el.x + f.x * el.width,
     y: el.y + f.y * el.height,
     width: Math.max(1, f.width * el.width),
     height: Math.max(1, f.height * el.height),
   };
-
-  if (!natural || !(natural.width > 0) || !(natural.height > 0)) {
-    return box;
-  }
-
-  // The window of source pixels the box shows today.
-  const current: DesignerCrop = el.crop || {
-    x: 0,
-    y: 0,
-    width: natural.width,
-    height: natural.height,
+  const source = {
+    x: crop.x,
+    y: crop.y,
+    width: Math.max(1, crop.width),
+    height: Math.max(1, crop.height),
   };
+  const scale = Math.min(raw.width / source.width, raw.height / source.height);
+  const width = Math.max(1, source.width * scale);
+  const height = Math.max(1, source.height * scale);
+  const alignX = handle?.includes('left') ? 1 : handle?.includes('right') ? 0 : handle ? 0.5 : 0;
+  const alignY = handle?.includes('top') ? 1 : handle?.includes('bottom') ? 0 : handle ? 0.5 : 0;
 
   return {
-    ...box,
-    crop: {
+    x: raw.x + (raw.width - width) * alignX,
+    y: raw.y + (raw.height - height) * alignY,
+    width,
+    height,
+    crop: source,
+  };
+};
+
+/** The on-canvas box that actually paints pixels, excluding contain letterboxing. */
+export const cropDisplayBox = (
+  el: CropElement,
+  natural: { width: number; height: number } | null
+): Pick<DesignerElement, 'x' | 'y' | 'width' | 'height'> => {
+  if (!natural || !(natural.width > 0) || !(natural.height > 0)) return el;
+  const { destination } = computeMediaDraw({
+    sourceWidth: natural.width,
+    sourceHeight: natural.height,
+    targetWidth: el.width,
+    targetHeight: el.height,
+    crop: el.crop,
+    fitMode: el.fitMode,
+    focalPoint: el.focalPoint,
+  });
+  return {
+    x: el.x + destination.x,
+    y: el.y + destination.y,
+    width: destination.width,
+    height: destination.height,
+  };
+};
+
+/**
+ * Apply a crop expressed as a fraction of the element's displayed box.
+ * Cropping an already-cropped or cover-fitted element composes onto the source
+ * window it actually paints, not the full bitmap.
+ */
+export const cropFromBoxFraction = (
+  el: CropElement,
+  natural: { width: number; height: number } | null,
+  fraction: BoxFraction,
+  handle?: CropResizeHandle
+): CropResult => {
+  const f = normaliseFraction(fraction);
+  if (!natural || !(natural.width > 0) || !(natural.height > 0)) {
+    return {
+      x: el.x + f.x * el.width,
+      y: el.y + f.y * el.height,
+      width: Math.max(1, f.width * el.width),
+      height: Math.max(1, f.height * el.height),
+    };
+  }
+
+  const current = currentSourceWindow(el, natural);
+  return cropFromSourceRect(
+    cropDisplayBox(el, natural),
+    {
       x: current.x + f.x * current.width,
       y: current.y + f.y * current.height,
       width: Math.max(1, f.width * current.width),
       height: Math.max(1, f.height * current.height),
     },
-  };
+    f,
+    handle
+  );
 };
 
 /** Aspect ratio from an options-bar value like `"16:9"`, or null for free. */

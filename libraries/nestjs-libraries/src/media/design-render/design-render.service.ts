@@ -47,6 +47,7 @@ import {
 import { drawPatternTile, tileSizeFor } from '../designer-doc/pattern-tiles';
 import { drawTextureOverlay } from '../designer-doc/background-texture';
 import { canvasColor } from '../designer-doc/canvas-color';
+import { computeCoverCrop, computeMediaDraw } from '../designer-doc/media-geometry';
 import { splitStyles, styleOffset, styleBlur, stylePadding, elementStyles } from '../designer-doc/layer-styles';
 import {
   buildStyleGradient,
@@ -274,27 +275,6 @@ const inkUnionRect = (
 
 // Canonical filter token vocabulary — must match the client tokens 1:1.
 // Each token is passed to ctx.filter as a CSS filter string.
-// Compute a cover source-rect from a source image to fill target w×h,
-// cropped toward a focalPoint (0–1, default centre).
-const computeCoverCrop = (
-  srcW: number, srcH: number, targetW: number, targetH: number,
-  focalPoint?: { x: number; y: number }
-): { sx: number; sy: number; sw: number; sh: number } => {
-  const fp = focalPoint || { x: 0.5, y: 0.5 };
-  const targetRatio = targetW / targetH;
-  const srcRatio = srcW / srcH;
-  let sw: number, sh: number;
-  if (srcRatio > targetRatio) {
-    sh = srcH;
-    sw = srcH * targetRatio;
-  } else {
-    sw = srcW;
-    sh = srcW / targetRatio;
-  }
-  const sx = (srcW - sw) * Math.min(1, Math.max(0, fp.x));
-  const sy = (srcH - sh) * Math.min(1, Math.max(0, fp.y));
-  return { sx, sy, sw, sh };
-};
 
 // ----- SVG path sampling helpers for text-on-path (T-33) ---------------------
 
@@ -1777,8 +1757,8 @@ export class DesignRenderService {
         // math as image-element 'cover' fitMode below).
         const srcW = (img as any).naturalWidth || img.width || w;
         const srcH = (img as any).naturalHeight || img.height || h;
-        const { sx, sy, sw, sh } = computeCoverCrop(srcW, srcH, w, h, bg.focalPoint);
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+        const source = computeCoverCrop(srcW, srcH, w, h, bg.focalPoint);
+        ctx.drawImage(img, source.x, source.y, source.width, source.height, 0, 0, w, h);
         ctx.restore();
         basePainted = true;
       }
@@ -3060,32 +3040,27 @@ export class DesignRenderService {
       tctx.translate(-visibleX, -visibleY);
     }
 
-    // An explicit crop wins over the fit mode, matching the canvas — dropped
-    // images default to `cover`, so honouring cover first made the crop tool a
-    // no-op on exactly the images people crop most.
-    const crop = loaded.preCropped ? undefined : el.crop;
-    const srcW = (img as any).naturalWidth || img.width || el.width;
-    const srcH = (img as any).naturalHeight || img.height || el.height;
-
-    if (crop) {
-      tctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, el.width, el.height);
-    } else if (el.fitMode === 'cover') {
-      const { sx, sy, sw, sh } = computeCoverCrop(
-        srcW, srcH, el.width, el.height, el.focalPoint
-      );
-      tctx.drawImage(img, sx, sy, sw, sh, 0, 0, el.width, el.height);
-    } else if (el.fitMode === 'contain') {
-      // Letterbox. Upscaling is allowed: "Fit" that refuses to enlarge a small
-      // source is not what the control says it does.
-      const scale = Math.min(el.width / srcW, el.height / srcH);
-      const dw = srcW * scale;
-      const dh = srcH * scale;
-      tctx.drawImage(img, 0, 0, srcW, srcH, (el.width - dw) / 2, (el.height - dh) / 2, dw, dh);
-    } else {
-      // 'fill' and the unset default both stretch, which is what the canvas has
-      // always done for an element with no explicit fit mode.
-      tctx.drawImage(img, 0, 0, el.width, el.height);
-    }
+    const geometry = computeMediaDraw({
+      sourceWidth: (img as any).naturalWidth || img.width || el.width,
+      sourceHeight: (img as any).naturalHeight || img.height || el.height,
+      targetWidth: el.width,
+      targetHeight: el.height,
+      crop: loaded.preCropped ? undefined : el.crop,
+      fitMode: el.fitMode,
+      focalPoint: el.focalPoint,
+    });
+    const { source, destination } = geometry;
+    tctx.drawImage(
+      img,
+      source.x,
+      source.y,
+      source.width,
+      source.height,
+      destination.x,
+      destination.y,
+      destination.width,
+      destination.height
+    );
 
     if (target) {
       applyFilterTokensToCanvas(target, el.filters, ratio);

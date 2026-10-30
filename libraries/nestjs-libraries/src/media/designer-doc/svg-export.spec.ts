@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { isVectorExportable, layersNeedingRaster, outputToSvg } from './svg-export';
+import sharp from 'sharp';
+import { isVectorExportable, layersNeedingRaster, outputToSvg, svgBackgroundNeedsRaster } from './svg-export';
 import type { DesignerElement, DesignerOutput } from './designer-doc.schema';
 
 /**
@@ -243,5 +244,114 @@ describe('backgrounds', () => {
       },
     };
     expect(outputToSvg(out)).toContain('<linearGradient');
+  });
+});
+
+describe('source crop and focal geometry', () => {
+  const asymmetricSource = async (): Promise<string> => {
+    const raw = await sharp({
+      create: { width: 8, height: 2, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } },
+    }).raw().toBuffer();
+    for (let y = 0; y < 2; y++) {
+      for (let x = 0; x < 8; x++) {
+        const i = (y * 8 + x) * 4;
+        const color = x < 4
+          ? (y === 0 ? [255, 0, 0] : [0, 255, 0])
+          : (y === 0 ? [0, 0, 255] : [255, 255, 0]);
+        raw[i] = color[0];
+        raw[i + 1] = color[1];
+        raw[i + 2] = color[2];
+        raw[i + 3] = 255;
+      }
+    }
+    const png = await sharp(raw, { raw: { width: 8, height: 2, channels: 4 } }).png().toBuffer();
+    return `data:image/png;base64,${png.toString('base64')}`;
+  };
+
+  const renderedPixel = async (svg: string, x: number, y: number): Promise<number[]> => {
+    const { data, info } = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const i = (y * info.width + x) * info.channels;
+    return [data[i], data[i + 1], data[i + 2], data[i + 3]];
+  };
+
+  it('rasterizes an explicit source crop without stretching a mismatched legacy box', async () => {
+    const src = await asymmetricSource();
+    const svg = outputToSvg({
+      ...output([
+        el({
+          type: 'image', src, x: 0, y: 0, width: 100, height: 100,
+          naturalWidth: 8, naturalHeight: 2,
+          crop: { x: 4, y: 0, width: 4, height: 2 },
+        }),
+      ]),
+      background: 'transparent',
+    });
+    expect(svg).toContain('viewBox="4 0 4 2"');
+    expect(svg).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect((await renderedPixel(svg, 50, 10))[3]).toBe(0);
+    expect((await renderedPixel(svg, 50, 90))[3]).toBe(0);
+    const top = await renderedPixel(svg, 50, 35);
+    const bottom = await renderedPixel(svg, 50, 65);
+    expect(top[0]).toBeLessThan(3);
+    expect(top[1]).toBeLessThan(3);
+    expect(top[2]).toBeGreaterThan(252);
+    expect(top[3]).toBe(255);
+    expect(bottom[0]).toBeGreaterThan(252);
+    expect(bottom[1]).toBeGreaterThan(252);
+    expect(bottom[2]).toBeLessThan(3);
+    expect(bottom[3]).toBe(255);
+  });
+
+  it.each([
+    { fitMode: undefined, expected: 'none' },
+    { fitMode: 'contain' as const, expected: 'xMidYMid meet' },
+    { fitMode: 'fill' as const, expected: 'none' },
+  ])('maps fitMode $fitMode to the same SVG aspect behavior as the canvas', ({ fitMode, expected }) => {
+    const svg = outputToSvg(output([
+      el({ type: 'image', src: 'data:image/png;base64,AAA', fitMode }),
+    ]));
+    expect(svg).toContain(`preserveAspectRatio="${expected}"`);
+  });
+
+  it('applies an off-center focal background to the correct output pixels', async () => {
+    const src = await asymmetricSource();
+    const out = {
+      ...output([]),
+      width: 100,
+      height: 100,
+      bg: {
+        type: 'image' as const, src, naturalWidth: 8, naturalHeight: 2,
+        focalPoint: { x: 0.75, y: 0.5 },
+      },
+    };
+    const svg = outputToSvg(out);
+    expect(svg).toContain('viewBox="4.5 0 2 2"');
+    const top = await renderedPixel(svg, 50, 25);
+    const bottom = await renderedPixel(svg, 50, 75);
+    expect(top[0]).toBeLessThan(3);
+    expect(top[1]).toBeLessThan(3);
+    expect(top[2]).toBeGreaterThan(252);
+    expect(top[3]).toBe(255);
+    expect(bottom[0]).toBeGreaterThan(252);
+    expect(bottom[1]).toBeGreaterThan(252);
+    expect(bottom[2]).toBeLessThan(3);
+    expect(bottom[3]).toBe(255);
+  });
+
+  it('rasterizes older cropped content that lacks intrinsic dimensions', () => {
+    const cropped = el({ type: 'image', crop: { x: 1, y: 0, width: 2, height: 2 } });
+    expect(isVectorExportable(cropped)).toBe(false);
+    expect(layersNeedingRaster(output([cropped]))).toEqual([cropped.id]);
+
+    const out = {
+      ...output([]),
+      bg: { type: 'image' as const, src: 'https://x/bg.jpg', focalPoint: { x: 0.8, y: 0.5 } },
+    };
+    expect(svgBackgroundNeedsRaster(out)).toBe(true);
+    expect(outputToSvg(out, { rasterizedBackground: 'data:image/png;base64,AAA' }))
+      .toContain('data:image/png;base64,AAA');
   });
 });

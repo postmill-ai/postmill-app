@@ -176,8 +176,8 @@ an `<image>` the caller rasterises. It still has to agree on geometry, so the sa
 
 All three must produce the same picture, so **every rule any of them needs goes in a shared pure
 module under `designer-doc/`** — `fit-text`, `shape-geometry`, `path-geometry`, `layer-tree`,
-`pixel-ops`, `layer-styles`, `pattern-tiles`, `background-texture`. Reimplementing one of those rules in one renderer is
-how the exports drift.
+`pixel-ops`, `layer-styles`, `pattern-tiles`, `background-texture`, `media-geometry`. Reimplementing
+one of those rules in one renderer is how the exports drift.
 
 The frame renderer is injected into a page as text and cannot import, so it takes the shared code as
 **source**: `shapeGeometrySource()` stringifies the geometry functions (and everything they close

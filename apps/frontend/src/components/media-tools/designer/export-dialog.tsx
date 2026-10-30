@@ -2,7 +2,7 @@
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Stage, Layer, Rect, Group, Image as KonvaImage } from 'react-konva';
+import { Stage, Layer, Rect, Group } from 'react-konva';
 import type Konva from 'konva';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
@@ -22,6 +22,7 @@ import { measureForElement } from './measure-text';
 import {
   layersNeedingRaster,
   outputToSvg,
+  svgBackgroundNeedsRaster,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-export';
 import { CanvasElements, gradientFillProps, getImageNaturalSize } from './elements';
 import { textureFillProps } from './textures';
@@ -36,6 +37,7 @@ import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/soci
 import type { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 import { variantProviders, groupFilesByProvider } from './export-channels';
 import { readErrorMessage } from './read-error-message';
+import { ExportBackgroundImage } from './export-background';
 
 const useFocusTrap = (containerRef: React.RefObject<HTMLElement | null>) => {
   useEffect(() => {
@@ -234,6 +236,14 @@ const renderOutputToBlob = async (
   // The texture is part of the background: it exports with it and is skipped
   // for a transparent export, exactly like the base fill.
   const bgTexture = !transparent && bg?.texture ? textureFillProps(bg.texture) : null;
+  if (bgImageEl && !bgImageEl.complete) {
+    await new Promise<void>((resolve) => {
+      const done = () => resolve();
+      bgImageEl.addEventListener('load', done, { once: true });
+      bgImageEl.addEventListener('error', done, { once: true });
+      setTimeout(done, 5000);
+    });
+  }
 
   try {
     await new Promise<void>((resolve) => {
@@ -259,13 +269,11 @@ const renderOutputToBlob = async (
                       {...bgGrad}
                     />
                     {bg?.type === 'image' && bgImageEl && (
-                      <KonvaImage
+                      <ExportBackgroundImage
                         image={bgImageEl}
-                        x={0}
-                        y={0}
                         width={output.width}
                         height={output.height}
-                        listening={false}
+                        focalPoint={bg.focalPoint}
                       />
                     )}
                     {bgTexture && (
@@ -291,19 +299,11 @@ const renderOutputToBlob = async (
     // The Konva render reads element bitmaps from the shared imageCache, which is
     // populated asynchronously (incl. the cross-origin proxy fallback). Two RAFs
     // aren't enough for a slow/proxied image, so wait until every element src is
-    // actually cached (or a deadline), plus let the background <img> finish.
+    // actually cached (or a deadline).
     {
       const srcs: string[] = [];
       for (const el of output.children) {
         if (el.type === 'image' && el.src) srcs.push(el.src);
-      }
-      if (bgImageEl && !bgImageEl.complete) {
-        await new Promise<void>((res) => {
-          const done = () => res();
-          bgImageEl.addEventListener('load', done, { once: true });
-          bgImageEl.addEventListener('error', done, { once: true });
-          setTimeout(done, 5000);
-        });
       }
       const deadline = Date.now() + 5000;
       while (Date.now() < deadline && srcs.some((s) => !getImageNaturalSize(s))) {
@@ -337,6 +337,14 @@ const renderOutputToBlob = async (
  * box with no rotation and no flip, because the `<g>` wrapper in the SVG
  * re-applies all three. Baking them in would apply each one twice.
  */
+const blobDataUrl = (blob: Blob): Promise<string> =>
+  new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(blob);
+  });
+
 const renderOutputAsSvg = async (
   output: DesignerOutput,
   symbols?: SymbolDefinition[]
@@ -370,17 +378,19 @@ const renderOutputAsSvg = async (
     };
     const blob = await renderOutputToBlob(solo, 'transparent', 1, 1, symbols);
     if (!blob) continue;
-    rasterized[id] = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => resolve('');
-      reader.readAsDataURL(blob);
-    });
+    rasterized[id] = await blobDataUrl(blob);
     if (!rasterized[id]) delete rasterized[id];
+  }
+
+  let rasterizedBackground: string | undefined;
+  if (svgBackgroundNeedsRaster(output)) {
+    const blob = await renderOutputToBlob({ ...output, children: [] }, 'png', 1, 1, symbols);
+    if (blob) rasterizedBackground = await blobDataUrl(blob);
   }
 
   return outputToSvg(output, {
     rasterized,
+    rasterizedBackground,
     // SVG can't wrap or shrink text on its own; the exporter lays the lines out
     // with the same fitter the canvas uses, given a browser measurement.
     measure: (el) => measureForElement(el as never) ?? ((line, size) => line.length * size * 0.6),
@@ -481,6 +491,14 @@ export const renderOutputThumbnail = async (
     return img;
   })();
   const bgTexture = bg?.texture ? textureFillProps(bg.texture) : null;
+  if (bgImageEl && !bgImageEl.complete) {
+    await new Promise<void>((resolve) => {
+      const done = () => resolve();
+      bgImageEl.addEventListener('load', done, { once: true });
+      bgImageEl.addEventListener('error', done, { once: true });
+      setTimeout(done, 5000);
+    });
+  }
 
   try {
     await new Promise<void>((resolve) => {
@@ -496,13 +514,11 @@ export const renderOutputThumbnail = async (
               {...bgGrad}
             />
             {bg?.type === 'image' && bgImageEl && (
-              <KonvaImage
+              <ExportBackgroundImage
                 image={bgImageEl}
-                x={0}
-                y={0}
                 width={output.width}
                 height={output.height}
-                listening={false}
+                focalPoint={bg.focalPoint}
               />
             )}
             {bgTexture && (

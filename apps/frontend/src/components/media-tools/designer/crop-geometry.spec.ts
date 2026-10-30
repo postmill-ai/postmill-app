@@ -1,5 +1,8 @@
 import {
   cropFromBoxFraction,
+  cropFromSourceRect,
+  cropDisplayBox,
+  currentSourceWindow,
   normaliseFraction,
   parseCropRatio,
   constrainFractionToRatio,
@@ -57,6 +60,119 @@ describe('cropFromBoxFraction', () => {
     expect(r.width).toBeGreaterThan(0);
     expect(r.height).toBeGreaterThan(0);
     expect(r.crop!.width).toBeGreaterThan(0);
+  });
+  it('starts from the focal cover window for a landscape source', () => {
+    const covered = {
+      ...el,
+      height: 400,
+      fitMode: 'cover' as const,
+      focalPoint: { x: 0.75, y: 0.5 },
+    };
+    expect(currentSourceWindow(covered, natural)).toEqual({
+      x: 150, y: 0, width: 600, height: 600,
+    });
+    const r = cropFromBoxFraction(
+      covered,
+      natural,
+      { x: 0.5, y: 0, width: 0.5, height: 1 },
+      'right'
+    );
+    expect(r.crop).toEqual({ x: 450, y: 0, width: 300, height: 600 });
+    expect(r).toMatchObject({ x: 300, y: 200, width: 200, height: 400 });
+  });
+
+  it('starts from the focal cover window for a portrait source', () => {
+    const portrait = { width: 600, height: 800 };
+    const covered = {
+      ...el,
+      fitMode: 'cover' as const,
+      focalPoint: { x: 0.5, y: 0.25 },
+    };
+    expect(currentSourceWindow(covered, portrait)).toEqual({
+      x: 0, y: 87.5, width: 600, height: 450,
+    });
+  });
+
+  it.each(['contain', 'fill'] as const)('uses the full source for %s before an explicit crop', (fitMode) => {
+    expect(currentSourceWindow({ ...el, fitMode }, natural)).toEqual({
+      x: 0, y: 0, width: 800, height: 600,
+    });
+  });
+
+  it('crops within the visible contain box and composes repeated crops', () => {
+    const contained = { ...el, width: 200, height: 400, fitMode: 'contain' as const };
+    expect(cropDisplayBox(contained, natural)).toEqual({ x: 100, y: 325, width: 200, height: 150 });
+    const first = cropFromBoxFraction(
+      contained,
+      natural,
+      { x: 0, y: 1 / 6, width: 1, height: 2 / 3 }
+    );
+    expect(first).toEqual({
+      x: 100,
+      y: 350,
+      width: 200,
+      height: 100,
+      crop: { x: 0, y: 100, width: 800, height: 400 },
+    });
+    const second = cropFromBoxFraction(
+      { ...el, ...first },
+      natural,
+      { x: 0.5, y: 0, width: 0.5, height: 1 }
+    );
+    expect(second).toEqual({
+      x: 200,
+      y: 350,
+      width: 100,
+      height: 100,
+      crop: { x: 400, y: 100, width: 400, height: 400 },
+    });
+  });
+
+  it('preserves aspect and the opposite edge on a repeated crop', () => {
+    const first = cropFromBoxFraction(
+      { ...el, fitMode: 'cover' as const, focalPoint: { x: 0.75, y: 0.5 } },
+      natural,
+      { x: 0.25, y: 0, width: 0.75, height: 1 },
+      'left'
+    );
+    expect(first.width / first.height).toBeCloseTo(first.crop!.width / first.crop!.height, 10);
+
+    const second = cropFromBoxFraction(
+      { ...el, ...first },
+      natural,
+      { x: 0.5, y: 0.25, width: 0.5, height: 0.75 },
+      'bottom-right'
+    );
+    expect(second.width / second.height).toBeCloseTo(second.crop!.width / second.crop!.height, 10);
+    expect(second.x).toBeCloseTo(first.x + first.width * 0.5, 10);
+    expect(second.y).toBeCloseTo(first.y + first.height * 0.25, 10);
+    expect(second.crop!.x).toBeGreaterThanOrEqual(first.crop!.x);
+    expect(second.crop!.y).toBeGreaterThanOrEqual(first.crop!.y);
+  });
+});
+
+describe('Inspector crop geometry', () => {
+  it('uses the same aspect-preserving helper for asymmetric insets', () => {
+    const r = cropFromSourceRect(
+      el,
+      { x: 200, y: 50, width: 400, height: 450 },
+      undefined,
+      'left'
+    );
+    expect(r.width / r.height).toBeCloseTo(400 / 450, 10);
+    expect(r.x + r.width).toBeCloseTo(el.x + el.width, 10);
+    expect(r.y).toBe(el.y);
+    expect(r.crop).toEqual({ x: 200, y: 50, width: 400, height: 450 });
+  });
+
+  it('keeps the left edge anchored for a right-side slider', () => {
+    const r = cropFromSourceRect(
+      el,
+      { x: 0, y: 0, width: 600, height: 600 },
+      undefined,
+      'right'
+    );
+    expect(r).toMatchObject({ x: el.x, y: el.y, width: 300, height: 300 });
   });
 });
 
