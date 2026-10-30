@@ -39,6 +39,7 @@ import {
   flattenSmartFilters,
   rebakeSmartFilters,
 } from './smart-filters';
+import { clipMediaSourceMatches } from './clip-media';
 
 /**
  * The operations that act on PIXELS rather than on the document: the Select
@@ -460,6 +461,10 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
           { signal: run.signal }
         );
         if (!isCurrentRun(sel.clipId, run)) return;
+        const current = (store.getState().doc.outputs[sel.outputIndex] as { tracks?: VideoTrack[] } | undefined)?.tracks
+          ?.find((track) => track.id === sel.trackId)
+          ?.clips.find((candidate) => candidate.id === sel.clipId);
+        if (!clipMediaSourceMatches(clip, current)) return;
         if (!result) {
           toaster.show(t('designer_filter_failed', "Couldn't apply that filter"), 'warning');
           return;

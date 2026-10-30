@@ -48,14 +48,19 @@ via headless Chromium + FFmpeg.
   Tracks can be renamed, muted, locked, and hidden. A dropped clip snaps into the nearest free gap on
   the target track; if there is no room it is rejected rather than overlapping (hold **Alt** to keep
   an intentional overlap).
-- **Editing** — split at the playhead (**S**), trim, duplicate, freeze frame (**Ctrl+F**), ripple
-  delete (**Shift+Delete**), multi-select (Shift-click or marquee) with copy/paste, snapping,
-  timeline markers, zoom, and loop playback.
+- **Editing** — use the transport's **Split clip**, **Duplicate clip**, and **Delete clip** icons,
+  or split at the playhead (**S**), trim, freeze frame (**Ctrl+F**), and ripple delete
+  (**Shift+Delete**). Split is enabled only inside a selected, unlocked clip with room on both
+  sides. The duration stepper beside the timecode sets 1–180 seconds. Multi-select (Shift-click or
+  marquee), copy/paste, timeline markers, zoom, and loop playback are also available.
 - **Transitions** — cut, fade, dissolve, slide, wipe, zoom, and blur between clips.
 - **Clip inspector** — speed and speed ramps, reverse, volume (keyframable), fade in/out, auto-duck
   under voice, **Looks** presets, filters, blend modes, motion blur, Ken Burns presets, and
-  per-property keyframes with a graph editor. **Animations** presets apply to text, shape, image,
-  and sticker clips; text clips also get a **Typewriter** reveal. Audio clips can detect beats.
+  per-property keyframes with a graph editor. Image clips can be replaced through the media picker
+  or have their background removed when a provider is configured. Shape clips have uniform or
+  per-corner radius controls; text clips have Normal, Bold, Italic, and Bold Italic styles.
+  **Animations** presets apply to text, shape, image, and sticker clips; text clips also get a
+  **Typewriter** reveal. Audio clips can detect beats.
 - **Captions** — **CC** auto-generates captions from every audio-bearing clip (needs a
   speech-to-text provider such as Deepgram), imports `.srt`/`.vtt` files, and exports the caption
   tracks as `.srt`.

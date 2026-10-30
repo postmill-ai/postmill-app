@@ -121,6 +121,7 @@ const clipToElement = (
         ...(clip.fontFamily ? { fontFamily: clip.fontFamily } : {}),
         ...(fontSize ? { fontSize } : {}),
         ...(clip.fontWeight ? { fontWeight: clip.fontWeight } : {}),
+        ...(clip.fontStyle ? { fontStyle: clip.fontStyle } : {}),
         ...(clip.fill ? { fill: clip.fill } : {}),
         ...(clip.align ? { align: clip.align } : {}),
       } as DesignerElement;

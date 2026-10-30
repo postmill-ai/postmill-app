@@ -377,6 +377,18 @@ export const DeleteLayerIcon = toolIcon(
     <path d="M7.8 5.8V4.2a1 1 0 0 1 1-1h2.4a1 1 0 0 1 1 1v1.6" />
   </>
 );
+export const SplitClipIcon = toolIcon(
+  <>
+    <path d="M7 3v14M13 3v14" opacity="0.35" />
+    <path d="m3 7 4 3-4 3M17 7l-4 3 4 3" />
+  </>
+);
+export const DuplicateClipIcon = toolIcon(
+  <>
+    <rect x="6.5" y="6.5" width="10" height="10" rx="1.2" />
+    <path d="M13.5 3.5h-9a1 1 0 0 0-1 1v9" />
+  </>
+);
 
 /** Footer: add a layer mask — a filled rect with a knocked-out circle. */
 export const LayerMaskIcon = toolIcon(

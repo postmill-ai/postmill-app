@@ -207,8 +207,8 @@ describe('applyLinked symbol overrides', () => {
 });
 
 
-describe('applyLinkedVideoClip v9 styles', () => {
-  it('propagates fillGradient and align without copying geometry or timing', () => {
+describe('applyLinkedVideoClip styles', () => {
+  it('propagates fillGradient, align, and fontStyle without copying geometry or timing', () => {
     const doc = {
       mode: 'video',
       outputs: [0, 1].map((index) => ({
@@ -245,14 +245,54 @@ describe('applyLinkedVideoClip v9 styles', () => {
       0,
       'track-0',
       'clip-0',
-      { fillGradient, align: 'justify', x: 999 },
+      { fillGradient, align: 'justify', fontStyle: 'italic', x: 999 },
       false
     );
     const sibling = (outputs[1] as any).tracks[0].clips[0];
     expect(affected).toEqual([1]);
     expect(sibling.fillGradient).toEqual(fillGradient);
     expect(sibling.align).toBe('justify');
+    expect(sibling.fontStyle).toBe('italic');
     expect(sibling.x).toBe(100);
     expect(sibling.startMs).toBe(500);
+  });
+
+  it('clears stale crop and focal points on linked clips when their media is replaced', () => {
+    const doc = {
+      mode: 'video',
+      outputs: [0, 1].map((index) => ({
+        id: `video-${index}`,
+        width: 1080,
+        height: 1080,
+        tracks: [{
+          id: `track-${index}`,
+          clips: [{
+            id: `clip-${index}`,
+            originId: 'shared-image',
+            src: '/old.png',
+            crop: { x: 1, y: 2, width: 20, height: 20 },
+            focalPoint: { x: 0.2 + index * 0.6, y: 0.75 },
+            originalSrc: '/old.png',
+          }],
+        }],
+      })),
+    } as unknown as DesignerDoc;
+
+    const { outputs } = applyLinkedVideoClip(
+      doc,
+      0,
+      'track-0',
+      'clip-0',
+      { src: '/new.png', crop: undefined, focalPoint: undefined, originalSrc: undefined, smartFilters: undefined },
+      false,
+    );
+    for (const output of outputs) {
+      const clip = (output as any).tracks[0].clips[0];
+      expect(clip.src).toBe('/new.png');
+      expect(clip.crop).toBeUndefined();
+      expect(clip.focalPoint).toBeUndefined();
+      expect(clip.originalSrc).toBeUndefined();
+      expect(clip.smartFilters).toBeUndefined();
+    }
   });
 });

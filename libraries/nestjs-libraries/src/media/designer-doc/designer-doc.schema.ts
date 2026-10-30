@@ -733,6 +733,8 @@ export interface VideoClip {
   fontSize?: number;
   // drift-resolved: fontWeight present in frontend, absent server copy
   fontWeight?: number;
+  /** Optional-additive doc v10: upright or italic text. */
+  fontStyle?: 'normal' | 'italic';
   fill?: string;
   /** Optional-additive doc v9: solid/gradient shape fills and text alignment. */
   fillGradient?: DesignerGradient;
@@ -1696,6 +1698,7 @@ const clipCommon = {
     })
     .optional(),
   fontFamily: z.string().max(200).optional(),
+  fontStyle: z.enum(['normal', 'italic']).optional(),
   fill: ColorSchema.optional(),
   // Optional-additive doc v9: text clips accept the same four alignments as
   // image text. Shape gradients live in the strict/lenient nested maps below.

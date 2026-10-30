@@ -91,9 +91,13 @@ export const catalogWeights = (family: string, wanted: number[]): number[] => {
  * `display=swap` so text paints in a fallback rather than staying invisible;
  * the canvas re-measures once the real font arrives.
  */
-export const googleFontsUrl = (family: string, weights: number[]): string => {
+export const googleFontsUrl = (family: string, weights: number[], includeItalic = false): string => {
   const resolved = catalogWeights(family, weights);
   const encoded = family.replace(/ /g, '+');
-  const spec = resolved.length ? `:wght@${resolved.join(';')}` : '';
+  const spec = resolved.length
+    ? includeItalic
+      ? `:ital,wght@${resolved.flatMap((weight) => [`0,${weight}`, `1,${weight}`]).join(';')}`
+      : `:wght@${resolved.join(';')}`
+    : '';
   return `https://fonts.googleapis.com/css2?family=${encoded}${spec}&display=swap`;
 };

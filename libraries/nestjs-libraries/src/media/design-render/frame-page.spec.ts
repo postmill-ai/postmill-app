@@ -35,6 +35,18 @@ describe('fontsUsedInOutput', () => {
     const used = fontsUsedInOutput({ clips: [{ fontFamily: 'evil"><script>' }] });
     expect(used.size).toBe(0);
   });
+
+  it('requests and preloads italic faces only when the composition uses them', () => {
+    const italicOutput = {
+      tracks: [{ clips: [{ fontFamily: 'Montserrat', fontWeight: 700, fontStyle: 'italic' }] }],
+    };
+    expect(fontLinksForOutput(italicOutput)).toContain('Montserrat:ital,wght@0,700;1,700');
+    expect(fontPreloadsForOutput(italicOutput)).toEqual([
+      '700 16px "Montserrat"',
+      'italic 700 16px "Montserrat"',
+    ]);
+    expect(fontLinksForOutput(output)).not.toContain(':ital,wght@');
+  });
 });
 
 describe('buildFramePage', () => {

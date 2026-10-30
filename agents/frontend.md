@@ -232,9 +232,19 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame
   was showing. A keyframe sitting under the playhead is edited in place; otherwise the base props
   move. Track types `shape` and `raster` (doc v5) exist so shape and paint tools have somewhere to
-  put their output on a timeline. Doc v9 adds optional `fillGradient`/`align`; both are style fields
-  for linked propagation and the clip-op whitelist, never geometry. Text corner transforms scale the
-  rendered `fontSize` through that same base/keyframe path, while side handles only re-wrap.
+  put their output on a timeline. Doc v9 adds optional `fillGradient`/`align`; doc v10 adds optional
+  `fontStyle` (`normal`/`italic`). All are style fields for linked propagation and the clip-op
+  whitelist, never geometry. Text corner transforms scale the rendered `fontSize` through that same
+  base/keyframe path, while side handles only re-wrap. Generic new Text starts at 400 Normal; named
+  presets keep their authored weight.
+- **Timeline transport and Inspector essentials.** `timeline-split.ts` is the single split guard for
+  the transport, S shortcut, context menu, and store: an unlocked selected clip, a strictly interior
+  playhead, and at least 100 ms on both sides. Invalid cuts are no-ops; valid splits select the right
+  half. The transport's duration stepper uses `setVideoDuration` and the shared 1–180 s cap. Image
+  replacement/background removal lives in `clip-media.ts`: preserve editing semantics, update media
+  identity/intrinsics, and clear crop/original/smart-filter state. `use-pixel-ops.tsx` must not let an
+  older rebake overwrite a newer media source. Static and video Inspectors share
+  `corner-radius-control.tsx` and `text-style-control.tsx`.
 - **Timeline hit-testing starts at the scroll viewport.** `timeline-geometry.ts` owns row/new-track
   geometry, duration-preserving keyboard moves, and the separate zoom-aware snap and collision
   thresholds. Never measure drop rows from the toolbar wrapper or reuse edge-snap tolerance to

@@ -26,6 +26,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import { smartReflow, computeGroupBoxes } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
+import { canSplitClipAt } from './timeline-split';
 import { applyLinked, applyElementPatch, applyLinkedVideoClip, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
 import {
   seedVideoOutput,
@@ -1776,9 +1777,8 @@ export const createDesignerStore = (
       splitClip: (outputIndex, trackId, clipId, atMs) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
-        // A locked track refuses the split, same as it refuses deletion.
-        if (vo.tracks.find((t) => t.id === trackId)?.locked) return;
+        if (!vo || doc.mode !== 'video' || !canSplitClipAt(vo, trackId, clipId, atMs)) return;
+        let resultingClipId: string | null = null;
         const updated: VideoOutput = {
           ...vo,
           tracks: vo.tracks.map((t) => {
@@ -1786,8 +1786,7 @@ export const createDesignerStore = (
             const idx = t.clips.findIndex((c) => c.id === clipId);
             if (idx < 0) return t;
             const original = t.clips[idx];
-            const splitPoint = Math.max(original.startMs + 100, Math.min(original.endMs - 100, atMs));
-            if (splitPoint <= original.startMs || splitPoint >= original.endMs) return t;
+            const splitPoint = atMs;
             // A ramped clip splits its CURVE at the cut: each side keeps the
             // points for the source window it plays, re-based to its own
             // start, with trim-in fixed so the source stays continuous (see
@@ -1812,14 +1811,21 @@ export const createDesignerStore = (
                 ? { speedCurve: curveSplit.second.speedCurve, trimInMs: curveSplit.second.trimInMs }
                 : { trimInMs: (original.trimInMs ?? 0) + (splitPoint - original.startMs) }),
             };
+            resultingClipId = second.id;
             const clips = [...t.clips];
             clips.splice(idx, 1, first, second);
             return { ...t, clips };
           }),
         };
+        if (!resultingClipId) return;
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        set({
+          doc: { ...doc, outputs: outs },
+          isDirty: true,
+          selectedClip: { outputIndex, trackId, clipId: resultingClipId },
+          selectedClips: [{ trackId, clipId: resultingClipId }],
+        });
         get().pushHistory();
       },
 

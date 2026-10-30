@@ -46,6 +46,22 @@ describe('drawVideoText', () => {
     }
   });
 
+  it('includes italic and weight in the canvas font shorthand', () => {
+    const ctx = {
+      font: '',
+      fillStyle: '',
+      textBaseline: '',
+      textAlign: '',
+      measureText: (text: string) => ({ width: tenPx(text) }),
+      fillText: () => undefined,
+    };
+    drawVideoText(ctx, {
+      text: 'ab', width: 50, height: 10, fontSize: 10,
+      fontFamily: 'Inter', fontWeight: 700, fontStyle: 'italic',
+    });
+    expect(ctx.font).toBe('italic 700 10px "Inter"');
+  });
+
   it('justifies non-final lines with word offsets, leaving paragraph-final lines alone', () => {
     const calls: { text: string; x: number; y: number }[] = [];
     const ctx = {

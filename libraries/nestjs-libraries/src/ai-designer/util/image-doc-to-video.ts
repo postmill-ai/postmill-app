@@ -289,6 +289,7 @@ export function imageOutputToVideo(
         ...(el.fontFamily ? { fontFamily: el.fontFamily } : {}),
         ...(el.fontSize ? { fontSize: el.fontSize } : {}),
         ...(el.fontWeight ? { fontWeight: el.fontWeight } : {}),
+        ...(el.fontStyle ? { fontStyle: el.fontStyle } : {}),
         ...(el.fill ? { fill: el.fill } : {}),
         transitionIn: { type: 'fade', durationMs: TEXT_TRANSITION_IN_MS },
       };

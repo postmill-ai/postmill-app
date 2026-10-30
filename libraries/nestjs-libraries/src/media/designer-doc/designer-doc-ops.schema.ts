@@ -209,6 +209,7 @@ const UpdateClipPatchSchema = z
     fontFamily: z.string().max(200).optional(),
     fontSize: strictNum(1, MAX_FONT_SIZE).optional(),
     fontWeight: strictNum(1, 1000).optional(),
+    fontStyle: z.enum(['normal', 'italic']).optional(),
     x: strictNum(-MAX_DIMENSION, MAX_DIMENSION).optional(),
     y: strictNum(-MAX_DIMENSION, MAX_DIMENSION).optional(),
     width: strictNum(0, MAX_DIMENSION).optional(),

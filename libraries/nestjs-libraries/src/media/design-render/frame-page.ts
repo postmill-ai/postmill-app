@@ -46,7 +46,7 @@ export const fontFamiliesUsedInOutput = (output: unknown): Set<string> => {
 
 const walkFontUsage = (
   output: unknown,
-  note: (family?: unknown, weight?: unknown) => void,
+  note: (family?: unknown, weight?: unknown, italic?: boolean) => void,
 ): void => {
   const walk = (node: unknown): void => {
     if (Array.isArray(node)) {
@@ -55,13 +55,21 @@ const walkFontUsage = (
     }
     if (!node || typeof node !== 'object') return;
     const rec = node as Record<string, unknown>;
-    note(rec.fontFamily, rec.fontWeight);
+    note(rec.fontFamily, rec.fontWeight, rec.fontStyle === 'italic');
     for (const value of Object.values(rec)) {
       if (value && typeof value === 'object') walk(value);
     }
   };
 
   walk(output);
+};
+
+export const italicFontFamiliesUsedInOutput = (output: unknown): Set<string> => {
+  const families = new Set<string>();
+  walkFontUsage(output, (family, _weight, italic) => {
+    if (italic && typeof family === 'string' && family) families.add(family);
+  });
+  return families;
 };
 
 /** An org-uploaded font the frame page can load straight from its storage URL. */
@@ -95,11 +103,12 @@ export const fontLinksForOutput = (
   output: unknown,
   customFonts: FrameCustomFont[] = [],
 ): string => {
+  const italicFamilies = italicFontFamiliesUsedInOutput(output);
   const links = [...fontsUsedInOutput(output).entries()]
     .map(([family, weights]) => {
       const resolved = catalogWeights(family, [...weights]);
       if (!resolved.length) return '';
-      const href = googleFontsUrl(family, resolved);
+      const href = googleFontsUrl(family, resolved, italicFamilies.has(family));
       return `<link rel="stylesheet" href="${href.replace(/"/g, '&quot;')}">`;
     })
     .filter(Boolean)
@@ -142,9 +151,11 @@ export const fontPreloadsForOutput = (
     if (!safeFamily) return;
     specs.push(`${italic ? 'italic ' : ''}${w} 16px "${safeFamily}"`);
   };
+  const italicFamilies = italicFontFamiliesUsedInOutput(output);
   for (const [family, weights] of fontsUsedInOutput(output)) {
     for (const weight of catalogWeights(family, [...weights])) {
       push(family, weight);
+      if (italicFamilies.has(family)) push(family, weight, true);
     }
   }
   const usedFamilies = fontFamiliesUsedInOutput(output);

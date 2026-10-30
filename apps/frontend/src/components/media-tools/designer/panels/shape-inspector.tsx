@@ -12,14 +12,7 @@ import type { DesignerElement } from '../designer.store';
 import { useBrandColors } from './use-brand-colors';
 import { ShadowSection, BackdropSection } from './shadow-section';
 import { FillSection } from './fill-section';
-import { cornerRadii } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
-
-const CORNER_LABELS = [
-  { key: 'tl', label: 'Top left', labelKey: 'designer_corner_top_left' },
-  { key: 'tr', label: 'Top right', labelKey: 'designer_corner_top_right' },
-  { key: 'br', label: 'Bottom right', labelKey: 'designer_corner_bottom_right' },
-  { key: 'bl', label: 'Bottom left', labelKey: 'designer_corner_bottom_left' },
-];
+import { CornerRadiusControl } from './corner-radius-control';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface ShapeInspectorProps {
@@ -67,9 +60,6 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
 
   /** Pen output shares this inspector; a few controls only mean something on a shape. */
   const isPath = element.type === 'path';
-  const perCorner = Array.isArray(element.borderRadius);
-  const maxRadius = Math.floor(Math.min(element.width, element.height) / 2);
-  const corners = cornerRadii(element.borderRadius, element.width, element.height);
   /** An open path fills its chord, so both renderers skip the fill entirely. */
   const canFill = !isPath || !!element.closed;
 
@@ -278,67 +268,12 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
 
       {/* borderRadius is a Rect prop — neither renderer reads it for a path. */}
       {!isPath && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-textColor/50">
-              {t('designer_label_corner_radius', 'Corner radius')}
-            </span>
-            <button
-              type="button"
-              aria-pressed={perCorner}
-              onClick={() =>
-                set({
-                  borderRadius: perCorner
-                    ? corners[0]
-                    : ([corners[0], corners[0], corners[0], corners[0]] as [
-                        number,
-                        number,
-                        number,
-                        number
-                      ]),
-                } as Partial<DesignerElement>)
-              }
-              className={`text-[11px] px-2 h-[22px] rounded-md border ${
-                perCorner
-                  ? 'border-designerAccent text-designerAccent'
-                  : 'border-studioBorder text-textColor/60'
-              }`}
-            >
-              {t('designer_per_corner', 'Per corner')}
-            </button>
-          </div>
-          {perCorner ? (
-            <div className="grid grid-cols-2 gap-2">
-              {CORNER_LABELS.map((corner, i) => (
-                <Stepper
-                  key={corner.key}
-                  label={t(corner.labelKey, corner.label)}
-                  min={0}
-                  max={maxRadius}
-                  value={corners[i]}
-                  onChange={(n) =>
-                    set({
-                      borderRadius: corners.map((c, ci) => (ci === i ? n : c)) as [
-                        number,
-                        number,
-                        number,
-                        number
-                      ],
-                    } as Partial<DesignerElement>)
-                  }
-                />
-              ))}
-            </div>
-          ) : (
-            <Stepper
-              label={t('designer_label_corner_radius', 'Corner radius')}
-              min={0}
-              max={maxRadius}
-              value={corners[0]}
-              onChange={(n) => set({ borderRadius: n })}
-            />
-          )}
-        </div>
+        <CornerRadiusControl
+          value={element.borderRadius}
+          width={element.width}
+          height={element.height}
+          onChange={(borderRadius) => set({ borderRadius })}
+        />
       )}
 
       <BackdropSection element={element} set={set} />

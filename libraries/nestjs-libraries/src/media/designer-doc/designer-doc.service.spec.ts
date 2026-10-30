@@ -1174,6 +1174,7 @@ describe('DesignerDocService clip ops (video outputs)', () => {
           fill: '#ff0000',
           fillGradient: { type: 'linear', stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#00ff00' }] },
           align: 'justify',
+          fontStyle: 'italic',
           fontSize: 80,
           y: 700,
         },
@@ -1184,6 +1185,7 @@ describe('DesignerDocService clip ops (video outputs)', () => {
     expect(clip.fill).toBe('#ff0000');
     expect(clip.fillGradient.stops).toHaveLength(2);
     expect(clip.align).toBe('justify');
+    expect(clip.fontStyle).toBe('italic');
     expect(clip.fontSize).toBe(80);
     expect(clip.y).toBe(700);
     expect(clip.startMs).toBe(500); // timing untouched

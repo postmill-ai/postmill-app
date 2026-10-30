@@ -134,6 +134,7 @@ export const shapeGeometrySource = (): string => {
     decl('starPoints', starPoints),
     decl('pointsForShape', pointsForShape),
     decl('flattenPoints', flattenPoints),
+    decl('cornerRadii', cornerRadii),
   ].join('\n');
 };
 

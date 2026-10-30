@@ -394,8 +394,12 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
 - Video text layout is canvas-authoritative and shared through `designer-doc/video-text-layout.ts`.
   The injected frame script must use `videoTextLayoutSource()` (paragraphs, long tokens, box overflow,
   one-fontSize line height, middle baselines, all four alignments and reveal prefixes), never a local
-  wrapper or top baseline. `fontSize` is a numeric keyframe channel like geometry. Shape gradients use
-  injected `buildStyleGradient`; doc v9 `fillGradient`/`align` also project through `video-poster.ts`.
+  wrapper or top baseline. `fontSize` is a numeric keyframe channel like geometry. Doc v10 `fontStyle`
+  is part of the canvas font shorthand in Konva, `drawVideoText`, captions, and poster projection;
+  italic catalog faces must be included in `fontLinksForOutput` and `fontPreloadsForOutput`. Shape
+  gradients use injected `buildStyleGradient`; doc v9 `fillGradient`/`align` also project through
+  `video-poster.ts`. Rect clips accept scalar or `[tl,tr,br,bl]` radii through injected `cornerRadii`
+  and Canvas `roundRect` — never coerce a tuple to a scalar.
 - Visual clip crop/fit geometry is shared through `designer-doc/media-geometry.ts` and injected with
   `mediaGeometrySource()`. Preview (including the filtered canvas branch) and frame export must use
   the same source/destination rectangles. Absent `fitMode` means aspect-preserving `cover`; only

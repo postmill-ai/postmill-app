@@ -126,26 +126,28 @@ const RENDERED_WEIGHTS = [400, 700];
  * blocked render on every page and could not grow past its URL length, and a
  * user picking one display face had no reason to download forty others.
  */
-const injectStylesheet = (family: string, weights: number[]): void => {
+const injectStylesheet = (family: string, weights: number[], italic = false): void => {
   if (typeof document === 'undefined') return;
   if (!isCatalogFamily(family)) return;
 
-  const have = injected.get(family) ?? new Set<number>();
+  const key = italic ? `${family}|italic` : family;
+  const have = injected.get(key) ?? new Set<number>();
   const missing = weights.filter((w) => !have.has(w));
   if (!missing.length) return;
   missing.forEach((w) => have.add(w));
-  injected.set(family, have);
+  injected.set(key, have);
 
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = googleFontsUrl(family, missing);
-  link.dataset.designerFont = family;
+  link.href = googleFontsUrl(family, missing, italic);
+  link.dataset.designerFont = key;
   document.head.appendChild(link);
 };
 
 export async function ensureFontLoaded(
   family: string,
-  weights?: number[]
+  weights?: number[],
+  italic = false
 ): Promise<void> {
   if (!family || SYSTEM_FAMILIES.has(family)) {
     return;
@@ -161,11 +163,15 @@ export async function ensureFontLoaded(
     ...RENDERED_WEIGHTS,
   ]);
   injectStylesheet(family, wanted);
+  if (italic) injectStylesheet(family, wanted, true);
   try {
     // `document.fonts` resolves per face, so loading one weight would leave a
     // 700 headline measuring against the 400 cut.
     await Promise.all(
-      wanted.map((weight) => document.fonts.load(`${weight} 16px "${family}"`))
+      wanted.flatMap((weight) => [
+        document.fonts.load(`${weight} 16px "${family}"`),
+        ...(italic ? [document.fonts.load(`italic ${weight} 16px "${family}"`)] : []),
+      ])
     );
     await document.fonts.ready;
   } catch {
@@ -180,11 +186,12 @@ export async function ensureFontLoaded(
  * 400 cut wraps differently.
  */
 export async function ensureFontsUsed(
-  used: Map<string, Set<number>>
+  used: Map<string, Set<number>>,
+  italicFamilies: ReadonlySet<string> = new Set<string>()
 ): Promise<void> {
   await Promise.all(
     [...used.entries()].map(([family, weights]) =>
-      ensureFontLoaded(family, [...weights])
+      ensureFontLoaded(family, [...weights], italicFamilies.has(family))
     )
   );
 }

@@ -198,6 +198,28 @@ describe('DesignerDoc schema', () => {
     }
   });
 
+  it('accepts optional v10 fontStyle in both parsers and rejects other styles', () => {
+    for (const fontStyle of ['normal', 'italic'] as const) {
+      const doc = JSON.parse(JSON.stringify(videoDocFixture));
+      doc.version = 10;
+      doc.outputs[0].tracks[0].clips[0].fontStyle = fontStyle;
+      for (const schema of [DesignerDocLenientSchema, DesignerDocStrictSchema]) {
+        expect(schema.parse(migrateDoc(doc)).outputs[0].tracks[0].clips[0].fontStyle).toBe(fontStyle);
+      }
+    }
+    const invalid = JSON.parse(JSON.stringify(videoDocFixture));
+    invalid.version = 10;
+    invalid.outputs[0].tracks[0].clips[0].fontStyle = 'oblique';
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(invalid)).success).toBe(false);
+    expect(DesignerDocLenientSchema.safeParse(migrateDoc(invalid)).success).toBe(false);
+  });
+
+  it('keeps v9 clips valid without the optional v10 fontStyle', () => {
+    const doc = { ...JSON.parse(JSON.stringify(videoDocFixture)), version: 9 };
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(true);
+    expect(DesignerDocLenientSchema.safeParse(migrateDoc(doc)).success).toBe(true);
+  });
+
   it('keeps v8 clips valid without the optional v9 fields', () => {
     const doc = { ...JSON.parse(JSON.stringify(videoDocFixture)), version: 8 };
     expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(true);

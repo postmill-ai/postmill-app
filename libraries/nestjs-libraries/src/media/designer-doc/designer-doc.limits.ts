@@ -60,7 +60,7 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * every AI-generated design under dozens of folders it never asked for. When a
  * user makes a layer group we set both, so a folder also reflows as a unit.
  */
-export const DESIGNER_DOC_VERSION = 9;
+export const DESIGNER_DOC_VERSION = 10;
 
 /**
  * Maximum pages per image output, INCLUDING page 1 (`output.children` itself).

@@ -239,6 +239,7 @@ export const applyLinkedVideoClip = (
   const originId = clip?.originId;
 
   const shared = sharedClipUpdates(updates);
+  const mediaReplacement = updates.src !== undefined || updates.fileId !== undefined;
   const propagate =
     !editFormatOnly && !!originId && Object.keys(shared).length > 0;
   const affected: number[] = [];
@@ -276,7 +277,11 @@ export const applyLinkedVideoClip = (
       clips: t.clips.map((c) => {
         if (c.originId && c.originId === originId) {
           changed = true;
-          return { ...c, ...scaled } as VideoClip;
+          return {
+            ...c,
+            ...scaled,
+            ...(mediaReplacement ? { crop: undefined, focalPoint: undefined } : {}),
+          } as VideoClip;
         }
         return c;
       }),

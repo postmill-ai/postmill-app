@@ -240,10 +240,11 @@ describe('videoOutputToPosterOutput', () => {
     expect(poster.children.some((el) => el.id === 'clip-headline')).toBe(false);
   });
 
-  it('projects v9 text alignment and shape gradients', () => {
+  it('projects text alignment, fontStyle, and shape gradients', () => {
     const out = makeVideoOutput();
     const text = out.tracks[1].clips[0];
     text.align = 'justify';
+    text.fontStyle = 'italic';
     const shape = out.tracks[2].clips[0];
     shape.fillGradient = {
       type: 'linear',
@@ -251,6 +252,7 @@ describe('videoOutputToPosterOutput', () => {
     };
     const poster = videoOutputToPosterOutput(out);
     expect(poster.children.find((el) => el.id === text.id)?.align).toBe('justify');
+    expect(poster.children.find((el) => el.id === text.id)?.fontStyle).toBe('italic');
     expect(poster.children.find((el) => el.id === shape.id)?.fillGradient).toEqual(shape.fillGradient);
   });
 

@@ -272,4 +272,64 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
       fs.rmSync(frameDir, { recursive: true, force: true });
     }
   }, 120000);
+
+  it('captures per-corner radii and real italic glyph pixels', async () => {
+    const capture = new ChromiumFrameCaptureService();
+    const fs = await import('fs');
+    const os = await import('os');
+    const frameDir = fs.mkdtempSync(path.join(os.tmpdir(), 'radius-italic-capture-'));
+    const output = (fontStyle: 'normal' | 'italic'): VideoOutput => ({
+      ...redVideo(1000),
+      width: 200,
+      height: 200,
+      fps: 1,
+      background: '#ffffff',
+      tracks: [
+        {
+          id: 'shape', type: 'shape',
+          clips: [{
+            id: 'rounded', shape: 'rect', startMs: 0, endMs: 1000,
+            x: 0, y: 0, width: 200, height: 100,
+            fill: '#ff0000', borderRadius: [60, 0, 0, 0],
+          }],
+        },
+        {
+          id: 'text', type: 'text',
+          clips: [{
+            id: 'italic', text: 'Italic', startMs: 0, endMs: 1000,
+            x: 10, y: 115, width: 180, height: 60,
+            fontFamily: 'Arial', fontSize: 40, fontWeight: 400,
+            fontStyle, fill: '#000000',
+          }],
+        },
+      ],
+    });
+    const pixel = async (dir: string, x: number, y: number) => {
+      const { data, info } = await sharp(path.join(dir, 'frame-00001.png'))
+        .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const index = (y * info.width + x) * info.channels;
+      return [...data.subarray(index, index + 4)];
+    };
+    try {
+      const normalDir = path.join(frameDir, 'normal');
+      const italicDir = path.join(frameDir, 'italic');
+      fs.mkdirSync(normalDir);
+      fs.mkdirSync(italicDir);
+      expect(await capture.captureFrames(output('normal'), 1, normalDir)).toBe(1);
+      expect(await capture.captureFrames(output('italic'), 1, italicDir)).toBe(1);
+
+      expect((await pixel(normalDir, 4, 4))[0]).toBeGreaterThan(240);
+      expect((await pixel(normalDir, 196, 4))[0]).toBeGreaterThan(240);
+      expect((await pixel(normalDir, 4, 96))[0]).toBeGreaterThan(240);
+
+      const normal = await sharp(path.join(normalDir, 'frame-00001.png')).raw().toBuffer();
+      const italic = await sharp(path.join(italicDir, 'frame-00001.png')).raw().toBuffer();
+      expect(italic.equals(normal)).toBe(false);
+      const darkPixels = italic.reduce((count, _value, index) =>
+        index % 3 === 0 && italic[index] < 100 ? count + 1 : count, 0);
+      expect(darkPixels).toBeGreaterThan(100);
+    } finally {
+      fs.rmSync(frameDir, { recursive: true, force: true });
+    }
+  }, 120000);
 });
