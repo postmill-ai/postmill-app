@@ -265,7 +265,7 @@ const videoGroupBoxes = (output: VideoOutput): Map<string, GroupBox> => {
       } as DesignerElement);
     }
   }
-  return computeGroupBoxes(proxies);
+  return computeGroupBoxes(proxies, output);
 };
 
 /**

@@ -253,6 +253,17 @@ describe('persistent video group reflow', () => {
     expect(resized.tracks[0].clips[0].fitMode).toBe('cover');
   });
 
+  it('keeps a full-bleed cover background out of the group transform', () => {
+    const output = groupedOutput();
+    Object.assign(output.tracks[0].clips[0], {
+      x: 0, y: 0, width: 1920, height: 1080, fitMode: 'cover',
+    });
+    const resized = reflowVideoOutputInPlace(output, 1080, 1920, 'custom-tall');
+    expect(resized.tracks[0].clips[0]).toMatchObject({
+      x: 0, y: 0, width: 1080, height: 1920, fitMode: 'cover',
+    });
+  });
+
   it('preserves an unset fitMode as fill instead of converting grouped clips to cover', () => {
     const output = groupedOutput();
     output.tracks[0].clips[0].fitMode = undefined;

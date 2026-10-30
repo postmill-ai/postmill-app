@@ -1293,7 +1293,7 @@ export const createDesignerStore = (
         const source = doc.outputs[currentOutput] as DesignerOutput;
         const sourceChildren = source.children.map((el) => (el.originId ? el : { ...el, originId: genId() }));
         const targetBasis = { ...preset, id: '', background: '#fff', children: [] } as DesignerOutput;
-        const groupBoxes = computeGroupBoxes(sourceChildren);
+        const groupBoxes = computeGroupBoxes(sourceChildren, source);
         const children = sourceChildren.map((el) =>
           seedCopy(el, source, targetBasis, el.originId as string, el.groupId ? groupBoxes.get(el.groupId) : undefined),
         );
@@ -1301,7 +1301,7 @@ export const createDesignerStore = (
         // per-page edits are deliberately local (duplicatePageAt semantics,
         // designer-doc.pages.ts) — each child reflowed onto the new canvas.
         const pages = source.pages?.map((page) => {
-          const pageBoxes = computeGroupBoxes(page.children);
+          const pageBoxes = computeGroupBoxes(page.children, source);
           return {
             ...page,
             id: genId(),
@@ -1352,12 +1352,12 @@ export const createDesignerStore = (
         if (isVideoMode()) return;
         const imgOut = out as DesignerOutput;
         const resized: DesignerOutput = { ...imgOut, width, height, formatId: formatId ?? imgOut.formatId, name: name ?? imgOut.name };
-        const groupBoxes = computeGroupBoxes(imgOut.children);
+        const groupBoxes = computeGroupBoxes(imgOut.children, imgOut);
         resized.children = imgOut.children.map((el) => seedCopy(el, imgOut, resized, el.originId || el.id, el.groupId ? groupBoxes.get(el.groupId) : undefined));
         // Pages 2+ carry elements in the OLD canvas coordinates — reflow them
         // too, or a resize leaves every extra page laid out for the old size.
         resized.pages = imgOut.pages?.map((page) => {
-          const pageBoxes = computeGroupBoxes(page.children);
+          const pageBoxes = computeGroupBoxes(page.children, imgOut);
           return {
             ...page,
             children: page.children.map((el) =>

@@ -137,11 +137,15 @@ export const groupKeyOf = (
  * its relative offsets instead of each element anchoring independently.
  */
 export const computeGroupBoxes = (
-  elements: DesignerElement[]
+  elements: DesignerElement[],
+  source?: { width: number; height: number }
 ): Map<string, GroupBox> => {
   const boxes = new Map<string, GroupBox>();
   for (const el of elements) {
     if (!el.groupId) continue;
+    if (source && (el.width >= source.width * 0.95 || el.height >= source.height * 0.95)) {
+      continue;
+    }
     const box = boxes.get(el.groupId);
     if (!box) {
       boxes.set(el.groupId, {
@@ -553,10 +557,11 @@ export const smartReflow = (
   // Elements sized/positioned per-axis (cover images, full-bleed shapes)
   // already track the canvas fractionally — a panel IS one of these, so it is
   // never re-homed into itself.
-  const perAxis = !groupBox && (
-    (el.type === 'image' && (el.fitMode || 'cover') === 'cover') ||
-    fullBleedShape
-  );
+  const perAxis =
+    fullBleedShape ||
+    (el.type === 'image' &&
+      (el.width >= source.width * 0.95 || el.height >= source.height * 0.95)) ||
+    (!groupBox && el.type === 'image' && (el.fitMode || 'cover') === 'cover');
   const container = perAxis ? undefined : containerBox;
   // The container's own per-axis transform (identical to the transform the
   // panel shape itself takes above).
