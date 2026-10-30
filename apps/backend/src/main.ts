@@ -30,6 +30,7 @@ import { CollaborationGateway } from './services/collaboration/collaboration.gat
 import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { createGracefulShutdown } from './services/graceful-shutdown';
 
 // v3.6.0 added BigInt columns (e.g. Organization.localStorageQuotaBytes,
 // StorageProviderConfig.quotaBytes). Express serializes responses with
@@ -83,30 +84,13 @@ async function start() {
     },
   });
 
-  // Graceful shutdown (G1): drain Redis/Prisma (via onModuleDestroy) on SIGTERM/SIGINT.
-  // Enabled before listen; the handler runs app.close() exactly once. This is additive to
-  // the dev `ppid===1` watcher above (which handles the nest-watch orphan case separately).
-  app.enableShutdownHooks();
-
   // Socket.IO runs on the same HTTP server via the NestJS IoAdapter.
   // The `/ai-designer` namespace is handled by AiDesignerGateway.
   // `as any` works around a type-only mismatch between `@nestjs/platform-socket.io`
   // and `@nestjs/websockets` bindMessageHandlers signatures; runtime is unaffected.
   app.useWebSocketAdapter(new IoAdapter(app) as any);
 
-  let shuttingDown = false;
-  const gracefulShutdown = async (signal: string) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    new Logger('Bootstrap').log(`Received ${signal}, shutting down gracefully...`);
-    try {
-      await app.close();
-    } catch (e) {
-      new Logger('Bootstrap').error('Error during graceful shutdown', e as Error);
-    } finally {
-      process.exit(0);
-    }
-  };
+  const gracefulShutdown = createGracefulShutdown(app);
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
