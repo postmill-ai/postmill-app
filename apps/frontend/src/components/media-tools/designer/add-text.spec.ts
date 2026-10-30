@@ -21,6 +21,14 @@ describe('addText — image documents', () => {
     expect(store.getState().selectedIds).toEqual([id]);
   });
 
+  it('creates generic Text at 400 Normal', () => {
+    const store = createDesignerStore(1000, 1000);
+    addText(store);
+    expect(store.getState().doc.outputs[0].children[0]).toMatchObject({
+      text: 'Text', fontWeight: 400, fontStyle: 'normal',
+    });
+  });
+
   it('centres the box when no position is given', () => {
     const store = createDesignerStore(1000, 600);
     addText(store);
@@ -58,6 +66,7 @@ describe('addText — video documents', () => {
     const textTrack = vo().tracks.find((t) => t.type === 'text');
     expect(textTrack).toBeTruthy();
     expect(textTrack?.clips).toHaveLength(1);
+    expect(textTrack?.clips[0]).toMatchObject({ fontWeight: 400, fontStyle: 'normal' });
   });
 
   it('reuses an existing text track rather than stacking new ones', () => {

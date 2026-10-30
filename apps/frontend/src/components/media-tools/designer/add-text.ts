@@ -25,7 +25,7 @@ export const DEFAULT_TEXT: Pick<
 > = {
   name: 'Text',
   fontSize: 32,
-  fontWeight: 700,
+  fontWeight: 400,
   fontFamily: 'Inter',
 };
 
@@ -94,6 +94,7 @@ export const addText = (
       fontFamily: style.fontFamily,
       fontSize: style.fontSize,
       fontWeight: style.fontWeight,
+      fontStyle: 'normal',
       fill: (preset as TextStylePreset).fill || '#000000',
       x,
       y,

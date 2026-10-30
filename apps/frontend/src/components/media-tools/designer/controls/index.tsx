@@ -596,6 +596,7 @@ export interface StepperProps {
   max?: number;
   step?: number;
   label?: string;
+  compact?: boolean;
 }
 
 export const Stepper: React.FC<StepperProps> = ({
@@ -605,6 +606,7 @@ export const Stepper: React.FC<StepperProps> = ({
   max = Infinity,
   step = 1,
   label,
+  compact = false,
 }) => {
   const t = useT();
   const id = useId();
@@ -613,19 +615,19 @@ export const Stepper: React.FC<StepperProps> = ({
   const bump = (dir: 1 | -1) => onChange(clamp(value + dir * step));
 
   return (
-    <div className="flex flex-col gap-[6px]">
+    <div className={compact ? 'flex' : 'flex flex-col gap-[6px]'}>
       {label && (
-        <label htmlFor={id} className="text-[12px] text-textColor/70">
+        <label htmlFor={id} className={compact ? 'sr-only' : 'text-[12px] text-textColor/70'}>
           {label}
         </label>
       )}
-      <div className="inline-flex items-center h-[34px] rounded-[8px] bg-newBgColorInner border border-studioBorder overflow-hidden">
+      <div className={`inline-flex items-center rounded-[8px] bg-newBgColorInner border border-studioBorder overflow-hidden ${compact ? 'h-[26px]' : 'h-[34px]'}`}>
         <button
           type="button"
           aria-label={t('decrease', 'Decrease')}
           disabled={value <= min}
           onClick={() => bump(-1)}
-          className="w-[32px] h-full flex items-center justify-center text-textColor text-[16px] hover:bg-newBgColor disabled:opacity-40 disabled:cursor-not-allowed"
+          className={`${compact ? 'w-[24px]' : 'w-[32px]'} h-full flex items-center justify-center text-textColor text-[16px] hover:bg-newBgColor disabled:opacity-40 disabled:cursor-not-allowed`}
         >
           −
         </button>
@@ -643,14 +645,14 @@ export const Stepper: React.FC<StepperProps> = ({
             const n = Number(e.target.value);
             if (!Number.isNaN(n)) onChange(clamp(n));
           }}
-          className="w-[56px] h-full text-center bg-transparent text-textColor text-[13px] font-mono border-x border-studioBorder focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          className={`${compact ? 'w-[42px] text-[11px]' : 'w-[56px] text-[13px]'} h-full text-center bg-transparent text-textColor font-mono border-x border-studioBorder focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
         />
         <button
           type="button"
           aria-label={t('increase', 'Increase')}
           disabled={value >= max}
           onClick={() => bump(1)}
-          className="w-[32px] h-full flex items-center justify-center text-textColor text-[16px] hover:bg-newBgColor disabled:opacity-40 disabled:cursor-not-allowed"
+          className={`${compact ? 'w-[24px]' : 'w-[32px]'} h-full flex items-center justify-center text-textColor text-[16px] hover:bg-newBgColor disabled:opacity-40 disabled:cursor-not-allowed`}
         >
           +
         </button>

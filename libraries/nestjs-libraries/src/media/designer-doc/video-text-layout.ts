@@ -13,6 +13,7 @@ export interface VideoTextDrawOptions {
   fontSize: number;
   fontFamily?: string;
   fontWeight?: number;
+  fontStyle?: 'normal' | 'italic';
   fill?: string;
   align?: VideoTextAlign;
 }
@@ -132,7 +133,7 @@ export const drawVideoText = (
   if (!options.text) return [];
   const fontSize = options.fontSize;
   const align = options.align || 'left';
-  ctx.font = `${options.fontWeight || 400} ${fontSize}px "${options.fontFamily || 'Arial'}"`;
+  ctx.font = `${options.fontStyle === 'italic' ? 'italic ' : ''}${options.fontWeight || 400} ${fontSize}px "${options.fontFamily || 'Arial'}"`;
   ctx.fillStyle = options.fill || '#000000';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';

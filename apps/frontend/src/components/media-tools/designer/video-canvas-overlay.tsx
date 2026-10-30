@@ -394,7 +394,8 @@ const CaptionClip: FC<{ clip: VideoClip; width: number; height: number; playhead
     const fontSize = clip.fontSize || 28;
     const fontWeight = clip.fontWeight || 700;
     const fontFamily = clip.fontFamily || 'Arial';
-    ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+    const fontStyle = clip.fontStyle === 'italic' ? 'italic ' : '';
+    ctx.font = `${fontStyle}${fontWeight} ${fontSize}px ${fontFamily}`;
     ctx.textBaseline = 'top';
     const lineHeight = fontSize * 1.35;
     const spaceWidth = ctx.measureText(' ').width;
@@ -408,7 +409,7 @@ const CaptionClip: FC<{ clip: VideoClip; width: number; height: number; playhead
       const w = words[i];
       const state = states[i];
       const scaled = fontSize * state.scale;
-      ctx.font = `${state.weight || fontWeight} ${scaled}px ${fontFamily}`;
+      ctx.font = `${fontStyle}${state.weight || fontWeight} ${scaled}px ${fontFamily}`;
       const wordWidth = ctx.measureText(w.word).width;
       if (x + wordWidth > width && x > 0) {
         x = 0;
@@ -832,8 +833,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               fontSize={props.fontSize}
               lineHeight={1}
               align={clip.align || 'left'}
-              // Numeric weight straight through, the same as an element's text.
-              fontStyle={String(clip.fontWeight ?? 400)}
+              fontStyle={`${clip.fontStyle === 'italic' ? 'italic ' : ''}${clip.fontWeight ?? 400}`}
               fill={canvasColor(clip.fill || '#000000')}
               rotation={props.rotation}
               opacity={props.opacity}

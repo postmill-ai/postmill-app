@@ -380,10 +380,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     // Weights as well as families: a face loads per weight, so warming only the
     // default would leave a 700 headline measuring against the 400 cut.
     const families = new Map<string, Set<number>>();
-    const note = (family?: string, weight?: number) => {
+    const italicFamilies = new Set<string>();
+    const note = (family?: string, weight?: number, italic = false) => {
       if (!family) return;
       if (!families.has(family)) families.set(family, new Set());
       families.get(family)!.add(weight ?? 400);
+      if (italic) italicFamilies.add(family);
     };
     for (const out of doc.outputs || []) {
       const pages = [
@@ -392,16 +394,22 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       ];
       for (const pageEls of pages) {
       for (const el of pageEls || []) {
-        note(el.fontFamily, el.fontWeight);
-        for (const run of el.richText || []) note(run.fontFamily, run.fontWeight);
+        note(el.fontFamily, el.fontWeight, el.fontStyle === 'italic');
+        for (const run of el.richText || []) {
+          note(run.fontFamily, run.fontWeight, run.fontStyle === 'italic');
+        }
       }
       }
       for (const track of (out as any).tracks || []) {
-        for (const clip of track.clips || []) note(clip.fontFamily, clip.fontWeight);
+        for (const clip of track.clips || []) {
+          note(clip.fontFamily, clip.fontWeight, clip.fontStyle === 'italic');
+        }
       }
     }
     return [...families.entries()]
-      .map(([family, weights]) => `${family}@${[...weights].sort((a, b) => a - b).join(',')}`)
+      .map(([family, weights]) =>
+        `${family}@${[...weights].sort((a, b) => a - b).join(',')}${italicFamilies.has(family) ? ':italic' : ''}`
+      )
       .sort()
       .join('|');
   }, [doc]);
@@ -409,12 +417,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   useEffect(() => {
     if (!fontSignature) return;
     const families = new Map<string, Set<number>>();
+    const italicFamilies = new Set<string>();
     for (const entry of fontSignature.split('|')) {
-      const [family, weights] = entry.split('@');
+      const [family, spec] = entry.split('@');
+      const [weights, style] = spec.split(':');
       families.set(family, new Set(weights.split(',').map(Number)));
+      if (style === 'italic') italicFamilies.add(family);
     }
     let cancelled = false;
-    void ensureFontsUsed(families).then(() => {
+    void ensureFontsUsed(families, italicFamilies).then(() => {
       if (cancelled) return;
       const stage = stageRef.current;
       if (!stage) return;
@@ -2320,6 +2331,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           fontFamily: clip.fontFamily,
           fontSize: clip.fontSize,
           fontWeight: clip.fontWeight,
+          fontStyle: clip.fontStyle,
           fill: clip.fill,
         } as DesignerElement;
         return (

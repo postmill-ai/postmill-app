@@ -195,6 +195,54 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     ]);
   });
 
+  it('passes italic and weight through the shared video text painter', async () => {
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
+      fillText: () => undefined,
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      tracks: [{
+        id: 'text-track', type: 'text',
+        clips: [{
+          id: 'italic', startMs: 0, endMs: 1000, text: 'ab',
+          x: 0, y: 0, width: 45, height: 30, fontSize: 10,
+          fontWeight: 700, fontStyle: 'italic',
+        }],
+      }],
+    }, context as never);
+    await api.renderFrame(0);
+    expect(state.font).toBe('italic 700 10px "Arial"');
+  });
+
+  it('passes scalar and per-corner radii to roundRect without scalar coercion', async () => {
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      roundRect: vi.fn(),
+      rect: vi.fn(),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const withRadius = (borderRadius: number | number[]) => ({
+      ...output,
+      tracks: [{
+        ...output.tracks[0],
+        clips: [{ ...output.tracks[0].clips[0], borderRadius }],
+      }],
+    });
+    await run(withRadius([10, 0, 20, 0]), context as never).renderFrame(0);
+    expect(state.roundRect).toHaveBeenNthCalledWith(1, 0, 0, 50, 50, [10, 0, 20, 0]);
+    await run(withRadius(12), context as never).renderFrame(0);
+    expect(state.roundRect).toHaveBeenNthCalledWith(2, 0, 0, 50, 50, [12, 12, 12, 12]);
+  });
+
   it('builds shape fill gradients through the shared gradient painter', async () => {
     const stops: [number, string][] = [];
     const gradient = { addColorStop: (offset: number, color: string) => stops.push([offset, color]) };

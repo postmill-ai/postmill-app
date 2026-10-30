@@ -1,6 +1,7 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ColorSwatch, SegmentedControl, Slider, Stepper } from '../controls';
 import { FillSection } from './fill-section';
 import {
@@ -50,6 +51,11 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { runClipTransformRequest, VIDEO_BG_REMOVAL_MODELS } from '../clip-transform';
 import { FontFamilyPicker } from './font-family-picker';
 import { VoiceoverClipSection } from './voiceover-clip-section';
+import { useMediaPicker } from '../../use-media-picker';
+import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
+import { removeClipImageBackground, replaceClipImage } from '../clip-media';
+import { CornerRadiusControl } from './corner-radius-control';
+import { TextStyleControl } from './text-style-control';
 
 // Same weight ladder the image-mode text panel offers.
 const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
@@ -438,6 +444,23 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     store.getState().pushHistory();
   }, [store]);
 
+  const replacePicker = useMediaPicker({
+    title: translate('replace_image', 'Replace image'),
+    kinds: ['image'],
+    onSelect: (item) => {
+      void replaceClipImage({
+        store,
+        target: { outputIndex, trackId, clipId },
+        item,
+      }).catch(() => {
+        toaster.show(
+          translate('designer_clip_update_rejected', 'That clip change could not be applied'),
+          'warning'
+        );
+      });
+    },
+  });
+
   // --- Speed ramp -----------------------------------------------------------
   const ramped = !!clip && hasSpeedCurve(clip);
   const clipDurationMs = clip ? clip.endMs - clip.startMs : 0;
@@ -723,6 +746,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   // menu uses (clip-transform.ts); the choice picks WHICH removal model runs.
   // "Auto" omits `model`, so the org's configured media default wins.
   const fetch = useFetch();
+  const { operationAvailable } = useMediaToolsStatus();
   const mountedRef = useRef(true);
   useEffect(() => () => {
     mountedRef.current = false;
@@ -751,6 +775,30 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     [clip?.src, bgRemovalRunning, store, outputIndex, trackId, clipId, fetch, translate, toaster],
   );
 
+  const [imageBgRemovalRunning, setImageBgRemovalRunning] = useState(false);
+  const [imageBgRemovalError, setImageBgRemovalError] = useState<string | null>(null);
+  const runImageBackgroundRemoval = useCallback(async () => {
+    if (!clip?.src || imageBgRemovalRunning) return;
+    setImageBgRemovalRunning(true);
+    setImageBgRemovalError(null);
+    try {
+      await removeClipImageBackground({
+        fetch,
+        store,
+        target: { outputIndex, trackId, clipId },
+      });
+    } catch (error) {
+      const message = (error as Error)?.message ||
+        translate('designer_bg_removal_failed', 'Background removal failed');
+      if (mountedRef.current) {
+        setImageBgRemovalError(message);
+        toaster.show(message, 'warning');
+      }
+    } finally {
+      if (mountedRef.current) setImageBgRemovalRunning(false);
+    }
+  }, [clip?.src, imageBgRemovalRunning, fetch, store, outputIndex, trackId, clipId, translate, toaster]);
+
   if (!clip) return null;
 
   return (
@@ -758,6 +806,36 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
       <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
         {translate('designer_video_clip', 'Video Clip')}
       </div>
+
+      {clipTrackType === 'image' && !!clip.src && (
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={replacePicker.open}
+            className="w-full px-3 py-2 rounded-sm text-[12px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10"
+          >
+            {translate('designer_replace_image', 'Replace image…')}
+          </button>
+          {operationAvailable('bg-remove') && (
+            <button
+              type="button"
+              onClick={runImageBackgroundRemoval}
+              disabled={imageBgRemovalRunning}
+              className="w-full px-3 py-2 rounded-sm text-[12px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {imageBgRemovalRunning
+                ? translate('designer_processing_ellipsis', 'Processing...')
+                : translate('designer_remove_background', 'Remove Background')}
+            </button>
+          )}
+          {imageBgRemovalError && (
+            <div role="alert" className="text-[11px] text-dangerText">
+              {imageBgRemovalError}
+            </div>
+          )}
+        </div>
+      )}
+      {replacePicker.element ? createPortal(replacePicker.element, document.body) : null}
 
       {/* Position & Size */}
       <div className="grid grid-cols-2 gap-2">
@@ -1102,6 +1180,12 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             label={translate('fill_button', 'Fill')}
             brandEnforcement={brandEnforcement}
           />
+          <CornerRadiusControl
+            value={clip.borderRadius}
+            width={clip.width ?? 1}
+            height={clip.height ?? 1}
+            onChange={(borderRadius) => updateClip({ borderRadius })}
+          />
         </div>
       )}
 
@@ -1256,6 +1340,12 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             value={clip.fontFamily || 'Inter'}
             brandEnforcement={brandEnforcement}
             onPick={(family) => updateClip({ fontFamily: family })}
+          />
+          <TextStyleControl
+            id="clip-text-style"
+            fontWeight={clip.fontWeight}
+            fontStyle={clip.fontStyle}
+            onChange={updateClip}
           />
           <div className="grid grid-cols-2 gap-2">
             <Stepper

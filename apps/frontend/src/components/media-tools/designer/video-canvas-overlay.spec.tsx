@@ -211,8 +211,8 @@ describe('video overlay paint invalidation', () => {
 });
 
 
-describe('video overlay v9 styles and keyframed text', () => {
-  it('passes gradient, alignment and interpolated font size to Konva', async () => {
+describe('video overlay styles and keyframed text', () => {
+  it('passes gradient, alignment, italic weight, and interpolated font size to Konva', async () => {
     const store = createDesignerStore(500, 500);
     store.getState().setMode('video');
     store.getState().addTrack(0, 'shape');
@@ -245,6 +245,8 @@ describe('video overlay v9 styles and keyframed text', () => {
       width: 200,
       height: 60,
       align: 'justify',
+      fontWeight: 700,
+      fontStyle: 'italic',
       fontSize: 20,
       keyframes: [{ tMs: 0, props: { fontSize: 48 } }],
     } as never);
@@ -270,6 +272,7 @@ describe('video overlay v9 styles and keyframed text', () => {
     const text = stage.findOne('#aligned-text') as Konva.Text;
     expect(shape.fillLinearGradientColorStops()).toEqual([0, '#000000', 1, '#ffffff']);
     expect(text.align()).toBe('justify');
+    expect(text.fontStyle()).toBe('italic 700');
     expect(text.fontSize()).toBe(48);
     expect(text.lineHeight()).toBe(1);
   });

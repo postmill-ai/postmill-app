@@ -6,6 +6,8 @@ const DESIGN_ID = 'design-generated-video-e2e';
 const GENERATED_URL = '/mock-storage/generated.mp4';
 const REPLACEMENT_URL = '/mock-storage/replacement.webm';
 const ASYMMETRIC_URL = '/mock-storage/asymmetric-8x2.png';
+const REPLACEMENT_IMAGE_URL = '/mock-storage/replacement-image.png';
+const TRANSPARENT_IMAGE_URL = '/mock-storage/transparent.png';
 const GENERATE_PATH = '/media/generate-video';
 
 interface CropSnapshot {
@@ -27,7 +29,18 @@ interface VideoClipSnapshot {
   startMs: number;
   endMs: number;
   text?: string;
+  fileId?: string;
+  originId?: string;
+  mediaType?: 'video' | 'image';
   fontSize?: number;
+  fontWeight?: number;
+  fontStyle?: 'normal' | 'italic';
+  borderRadius?: number | [number, number, number, number];
+  filters?: string[];
+  smartFilters?: unknown[];
+  originalSrc?: string;
+  originalFileId?: string;
+  keyframes?: unknown[];
   shape?: string;
   fill?: string;
   crop?: CropSnapshot;
@@ -156,6 +169,7 @@ const json = (route: Route, body: unknown, status = 200) =>
 
 class DesignerMocks {
   readonly generatePosts: string[] = [];
+  readonly backgroundRemovalPosts: string[] = [];
   readonly unexpectedProviderPosts: string[] = [];
   readonly httpErrors: string[] = [];
   readonly consoleErrors: string[] = [];
@@ -177,6 +191,14 @@ class DesignerMocks {
     },
     [ASYMMETRIC_URL]: {
       file: 'asymmetric-8x2.png',
+      contentType: 'image/png',
+    },
+    [REPLACEMENT_IMAGE_URL]: {
+      file: 'asymmetric-8x2.png',
+      contentType: 'image/png',
+    },
+    [TRANSPARENT_IMAGE_URL]: {
+      file: 'transparent-2x2.png',
       contentType: 'image/png',
     },
   };
@@ -217,7 +239,11 @@ class DesignerMocks {
 
       if (pathname === '/media/tools/status' && method === 'GET') {
         await json(route, {
-          operations: { tts: { available: true }, stt: { available: true } },
+          operations: {
+            tts: { available: true },
+            stt: { available: true },
+            'bg-remove': { available: true },
+          },
           tools: Object.fromEntries(
             [
               'text-to-video',
@@ -256,6 +282,41 @@ class DesignerMocks {
 
       if (pathname === '/media/studio/replicate/jobs' && method === 'GET') {
         await json(route, []);
+        return;
+      }
+
+      if (pathname === '/files/folders' && method === 'GET') {
+        await json(route, []);
+        return;
+      }
+
+      if (pathname === '/files' && method === 'GET') {
+        await json(route, {
+          results: [{
+            id: 'replacement-image-file',
+            name: 'replacement-image.png',
+            originalName: 'replacement-image.png',
+            path: REPLACEMENT_IMAGE_URL,
+            thumbnail: REPLACEMENT_IMAGE_URL,
+            alt: null,
+            thumbnailTimestamp: null,
+            fileSize: 1234,
+            type: 'image',
+            tags: null,
+            description: null,
+            folderId: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            metadata: { dimensions: { width: 8, height: 2 }, mimeType: 'image/png' },
+          }],
+          total: 1,
+        });
+        return;
+      }
+
+      if (pathname === '/media/remove-background' && method === 'POST') {
+        this.backgroundRemovalPosts.push(request.postData() || '');
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        await json(route, { url: TRANSPARENT_IMAGE_URL });
         return;
       }
 
@@ -584,6 +645,47 @@ test.describe('Designer generated video (fully mocked provider and storage)', ()
 });
 
 
+const essentialsDoc = (): DesignerDocSnapshot => ({
+  version: 10,
+  mode: 'video',
+  outputs: [{
+    id: 'essentials-output',
+    formatId: 'essentials',
+    name: 'Essentials',
+    width: 400,
+    height: 300,
+    durationMs: 6000,
+    tracks: [
+      {
+        id: 'image-track', type: 'image',
+        clips: [{
+          id: 'image-original', originId: 'shared-image', src: ASYMMETRIC_URL,
+          fileId: 'old-image-file', originalSrc: ASYMMETRIC_URL,
+          originalFileId: 'old-image-file', smartFilters: [{ id: 'blur', enabled: true }],
+          filters: ['sepia:0.2'], crop: { x: 0, y: 0, width: 2, height: 2 },
+          startMs: 0, endMs: 4000, x: 20, y: 20, width: 120, height: 60,
+          naturalWidth: 8, naturalHeight: 2, keyframes: [],
+        }],
+      },
+      {
+        id: 'shape-track', type: 'shape',
+        clips: [{
+          id: 'shape-original', shape: 'rect', startMs: 0, endMs: 6000,
+          x: 200, y: 20, width: 100, height: 100, fill: '#ff0000',
+        }],
+      },
+      {
+        id: 'text-track', type: 'text',
+        clips: [{
+          id: 'text-original', text: 'Style me', startMs: 0, endMs: 6000,
+          x: 20, y: 180, width: 250, height: 50, fontSize: 32,
+          fontWeight: 400, fontStyle: 'normal', fill: '#ffffff',
+        }],
+      },
+    ],
+  }],
+});
+
 const motionDoc = (): DesignerDocSnapshot => ({
   version: 9,
   mode: 'video',
@@ -738,6 +840,123 @@ test.describe('Designer motion graphics editing (mocked local document)', () => 
     expect(persistedText?.height).toBeGreaterThan(70);
     expect(persistedText?.height).toBeLessThan(80);
     expect(mocks.savedClips().find((clip) => clip.id === 'shape-1')?.fillGradient?.stops).toHaveLength(2);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
+test.describe('Designer video Inspector and timeline essentials (mocked local document)', () => {
+  test('timeline tools, image replacement/removal, radius/text styles, and save/reload', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const mocks = new DesignerMocks();
+    mocks.doc = essentialsDoc();
+    mocks.name = 'Video essentials E2E';
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(3);
+
+    await clipOnTrack(page, 'Image').click();
+    const split = page.getByRole('button', { name: 'Split clip', exact: true });
+    await expect(split).toBeDisabled();
+    const seek = page.getByRole('slider', { name: 'Seek timeline', exact: true });
+    await seek.press('Home');
+    await seek.press('Shift+ArrowRight');
+    await expect(split).toBeEnabled();
+    await split.click();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips.length).toBe(2);
+    expect(mocks.doc.outputs[0].tracks[0].clips.map((clip) => [clip.startMs, clip.endMs])).toEqual([
+      [0, 1000], [1000, 4000],
+    ]);
+
+    await page.getByRole('button', { name: 'Duplicate clip', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips.length).toBe(3);
+    await page.getByRole('button', { name: 'Delete clip', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips.length).toBe(2);
+    await page.getByRole('spinbutton', { name: 'Duration (seconds)', exact: true }).fill('8');
+    await expect.poll(() => mocks.doc.outputs[0].durationMs).toBe(8000);
+
+    await clipOnTrack(page, 'Image').nth(1).click();
+    const beforeReplacement = mocks.doc.outputs[0].tracks[0].clips[1];
+    await page.getByRole('button', { name: 'Replace image…', exact: true }).click();
+    await page.getByText('replacement-image.png', { exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[1]?.src).toBe(REPLACEMENT_IMAGE_URL);
+    const replaced = mocks.doc.outputs[0].tracks[0].clips[1];
+    expect(replaced).toMatchObject({
+      id: beforeReplacement.id,
+      originId: beforeReplacement.originId,
+      startMs: beforeReplacement.startMs,
+      endMs: beforeReplacement.endMs,
+      x: beforeReplacement.x,
+      y: beforeReplacement.y,
+      width: beforeReplacement.width,
+      height: beforeReplacement.height,
+      keyframes: beforeReplacement.keyframes,
+      filters: beforeReplacement.filters,
+      fileId: 'replacement-image-file',
+      mediaType: 'image',
+      naturalWidth: 8,
+      naturalHeight: 2,
+    });
+    expect(replaced.crop).toBeUndefined();
+    expect(replaced.originalSrc).toBeUndefined();
+    expect(replaced.originalFileId).toBeUndefined();
+    expect(replaced.smartFilters).toBeUndefined();
+
+    await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Processing...', exact: true })).toBeVisible();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[1]?.src).toBe(TRANSPARENT_IMAGE_URL);
+    expect(mocks.backgroundRemovalPosts).toHaveLength(1);
+    expect(JSON.parse(mocks.backgroundRemovalPosts[0])).toEqual({ imageUrl: REPLACEMENT_IMAGE_URL });
+    const transparent = mocks.doc.outputs[0].tracks[0].clips[1];
+    expect(transparent.id).toBe(beforeReplacement.id);
+    expect(transparent.filters).toEqual(beforeReplacement.filters);
+    expect(transparent.smartFilters).toBeUndefined();
+    expect(transparent.originalSrc).toBeUndefined();
+
+    await clipOnTrack(page, 'Shape').click();
+    await page.getByRole('button', { name: 'Per corner', exact: true }).click();
+    await page.getByRole('spinbutton', { name: 'Top right', exact: true }).fill('18');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')?.borderRadius)
+      .toEqual([0, 18, 0, 0]);
+
+    await clipOnTrack(page, 'Text').click();
+    for (const [label, fontWeight, fontStyle] of [
+      ['Bold', 700, 'normal'],
+      ['Italic', 400, 'italic'],
+      ['Bold Italic', 700, 'italic'],
+      ['Normal', 400, 'normal'],
+      ['Bold Italic', 700, 'italic'],
+    ] as const) {
+      await page.getByRole('radio', { name: label, exact: true }).click();
+      await expect.poll(() => {
+        const clip = mocks.savedClips().find((item) => item.id === 'text-original');
+        return clip ? [clip.fontWeight, clip.fontStyle] : [];
+      }).toEqual([fontWeight, fontStyle]);
+    }
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(4);
+    await expect.poll(() => mocks.dashboardJobReads).toBeGreaterThan(1);
+    expect(mocks.doc.version).toBe(10);
+    expect(mocks.doc.outputs[0].durationMs).toBe(8000);
+    expect(mocks.doc.outputs[0].tracks[0].clips).toHaveLength(2);
+    expect(mocks.doc.outputs[0].tracks[0].clips[1]).toMatchObject({
+      id: beforeReplacement.id,
+      originId: beforeReplacement.originId,
+      startMs: 1000,
+      endMs: 4000,
+      src: TRANSPARENT_IMAGE_URL,
+      filters: beforeReplacement.filters,
+      naturalWidth: 2,
+      naturalHeight: 2,
+    });
+    expect(mocks.savedClips().find((clip) => clip.id === 'shape-original')?.borderRadius)
+      .toEqual([0, 18, 0, 0]);
+    expect(mocks.savedClips().find((clip) => clip.id === 'text-original')).toMatchObject({
+      fontWeight: 700,
+      fontStyle: 'italic',
+    });
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

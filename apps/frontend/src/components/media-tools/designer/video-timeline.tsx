@@ -70,6 +70,8 @@ import {
   withCaptionClips,
   type TranscribedWord,
 } from './captions';
+import { TimelineTransportControls } from './timeline-transport-controls';
+import { canSplitClipAt } from './timeline-split';
 
 interface VideoTimelineProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -2603,7 +2605,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         // (the timeline is focusable, so overloading Ctrl+S silently split the
         // clip AND saved the mutated doc).
         e.preventDefault();
-        store.getState().splitClip(currentOutput, selectedClip.trackId, selectedClip.clipId, store.getState().playheadMs);
+        const state = store.getState();
+        if (canSplitClipAt(vo, selectedClip.trackId, selectedClip.clipId, state.playheadMs)) {
+          state.splitClip(currentOutput, selectedClip.trackId, selectedClip.clipId, state.playheadMs);
+        }
       } else if (
         e.key.toLowerCase() === 'f' &&
         (e.ctrlKey || e.metaKey) &&
@@ -2911,7 +2916,11 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   const handleSplitClipAtPlayhead = useCallback(() => {
     if (!clipMenu) return;
-    store.getState().splitClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, store.getState().playheadMs);
+    const state = store.getState();
+    const output = state.doc.outputs[clipMenu.outputIndex] as VideoOutput | undefined;
+    if (canSplitClipAt(output, clipMenu.trackId, clipMenu.clipId, state.playheadMs)) {
+      state.splitClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, state.playheadMs);
+    }
     setClipMenu(null);
   }, [clipMenu, store]);
 
@@ -3665,6 +3674,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <span className="text-[11px] text-textColor/40">
           / {formatTime(vo.durationMs)}
         </span>
+        <TimelineTransportControls store={store} outputIndex={currentOutput} />
         <div className="flex-1" />
         <button
           onClick={() => store.getState().setTimelineSnap(!timelineSnap)}
@@ -4405,8 +4415,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                   </button>
                   <button
                     onClick={handleSplitClipAtPlayhead}
+                    disabled={!canSplitClipAt(vo, clipMenu.trackId, clipMenu.clipId, store.getState().playheadMs)}
                     title={translate('split_clip_hint', 'Split the clip at the playhead (S)')}
-                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {translate('designer_video_split_clip', 'Split clip at playhead')}
                   </button>

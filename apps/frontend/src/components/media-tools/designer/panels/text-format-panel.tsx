@@ -29,6 +29,7 @@ import {
   AlignLeftIcon,
   AlignRightIcon,
 } from '@postmill-ai/frontend/components/ui/icons';
+import { TextStyleControl } from './text-style-control';
 
 const RUN_STYLE_KEYS = new Set(['fill', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'underline', 'lineThrough']);
 
@@ -323,10 +324,6 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
   }
 
 
-  const isBold = (element.fontWeight ?? 400) >= 600;
-  const isItalic = element.fontStyle === 'italic';
-  const styleValue = `${isBold ? 'b' : ''}${isItalic ? 'i' : ''}` || 'n';
-
   // Decorations are run-level only; the toggle reads as ON when every run
   // carries it (flat text has no runs, so it always starts OFF).
   const runs = element.richText;
@@ -358,28 +355,12 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
         />
       </div>
 
-      {/* Bold / Italic (C2) */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="text-style" className="text-[11px] text-newTextColor/60">{t('designer_label_style', 'Style')}</label>
-        <SegmentedControl
-          id="text-style"
-          value={styleValue}
-          options={[
-            { value: 'n', label: t('designer_style_normal', 'Normal') },
-            { value: 'b', label: <span className="font-bold">B</span> },
-            { value: 'i', label: <span className="italic">I</span> },
-            { value: 'bi', label: <span className="font-bold italic">BI</span> },
-          ]}
-          onChange={(v) => {
-            const bold = v.includes('b');
-            const italic = v.includes('i');
-            update({
-              fontWeight: bold ? 700 : 400,
-              fontStyle: italic ? 'italic' : 'normal',
-            });
-          }}
-        />
-      </div>
+      <TextStyleControl
+        id="text-style"
+        fontWeight={element.fontWeight}
+        fontStyle={element.fontStyle}
+        onChange={update}
+      />
 
       {/* Underline / Strikethrough — run-level decorations */}
       <div className="flex flex-col gap-1.5">

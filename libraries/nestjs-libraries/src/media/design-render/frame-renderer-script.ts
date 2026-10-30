@@ -450,9 +450,9 @@ ${stripExportsNamespace(mediaGeometrySource())}
       ctx.lineWidth = clip.strokeWidth || 2;
       ctx.stroke();
     } else {
-      const r = Math.min(clip.borderRadius || 0, w / 2, h / 2);
+      const radii = cornerRadii(clip.borderRadius, w, h);
       ctx.beginPath();
-      if (r > 0 && ctx.roundRect) ctx.roundRect(0, 0, w, h, r);
+      if (radii.some((radius) => radius > 0) && ctx.roundRect) ctx.roundRect(0, 0, w, h, radii);
       else ctx.rect(0, 0, w, h);
       ctx.fill();
       if (clip.strokeWidth) ctx.stroke();
@@ -480,6 +480,7 @@ ${stripExportsNamespace(mediaGeometrySource())}
       fontSize: props.fontSize,
       fontFamily: clip.fontFamily || 'Arial',
       fontWeight: clip.fontWeight || 400,
+      fontStyle: clip.fontStyle || 'normal',
       fill: clip.fill || '#000000',
       align: clip.align || 'left',
     });
@@ -493,7 +494,8 @@ ${stripExportsNamespace(mediaGeometrySource())}
     ctx.globalAlpha = props.opacity;
     const fontSize = clip.fontSize || 28;
     const fontWeight = clip.fontWeight || 700;
-    ctx.font = \`\${fontWeight} \${fontSize}px "\${clip.fontFamily || 'Arial'}"\`;
+    const fontStyle = clip.fontStyle === 'italic' ? 'italic ' : '';
+    ctx.font = \`\${fontStyle}\${fontWeight} \${fontSize}px "\${clip.fontFamily || 'Arial'}"\`;
     ctx.textBaseline = 'top';
     const lineHeight = fontSize * 1.35;
     const spaceWidth = ctx.measureText(' ').width;
@@ -506,7 +508,7 @@ ${stripExportsNamespace(mediaGeometrySource())}
     for (let i = 0; i < words.length; i++) {
       const state = states[i];
       const scaled = fontSize * state.scale;
-      ctx.font = (state.weight || fontWeight) + ' ' + scaled + 'px "' + (clip.fontFamily || 'Arial') + '"';
+      ctx.font = fontStyle + (state.weight || fontWeight) + ' ' + scaled + 'px "' + (clip.fontFamily || 'Arial') + '"';
       const wordWidth = ctx.measureText(words[i].word).width;
       if (x + wordWidth > props.width && x > 0) {
         x = 0;

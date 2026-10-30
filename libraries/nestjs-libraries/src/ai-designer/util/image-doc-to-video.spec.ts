@@ -246,6 +246,7 @@ describe('imageOutputToVideo', () => {
           locked: false,
           hidden: false,
           fontSize: 32,
+          fontStyle: 'italic',
           fill: '#ffffff',
         },
       ] as SymbolDefinition['children'],
@@ -291,6 +292,7 @@ describe('imageOutputToVideo', () => {
     const label = textTrack.clips[0];
     // The instance's text override wins over the definition's authored copy.
     expect(label.text).toBe('Buy now');
+    expect(label.fontStyle).toBe('italic');
     expect(label.y).toBe(220);
 
     const parsed = StrictVideoOutputSchema.safeParse(vo);

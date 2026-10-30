@@ -55,9 +55,9 @@ describe('buildPostmillFile / parsePostmillFile round-trip', () => {
     expect(typeof manifest.exportedAt).toBe('string');
   });
 
-  it('round-trips v9 video clip fillGradient and align verbatim', () => {
+  it('round-trips v10 video clip gradients, alignment, and fontStyle verbatim', () => {
     const doc = {
-      version: 9,
+      version: 10,
       mode: 'video',
       outputs: [{
         id: 'video-out',
@@ -67,26 +67,40 @@ describe('buildPostmillFile / parsePostmillFile round-trip', () => {
         height: 1080,
         fps: 30,
         durationMs: 1000,
-        tracks: [{
-          id: 'shape-track',
-          type: 'shape',
-          clips: [{
-            id: 'shape-clip',
-            startMs: 0,
-            endMs: 1000,
-            shape: 'rect',
-            align: 'justify',
-            fillGradient: {
-              type: 'radial',
-              stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#FFFFFF80' }],
-            },
-          }],
-        }],
+        tracks: [
+          {
+            id: 'shape-track',
+            type: 'shape',
+            clips: [{
+              id: 'shape-clip',
+              startMs: 0,
+              endMs: 1000,
+              shape: 'rect',
+              align: 'justify',
+              fillGradient: {
+                type: 'radial',
+                stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#FFFFFF80' }],
+              },
+            }],
+          },
+          {
+            id: 'text-track',
+            type: 'text',
+            clips: [{
+              id: 'text-clip',
+              startMs: 0,
+              endMs: 1000,
+              text: 'Italic',
+              fontWeight: 700,
+              fontStyle: 'italic',
+            }],
+          },
+        ],
       }],
     } as unknown as DesignerDoc;
 
     const parsed = parsePostmillFile(buildPostmillFile(doc, 'Motion'));
-    expect(parsed.manifest.docVersion).toBe(9);
+    expect(parsed.manifest.docVersion).toBe(10);
     expect(parsed.doc).toEqual(doc);
   });
 });
