@@ -420,7 +420,10 @@ export class MediaJobLifecycleService {
     metadata?: MediaArtifactMetadata,
     thumbnailBuffer?: Buffer,
     folderId?: string,
-    options?: { notify?: boolean },
+    options?: {
+      notify?: boolean;
+      poster?: { customPath?: string; timestamp: number };
+    },
   ): Promise<boolean> {
     // M-06: idempotent, crash-safe completion for buffer-based jobs (local render,
     // slide, caption, transcript). These jobs have no provider poll path, so we must
@@ -473,20 +476,30 @@ export class MediaJobLifecycleService {
         thumbnailPath = thumbStored.path;
       }
 
+      if (thumbnailPath) {
+        if (options?.poster) {
+          await this._fileService.saveRenderedVideoPoster(current.organizationId, {
+            id: stored.mediaId,
+            generatedPosterUrl: thumbnailPath,
+            thumbnail: options.poster.customPath || thumbnailPath,
+            thumbnailTimestamp: options.poster.timestamp,
+            alt: '',
+          });
+        } else {
+          await this._fileService.saveMediaInformation(current.organizationId, {
+            id: stored.mediaId,
+            thumbnail: thumbnailPath,
+            alt: '',
+            thumbnailTimestamp: 0,
+          });
+        }
+      }
+
       await this._aiSettings.updateMediaJob(current.organizationId, current.id, {
         status: 'completed',
         artifactUrl: stored.path,
         error: null,
       });
-
-      if (thumbnailPath) {
-        await this._fileService.saveMediaInformation(current.organizationId, {
-          id: stored.mediaId,
-          thumbnail: thumbnailPath,
-          alt: '',
-          thumbnailTimestamp: 0,
-        });
-      }
 
       if (options?.notify !== false) {
         await this._notify(

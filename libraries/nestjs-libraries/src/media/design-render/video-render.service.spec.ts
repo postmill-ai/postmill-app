@@ -45,7 +45,10 @@ describe('VideoRenderService', () => {
   let lifecycle: MediaJobLifecycleService;
   let aiSettings: AiSettingsService;
   let encoder: FfmpegVideoEncoderService;
-  let fileService: { getFileByPath: ReturnType<typeof vi.fn> };
+  let fileService: {
+    getFileByPath: ReturnType<typeof vi.fn>;
+    saveRenderedVideoPoster: ReturnType<typeof vi.fn>;
+  };
   let designService: { getTemplate: ReturnType<typeof vi.fn>; updateTemplate: ReturnType<typeof vi.fn> };
 
   const orgId = 'org-1';
@@ -95,6 +98,7 @@ describe('VideoRenderService', () => {
 
     fileService = {
       getFileByPath: vi.fn().mockResolvedValue({ id: 'file-anim-1' }),
+      saveRenderedVideoPoster: vi.fn().mockResolvedValue(undefined),
     };
     designService = {
       getTemplate: vi.fn().mockResolvedValue({ id: 'tpl-1', organizationId: orgId }),
@@ -170,6 +174,48 @@ describe('VideoRenderService', () => {
       'EX',
       24 * 60 * 60,
     );
+  });
+
+  it('validates an org-owned image poster and stores it with the selected frame', async () => {
+    fileService.getFileByPath.mockResolvedValue({ id: 'poster-1', type: 'image' });
+
+    await service.enqueueRender(orgId, {
+      composition: videoOutput(5000),
+      posterUrl: '/uploads/org/custom.png',
+      posterTimeMs: 1250,
+    });
+
+    expect(fileService.getFileByPath).toHaveBeenCalledWith(orgId, '/uploads/org/custom.png');
+    expect(lifecycle.createPendingJob).toHaveBeenCalledTimes(1);
+    const payloadCall = vi.mocked(ioRedis.set).mock.calls.find(
+      (call) => call[0] === 'video-render:payload:job-1',
+    );
+    expect(JSON.parse(payloadCall![1] as string)).toMatchObject({
+      posterUrl: '/uploads/org/custom.png',
+      posterTimeMs: 1250,
+    });
+  });
+
+  it.each([
+    ['missing or foreign', null],
+    ['non-image', { id: 'video-1', type: 'video' }],
+  ])('rejects a %s poster before creating a job', async (_label, poster) => {
+    fileService.getFileByPath.mockResolvedValue(poster);
+
+    await expect(service.enqueueRender(orgId, {
+      composition: videoOutput(5000),
+      posterUrl: 'https://attacker.invalid/private.png',
+    })).rejects.toThrow('posterUrl must reference an image File owned by this organization');
+    expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
+    expect(inngestClient.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects a poster timestamp beyond the composition before creating a job', async () => {
+    await expect(service.enqueueRender(orgId, {
+      composition: videoOutput(5000),
+      posterTimeMs: 5001,
+    })).rejects.toThrow('posterTimeMs must be within the composition duration');
+    expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
   });
 
   it('rejects compositions longer than 180 seconds', async () => {
@@ -256,6 +302,7 @@ describe('VideoRenderService', () => {
       }),
       expect.any(Buffer),
       undefined,
+      { poster: { customPath: undefined, timestamp: 0 } },
     );
     expect(aiSettings.updateMediaJob).not.toHaveBeenCalledWith(
       orgId,
@@ -269,6 +316,56 @@ describe('VideoRenderService', () => {
       'video-render:progress:job-1',
     );
 
+    encoder.cleanup(tmpDir);
+  });
+
+  it('stores the custom poster as effective while preserving the generated selected frame', async () => {
+    const composition = videoOutput(3000);
+    vi.mocked(ioRedis.get).mockResolvedValueOnce(JSON.stringify({
+      organizationId: orgId,
+      composition,
+      posterUrl: '/uploads/org/custom.png',
+      posterTimeMs: 1250,
+    }));
+    vi.mocked(aiSettings.getMediaJobById).mockResolvedValue({
+      id: 'job-1',
+      organizationId: orgId,
+      status: 'completed',
+      artifactUrl: '/uploads/org/rendered.mp4',
+    } as any);
+    fileService.getFileByPath.mockImplementation(async (_org, filePath) =>
+      filePath === '/uploads/org/custom.png'
+        ? { id: 'poster-1', type: 'image' }
+        : {
+            id: 'file-video-1',
+            alt: 'Rendered video',
+            thumbnail: '/uploads/org/generated-midpoint.jpg',
+            thumbnailTimestamp: 0,
+          }
+    );
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-test-'));
+    const videoPath = path.join(tmpDir, 'output.mp4');
+    const thumbPath = path.join(tmpDir, 'thumbnail.jpg');
+    fs.writeFileSync(videoPath, Buffer.from('fake-video'));
+    fs.writeFileSync(thumbPath, Buffer.from('fake-thumb'));
+    vi.mocked(encoder.encode).mockResolvedValue({ videoPath, thumbnailPath: thumbPath });
+
+    await service.processVideoRender('job-1');
+
+    expect(encoder.encode).toHaveBeenCalledWith(
+      composition,
+      expect.objectContaining({ posterTimeMs: 1250 }),
+    );
+    expect(fileService.getFileByPath).toHaveBeenCalledWith(orgId, '/uploads/org/custom.png');
+    expect(lifecycle.completeJobWithBuffer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'job-1' }),
+      expect.any(Buffer),
+      'video/mp4',
+      expect.any(Object),
+      expect.any(Buffer),
+      undefined,
+      { poster: { customPath: '/uploads/org/custom.png', timestamp: 1250 } },
+    );
     encoder.cleanup(tmpDir);
   });
 
@@ -504,6 +601,7 @@ describe('VideoRenderService', () => {
       expect.objectContaining({ provider: 'chromium-ffmpeg' }),
       undefined,
       'folder-9',
+      { poster: { customPath: undefined, timestamp: 0 } },
     );
 
     encoder.cleanup(tmpDir);
@@ -559,6 +657,7 @@ describe('VideoRenderService', () => {
       expect.objectContaining({ width: 2160, height: 2160, fps: 60 }),
       expect.any(Buffer),
       undefined,
+      { poster: { customPath: undefined, timestamp: 0 } },
     );
 
     encoder.cleanup(tmpDir);

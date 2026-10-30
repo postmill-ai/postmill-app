@@ -98,6 +98,47 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
     encoder.cleanup(path.dirname(result.videoPath));
   }, 120000);
 
+  it('extracts the selected timeline frame instead of the midpoint', async () => {
+    const capture = new ChromiumFrameCaptureService();
+    const encoder = new FfmpegVideoEncoderService(capture);
+    const output: VideoOutput = {
+      ...redVideo(4000),
+      background: '#ffffff',
+      tracks: [{
+        id: 'poster-colors',
+        type: 'shape',
+        clips: [
+          {
+            id: 'red-opening', type: 'shape', shape: 'rect', fill: '#ff0000',
+            startMs: 0, endMs: 2000, x: 0, y: 0, width: 320, height: 240,
+          },
+          {
+            id: 'blue-ending', type: 'shape', shape: 'rect', fill: '#0000ff',
+            startMs: 2000, endMs: 4000, x: 0, y: 0, width: 320, height: 240,
+          },
+        ],
+      }],
+    };
+
+    const result = await encoder.encode(output, {
+      fps: 5,
+      bitrateKbps: 500,
+      format: 'mp4',
+      posterTimeMs: 1000,
+    });
+
+    const { data, info } = await sharp(result.thumbnailPath)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const index = (Math.floor(info.height / 2) * info.width + Math.floor(info.width / 2)) * info.channels;
+    expect(data[index]).toBeGreaterThan(180);
+    expect(data[index + 1]).toBeLessThan(80);
+    expect(data[index + 2]).toBeLessThan(80);
+
+    encoder.cleanup(path.dirname(result.videoPath));
+  }, 120000);
+
   it('renders an odd scaled raster as an even-dimension MP4', async () => {
     const capture = new ChromiumFrameCaptureService();
     const encoder = new FfmpegVideoEncoderService(capture);

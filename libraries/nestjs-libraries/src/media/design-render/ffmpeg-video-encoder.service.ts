@@ -82,6 +82,23 @@ export function formatExtension(format: string): string {
   return format === 'webp-animated' ? 'webp' : format;
 }
 
+export function posterSeekSeconds(durationMs: number, posterTimeMs?: number): number {
+  if (posterTimeMs === undefined) return Math.max(0, durationMs / 2000);
+  const lastFrameMs = Math.max(0, durationMs - 1);
+  return Math.max(0, Math.min(posterTimeMs, lastFrameMs)) / 1000;
+}
+
+export function posterCaptureFrameNumber(
+  durationMs: number,
+  fps: number,
+  posterTimeMs?: number,
+): number {
+  const totalFrames = Math.max(1, Math.ceil((durationMs / 1000) * fps));
+  if (posterTimeMs === undefined) return Math.max(1, Math.floor(totalFrames / 2));
+  const nearestIndex = Math.round((posterTimeMs / 1000) * fps);
+  return Math.min(totalFrames, Math.max(1, nearestIndex + 1));
+}
+
 export interface VideoEncodeOptions {
   fps?: number;
   /** Resolution multiplier over the composition canvas (default 1). */
@@ -110,6 +127,8 @@ export interface VideoEncodeOptions {
    * social platforms normalize to. No-op when the composition has no audio.
    */
   normalizeLoudness?: boolean;
+  /** Timeline timestamp for poster extraction; absent retains midpoint behavior. */
+  posterTimeMs?: number;
 }
 
 export interface EncodeResult {
@@ -263,26 +282,22 @@ export class FfmpegVideoEncoderService {
         await runFfmpeg(args);
       }
 
-      // 4. Extract poster (mid-frame).
+      // 4. Extract the selected poster, or retain the legacy midpoint when absent.
       const thumbnailPath = path.join(tmpDir, 'thumbnail.jpg');
       if (format === 'webp-animated') {
-        // Distro ffmpeg's webp decoder can't read ANIM/ANMF chunks, so
-        // re-reading the animated output fails. Convert the mid capture frame
-        // instead — identical pixels, no decode of the animated container.
-        const totalFrames = Math.max(
-          1,
-          Math.ceil((output.durationMs / 1000) * fps),
-        );
-        const midFrame = path.join(
+        // Distro ffmpeg's webp decoder can't read ANIM/ANMF chunks, so convert
+        // the nearest captured frame instead of decoding the animated container.
+        const frameNumber = posterCaptureFrameNumber(output.durationMs, fps, options.posterTimeMs);
+        const posterFrame = path.join(
           tmpDir,
-          `frame-${String(Math.max(1, Math.floor(totalFrames / 2))).padStart(5, '0')}.png`,
+          `frame-${String(frameNumber).padStart(5, '0')}.png`,
         );
-        await runFfmpeg(['-y', '-i', midFrame, '-frames:v', '1', '-q:v', '2', thumbnailPath]);
+        await runFfmpeg(['-y', '-i', posterFrame, '-frames:v', '1', '-q:v', '2', thumbnailPath]);
       } else {
         await runFfmpeg([
           '-y',
           '-ss',
-          String(Math.max(0, durationS / 2)),
+          String(posterSeekSeconds(output.durationMs, options.posterTimeMs)),
           '-i',
           videoPath,
           '-frames:v',

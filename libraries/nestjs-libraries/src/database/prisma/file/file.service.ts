@@ -232,6 +232,34 @@ export class FileService {
     return this._fileRepository.saveMediaInformation(org, data);
   }
 
+  async saveRenderedVideoPoster(
+    org: string,
+    data: {
+      id: string;
+      thumbnail: string;
+      generatedPosterUrl: string;
+      thumbnailTimestamp: number;
+      alt?: string | null;
+    },
+  ) {
+    const file = await this._fileRepository.getFileById(org, data.id);
+    if (!file) throw new HttpException('File not found', 404);
+    const metadata =
+      file.metadata && typeof file.metadata === 'object' && !Array.isArray(file.metadata)
+        ? file.metadata as Record<string, unknown>
+        : {};
+    await this._fileRepository.updateFileMetadata(org, data.id, {
+      ...metadata,
+      generatedPosterUrl: data.generatedPosterUrl,
+    });
+    return this._fileRepository.saveMediaInformation(org, {
+      id: data.id,
+      thumbnail: data.thumbnail,
+      thumbnailTimestamp: data.thumbnailTimestamp,
+      alt: data.alt || '',
+    });
+  }
+
   async saveGeneratedMedia(
     org: string,
     data: {

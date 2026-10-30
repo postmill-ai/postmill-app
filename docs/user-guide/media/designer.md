@@ -107,8 +107,9 @@ actions — **Generate Image…**, **Inpaint…**, **Remove Background**, and **
 which extends an image beyond its borders (zoom out 1.5×/2×, make square, or extend left, right, up,
 or down) and requires [Replicate](./replicate). The color picker supports alpha; fills include
 patterns (with a noise preset) and output backgrounds can carry grain or paper textures. The font
-picker includes **Upload font** for your own `.ttf`, `.otf`, or `.woff2` files (WOFF2 fonts are not
-used in server-rendered exports).
+picker includes **Upload font** for one or more of your own `.ttf`, `.otf`, or `.woff2` files.
+Batch uploads continue past individual failures and report partial success; WOFF2 fonts are not
+used in server-rendered exports.
 
 **Crop** works on both images and visual timeline clips, through canvas handles or the Inspector's
 inset sliders. Cropping keeps the selected pixels' aspect ratio. **Cover** fills the frame and crops
@@ -147,8 +148,10 @@ The **Export** dialog offers different formats per mode:
 
 Video exports also take a resolution (720p / 1080p / 4K shorthands or a free scale), frame rate,
 **Platform presets** (TikTok, Reels, Shorts, YouTube), optional **Normalize loudness** (-14 LUFS /
--1.5 dBTP, the social-platform target), and a poster/thumbnail. Video renders run asynchronously;
-progress shows in the dialog.
+-1.5 dBTP, the social-platform target), and a poster/thumbnail. Upload a custom image or choose
+**Use current timeline frame** to capture the paused playhead; without a frame choice, the midpoint
+is used. After rendering, you can switch between the generated and custom poster, and the choice is
+saved to the rendered file in Files. Video renders run asynchronously; progress shows in the dialog.
 
 GIF and animated WebP are deliberately excluded from the static-canvas format list — a single-frame
 Konva snapshot can't produce real animation, so those two only exist as video-mode exports.

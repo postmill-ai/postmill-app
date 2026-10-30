@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsIn,
@@ -59,7 +60,46 @@ export class RenderVideoDesignDto {
   @IsString()
   posterUrl?: string;
 
+  /** Timeline timestamp for the generated poster. Absent = the existing midpoint. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(180000)
+  posterTimeMs?: number;
+
   @IsOptional()
   @IsString()
   folderId?: string;
+}
+
+export class RenderVideoStatusDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  status!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  artifactUrl?: string | null;
+
+  @ApiPropertyOptional()
+  fileId?: string;
+
+  @ApiProperty()
+  alt!: string;
+
+  @ApiPropertyOptional()
+  thumbnailUrl?: string;
+
+  @ApiPropertyOptional()
+  generatedPosterUrl?: string;
+
+  @ApiProperty()
+  thumbnailTimestamp!: number;
+
+  @ApiPropertyOptional()
+  errorMessage?: string;
+
+  @ApiProperty()
+  progress!: number;
 }

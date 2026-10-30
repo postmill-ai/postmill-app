@@ -38,6 +38,7 @@ import type { Integrations } from '@postmill-ai/frontend/components/launches/cal
 import { variantProviders, groupFilesByProvider } from './export-channels';
 import { readErrorMessage } from './read-error-message';
 import { ExportBackgroundImage } from './export-background';
+import { mergePosterPoll } from './poster-selection';
 
 const useFocusTrap = (containerRef: React.RefObject<HTMLElement | null>) => {
   useEffect(() => {
@@ -170,6 +171,7 @@ interface ExportedFile {
   outputId: string;
   alt?: string;
   thumbnailPath?: string;
+  thumbnailTimestamp?: number;
 }
 
 // --- Image preloader ---
@@ -612,12 +614,14 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const [videoScale, setVideoScale] = useState<number>(1);
   const [normalizeLoudness, setNormalizeLoudness] = useState(true);
   const [posterUrl, setPosterUrl] = useState<string>('');
+  const [posterTimeMs, setPosterTimeMs] = useState<number | undefined>();
   const [posterUploading, setPosterUploading] = useState(false);
   const [renderedPosterUrl, setRenderedPosterUrl] = useState<string>('');
   const [posterSource, setPosterSource] = useState<'rendered' | 'custom'>('rendered');
 
   interface RenderJob {
     id: string;
+    fileId?: string;
     outputId: string;
     outputName: string;
     format: 'mp4' | 'webm' | 'gif' | 'webp-animated';
@@ -625,6 +629,9 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     progress: number;
     artifactUrl: string | null;
     thumbnailUrl: string | null;
+    generatedThumbnailUrl?: string;
+    thumbnailTimestamp?: number;
+    alt?: string;
     error: string;
   }
   const [renderJobs, setRenderJobs] = useState<RenderJob[]>([]);
@@ -632,6 +639,10 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   useEffect(() => {
     renderJobsRef.current = renderJobs;
   }, [renderJobs]);
+  const posterSourceRef = useRef(posterSource);
+  useEffect(() => {
+    posterSourceRef.current = posterSource;
+  }, [posterSource]);
   const [isEnqueuing, setIsEnqueuing] = useState(false);
   const renderStatus = useMemo(
     () => (renderJobs.length ? (renderJobs.every((j) => j.status === 'completed') ? 'completed' : renderJobs.some((j) => j.status === 'failed') ? 'failed' : 'rendering') : ''),
@@ -948,6 +959,80 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     goToExport();
   }, [pickedChannelCount, goToExport]);
 
+  const applyPosterSelection = useCallback(
+    async (nextPosterUrl: string, source: 'rendered' | 'custom') => {
+      let nextJobs = renderJobsRef.current;
+      try {
+        const completedJobs = nextJobs.filter((job) => job.status === 'completed' && job.fileId);
+        for (const job of completedJobs) {
+          const res = await fetch('/files/information', {
+            method: 'POST',
+            body: JSON.stringify({
+              id: job.fileId,
+              alt: job.alt || '',
+              thumbnail: nextPosterUrl,
+              thumbnailTimestamp: job.thumbnailTimestamp ?? 0,
+            }),
+          });
+          if (!res.ok) {
+            setRenderJobs(nextJobs);
+            const reason = await readErrorMessage(
+              res,
+              t('designer_poster_save_failed', 'Failed to save poster selection'),
+            );
+            toaster.show(reason, 'warning');
+            return false;
+          }
+          nextJobs = nextJobs.map((item) =>
+            item.id === job.id ? { ...item, thumbnailUrl: nextPosterUrl } : item,
+          );
+        }
+        if (completedJobs.length) setRenderJobs(nextJobs);
+        setPosterSource(source);
+        setPosterUrl(nextPosterUrl);
+        return true;
+      } catch {
+        setRenderJobs(nextJobs);
+        toaster.show(t('designer_poster_save_failed', 'Failed to save poster selection'), 'warning');
+        return false;
+      }
+    },
+    [fetch, t, toaster],
+  );
+
+  const handlePosterUpload = useCallback(
+    async (file: File) => {
+      setPosterUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (selectedFolderId) formData.append('folderId', selectedFolderId);
+        const res = await fetch('/files/upload-simple', { method: 'POST', body: formData });
+        if (!res.ok) {
+          const reason = await readErrorMessage(
+            res,
+            t('designer_poster_upload_failed', 'Poster upload failed'),
+          );
+          toaster.show(reason, 'warning');
+          return;
+        }
+        const data = await res.json();
+        await applyPosterSelection(data.path, 'custom');
+      } catch {
+        toaster.show(t('designer_poster_upload_failed', 'Poster upload failed'), 'warning');
+      } finally {
+        setPosterUploading(false);
+      }
+    },
+    [applyPosterSelection, fetch, selectedFolderId, t, toaster],
+  );
+
+  const useCurrentTimelineFrame = useCallback(() => {
+    const state = store.getState();
+    state.setIsPlaying(false);
+    setPosterTimeMs(Math.max(0, Math.round(state.playheadMs || 0)));
+  }, [store]);
+
   const startVideoRender = useCallback(async (retryOutputs?: DesignerDoc['outputs']) => {
     // A retry keeps the completed renders and re-enqueues only what failed (or
     // never started) — re-rendering a completed output would charge a second
@@ -986,6 +1071,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
             fps: videoFps || undefined,
             normalizeLoudness: normalizeLoudness || undefined,
             posterUrl: posterUrl || undefined,
+            posterTimeMs,
             folderId: selectedFolderId || undefined,
           }),
         });
@@ -1033,7 +1119,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     } finally {
       setIsEnqueuing(false);
     }
-  }, [doc, store, exportAll, forceAllOutputs, outputFormats, videoFormat, videoQuality, videoBitrateKbps, videoFps, videoScale, normalizeLoudness, posterUrl, selectedFolderId, fetch, toaster]);
+  }, [doc, store, exportAll, forceAllOutputs, outputFormats, videoFormat, videoQuality, videoBitrateKbps, videoFps, videoScale, normalizeLoudness, posterUrl, posterTimeMs, selectedFolderId, fetch, toaster]);
 
   const retryFailedRenders = useCallback(() => {
     const candidates = exportAll || forceAllOutputs
@@ -1071,20 +1157,30 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
               ...job,
               progress: data.progress || 0,
               status: data.status,
+              fileId: data.status === 'completed' ? data.fileId || job.fileId : job.fileId,
               artifactUrl: data.status === 'completed' ? data.artifactUrl || null : job.artifactUrl,
               thumbnailUrl: data.status === 'completed' ? data.thumbnailUrl || null : job.thumbnailUrl,
+              generatedThumbnailUrl: data.status === 'completed'
+                ? data.generatedPosterUrl || data.thumbnailUrl || job.generatedThumbnailUrl
+                : job.generatedThumbnailUrl,
+              thumbnailTimestamp: data.status === 'completed'
+                ? data.thumbnailTimestamp ?? job.thumbnailTimestamp ?? 0
+                : job.thumbnailTimestamp,
+              alt: data.status === 'completed' ? data.alt || '' : job.alt,
               error: data.status === 'failed' ? data.errorMessage || t('designer_render_failed', 'Render failed') : job.error,
             };
           })
         );
-        const completedThumb = nextJobs.find((j) => j.status === 'completed' && j.thumbnailUrl)?.thumbnailUrl;
-        if (completedThumb) {
-          setRenderedPosterUrl(completedThumb);
-          if (posterSource === 'rendered') {
-            setPosterUrl(completedThumb);
+        const completedJob = nextJobs.find(
+          (job) => job.status === 'completed' && job.generatedThumbnailUrl,
+        );
+        if (completedJob?.generatedThumbnailUrl) {
+          setRenderedPosterUrl(completedJob.generatedThumbnailUrl);
+          if (posterSourceRef.current === 'rendered') {
+            setPosterUrl(completedJob.thumbnailUrl || completedJob.generatedThumbnailUrl);
           }
         }
-        setRenderJobs(nextJobs);
+        setRenderJobs((latestJobs) => mergePosterPoll(currentJobs, nextJobs, latestJobs));
       } catch {}
     };
 
@@ -1096,7 +1192,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
         pollRef.current = null;
       }
     };
-  }, [step, fetch, posterSource]);
+  }, [step, fetch]);
 
   // Pre-fill alt from the output's alt when exporting
   const getOutputAlt = useCallback(
@@ -1151,7 +1247,9 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                         id: f.id,
                         path: f.path,
                         alt: f.alt || getOutputAlt(f.outputId) || undefined,
-                        ...(f.thumbnailPath ? { thumbnail: f.thumbnailPath } : {}),
+                        ...(f.thumbnailPath
+                          ? { thumbnail: f.thumbnailPath, thumbnailTimestamp: f.thumbnailTimestamp ?? 0 }
+                          : {}),
                       })),
                     },
                   ],
@@ -1224,9 +1322,10 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     const files: ExportedFile[] = renderJobs
       .filter((j) => j.status === 'completed' && j.artifactUrl)
       .map((j) => ({
-        id: j.id,
+        id: j.fileId || j.id,
         path: j.artifactUrl || '',
-        thumbnailPath: posterUrl || undefined,
+        thumbnailPath: j.thumbnailUrl || posterUrl || undefined,
+        thumbnailTimestamp: j.thumbnailTimestamp ?? 0,
         name: `${j.outputName}.${extFor(j.format)}`,
         outputId: j.outputId,
       }));
@@ -2137,48 +2236,58 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
               <span className="text-[11px] text-newTextColor/60">{t('designer_normalize_loudness_hint', '-14 LUFS / -1.5 dBTP (social platform target)')}</span>
             </label>
 
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-2">
               <div className="text-[13px] font-medium text-textColor">{t('designer_poster_thumbnail_label', 'Poster / Thumbnail')}</div>
               <div className="flex items-center gap-2">
                 <input
                   type="file"
+                  aria-label={t('designer_upload_custom_poster', 'Upload custom poster')}
                   accept="image/*"
                   disabled={posterUploading}
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
-                    if (!file) return;
-                    setPosterUploading(true);
-                    try {
-                      const formData = new FormData();
-                      formData.append('file', file);
-                      if (selectedFolderId) formData.append('folderId', selectedFolderId);
-                      const res = await fetch('/files/upload-simple', { method: 'POST', body: formData });
-                      if (res.ok) {
-                        const data = await res.json();
-                        setPosterSource('custom');
-                        setPosterUrl(data.path);
-                      } else {
-                        toaster.show(t('designer_poster_upload_failed', 'Poster upload failed'), 'warning');
-                      }
-                    } catch {
-                      toaster.show(t('designer_poster_upload_failed', 'Poster upload failed'), 'warning');
-                    } finally {
-                      setPosterUploading(false);
-                    }
+                    if (file) await handlePosterUpload(file);
+                    e.target.value = '';
                   }}
                   className="text-[12px] text-textColor file:mr-2 file:px-2 file:py-1 file:rounded-sm file:border-0 file:bg-designerAccent file:text-white"
                 />
                 {posterUrl && (
                   <button
-                    onClick={() => setPosterUrl('')}
+                    onClick={() => {
+                      setPosterSource('rendered');
+                      setPosterUrl('');
+                    }}
                     className="text-[11px] text-dangerText hover:text-red-300"
                   >
                     {t('clear', 'Clear')}
                   </button>
                 )}
               </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={useCurrentTimelineFrame}
+                  className={`px-3 py-1.5 rounded-[5px] text-[12px] ${posterTimeMs !== undefined ? 'bg-designerAccent text-white' : 'border border-studioBorder text-textColor hover:bg-boxHover'}`}
+                >
+                  {t('designer_use_current_timeline_frame', 'Use current timeline frame')}
+                </button>
+                {posterTimeMs !== undefined && (
+                  <button
+                    type="button"
+                    onClick={() => setPosterTimeMs(undefined)}
+                    className="text-[11px] text-newTextColor/65 hover:text-textColor"
+                  >
+                    {t('designer_use_midpoint_poster', 'Use midpoint')} ({(posterTimeMs / 1000).toFixed(2)}s)
+                  </button>
+                )}
+              </div>
               {posterUrl && (
-                <div className="text-[10px] text-newTextColor/65 truncate">{posterUrl}</div>
+                // eslint-disable-next-line @next/next/no-img-element -- stored File preview
+                <img
+                  src={posterUrl}
+                  alt={t('designer_selected_poster_alt', 'Selected poster')}
+                  className="w-[96px] h-[96px] rounded-[6px] border border-studioBorder object-cover"
+                />
               )}
             </div>
 
@@ -2266,39 +2375,33 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                   ))}
                 </div>
 
-                {renderedPosterUrl && (
+                {(posterUrl || renderedPosterUrl) && (
                   <div className="w-full flex flex-col gap-2 mt-1">
                     <div className="text-[13px] font-medium text-textColor">{t('designer_poster_thumbnail_label', 'Poster / Thumbnail')}</div>
                     <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        className={`w-[80px] h-[80px] rounded-[6px] border overflow-hidden cursor-pointer p-0 bg-transparent ${posterSource === 'rendered' ? 'border-designerAccent ring-2 ring-designerAccent/30' : 'border-studioBorder'}`}
-                        onClick={() => {
-                          setPosterSource('rendered');
-                          setPosterUrl(renderedPosterUrl);
-                        }}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- data URL preview */}
-                        <img
-                          src={renderedPosterUrl}
-                          alt={t('designer_rendered_poster_alt', 'Rendered poster')}
-                          className="w-full h-full object-cover"
-                        />
-                      </button>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- stored File preview */}
+                      <img
+                        src={posterUrl || renderedPosterUrl}
+                        alt={posterSource === 'custom'
+                          ? t('designer_custom_poster_alt', 'Custom poster')
+                          : t('designer_rendered_poster_alt', 'Rendered poster')}
+                        className="w-[96px] h-[96px] rounded-[6px] border border-studioBorder object-cover"
+                      />
                       <div className="flex flex-col gap-1">
-                        <button
-                          onClick={() => {
-                            setPosterSource('rendered');
-                            setPosterUrl(renderedPosterUrl);
-                          }}
-                          className={`text-[12px] px-3 py-1.5 rounded-[5px] transition-all ${
-                            posterSource === 'rendered'
-                              ? 'bg-designerAccent text-white'
-                              : 'border border-studioBorder text-textColor hover:bg-boxHover'
-                          }`}
-                        >
-                          {t('designer_use_rendered_poster', 'Use rendered poster')}
-                        </button>
+                        {renderedPosterUrl && (
+                          <button
+                            type="button"
+                            disabled={posterUploading}
+                            onClick={() => void applyPosterSelection(renderedPosterUrl, 'rendered')}
+                            className={`text-[12px] px-3 py-1.5 rounded-[5px] transition-all ${
+                              posterSource === 'rendered'
+                                ? 'bg-designerAccent text-white'
+                                : 'border border-studioBorder text-textColor hover:bg-boxHover'
+                            }`}
+                          >
+                            {t('designer_use_rendered_poster', 'Use rendered poster')}
+                          </button>
+                        )}
                         <label
                           className={`text-[12px] px-3 py-1.5 rounded-[5px] cursor-pointer transition-all ${
                             posterSource === 'custom'
@@ -2308,29 +2411,13 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                         >
                           <input
                             type="file"
+                            aria-label={t('designer_upload_custom_poster', 'Upload custom poster')}
                             accept="image/*"
                             disabled={posterUploading}
                             onChange={async (e) => {
                               const file = e.target.files?.[0];
-                              if (!file) return;
-                              setPosterUploading(true);
-                              try {
-                                const formData = new FormData();
-                                formData.append('file', file);
-                                if (selectedFolderId) formData.append('folderId', selectedFolderId);
-                                const res = await fetch('/files/upload-simple', { method: 'POST', body: formData });
-                                if (res.ok) {
-                                  const data = await res.json();
-                                  setPosterSource('custom');
-                                  setPosterUrl(data.path);
-                                } else {
-                                  toaster.show(t('designer_poster_upload_failed', 'Poster upload failed'), 'warning');
-                                }
-                              } catch {
-                                toaster.show(t('designer_poster_upload_failed', 'Poster upload failed'), 'warning');
-                              } finally {
-                                setPosterUploading(false);
-                              }
+                              if (file) await handlePosterUpload(file);
+                              e.target.value = '';
                             }}
                             className="hidden"
                           />
@@ -2338,9 +2425,6 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                         </label>
                       </div>
                     </div>
-                    {posterUrl && (
-                      <div className="text-[10px] text-newTextColor/65 truncate">{posterUrl}</div>
-                    )}
                   </div>
                 )}
               </>

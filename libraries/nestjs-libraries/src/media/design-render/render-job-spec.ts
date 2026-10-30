@@ -23,6 +23,8 @@ export interface DesignRenderJobSpec {
     quality?: number;
     /** loudnorm on the final audio mix (-14 LUFS / -1.5 dBTP); default off. */
     normalizeLoudness?: boolean;
+    /** Timeline timestamp for poster extraction; absent retains midpoint behavior. */
+    posterTimeMs?: number;
     jobId: string;
     orgId: string;
     renderToken: string;

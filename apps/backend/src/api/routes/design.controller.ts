@@ -19,7 +19,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Organization, User } from '@prisma/client';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
 import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import {
@@ -42,7 +42,10 @@ import { RenderDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/rende
 import { TextOutlinesDto } from '@postmill-ai/nestjs-libraries/dtos/design/text-outlines.dto';
 import { textToOutlines } from '@postmill-ai/nestjs-libraries/media/design-render/text-outlines';
 import { FontLoaderService } from '@postmill-ai/nestjs-libraries/media/design-render/font-loader.service';
-import { RenderVideoDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/render-video.design.dto';
+import {
+  RenderVideoDesignDto,
+  RenderVideoStatusDto,
+} from '@postmill-ai/nestjs-libraries/dtos/design/render-video.design.dto';
 import { BulkGenerateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/bulk.generate.design.dto';
 import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design.dto';
 import { ImportLibraryDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/import-library-design.dto';
@@ -458,6 +461,7 @@ export class DesignController {
   }
 
   @Get('/render-video/:jobId')
+  @ApiOkResponse({ type: RenderVideoStatusDto })
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
   // The Designer export dialog polls this every 2s, once per queued output (1800/h per
@@ -466,14 +470,21 @@ export class DesignController {
   async getVideoRenderStatus(
     @GetOrgFromRequest() org: Organization,
     @Param('jobId') jobId: string,
-  ) {
+  ): Promise<RenderVideoStatusDto> {
     const job = await this._videoRenderService.getJob(org.id, jobId);
     if (!job) throw new NotFoundException();
-    let thumbnailUrl: string | undefined;
+    let file: Awaited<ReturnType<FileService['getFileByPath']>> | null = null;
     if (job.status === 'completed' && job.artifactUrl) {
-      const file = await this._fileService.getFileByPath(org.id, job.artifactUrl);
-      thumbnailUrl = file?.thumbnail || undefined;
+      file = await this._fileService.getFileByPath(org.id, job.artifactUrl);
     }
+    const metadata =
+      file?.metadata && typeof file.metadata === 'object' && !Array.isArray(file.metadata)
+        ? file.metadata as Record<string, unknown>
+        : {};
+    const generatedPosterUrl =
+      typeof metadata.generatedPosterUrl === 'string'
+        ? metadata.generatedPosterUrl
+        : file?.thumbnail || undefined;
     // Real frame-capture progress when the render has reported it (written to Redis by
     // the in-process capture loop or POSTed by the container worker); the 50 midpoint
     // stays as the fallback until the first report lands.
@@ -491,7 +502,11 @@ export class DesignController {
       id: job.id,
       status: job.status,
       artifactUrl: job.artifactUrl,
-      thumbnailUrl,
+      fileId: file?.id,
+      alt: file?.alt || '',
+      thumbnailUrl: file?.thumbnail || undefined,
+      generatedPosterUrl,
+      thumbnailTimestamp: file?.thumbnailTimestamp ?? 0,
       errorMessage: job.status === 'failed' ? job.error : undefined,
       progress,
     };

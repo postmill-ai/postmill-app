@@ -3,18 +3,12 @@ export const metadata = { title: { default: 'Postmill', template: '%s' } };
 import '../tailwind.css';
 import '../global.scss';
 import { ReactNode } from 'react';
-import { Plus_Jakarta_Sans } from 'next/font/google';
+import { jakartaSans } from '@postmill-ai/frontend/components/new-layout/jakarta-sans';
 import clsx from 'clsx';
 import { cookies } from 'next/headers';
 import { VariableContextComponent } from '@postmill-ai/react/helpers/variable.context';
 import { paymentsVariables } from '@postmill-ai/frontend/app/payments.vars';
 import { FetchWrapperComponent } from '@postmill-ai/helpers/utils/custom.fetch';
-
-const jakartaSans = Plus_Jakarta_Sans({
-  weight: ['600', '500'],
-  style: ['normal', 'italic'],
-  subsets: ['latin'],
-});
 
 export default async function ShareLayout({
   children,
