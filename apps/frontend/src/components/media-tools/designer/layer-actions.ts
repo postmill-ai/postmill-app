@@ -271,6 +271,34 @@ export const layerActions = (
     ];
     return [
       ...(newArtboard ? [newArtboard] : []),
+      {
+        id: 'group',
+        label: 'Group Clips',
+        menu: 'layer' as const,
+        group: 'group',
+        shortcut: '⌘G',
+        keywords: ['group', 'clips'],
+        enabled: () => store.getState().selectedClips.length >= 1,
+        run: () => store.getState().groupSelection(),
+      },
+      {
+        id: 'ungroup',
+        label: 'Ungroup Clips',
+        menu: 'layer' as const,
+        group: 'group',
+        shortcut: '⇧⌘G',
+        keywords: ['ungroup', 'clips'],
+        enabled: () => {
+          const st = store.getState();
+          const output = st.doc.outputs[st.currentOutput];
+          return 'tracks' in output && st.selectedClips.some((ref) =>
+            output.tracks
+              .find((track) => track.id === ref.trackId)
+              ?.clips.some((clip) => clip.id === ref.clipId && !!clip.groupId)
+          );
+        },
+        run: () => store.getState().ungroupSelection(),
+      },
       ...trackTypes.map((tt) => ({
         id: `layer-new-track-${tt.type}`,
         label: tt.label,

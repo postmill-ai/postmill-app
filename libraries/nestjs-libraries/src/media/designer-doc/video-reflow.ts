@@ -7,6 +7,7 @@ import type {
 import {
   smartReflow,
   computeTextStackBoxes,
+  computeGroupBoxes,
   estimateFocalPoint,
   type GroupBox,
   type TypeBasisCanvas,
@@ -131,7 +132,7 @@ export const reflowVideoClip = (
 
   const pseudoType = pseudoTypeOf(clip, trackType);
 
-  if (pseudoType === null) {
+  if (pseudoType === null && !stackBox) {
     // fill-stretch: per-axis scale, no anchor — a stretch has no alignment to
     // preserve, and stretching is the point of fill.
     next.x = Math.round(clip.x! * scaleX);
@@ -145,7 +146,8 @@ export const reflowVideoClip = (
   const pseudo: DesignerElement = {
     id: clip.id,
     originId: clip.originId,
-    type: pseudoType,
+    groupId: clip.groupId,
+    type: pseudoType ?? 'image',
     x: clip.x!,
     y: clip.y!,
     width: clip.width!,
@@ -154,9 +156,9 @@ export const reflowVideoClip = (
     opacity: clip.opacity ?? 1,
     locked: false,
     hidden: false,
-    ...(pseudoType === 'image'
+    ...(pseudoType === 'image' || pseudoType === null
       ? {
-          fitMode: clip.fitMode,
+          fitMode: clip.fitMode ?? (pseudoType === null ? 'fill' : undefined),
           focalPoint: clip.focalPoint,
           naturalWidth: clip.naturalWidth,
           naturalHeight: clip.naturalHeight,
@@ -239,6 +241,33 @@ const videoTextStackBoxes = (
   return result;
 };
 
+const videoGroupBoxes = (output: VideoOutput): Map<string, GroupBox> => {
+  const proxies: DesignerElement[] = [];
+  for (const track of output.tracks) {
+    if (!isVisualTrack(track.type)) continue;
+    for (const clip of track.clips) {
+      if (!clip.groupId || !hasExplicitBox(clip)) continue;
+      proxies.push({
+        id: clip.id,
+        originId: clip.originId,
+        groupId: clip.groupId,
+        type: pseudoTypeOf(clip, track.type) ?? 'image',
+        x: clip.x!,
+        y: clip.y!,
+        width: clip.width!,
+        height: clip.height!,
+        rotation: clip.rotation ?? 0,
+        opacity: clip.opacity ?? 1,
+        locked: false,
+        hidden: false,
+        fontSize: clip.fontSize,
+        fitMode: clip.fitMode,
+      } as DesignerElement);
+    }
+  }
+  return computeGroupBoxes(proxies);
+};
+
 /**
  * Reflow every clip of `output` onto a `width`×`height` canvas, IN PLACE
  * (ids preserved — this is the resize path). Timing, fps, durationMs and
@@ -254,6 +283,7 @@ export const reflowVideoOutputInPlace = (
   const source = { width: output.width, height: output.height };
   const target = { width, height, formatId: formatId ?? output.formatId };
   const stacks = videoTextStackBoxes(output);
+  const groupBoxes = videoGroupBoxes(output);
   return {
     ...output,
     width,
@@ -263,7 +293,13 @@ export const reflowVideoOutputInPlace = (
     tracks: output.tracks.map((track) => ({
       ...track,
       clips: track.clips.map((clip) =>
-        reflowVideoClip(clip, track.type, source, target, stacks.get(clip.id))
+        reflowVideoClip(
+          clip,
+          track.type,
+          source,
+          target,
+          (clip.groupId ? groupBoxes.get(clip.groupId) : undefined) ?? stacks.get(clip.id)
+        )
       ),
     })),
   };
@@ -292,6 +328,8 @@ export const seedVideoOutput = (
   }));
   const sourceWithIds: VideoOutput = { ...source, tracks: sourceTracks };
   const stacks = videoTextStackBoxes(sourceWithIds);
+  const groupBoxes = videoGroupBoxes(sourceWithIds);
+  const groupRemap = new Map<string, string>();
 
   const tracks = sourceTracks.map((track) => ({
     ...JSON.parse(JSON.stringify(track)),
@@ -302,9 +340,17 @@ export const seedVideoOutput = (
         track.type,
         source,
         target,
-        stacks.get(clip.id)
+        (clip.groupId ? groupBoxes.get(clip.groupId) : undefined) ?? stacks.get(clip.id)
       );
-      return { ...reflowed, id: idGen(), originId: clip.originId };
+      if (clip.groupId && !groupRemap.has(clip.groupId)) {
+        groupRemap.set(clip.groupId, idGen());
+      }
+      return {
+        ...reflowed,
+        id: idGen(),
+        originId: clip.originId,
+        groupId: clip.groupId ? groupRemap.get(clip.groupId) : undefined,
+      };
     }),
   }));
 

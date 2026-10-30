@@ -3,7 +3,7 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import Konva from 'konva';
-import { Stage, Layer } from 'react-konva';
+import { Stage, Layer, Transformer } from 'react-konva';
 import { VideoCanvasOverlay } from './video-canvas-overlay';
 import { VideoPreviewEngine } from './video-preview';
 import { resetVideoElementRegistry } from './video-element-registry';
@@ -371,5 +371,130 @@ describe('video overlay draw geometry', () => {
       await act(async () => root?.unmount());
       root = null;
     }
+  });
+});
+
+describe('video overlay selection and gesture commits', () => {
+  const gestureStore = () => {
+    const store = createDesignerStore(500, 400);
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'shape');
+    const output = store.getState().doc.outputs[0] as VideoOutput;
+    const track = output.tracks.find((item) => item.type === 'shape')!;
+    store.getState().addClip(0, track.id, {
+      id: 'first', startMs: 0, endMs: 4000, shape: 'rect',
+      x: 20, y: 30, width: 80, height: 60, fill: '#ff0000',
+    } as never);
+    store.getState().addClip(0, track.id, {
+      id: 'second', startMs: 0, endMs: 4000, shape: 'rect',
+      x: 180, y: 90, width: 100, height: 50, fill: '#00ff00',
+    } as never);
+    return { store, trackId: track.id };
+  };
+
+  const renderGestureStore = async (store: ReturnType<typeof createDesignerStore>) => {
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={500} height={400}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={500} height={400} interactive />
+            <Transformer />
+          </Layer>
+        </Stage>
+      );
+    });
+    return Konva.stages[Konva.stages.length - 1];
+  };
+
+  it('keeps additive selection on drag start and toggles persistent groups together', async () => {
+    const { store, trackId } = gestureStore();
+    const stage = await renderGestureStore(store);
+    const first = stage.findOne('#first')!;
+    const second = stage.findOne('#second')!;
+    await act(async () => {
+      first.fire('click', { evt: new MouseEvent('click') });
+      second.fire('click', { evt: new MouseEvent('click', { ctrlKey: true }) });
+    });
+    expect(store.getState().selectedClips.map((ref) => ref.clipId)).toEqual(['first', 'second']);
+    await act(async () => second.fire('dragstart'));
+    expect(store.getState().selectedClips).toHaveLength(2);
+
+    await act(async () => {
+      store.getState().groupSelection();
+      store.getState().setSelectedClips([]);
+      first.fire('click', { evt: new MouseEvent('click') });
+    });
+    expect(store.getState().selectedClips).toEqual([
+      { trackId, clipId: 'first' },
+      { trackId, clipId: 'second' },
+    ]);
+    await act(async () => second.fire('click', { evt: new MouseEvent('click', { shiftKey: true }) }));
+    expect(store.getState().selectedClips).toEqual([]);
+  });
+
+  it('commits every attached drag member once with one history entry and one-step undo', async () => {
+    const { store, trackId } = gestureStore();
+    store.getState().setSelectedClips([
+      { trackId, clipId: 'first' },
+      { trackId, clipId: 'second' },
+    ]);
+    const stage = await renderGestureStore(store);
+    const first = stage.findOne('#first')!;
+    const second = stage.findOne('#second')!;
+    const transformer = stage.findOne('Transformer') as Konva.Transformer;
+    await act(async () => transformer.nodes([first, second]));
+    first.position({ x: 45, y: 55 });
+    second.position({ x: 205, y: 115 });
+    const depth = store.getState().history.length;
+    await act(async () => {
+      first.fire('dragend');
+      second.fire('dragend');
+    });
+
+    const clips = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips;
+    expect(clips.map((clip) => [clip.x, clip.y])).toEqual([[45, 55], [205, 115]]);
+    expect(store.getState().history.length).toBe(depth + 1);
+    await act(async () => store.getState().undo());
+    const restored = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips;
+    expect(restored.map((clip) => [clip.x, clip.y])).toEqual([[20, 30], [180, 90]]);
+  });
+
+  it('batch-transforms each member and refuses geometry on locked tracks', async () => {
+    const { store, trackId } = gestureStore();
+    store.getState().setSelectedClips([
+      { trackId, clipId: 'first' },
+      { trackId, clipId: 'second' },
+    ]);
+    const stage = await renderGestureStore(store);
+    const first = stage.findOne('#first')!;
+    const second = stage.findOne('#second')!;
+    const transformer = stage.findOne('Transformer') as Konva.Transformer;
+    await act(async () => transformer.nodes([first, second]));
+    first.scale({ x: 2, y: 1.5 });
+    second.scale({ x: 0.5, y: 2 });
+    const depth = store.getState().history.length;
+    await act(async () => {
+      first.fire('transformend');
+      second.fire('transformend');
+    });
+    let clips = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips;
+    expect(clips.map((clip) => [clip.width, clip.height])).toEqual([[160, 90], [50, 100]]);
+    expect(store.getState().history.length).toBe(depth + 1);
+
+    await act(async () => store.getState().setTrackLocked(0, trackId, true));
+    const lockedDepth = store.getState().history.length;
+    first.position({ x: 300, y: 200 });
+    await act(async () => first.fire('dragend'));
+    clips = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips;
+    expect(clips[0].x).toBe(20);
+    expect(clips[0].y).toBe(30);
+    expect(store.getState().history.length).toBe(lockedDepth);
+    expect(first.draggable()).toBe(false);
   });
 });

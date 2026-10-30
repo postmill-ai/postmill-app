@@ -51,8 +51,12 @@ via headless Chromium + FFmpeg.
 - **Editing** — use the transport's **Split clip**, **Duplicate clip**, and **Delete clip** icons,
   or split at the playhead (**S**), trim, freeze frame (**Ctrl+F**), and ripple delete
   (**Shift+Delete**). Split is enabled only inside a selected, unlocked clip with room on both
-  sides. The duration stepper beside the timecode sets 1–180 seconds. Multi-select (Shift-click or
-  marquee), copy/paste, timeline markers, zoom, and loop playback are also available.
+  sides. The duration stepper beside the timecode sets 1–180 seconds. Multi-select (Shift/Ctrl/Cmd-click
+  or marquee, on both canvas and timeline), copy/paste, timeline markers, zoom, and loop playback are
+  also available. Canvas drag, resize, rotation, arrow-key nudge, and Delete apply to all selected
+  visible clips as one undo step. **Ctrl/Cmd+G** groups selected clips and **Ctrl/Cmd+Shift+G** ungroups
+  them; grouped members select and move together, stay grouped after save/reload, and keep their
+  relative layout when another format is added. Locked tracks cannot be moved or deleted.
 - **Transitions** — cut, fade, dissolve, slide, wipe, zoom, and blur between clips.
 - **Clip inspector** — speed and speed ramps, reverse, volume (keyframable), fade in/out, auto-duck
   under voice, **Looks** presets, filters, blend modes, motion blur, Ken Burns presets, and

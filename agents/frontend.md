@@ -237,10 +237,14 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   was showing. A keyframe sitting under the playhead is edited in place; otherwise the base props
   move. Track types `shape` and `raster` (doc v5) exist so shape and paint tools have somewhere to
   put their output on a timeline. Doc v9 adds optional `fillGradient`/`align`; doc v10 adds optional
-  `fontStyle` (`normal`/`italic`). All are style fields for linked propagation and the clip-op
-  whitelist, never geometry. Text corner transforms scale the rendered `fontSize` through that same
-  base/keyframe path, while side handles only re-wrap. Generic new Text starts at 400 Normal; named
-  presets keep their authored weight.
+  `fontStyle` (`normal`/`italic`) and format-local `groupId`. Style fields propagate through linked
+  edits and the clip-op whitelist; `groupId` never does. Text corner transforms scale the rendered
+  `fontSize` through that same base/keyframe path, while side handles only re-wrap. Generic new Text
+  starts at 400 Normal; named presets keep their authored weight. The video overlay is the sole owner
+  of clip drag/transform geometry: the static Layer handlers return early in video mode, and every
+  selected visible node commits through silent clip updates plus ONE history push. Shift/Ctrl/Cmd-click
+  and marquee use `selectedClips`; grouped members select together, duplicate/paste remaps group ids,
+  and `video-reflow.ts` supplies one group box so relative geometry survives resize/seed.
 - **Timeline transport and Inspector essentials.** `timeline-split.ts` is the single split guard for
   the transport, S shortcut, context menu, and store: an unlocked selected clip, a strictly interior
   playhead, and at least 100 ms on both sides. Invalid cuts are no-ops; valid splits select the right

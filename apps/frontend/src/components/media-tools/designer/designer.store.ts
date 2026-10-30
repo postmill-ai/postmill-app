@@ -59,6 +59,7 @@ import type {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import type { FillContents } from '@postmill-ai/nestjs-libraries/media/designer-doc/fill-stroke';
 import { mergeKeyframes } from './keyframe-props';
+import { expandClipRefs, groupRefsForClip, toggleClipRefs } from './video-selection';
 
 export type {
   DesignerDoc,
@@ -348,8 +349,11 @@ export interface DesignerActions {
    * Replace the multi-selection. Keeps the primary (`selectedClip`) a member:
    * a primary outside the new set is moved to its first entry (or null).
    */
-  setSelectedClips: (clips: { trackId: string; clipId: string }[]) => void;
-  /** Shift-click: add/remove one clip, making an added clip the primary. */
+  setSelectedClips: (
+    clips: { trackId: string; clipId: string }[],
+    primary?: { trackId: string; clipId: string }
+  ) => void;
+  /** Shift-click: add/remove one clip or its group, making an added clip the primary. */
   toggleClipSelection: (trackId: string, clipId: string) => void;
   setTrackGain: (outputIndex: number, trackId: string, gain: number, commit?: boolean) => void;
   setTrackAutoDuck: (outputIndex: number, trackId: string, autoDuck: boolean) => void;
@@ -955,7 +959,28 @@ export const createDesignerStore = (
       },
 
       groupSelection: (ids) => {
-        if (isVideoMode()) return;
+        if (isVideoMode()) {
+          const { doc, currentOutput, selectedClips } = get();
+          const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
+          if (!vo || !selectedClips.length) return;
+          const selected = new Set(
+            expandClipRefs(vo, selectedClips).map((ref) => `${ref.trackId}:${ref.clipId}`)
+          );
+          const groupId = genId();
+          const outs = [...doc.outputs];
+          outs[currentOutput] = {
+            ...vo,
+            tracks: vo.tracks.map((track) => ({
+              ...track,
+              clips: track.clips.map((clip) =>
+                selected.has(`${track.id}:${clip.id}`) ? { ...clip, groupId } : clip
+              ),
+            })),
+          };
+          set({ doc: { ...doc, outputs: outs }, isDirty: true });
+          get().pushHistory('Group clips');
+          return;
+        }
         // Explicit ids let a caller (the canvas context menu) group without a
         // selection round-trip; the default is the live selection.
         const selectedIds = ids ?? get().selectedIds;
@@ -993,7 +1018,35 @@ export const createDesignerStore = (
 
       /** Dissolve the selected groups, promoting members to the group's level. */
       ungroupSelection: (ids) => {
-        if (isVideoMode()) return;
+        if (isVideoMode()) {
+          const { doc, currentOutput, selectedClips } = get();
+          const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
+          if (!vo || !selectedClips.length) return;
+          const groupIds = new Set(
+            selectedClips.flatMap((ref) => {
+              const clip = vo.tracks
+                .find((track) => track.id === ref.trackId)
+                ?.clips.find((item) => item.id === ref.clipId);
+              return clip?.groupId ? [clip.groupId] : [];
+            })
+          );
+          if (!groupIds.size) return;
+          const outs = [...doc.outputs];
+          outs[currentOutput] = {
+            ...vo,
+            tracks: vo.tracks.map((track) => ({
+              ...track,
+              clips: track.clips.map((clip) =>
+                clip.groupId && groupIds.has(clip.groupId)
+                  ? { ...clip, groupId: undefined }
+                  : clip
+              ),
+            })),
+          };
+          set({ doc: { ...doc, outputs: outs }, isDirty: true });
+          get().pushHistory('Ungroup clips');
+          return;
+        }
         const selectedIds = ids ?? get().selectedIds;
         const children = activePageChildren();
 
@@ -1872,23 +1925,30 @@ export const createDesignerStore = (
       setIsPlaying: (playing) => set({ isPlaying: playing }),
 
       setSelectedClip: (clip) => {
-        // Single select is a one-member multi-selection — keep the two in sync
-        // so every reader (inspector, timeline highlight, marquee) agrees.
-        set({
-          selectedClip: clip,
-          selectedClips: clip ? [{ trackId: clip.trackId, clipId: clip.clipId }] : [],
-          selectedIds: [],
-        });
+        if (!clip) {
+          set({ selectedClip: null, selectedClips: [], selectedIds: [] });
+          return;
+        }
+        const vo = get().doc.outputs[clip.outputIndex] as VideoOutput | undefined;
+        const selectedClips = vo
+          ? groupRefsForClip(vo, clip.trackId, clip.clipId)
+          : [{ trackId: clip.trackId, clipId: clip.clipId }];
+        set({ selectedClip: clip, selectedClips, selectedIds: [] });
       },
 
-      setSelectedClips: (clips) => {
+      setSelectedClips: (clips, primary) => {
         const { selectedClip, currentOutput } = get();
+        const requestedPrimary = primary && clips.some(
+          (clip) => clip.trackId === primary.trackId && clip.clipId === primary.clipId
+        );
         const primarySurvives =
           selectedClip &&
           clips.some((c) => c.trackId === selectedClip.trackId && c.clipId === selectedClip.clipId);
         set({
           selectedClips: clips,
-          selectedClip: primarySurvives
+          selectedClip: requestedPrimary
+            ? { outputIndex: currentOutput, ...primary }
+            : primarySurvives
             ? selectedClip
             : clips.length
             ? { outputIndex: currentOutput, trackId: clips[0].trackId, clipId: clips[0].clipId }
@@ -1897,27 +1957,19 @@ export const createDesignerStore = (
       },
 
       toggleClipSelection: (trackId, clipId) => {
-        const { selectedClips, selectedClip, currentOutput } = get();
-        const exists = selectedClips.some((c) => c.trackId === trackId && c.clipId === clipId);
-        if (!exists) {
-          // The newly added clip becomes the primary so the inspector follows
-          // the last thing the user shift-clicked.
-          set({
-            selectedClips: [...selectedClips, { trackId, clipId }],
-            selectedClip: { outputIndex: currentOutput, trackId, clipId },
-          });
-          return;
-        }
-        const next = selectedClips.filter((c) => !(c.trackId === trackId && c.clipId === clipId));
-        const wasPrimary = selectedClip?.trackId === trackId && selectedClip?.clipId === clipId;
-        set({
-          selectedClips: next,
-          selectedClip: wasPrimary
-            ? next.length
-              ? { outputIndex: currentOutput, trackId: next[next.length - 1].trackId, clipId: next[next.length - 1].clipId }
-              : null
-            : selectedClip,
-        });
+        const { doc, selectedClips, currentOutput } = get();
+        const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
+        if (!vo) return;
+        const members = groupRefsForClip(vo, trackId, clipId);
+        const adding = !members.every((member) =>
+          selectedClips.some(
+            (ref) => ref.trackId === member.trackId && ref.clipId === member.clipId
+          )
+        );
+        get().setSelectedClips(
+          toggleClipRefs(selectedClips, members),
+          adding ? { trackId, clipId } : undefined
+        );
       },
 
       setTrackGain: (outputIndex, trackId, gain, commit = true) => {
@@ -2070,6 +2122,7 @@ export const createDesignerStore = (
         const newClip: VideoClip = {
           ...source,
           id: genId(),
+          groupId: source.groupId ? genId() : undefined,
           startMs,
           endMs: startMs + duration,
           // A frozen hold is not part of the copy: duplicating a half-frozen
@@ -2235,6 +2288,7 @@ export const createDesignerStore = (
 
         const tracks = vo.tracks.map((t) => ({ ...t, clips: [...t.clips] }));
         const pastedRefs: { trackId: string; clipId: string }[] = [];
+        const groupRemap = new Map<string, string>();
         for (const p of fits) {
           const track =
             tracks.find((t) => t.id === p.entry.trackId && !t.locked) ??
@@ -2246,9 +2300,14 @@ export const createDesignerStore = (
               return created;
             })();
           if (!track) continue;
+          const sourceGroupId = p.entry.clip.groupId;
+          if (sourceGroupId && !groupRemap.has(sourceGroupId)) {
+            groupRemap.set(sourceGroupId, genId());
+          }
           const clip: VideoClip = {
             ...JSON.parse(JSON.stringify(p.entry.clip)),
             id: genId(),
+            groupId: sourceGroupId ? groupRemap.get(sourceGroupId) : undefined,
             startMs: p.startMs,
             endMs: p.endMs,
           };

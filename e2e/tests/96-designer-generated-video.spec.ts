@@ -34,6 +34,7 @@ interface VideoClipSnapshot {
   text?: string;
   fileId?: string;
   originId?: string;
+  groupId?: string;
   mediaType?: 'video' | 'image';
   fontSize?: number;
   fontWeight?: number;
@@ -1451,6 +1452,135 @@ test.describe('Designer posters and custom fonts (mocked local document)', () =>
         .map((face) => `${face.family.replace(/["']/g, '')}:${face.status}`)
     )).toEqual(expect.arrayContaining(['Wendy One:loaded', 'Playwrite GB J:loaded']));
     expect(mocks.fontUploads).toHaveLength(2);
+    mocks.expectClean();
+  });
+});
+
+const groupingDoc = (): DesignerDocSnapshot => ({
+  version: 10,
+  mode: 'video',
+  outputs: [{
+    id: 'grouping-output',
+    formatId: 'grouping',
+    name: 'Grouping',
+    width: 400,
+    height: 300,
+    durationMs: 4000,
+    tracks: [{
+      id: 'grouping-shapes',
+      type: 'shape',
+      clips: [
+        { id: 'clip-a', shape: 'rect', fill: '#ff0000', startMs: 0, endMs: 4000, x: 40, y: 40, width: 60, height: 50 },
+        { id: 'clip-b', shape: 'rect', fill: '#00ff00', startMs: 0, endMs: 4000, x: 150, y: 40, width: 60, height: 50 },
+        { id: 'clip-c', shape: 'rect', fill: '#0000ff', startMs: 0, endMs: 4000, x: 40, y: 160, width: 60, height: 50 },
+      ],
+    }],
+  }],
+});
+
+async function dragDocumentPoints(
+  page: Page,
+  start: { x: number; y: number },
+  end: { x: number; y: number }
+) {
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 12 });
+  await page.mouse.up();
+}
+
+test.describe('Designer video canvas movement and grouping (mocked local document)', () => {
+  test('real pointer drag, shift/marquee selection, group move, reload, and one-step undo', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = groupingDoc();
+    mocks.name = 'Video grouping E2E';
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(3);
+    await fitDesignerCanvas(page);
+
+    const point = (x: number, y: number) => canvasDocumentPoint(page, 400, 300, x, y);
+    const clip = (id: string) => mocks.savedClips().find((item) => item.id === id)!;
+    const expectPosition = async (id: string, x: number, y: number) => {
+      await expect.poll(() => clip(id).x).toBeCloseTo(x, 0);
+      await expect.poll(() => clip(id).y).toBeCloseTo(y, 0);
+    };
+    const clickPoint = async (x: number, y: number) => {
+      const target = await point(x, y);
+      await page.mouse.click(target.x, target.y);
+    };
+
+    await dragDocumentPoints(page, await point(70, 65), await point(100, 85));
+    await expectPosition('clip-a', 70, 60);
+    await page.keyboard.press('Control+z');
+    await expectPosition('clip-a', 40, 40);
+    await expectPosition('clip-b', 150, 40);
+
+    await clickPoint(370, 260);
+    await clickPoint(70, 65);
+    await page.keyboard.down('Shift');
+    await clickPoint(180, 65);
+    await page.keyboard.up('Shift');
+    await page.keyboard.press('Control+g');
+    await expect.poll(() => clip('clip-a').groupId).toBeTruthy();
+    expect(clip('clip-b').groupId).toBe(clip('clip-a').groupId);
+    expect(clip('clip-c').groupId).toBeUndefined();
+
+    await dragDocumentPoints(page, await point(70, 65), await point(100, 85));
+    await expectPosition('clip-a', 70, 60);
+    await expectPosition('clip-b', 180, 60);
+    await expectPosition('clip-c', 40, 160);
+    await page.keyboard.press('Control+z');
+    await expectPosition('clip-a', 40, 40);
+    await expectPosition('clip-b', 150, 40);
+    await page.keyboard.press('Control+Shift+z');
+    await expectPosition('clip-a', 70, 60);
+    await expectPosition('clip-b', 180, 60);
+
+    await saveDesign(page);
+    const savedGroupId = clip('clip-a').groupId;
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(3);
+    await expect.poll(() => mocks.dashboardJobReads).toBeGreaterThan(1);
+    await expectPosition('clip-a', 70, 60);
+    await expectPosition('clip-b', 180, 60);
+    expect(clip('clip-a').groupId).toBe(savedGroupId);
+    expect(clip('clip-b').groupId).toBe(savedGroupId);
+
+    await fitDesignerCanvas(page);
+    await clickPoint(100, 85);
+    await page.keyboard.press('Control+Shift+g');
+    await expect.poll(() => clip('clip-a').groupId).toBeUndefined();
+    expect(clip('clip-b').groupId).toBeUndefined();
+
+    await clickPoint(370, 260);
+    await dragDocumentPoints(page, await point(5, 5), await point(270, 125));
+    await page.keyboard.press('Control+g');
+    await expect.poll(() => clip('clip-a').groupId).toBeTruthy();
+    expect(clip('clip-b').groupId).toBe(clip('clip-a').groupId);
+    expect(clip('clip-c').groupId).toBeUndefined();
+
+    await dragDocumentPoints(page, await point(100, 85), await point(110, 90));
+    await expectPosition('clip-a', 80, 65);
+    await expectPosition('clip-b', 190, 65);
+    await expectPosition('clip-c', 40, 160);
+    await page.keyboard.press('Control+z');
+    await expectPosition('clip-a', 70, 60);
+    await expectPosition('clip-b', 180, 60);
+
+    await page.keyboard.press('ArrowRight');
+    await expectPosition('clip-a', 71, 60);
+    await expectPosition('clip-b', 181, 60);
+    await page.keyboard.press('Control+z');
+    await expectPosition('clip-a', 70, 60);
+    await expectPosition('clip-b', 180, 60);
+    await page.keyboard.press('Delete');
+    await expect.poll(() => mocks.savedClips().map((item) => item.id)).toEqual(['clip-c']);
+    await page.keyboard.press('Control+z');
+    await expect.poll(() => mocks.savedClips().map((item) => item.id).sort()).toEqual(['clip-a', 'clip-b', 'clip-c']);
+    await expectPosition('clip-a', 70, 60);
+    await expectPosition('clip-b', 180, 60);
+    expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });
 });

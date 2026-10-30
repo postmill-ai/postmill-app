@@ -553,9 +553,10 @@ export const smartReflow = (
   // Elements sized/positioned per-axis (cover images, full-bleed shapes)
   // already track the canvas fractionally — a panel IS one of these, so it is
   // never re-homed into itself.
-  const perAxis =
+  const perAxis = !groupBox && (
     (el.type === 'image' && (el.fitMode || 'cover') === 'cover') ||
-    fullBleedShape;
+    fullBleedShape
+  );
   const container = perAxis ? undefined : containerBox;
   // The container's own per-axis transform (identical to the transform the
   // panel shape itself takes above).
