@@ -35,6 +35,7 @@ import {
   flattenPoints,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
 import { gradientFillProps } from './elements';
+import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 
 interface VideoCanvasOverlayProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -235,6 +236,29 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
     [clip.filters, blurPx]
   );
 
+  const media = source as unknown as {
+    naturalWidth?: number;
+    naturalHeight?: number;
+    videoWidth?: number;
+    videoHeight?: number;
+    width?: number;
+    height?: number;
+  } | null;
+  const sourceWidth = media?.naturalWidth || media?.videoWidth || media?.width || clip.naturalWidth || width;
+  const sourceHeight = media?.naturalHeight || media?.videoHeight || media?.height || clip.naturalHeight || height;
+  const geometry = useMemo(
+    () => computeMediaDraw({
+      sourceWidth,
+      sourceHeight,
+      targetWidth: width,
+      targetHeight: height,
+      crop: clip.crop,
+      fitMode: clip.fitMode || 'cover',
+      focalPoint: clip.focalPoint,
+    }),
+    [sourceWidth, sourceHeight, width, height, clip.crop, clip.fitMode, clip.focalPoint]
+  );
+
   useEffect(() => {
     if (!source || !filterString) return;
     let c = filterCanvasCache.get(canvasId);
@@ -250,25 +274,11 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
 
     ctx.clearRect(0, 0, c.width, c.height);
     ctx.filter = filterString;
-    const cr = clip.crop;
-    if (cr) {
-      ctx.drawImage(
-        source,
-        Math.max(0, cr.x),
-        Math.max(0, cr.y),
-        Math.max(1, cr.width),
-        Math.max(1, cr.height),
-        0,
-        0,
-        c.width,
-        c.height
-      );
-    } else {
-      ctx.drawImage(source, 0, 0, c.width, c.height);
-    }
+    const { source: src, destination: dest } = geometry;
+    ctx.drawImage(source, src.x, src.y, src.width, src.height, dest.x, dest.y, dest.width, dest.height);
     ctx.filter = 'none';
     store.emit();
-  }, [source, filterString, width, height, tick, canvasId, store, clip.crop]);
+  }, [source, filterString, width, height, tick, canvasId, store, geometry]);
 
   useEffect(() => {
     return () => {
@@ -315,20 +325,11 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
     return (
       <KonvaImage
         image={source}
-        width={width}
-        height={height}
-        // Konva's crop is in source pixels, the same space the schema and the
-        // frame renderer use — so the Crop tool's numbers mean one thing.
-        crop={
-          clip.crop
-            ? {
-                x: Math.max(0, clip.crop.x),
-                y: Math.max(0, clip.crop.y),
-                width: Math.max(1, clip.crop.width),
-                height: Math.max(1, clip.crop.height),
-              }
-            : undefined
-        }
+        x={geometry.destination.x}
+        y={geometry.destination.y}
+        width={geometry.destination.width}
+        height={geometry.destination.height}
+        crop={geometry.source}
         globalCompositeOperation={blendGco}
         listening={false}
       />

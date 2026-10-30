@@ -21,6 +21,7 @@ import { buildLayerTree, walkLayerTree, type LayerNode } from './layer-tree';
 import { fitTextToBox, DEFAULT_LINE_HEIGHT, type MeasureText } from './fit-text';
 import { warpedOutline } from './warp';
 import { renderableSrc } from './svg-src';
+import { computeCoverCrop } from './media-geometry';
 
 /** Blend modes the CSS `mix-blend-mode` property actually has. */
 const CSS_BLEND_MODES = new Set([
@@ -52,6 +53,14 @@ export const isVectorExportable = (el: DesignerElement): boolean => {
   if (el.maskSrc) return false; // a bitmap mask is a bitmap
   if (el.blendMode && !CSS_BLEND_MODES.has(el.blendMode)) return false;
   if (el.type === 'raster' || el.type === 'adjustment') return false;
+  // Source-pixel crops and off-centre focal windows need the intrinsic
+  // coordinate system. Older documents without it are baked by the caller.
+  const offCenter = el.focalPoint && (el.focalPoint.x !== 0.5 || el.focalPoint.y !== 0.5);
+  if (
+    el.type === 'image' &&
+    (el.crop || (el.fitMode === 'cover' && offCenter)) &&
+    !((el.naturalWidth || 0) > 0 && (el.naturalHeight || 0) > 0)
+  ) return false;
   // A symbol INSTANCE is an id plus overrides; its geometry lives in the
   // document's symbol table, which this translator is not handed. It used to
   // fall through to the shape branch and come out as a plain rectangle.
@@ -140,6 +149,8 @@ export interface SvgExportOptions {
    * with no entry is skipped rather than drawn wrong.
    */
   rasterized?: Record<string, string>;
+  /** Exact browser-rendered background when focal crop lacks intrinsic size. */
+  rasterizedBackground?: string;
   /**
    * Measures a string at a font size, for the caller's font stack.
    *
@@ -192,10 +203,28 @@ const elementSvg = (el: DesignerElement, ctx: Ctx): string => {
       case 'image': {
         const src = el.src || ctx.options.rasterized?.[el.id];
         if (!src) return '';
+        const naturalWidth = el.naturalWidth || 0;
+        const naturalHeight = el.naturalHeight || 0;
+        if (el.crop || (el.fitMode === 'cover' && el.focalPoint && naturalWidth > 0 && naturalHeight > 0)) {
+          const source = el.crop || computeCoverCrop(
+            naturalWidth,
+            naturalHeight,
+            el.width,
+            el.height,
+            el.focalPoint
+          );
+          return `<svg x="0" y="0" width="${num(el.width)}" height="${num(
+            el.height
+          )}" viewBox="${num(source.x)} ${num(source.y)} ${num(source.width)} ${num(
+            source.height
+          )}" preserveAspectRatio="xMidYMid meet"><image x="0" y="0" width="${num(
+            naturalWidth
+          )}" height="${num(naturalHeight)}" href="${esc(src)}" preserveAspectRatio="none"/></svg>`;
+        }
         return `<image x="0" y="0" width="${num(el.width)}" height="${num(
           el.height
         )}" href="${esc(src)}" preserveAspectRatio="${
-          el.fitMode === 'cover' ? 'xMidYMid slice' : el.fitMode === 'fill' ? 'none' : 'xMidYMid meet'
+          el.fitMode === 'cover' ? 'xMidYMid slice' : el.fitMode === 'contain' ? 'xMidYMid meet' : 'none'
         }"/>`;
       }
       case 'text': {
@@ -349,9 +378,44 @@ const nodeSvg = (node: LayerNode, ctx: Ctx): string => {
   return own + inner;
 };
 
+export const svgBackgroundNeedsRaster = (output: DesignerOutput): boolean => {
+  const bg = output.bg;
+  const offCenter = bg?.focalPoint && (bg.focalPoint.x !== 0.5 || bg.focalPoint.y !== 0.5);
+  return !!(
+    bg?.type === 'image' &&
+    bg.src &&
+    offCenter &&
+    !((bg.naturalWidth || 0) > 0 && (bg.naturalHeight || 0) > 0)
+  );
+};
+
 const backgroundSvg = (output: DesignerOutput, ctx: Ctx): string => {
   const bg = output.bg;
   if (bg?.type === 'image' && bg.src) {
+    if (ctx.options.rasterizedBackground) {
+      return `<image x="0" y="0" width="${num(output.width)}" height="${num(
+        output.height
+      )}" href="${esc(ctx.options.rasterizedBackground)}" preserveAspectRatio="none"/>`;
+    }
+    if (svgBackgroundNeedsRaster(output)) return '';
+    const naturalWidth = bg.naturalWidth || 0;
+    const naturalHeight = bg.naturalHeight || 0;
+    if (bg.focalPoint && naturalWidth > 0 && naturalHeight > 0) {
+      const source = computeCoverCrop(
+        naturalWidth,
+        naturalHeight,
+        output.width,
+        output.height,
+        bg.focalPoint
+      );
+      return `<svg x="0" y="0" width="${num(output.width)}" height="${num(
+        output.height
+      )}" viewBox="${num(source.x)} ${num(source.y)} ${num(source.width)} ${num(
+        source.height
+      )}" preserveAspectRatio="none"><image x="0" y="0" width="${num(
+        naturalWidth
+      )}" height="${num(naturalHeight)}" href="${esc(bg.src)}" preserveAspectRatio="none"/></svg>`;
+    }
     return `<image x="0" y="0" width="${num(output.width)}" height="${num(
       output.height
     )}" href="${esc(bg.src)}" preserveAspectRatio="xMidYMid slice"/>`;

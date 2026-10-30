@@ -18,6 +18,7 @@ import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { aiRemoveBackground, aiUpscale, aiOutpaint, readErrorMessage } from '../ai-image-actions';
 import { OutpaintDialog } from '../outpaint-dialog';
+import { cropFromSourceRect } from '../crop-geometry';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -145,14 +146,20 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     } else {
       height = natural.height * (1 - f) - y;
     }
-    updateElement(element.id, {
-      crop: {
-        x: Math.max(0, x),
-        y: Math.max(0, y),
-        width: Math.max(1, width),
-        height: Math.max(1, height),
-      },
-    });
+    updateElement(
+      element.id,
+      cropFromSourceRect(
+        element,
+        {
+          x: Math.max(0, x),
+          y: Math.max(0, y),
+          width: Math.max(1, width),
+          height: Math.max(1, height),
+        },
+        undefined,
+        side
+      )
+    );
   };
 
   const handleRemoveBackground = async () => {

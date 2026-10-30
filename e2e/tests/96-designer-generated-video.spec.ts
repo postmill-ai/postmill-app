@@ -5,7 +5,15 @@ import * as path from 'node:path';
 const DESIGN_ID = 'design-generated-video-e2e';
 const GENERATED_URL = '/mock-storage/generated.mp4';
 const REPLACEMENT_URL = '/mock-storage/replacement.webm';
+const ASYMMETRIC_URL = '/mock-storage/asymmetric-8x2.png';
 const GENERATE_PATH = '/media/generate-video';
+
+interface CropSnapshot {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 interface VideoClipSnapshot {
   id: string;
@@ -22,6 +30,9 @@ interface VideoClipSnapshot {
   fontSize?: number;
   shape?: string;
   fill?: string;
+  crop?: CropSnapshot;
+  fitMode?: 'contain' | 'cover' | 'fill';
+  focalPoint?: { x: number; y: number };
   align?: 'left' | 'center' | 'right' | 'justify';
   fillGradient?: {
     type: 'linear' | 'radial';
@@ -29,14 +40,30 @@ interface VideoClipSnapshot {
   };
 }
 
+interface DesignerElementSnapshot extends Omit<VideoClipSnapshot, 'startMs' | 'endMs'> {
+  type?: string;
+}
+
 interface DesignerDocSnapshot {
   version: number;
   mode: string;
   outputs: Array<{
+    id?: string;
+    formatId?: string;
+    name?: string;
     width: number;
     height: number;
-    durationMs: number;
+    durationMs?: number;
+    background?: string;
+    bg?: {
+      type: string;
+      src?: string;
+      naturalWidth?: number;
+      naturalHeight?: number;
+      focalPoint?: { x: number; y: number };
+    };
     tracks: Array<{ id: string; type: string; clips: VideoClipSnapshot[] }>;
+    children?: DesignerElementSnapshot[];
   }>;
 }
 
@@ -51,6 +78,68 @@ const blankDoc = (): DesignerDocSnapshot => ({
       tracks: [],
     },
   ],
+});
+
+const staticCropDoc = (): DesignerDocSnapshot => ({
+  version: 9,
+  mode: 'image',
+  outputs: [{
+    id: 'static-output',
+    formatId: 'static-crop',
+    name: 'Static crop',
+    width: 400,
+    height: 300,
+    background: '#000000',
+    tracks: [],
+    bg: {
+      type: 'image',
+      src: ASYMMETRIC_URL,
+      naturalWidth: 8,
+      naturalHeight: 2,
+      focalPoint: { x: 0.75, y: 0.5 },
+    },
+    children: [{
+      id: 'static-image',
+      type: 'image',
+      src: ASYMMETRIC_URL,
+      x: 100,
+      y: 50,
+      width: 200,
+      height: 100,
+      naturalWidth: 8,
+      naturalHeight: 2,
+      fitMode: 'cover',
+      focalPoint: { x: 0.75, y: 0.5 },
+    }],
+  }],
+});
+
+const videoCropDoc = (): DesignerDocSnapshot => ({
+  version: 9,
+  mode: 'video',
+  outputs: [{
+    width: 400,
+    height: 300,
+    durationMs: 4000,
+    tracks: [{
+      id: 'video-crop-track',
+      type: 'video',
+      clips: [{
+        id: 'video-crop-clip',
+        src: GENERATED_URL,
+        startMs: 0,
+        endMs: 4000,
+        x: 50,
+        y: 40,
+        width: 200,
+        height: 100,
+        naturalWidth: 720,
+        naturalHeight: 1280,
+        fitMode: 'cover',
+        focalPoint: { x: 0.5, y: 0.75 },
+      }],
+    }],
+  }],
 });
 
 const apiPath = (rawUrl: string): string => {
@@ -86,11 +175,15 @@ class DesignerMocks {
       file: 'replacement.webm',
       contentType: 'video/webm',
     },
+    [ASYMMETRIC_URL]: {
+      file: 'asymmetric-8x2.png',
+      contentType: 'image/png',
+    },
   };
 
   async install(page: Page) {
     page.on('response', (response) => {
-      if (response.status() >= 400 && !/gravatar\.com|ingest\.us\.sentry\.io/.test(response.url())) {
+      if (response.status() >= 400 && !/gravatar\.com|ingest\.us\.sentry\.io|\.(?:otf|ttf|woff2?)(?:$|\?)/.test(response.url())) {
         this.httpErrors.push(`${response.status()} ${response.request().method()} ${response.url()}`);
       }
     });
@@ -98,7 +191,7 @@ class DesignerMocks {
     page.on('console', (message) => {
       if (message.type() !== 'error') return;
       const text = message.text();
-      if (/Download the React DevTools|\[Fast Refresh\]|ResizeObserver loop|Sentry Logger|Loading the font/i.test(text)) return;
+      if (/Download the React DevTools|\[Fast Refresh\]|ResizeObserver loop|Sentry Logger|Loading the font|Failed to load resource: the server responded with a status of 404/i.test(text)) return;
       this.consoleErrors.push(text);
     });
 
@@ -196,6 +289,11 @@ class DesignerMocks {
         return;
       }
 
+      if (pathname === '/files/upload-simple' && method === 'POST') {
+        await json(route, { id: 'static-export-png', path: '/mock-storage/static-export.png' });
+        return;
+      }
+
       if (pathname === `/media/designs/${DESIGN_ID}` && method === 'GET') {
         await json(route, { id: DESIGN_ID, name: this.name, doc: this.doc });
         return;
@@ -285,7 +383,7 @@ class DesignerMocks {
   }
 
   savedClips(): VideoClipSnapshot[] {
-    return this.doc.outputs[0].tracks.flatMap((track) => track.clips);
+    return this.doc.outputs[0].tracks?.flatMap((track) => track.clips) ?? [];
   }
 
   expectClean() {
@@ -640,6 +738,235 @@ test.describe('Designer motion graphics editing (mocked local document)', () => 
     expect(persistedText?.height).toBeGreaterThan(70);
     expect(persistedText?.height).toBeLessThan(80);
     expect(mocks.savedClips().find((clip) => clip.id === 'shape-1')?.fillGradient?.stops).toHaveLength(2);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
+async function openStaticDesigner(page: Page, mocks: DesignerMocks) {
+  await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('button', { name: 'Save (Ctrl+S)' })).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('.konvajs-content').first()).toBeVisible();
+}
+
+async function fitDesignerCanvas(page: Page) {
+  await page.keyboard.press('Control+0');
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+}
+
+async function canvasDocumentPoint(
+  page: Page,
+  outputWidth: number,
+  outputHeight: number,
+  x: number,
+  y: number
+) {
+  const stage = await page.locator('.konvajs-content').first().boundingBox();
+  expect(stage).not.toBeNull();
+  const zoom = Math.min(stage!.width / outputWidth, stage!.height / outputHeight) * 0.85;
+  return {
+    x: stage!.x + (stage!.width - outputWidth * zoom) / 2 + x * zoom,
+    y: stage!.y + (stage!.height - outputHeight * zoom) / 2 + y * zoom,
+  };
+}
+
+async function cropFromRightHandle(
+  page: Page,
+  outputWidth: number,
+  outputHeight: number,
+  right: number,
+  centerY: number,
+  targetX: number
+) {
+  await fitDesignerCanvas(page);
+  const start = await canvasDocumentPoint(page, outputWidth, outputHeight, right, centerY);
+  const end = await canvasDocumentPoint(page, outputWidth, outputHeight, targetX, centerY);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 12 });
+  await page.mouse.up();
+}
+
+interface PixelBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+async function analyzeDownloadedPng(page: Page, png: Buffer) {
+  return page.evaluate(async (base64) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(bitmap, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const at = (x: number, y: number) => {
+      const index = (y * canvas.width + x) * 4;
+      return [pixels[index], pixels[index + 1], pixels[index + 2], pixels[index + 3]];
+    };
+    const bounds = (predicate: (r: number, g: number, b: number) => boolean) => {
+      let minX = canvas.width;
+      let minY = canvas.height;
+      let maxX = -1;
+      let maxY = -1;
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const [r, g, b] = at(x, y);
+          if (!predicate(r, g, b)) continue;
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+      }
+      return { minX, minY, maxX, maxY };
+    };
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      red: bounds((r, g, b) => r > 180 && g < 80 && b < 80),
+      green: bounds((r, g, b) => g > 180 && r < 80 && b < 80),
+      backgroundTop: at(10, 10),
+      backgroundBottom: at(10, canvas.height - 10),
+      cropTopLeft: at(110, 60),
+      cropTopRight: at(160, 60),
+      cropBottomLeft: at(110, 120),
+      cropBottomRight: at(160, 120),
+    };
+  }, png.toString('base64')) as Promise<{
+    width: number;
+    height: number;
+    red: PixelBounds;
+    green: PixelBounds;
+    backgroundTop: number[];
+    backgroundBottom: number[];
+    cropTopLeft: number[];
+    cropTopRight: number[];
+    cropBottomLeft: number[];
+    cropBottomRight: number[];
+  }>;
+}
+
+test.describe('Designer crop and browser export artifacts (mocked local document)', () => {
+  test('static crop persists aspect geometry and downloads focal/cropped PNG pixels', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    mocks.name = 'Static crop E2E';
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+
+    await fitDesignerCanvas(page);
+    const imageCenter = await canvasDocumentPoint(page, 400, 300, 150, 100);
+    await page.mouse.click(imageCenter.x, imageCenter.y);
+    await page.getByRole('button', { name: 'Crop (C)', exact: true }).click();
+    await cropFromRightHandle(page, 400, 300, 300, 100, 200);
+    await page.keyboard.press('Enter');
+
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.crop?.width).toBeCloseTo(2, 0);
+    const cropped = mocks.doc.outputs[0].children![0];
+    expect(cropped.x).toBeCloseTo(100, 0);
+    expect(cropped.y).toBeCloseTo(50, 0);
+    expect(cropped.width).toBeCloseTo(100, 0);
+    expect(cropped.height).toBeCloseTo(100, 0);
+    expect(cropped.crop!.x).toBeCloseTo(3, 0);
+    expect(cropped.crop!.y).toBeCloseTo(0, 0);
+    expect(cropped.crop!.width).toBeCloseTo(2, 0);
+    expect(cropped.crop!.height).toBeCloseTo(2, 0);
+    expect(cropped.width! / cropped.height!).toBeCloseTo(cropped.crop!.width / cropped.crop!.height, 8);
+
+    await page.keyboard.press('Control+e');
+    await expect(page.getByText('Export Design', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
+    await page.getByRole('button', { name: 'Next: Export 1 file', exact: true }).click();
+    await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
+    await expect(page.getByText('Exports are saved in Media → Files. Download a copy to your computer:', { exact: true }))
+      .toBeVisible({ timeout: 60_000 });
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('link', { name: /\.png$/ }).click();
+    const download = await downloadPromise;
+    const png = fs.readFileSync((await download.path())!);
+    expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    const pixels = await analyzeDownloadedPng(page, png);
+
+    expect(pixels.width).toBe(400);
+    expect(pixels.height).toBe(300);
+    expect(pixels.red.minX).toBe(100);
+    expect(pixels.red.minY).toBe(50);
+    expect(pixels.red.maxX).toBeGreaterThanOrEqual(130);
+    expect(pixels.red.maxX).toBeLessThan(160);
+    expect(pixels.red.maxY).toBeGreaterThanOrEqual(80);
+    expect(pixels.red.maxY).toBeLessThan(110);
+    expect(pixels.green.minX).toBe(100);
+    expect(pixels.green.minY).toBeGreaterThanOrEqual(90);
+    expect(pixels.green.maxX).toBeGreaterThanOrEqual(130);
+    expect(pixels.green.maxX).toBeLessThan(160);
+    expect(pixels.green.maxY).toBeGreaterThanOrEqual(130);
+    expect(pixels.green.maxY).toBeLessThan(160);
+    expect(pixels.backgroundTop[2]).toBeGreaterThan(100);
+    expect(pixels.backgroundTop[2]).toBeGreaterThan(pixels.backgroundTop[0]);
+    expect(pixels.backgroundTop[2]).toBeGreaterThan(pixels.backgroundTop[1]);
+    expect(pixels.backgroundBottom[0]).toBeGreaterThan(100);
+    expect(pixels.backgroundBottom[1]).toBeGreaterThan(100);
+    expect(pixels.backgroundBottom[0]).toBeGreaterThan(pixels.backgroundBottom[2] + 50);
+    expect(pixels.backgroundBottom[1]).toBeGreaterThan(pixels.backgroundBottom[2] + 50);
+    expect(pixels.cropTopLeft[0]).toBeGreaterThan(pixels.cropTopLeft[1] + 50);
+    expect(pixels.cropTopLeft[0]).toBeGreaterThan(pixels.cropTopLeft[2] + 50);
+    expect(pixels.cropTopRight[2]).toBeGreaterThan(pixels.cropTopRight[0] + 50);
+    expect(pixels.cropTopRight[2]).toBeGreaterThan(pixels.cropTopRight[1] + 50);
+    expect(pixels.cropBottomLeft[1]).toBeGreaterThan(pixels.cropBottomLeft[0] + 50);
+    expect(pixels.cropBottomLeft[1]).toBeGreaterThan(pixels.cropBottomLeft[2] + 50);
+    expect(pixels.cropBottomRight[0]).toBeGreaterThan(pixels.cropBottomRight[2] + 50);
+    expect(pixels.cropBottomRight[1]).toBeGreaterThan(pixels.cropBottomRight[2] + 50);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('video crop UI saves and reloads aspect-correct source and destination geometry', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = videoCropDoc();
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1);
+
+    await page.getByRole('slider', { name: 'Clip', exact: true }).click();
+    await fitDesignerCanvas(page);
+    const clipCenter = await canvasDocumentPoint(page, 400, 300, 150, 90);
+    await page.mouse.click(clipCenter.x, clipCenter.y);
+    await page.getByRole('button', { name: 'Crop (C)', exact: true }).click();
+    await cropFromRightHandle(page, 400, 300, 250, 90, 150);
+    await page.keyboard.press('Enter');
+
+    await expect.poll(() => mocks.savedClips()[0]?.crop?.height).toBeCloseTo(360, 0);
+    const assertGeometry = () => {
+      const clip = mocks.savedClips()[0];
+      expect(clip.x).toBeCloseTo(50, 0);
+      expect(clip.y).toBeCloseTo(40, 0);
+      expect(clip.width).toBeCloseTo(100, 0);
+      expect(clip.height).toBeCloseTo(100, 0);
+      expect(clip).toMatchObject({ naturalWidth: 720, naturalHeight: 1280, fitMode: 'cover' });
+      expect(clip.crop!.x).toBeCloseTo(0, 0);
+      expect(clip.crop!.y).toBeCloseTo(690, 0);
+      expect(clip.crop!.width).toBeGreaterThan(359);
+      expect(clip.crop!.width).toBeLessThan(361.5);
+      expect(clip.crop!.height).toBeGreaterThan(359);
+      expect(clip.crop!.height).toBeLessThan(361.5);
+      expect(clip.width! / clip.height!).toBeCloseTo(clip.crop!.width / clip.crop!.height, 8);
+    };
+    assertGeometry();
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1);
+    await expect.poll(() => mocks.dashboardJobReads).toBeGreaterThan(1);
+    assertGeometry();
+    expect(mocks.doc.version).toBe(9);
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

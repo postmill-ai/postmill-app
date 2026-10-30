@@ -816,3 +816,104 @@ describe('FRAME_RENDERER_SCRIPT — video capture hardening', () => {
     }
   });
 });
+
+describe('FRAME_RENDERER_SCRIPT — media draw geometry', () => {
+  class DrawVideo {
+    videoWidth = 800;
+    videoHeight = 600;
+    currentTime = 0;
+    style: Record<string, string> = {};
+    crossOrigin = '';
+    preload = '';
+    muted = false;
+    playsInline = false;
+    onloadeddata: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    listeners: Record<string, Array<() => void>> = {};
+    set src(_value: string) {
+      queueMicrotask(() => this.onloadeddata?.());
+    }
+    addEventListener(name: string, fn: () => void) {
+      (this.listeners[name] ||= []).push(fn);
+    }
+    removeEventListener(name: string, fn: () => void) {
+      this.listeners[name] = (this.listeners[name] || []).filter((item) => item !== fn);
+    }
+  }
+
+  const drawArguments = async (clip: Record<string, unknown>): Promise<number[]> => {
+    const calls: unknown[][] = [];
+    const state: Record<string, unknown> = {
+      canvas: { width: 200, height: 400 },
+      drawImage: (...args: unknown[]) => calls.push(args),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const canvas = { width: 0, height: 0, getContext: () => context };
+    const video = new DrawVideo();
+    const win: Record<string, unknown> = {
+      __DATA: {
+        output: {
+          id: 'o', width: 200, height: 400, fps: 30, durationMs: 1000,
+          background: '#000000',
+          tracks: [{
+            id: 'tv', type: 'video',
+            clips: [{
+              id: 'v', type: 'video', mediaType: 'video', src: 'clip.mp4',
+              startMs: 0, endMs: 1000, x: 0, y: 0, width: 200, height: 400,
+              focalPoint: { x: 0.75, y: 0.25 },
+              ...clip,
+            }],
+          }],
+        },
+        baseUrl: 'https://example.test',
+      },
+    };
+    const doc = {
+      getElementById: () => canvas,
+      body: { appendChild: () => {} },
+      createElement: (tag: string) => tag === 'video'
+        ? video
+        : { width: 0, height: 0, getContext: () => context },
+    };
+    const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
+    fn(win, doc, class {});
+    const api = win.__FRAME_API as { renderFrame: (ms: number) => Promise<void> };
+    await api.renderFrame(0);
+    const call = calls.find((args) => args[0] === video);
+    expect(call).toBeTruthy();
+    return call!.slice(1).map(Number);
+  };
+
+  const cases = [
+    {
+      clip: {},
+      expected: [375, 0, 300, 600, 0, 0, 200, 400],
+    },
+    {
+      clip: { fitMode: 'cover' },
+      expected: [375, 0, 300, 600, 0, 0, 200, 400],
+    },
+    {
+      clip: { fitMode: 'contain' },
+      expected: [0, 0, 800, 600, 0, 125, 200, 150],
+    },
+    {
+      clip: { fitMode: 'fill' },
+      expected: [0, 0, 800, 600, 0, 0, 200, 400],
+    },
+    {
+      clip: { crop: { x: 40, y: 60, width: 200, height: 100 } },
+      expected: [40, 60, 200, 100, 0, 150, 200, 100],
+    },
+  ];
+
+  it.each([false, true])('matches preview arguments using natural video dimensions (filtered=%s)', async (filtered) => {
+    for (const testCase of cases) {
+      const clip = filtered ? { ...testCase.clip, filters: ['grayscale'] } : testCase.clip;
+      expect(await drawArguments(clip)).toEqual(testCase.expected);
+    }
+  });
+});

@@ -105,6 +105,12 @@ patterns (with a noise preset) and output backgrounds can carry grain or paper t
 picker includes **Upload font** for your own `.ttf`, `.otf`, or `.woff2` files (WOFF2 fonts are not
 used in server-rendered exports).
 
+**Crop** works on both images and visual timeline clips, through canvas handles or the Inspector's
+inset sliders. Cropping keeps the selected pixels' aspect ratio. **Cover** fills the frame and crops
+around the adjustable focal point, **Fit** letterboxes without cropping, and **Fill** stretches;
+video and image clips default to Cover when no fit was saved. Image backgrounds, thumbnails, SVG,
+and video exports use the same crop and focal-point geometry as the canvas.
+
 ## Opening the Designer
 
 The Designer accepts a few different entry points, all via the `/media/designer` route:

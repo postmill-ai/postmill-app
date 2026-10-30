@@ -11,6 +11,8 @@
  * stored on the element (`subjectPoint`) and re-converted here per target box.
  */
 
+import { computeCoverCrop } from './media-geometry';
+
 const clamp01 = (n: number): number => Math.min(1, Math.max(0, n));
 
 /**
@@ -50,11 +52,9 @@ export const subjectPointToFocalPoint = (
     return { x: clamp01(subject.x), y: clamp01(subject.y) };
   }
 
-  // Mirror computeCoverCrop's window sizing, then invert it.
-  const targetRatio = boxW / boxH;
-  const wider = srcW / srcH > targetRatio;
-  const cropW = wider ? srcH * targetRatio : srcW;
-  const cropH = wider ? srcH : srcW / targetRatio;
+  const cover = computeCoverCrop(srcW, srcH, boxW, boxH);
+  const cropW = cover.width;
+  const cropH = cover.height;
   const axis = (c: number, srcDim: number, cropDim: number): number => {
     const slack = srcDim - cropDim;
     if (slack <= 0) return 0.5;

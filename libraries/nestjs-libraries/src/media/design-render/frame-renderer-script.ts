@@ -31,6 +31,7 @@ import { transitionsSource } from '../designer-doc/transitions';
 import { textRevealSource } from '../designer-doc/text-reveal';
 import { styleGradientSource } from '../designer-doc/layer-style-render';
 import { videoTextLayoutSource } from '../designer-doc/video-text-layout';
+import { mediaGeometrySource } from '../designer-doc/media-geometry';
 
 /**
  * The ...Source() helpers serialize functions with String(fn). The backend runs
@@ -59,6 +60,7 @@ ${stripExportsNamespace(transitionsSource())}
 ${stripExportsNamespace(textRevealSource())}
 ${stripExportsNamespace(styleGradientSource())}
 ${stripExportsNamespace(videoTextLayoutSource())}
+${stripExportsNamespace(mediaGeometrySource())}
 
   const output = window.__DATA.output;
   const baseUrl = window.__DATA.baseUrl || '';
@@ -253,23 +255,6 @@ ${stripExportsNamespace(videoTextLayoutSource())}
     return mode;
   }
 
-  function computeCoverCrop(srcW, srcH, targetW, targetH, focalPoint) {
-    const fp = focalPoint || { x: 0.5, y: 0.5 };
-    const targetRatio = targetW / targetH;
-    const srcRatio = srcW / srcH;
-    let sw, sh;
-    if (srcRatio > targetRatio) {
-      sh = srcH;
-      sw = srcH * targetRatio;
-    } else {
-      sw = srcW;
-      sh = srcW / targetRatio;
-    }
-    const sx = (srcW - sw) * Math.min(1, Math.max(0, fp.x));
-    const sy = (srcH - sh) * Math.min(1, Math.max(0, fp.y));
-    return { sx, sy, sw, sh };
-  }
-
   function getStickerFrameUrl(clip, relativeMs) {
     const frames = clip.frames;
     if (!frames || frames.length === 0) return clip.src;
@@ -398,45 +383,33 @@ ${stripExportsNamespace(videoTextLayoutSource())}
     }
     if (!element) return;
 
-    const nw = element.naturalWidth || element.videoWidth || props.width;
-    const nh = element.naturalHeight || element.videoHeight || props.height;
-    // Unset means fill, as it does in the preview and the still renderer. This
-    // defaulted to 'contain', so a clip that filled its box in the editor
-    // exported letterboxed.
-    const fitMode = clip.fitMode || 'fill';
+    const geometry = computeMediaDraw({
+      sourceWidth: element.naturalWidth || element.videoWidth || clip.naturalWidth || props.width,
+      sourceHeight: element.naturalHeight || element.videoHeight || clip.naturalHeight || props.height,
+      targetWidth: props.width,
+      targetHeight: props.height,
+      crop: clip.crop,
+      fitMode: clip.fitMode || 'cover',
+      focalPoint: clip.focalPoint,
+    });
 
     ctx.save();
     applyFilters(ctx, clip.filters, props.blurPx);
     ctx.globalAlpha = props.opacity;
 
-    if (clip.crop) {
-      // An explicit crop is what the Crop tool wrote and beats fitMode's
-      // automatic cover window — same precedence the canvas uses.
-      const c = clip.crop;
-      ctx.drawImage(
-        element,
-        Math.max(0, c.x),
-        Math.max(0, c.y),
-        Math.max(1, c.width),
-        Math.max(1, c.height),
-        0,
-        0,
-        props.width,
-        props.height
-      );
-    } else if (fitMode === 'cover') {
-      const { sx, sy, sw, sh } = computeCoverCrop(nw, nh, props.width, props.height, clip.focalPoint);
-      ctx.drawImage(element, sx, sy, sw, sh, 0, 0, props.width, props.height);
-    } else if (fitMode === 'fill') {
-      ctx.drawImage(element, 0, 0, props.width, props.height);
-    } else {
-      const scale = Math.min(props.width / nw, props.height / nh);
-      const dw = nw * scale;
-      const dh = nh * scale;
-      const dx = (props.width - dw) / 2;
-      const dy = (props.height - dh) / 2;
-      ctx.drawImage(element, 0, 0, nw, nh, dx, dy, dw, dh);
-    }
+    const source = geometry.source;
+    const destination = geometry.destination;
+    ctx.drawImage(
+      element,
+      source.x,
+      source.y,
+      source.width,
+      source.height,
+      destination.x,
+      destination.y,
+      destination.width,
+      destination.height
+    );
 
     ctx.restore();
   }
@@ -621,7 +594,16 @@ ${stripExportsNamespace(videoTextLayoutSource())}
     if (output.bg && output.bg.type === 'image' && output.bg.src) {
       try {
         const img = await loadImage(output.bg.src);
-        ctx.drawImage(img, 0, 0, logicalW, logicalH);
+        const bgGeometry = computeMediaDraw({
+          sourceWidth: img.naturalWidth || output.bg.naturalWidth || logicalW,
+          sourceHeight: img.naturalHeight || output.bg.naturalHeight || logicalH,
+          targetWidth: logicalW,
+          targetHeight: logicalH,
+          fitMode: 'cover',
+          focalPoint: output.bg.focalPoint,
+        });
+        const bgSource = bgGeometry.source;
+        ctx.drawImage(img, bgSource.x, bgSource.y, bgSource.width, bgSource.height, 0, 0, logicalW, logicalH);
       } catch {}
     } else if (output.bg && output.bg.type === 'gradient' && output.bg.gradient) {
       // "stops", not "colors" — this read a field the schema has never had,

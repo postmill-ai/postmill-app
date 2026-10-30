@@ -47,7 +47,7 @@ afterEach(async () => {
   resetVideoSrcErrors();
 });
 
-const videoStore = () => {
+const videoStore = (overrides: Partial<import('./designer.store').VideoClip> = {}) => {
   const store = createDesignerStore(1080, 1080);
   store.getState().setMode('video');
   const out = store.getState().currentOutput;
@@ -61,6 +61,7 @@ const videoStore = () => {
     y: 0,
     width: 400,
     height: 300,
+    ...overrides,
   });
   return store;
 };
@@ -271,5 +272,101 @@ describe('video overlay v9 styles and keyframed text', () => {
     expect(text.align()).toBe('justify');
     expect(text.fontSize()).toBe(48);
     expect(text.lineHeight()).toBe(1);
+  });
+});
+
+describe('video overlay draw geometry', () => {
+  const drawArguments = async (
+    overrides: Partial<import('./designer.store').VideoClip>,
+    filtered: boolean
+  ): Promise<number[]> => {
+    const store = videoStore({
+      width: 200,
+      height: 400,
+      naturalWidth: 800,
+      naturalHeight: 600,
+      focalPoint: { x: 0.75, y: 0.25 },
+      filters: filtered ? ['grayscale'] : undefined,
+      ...overrides,
+    });
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const drawSpy = filtered
+      ? vi.spyOn(
+          Object.getPrototypeOf(document.createElement('canvas').getContext('2d')!),
+          'drawImage'
+        ).mockImplementation(() => undefined)
+      : null;
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={1080} height={1080}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={1080} height={1080} />
+          </Layer>
+        </Stage>
+      );
+    });
+    const video = document.querySelector('video')!;
+    Object.defineProperty(video, 'videoWidth', { value: 800, configurable: true });
+    Object.defineProperty(video, 'videoHeight', { value: 600, configurable: true });
+    await act(async () => {
+      video.dispatchEvent(new Event('loadeddata'));
+    });
+
+    if (drawSpy) {
+      const call = drawSpy.mock.calls.at(-1);
+      expect(call).toBeTruthy();
+      return call!.slice(1).map(Number);
+    }
+
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const image = stage.findOne('#c1')!.findOne('Image') as Konva.Image;
+    const crop = image.crop();
+    return [
+      crop.x, crop.y, crop.width, crop.height,
+      image.x(), image.y(), image.width(), image.height(),
+    ];
+  };
+
+  const cases = [
+    {
+      name: 'defaults absent fit to focal cover',
+      clip: { fitMode: 'cover' as const },
+      expected: [375, 0, 300, 600, 0, 0, 200, 400],
+    },
+    {
+      name: 'contains without cropping',
+      clip: { fitMode: 'contain' as const },
+      expected: [0, 0, 800, 600, 0, 125, 200, 150],
+    },
+    {
+      name: 'stretches only for explicit fill',
+      clip: { fitMode: 'fill' as const },
+      expected: [0, 0, 800, 600, 0, 0, 200, 400],
+    },
+    {
+      name: 'honors explicit source crop without stretching a legacy mismatched box',
+      clip: { crop: { x: 40, y: 60, width: 200, height: 100 } },
+      expected: [40, 60, 200, 100, 0, 150, 200, 100],
+    },
+  ];
+
+  it.each([false, true])('uses natural video metadata and cover when fit is absent (filtered=%s)', async (filtered) => {
+    const { fitMode: _fitMode, ...withoutFit } = cases[0].clip;
+    void _fitMode;
+    expect(await drawArguments(withoutFit, filtered)).toEqual(cases[0].expected);
+  });
+
+  it.each([false, true])('matches frame-renderer arguments for every fit and crop (filtered=%s)', async (filtered) => {
+    for (const testCase of cases) {
+      expect(await drawArguments(testCase.clip, filtered)).toEqual(testCase.expected);
+      await act(async () => root?.unmount());
+      root = null;
+    }
   });
 });

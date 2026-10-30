@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import path from 'path';
+import sharp from 'sharp';
 import { ChromiumFrameCaptureService } from './chromium-frame-capture.service';
 import { FfmpegVideoEncoderService } from './ffmpeg-video-encoder.service';
 import type { VideoOutput } from './design-render.types';
@@ -169,6 +170,106 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
       }
     } finally {
       delete process.env.VIDEO_RENDER_CAPTURE_PAGES;
+    }
+  }, 120000);
+
+  it('captures cover, contain, fill, and explicit-crop frame pixels', async () => {
+    const raw = Buffer.alloc(8 * 2 * 4);
+    for (let y = 0; y < 2; y++) {
+      for (let x = 0; x < 8; x++) {
+        const index = (y * 8 + x) * 4;
+        const color = x < 4
+          ? (y === 0 ? [255, 0, 0] : [0, 255, 0])
+          : (y === 0 ? [0, 0, 255] : [255, 255, 0]);
+        raw[index] = color[0];
+        raw[index + 1] = color[1];
+        raw[index + 2] = color[2];
+        raw[index + 3] = 255;
+      }
+    }
+    const png = await sharp(raw, { raw: { width: 8, height: 2, channels: 4 } }).png().toBuffer();
+    const src = `data:image/png;base64,${png.toString('base64')}`;
+    const baseClip = {
+      type: 'image' as const, src, startMs: 0, endMs: 1000,
+      x: 0, y: 0, width: 200, height: 200,
+      naturalWidth: 8, naturalHeight: 2,
+    };
+    const cases = [
+      {
+        id: 'default-cover', clip: { focalPoint: { x: 0.75, y: 0.5 } },
+        checks: [
+          [100, 40, [0, 0, 255, 255]],
+          [100, 160, [255, 255, 0, 255]],
+        ],
+      },
+      {
+        id: 'contain', clip: { fitMode: 'contain' as const },
+        checks: [
+          [100, 25, [255, 255, 255, 255]],
+          [25, 90, [255, 0, 0, 255]],
+          [175, 90, [0, 0, 255, 255]],
+        ],
+      },
+      {
+        id: 'fill', clip: { fitMode: 'fill' as const },
+        checks: [
+          [25, 40, [255, 0, 0, 255]],
+          [175, 40, [0, 0, 255, 255]],
+          [25, 160, [0, 255, 0, 255]],
+          [175, 160, [255, 255, 0, 255]],
+        ],
+      },
+      {
+        id: 'crop', clip: { crop: { x: 4, y: 0, width: 4, height: 2 } },
+        checks: [
+          [100, 25, [255, 255, 255, 255]],
+          [100, 75, [0, 0, 255, 255]],
+          [100, 125, [255, 255, 0, 255]],
+        ],
+      },
+    ];
+
+    const capture = new ChromiumFrameCaptureService();
+    const fs = await import('fs');
+    const os = await import('os');
+    const frameDir = fs.mkdtempSync(path.join(os.tmpdir(), 'crop-fit-capture-'));
+    const expectColor = async (dir: string, x: number, y: number, expected: number[]) => {
+      const { data, info } = await sharp(path.join(dir, 'frame-00001.png'))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const index = (y * info.width + x) * info.channels;
+      const actual = [data[index], data[index + 1], data[index + 2], data[index + 3]];
+      for (let channel = 0; channel < 4; channel++) {
+        expect(
+          Math.abs(actual[channel] - expected[channel]),
+          `${dir} pixel ${x},${y} channel ${channel}: actual ${actual}, expected ${expected}`
+        ).toBeLessThanOrEqual(25);
+      }
+    };
+
+    try {
+      for (const testCase of cases) {
+        const dir = path.join(frameDir, testCase.id);
+        fs.mkdirSync(dir);
+        const output: VideoOutput = {
+          ...redVideo(1000),
+          width: 200,
+          height: 200,
+          fps: 1,
+          background: '#ffffff',
+          tracks: [{
+            id: 'fit-track', type: 'image',
+            clips: [{ ...baseClip, id: testCase.id, ...testCase.clip }],
+          }],
+        };
+        expect(await capture.captureFrames(output, 1, dir)).toBe(1);
+        for (const [x, y, expected] of testCase.checks) {
+          await expectColor(dir, x, y, expected);
+        }
+      }
+    } finally {
+      fs.rmSync(frameDir, { recursive: true, force: true });
     }
   }, 120000);
 });

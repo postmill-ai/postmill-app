@@ -268,8 +268,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   );
   // The Crop tool acts on the single selected element; with nothing selected it
   // simply has no target and the overlay stays hidden.
-  // In video the target is the selected clip, adapted into the element shape the
-  // overlay reads — geometry plus src/crop is all it touches.
+  // In video the target is the selected clip, adapted with the same intrinsic
+  // size and fit/focal metadata the preview paints from.
   const cropClip =
     isVideo && effectiveTool === 'crop' && selectedClip
       ? (output as unknown as VideoOutput | undefined)?.tracks
@@ -291,6 +291,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           hidden: false,
           src: cropClip.src,
           crop: cropClip.crop,
+          naturalWidth: cropClip.naturalWidth,
+          naturalHeight: cropClip.naturalHeight,
+          fitMode: cropClip.fitMode || 'cover',
+          focalPoint: cropClip.focalPoint,
         } as DesignerElement)
       : undefined
     : effectiveTool === 'crop' && selectedIds.length === 1
@@ -2094,7 +2098,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             <CropOverlay
               key={cropTarget.id}
               element={cropTarget}
-              natural={getImageNaturalSize(cropTarget.src)}
+              natural={
+                cropTarget.naturalWidth && cropTarget.naturalHeight
+                  ? { width: cropTarget.naturalWidth, height: cropTarget.naturalHeight }
+                  : getImageNaturalSize(cropTarget.src)
+              }
               zoom={zoom}
               ratio={String(store.getState().toolOptions['crop']?.ratio ?? 'free')}
               onCommit={(patch) => {
