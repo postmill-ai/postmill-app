@@ -4681,5 +4681,15 @@
   "studio_kling_kling_ai_landing_hl0": "직접 통합 — 사용자의 klingai.com API 키를 사용하며 애그리게이터 추가 요금이 없습니다",
   "studio_kling_kling_ai_landing_hl1": "Kling 3.0 / 2.6 동영상은 선택적 네이티브 오디오와 최대 1080p를 지원합니다",
   "studio_kling_kling_ai_landing_hl2": "첫/마지막 프레임을 제어하는 텍스트-동영상 및 이미지-동영상 생성",
-  "studio_kling_kling_ai_landing_hl3": "Kling V3 텍스트-이미지 생성은 8가지 화면 비율로 최대 2K를 지원합니다"
+  "studio_kling_kling_ai_landing_hl3": "Kling V3 텍스트-이미지 생성은 8가지 화면 비율로 최대 2K를 지원합니다",
+  "designer_character_reference_picker": "캐릭터 참조 이미지 선택",
+  "designer_character_references": "캐릭터 참조",
+  "designer_character_reference_help": "여러 장면에서 동일한 인물, 캐릭터 또는 제품을 재사용하세요. 지원되는 모델에 자동으로 적용되며, 연속성은 보장되지 않습니다.",
+  "designer_character_reference_limit": "참조 이미지를 최대 {{count}}개까지 선택하세요.",
+  "designer_character_reference_image": "캐릭터 참조 {{index}}",
+  "designer_remove_character_reference": "{{name}} 삭제",
+  "designer_change_character_references": "참조 이미지 변경",
+  "designer_add_character_references": "참조 이미지 추가",
+  "designer_character_references_default_not_used": "기본 제공업체는 저장된 캐릭터 참조를 사용하지 않습니다. 캐릭터 참조를 사용하려면 MiniMax Subject Reference, Replicate Veo 3.1 또는 ElevenLabs Veo 3.1을 선택하세요.",
+  "designer_character_references_model_not_used": "이 제공업체 또는 모델은 저장된 캐릭터 참조를 사용하지 않습니다. 캐릭터 참조를 사용하려면 MiniMax Subject Reference, Replicate Veo 3.1 또는 ElevenLabs Veo 3.1을 선택하세요."
 }

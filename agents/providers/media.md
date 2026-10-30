@@ -40,6 +40,10 @@ Missing-key on poll → return terminal `{status:'failed', error}` (a config err
 
 **ElevenLabs Veo reference inputs.** Both `veo-3.1-fast-generate-001` and `veo-3.1-generate-001` support `start_frame`, `end_frame`, and up to three `images: [{image, role}]` entries (`subject` or `style`). Postmill's generic studio boundary resolves org-owned Files, then the ElevenLabs adapter fetches them through `SafeFetchPort` and sends `{type:'inline_base64', content_base64, mime_type}` — never a raw public URL. Inline images allow JPEG/PNG/WebP/HEIC/HEIF and are capped at 25 MB after decoding. An end frame requires a start frame; subject/style references are mutually exclusive with either frame and require `duration_secs: 8`. The full-page/compact forms and adapter enforce these rules before the Flows create call. Successful video polls are coalesced/throttled to one request per job per 10 seconds, while transient throws are not cached and retry normally. `testConnection` uses the free authenticated `GET /v1/user` probe, not a billable image generation.
 
+**Subject/style references are not source/start-frame conditioning.** Subject/style references guide identity or appearance; a source image or start/end frame conditions the source or temporal endpoints instead. Never present first-frame-only support as character-reference support or imply that references guarantee consistency.
+
+**Designer compact-studio mapping contract.** `CompactStudio` receives Designer's ordered `characterReferences` (maximum three) and maps only genuine reference inputs: MiniMax `subject-reference` uses the first image as `subject_image`; ElevenLabs Veo 3.1 Fast/Quality maps them in order to `reference_image_1..3` with subject roles, removes start/end frames, and retains the 8-second requirement. `CompactReplicate` maps `google/veo-3.1` to ordered `reference_images`; its adapter requires 16:9 and 8 seconds. Unsupported providers/models and the non-compact **Default** fallback visibly report that saved references are unused rather than substituting a first frame.
+
 ## 2. Base adapters (`kernel/src/domains/media-helpers.ts`)
 
 | Base | Use when | Provides |

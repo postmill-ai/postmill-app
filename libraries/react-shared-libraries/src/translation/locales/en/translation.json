@@ -4680,5 +4680,15 @@
   "studio_kling_kling_ai_landing_hl0": "Direct integration — your klingai.com API key, no aggregator markup",
   "studio_kling_kling_ai_landing_hl1": "Kling 3.0 / 2.6 video with optional native audio, up to 1080p",
   "studio_kling_kling_ai_landing_hl2": "Text-to-video and image-to-video with first/last-frame control",
-  "studio_kling_kling_ai_landing_hl3": "Kling V3 text-to-image up to 2K in eight aspect ratios"
+  "studio_kling_kling_ai_landing_hl3": "Kling V3 text-to-image up to 2K in eight aspect ratios",
+  "designer_character_reference_picker": "Choose character reference images",
+  "designer_character_references": "Character references",
+  "designer_character_reference_help": "Reuse the same person, character, or product across scenes. Applied automatically to supported models; continuity is not guaranteed.",
+  "designer_character_reference_limit": "Choose up to {{count}} reference images.",
+  "designer_character_reference_image": "Character reference {{index}}",
+  "designer_remove_character_reference": "Remove {{name}}",
+  "designer_change_character_references": "Change reference images",
+  "designer_add_character_references": "Add reference images",
+  "designer_character_references_default_not_used": "The default provider does not use saved character references. Choose MiniMax Subject Reference, Replicate Veo 3.1, or ElevenLabs Veo 3.1 to use them.",
+  "designer_character_references_model_not_used": "This provider or model does not use saved character references. Use MiniMax Subject Reference, Replicate Veo 3.1, or ElevenLabs Veo 3.1 to use them."
 }

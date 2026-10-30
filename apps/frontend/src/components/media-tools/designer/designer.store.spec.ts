@@ -560,6 +560,104 @@ describe('raster buffer lifecycle', () => {
   });
 });
 
+describe('character references', () => {
+  const references = [
+    { fileId: 'file-1', src: 'https://example.com/character-1.png', name: 'One' },
+    { fileId: 'file-2', src: 'https://example.com/character-2.png', name: 'Two' },
+    { fileId: 'file-3', src: 'https://example.com/character-3.png', name: 'Three' },
+    { fileId: 'file-4', src: 'https://example.com/character-4.png', name: 'Four' },
+  ];
+  const videoStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    return store;
+  };
+
+  it('sets, changes, and removes references with one history entry per edit', () => {
+    const store = videoStore();
+    store.getState().markSaved();
+    const depth = store.getState().history.length;
+
+    store.getState().setCharacterReferences([references[0]]);
+    expect(store.getState().doc.characterReferences).toEqual([references[0]]);
+    expect(store.getState().isDirty).toBe(true);
+    expect(store.getState().history).toHaveLength(depth + 1);
+
+    store.getState().setCharacterReferences([references[1], references[0]]);
+    expect(store.getState().doc.characterReferences).toEqual([references[1], references[0]]);
+    expect(store.getState().history).toHaveLength(depth + 2);
+
+    store.getState().setCharacterReferences([]);
+    expect(store.getState().doc.characterReferences).toBeUndefined();
+    expect(store.getState().history).toHaveLength(depth + 3);
+    expect(store.getState().historyLabels.at(-1)).toBe('Edit character references');
+
+    store.getState().undo();
+    expect(store.getState().doc.characterReferences).toEqual([references[1], references[0]]);
+    store.getState().undo();
+    expect(store.getState().doc.characterReferences).toEqual([references[0]]);
+    store.getState().redo();
+    expect(store.getState().doc.characterReferences).toEqual([references[1], references[0]]);
+  });
+
+  it('ignores no-op writes and references in image mode', () => {
+    const store = videoStore();
+    const depth = store.getState().history.length;
+
+    store.getState().setCharacterReferences([]);
+    store.getState().setCharacterReferences(undefined);
+    expect(store.getState().history).toHaveLength(depth);
+
+    store.getState().setCharacterReferences([references[0]]);
+    const doc = store.getState().doc;
+    const changedDepth = store.getState().history.length;
+    store.getState().setCharacterReferences([{ ...references[0] }]);
+    expect(store.getState().doc).toBe(doc);
+    expect(store.getState().history).toHaveLength(changedDepth);
+
+    const imageStore = createDesignerStore();
+    const imageDoc = imageStore.getState().doc;
+    imageStore.getState().setCharacterReferences([references[0]]);
+    expect(imageStore.getState().doc).toBe(imageDoc);
+    expect(imageStore.getState().isDirty).toBe(false);
+    expect(imageStore.getState().history).toHaveLength(1);
+  });
+
+  it('caps references at three in their original order', () => {
+    const store = videoStore();
+    const depth = store.getState().history.length;
+
+    store.getState().setCharacterReferences(references);
+
+    expect(store.getState().doc.characterReferences).toEqual(references.slice(0, 3));
+    expect(store.getState().history).toHaveLength(depth + 1);
+  });
+
+  it('normalizes long and blank media names to the document contract', () => {
+    const store = videoStore();
+    store.getState().setCharacterReferences([
+      { ...references[0], name: `  ${'x'.repeat(205)}  ` },
+      { ...references[1], name: '   ' },
+    ]);
+
+    expect(store.getState().doc.characterReferences?.[0].name).toHaveLength(200);
+    expect(store.getState().doc.characterReferences?.[1]).toEqual({
+      fileId: references[1].fileId,
+      src: references[1].src,
+    });
+  });
+
+  it('drops video-only references when switching to image mode', () => {
+    const store = videoStore();
+    store.getState().setCharacterReferences([references[0]]);
+
+    store.getState().setMode('image');
+
+    expect(store.getState().doc.mode).toBe('image');
+    expect(store.getState().doc.characterReferences).toBeUndefined();
+  });
+});
+
 describe('video track management', () => {
   const videoStore = () => {
     const store = createDesignerStore();

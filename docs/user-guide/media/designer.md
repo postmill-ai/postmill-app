@@ -76,6 +76,25 @@ via headless Chromium + FFmpeg.
   clip is replaced with the background-free render when the job finishes; both models run on
   [Replicate](./replicate), and any other model id is rejected server-side.
 
+### AI Video character references
+
+The **Character references** tray holds up to three ordered images. References are saved with the
+video design and reused across scene generations. Once the design has content, they persist across
+save/reload, and `.pdesign` export/import carries the images and remaps them in the imported design.
+A blank design containing only references is not auto-created.
+
+Provider support is specific:
+
+- **MiniMax S2V-01 Subject Reference** uses the first image.
+- **Replicate `google/veo-3.1`** sends the ordered images as `reference_images`; 16:9 and 8 seconds
+  are required.
+- **ElevenLabs Veo 3.1 Fast/Quality** sends the ordered images as subject references
+  `reference_image_1..3`; 8 seconds is required and start/end frames cannot be combined with them.
+
+**Default** fallback and first-frame-only providers do not use saved character references, and the
+dialog says so. A first frame is source conditioning, not an equivalent character reference;
+references do not guarantee consistency.
+
 ## Canvas tools
 
 Beyond layers, shapes, text, and pen/paint tools, the **Tools** menu carries the AI image

@@ -4681,5 +4681,15 @@
   "studio_kling_kling_ai_landing_hl0": "直接集成 — 使用你的 klingai.com API 密钥，无聚合商加价",
   "studio_kling_kling_ai_landing_hl1": "Kling 3.0 / 2.6 视频支持可选原生音频，最高 1080p",
   "studio_kling_kling_ai_landing_hl2": "文本和图片生成视频，支持首帧/尾帧控制",
-  "studio_kling_kling_ai_landing_hl3": "Kling V3 文本生成图片支持八种宽高比，最高 2K"
+  "studio_kling_kling_ai_landing_hl3": "Kling V3 文本生成图片支持八种宽高比，最高 2K",
+  "designer_character_reference_picker": "选择角色参考图片",
+  "designer_character_references": "角色参考",
+  "designer_character_reference_help": "在不同场景中复用同一人物、角色或产品。自动应用于支持的模型；不保证连续性。",
+  "designer_character_reference_limit": "最多选择 {{count}} 张参考图片。",
+  "designer_character_reference_image": "角色参考 {{index}}",
+  "designer_remove_character_reference": "移除 {{name}}",
+  "designer_change_character_references": "更改参考图片",
+  "designer_add_character_references": "添加参考图片",
+  "designer_character_references_default_not_used": "默认提供商不使用已保存的角色参考。请选择 MiniMax Subject Reference、Replicate Veo 3.1 或 ElevenLabs Veo 3.1 以使用这些参考。",
+  "designer_character_references_model_not_used": "此提供商或模型不使用已保存的角色参考。请使用 MiniMax Subject Reference、Replicate Veo 3.1 或 ElevenLabs Veo 3.1 以应用这些参考。"
 }

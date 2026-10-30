@@ -137,6 +137,28 @@ describe('AiVideoDialog provider picker wiring', () => {
     expect(callsTo('/media/studio/google/generate')).toHaveLength(0);
   });
 
+  it('keeps saved character references out of the default provider request and explains the limitation', async () => {
+    wrap(
+      <AiVideoDialog
+        fetch={fetchMock as never}
+        toaster={toaster}
+        onResult={vi.fn()}
+        initialCharacterReferences={[{ fileId: 'char-1', src: '/uploads/char-1.png', name: 'Hero' }]}
+      />
+    );
+    expect(await screen.findByRole('note')).toHaveProperty(
+      'textContent',
+      'The default provider does not use saved character references. Choose MiniMax Subject Reference, Replicate Veo 3.1, or ElevenLabs Veo 3.1 to use them.'
+    );
+    fireEvent.change(await screen.findByPlaceholderText('Describe the video you want to generate...'), {
+      target: { value: 'hero in a cafe' },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(callsTo('/media/generate-video')).toHaveLength(1));
+    const [, init] = callsTo('/media/generate-video')[0];
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ prompt: 'hero in a cafe' });
+  });
+
   it('hides the legacy Generate and routes generation through the compact studio when a provider is picked', async () => {
     wrap(<AiVideoDialog fetch={fetchMock as never} toaster={toaster} onResult={vi.fn()} />);
     fireEvent.change(await screen.findByPlaceholderText('Describe the video you want to generate...'), {

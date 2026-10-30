@@ -58,6 +58,8 @@ import {
   type CompactStudioResult,
 } from '@postmill-ai/frontend/components/media-tools/studio-kit/compact-studio';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { CharacterReferenceTray } from './character-reference-tray';
+import type { CharacterReference } from './character-references';
 import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import {
   captionClipDefaults,
@@ -830,12 +832,19 @@ interface AiVideoDialogProps {
   onGenerateVoiceover?: (text: string, voiceId: string, instructions?: string, provider?: string, startMs?: number) => Promise<void>;
   outputWidth?: number;
   outputHeight?: number;
+  initialCharacterReferences?: CharacterReference[];
+  onCharacterReferencesChange?: (references: CharacterReference[]) => void;
 }
 
-export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult, onGenerateVoiceover, outputWidth, outputHeight }) => {
+export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSrc, onResult, onGenerateVoiceover, outputWidth, outputHeight, initialCharacterReferences = [], onCharacterReferencesChange }) => {
   const t = useT();
   const modals = useModals();
   const [prompt, setPrompt] = useState('');
+  const [characterReferences, setCharacterReferences] = useState(initialCharacterReferences);
+  const updateCharacterReferences = useCallback((references: CharacterReference[]) => {
+    setCharacterReferences(references);
+    onCharacterReferencesChange?.(references);
+  }, [onCharacterReferencesChange]);
   const [useImage, setUseImage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [provider, setProvider] = useGenerationProviderChoice('video');
@@ -926,6 +935,7 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
         value={provider}
         onChange={setProvider}
       />
+      <CharacterReferenceTray value={characterReferences} onChange={updateCharacterReferences} />
       <label className="flex items-center gap-2 text-[11px] text-textColor cursor-pointer">
         <input
           type="checkbox"
@@ -985,11 +995,20 @@ export const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selected
           operation="video"
           prompt={prompt}
           aspectRatio={canvasAspect}
+          characterReferences={characterReferences}
           onGenerated={handleStudioGenerated}
           submitDisabled={!voiceoverReady}
         />
       ) : (
         <>
+          {characterReferences.length > 0 && (
+            <p className="text-[10px] text-newTextColor/60" role="note">
+              {t(
+                'designer_character_references_default_not_used',
+                'The default provider does not use saved character references. Choose MiniMax Subject Reference, Replicate Veo 3.1, or ElevenLabs Veo 3.1 to use them.'
+              )}
+            </p>
+          )}
           {selectedImageSrc && (
             <label className="flex items-center gap-2 text-[11px] text-textColor cursor-pointer">
               <input
@@ -3518,10 +3537,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           onGenerateVoiceover={generateVoiceover}
           outputWidth={vo?.width}
           outputHeight={vo?.height}
+          initialCharacterReferences={store.getState().doc.characterReferences ?? []}
+          onCharacterReferencesChange={(references) => store.getState().setCharacterReferences(references)}
         />
       ),
     });
-  }, [modals, fetch, toaster, selectedImageSrc, landOrPoll, generateVoiceover, translate, vo?.width, vo?.height]);
+  }, [modals, store, fetch, toaster, selectedImageSrc, landOrPoll, generateVoiceover, translate, vo?.width, vo?.height]);
 
   const handleGenerateMusic = useCallback(() => {
     modals.openModal({

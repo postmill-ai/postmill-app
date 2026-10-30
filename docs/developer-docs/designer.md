@@ -10,6 +10,8 @@ The **`DesignerDoc` JSON is the agent interface, and the server owns it.** There
 
 `DesignerDocService` provides `validate` (lenient, clamps out-of-shape docs), `validateStrict` (rejects unknown keys), `applyOps` (mode-aware document transforms), and `assignIdsAndNormalize` (CSPRNG id minting across children/tracks/clips). `DesignService` validates every persisted design and template, reconciles `Design.width/height` from `doc.outputs[0]`, and exposes `instantiateTemplate` and `placeAsset` for agent use.
 
+Video-mode docs also accept the optional root field `characterReferences: [{fileId,src,name?}]`: an ordered, maximum-three list rejected on image docs. This additive JSON field needs no DB migration. AI Video reuses the saved references across scene generations; reference-only blank designs do not auto-create. Once a design has content, save/reload preserves its references, and `.pdesign` export/import carries their assets and remaps `fileId`/`src` for the importing org.
+
 ## Frontend architecture
 
 All components live under `apps/frontend/src/components/media-tools/designer/`.

@@ -216,6 +216,7 @@ export interface DesignerState {
 
 export interface DesignerActions {
   setDoc: (doc: DesignerDoc) => void;
+  setCharacterReferences: (references: DesignerDoc['characterReferences']) => void;
   setDesignName: (name: string) => void;
   setDesignId: (id: string | null) => void;
   setTemplateId: (id: string | null) => void;
@@ -564,6 +565,23 @@ export const createDesignerStore = (
       maskTargetId: null,
       clipboard: [],
       setDoc: (doc) => set({ doc: migrateDoc(doc), isDirty: true }),
+      setCharacterReferences: (references) => {
+        const { doc } = get();
+        if (doc.mode !== 'video') return;
+        const nextReferences = references?.length
+          ? references.slice(0, 3).map((reference) => ({
+              fileId: reference.fileId,
+              src: reference.src,
+              ...(reference.name?.trim() ? { name: reference.name.trim().slice(0, 200) } : {}),
+            }))
+          : undefined;
+        if (JSON.stringify(doc.characterReferences ?? []) === JSON.stringify(nextReferences ?? [])) return;
+        const nextDoc = { ...doc };
+        if (nextReferences) nextDoc.characterReferences = nextReferences;
+        else delete nextDoc.characterReferences;
+        set({ doc: nextDoc, isDirty: true });
+        get().pushHistory('Edit character references');
+      },
       setDesignName: (name) => set({ designName: name, isDirty: true }),
       setDesignId: (id) => set({ designId: id }),
       setTemplateId: (id) => set({ templateId: id }),
@@ -1836,7 +1854,9 @@ export const createDesignerStore = (
             background: '#ffffff',
             children: [],
           };
-          set({ doc: { ...doc, mode: 'image', outputs: [imgOut] }, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, currentPage: 0, isDirty: true });
+          const nextDoc = { ...doc, mode: 'image' as const, outputs: [imgOut] };
+          delete nextDoc.characterReferences;
+          set({ doc: nextDoc, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, currentPage: 0, isDirty: true });
         }
         get().pushHistory();
       },

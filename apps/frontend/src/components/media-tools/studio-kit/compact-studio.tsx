@@ -19,6 +19,7 @@ import {
 } from './compact-registry';
 import { CompactReplicate } from '../replicate/compact-replicate';
 import { CompactHeyGen } from '../heygen/compact-heygen';
+import { descriptorCharacterReferences, type CharacterReference } from '../designer/character-references';
 import { UtcToLocalDateRender } from '@postmill-ai/react/helpers/utc.date.render';
 import type { StudioFieldValue, StudioJob } from './types';
 
@@ -33,6 +34,7 @@ export interface CompactStudioProps {
   // Hosting canvas's aspect ratio (e.g. '16:9') — descriptor studios ignore
   // it; CompactReplicate seeds it into a schema `aspect_ratio` field.
   aspectRatio?: string;
+  characterReferences?: CharacterReference[];
   onGenerated: (result: CompactStudioResult) => void;
   onError?: (message: string) => void;
   submitDisabled?: boolean;
@@ -52,6 +54,7 @@ export const CompactStudio: FC<CompactStudioProps> = (props) => {
         operation={props.operation}
         prompt={props.prompt}
         aspectRatio={props.aspectRatio}
+        characterReferences={props.characterReferences}
         onGenerated={props.onGenerated}
         onError={props.onError}
         submitDisabled={props.submitDisabled}
@@ -75,6 +78,7 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
   provider,
   operation,
   prompt,
+  characterReferences,
   onGenerated,
   onError,
   submitDisabled = false,
@@ -178,17 +182,23 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
   }, [jobs, activeJobId, onGenerated, operation, fail, t]);
 
   const promptField = active?.tab.fields.find((f) => f.type === 'prompt');
+  const referenceValues = useMemo(
+    () => active
+      ? descriptorCharacterReferences(provider, active.tab, values, characterReferences)
+      : { values, hiddenFields: new Set<string>(), usesReferences: false },
+    [active, provider, values, characterReferences]
+  );
 
   const validationError = useMemo(
-    () => (active ? validateStudioValues(provider, active.tab, values) : null),
-    [active, provider, values]
+    () => (active ? validateStudioValues(provider, active.tab, referenceValues.values) : null),
+    [active, provider, referenceValues.values]
   );
   const canGenerate = useMemo(() => {
     if (!active || validationError || submitDisabled) return false;
     return active.tab.fields
       .filter((f) => f.required)
-      .every((f) => (f.type === 'prompt' ? !!prompt.trim() : isFilled(values[f.name])));
-  }, [active, values, prompt, validationError, submitDisabled]);
+      .every((f) => (f.type === 'prompt' ? !!prompt.trim() : isFilled(referenceValues.values[f.name])));
+  }, [active, referenceValues.values, prompt, validationError, submitDisabled]);
 
   const onGenerate = useCallback(async () => {
     if (!active || !canGenerate) return;
@@ -196,7 +206,7 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
     setError(null);
     setResumedJob(null);
     try {
-      const body = buildBody(active.tab, values);
+      const body = buildBody(active.tab, referenceValues.values);
       // The dialog's prompt box owns the prompt — inject it into the submitted
       // input under the descriptor's prompt field name (filtered out of the
       // rendered form above).
@@ -218,7 +228,7 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
     } finally {
       setStarting(false);
     }
-  }, [active, canGenerate, values, promptField, prompt, generate, mutateJobs, fail, t]);
+  }, [active, canGenerate, referenceValues.values, promptField, prompt, generate, mutateJobs, fail, t]);
 
   if (!entry) return null;
 
@@ -256,7 +266,9 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
   }
 
   const busy = starting || !!activeJobId;
-  const renderedFields = active.tab.fields.filter((f) => f.type !== 'prompt');
+  const renderedFields = active.tab.fields.filter(
+    (f) => f.type !== 'prompt' && !referenceValues.hiddenFields.has(f.name)
+  );
 
   return (
     <div className="flex flex-col gap-[12px]">
@@ -275,9 +287,15 @@ const DescriptorCompactStudio: FC<CompactStudioProps> = ({
         />
       )}
 
+      {!!characterReferences?.length && !referenceValues.usesReferences && (
+        <p className="text-[11px] text-newTextColor/60" role="note">
+          {t('designer_character_references_model_not_used', 'This provider or model does not use saved character references. Use MiniMax Subject Reference, Replicate Veo 3.1, or ElevenLabs Veo 3.1 to use them.')}
+        </p>
+      )}
+
       <StudioForm
         fields={renderedFields}
-        values={values}
+        values={referenceValues.values}
         onChange={setValue}
         provider={provider}
         operation={operation}

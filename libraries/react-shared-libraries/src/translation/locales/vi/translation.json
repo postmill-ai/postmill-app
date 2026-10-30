@@ -4681,5 +4681,15 @@
   "studio_kling_kling_ai_landing_hl0": "Tích hợp trực tiếp — khóa API klingai.com của bạn, không phụ phí trung gian",
   "studio_kling_kling_ai_landing_hl1": "Video Kling 3.0 / 2.6 với âm thanh gốc tùy chọn, lên đến 1080p",
   "studio_kling_kling_ai_landing_hl2": "Tạo video từ văn bản và hình ảnh với điều khiển khung hình đầu/cuối",
-  "studio_kling_kling_ai_landing_hl3": "Tạo hình ảnh từ văn bản Kling V3 lên đến 2K ở tám tỷ lệ khung hình"
+  "studio_kling_kling_ai_landing_hl3": "Tạo hình ảnh từ văn bản Kling V3 lên đến 2K ở tám tỷ lệ khung hình",
+  "designer_character_reference_picker": "Chọn hình ảnh tham chiếu nhân vật",
+  "designer_character_references": "Tham chiếu nhân vật",
+  "designer_character_reference_help": "Dùng lại cùng một cá nhân, nhân vật hoặc sản phẩm trong nhiều cảnh khác nhau. Tự động áp dụng cho các mô hình được hỗ trợ; không đảm bảo tính liên tục.",
+  "designer_character_reference_limit": "Chọn tối đa {{count}} hình ảnh tham chiếu.",
+  "designer_character_reference_image": "Tham chiếu nhân vật {{index}}",
+  "designer_remove_character_reference": "Xóa {{name}}",
+  "designer_change_character_references": "Thay đổi hình ảnh tham chiếu",
+  "designer_add_character_references": "Thêm hình ảnh tham chiếu",
+  "designer_character_references_default_not_used": "Nhà cung cấp mặc định không sử dụng các tham chiếu nhân vật đã lưu. Chọn MiniMax Subject Reference, Replicate Veo 3.1 hoặc ElevenLabs Veo 3.1 để sử dụng chúng.",
+  "designer_character_references_model_not_used": "Nhà cung cấp hoặc mô hình này không sử dụng các tham chiếu nhân vật đã lưu. Hãy dùng MiniMax Subject Reference, Replicate Veo 3.1 hoặc ElevenLabs Veo 3.1 để áp dụng chúng."
 }

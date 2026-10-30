@@ -95,6 +95,7 @@ class ProviderWorkflowMocks {
     outputs: [{ width: 1080, height: 1920, durationMs: 10_000, tracks: [] }],
   };
   private designName = 'Provider video workflows E2E';
+  completeReplicate = false;
   readonly unexpectedGenerationPosts: string[] = [];
   readonly externalProviderCalls: string[] = [];
 
@@ -321,7 +322,19 @@ class ProviderWorkflowMocks {
         return;
       }
       if (pathname === '/media/replicate/jobs/replicate-e2e-job' && method === 'GET') {
-        await json(route, { status: 'processing', result: null, error: null });
+        await json(route, this.completeReplicate
+          ? {
+              status: 'completed',
+              result: {
+                kind: 'video',
+                urls: [REELFARM_VIDEO_URL],
+                fileId: 'file-reelfarm-completed',
+                fileType: 'video',
+                metadata: { dimensions: { width: 720, height: 1280 }, durationMs: 4000 },
+              },
+              error: null,
+            }
+          : { status: 'processing', result: null, error: null });
         return;
       }
 
@@ -375,6 +388,34 @@ class ProviderWorkflowMocks {
       ) {
         this.unexpectedGenerationPosts.push(`${method} ${pathname}`);
         await json(route, { message: 'Unexpected generation POST blocked by E2E' }, 503);
+        return;
+      }
+
+      const frontendOrigin = process.env.E2E_FRONTEND_ORIGIN;
+      if (frontendOrigin && url.origin === 'https://app.postmill.ai' && !pathname.startsWith('/api/')) {
+        const frontend = new URL(frontendOrigin);
+        if (frontend.protocol !== 'http:' || !['localhost', '127.0.0.1', '::1'].includes(frontend.hostname)) {
+          throw new Error('E2E_FRONTEND_ORIGIN must be a loopback HTTP origin');
+        }
+        const headers = { ...request.headers() };
+        delete headers.host;
+        delete headers['content-length'];
+        const response = await fetch(`${frontendOrigin}${pathname}${url.search}`, {
+          method,
+          headers,
+          body: request.postDataBuffer() ?? undefined,
+        });
+        const responseHeaders: Record<string, string> = {};
+        response.headers.forEach((value, key) => {
+          if (!['content-encoding', 'content-length', 'transfer-encoding', 'connection'].includes(key)) {
+            responseHeaders[key] = value;
+          }
+        });
+        await route.fulfill({
+          status: response.status,
+          headers: responseHeaders,
+          body: Buffer.from(await response.arrayBuffer()),
+        });
         return;
       }
 
@@ -943,6 +984,67 @@ test.describe('Provider video workflows (network stubbed)', () => {
       { fileId: 'file-reference-2', url: '/mock-storage/reference-two.png', type: 'image' },
       { fileId: 'file-reference-3', url: '/mock-storage/reference-three.png', type: 'image' },
     ]);
+    mocks.expectNoExternalProviders();
+  });
+
+  test('saved character references persist and repeat across successive Veo scenes', async ({ page }) => {
+    test.setTimeout(120_000);
+    const mocks = new ProviderWorkflowMocks();
+    mocks.completeReplicate = true;
+    await mocks.install(page);
+    await openDesigner(page);
+    await openVideoDialog(page);
+    await page.getByLabel('Provider:').selectOption('replicate');
+    await page.getByLabel('Category', { exact: true }).selectOption('text-to-video');
+    await page.getByLabel('Model', { exact: true }).selectOption('google/veo-3.1');
+
+    await page.getByRole('button', { name: 'Add reference images', exact: true }).click();
+    await pickFile(page, 'reference-one.png');
+    await pickFile(page, 'reference-two.png');
+    const picker = page.getByTestId('media-picker');
+    await picker.getByRole('button', { name: 'Confirm (2)', exact: true }).click();
+    await expect(picker).toHaveCount(0);
+    await expect(page.getByText('2/3', { exact: true })).toBeVisible();
+    expect(mocks.generationCount(), 'saving references must not generate').toBe(0);
+
+    await page.getByPlaceholder('Describe the video you want to generate...').fill(PROMPT);
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect.poll(() => mocks.bodies('/media/replicate/run/async').length).toBe(1);
+    await expect(page.getByPlaceholder('Describe the video you want to generate...')).toHaveCount(0);
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1);
+    const expectedReferences = [
+      { fileId: 'file-reference-1', url: '/mock-storage/reference-one.png', type: 'image' },
+      { fileId: 'file-reference-2', url: '/mock-storage/reference-two.png', type: 'image' },
+    ];
+    expect(mocks.bodies('/media/replicate/run/async')[0].input).toMatchObject({
+      prompt: PROMPT,
+      aspect_ratio: '16:9',
+      duration: 8,
+      reference_images: expectedReferences,
+    });
+
+    await page.getByRole('slider', { name: 'Seek timeline', exact: true }).press('End');
+    await openVideoDialog(page);
+    await expect(page.getByText('2/3', { exact: true })).toBeVisible();
+    await page.getByLabel('Category', { exact: true }).selectOption('text-to-video');
+    await page.getByLabel('Model', { exact: true }).selectOption('google/veo-3.1');
+    const secondPrompt = `${PROMPT} — scene two`;
+    await page.getByPlaceholder('Describe the video you want to generate...').fill(secondPrompt);
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect.poll(() => mocks.bodies('/media/replicate/run/async').length).toBe(2);
+    expect(mocks.bodies('/media/replicate/run/async')[1].input).toMatchObject({
+      prompt: secondPrompt,
+      aspect_ratio: '16:9',
+      duration: 8,
+      reference_images: expectedReferences,
+    });
+
+    await page.getByRole('button', { name: 'Save (Ctrl+S)', exact: true }).click();
+    await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+    await openDesigner(page);
+    await openVideoDialog(page);
+    await expect(page.getByText('2/3', { exact: true })).toBeVisible();
+    expect(mocks.generationCount(), 'save/reload must not generate again').toBe(2);
     mocks.expectNoExternalProviders();
   });
 });

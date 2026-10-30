@@ -947,11 +947,19 @@ export interface DesignerAttribution {
   authorUrl?: string;
 }
 
+export interface DesignerCharacterReference {
+  fileId: string;
+  src: string;
+  name?: string;
+}
+
 export interface DesignerDoc {
   version: number;
   mode: 'image' | 'video';
   outputs: (DesignerOutput | VideoOutput)[];
   attribution?: DesignerAttribution;
+  /** Video mode only. */
+  characterReferences?: DesignerCharacterReference[];
   /**
    * Reusable symbol definitions, stored once for the whole document. Instances
    * reference them by id; editing one updates every instance.
@@ -2006,6 +2014,14 @@ const { strict: StrictDesignerAttributionSchema, lenient: LenientDesignerAttribu
 // ---------------------------------------------------------------------------
 // Doc
 // ---------------------------------------------------------------------------
+const characterReferenceCommon = {
+  fileId: z.string().min(1).max(200),
+  src: SrcSchema,
+  name: z.string().min(1).max(200).optional(),
+};
+const { strict: StrictCharacterReferenceSchema, lenient: LenientCharacterReferenceSchema } =
+  dualObject(characterReferenceCommon, characterReferenceCommon);
+
 const docCommon = {
   version: z.number().int().min(1).max(DESIGNER_DOC_VERSION),
   mode: z.literal('image'),
@@ -2016,12 +2032,14 @@ const { strict: ImageDocStrictSchema, lenient: ImageDocLenientSchema } = dualObj
     outputs: z.array(StrictDesignerOutputSchema).min(1).max(MAX_OUTPUTS),
     attribution: StrictDesignerAttributionSchema.optional(),
     symbols: z.array(symbolDefinitionShape(StrictDesignerElementSchema)).max(200).optional(),
+    characterReferences: z.never().optional(),
   },
   {
     ...docCommon,
     outputs: z.array(LenientDesignerOutputSchema).min(1).max(MAX_OUTPUTS),
     attribution: LenientDesignerAttributionSchema.optional(),
     symbols: z.array(symbolDefinitionShape(LenientDesignerElementSchema)).max(200).optional(),
+    characterReferences: z.never().optional(),
   }
 );
 
@@ -2056,12 +2074,14 @@ const { strict: VideoDocStrictSchemaBase, lenient: VideoDocLenientSchemaBase } =
     outputs: z.array(StrictVideoOutputSchema).min(1).max(MAX_OUTPUTS),
     attribution: StrictDesignerAttributionSchema.optional(),
     symbols: z.array(symbolDefinitionShape(StrictDesignerElementSchema)).max(200).optional(),
+    characterReferences: z.array(StrictCharacterReferenceSchema).max(3).optional(),
   },
   {
     ...videoDocCommon,
     outputs: z.array(LenientVideoOutputSchema).min(1).max(MAX_OUTPUTS),
     attribution: LenientDesignerAttributionSchema.optional(),
     symbols: z.array(symbolDefinitionShape(LenientDesignerElementSchema)).max(200).optional(),
+    characterReferences: z.array(LenientCharacterReferenceSchema).max(3).optional(),
   }
 );
 

@@ -408,3 +408,65 @@ describe('CompactStudio (descriptor provider)', () => {
     expect(body.model).toBe('fal-ai/kling-video/v2.5-turbo/pro/text-to-video');
   });
 });
+
+describe('CompactStudio character references', () => {
+  const references = [
+    { fileId: 'char-1', src: '/uploads/char-1.png', name: 'Hero front' },
+    { fileId: 'char-2', src: '/uploads/char-2.png', name: 'Hero side' },
+  ];
+
+  it('maps the first saved reference to MiniMax S2V-01', async () => {
+    renderStudio(
+      <CompactStudio provider="minimax" operation="video" prompt="hero in a cafe" characterReferences={references} onGenerated={vi.fn()} />
+    );
+    fireEvent.click(await screen.findByRole('tab', { name: 'Subject Reference' }));
+    expect(screen.queryByText('Subject image')).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(generateCalls('minimax')).toHaveLength(1));
+    const [, init] = generateCalls('minimax')[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.model).toBe('S2V-01');
+    expect(body.mediaInputs).toEqual({ subject_image: 'char-1' });
+    expect(body.input.prompt).toBe('hero in a cafe');
+  });
+
+  it('maps ordered saved references to ElevenLabs Veo subject inputs without frames', async () => {
+    renderStudio(
+      <CompactStudio provider="elevenlabs" operation="video" prompt="hero in a cafe" characterReferences={references} onGenerated={vi.fn()} />
+    );
+    fireEvent.click(await screen.findByRole('tab', { name: 'Image → Video' }));
+    expect(screen.queryByText('Reference image 1')).toBeNull();
+    expect(screen.queryByText('Start frame')).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+
+    await waitFor(() => expect(generateCalls('elevenlabs')).toHaveLength(1));
+    const [, init] = generateCalls('elevenlabs')[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.mediaInputs).toEqual({
+      reference_image_1: 'char-1',
+      reference_image_2: 'char-2',
+    });
+    expect(body.input.reference_image_1_role).toBe('subject');
+    expect(body.input.reference_image_2_role).toBe('subject');
+    expect(body.input.duration_secs).toBe(8);
+    expect(body.input.start_frame).toBeUndefined();
+    expect(body.input.end_frame).toBeUndefined();
+  });
+
+  it('warns and omits references for an unsupported provider', async () => {
+    renderStudio(
+      <CompactStudio provider="google" operation="video" prompt="a rocket" characterReferences={references} onGenerated={vi.fn()} />
+    );
+    expect(await screen.findByRole('note')).toHaveProperty(
+      'textContent',
+      'This provider or model does not use saved character references. Use MiniMax Subject Reference, Replicate Veo 3.1, or ElevenLabs Veo 3.1 to use them.'
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(generateCalls('google')).toHaveLength(1));
+    const [, init] = generateCalls('google')[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.mediaInputs).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain('char-1');
+  });
+});

@@ -4680,5 +4680,15 @@
   "studio_kling_kling_ai_landing_hl0": "Directe integratie — je klingai.com API-sleutel, zonder aggregatoropslag",
   "studio_kling_kling_ai_landing_hl1": "Kling 3.0 / 2.6-video met optionele native audio, tot 1080p",
   "studio_kling_kling_ai_landing_hl2": "Tekst-naar-video en afbeelding-naar-video met controle over eerste/laatste frame",
-  "studio_kling_kling_ai_landing_hl3": "Kling V3 tekst-naar-afbeelding tot 2K in acht beeldverhoudingen"
+  "studio_kling_kling_ai_landing_hl3": "Kling V3 tekst-naar-afbeelding tot 2K in acht beeldverhoudingen",
+  "designer_character_reference_picker": "Kies referentieafbeeldingen voor personages",
+  "designer_character_references": "Personagereferenties",
+  "designer_character_reference_help": "Gebruik dezelfde persoon, hetzelfde personage of product in verschillende scènes opnieuw. Wordt automatisch toegepast op ondersteunde modellen; continuïteit is niet gegarandeerd.",
+  "designer_character_reference_limit": "Kies maximaal {{count}} referentieafbeeldingen.",
+  "designer_character_reference_image": "Personagereferentie {{index}}",
+  "designer_remove_character_reference": "{{name}} verwijderen",
+  "designer_change_character_references": "Referentieafbeeldingen wijzigen",
+  "designer_add_character_references": "Referentieafbeeldingen toevoegen",
+  "designer_character_references_default_not_used": "De standaardprovider gebruikt geen opgeslagen personagereferenties. Kies MiniMax Subject Reference, Replicate Veo 3.1 of ElevenLabs Veo 3.1 om ze te gebruiken.",
+  "designer_character_references_model_not_used": "Deze provider of dit model gebruikt geen opgeslagen personagereferenties. Gebruik MiniMax Subject Reference, Replicate Veo 3.1 of ElevenLabs Veo 3.1 om ze te gebruiken."
 }

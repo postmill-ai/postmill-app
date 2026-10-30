@@ -4681,5 +4681,15 @@
   "studio_kling_kling_ai_landing_hl0": "Intégration directe — votre clé API klingai.com, sans majoration d’agrégateur",
   "studio_kling_kling_ai_landing_hl1": "Vidéo Kling 3.0 / 2.6 avec son natif en option, jusqu’à 1080p",
   "studio_kling_kling_ai_landing_hl2": "Texte-vidéo et image-vidéo avec contrôle de la première/dernière trame",
-  "studio_kling_kling_ai_landing_hl3": "Génération d’images à partir de texte avec Kling V3 jusqu’à 2K dans huit formats"
+  "studio_kling_kling_ai_landing_hl3": "Génération d’images à partir de texte avec Kling V3 jusqu’à 2K dans huit formats",
+  "designer_character_reference_picker": "Choisissez des images de référence de personnages",
+  "designer_character_references": "Références de personnages",
+  "designer_character_reference_help": "Réutilisez la même personne, le même personnage ou le même produit dans différentes scènes. Appliqué automatiquement aux modèles pris en charge ; la continuité n’est pas garantie.",
+  "designer_character_reference_limit": "Choisissez jusqu’à {{count}} images de référence.",
+  "designer_character_reference_image": "Référence de personnage {{index}}",
+  "designer_remove_character_reference": "Supprimer {{name}}",
+  "designer_change_character_references": "Modifier les images de référence",
+  "designer_add_character_references": "Ajouter des images de référence",
+  "designer_character_references_default_not_used": "Le fournisseur par défaut n’utilise pas les références de personnages enregistrées. Choisissez MiniMax Subject Reference, Replicate Veo 3.1 ou ElevenLabs Veo 3.1 pour les utiliser.",
+  "designer_character_references_model_not_used": "Ce fournisseur ou ce modèle n’utilise pas les références de personnages enregistrées. Utilisez MiniMax Subject Reference, Replicate Veo 3.1 ou ElevenLabs Veo 3.1 pour les utiliser."
 }
