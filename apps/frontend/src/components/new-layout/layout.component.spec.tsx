@@ -12,8 +12,8 @@ vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
 }));
 
-vi.mock('next/font/google', () => ({
-  Plus_Jakarta_Sans: () => ({ className: 'mocked-font' }),
+vi.mock('@postmill-ai/frontend/components/new-layout/jakarta-sans', () => ({
+  jakartaSans: { className: 'mocked-font' },
 }));
 
 const mockReplace = vi.fn();

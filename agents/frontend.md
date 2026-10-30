@@ -12,6 +12,10 @@ Tests: [`agents/testing.md`](./testing.md).
   `@postmill-ai/react/*` → `libraries/react-shared-libraries/src/*`,
   `@postmill-ai/helpers/*` → `libraries/helpers/src/*`,
   `@postmill-ai/nestjs-libraries/*` → `libraries/nestjs-libraries/src/*`.
+- Global Plus Jakarta Sans comes from `components/new-layout/jakarta-sans.ts` using
+  `next/font/local` and the OFL variable fonts in `apps/frontend/public/fonts`. Do not use
+  `next/font/google` in application layouts: build-time Google downloads make production
+  deploys depend on an external network response.
 
 ### Route groups under `apps/frontend/src/app/`
 

@@ -4,7 +4,7 @@ import React, { ReactNode, useCallback, useState, useRef, useEffect } from 'reac
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { Wordmark } from '@postmill-ai/frontend/components/new-layout/wordmark';
 import { UserAvatarMenu } from '@postmill-ai/frontend/components/new-layout/user-avatar-menu';
-import { Plus_Jakarta_Sans } from 'next/font/google';
+import { jakartaSans } from '@postmill-ai/frontend/components/new-layout/jakarta-sans';
 const ModeComponent = dynamic(
   () => import('@postmill-ai/frontend/components/layout/mode.component'),
   {
@@ -67,12 +67,6 @@ const BulkImport = dynamic(
     ),
   { ssr: false }
 );
-
-const jakartaSans = Plus_Jakarta_Sans({
-  weight: ['600', '500', '700'],
-  style: ['normal', 'italic'],
-  subsets: ['latin'],
-});
 
 export const LayoutComponent = ({ children }: { children: ReactNode }) => {
   const fetch = useFetch();
