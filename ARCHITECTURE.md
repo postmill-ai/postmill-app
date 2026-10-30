@@ -102,7 +102,8 @@ Deep tour of the libraries: `agents/libraries.md`.
    (e.g. `StorageProviderConfig.quotaBytes`); serialized as JS number.
 5. `NestFactory.create(AppModule, { rawBody: true, cors: … })` — CORS allowlist:
    `FRONTEND_URL`, `http://localhost:6274` (Inngest dev), optional `MAIN_URL`.
-6. Single-run SIGTERM/SIGINT handler → drain the HTTP listener → `app.close()` (then Redis/Prisma).
+6. Single-run SIGTERM/SIGINT handler → close idle/websocket connections → drain HTTP for up to
+   5 seconds → force remaining HTTP connections → `app.close()` (then Redis/Prisma).
 7. Socket.IO `IoAdapter` on the same HTTP server (`/collaboration`, `/ai-designer` namespaces).
 8. `await startMcp(app)` — MCP server (`@postmill-ai/nestjs-libraries/chat/start.mcp`).
 9. Global `ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })`

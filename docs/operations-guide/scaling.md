@@ -116,10 +116,12 @@ for liveness — a transient DB blip would restart an otherwise healthy process.
 
 ## Graceful shutdown
 
-On `SIGTERM`/`SIGINT` the backend drains in order: it stops accepting new work, runs
-NestJS shutdown hooks (`app.close()`), which disconnects Prisma and quits the Redis
-connection, then exits once. Give the container a sensible termination grace period (for example,
-Kubernetes `terminationGracePeriodSeconds: 30`) so in-flight requests finish.
+On `SIGTERM`/`SIGINT` the backend stops accepting HTTP work, closes idle keep-alive and
+websocket connections, then allows up to **5 seconds** for active HTTP requests to drain. Any
+remaining HTTP connections are force-closed before NestJS shutdown hooks (`app.close()`)
+disconnect Prisma and quit Redis; the process then exits once. Give the container a termination
+grace period comfortably above that drain deadline (for example, Docker `stop_grace_period: 30s`
+or Kubernetes `terminationGracePeriodSeconds: 30`).
 
 ## Fail-fast configuration validation
 

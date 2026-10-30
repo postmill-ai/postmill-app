@@ -27,6 +27,7 @@ import { ConfigurationChecker } from '@postmill-ai/helpers/configuration/configu
 import { startMcp } from '@postmill-ai/nestjs-libraries/chat/start.mcp';
 import { isDev } from '@postmill-ai/helpers/utils/is.dev';
 import { CollaborationGateway } from './services/collaboration/collaboration.gateway';
+import { AiDesignerGateway } from './api/gateways/ai-designer.gateway';
 import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
@@ -90,7 +91,10 @@ async function start() {
   // and `@nestjs/websockets` bindMessageHandlers signatures; runtime is unaffected.
   app.useWebSocketAdapter(new IoAdapter(app) as any);
 
-  const gracefulShutdown = createGracefulShutdown(app);
+  const gracefulShutdown = createGracefulShutdown(app, undefined, async () => {
+    app.get(AiDesignerGateway).close();
+    await app.get(CollaborationGateway).close();
+  });
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 

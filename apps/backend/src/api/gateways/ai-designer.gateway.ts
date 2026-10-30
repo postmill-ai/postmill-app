@@ -182,6 +182,10 @@ export class AiDesignerGateway
     }
   }
 
+  close() {
+    this.server?.disconnectSockets(true);
+  }
+
   async handleConnection(client: Socket) {
     try {
       // Cheapest check first: per-IP connection budget, before any JWT/DB work.
