@@ -7735,6 +7735,10 @@ paths:
       responses:
         "200":
           description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderVideoStatusDto"
       tags:
         - Design
   /media/design-templates/folders:
@@ -12335,10 +12339,45 @@ components:
           description: Normalize the final audio mix to -14 LUFS / -1.5 dBTP (ffmpeg loudnorm).
         posterUrl:
           type: string
+        posterTimeMs:
+          type: number
+          description: Timeline timestamp for the generated poster. Absent = the existing midpoint.
+          minimum: 0
+          maximum: 180000
         folderId:
           type: string
       required:
         - composition
+    RenderVideoStatusDto:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+        artifactUrl:
+          type: string
+          nullable: true
+        fileId:
+          type: string
+        alt:
+          type: string
+        thumbnailUrl:
+          type: string
+        generatedPosterUrl:
+          type: string
+        thumbnailTimestamp:
+          type: number
+        errorMessage:
+          type: string
+        progress:
+          type: number
+      required:
+        - id
+        - status
+        - alt
+        - thumbnailTimestamp
+        - progress
     CreateTemplateFolderDto:
       type: object
       properties:

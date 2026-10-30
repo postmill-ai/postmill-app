@@ -43,7 +43,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   const [saving, setSaving] = useState(false);
 
   const { fonts: customFonts, mutate: mutateCustomFonts } = useCustomFonts();
-  const { upload: uploadCustomFont, uploading } = useUploadCustomFont();
+  const { uploadMany: uploadCustomFonts, uploading } = useUploadCustomFont();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { data: brands, mutate } = useSWR<BrandProfile[]>(
@@ -265,12 +265,12 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
 
   const handleFontUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      await uploadCustomFont(file);
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      await uploadCustomFonts(files);
       if (fileInputRef.current) fileInputRef.current.value = '';
     },
-    [uploadCustomFont]
+    [uploadCustomFonts]
   );
 
   const handleFontDelete = useCallback(
@@ -674,6 +674,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           accept=".ttf,.otf,.woff2"
           onChange={handleFontUpload}
           className="hidden"

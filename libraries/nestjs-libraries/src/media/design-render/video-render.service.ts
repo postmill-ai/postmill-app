@@ -206,6 +206,7 @@ export class VideoRenderService {
       /** loudnorm on the final audio mix (-14 LUFS / -1.5 dBTP); default off. */
       normalizeLoudness?: boolean;
       posterUrl?: string;
+      posterTimeMs?: number;
       folderId?: string;
     },
   ) {
@@ -217,6 +218,15 @@ export class VideoRenderService {
       throw new Error(
         `Composition duration ${durationMs}ms exceeds the 180 s hard cap`,
       );
+    }
+    if (body.posterTimeMs !== undefined && body.posterTimeMs > durationMs) {
+      throw new BadRequestException('posterTimeMs must be within the composition duration');
+    }
+    if (body.posterUrl) {
+      const poster = await this._fileService.getFileByPath(orgId, body.posterUrl);
+      if (!poster || poster.type !== 'image') {
+        throw new BadRequestException('posterUrl must reference an image File owned by this organization');
+      }
     }
     // Bounds apply to the EFFECTIVE render: a 2× 1080×1080 @60fps job must pass
     // (2160 ≤ MAX_DIMENSION, 60 ≤ MAX_FPS) while a 2× near-max canvas is rejected.
@@ -246,6 +256,7 @@ export class VideoRenderService {
       fps: body.fps,
       normalizeLoudness: body.normalizeLoudness === true,
       posterUrl: body.posterUrl,
+      posterTimeMs: body.posterTimeMs,
       folderId: body.folderId,
       enqueuedAt: new Date().toISOString(),
     };
@@ -480,6 +491,7 @@ export class VideoRenderService {
         format: format as DesignRenderJobSpec['options']['format'],
         quality: input.quality,
         normalizeLoudness: input.normalizeLoudness === true,
+        posterTimeMs: input.posterTimeMs,
         jobId,
         orgId: job.organizationId,
         renderToken,
@@ -559,6 +571,13 @@ export class VideoRenderService {
         provider: 'chromium-ffmpeg',
       };
 
+      if (!isTemplatePreview && input.posterUrl) {
+        const poster = await this._fileService.getFileByPath(orgId, input.posterUrl);
+        if (!poster || poster.type !== 'image') {
+          throw new Error('Custom poster File is no longer available');
+        }
+      }
+
       const ok = isTemplatePreview
         ? await this._lifecycle.completeJobWithBuffer(
             job,
@@ -576,6 +595,12 @@ export class VideoRenderService {
             metadata,
             thumbnailBuffer,
             input.folderId ?? undefined,
+            {
+              poster: {
+                customPath: input.posterUrl,
+                timestamp: input.posterTimeMs ?? 0,
+              },
+            },
           );
 
       if (!ok) {

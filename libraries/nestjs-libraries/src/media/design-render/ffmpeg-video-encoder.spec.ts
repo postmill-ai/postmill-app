@@ -24,7 +24,29 @@ vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
 import {
   FfmpegVideoEncoderService,
   ffmpegErrorDetail,
+  posterCaptureFrameNumber,
+  posterSeekSeconds,
 } from './ffmpeg-video-encoder.service';
+
+describe('poster frame selection', () => {
+  it('retains the legacy midpoint when posterTimeMs is absent', () => {
+    expect(posterSeekSeconds(5000)).toBe(2.5);
+    expect(posterCaptureFrameNumber(3000, 12)).toBe(18);
+  });
+
+  it('seeks to the selected timestamp for encoded video and GIF posters', () => {
+    expect(posterSeekSeconds(5000, 1250)).toBe(1.25);
+    expect(posterSeekSeconds(5000, 0)).toBe(0);
+    expect(posterSeekSeconds(5000, 5000)).toBe(4.999);
+  });
+
+  it('chooses the nearest captured animated-WebP frame and clamps to the capture', () => {
+    expect(posterCaptureFrameNumber(3000, 12, 1000)).toBe(13);
+    expect(posterCaptureFrameNumber(3000, 12, 1050)).toBe(14);
+    expect(posterCaptureFrameNumber(3000, 12, 0)).toBe(1);
+    expect(posterCaptureFrameNumber(3000, 12, 3000)).toBe(36);
+  });
+});
 
 describe('ffmpegErrorDetail', () => {
   it('retains the encoder root cause instead of the generic final failure', () => {
@@ -111,6 +133,30 @@ describe('FfmpegVideoEncoderService.mixAudio filter graph', () => {
     expect(cvIdx).toBeGreaterThan(audioInputIdx);
     const caIdx = args.indexOf('-c:a');
     expect(caIdx).toBeGreaterThan(audioInputIdx);
+  });
+
+  it('passes the selected timestamp to poster extraction', async () => {
+    const frameCapture = { captureFrames: vi.fn().mockResolvedValue(30) };
+    const service = new FfmpegVideoEncoderService(frameCapture as any);
+    vi.spyOn(service as any, 'mixAudio').mockResolvedValue(null);
+
+    await service.encode(output, { fps: 30, format: 'mp4', posterTimeMs: 1250 });
+
+    const posterCall = spawnCalls[spawnCalls.length - 1];
+    expect(posterCall.args[posterCall.args.indexOf('-ss') + 1]).toBe('1.25');
+  });
+
+  it('extracts animated-WebP posters from the nearest captured frame', async () => {
+    const frameCapture = { captureFrames: vi.fn().mockResolvedValue(36) };
+    const service = new FfmpegVideoEncoderService(frameCapture as any);
+
+    await service.encode(
+      { ...output, durationMs: 3000, tracks: [] },
+      { fps: 12, format: 'webp-animated', posterTimeMs: 1050 },
+    );
+
+    const posterCall = spawnCalls[spawnCalls.length - 1];
+    expect(posterCall.args[posterCall.args.indexOf('-i') + 1]).toMatch(/frame-00014\.png$/);
   });
 
   it.each(['mp4', 'webm'] as const)('normalizes odd %s frame dimensions for 4:2:0 encoding', async (format) => {

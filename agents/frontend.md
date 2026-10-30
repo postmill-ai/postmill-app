@@ -290,6 +290,20 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `app/global.scss`, and `CURATED_FONTS` in `font-loader.service.ts`. A family missing from the
   second renders as Arial; missing from the third exports as sans-serif. `font-catalog.drift.spec.ts`
   fails the build if they disagree.
+- **Custom font batches are sequential.** Both the Brand panel and shared family picker accept
+  multiple TTF/OTF/WOFF2 files through `useUploadCustomFont.uploadMany`: validate and post each
+  file through the existing single-file endpoint, continue after individual failures, expose
+  per-file results, hold one uploading state, and run one final custom-fonts SWR refresh. The
+  `upload(file)` wrapper remains for single-file callers. Sequential posts are required because
+  the endpoint read/modify/writes brand `customFonts` JSON; parallel posts lose entries. Batch
+  toasts summarize full/partial success and retain the WOFF2 server-render warning.
+- **Video poster state distinguishes effective and generated images.** The export dialog sends
+  only an uploaded File path as `posterUrl` and may send the paused playhead as `posterTimeMs`.
+  Polling reads `thumbnailUrl` (effective), `generatedPosterUrl` (rendered alternative), `fileId`,
+  and `thumbnailTimestamp`; it must never replace a custom selection with the generated JPEG.
+  Pre-/post-render uploads share one handler, and post-render rendered/custom changes persist
+  through `/files/information` before the UI treats them as saved. Draft media carries the same
+  effective thumbnail and timestamp.
 
 Acceptance test for any change here: render the same document through **both** paths and diff them —
 a document with a blended group, a clipped adjustment and a layer style is the case that catches

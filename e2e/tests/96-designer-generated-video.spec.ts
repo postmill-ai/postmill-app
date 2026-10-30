@@ -8,6 +8,9 @@ const REPLACEMENT_URL = '/mock-storage/replacement.webm';
 const ASYMMETRIC_URL = '/mock-storage/asymmetric-8x2.png';
 const REPLACEMENT_IMAGE_URL = '/mock-storage/replacement-image.png';
 const TRANSPARENT_IMAGE_URL = '/mock-storage/transparent.png';
+const CUSTOM_POSTER_URL = '/mock-storage/custom-poster.png';
+const GENERATED_POSTER_URL = '/mock-storage/generated-poster.jpg';
+const RENDERED_VIDEO_URL = '/mock-storage/designer-render.mp4';
 const GENERATE_PATH = '/media/generate-video';
 
 interface CropSnapshot {
@@ -35,6 +38,7 @@ interface VideoClipSnapshot {
   fontSize?: number;
   fontWeight?: number;
   fontStyle?: 'normal' | 'italic';
+  fontFamily?: string;
   borderRadius?: number | [number, number, number, number];
   filters?: string[];
   smartFilters?: unknown[];
@@ -174,11 +178,31 @@ class DesignerMocks {
   readonly httpErrors: string[] = [];
   readonly consoleErrors: string[] = [];
   readonly pageErrors: string[] = [];
+  readonly renderRequests: Array<Record<string, unknown>> = [];
+  readonly fileInformationUpdates: Array<Record<string, unknown>> = [];
+  readonly fontUploads: string[] = [];
+  readonly customFonts: Array<Record<string, unknown>> = [];
   dashboardJobReads = 0;
   studioStatusReads = 0;
   doc = blankDoc();
   name = 'Generated video E2E';
   jobOutcome: 'completed' | 'failed' = 'completed';
+  renderFile = {
+    id: 'file-rendered-e2e',
+    name: 'designer-render.mp4',
+    originalName: 'designer-render.mp4',
+    path: RENDERED_VIDEO_URL,
+    thumbnail: GENERATED_POSTER_URL,
+    alt: '',
+    thumbnailTimestamp: 0,
+    fileSize: 1000,
+    type: 'video',
+    tags: null,
+    description: null,
+    folderId: null,
+    createdAt: new Date(0).toISOString(),
+    metadata: { generatedPosterUrl: GENERATED_POSTER_URL } as Record<string, unknown>,
+  };
 
   private readonly fixtures = {
     [GENERATED_URL]: {
@@ -188,6 +212,10 @@ class DesignerMocks {
     [REPLACEMENT_URL]: {
       file: 'replacement.webm',
       contentType: 'video/webm',
+    },
+    [RENDERED_VIDEO_URL]: {
+      file: 'motion-rear-moov.mp4',
+      contentType: 'video/mp4',
     },
     [ASYMMETRIC_URL]: {
       file: 'asymmetric-8x2.png',
@@ -200,6 +228,22 @@ class DesignerMocks {
     [TRANSPARENT_IMAGE_URL]: {
       file: 'transparent-2x2.png',
       contentType: 'image/png',
+    },
+    [CUSTOM_POSTER_URL]: {
+      file: 'asymmetric-8x2.png',
+      contentType: 'image/png',
+    },
+    [GENERATED_POSTER_URL]: {
+      file: 'asymmetric-8x2.png',
+      contentType: 'image/png',
+    },
+    '/mock-fonts/WendyOne-Regular.ttf': {
+      file: 'WendyOne-Regular.ttf',
+      contentType: 'font/ttf',
+    },
+    '/mock-fonts/PlaywriteGBJ-VariableFont_wght.ttf': {
+      file: 'PlaywriteGBJ-VariableFont_wght.ttf',
+      contentType: 'font/ttf',
     },
   };
 
@@ -227,6 +271,35 @@ class DesignerMocks {
         return;
       }
       if (hostname.endsWith('.ingest.us.sentry.io')) {
+        await json(route, {});
+        return;
+      }
+      if (method === 'GET' && pathname === '/user/self') {
+        await json(route, {
+          id: 'e2e-user',
+          email: 'qa@example.test',
+          orgId: 'e2e-org',
+          role: 'owner',
+          isSuperAdmin: true,
+          activated: true,
+          setupCompleted: true,
+          profile: {},
+        });
+        return;
+      }
+      if (method === 'GET' && pathname === '/settings/roles/me') {
+        await json(route, { role: 'owner', permissions: [], isSuperAdmin: true });
+        return;
+      }
+      if (method === 'GET' && pathname === '/user/organizations') {
+        await json(route, [{ id: 'e2e-org', name: 'E2E Org', users: [{ disabled: false }] }]);
+        return;
+      }
+      if (method === 'GET' && ['/announcements', '/notifications', '/brands', '/integrations/list'].includes(pathname)) {
+        await json(route, []);
+        return;
+      }
+      if (method === 'GET' && ['/settings/media/config', '/settings/ai/config', '/settings/storage', '/files/limits'].includes(pathname)) {
         await json(route, {});
         return;
       }
@@ -274,9 +347,22 @@ class DesignerMocks {
         return;
       }
 
-      if (pathname === '/media/studio/replicate/status' && method === 'GET') {
+      if (['/media/studio/replicate/status', '/media/replicate/status'].includes(pathname) && method === 'GET') {
         this.studioStatusReads++;
         await json(route, { configured: true, enabled: true });
+        return;
+      }
+
+      if (pathname === '/media/replicate/categories' && method === 'GET') {
+        await json(route, [
+          { key: 'text-to-video', medium: 'video', label: 'Text to Video', execution: 'async' },
+          { key: 'image-to-video', medium: 'video', label: 'Image to Video', execution: 'async' },
+        ]);
+        return;
+      }
+
+      if (/^\/media\/replicate\/categories\/(text|image)-to-video\/models$/.test(pathname) && method === 'GET') {
+        await json(route, []);
         return;
       }
 
@@ -290,25 +376,28 @@ class DesignerMocks {
         return;
       }
 
-      if (pathname === '/files' && method === 'GET') {
+      if (pathname === '/files' && method === 'GET' && request.resourceType() !== 'document') {
         await json(route, {
-          results: [{
-            id: 'replacement-image-file',
-            name: 'replacement-image.png',
-            originalName: 'replacement-image.png',
-            path: REPLACEMENT_IMAGE_URL,
-            thumbnail: REPLACEMENT_IMAGE_URL,
-            alt: null,
-            thumbnailTimestamp: null,
-            fileSize: 1234,
-            type: 'image',
-            tags: null,
-            description: null,
-            folderId: null,
-            createdAt: '2026-01-01T00:00:00.000Z',
-            metadata: { dimensions: { width: 8, height: 2 }, mimeType: 'image/png' },
-          }],
-          total: 1,
+          results: [
+            this.renderFile,
+            {
+              id: 'replacement-image-file',
+              name: 'replacement-image.png',
+              originalName: 'replacement-image.png',
+              path: REPLACEMENT_IMAGE_URL,
+              thumbnail: REPLACEMENT_IMAGE_URL,
+              alt: null,
+              thumbnailTimestamp: null,
+              fileSize: 1234,
+              type: 'image',
+              tags: null,
+              description: null,
+              folderId: null,
+              createdAt: '2026-01-01T00:00:00.000Z',
+              metadata: { dimensions: { width: 8, height: 2 }, mimeType: 'image/png' },
+            },
+          ],
+          total: 2,
         });
         return;
       }
@@ -350,8 +439,82 @@ class DesignerMocks {
         return;
       }
 
+      if (pathname === '/media/fonts' && method === 'GET') {
+        await json(route, this.customFonts);
+        return;
+      }
+
+      if (pathname === '/media/fonts/upload' && method === 'POST') {
+        const multipart = request.postDataBuffer()?.toString('latin1') || '';
+        const fileName = /filename="([^"]+)"/.exec(multipart)?.[1] || 'unknown.ttf';
+        this.fontUploads.push(fileName);
+        const family = fileName.startsWith('WendyOne') ? 'Wendy One' : 'Playwrite GB J';
+        const entry = {
+          family,
+          fileId: `font-${this.customFonts.length + 1}`,
+          path: `/mock-fonts/${fileName}`,
+          weights: [400],
+          serverRender: true,
+        };
+        this.customFonts.push(entry);
+        await json(route, { uploaded: entry });
+        return;
+      }
+
+      if (pathname === '/media/designs/render-video' && method === 'POST') {
+        const body = request.postDataJSON() as Record<string, unknown>;
+        this.renderRequests.push(body);
+        this.renderFile.thumbnail = typeof body.posterUrl === 'string'
+          ? body.posterUrl
+          : GENERATED_POSTER_URL;
+        this.renderFile.thumbnailTimestamp = typeof body.posterTimeMs === 'number'
+          ? body.posterTimeMs
+          : 0;
+        await json(route, { id: 'designer-render-job', status: 'pending' });
+        return;
+      }
+
+      if (pathname === '/media/designs/render-video/designer-render-job' && method === 'GET') {
+        await json(route, {
+          id: 'designer-render-job',
+          status: 'completed',
+          progress: 100,
+          artifactUrl: RENDERED_VIDEO_URL,
+          fileId: this.renderFile.id,
+          alt: this.renderFile.alt,
+          thumbnailUrl: this.renderFile.thumbnail,
+          generatedPosterUrl: this.renderFile.metadata.generatedPosterUrl,
+          thumbnailTimestamp: this.renderFile.thumbnailTimestamp,
+        });
+        return;
+      }
+
+      if (pathname === '/files/information' && method === 'POST') {
+        const body = request.postDataJSON() as Record<string, unknown>;
+        this.fileInformationUpdates.push(body);
+        this.renderFile.thumbnail = String(body.thumbnail);
+        this.renderFile.thumbnailTimestamp = Number(body.thumbnailTimestamp || 0);
+        this.renderFile.alt = String(body.alt || '');
+        await json(route, this.renderFile);
+        return;
+      }
+
+      if (pathname === '/files' && method === 'GET' && request.resourceType() !== 'document') {
+        await json(route, { results: [this.renderFile], total: 1 });
+        return;
+      }
+
+      if (pathname === '/files/folders' && method === 'GET') {
+        await json(route, []);
+        return;
+      }
+
       if (pathname === '/files/upload-simple' && method === 'POST') {
-        await json(route, { id: 'static-export-png', path: '/mock-storage/static-export.png' });
+        const multipart = request.postDataBuffer()?.toString('latin1') || '';
+        const customPoster = multipart.includes('asymmetric-8x2.png');
+        await json(route, customPoster
+          ? { id: 'custom-poster-e2e', path: CUSTOM_POSTER_URL }
+          : { id: 'static-export-png', path: '/mock-storage/static-export.png' });
         return;
       }
 
@@ -456,7 +619,10 @@ class DesignerMocks {
 }
 
 async function fulfillVideo(route: Route, fixtureFile: string, contentType: string) {
-  const body = fs.readFileSync(path.join(__dirname, '../fixtures', fixtureFile));
+  const fixtureDir = fixtureFile.endsWith('.ttf')
+    ? path.join(__dirname, '../../apps/frontend/public/fonts')
+    : path.join(__dirname, '../fixtures');
+  const body = fs.readFileSync(path.join(fixtureDir, fixtureFile));
   const range = route.request().headers()['range'];
   const common = {
     'accept-ranges': 'bytes',
@@ -1187,6 +1353,104 @@ test.describe('Designer crop and browser export artifacts (mocked local document
     assertGeometry();
     expect(mocks.doc.version).toBe(9);
     expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
+test.describe('Designer posters and custom fonts (mocked local document)', () => {
+  test('custom and current-frame posters survive polling, post-render switching, and Files', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = motionDoc();
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+
+    const timeline = page.getByRole('slider', { name: 'Seek timeline', exact: true });
+    await timeline.focus();
+    await timeline.press('Home');
+    for (let index = 0; index < 10; index++) await timeline.press('ArrowRight');
+    await expect(timeline).toHaveAttribute('aria-valuenow', '1000');
+
+    await page.keyboard.press('Control+e');
+    await page.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
+    await page.getByRole('button', { name: 'Next: Export 1 file', exact: true }).click();
+    await page.getByLabel('Upload custom poster', { exact: true }).setInputFiles(
+      path.join(__dirname, '../fixtures/asymmetric-8x2.png'),
+    );
+    await expect(page.getByRole('img', { name: 'Selected poster', exact: true }))
+      .toHaveAttribute('src', CUSTOM_POSTER_URL);
+    await page.getByRole('button', { name: 'Use current timeline frame', exact: true }).click();
+    await page.getByRole('button', { name: 'Start Render', exact: true }).click();
+    await expect(page.getByText('Render Complete', { exact: true })).toBeVisible();
+
+    expect(mocks.renderRequests).toHaveLength(1);
+    expect(mocks.renderRequests[0]).toMatchObject({
+      posterUrl: CUSTOM_POSTER_URL,
+      posterTimeMs: 1000,
+    });
+    expect(mocks.renderFile.thumbnail).toBe(CUSTOM_POSTER_URL);
+    expect(mocks.renderFile.thumbnailTimestamp).toBe(1000);
+    expect(mocks.renderFile.metadata.generatedPosterUrl).toBe(GENERATED_POSTER_URL);
+    await expect(page.getByRole('img', { name: 'Custom poster', exact: true }))
+      .toHaveAttribute('src', CUSTOM_POSTER_URL);
+
+    await page.getByRole('button', { name: 'Use rendered poster', exact: true }).click();
+    await expect.poll(() => mocks.renderFile.thumbnail).toBe(GENERATED_POSTER_URL);
+    await page.getByLabel('Upload custom poster', { exact: true }).setInputFiles(
+      path.join(__dirname, '../fixtures/asymmetric-8x2.png'),
+    );
+    await expect.poll(() => mocks.renderFile.thumbnail).toBe(CUSTOM_POSTER_URL);
+    expect(mocks.fileInformationUpdates).toHaveLength(2);
+    expect(mocks.fileInformationUpdates[1]).toMatchObject({
+      id: 'file-rendered-e2e',
+      thumbnail: CUSTOM_POSTER_URL,
+      thumbnailTimestamp: 1000,
+    });
+
+    await page.goto('/files', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator(`img[src="${CUSTOM_POSTER_URL}"]`).first()).toBeVisible();
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('two real TTF uploads are sequential, usable, loaded, and persistent across reloads', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = motionDoc();
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await clipOnTrack(page, 'Text').first().click();
+    await page.getByRole('button', { name: /^Inter/ }).click();
+
+    await page.getByLabel('Upload font file', { exact: true }).setInputFiles([
+      path.join(__dirname, '../../apps/frontend/public/fonts/WendyOne-Regular.ttf'),
+      path.join(__dirname, '../../apps/frontend/public/fonts/PlaywriteGBJ-VariableFont_wght.ttf'),
+    ]);
+    await expect.poll(() => mocks.customFonts.length).toBe(2);
+    expect(mocks.fontUploads).toEqual([
+      'WendyOne-Regular.ttf',
+      'PlaywriteGBJ-VariableFont_wght.ttf',
+    ]);
+
+    await page.getByRole('button', { name: /^Wendy One/ }).click();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-1')?.fontFamily)
+      .toBe('Wendy One');
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await clipOnTrack(page, 'Text').first().click();
+    await page.getByRole('button', { name: /^Wendy One/ }).click();
+    await page.getByRole('button', { name: /^Playwrite GB J/ }).click();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-1')?.fontFamily)
+      .toBe('Playwrite GB J');
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+
+    expect(mocks.savedClips().find((clip) => clip.id === 'text-1')?.fontFamily).toBe('Playwrite GB J');
+    expect(mocks.customFonts.map((font) => font.family)).toEqual(['Wendy One', 'Playwrite GB J']);
+    await expect.poll(() => page.evaluate(() =>
+      Array.from(document.fonts)
+        .filter((face) => /Wendy One|Playwrite GB J/.test(face.family))
+        .map((face) => `${face.family.replace(/["']/g, '')}:${face.status}`)
+    )).toEqual(expect.arrayContaining(['Wendy One:loaded', 'Playwrite GB J:loaded']));
+    expect(mocks.fontUploads).toHaveLength(2);
     mocks.expectClean();
   });
 });

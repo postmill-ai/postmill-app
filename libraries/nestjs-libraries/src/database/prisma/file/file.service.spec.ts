@@ -69,6 +69,43 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+describe('FileService — rendered video posters', () => {
+  it('preserves the generated poster in metadata and saves the effective thumbnail', async () => {
+    const { fileRepo, model } = makeRepo();
+    model.file.findUnique.mockResolvedValue({
+      id: 'file-video-1',
+      metadata: { width: 1080 },
+    });
+    const service = makeService(fileRepo);
+
+    await service.saveRenderedVideoPoster('org-1', {
+      id: 'file-video-1',
+      alt: 'Video',
+      generatedPosterUrl: '/uploads/org/generated.jpg',
+      thumbnail: '/uploads/org/custom.png',
+      thumbnailTimestamp: 1250,
+    });
+
+    expect(model.file.updateMany).toHaveBeenCalledWith({
+      where: { id: 'file-video-1', organizationId: 'org-1', deletedAt: null },
+      data: {
+        metadata: {
+          width: 1080,
+          generatedPosterUrl: '/uploads/org/generated.jpg',
+        },
+      },
+    });
+    expect(model.file.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'file-video-1', organizationId: 'org-1' },
+      data: {
+        alt: 'Video',
+        thumbnail: '/uploads/org/custom.png',
+        thumbnailTimestamp: 1250,
+      },
+    }));
+  });
+});
+
 describe('FileService — cloud fileSize persistence', () => {
   it('persists the supplied fileSize for a cloud URL path', async () => {
     const { fileRepo, model } = makeRepo();

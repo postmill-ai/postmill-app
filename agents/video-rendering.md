@@ -102,6 +102,21 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      GIF/WebP dimensions are unchanged. FFmpeg failures retain the first known
      encoder/filter diagnostic and log only safe render parameters, not design
      content or asset URLs.
+   - Posters have two independent choices. `posterTimeMs` (integer, 0 through
+     the composition duration) rides the Redis payload + job spec into encoder
+     options: MP4/WebM/GIF seek there, animated WebP uses the nearest captured
+     frame, and an absent value retains the legacy midpoint. The chosen value
+     is saved as the rendered File's `thumbnailTimestamp` and included in
+     create-post drafts. `posterUrl` must exactly match an org-owned image
+     File path, validated before the pending job is created and again before
+     completion; it is never fetched as an arbitrary URL. The lifecycle saves
+     the effective poster, generated-poster metadata and timestamp BEFORE the
+     job becomes `completed` or notifies, so polling cannot cache a partial
+     state. `File.thumbnail` is the effective poster (custom when supplied,
+     generated otherwise), while `File.metadata.generatedPosterUrl` preserves
+     the rendered JPEG for rendered/custom switching. Polling returns both URLs plus `fileId`,
+     `thumbnailTimestamp`, and `alt`; post-render changes go through the
+     existing Files information endpoint.
    - Clip `volume` is keyframable: keyframes REPLACE the base volume where they span
      (both sides evaluate the shared `volumeAtClipTime`), and the mixer bakes the
      eased curve into `volume='<expr>':eval=frame` sampled at 100 ms steps

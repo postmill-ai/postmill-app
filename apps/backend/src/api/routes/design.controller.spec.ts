@@ -601,6 +601,35 @@ describe('DesignController', () => {
       const out = await controller.getVideoRenderStatus(org, 'job-1');
       expect(out.progress).toBe(99);
     });
+
+    it('returns effective and generated posters with the rendered File metadata', async () => {
+      (controller as any)._videoRenderService = {
+        getJob: vi.fn().mockResolvedValue({
+          id: 'job-1',
+          status: 'completed',
+          artifactUrl: '/uploads/org/rendered.mp4',
+        }),
+      };
+      (controller as any)._fileService = {
+        getFileByPath: vi.fn().mockResolvedValue({
+          id: 'file-video-1',
+          alt: 'Video alt',
+          thumbnail: '/uploads/org/custom.png',
+          thumbnailTimestamp: 1250,
+          metadata: { generatedPosterUrl: '/uploads/org/generated.jpg' },
+        }),
+      };
+
+      const out = await controller.getVideoRenderStatus(org, 'job-1');
+      expect(out).toMatchObject({
+        progress: 100,
+        fileId: 'file-video-1',
+        alt: 'Video alt',
+        thumbnailUrl: '/uploads/org/custom.png',
+        generatedPosterUrl: '/uploads/org/generated.jpg',
+        thumbnailTimestamp: 1250,
+      });
+    });
   });
 
   describe('GET /media/design-templates', () => {

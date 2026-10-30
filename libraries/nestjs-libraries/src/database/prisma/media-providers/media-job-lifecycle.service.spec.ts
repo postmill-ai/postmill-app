@@ -124,6 +124,8 @@ function makeService() {
 
   const mediaRepository = {
     saveGeneratedMedia: vi.fn().mockResolvedValue({ id: 'media-1', path: '/uploads/org-1/artifact.mp4' }),
+    saveMediaInformation: vi.fn().mockResolvedValue(undefined),
+    saveRenderedVideoPoster: vi.fn().mockResolvedValue(undefined),
     // 1.3 (orchestrator): _writeToTenantStorage validates a client folderId's ownership;
     // null = not owned → fall through to standard folder resolution (default behaviour).
     resolveOwnedFolderId: vi.fn().mockResolvedValue(null),
@@ -1175,6 +1177,58 @@ describe('MediaJobLifecycleService (§11.2 async job lifecycle)', () => {
       expect(ok).toBe(false);
       expect(jobs.get('job-1')!.status).toBe('failed');
       expect(jobs.get('job-1')!.error).toContain('disk full');
+    });
+
+    it('keeps the job non-terminal until poster metadata is fully saved', async () => {
+      const { service, job, jobs, mediaRepository, notificationService } = bufferCtx();
+      let resolvePoster!: () => void;
+      mediaRepository.saveRenderedVideoPoster.mockReturnValue(
+        new Promise<void>((resolve) => { resolvePoster = resolve; })
+      );
+
+      const completing = service.completeJobWithBuffer(
+        job,
+        Buffer.from('vid'),
+        'video/mp4',
+        undefined,
+        tinyJpeg,
+        undefined,
+        { poster: { customPath: '/uploads/org-1/custom.jpg', timestamp: 1250 } },
+      );
+      await vi.waitFor(() => expect(mediaRepository.saveRenderedVideoPoster).toHaveBeenCalled());
+      expect(jobs.get('job-1')!.status).toBe('landing');
+      expect(notificationService.notify).not.toHaveBeenCalled();
+
+      resolvePoster();
+      await expect(completing).resolves.toBe(true);
+      expect(jobs.get('job-1')!.status).toBe('completed');
+      expect(mediaRepository.saveRenderedVideoPoster).toHaveBeenCalledWith('org-1', {
+        id: 'media-1',
+        generatedPosterUrl: '/uploads/org-1/artifact.mp4',
+        thumbnail: '/uploads/org-1/custom.jpg',
+        thumbnailTimestamp: 1250,
+        alt: '',
+      });
+      expect(notificationService.notify).toHaveBeenCalled();
+    });
+
+    it('does not expose a successful job when poster finalization fails', async () => {
+      const { service, job, jobs, mediaRepository } = bufferCtx();
+      mediaRepository.saveRenderedVideoPoster.mockRejectedValue(new Error('poster write failed'));
+
+      const ok = await service.completeJobWithBuffer(
+        job,
+        Buffer.from('vid'),
+        'video/mp4',
+        undefined,
+        tinyJpeg,
+        undefined,
+        { poster: { customPath: '/uploads/org-1/custom.jpg', timestamp: 1250 } },
+      );
+
+      expect(ok).toBe(false);
+      expect(jobs.get('job-1')!.status).toBe('failed');
+      expect(jobs.get('job-1')!.error).toContain('poster write failed');
     });
 
     it('two concurrent completions produce exactly one file row and one notification', async () => {

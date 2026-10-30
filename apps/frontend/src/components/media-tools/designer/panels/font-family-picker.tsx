@@ -41,7 +41,7 @@ export const FontFamilyPicker: FC<FontFamilyPickerProps> = ({ value, onPick, id,
   const { fonts: customFonts } = useCustomFonts();
   // Same upload round trip as the Brand panel, surfaced here so adding a font
   // doesn't mean leaving the picker for another panel.
-  const { upload: uploadCustomFont, uploading: fontUploading } = useUploadCustomFont();
+  const { uploadMany: uploadCustomFonts, uploading: fontUploading } = useUploadCustomFont();
   const fontFileInputRef = useRef<HTMLInputElement>(null);
 
   const hasNonServerFont = useMemo(
@@ -51,14 +51,13 @@ export const FontFamilyPicker: FC<FontFamilyPickerProps> = ({ value, onPick, id,
 
   const handleFontFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      // The picker stays open: the uploaded family lands in the list via the
-      // SWR refresh the hook fires.
-      await uploadCustomFont(file);
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      // The picker stays open: the uploaded families land via one final refresh.
+      await uploadCustomFonts(files);
       if (fontFileInputRef.current) fontFileInputRef.current.value = '';
     },
-    [uploadCustomFont]
+    [uploadCustomFonts]
   );
 
   const [fontPickerOpen, setFontPickerOpen] = useState(false);
@@ -243,6 +242,7 @@ export const FontFamilyPicker: FC<FontFamilyPickerProps> = ({ value, onPick, id,
             <input
               ref={fontFileInputRef}
               type="file"
+              multiple
               accept=".ttf,.otf,.woff2"
               onChange={handleFontFileChange}
               className="hidden"
