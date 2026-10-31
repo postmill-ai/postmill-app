@@ -290,6 +290,27 @@ describe('smartReflow grouped pairs', () => {
     expect((barOut.y as number) - (labelOut.y as number)).toBe(86);
   });
 
+  it('keeps full-bleed grouped backgrounds and panels pinned per-axis', () => {
+    const background: DesignerElement = {
+      id: 'bg', type: 'image', groupId: 'g', fitMode: 'cover',
+      x: 0, y: 0, width: 1080, height: 1080, rotation: 0, opacity: 1,
+      locked: false, hidden: false,
+    };
+    const panel: DesignerElement = {
+      id: 'panel', type: 'shape', shape: 'rect', groupId: 'g',
+      x: 0, y: 700, width: 1080, height: 380, rotation: 0, opacity: 1,
+      locked: false, hidden: false,
+    };
+    const boxes = computeGroupBoxes([background, panel, label], squareSource);
+
+    expect(smartReflow(background, squareSource, storyTarget, boxes.get('g'))).toMatchObject({
+      x: 0, y: 0, width: 1080, height: 1920,
+    });
+    expect(smartReflow(panel, squareSource, storyTarget, boxes.get('g'))).toMatchObject({
+      x: 0, y: 1244, width: 1080, height: 676,
+    });
+  });
+
   it('re-derives the group anchor even when a member carries its own anchor', () => {
     const boxes = computeGroupBoxes([bar, label]);
     const anchoredBar = { ...bar, anchor: 'top-left' as const };

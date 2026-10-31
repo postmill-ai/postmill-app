@@ -36,6 +36,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
 import { gradientFillProps } from './elements';
 import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
+import { groupRefsForClip, toggleClipRefs } from './video-selection';
 
 interface VideoCanvasOverlayProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -634,42 +635,90 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     return () => clearOverlayMedia(consumer);
   }, []);
 
-  const selectClip = (trackId: string, clipId: string) => {
-    store.getState().setSelectedClip({ outputIndex: currentOutput, trackId, clipId });
+  const selectClip = (
+    trackId: string,
+    clipId: string,
+    evt?: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
+    preserveSelection = false
+  ) => {
+    const state = store.getState();
+    const output = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+    if (!output) return;
+    const selected = state.selectedClips.some(
+      (ref) => ref.trackId === trackId && ref.clipId === clipId
+    );
+    if (preserveSelection && selected) return;
+    const members = groupRefsForClip(output, trackId, clipId);
+    const native = evt?.evt as MouseEvent | undefined;
+    if (native && (native.shiftKey || native.metaKey || native.ctrlKey)) {
+      const adding = !members.every((member) =>
+        state.selectedClips.some(
+          (ref) => ref.trackId === member.trackId && ref.clipId === member.clipId
+        )
+      );
+      state.setSelectedClips(
+        toggleClipRefs(state.selectedClips, members),
+        adding ? { trackId, clipId } : undefined
+      );
+      return;
+    }
+    state.setSelectedClips(members, { trackId, clipId });
   };
 
-  /**
-   * Fold a finished drag/transform back into the clip.
-   *
-   * Konva reports a resize as a SCALE, so it is baked into width/height here and
-   * the node's scale reset — exactly what `bakeTransform` does for elements, and
-   * for the same reason: a persisted scale would compound on the next gesture.
-   */
-  const commitGeometry = (
-    trackId: string,
-    clip: VideoClip,
-    before: ClipBox,
-    node: Konva.Node,
-    trackType: VideoOutput['tracks'][number]['type'],
-    fontSize: number
-  ) => {
-    const after: ClipBox = {
-      x: node.x(),
-      y: node.y(),
-      width: Math.max(1, before.width * node.scaleX()),
-      height: Math.max(1, before.height * node.scaleY()),
-      rotation: node.rotation(),
-    };
-    node.scaleX(1);
-    node.scaleY(1);
-
-    const update = clipGeometryUpdate(clip, before, after, playheadRef.current, {
-      trackType,
-      anchor: getTransformAnchor?.(),
-      fontSize,
+  const gestureCommitPending = useRef(false);
+  const commitGesture = (target: Konva.Node) => {
+    // Konva broadcasts transformend/dragend for every attached node. Commit the
+    // gesture once; a second event would restore the stale pre-gesture sizes.
+    if (gestureCommitPending.current) return;
+    gestureCommitPending.current = true;
+    requestAnimationFrame(() => {
+      gestureCommitPending.current = false;
     });
-    if (!update) return;
-    store.getState().updateClip(currentOutput, trackId, clip.id, update);
+    const transformer = target.getLayer()?.findOne('Transformer') as
+      | Konva.Transformer
+      | undefined;
+    const attached = transformer?.nodes() || [];
+    const nodes = attached.some((node) => node === target) || !attached.length
+      ? attached.length ? attached : [target]
+      : [...attached, target];
+    const state = store.getState();
+    const output = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+    if (!output) return;
+    const anchor = getTransformAnchor?.();
+    let changed = false;
+
+    for (const node of nodes) {
+      const composed = clipsAtPlayhead.find(({ clip }) => clip.id === node.id());
+      if (!composed || output.tracks.find((track) => track.id === composed.trackId)?.locked) {
+        continue;
+      }
+      const { clip, trackId, trackType, props } = composed;
+      const before: ClipBox = {
+        x: props.x,
+        y: props.y,
+        width: props.width,
+        height: props.height,
+        rotation: props.rotation,
+      };
+      const after: ClipBox = {
+        x: node.x(),
+        y: node.y(),
+        width: Math.max(1, before.width * node.scaleX()),
+        height: Math.max(1, before.height * node.scaleY()),
+        rotation: node.rotation(),
+      };
+      node.scaleX(1);
+      node.scaleY(1);
+      const update = clipGeometryUpdate(clip, before, after, playheadRef.current, {
+        trackType,
+        anchor,
+        fontSize: props.fontSize,
+      });
+      if (update && state.updateClipSilent(currentOutput, trackId, clip.id, update)) {
+        changed = true;
+      }
+    }
+    if (changed) state.pushHistory('Edit clip geometry');
   };
 
   if (!isVideo) return null;
@@ -679,14 +728,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   return (
     <>
       {clipsAtPlayhead.map(({ clip, trackId, trackType, props }) => {
-        // Selection/drag wiring, identical for every clip type.
-        const box: ClipBox = {
-          x: props.x,
-          y: props.y,
-          width: props.width,
-          height: props.height,
-          rotation: props.rotation,
-        };
+        const trackLocked = !!vo.tracks.find((track) => track.id === trackId)?.locked;
         // Blend composites the clip's own draw (see FilteredClipImage); text
         // and shape clips carry it on their shape node directly.
         const blendGco = canvasCompositeFor(clip.blendMode) as never;
@@ -694,19 +736,17 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           id: clip.id,
           name: 'video-clip',
           listening: interactive,
-          draggable: interactive,
-          onClick: () => selectClip(trackId, clip.id),
-          onTap: () => selectClip(trackId, clip.id),
-          onDragStart: () => selectClip(trackId, clip.id),
+          draggable: interactive && !trackLocked,
+          onClick: (e: Konva.KonvaEventObject<MouseEvent>) => selectClip(trackId, clip.id, e),
+          onTap: (e: Konva.KonvaEventObject<TouchEvent>) => selectClip(trackId, clip.id, e),
+          onDragStart: () => selectClip(trackId, clip.id, undefined, true),
           onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => {
             e.evt.preventDefault();
-            selectClip(trackId, clip.id);
+            selectClip(trackId, clip.id, undefined, true);
             onClipContextMenu?.(clip.id, e.evt.clientX, e.evt.clientY);
           },
-          onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) =>
-            commitGeometry(trackId, clip, box, e.target, trackType, props.fontSize),
-          onTransformEnd: (e: Konva.KonvaEventObject<Event>) =>
-            commitGeometry(trackId, clip, box, e.target, trackType, props.fontSize),
+          onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => commitGesture(e.target),
+          onTransformEnd: (e: Konva.KonvaEventObject<Event>) => commitGesture(e.target),
           // Text and caption clips both open the inline text editor on
           // double-click; a caption commit re-derives clip.words (canvas.tsx).
           ...((trackType === 'text' || trackType === 'caption') && onEditText

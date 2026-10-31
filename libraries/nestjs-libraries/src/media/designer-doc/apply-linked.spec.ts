@@ -225,6 +225,7 @@ describe('applyLinkedVideoClip styles', () => {
           clips: [{
             id: `clip-${index}`,
             originId: 'shared-shape',
+            groupId: `group-${index}`,
             startMs: index * 500,
             endMs: 4000,
             x: index * 100,
@@ -245,7 +246,7 @@ describe('applyLinkedVideoClip styles', () => {
       0,
       'track-0',
       'clip-0',
-      { fillGradient, align: 'justify', fontStyle: 'italic', x: 999 },
+      { fillGradient, align: 'justify', fontStyle: 'italic', groupId: 'new-group', x: 999 },
       false
     );
     const sibling = (outputs[1] as any).tracks[0].clips[0];
@@ -253,6 +254,7 @@ describe('applyLinkedVideoClip styles', () => {
     expect(sibling.fillGradient).toEqual(fillGradient);
     expect(sibling.align).toBe('justify');
     expect(sibling.fontStyle).toBe('italic');
+    expect(sibling.groupId).toBe('group-1');
     expect(sibling.x).toBe(100);
     expect(sibling.startMs).toBe(500);
   });

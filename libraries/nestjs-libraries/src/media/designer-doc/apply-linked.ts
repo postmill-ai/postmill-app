@@ -180,6 +180,7 @@ export const applyElementPatch = applyPatch;
 export const VIDEO_CLIP_LOCAL_KEYS = new Set([
   'id',
   'originId',
+  'groupId',
   'x',
   'y',
   'width',

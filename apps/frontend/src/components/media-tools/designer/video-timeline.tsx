@@ -28,6 +28,7 @@ import { postTextToSpeech } from './text-to-speech';
 import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, planTrackDrop, resolveClipPlacement } from './clip-geometry';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
+import { expandClipRefs } from './video-selection';
 import {
   moveClipPreservingDuration,
   timelineCollisionToleranceMs,
@@ -2423,7 +2424,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         store.getState().setSelectedClips([]);
         return;
       }
-      store.getState().setSelectedClips(marqueeHitClips(vo.tracks, rect, pixelsPerMs, MARQUEE_GEOM));
+      store.getState().setSelectedClips(
+        expandClipRefs(vo, marqueeHitClips(vo.tracks, rect, pixelsPerMs, MARQUEE_GEOM))
+      );
     };
     // A lost mouseup abandons the marquee without touching the selection —
     // there is no pointer position to finalize a rect from.

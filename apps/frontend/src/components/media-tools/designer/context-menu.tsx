@@ -99,14 +99,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
       ? [
           {
             label: t('copy', 'Copy'),
-            action: () => {
-              store.getState().setSelectedClip({
-                outputIndex: s.currentOutput,
-                trackId: clipTrack.id,
-                clipId: videoClip.id,
-              });
-              store.getState().copySelectedClips();
-            },
+            action: () => store.getState().copySelectedClips(),
           },
           {
             label: t('designer_action_paste_paste', 'Paste'),
@@ -114,7 +107,24 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
           },
           {
             label: t('designer_action_duplicate_duplicate', 'Duplicate'),
-            action: () => store.getState().duplicateClip(s.currentOutput, clipTrack.id, videoClip.id),
+            action: () => {
+              const state = store.getState();
+              if (state.selectedClips.length > 1) {
+                state.copySelectedClips();
+                store.getState().pasteClips(state.playheadMs);
+              } else {
+                state.duplicateClip(s.currentOutput, clipTrack.id, videoClip.id);
+              }
+            },
+          },
+          { label: '-', action: null },
+          {
+            label: t('group', 'Group'),
+            action: () => store.getState().groupSelection(),
+          },
+          {
+            label: t('designer_action_ungroup_ungroup', 'Ungroup'),
+            action: () => store.getState().ungroupSelection(),
           },
         ]
       : targetType === 'element' && el

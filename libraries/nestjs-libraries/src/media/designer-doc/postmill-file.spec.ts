@@ -55,7 +55,7 @@ describe('buildPostmillFile / parsePostmillFile round-trip', () => {
     expect(typeof manifest.exportedAt).toBe('string');
   });
 
-  it('round-trips v10 video clip gradients, alignment, and fontStyle verbatim', () => {
+  it('round-trips v10 video clip gradients, alignment, fontStyle, and groupId verbatim', () => {
     const doc = {
       version: 10,
       mode: 'video',
@@ -73,6 +73,7 @@ describe('buildPostmillFile / parsePostmillFile round-trip', () => {
             type: 'shape',
             clips: [{
               id: 'shape-clip',
+              groupId: 'cta-group',
               startMs: 0,
               endMs: 1000,
               shape: 'rect',
@@ -88,6 +89,7 @@ describe('buildPostmillFile / parsePostmillFile round-trip', () => {
             type: 'text',
             clips: [{
               id: 'text-clip',
+              groupId: 'cta-group',
               startMs: 0,
               endMs: 1000,
               text: 'Italic',

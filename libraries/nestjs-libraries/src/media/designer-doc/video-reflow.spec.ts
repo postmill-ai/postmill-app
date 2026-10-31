@@ -210,3 +210,79 @@ describe('reflowVideoOutputInPlace', () => {
     expect(resized.tracks[0].clips[0].y).toBe(Math.round(1920 * 0.95) - 120);
   });
 });
+
+describe('persistent video group reflow', () => {
+  const groupedOutput = () => makeOutput([
+    {
+      id: 'media',
+      type: 'video',
+      clips: [clip({
+        id: 'plate', groupId: 'cta', fitMode: 'fill',
+        x: 400, y: 500, width: 600, height: 120,
+      })],
+    },
+    {
+      id: 'copy',
+      type: 'text',
+      clips: [clip({
+        id: 'label', groupId: 'cta', text: 'Shop', fontSize: 40,
+        x: 440, y: 525, width: 520, height: 60,
+      })],
+    },
+  ]);
+
+  const expectRelativeGeometry = (output: VideoOutput) => {
+    const plate = output.tracks[0].clips[0];
+    const label = output.tracks[1].clips[0];
+    expect(label.x! - plate.x!).toBe(40);
+    expect(label.y! - plate.y!).toBe(25);
+    expect(plate.groupId).toBe(label.groupId);
+  };
+
+  it('uses one group box on resize, including fill-stretch members', () => {
+    const resized = reflowVideoOutputInPlace(groupedOutput(), 1080, 1920, 'custom-tall');
+    expectRelativeGeometry(resized);
+    expect(resized.tracks[0].clips[0].groupId).toBe('cta');
+  });
+
+  it('keeps cover-fit members in the shared group transform', () => {
+    const output = groupedOutput();
+    output.tracks[0].clips[0].fitMode = 'cover';
+    const resized = reflowVideoOutputInPlace(output, 1080, 1920, 'custom-tall');
+    expectRelativeGeometry(resized);
+    expect(resized.tracks[0].clips[0].fitMode).toBe('cover');
+  });
+
+  it('keeps a full-bleed cover background out of the group transform', () => {
+    const output = groupedOutput();
+    Object.assign(output.tracks[0].clips[0], {
+      x: 0, y: 0, width: 1920, height: 1080, fitMode: 'cover',
+    });
+    const resized = reflowVideoOutputInPlace(output, 1080, 1920, 'custom-tall');
+    expect(resized.tracks[0].clips[0]).toMatchObject({
+      x: 0, y: 0, width: 1080, height: 1920, fitMode: 'cover',
+    });
+  });
+
+  it('preserves an unset fitMode as fill instead of converting grouped clips to cover', () => {
+    const output = groupedOutput();
+    output.tracks[0].clips[0].fitMode = undefined;
+    const resized = reflowVideoOutputInPlace(output, 1080, 1920, 'custom-tall');
+    expect(resized.tracks[0].clips[0].fitMode).toBeUndefined();
+    expectRelativeGeometry(resized);
+  });
+
+  it('keeps the group box on seed but remaps groupId locally to the new format', () => {
+    let n = 0;
+    const { output: seeded, sourceTracks } = seedVideoOutput(
+      groupedOutput(),
+      { width: 1080, height: 1920, formatId: 'custom-tall', name: 'Tall' },
+      () => `id-${++n}`
+    );
+    expectRelativeGeometry(seeded);
+    expect(seeded.tracks[0].clips[0].groupId).not.toBe('cta');
+    expect(sourceTracks[0].clips[0].groupId).toBe('cta');
+    expect(seeded.tracks[0].clips[0].originId).toBe(sourceTracks[0].clips[0].originId);
+    expect(seeded.tracks[1].clips[0].originId).toBe(sourceTracks[1].clips[0].originId);
+  });
+});

@@ -281,7 +281,7 @@ export class DesignerDocService {
           // stack (its own members still share that one frame, so the pair
           // stays glued). A group outside any stack falls back to its own
           // combined bbox.
-          const groupBoxes = computeGroupBoxes(sourceChildren);
+          const groupBoxes = computeGroupBoxes(sourceChildren, source);
           const stackBoxes = computeTextStackBoxes(sourceChildren, source);
           // Elements inside a layout panel (split-panel / editorial-sidebar)
           // reflow horizontally against the PANEL — which scales per-axis —

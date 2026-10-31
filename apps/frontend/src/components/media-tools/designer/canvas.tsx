@@ -65,6 +65,8 @@ import {
   isMarqueeTool,
 } from './use-paint-tools';
 import { maskOutline, fullMask, invertMask } from './selection-mask';
+import { clipGeometryUpdate, type ClipBox } from './clip-geometry';
+import { clipsInMarquee, expandClipRefs } from './video-selection';
 
 /**
  * How much of the viewport a fitted artboard fills, leaving the rest as margin.
@@ -243,24 +245,22 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const effectiveTool = store((s) => s.activeTool);
   const toolCursor = getTool(effectiveTool)?.cursor || 'default';
   const selectedClip = store((s) => s.selectedClip);
-  // Read here rather than at the transformer: the transformer-attach effect
-  // re-resolves nodes after every render, so it needs a render when the
-  // selected clip's node mounts/unmounts as the playhead crosses the clip's
-  // bounds. Subscribing to the raw playhead would reconcile the whole stage at
-  // 60fps during playback — subscribe to the boundary FLIP only.
-  const selectedClipAtPlayhead = store((s) => {
-    if (s.doc.mode !== 'video' || !s.selectedClip) return false;
-    const vo = s.doc.outputs[s.selectedClip.outputIndex] as VideoOutput | undefined;
-    const clip = vo?.tracks
-      .find((tr) => tr.id === s.selectedClip?.trackId)
-      ?.clips.find((c) => c.id === s.selectedClip?.clipId);
-    if (!clip) return false;
-    return (
-      s.playheadMs >= clip.startMs &&
-      s.playheadMs <= clip.endMs + (clip.freezeAtMs || 0)
-    );
+  const selectedClips = store((s) => s.selectedClips);
+  // Re-resolve attached nodes only when a selection/playhead boundary changes,
+  // not on every playback frame.
+  const selectedClipsAtPlayhead = store((s) => {
+    if (s.doc.mode !== 'video') return '';
+    const vo = s.doc.outputs[s.currentOutput] as VideoOutput | undefined;
+    return s.selectedClips.map((ref) => {
+      const clip = vo?.tracks
+        .find((track) => track.id === ref.trackId)
+        ?.clips.find((item) => item.id === ref.clipId);
+      return clip && s.playheadMs >= clip.startMs && s.playheadMs <= clip.endMs + (clip.freezeAtMs || 0)
+        ? `${ref.trackId}:${ref.clipId}`
+        : '';
+    }).join('|');
   });
-  void selectedClipAtPlayhead;
+  void selectedClipsAtPlayhead;
   // The text editor tracks an animated clip's composed position per tick —
   // but only while a clip is actually being edited.
   const editingPlayheadMs = store((s) =>
@@ -586,10 +586,13 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     const transformer = transformerRef.current;
     const stage = stageRef.current;
     if (!transformer || !stage) return;
+    const videoOutput = isVideo
+      ? store.getState().doc.outputs[store.getState().currentOutput] as VideoOutput | undefined
+      : undefined;
     const ids = isVideo
-      ? selectedClip?.clipId
-        ? [selectedClip.clipId]
-        : []
+      ? selectedClips
+          .filter((ref) => !videoOutput?.tracks.find((track) => track.id === ref.trackId)?.locked)
+          .map((ref) => ref.clipId)
       : selectedIds;
     const nodes = ids
       .map((id) => stage.findOne('#' + id))
@@ -807,11 +810,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           marqueeStart.current = { x: pos.x, y: pos.y };
           setMarquee({ x: pos.x, y: pos.y, w: 0, h: 0 });
         }
-        setSelectedIds([]);
+        const additive = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
+        if (!additive) {
+          setSelectedIds([]);
+          if (isVideo) store.getState().setSelectedClip(null);
+        }
         setEditingTextId(null);
-        // Video keeps its selection in `selectedClip`, so clearing ids alone
-        // would leave the transformer attached to a clip nothing is selecting.
-        if (isVideo) store.getState().setSelectedClip(null);
       }
     },
     [
@@ -828,6 +832,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       toaster,
       t,
       zoom,
+      isVideo,
     ]
   );
 
@@ -995,17 +1000,33 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     }
 
     if (marqueeStart.current && marquee && (marquee.w > 3 || marquee.h > 3)) {
-      const hits = ((pageOutput as DesignerOutput | undefined)?.children || [])
-        .filter((el) => !el.hidden && !el.locked)
-        .filter(
-          (el) =>
-            el.x < marquee.x + marquee.w &&
-            el.x + el.width > marquee.x &&
-            el.y < marquee.y + marquee.h &&
-            el.y + el.height > marquee.y
-        )
-        .map((el) => el.id);
-      if (hits.length) setSelectedIds(hits);
+      if (isVideo) {
+        const state = store.getState();
+        const vo = state.doc.outputs[state.currentOutput] as VideoOutput | undefined;
+        if (vo) {
+          const hits = clipsInMarquee(
+            composeClipsAtPlayhead(vo, state.playheadMs),
+            marquee,
+            new Set(vo.tracks.filter((track) => track.locked).map((track) => track.id))
+          );
+          const additive = e?.evt.shiftKey || e?.evt.metaKey || e?.evt.ctrlKey;
+          state.setSelectedClips(
+            expandClipRefs(vo, [...(additive ? state.selectedClips : []), ...hits])
+          );
+        }
+      } else {
+        const hits = ((pageOutput as DesignerOutput | undefined)?.children || [])
+          .filter((el) => !el.hidden && !el.locked)
+          .filter(
+            (el) =>
+              el.x < marquee.x + marquee.w &&
+              el.x + el.width > marquee.x &&
+              el.y < marquee.y + marquee.h &&
+              el.y + el.height > marquee.y
+          )
+          .map((el) => el.id);
+        if (hits.length) setSelectedIds(hits);
+      }
     }
     marqueeStart.current = null;
     setMarquee(null);
@@ -1119,6 +1140,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   // drag-end we persist all of them.
   const handleDragMove = useCallback(
     (e: Konva.KonvaEventObject<DragEvent>) => {
+      if (isVideo) return;
       if (e.target === e.target.getStage()) return;
       computeSnap(e.target);
       if (rafIdRef.current) return;
@@ -1140,11 +1162,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         rafIdRef.current = null;
       });
     },
-    [computeSnap, updateElementEphemeral]
+    [computeSnap, updateElementEphemeral, isVideo]
   );
 
   const handleDragEnd = useCallback(
     (e: Konva.KonvaEventObject<DragEvent>) => {
+      if (isVideo) return;
       noteGestureEnd();
       setGuides([]);
       setSpacingGuide(null);
@@ -1173,7 +1196,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         bumpGeometryNow();
       }
     },
-    [pushHistory, updateElement, noteGestureEnd, bumpGeometryNow]
+    [pushHistory, updateElement, noteGestureEnd, bumpGeometryNow, isVideo]
   );
 
   /**
@@ -1272,9 +1295,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
   const handleTransformEnd = useCallback(
     (e: Konva.KonvaEventObject<Event>) => {
+      if (isVideo) return;
       noteGestureEnd();
       setHud(null);
-      if (isVideo) return;
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
@@ -1387,11 +1410,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         // no-op there, so the Delete key goes through the clip path, exactly
         // like the timeline's own Delete handler.
         if (isVideo) {
-          const sel = st.selectedClip;
-          if (sel && sel.outputIndex === st.currentOutput) {
-            st.removeClip(sel.outputIndex, sel.trackId, sel.clipId);
-            st.setSelectedClip(null);
-          }
+          e.preventDefault();
+          st.removeClips(st.currentOutput, st.selectedClips);
         } else {
           st.removeElements(selectedIds);
         }
@@ -1436,9 +1456,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         e.preventDefault();
         // The shortcut the Edit ▸ Duplicate menu item advertises.
         if (isVideo) {
-          const sel = st.selectedClip;
-          if (sel?.outputIndex === st.currentOutput) {
-            st.duplicateClip(sel.outputIndex, sel.trackId, sel.clipId);
+          if (st.selectedClips.length > 1) {
+            st.copySelectedClips();
+            store.getState().pasteClips(st.playheadMs);
+          } else {
+            const sel = st.selectedClip;
+            if (sel?.outputIndex === st.currentOutput) {
+              st.duplicateClip(sel.outputIndex, sel.trackId, sel.clipId);
+            }
           }
         } else {
           selectedIds.forEach((id) => st.duplicateElement(id));
@@ -1458,7 +1483,6 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         else st.undo();
       } else if (e.key.startsWith('Arrow')) {
         e.preventDefault();
-        if (selectedIds.length === 0) return;
         const delta = e.shiftKey ? 10 : 1;
         let dx = 0;
         let dy = 0;
@@ -1466,6 +1490,41 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         if (e.key === 'ArrowDown') dy = delta;
         if (e.key === 'ArrowLeft') dx = -delta;
         if (e.key === 'ArrowRight') dx = delta;
+        if (isVideo) {
+          const vo = st.doc.outputs[st.currentOutput] as VideoOutput | undefined;
+          if (!vo) return;
+          const composed = composeClipsAtPlayhead(vo, st.playheadMs);
+          let moved = false;
+          for (const ref of st.selectedClips) {
+            const track = vo.tracks.find((item) => item.id === ref.trackId);
+            const clip = track?.clips.find((item) => item.id === ref.clipId);
+            if (!track || !clip || track.locked) continue;
+            const rendered = composed.find(
+              (item) => item.trackId === ref.trackId && item.clip.id === ref.clipId
+            );
+            if (!rendered) continue;
+            const before: ClipBox = {
+              x: rendered.props.x,
+              y: rendered.props.y,
+              width: rendered.props.width,
+              height: rendered.props.height,
+              rotation: rendered.props.rotation,
+            };
+            const update = clipGeometryUpdate(
+              clip,
+              before,
+              { ...before, x: before.x + dx, y: before.y + dy },
+              st.playheadMs,
+              { trackType: track.type, fontSize: rendered?.props.fontSize }
+            );
+            if (update && st.updateClipSilent(st.currentOutput, ref.trackId, ref.clipId, update)) {
+              moved = true;
+            }
+          }
+          if (moved) st.pushHistory('Nudge clips');
+          return;
+        }
+        if (selectedIds.length === 0) return;
         let moved = false;
         selectedIds.forEach((id) => {
           const el = ((pageOutput as any)?.children || []).find((c: any) => c.id === id);
@@ -1742,7 +1801,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           }
         }}
       >
-        <Layer onDragStart={noteGestureStart} onDragMove={handleDragMove} onDragEnd={handleDragEnd}>
+        <Layer
+          onDragStart={() => { if (!isVideo) noteGestureStart(); }}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+        >
           <Rect
             x={0}
             y={0}
@@ -2139,7 +2202,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               brush stroke or a marquee drag. */}
           {/* A video document selects a CLIP rather than element ids, so the
               handles have to key off whichever selection this document uses. */}
-          {(isVideo ? !!selectedClip : selectedIds.length > 0) &&
+          {(isVideo ? selectedClips.length > 0 : selectedIds.length > 0) &&
             effectiveTool === 'move' && (
             <Transformer
               ref={transformerRef}
@@ -2152,7 +2215,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               anchorSize={10}
               anchorCornerRadius={5}
               rotateAnchorOffset={24}
-              onTransformStart={noteGestureStart}
+              onTransformStart={() => { if (!isVideo) noteGestureStart(); }}
               onTransform={handleTransform}
               onTransformEnd={handleTransformEnd}
             />

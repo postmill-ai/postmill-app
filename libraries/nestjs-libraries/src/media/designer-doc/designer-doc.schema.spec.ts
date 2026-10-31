@@ -214,6 +214,19 @@ describe('DesignerDoc schema', () => {
     expect(DesignerDocLenientSchema.safeParse(migrateDoc(invalid)).success).toBe(false);
   });
 
+  it('accepts optional v10 groupId in both parsers without changing v9 parsing', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.version = 10;
+    doc.outputs[0].tracks[0].clips[0].groupId = 'canvas-group';
+    for (const schema of [DesignerDocLenientSchema, DesignerDocStrictSchema]) {
+      expect(schema.parse(doc).outputs[0].tracks[0].clips[0].groupId).toBe('canvas-group');
+    }
+    const v9 = { ...JSON.parse(JSON.stringify(videoDocFixture)), version: 9 };
+    expect(DesignerDocStrictSchema.safeParse(v9).success).toBe(true);
+    expect(DesignerDocLenientSchema.safeParse(v9).success).toBe(true);
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(v9)).success).toBe(true);
+  });
+
   it('keeps v9 clips valid without the optional v10 fontStyle', () => {
     const doc = { ...JSON.parse(JSON.stringify(videoDocFixture)), version: 9 };
     expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(true);

@@ -685,6 +685,8 @@ export interface ClipTransition {
 
 export interface VideoClip {
   id: string;
+  /** Optional-additive doc v10: format-local selection and reflow move-unit. */
+  groupId?: string;
   /**
    * Cross-output link key for video variants (see `designer-doc/video-reflow`
    * seeding): sibling clips on other video outputs share it. Geometry and
@@ -1664,6 +1666,8 @@ const { strict: StrictSpeedCurvePointSchema, lenient: LenientSpeedCurvePointSche
 // ---------------------------------------------------------------------------
 const clipCommon = {
   id: z.string().max(200),
+  // Format-local grouping (doc v10) — unlike originId, never propagates.
+  groupId: z.string().max(200).optional(),
   /**
    * Cross-output link key (video variants): clips cloned by addOutput share
    * the source clip's originId, so a content/style edit on one variant can

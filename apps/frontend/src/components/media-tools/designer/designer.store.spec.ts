@@ -1857,3 +1857,73 @@ describe('updateClipSilent timing rules', () => {
     expect(store.getState().updateClipSilent(0, trackId, 'nope', { opacity: 0.5 })).toBe(false);
   });
 });
+
+describe('persistent video clip groups', () => {
+  const groupedStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 2000, x: 10, y: 20 } as never);
+    store.getState().addTrack(0, 'text');
+    const textTrack = vo(store).tracks.find((track) => track.type === 'text')!;
+    store.getState().addClip(0, textTrack.id, { id: 'b', startMs: 0, endMs: 2000, text: 'B' } as never);
+    store.getState().setSelectedClips([
+      { trackId, clipId: 'a' },
+      { trackId: textTrack.id, clipId: 'b' },
+    ]);
+    return { store, trackId, textTrackId: textTrack.id };
+  };
+  const vo = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+  it('groups, selects, and ungroups all members with one history step per command', () => {
+    const { store, trackId, textTrackId } = groupedStore();
+    const depth = store.getState().history.length;
+    store.getState().groupSelection();
+    const clips = vo(store).tracks.flatMap((track) => track.clips);
+    const groupId = clips[0].groupId;
+    expect(groupId).toBeTruthy();
+    expect(clips.every((clip) => clip.groupId === groupId)).toBe(true);
+    expect(store.getState().history.length).toBe(depth + 1);
+
+    store.getState().setSelectedClips([]);
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'a' });
+    expect(store.getState().selectedClips).toEqual([
+      { trackId, clipId: 'a' },
+      { trackId: textTrackId, clipId: 'b' },
+    ]);
+    store.getState().toggleClipSelection(textTrackId, 'b');
+    expect(store.getState().selectedClips).toEqual([]);
+
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'a' });
+    store.getState().ungroupSelection();
+    expect(vo(store).tracks.flatMap((track) => track.clips).every((clip) => !clip.groupId)).toBe(true);
+    expect(store.getState().history.length).toBe(depth + 2);
+    store.getState().undo();
+    expect(vo(store).tracks.flatMap((track) => track.clips).every((clip) => clip.groupId === groupId)).toBe(true);
+  });
+
+  it('remaps group ids on duplicate and consistently across a pasted batch', () => {
+    const { store, trackId, textTrackId } = groupedStore();
+    store.getState().groupSelection();
+    const originalGroupId = vo(store).tracks[0].clips[0].groupId;
+    const duplicateId = store.getState().duplicateClip(0, trackId, 'a')!;
+    const duplicate = vo(store).tracks[0].clips.find((clip) => clip.id === duplicateId)!;
+    expect(duplicate.groupId).toBeTruthy();
+    expect(duplicate.groupId).not.toBe(originalGroupId);
+
+    store.getState().setSelectedClips([
+      { trackId, clipId: 'a' },
+      { trackId: textTrackId, clipId: 'b' },
+    ]);
+    store.getState().copySelectedClips();
+    store.getState().pasteClips(4000);
+    const pasted = store.getState().selectedClips.map((ref) =>
+      vo(store).tracks.find((track) => track.id === ref.trackId)!.clips.find((clip) => clip.id === ref.clipId)!
+    );
+    expect(pasted).toHaveLength(2);
+    expect(pasted[0].groupId).toBe(pasted[1].groupId);
+    expect(pasted[0].groupId).not.toBe(originalGroupId);
+    expect(pasted[0].groupId).not.toBe(duplicate.groupId);
+  });
+});

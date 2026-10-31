@@ -414,7 +414,10 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
   italic catalog faces must be included in `fontLinksForOutput` and `fontPreloadsForOutput`. Shape
   gradients use injected `buildStyleGradient`; doc v9 `fillGradient`/`align` also project through
   `video-poster.ts`. Rect clips accept scalar or `[tl,tr,br,bl]` radii through injected `cornerRadii`
-  and Canvas `roundRect` — never coerce a tuple to a scalar.
+  and Canvas `roundRect` — never coerce a tuple to a scalar. Doc v10 `groupId` is editor/reflow
+  metadata, not a nested render container: it is format-local, remapped on duplicate/paste/seed, and
+  grouped clips reflow through one shared bounding box. `originId` linked-variant semantics are
+  unchanged, and renderers require no group-specific draw path.
 - Visual clip crop/fit geometry is shared through `designer-doc/media-geometry.ts` and injected with
   `mediaGeometrySource()`. Preview (including the filtered canvas branch) and frame export must use
   the same source/destination rectangles. Absent `fitMode` means aspect-preserving `cover`; only
