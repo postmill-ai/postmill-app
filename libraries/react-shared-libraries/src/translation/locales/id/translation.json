@@ -494,6 +494,7 @@
   "90_days": "90 hari",
   "start_7_days_free_trial": "Mulai uji coba gratis 7 hari",
   "change_language": "Ubah bahasa",
+  "preferred_language_save_failed": "Preferensi bahasa Anda tidak dapat disimpan. Silakan coba lagi.",
   "that_a_wrap": "Sekian!\n\nJika Anda menyukai utas ini:\n\n1. Ikuti saya @{{username}} untuk konten serupa\n2. RT tweet di bawah untuk membagikan utas ini kepada audiens Anda\n",
   "post_as_images_carousel": "Posting sebagai carousel gambar",
   "save_set": "Simpan set",

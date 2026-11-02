@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EmailLogRepository } from '@postmill-ai/nestjs-libraries/database/prisma/emails/email-log.repository';
+import type { EmailLogCreateData } from '@postmill-ai/nestjs-libraries/database/prisma/emails/email-log.repository';
 import { type EmailStatus, type EmailWebhookEvent } from '@postmill-ai/nestjs-libraries/emails/email-adapter.interface';
 
 const STATUS_PRECEDENCE: Record<EmailStatus, number> = {
@@ -21,15 +22,20 @@ export class EmailLogService {
 
   constructor(private _repository: EmailLogRepository) {}
 
-  async createLog(data: {
-    provider: string;
-    toAddress: string;
-    fromAddress: string;
-    subject: string;
-    replyTo?: string;
-    organizationId?: string;
-  }) {
+  async createLog(data: EmailLogCreateData) {
     return this._repository.create(data);
+  }
+
+  claimCampaignLog(data: EmailLogCreateData & { campaignId: string }) {
+    return this._repository.claimCampaignLog(data);
+  }
+
+  getTerminalNegativeAddresses() {
+    return this._repository.getTerminalNegativeAddresses();
+  }
+
+  getCampaignStatus(campaignId: string) {
+    return this._repository.getCampaignStatus(campaignId);
   }
 
   async markSent(id: string, providerMessageId: string, organizationId: string | null) {

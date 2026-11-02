@@ -237,8 +237,8 @@ Condensed "don't break this" set. Full detail with enforcement points: [`agents/
 
 ## Identity, RBAC & sessions
 
-- **Identity/profile split:** `User` keeps identity/auth columns; profile fields (name, bio,
-  pictureId, timezone, notification prefs) live on `UserProfile` (1:1).
+- **Identity/profile split:** `User` keeps identity/auth columns; user-level profile fields (name, bio,
+  pictureId, timezone, preferredLanguage, notification prefs) live on `UserProfile` (1:1), shared across organizations.
 - **RBAC:** `AppRole` (org-scoped; NULL org = system template; `key` =
   owner/admin/editor/member/viewer; `isSystem` = seeded). `Permission` catalog: **18 resources × 5
   actions = 90** seeded. Gating: `@RequirePermission(resource, action)` + `OrgRbacGuard`.

@@ -19,6 +19,8 @@ import {
   useAuthProviders,
 } from '@postmill-ai/frontend/components/auth/login';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { normalizeSupportedLanguage } from '@postmill-ai/helpers/translation/languages';
+import i18next from 'i18next';
 import useCookie from 'react-use-cookie';
 import {
   beginSsoCallback,
@@ -201,6 +203,7 @@ export function RegisterAfter({
       body: JSON.stringify({
         ...data,
         datafast_visitor_id,
+        preferredLanguage: normalizeSupportedLanguage(i18next.resolvedLanguage) || 'en',
       }),
     })
       .then(async (response) => {

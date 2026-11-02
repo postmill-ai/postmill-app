@@ -317,6 +317,7 @@ export class OrganizationRepository {
                   create: {
                     name: body.name || null,
                     lastName: body.lastName || null,
+                    preferredLanguage: body.preferredLanguage || null,
                   },
                 },
               },

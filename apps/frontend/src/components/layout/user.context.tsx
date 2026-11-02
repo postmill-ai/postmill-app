@@ -14,6 +14,7 @@ export interface UserSelfProfile {
   bio: string | null;
   avatarUrl: string | null;
   timezone: string | null;
+  preferredLanguage: string | null;
   pictureId: string | null;
   picture: { id: string; path: string } | null;
 }

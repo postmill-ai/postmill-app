@@ -494,6 +494,7 @@
   "90_days": "90 dagen",
   "start_7_days_free_trial": "Start 7 dagen gratis proefperiode",
   "change_language": "Taal wijzigen",
+  "preferred_language_save_failed": "Je taalvoorkeur kon niet worden opgeslagen. Probeer het opnieuw.",
   "that_a_wrap": "Dat was het!\n\nVond je deze thread leuk?\n\n1. Volg mij @{{username}} voor meer van dit soort\n2. Retweet de tweet hieronder om deze thread met je publiek te delen\n",
   "post_as_images_carousel": "Posten als afbeeldingencarrousel",
   "save_set": "Set opslaan",

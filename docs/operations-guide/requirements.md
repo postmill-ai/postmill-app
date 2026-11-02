@@ -80,16 +80,26 @@ The `apps/commands` package provides NestJS CLI commands for operator tasks:
 pnpm run commands:build:development
 
 # Check configuration for issues
-npx nestjs-command config:check
+pnpm exec nestjs-command config:check
 
 # Refresh all OAuth tokens
-npx nestjs-command refresh
+pnpm exec nestjs-command refresh
 
 # Run the AI agent
-npx nestjs-command run:agent <org>
+pnpm exec nestjs-command run:agent <org>
+
+# Preview the one-time English owner announcement (no provider calls)
+pnpm exec nestjs-command announcement:open-beta-end preview
+
+# Send one explicit preview recipient, then inspect delivery status
+pnpm exec nestjs-command announcement:open-beta-end test test-meta@test.com
+pnpm exec nestjs-command announcement:open-beta-end status
+
+# Full send requires the exact operator confirmation token
+pnpm exec nestjs-command announcement:open-beta-end send <confirmation>
 ```
 
-Run these inside the application container or with the same environment variables as the backend.
+Run these inside the application container or with the same environment variables as the backend. The announcement command requires the active Resend provider, selects each eligible active owner mailbox once, and uses campaign log claims plus Resend idempotency keys to prevent duplicate sends on rerun. Preview mode performs reads only.
 
 ## Native dependency notes
 

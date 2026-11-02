@@ -1,22 +1,7 @@
+import { SUPPORTED_LANGUAGES } from '@postmill-ai/helpers/translation/languages';
+
 export const fallbackLng = 'en';
-export const languages = [
-  fallbackLng,
-  'ru',
-  'zh',
-  'fr',
-  'es',
-  'pt',
-  'de',
-  'it',
-  'ja',
-  'ko',
-  'ar',
-  'tr',
-  'vi',
-  'nl',
-  'id',
-  'pl',
-];
+export const languages = [...SUPPORTED_LANGUAGES];
 
 export const defaultNS = 'translation';
 export const cookieName = 'i18next';

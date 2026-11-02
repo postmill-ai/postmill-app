@@ -36,6 +36,7 @@ import { CampaignsService } from '@postmill-ai/nestjs-libraries/database/prisma/
 import { DeletionService } from '@postmill-ai/nestjs-libraries/database/prisma/users/deletion.service';
 import { DataExportService } from '@postmill-ai/nestjs-libraries/database/prisma/users/data-export.service';
 import { UserDetailDto } from '@postmill-ai/nestjs-libraries/dtos/users/user.details.dto';
+import { UserPreferredLanguageDto } from '@postmill-ai/nestjs-libraries/dtos/users/user-preferred-language.dto';
 
 import { ChangePasswordDto } from '@postmill-ai/nestjs-libraries/dtos/users/change-password.dto';
 import { HttpForbiddenException } from '@postmill-ai/nestjs-libraries/services/exception.filter';
@@ -136,6 +137,7 @@ export class UsersController {
         bio: profile.bio,
         avatarUrl: profile.avatarUrl,
         timezone: profile.timezone,
+        preferredLanguage: profile.preferredLanguage,
         pictureId: profile.pictureId,
         picture: profile.picture || null,
       } : null,
@@ -209,6 +211,15 @@ export class UsersController {
     @Body() body: UserDetailDto
   ) {
     return this._userService.changePersonal(user.id, body);
+  }
+
+  @Post('/preferred-language')
+  async changePreferredLanguage(
+    @GetUserFromRequest() user: User,
+    @Body() body: UserPreferredLanguageDto
+  ) {
+    await this._userService.changePreferredLanguage(user.id, body.preferredLanguage);
+    return { success: true, preferredLanguage: body.preferredLanguage };
   }
 
   @Post('/change-password')

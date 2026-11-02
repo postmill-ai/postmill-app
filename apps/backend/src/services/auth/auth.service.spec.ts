@@ -443,12 +443,16 @@ describe('AuthService (backend)', () => {
 
       const result = await service.routeAuth(
         Provider.LOCAL,
-        makeRegisterBody(),
+        makeRegisterBody({ preferredLanguage: 'de' }),
         '1.2.3.4',
         'UA'
       );
 
-      expect(organizationService.createOrgAndUser).toHaveBeenCalled();
+      expect(organizationService.createOrgAndUser).toHaveBeenCalledWith(
+        expect.objectContaining({ preferredLanguage: 'de' }),
+        '1.2.3.4',
+        'UA'
+      );
       expect(notificationService.sendEmail).toHaveBeenCalledWith(
         'new@example.com',
         'Activate your account',
@@ -682,7 +686,7 @@ describe('AuthService (backend)', () => {
 
       const result = await service.routeAuth(
         Provider.GITHUB,
-        makeRegisterBody({ providerToken: 'token-1' }),
+        makeRegisterBody({ providerToken: 'token-1', preferredLanguage: 'fr' }),
         'ip',
         'ua'
       );
@@ -693,6 +697,7 @@ describe('AuthService (backend)', () => {
           provider: Provider.GITHUB,
           providerId: 'gh-1',
           password: '',
+          preferredLanguage: 'fr',
         }),
         'ip',
         'ua'

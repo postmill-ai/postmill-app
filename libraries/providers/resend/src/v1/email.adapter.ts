@@ -45,7 +45,12 @@ export class ResendAdapter implements EmailCapability {
     if (params.replyTo) {
       sendParams.replyTo = params.replyTo;
     }
-    const { data, error } = await resend.emails.send(sendParams);
+    if (params.text) {
+      sendParams.text = params.text;
+    }
+    const { data, error } = params.idempotencyKey
+      ? await resend.emails.send(sendParams, { idempotencyKey: params.idempotencyKey })
+      : await resend.emails.send(sendParams);
     if (error) throw new Error((error as { message?: string })?.message || 'Resend send failed');
     return { providerMessageId: data?.id };
   }

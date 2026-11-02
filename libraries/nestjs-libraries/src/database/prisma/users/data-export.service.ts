@@ -47,6 +47,7 @@ export class DataExportService {
             bio: true,
             avatarUrl: true,
             timezone: true,
+            preferredLanguage: true,
           },
         },
         organizations: {

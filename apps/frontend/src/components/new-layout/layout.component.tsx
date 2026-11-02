@@ -48,6 +48,7 @@ import { usePermissions } from '@postmill-ai/frontend/components/layout/use-perm
 import { BottomTabBar } from '@postmill-ai/frontend/components/new-layout/bottom-tab-bar';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useAddProvider } from '@postmill-ai/frontend/components/launches/add.provider.component';
+import { usePreferredLanguageSync } from '@postmill-ai/frontend/components/layout/use-preferred-language-sync';
 
 // Lazy — only loaded when "New Campaign" is actually chosen (keeps the campaign-modal
 // dependency graph out of the global layout bundle).
@@ -105,6 +106,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
     // restart, after which only the manual Retry button below would recover.
     errorRetryCount: 10,
   });
+  usePreferredLanguageSync(user, fetch);
 
   const router = useRouter();
   const pathname = usePathname();

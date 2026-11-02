@@ -48,9 +48,11 @@ Unlike ai/social/storage providers, email has **no per-org credential rows, no `
 `EmailService` (`libraries/nestjs-libraries/src/services/email.service.ts`) owns the flow; your adapter only implements `send()`:
 
 1. `sendEmail()` enqueues Inngest event `email/send` with a deterministic id (`email_<sha256(to:subject:html)>_<minute-bucket>`); skipped when Inngest is disabled.
-2. `createSendEmail` (`apps/backend/src/inngest/functions/send-email.ts`) consumes it, rate-limited to 1/sec globally, calling `EmailActivity.sendEmail()` → `EmailService.sendEmailSync()`.
+2. `createSendEmail` (`apps/backend/src/inngest/functions/send-email.ts`) consumes it with no function-level rate limit, calling `EmailActivity.sendEmail()` → `EmailService.sendEmailSync()`.
 3. `sendEmailSync()` wraps the HTML in the standard template (sender block + preferences link), creates an `EmailLog` row via `EmailLogService.createLog()`, then calls `adapter.send()` with up to 3 attempts (700 ms backoff), marking the log `sent` (with `providerMessageId`, or `'no-id'`) or `failed`.
 4. `hasProvider()` returns true only when the active adapter is not `empty` and `isConfigured()`.
+
+`EmailSendParams` also supports optional `text` (plain-text alternative) and `idempotencyKey`. Resend forwards the key as the second `emails.send` options argument (`{ idempotencyKey }`); other adapters may ignore these optional fields. Campaign sends use the stable `EmailLog` id as the key.
 
 **Notification chokepoint:** feature code never calls `EmailService` directly — user-facing mail goes through `NotificationService` (`libraries/nestjs-libraries/src/database/prisma/notifications/notification.service.ts:288`, `sendEmail()` → `_emailService.sendEmail(...)`). See `agents/notifications.md`.
 
@@ -67,7 +69,7 @@ Resend's svix pattern (`libraries/providers/resend/src/v1/email.adapter.ts:53-85
 
 ## Database
 
-`EmailLog` only (`libraries/nestjs-libraries/src/database/prisma/schema.prisma:1906`): `provider`, `toAddress`, `fromAddress`, `subject`, `replyTo?`, `providerMessageId?`, `status` (default `queued`), `error?`, `organizationId?`, `sentAt`, `deliveredAt?`; indexed on `(provider, providerMessageId)`, `sentAt`, `status`. Access goes through `EmailLogService` / `EmailLogRepository` (`libraries/nestjs-libraries/src/database/prisma/emails/`). A new provider needs **no schema change** — `provider` is a free-form string.
+`EmailLog` only (`libraries/nestjs-libraries/src/database/prisma/schema.prisma`): `provider`, `toAddress`, `fromAddress`, `subject`, `replyTo?`, `providerMessageId?`, `status` (default `queued`), `error?`, `organizationId?`, `campaignId?`, `sentAt`, `deliveredAt?`; indexed on `(provider, providerMessageId)`, `sentAt`, `status`, and `(campaignId, status)`, with unique `(campaignId, toAddress)` for operator-campaign dedupe (multiple null campaign ids remain valid). Access goes through `EmailLogService` / `EmailLogRepository` (`libraries/nestjs-libraries/src/database/prisma/emails/`). A new provider needs **no schema change** — `provider` is a free-form string.
 
 ## Package layout (copy `libraries/providers/resend`)
 

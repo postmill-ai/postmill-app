@@ -179,6 +179,7 @@ describe('RegisterAfter email re-prompt (provider returned no email)', () => {
         company: 'Acme Inc',
         providerToken: 'provider-token-1',
         provider: 'APPLE',
+        preferredLanguage: 'en',
       })
     );
   });

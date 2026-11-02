@@ -18,6 +18,7 @@ const mockEmptyAdapter = {
 };
 
 const mockCreateLog = vi.fn().mockResolvedValue({ id: 'log-1' });
+const mockClaimCampaignLog = vi.fn();
 const mockMarkSent = vi.fn().mockResolvedValue(undefined);
 const mockMarkFailed = vi.fn().mockResolvedValue(undefined);
 
@@ -32,6 +33,7 @@ vi.mock(
   () => ({
     EmailLogService: class {
       createLog = mockCreateLog;
+      claimCampaignLog = mockClaimCampaignLog;
       markSent = mockMarkSent;
       markFailed = mockMarkFailed;
     },
@@ -245,6 +247,51 @@ describe('EmailService', () => {
     await expect(service.sendEmailSync('a@b.com', 'S', '<p>H</p>')).rejects.toThrow('ECONNREFUSED');
 
     expect(mockMarkFailed).toHaveBeenCalledWith('log-1', 'ECONNREFUSED', null);
+  });
+
+  it('claims campaign recipients and sends text with a stable idempotency key', async () => {
+    vi.mocked(registry.getActiveAdapter).mockReturnValue(mockAdapter);
+    mockClaimCampaignLog.mockResolvedValue({
+      log: { id: 'campaign-log-1', organizationId: null },
+      claimed: true,
+    });
+    mockAdapter.send.mockResolvedValue({ providerMessageId: 'msg-campaign' });
+
+    await expect(
+      service.sendEmailSync('a@b.com', 'Subject', '<p>Hi</p>', undefined, {
+        campaignId: 'campaign-1',
+        text: 'Plain body',
+        notificationPreferences: { before: 'Manage in ', link: 'settings.', after: '' },
+      })
+    ).resolves.toEqual({ status: 'sent', logId: 'campaign-log-1' });
+
+    expect(mockClaimCampaignLog).toHaveBeenCalledWith(
+      expect.objectContaining({ campaignId: 'campaign-1', toAddress: 'a@b.com' })
+    );
+    expect(mockCreateLog).not.toHaveBeenCalled();
+    expect(mockAdapter.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining('Plain body'),
+        idempotencyKey: 'postmill-campaign-log-1',
+      })
+    );
+    expect(mockMarkSent).toHaveBeenCalledWith('campaign-log-1', 'msg-campaign', null);
+  });
+
+  it('skips an already claimed campaign recipient without another provider call', async () => {
+    vi.mocked(registry.getActiveAdapter).mockReturnValue(mockAdapter);
+    mockClaimCampaignLog.mockResolvedValue({
+      log: { id: 'campaign-log-1', organizationId: null },
+      claimed: false,
+    });
+
+    await expect(
+      service.sendEmailSync('a@b.com', 'Subject', '<p>Hi</p>', undefined, {
+        campaignId: 'campaign-1',
+      })
+    ).resolves.toEqual({ status: 'skipped', logId: 'campaign-log-1' });
+    expect(mockAdapter.send).not.toHaveBeenCalled();
+    expect(mockMarkSent).not.toHaveBeenCalled();
   });
 
   it('redacts the recipient email in failure logs', async () => {

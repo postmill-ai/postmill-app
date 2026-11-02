@@ -1,6 +1,7 @@
 import {
   IsDefined,
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
@@ -8,6 +9,8 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { Provider } from '@prisma/client';
+import { SUPPORTED_LANGUAGES } from '@postmill-ai/helpers/translation/languages';
+import type { SupportedLanguage } from '@postmill-ai/helpers/translation/languages';
 
 export class CreateOrgUserDto {
   @IsString()
@@ -51,6 +54,11 @@ export class CreateOrgUserDto {
   @IsString()
   @MaxLength(128)
   lastName: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn([...SUPPORTED_LANGUAGES])
+  preferredLanguage?: SupportedLanguage;
 
   // Optional analytics cookie sent by the frontend; must be declared so the global
   // forbidNonWhitelisted pipe (3Y) doesn't 400 the request.

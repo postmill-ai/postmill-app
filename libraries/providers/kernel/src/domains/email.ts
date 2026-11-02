@@ -15,6 +15,8 @@ export interface EmailSendParams {
   fromName: string;
   fromAddress: string;
   replyTo?: string;
+  text?: string;
+  idempotencyKey?: string;
 }
 
 export interface EmailSendResult {

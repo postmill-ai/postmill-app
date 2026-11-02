@@ -167,6 +167,7 @@ vi.mock('../notifications/notification.component', () => ({
 
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   Toaster: () => null,
+  useToaster: () => ({ show: vi.fn() }),
 }));
 
 vi.mock('../layout/top.tip', () => ({
