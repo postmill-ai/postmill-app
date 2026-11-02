@@ -9,8 +9,29 @@ export class UsersRepository {
   constructor(
     private _user: PrismaRepository<'user'>,
     private _session: PrismaRepository<'session'>,
-    private _profile: PrismaRepository<'userProfile'>
+    private _profile: PrismaRepository<'userProfile'>,
+    private _userOrganization: PrismaRepository<'userOrganization'>
   ) {}
+
+  getActiveOwnerMemberships() {
+    return this._userOrganization.model.userOrganization.findMany({
+      where: {
+        disabled: false,
+        roleRef: { key: 'owner' },
+        user: { activated: true },
+      },
+      select: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            lastOnline: true,
+          },
+        },
+      },
+      orderBy: { user: { lastOnline: 'desc' } },
+    });
+  }
 
   async getNamesByIds(ids: string[]): Promise<Map<string, string>> {
     const rows = await this._user.model.user.findMany({
@@ -188,6 +209,7 @@ export class UsersRepository {
             bio: true,
             avatarUrl: true,
             timezone: true,
+            preferredLanguage: true,
             pictureId: true,
             picture: {
               select: {
@@ -209,8 +231,17 @@ export class UsersRepository {
       bio: user.profile?.bio || null,
       avatarUrl: user.profile?.avatarUrl || null,
       timezone: user.profile?.timezone || null,
+      preferredLanguage: user.profile?.preferredLanguage || null,
       picture: user.profile?.picture || null,
     };
+  }
+
+  async changePreferredLanguage(userId: string, preferredLanguage: string) {
+    return this._profile.model.userProfile.upsert({
+      where: { userId },
+      create: { userId, preferredLanguage },
+      update: { preferredLanguage },
+    });
   }
 
   async changePersonal(userId: string, body: UserDetailDto) {

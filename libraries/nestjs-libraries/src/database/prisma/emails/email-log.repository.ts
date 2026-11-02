@@ -1,27 +1,75 @@
 import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
 
+export interface EmailLogCreateData {
+  provider: string;
+  toAddress: string;
+  fromAddress: string;
+  subject: string;
+  replyTo?: string;
+  providerMessageId?: string;
+  status?: string;
+  deliveredAt?: Date;
+  organizationId?: string;
+  campaignId?: string;
+}
+
 @Injectable()
 export class EmailLogRepository {
   constructor(private _db: PrismaRepository<'emailLog'>) {}
 
-  create(data: {
-    provider: string;
-    toAddress: string;
-    fromAddress: string;
-    subject: string;
-    replyTo?: string;
-    providerMessageId?: string;
-    status?: string;
-    deliveredAt?: Date;
-    organizationId?: string;
-  }) {
+  create(data: EmailLogCreateData) {
     return this._db.model.emailLog.create({ data });
+  }
+
+  async claimCampaignLog(data: EmailLogCreateData & { campaignId: string }) {
+    try {
+      return { log: await this.create(data), claimed: true as const };
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'P2002') throw error;
+      const log = await this._db.model.emailLog.findUnique({
+        where: {
+          campaignId_toAddress: {
+            campaignId: data.campaignId,
+            toAddress: data.toAddress,
+          },
+        },
+      });
+      if (!log) throw error;
+      if (log.status !== 'failed') return { log, claimed: false as const };
+
+      const reclaimed = await this._db.model.emailLog.updateMany({
+        where: { id: log.id, status: 'failed' },
+        data: { status: 'queued', error: null },
+      });
+      if (reclaimed.count !== 1) return { log, claimed: false as const };
+      return {
+        log: { ...log, status: 'queued', error: null },
+        claimed: true as const,
+      };
+    }
   }
 
   findByMessageId(provider: string, providerMessageId: string) {
     return this._db.model.emailLog.findFirst({
       where: { provider, providerMessageId },
+    });
+  }
+
+  async getTerminalNegativeAddresses() {
+    const rows = await this._db.model.emailLog.findMany({
+      where: { status: { in: ['bounced', 'complained'] } },
+      select: { toAddress: true },
+      distinct: ['toAddress'],
+    });
+    return rows.map((row) => row.toAddress);
+  }
+
+  getCampaignStatus(campaignId: string) {
+    return this._db.model.emailLog.groupBy({
+      by: ['status'],
+      where: { campaignId },
+      _count: { _all: true },
     });
   }
 

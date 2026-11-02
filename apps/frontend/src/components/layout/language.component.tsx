@@ -2,14 +2,12 @@
 
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import {
-  cookieName,
   fallbackLng,
   languages,
 } from '@postmill-ai/react/translation/i18n.config';
 import i18next from 'i18next';
-import useCookie from 'react-use-cookie';
 import ReactCountryFlag from 'react-country-flag';
-import React from 'react';
+import React, { useState } from 'react';
 import countries from 'i18n-iso-countries';
 import { getLanguageName } from '@postmill-ai/react/translation/language-name';
 
@@ -17,6 +15,13 @@ import { getLanguageName } from '@postmill-ai/react/translation/language-name';
 import countriesEn from 'i18n-iso-countries/langs/en.json';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { ModalWrapperComponent } from '../composer/modal.wrapper.component';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { SupportedLanguage } from '@postmill-ai/helpers/translation/languages';
+import {
+  applyPreferredLanguage,
+  savePreferredLanguage,
+} from './preferred-language.client';
 
 import clsx from 'clsx';
 countries.registerLocale(countriesEn);
@@ -63,17 +68,31 @@ const getCountryCodeForFlag = (languageCode: string) => {
 export const ChangeLanguageComponent = () => {
   const currentLanguage = i18next.resolvedLanguage || fallbackLng;
   const availableLanguages = languages;
-  const [_, setCookie] = useCookie(cookieName, currentLanguage || fallbackLng);
+  const [saving, setSaving] = useState(false);
   const modals = useModals();
   const t = useT();
+  const fetch = useFetch();
+  const toaster = useToaster();
 
-  const handleLanguageChange = (language: string) => {
-    setCookie(language);
-    i18next.changeLanguage(language);
-    modals.closeCurrent();
-    const rtlLanguages = ['ar'];
-    const dir = rtlLanguages.includes(language) ? 'rtl' : 'ltr';
-    document.documentElement.setAttribute('dir', dir);
+  const handleLanguageChange = async (language: SupportedLanguage) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await applyPreferredLanguage(language);
+      const response = await savePreferredLanguage(fetch, language);
+      if (!response.ok) throw new Error('Language save failed');
+      modals.closeCurrent();
+    } catch {
+      toaster.show(
+        t(
+          'preferred_language_save_failed',
+          'Your language preference could not be saved. Please try again.'
+        ),
+        'warning'
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -86,7 +105,7 @@ export const ChangeLanguageComponent = () => {
               language === currentLanguage ? 'border border-textColor' : ''
             )}
             key={language}
-            onClick={() => handleLanguageChange(language)}
+            onClick={() => void handleLanguageChange(language)}
           >
             <ReactCountryFlag
               countryCode={getCountryCodeForFlag(language)}

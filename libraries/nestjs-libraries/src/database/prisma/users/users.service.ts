@@ -20,6 +20,10 @@ export class UsersService {
     return this._usersRepository.getUserById(id);
   }
 
+  getActiveOwnerMemberships() {
+    return this._usersRepository.getActiveOwnerMemberships();
+  }
+
   getNamesByIds(ids: string[]) {
     return this._usersRepository.getNamesByIds(ids);
   }
@@ -53,6 +57,10 @@ export class UsersService {
 
   changePersonal(userId: string, body: UserDetailDto) {
     return this._usersRepository.changePersonal(userId, body);
+  }
+
+  changePreferredLanguage(userId: string, preferredLanguage: string) {
+    return this._usersRepository.changePreferredLanguage(userId, preferredLanguage);
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {

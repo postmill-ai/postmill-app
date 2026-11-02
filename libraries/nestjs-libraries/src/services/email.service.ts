@@ -58,7 +58,12 @@ export class EmailService {
     subject: string,
     html: string,
     replyTo?: string,
-  ) {
+    campaign?: {
+      campaignId: string;
+      text?: string;
+      notificationPreferences?: { before: string; link: string; after: string };
+    },
+  ): Promise<{ status: 'sent' | 'skipped'; logId: string } | undefined> {
     if (to.indexOf('@') === -1) {
       return;
     }
@@ -68,6 +73,12 @@ export class EmailService {
       return;
     }
 
+    const preferences = campaign?.notificationPreferences ?? {
+      before: 'You can change your notification preferences in your ',
+      link: 'account settings.',
+      after: '',
+    };
+    const preferencesUrl = `${process.env.FRONTEND_URL}/user/me/notifications`;
     const modifiedHtml = `
     <div style="
         background: linear-gradient(to bottom right, #e6f2ff, #f0e6ff);
@@ -114,22 +125,36 @@ export class EmailService {
                         margin: 0;
                     ">${process.env.EMAIL_FROM_NAME}</h2>
                     <div style="font-size: 12px">
-                      You can change your notification preferences in your <a href="${process.env.FRONTEND_URL}/user/me/notifications">account settings.</a>
+                      ${preferences.before}<a href="${preferencesUrl}">${preferences.link}</a>${preferences.after}
                      </div>
                 </div>
             </div>
         </div>
     </div>
     `;
+    const modifiedText = campaign?.text
+      ? `${campaign.text}\n\n${preferences.before}${preferences.link} ${preferencesUrl}${preferences.after}`
+      : undefined;
 
     const adapter = this._registry.getActiveAdapter();
-    const log = await this._emailLogService.createLog({
+    const logData = {
       provider: adapter.name,
       toAddress: to,
       fromAddress: process.env.EMAIL_FROM_ADDRESS!,
       subject,
       replyTo,
-    });
+      campaignId: campaign?.campaignId,
+    };
+    const claim = campaign
+      ? await this._emailLogService.claimCampaignLog({
+          ...logData,
+          campaignId: campaign.campaignId,
+        })
+      : undefined;
+    const log = claim?.log ?? (await this._emailLogService.createLog(logData));
+    if (claim && !claim.claimed) {
+      return { status: 'skipped', logId: log.id };
+    }
 
     // NOTIF-08: retry any provider error up to 3 times so transient failures
     // surface to Inngest for step-level retry. Business-level rejections are
@@ -144,6 +169,8 @@ export class EmailService {
           fromName: process.env.EMAIL_FROM_NAME!,
           fromAddress: process.env.EMAIL_FROM_ADDRESS!,
           replyTo,
+          ...(modifiedText ? { text: modifiedText } : {}),
+          ...(campaign ? { idempotencyKey: `postmill-${log.id}` } : {}),
         });
 
         if (result.providerMessageId) {
@@ -152,7 +179,7 @@ export class EmailService {
           await this._emailLogService.markSent(log.id, 'no-id', log.organizationId ?? null);
         }
 
-        return;
+        return { status: 'sent', logId: log.id };
       } catch (err) {
         lastErr = err;
         const errorMsg = (err as Error)?.message || 'Unknown error';

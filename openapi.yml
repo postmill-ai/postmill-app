@@ -1094,6 +1094,21 @@ paths:
           description: ""
       tags:
         - User
+  /user/preferred-language:
+    post:
+      operationId: UsersController_changePreferredLanguage
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPreferredLanguageDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - User
   /user/change-password:
     post:
       operationId: UsersController_changePassword
@@ -9832,6 +9847,25 @@ components:
         lastName:
           type: string
           maxLength: 128
+        preferredLanguage:
+          type: string
+          enum:
+            - en
+            - ru
+            - zh
+            - fr
+            - es
+            - pt
+            - de
+            - it
+            - ja
+            - ko
+            - ar
+            - tr
+            - vi
+            - nl
+            - id
+            - pl
         datafast_visitor_id:
           type: string
       required:
@@ -10185,6 +10219,30 @@ components:
         - bio
         - picture
         - timezone
+    UserPreferredLanguageDto:
+      type: object
+      properties:
+        preferredLanguage:
+          type: string
+          enum:
+            - en
+            - ru
+            - zh
+            - fr
+            - es
+            - pt
+            - de
+            - it
+            - ja
+            - ko
+            - ar
+            - tr
+            - vi
+            - nl
+            - id
+            - pl
+      required:
+        - preferredLanguage
     ChangePasswordDto:
       type: object
       properties:

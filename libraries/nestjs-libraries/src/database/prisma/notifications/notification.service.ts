@@ -334,6 +334,29 @@ export class NotificationService {
     await this._emailService.sendEmail(to, subject, html, 'top', replyTo);
   }
 
+  async sendCampaignEmail(
+    to: string,
+    campaignId: string,
+    content: {
+      subject: string;
+      html: string;
+      text: string;
+      notificationPreferences: { before: string; link: string; after: string };
+    }
+  ) {
+    return this._emailService.sendEmailSync(
+      to,
+      content.subject,
+      content.html,
+      undefined,
+      {
+        campaignId,
+        text: content.text,
+        notificationPreferences: content.notificationPreferences,
+      }
+    );
+  }
+
   // Convenience senders.
   async notifyPostPublishFailure(
     orgId: string,

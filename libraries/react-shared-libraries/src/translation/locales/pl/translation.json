@@ -496,6 +496,7 @@
   "90_days": "90 dni",
   "start_7_days_free_trial": "Rozpocznij 7-dniowy okres próbny",
   "change_language": "Zmień język",
+  "preferred_language_save_failed": "Nie udało się zapisać preferencji języka. Spróbuj ponownie.",
   "that_a_wrap": "To wszystko!\n\nJeśli spodobał Ci się ten wątek:\n\n1. Obserwuj mnie @{{username}}, aby zobaczyć więcej\n2. Podaj dalej poniższy tweet, aby udostępnić ten wątek swoim odbiorcom\n",
   "post_as_images_carousel": "Opublikuj jako karuzelę obrazów",
   "save_set": "Zapisz zestaw",

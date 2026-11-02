@@ -306,6 +306,7 @@ export class AuthService {
         datafast_visitor_id: body.datafast_visitor_id,
         name: providerUser.name || body.name || undefined,
         lastName: body.lastName || undefined,
+        preferredLanguage: body.preferredLanguage,
       },
       ip,
       userAgent

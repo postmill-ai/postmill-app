@@ -107,6 +107,21 @@ describe('ResendAdapter', () => {
       expect(mockEmailsSend.mock.calls[0][0]).not.toHaveProperty('reply_to');
     });
 
+    it('passes plain text and an idempotency key to Resend', async () => {
+      await adapter.send({
+        ...sendParams,
+        text: 'Plain text body',
+        idempotencyKey: 'campaign-log-1',
+      });
+
+      expect(mockEmailsSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'Plain text body',
+        }),
+        { idempotencyKey: 'campaign-log-1' }
+      );
+    });
+
     it('throws resend error message (not "[object Object]")', async () => {
       mockEmailsSend.mockResolvedValueOnce({
         data: null,
