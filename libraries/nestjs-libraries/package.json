@@ -109,8 +109,8 @@
     "class-transformer": "^0.5.1",
     "class-validator-jsonschema": "^5.1.0",
     "facebook-nodejs-business-sdk": "^21.0.5",
-    "ffmpeg-static": "^5.2.0",
     "fflate": "^0.8.2",
+    "ffmpeg-static": "^5.2.0",
     "file-type": "^22.0.2",
     "firebase-admin": "^13.3.0",
     "fluent-ffmpeg": "^2.1.2",
@@ -152,6 +152,7 @@
     "twitter-text": "^3.1.0",
     "undici": "^8.4.0",
     "ws": "^8.21.0",
+    "yargs": "^17.7.3",
     "zod": "^4.6.7"
   },
   "scripts": {

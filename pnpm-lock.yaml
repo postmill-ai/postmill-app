@@ -248,7 +248,7 @@ importers:
         version: link:../../libraries/helpers
       '@postmill-ai/nestjs-libraries':
         specifier: workspace:*
-        version: file:libraries/nestjs-libraries(178222a960c07c1c7f6bf08fc5aa7d6e)
+        version: file:libraries/nestjs-libraries(27d019bc61513f2b4190745b93eb09b1)
       '@postmill-ai/provider-adobe-stock':
         specifier: workspace:*
         version: file:libraries/providers/adobe-stock(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
@@ -365,13 +365,13 @@ importers:
         version: file:libraries/providers/gateway(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
       '@postmill-ai/provider-generic':
         specifier: workspace:*
-        version: file:libraries/providers/generic(05384a49536d76834a07664cd743595f)
+        version: file:libraries/providers/generic(e104f067858e2c9d3926a375f2c40e82)
       '@postmill-ai/provider-genviral':
         specifier: workspace:*
         version: file:libraries/providers/genviral(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
       '@postmill-ai/provider-github':
         specifier: workspace:*
-        version: file:libraries/providers/github(05384a49536d76834a07664cd743595f)
+        version: file:libraries/providers/github(e104f067858e2c9d3926a375f2c40e82)
       '@postmill-ai/provider-gmb':
         specifier: workspace:*
         version: file:libraries/providers/gmb(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
@@ -798,10 +798,13 @@ importers:
         version: link:../../libraries/helpers
       '@postmill-ai/nestjs-libraries':
         specifier: workspace:*
-        version: file:libraries/nestjs-libraries(578c61e458492661a827a0a98af44410)
+        version: file:libraries/nestjs-libraries(00ff1879a78c35f5d9252a6808688115)
       nestjs-command:
         specifier: ^3.1.4
-        version: 3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@18.1.0)
+        version: 3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@17.7.3)
+      yargs:
+        specifier: ^17.7.3
+        version: 17.7.3
     devDependencies:
       '@nestjs/cli':
         specifier: ^11.0.21
@@ -1599,7 +1602,7 @@ importers:
         version: 11.12.3
       nestjs-command:
         specifier: ^3.1.4
-        version: 3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@18.1.0)
+        version: 3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@17.7.3)
       nestjs-real-ip:
         specifier: ^3.0.1
         version: 3.0.1(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))
@@ -1669,6 +1672,9 @@ importers:
       ws:
         specifier: ^8.21.0
         version: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      yargs:
+        specifier: ^17.7.3
+        version: 17.7.3
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -1999,7 +2005,7 @@ importers:
     dependencies:
       '@postmill-ai/nestjs-libraries':
         specifier: workspace:*
-        version: file:libraries/nestjs-libraries(578c61e458492661a827a0a98af44410)
+        version: file:libraries/nestjs-libraries(00ff1879a78c35f5d9252a6808688115)
       '@postmill-ai/provider-kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -2014,7 +2020,7 @@ importers:
     dependencies:
       '@postmill-ai/nestjs-libraries':
         specifier: workspace:*
-        version: file:libraries/nestjs-libraries(578c61e458492661a827a0a98af44410)
+        version: file:libraries/nestjs-libraries(00ff1879a78c35f5d9252a6808688115)
       '@postmill-ai/provider-kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -29217,354 +29223,7 @@ snapshots:
 
   '@posthog/types@1.416.0': {}
 
-  '@postmill-ai/nestjs-libraries@file:libraries/nestjs-libraries(178222a960c07c1c7f6bf08fc5aa7d6e)':
-    dependencies:
-      '@ag-ui/mastra': 1.1.2(@ag-ui/client@0.0.57)(@ag-ui/core@0.0.59)(@copilotkit/runtime@1.69.3(4b0d32216dd3074360df548a5e503459))(@mastra/client-js@1.23.2(@bufbuild/protobuf@2.13.0)(@cfworker/json-schema@4.1.1)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
-      '@ai-sdk/amazon-bedrock': 2.2.12(zod@4.6.7)
-      '@ai-sdk/anthropic': 2.0.89(zod@4.6.7)
-      '@ai-sdk/azure': 2.0.143(zod@4.6.7)
-      '@ai-sdk/cohere': 2.0.46(zod@4.6.7)
-      '@ai-sdk/deepseek': 2.0.77(zod@4.6.7)
-      '@ai-sdk/fireworks': 2.0.97(zod@4.6.7)
-      '@ai-sdk/gateway': 3.0.220(zod@4.6.7)
-      '@ai-sdk/google': 2.0.84(zod@4.6.7)
-      '@ai-sdk/google-vertex': 2.2.27(zod@4.6.7)
-      '@ai-sdk/groq': 2.0.59(zod@4.6.7)
-      '@ai-sdk/mistral': 2.0.53(zod@4.6.7)
-      '@ai-sdk/openai': 2.0.136(zod@4.6.7)
-      '@ai-sdk/perplexity': 2.1.4(zod@4.6.7)
-      '@ai-sdk/togetherai': 2.0.93(zod@4.6.7)
-      '@ai-sdk/xai': 2.0.100(zod@4.6.7)
-      '@atproto/api': 0.19.19
-      '@aws-sdk/client-s3': 3.1062.0
-      '@aws-sdk/client-sesv2': 3.800.0
-      '@aws-sdk/s3-request-presigner': 3.1062.0
-      '@langchain/anthropic': 1.4.0(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))
-      '@langchain/community': 1.1.29(a381cb0f376d91d8bf77cb2e99c149ca)
-      '@langchain/core': 1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      '@langchain/langgraph': 1.3.5(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
-      '@langchain/openai': 1.7.0(@aws-sdk/credential-provider-node@3.972.88)(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      '@langchain/tavily': 1.2.0(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))
-      '@mastra/core': 1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7)
-      '@mastra/mcp': 1.17.2(@cfworker/json-schema@4.1.1)(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)
-      '@mastra/memory': 1.28.0(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
-      '@mastra/pg': 1.22.0(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
-      '@nest-lab/throttler-storage-redis': 1.2.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@nestjs/throttler@6.5.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(reflect-metadata@0.2.2))(ioredis@5.11.1)(reflect-metadata@0.2.2)
-      '@nestjs/common': 11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      '@nestjs/core': 11.2.7(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/microservices@11.2.7)(@nestjs/platform-express@11.2.7)(@nestjs/websockets@11.2.7)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      '@nestjs/microservices': 11.2.7(@grpc/grpc-js@1.14.4)(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@nestjs/websockets@11.2.7)(cache-manager@7.2.8)(ioredis@5.11.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      '@nestjs/platform-express': 11.2.7(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)
-      '@nestjs/schedule': 6.1.3(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)
-      '@nestjs/swagger': 11.4.4(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)
-      '@nestjs/throttler': 6.5.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(reflect-metadata@0.2.2)
-      '@neynar/nodejs-sdk': 3.176.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
-      '@openrouter/ai-sdk-provider': 2.10.0(ai@6.0.313(zod@4.6.7))(zod@4.6.7)
-      '@opentelemetry/api': 1.10.0
-      '@opentelemetry/auto-instrumentations-node': 0.77.0(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))
-      '@opentelemetry/exporter-trace-otlp-http': 0.219.0(@opentelemetry/api@1.10.0)
-      '@opentelemetry/sdk-node': 0.218.0(@opentelemetry/api@1.10.0)
-      '@postmill-ai/provider-kernel': file:libraries/providers/kernel(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
-      '@prisma/client': 6.5.0(prisma@6.5.0(typescript@5.9.3))(typescript@5.9.3)
-      '@reaatech/a2a-reference-auth': 0.2.0
-      '@reaatech/a2a-reference-mcp-bridge': 0.1.2(@cfworker/json-schema@4.1.1)
-      '@reaatech/a2a-reference-observability': 0.2.0
-      '@reaatech/agent-auth-proxy-server': 2.0.0(@opentelemetry/api@1.10.0)(@prisma/client@6.5.0(prisma@6.5.0(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.15.6)(@upstash/redis@1.36.3)(pg@8.23.0)(prisma@6.5.0(typescript@5.9.3))
-      '@reaatech/agent-budget-engine': 0.1.1
-      '@reaatech/agent-budget-llm-router-plugin': 0.1.1
-      '@reaatech/agent-budget-middleware': 0.1.1
-      '@reaatech/agent-budget-otel-bridge': 0.1.1(@opentelemetry/api@1.10.0)
-      '@reaatech/agent-budget-pricing': 0.1.1
-      '@reaatech/agent-budget-spend-tracker': 0.1.1
-      '@reaatech/agent-budget-types': 0.1.1
-      '@reaatech/agent-chaos-core': 0.1.0
-      '@reaatech/agent-mesh': 1.2.0
-      '@reaatech/agent-mesh-postgres': 0.2.0(pg@8.23.0)
-      '@reaatech/agent-mesh-redis': 0.2.0(ioredis@5.11.1)
-      '@reaatech/agent-mesh-registry': 1.0.2
-      '@reaatech/agent-mesh-router': 1.1.0(@cfworker/json-schema@4.1.1)(zod@4.6.7)
-      '@reaatech/agent-mesh-session': 1.1.1
-      '@reaatech/agent-mesh-utils': 1.1.1
-      '@reaatech/context-window-planner': 0.1.0
-      '@reaatech/guardrail-chain': 0.1.0
-      '@reaatech/guardrail-chain-observability': 0.1.0
-      '@reaatech/hybrid-rag': 0.1.0
-      '@reaatech/hybrid-rag-embedding': 0.1.0(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
-      '@reaatech/hybrid-rag-ingestion': 0.1.0
-      '@reaatech/hybrid-rag-observability': 0.1.0
-      '@reaatech/hybrid-rag-qdrant': 0.1.0(typescript@5.9.3)
-      '@reaatech/hybrid-rag-retrieval': 0.1.0(typescript@5.9.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
-      '@reaatech/idempotency-middleware-adapter-redis': 1.0.0
-      '@reaatech/idempotency-middleware-express': 1.0.0(express@5.2.1)
-      '@reaatech/media-pipeline-mcp-anthropic': 0.3.0
-      '@reaatech/media-pipeline-mcp-core': 0.3.0
-      '@reaatech/media-pipeline-mcp-cost': 0.3.0
-      '@reaatech/media-pipeline-mcp-deepgram': 0.4.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      '@reaatech/media-pipeline-mcp-elevenlabs': 0.3.0
-      '@reaatech/media-pipeline-mcp-fal': 0.3.0
-      '@reaatech/media-pipeline-mcp-google': 0.4.0
-      '@reaatech/media-pipeline-mcp-keyvault': 0.3.0
-      '@reaatech/media-pipeline-mcp-luma': 0.3.0
-      '@reaatech/media-pipeline-mcp-ollama': 0.3.0
-      '@reaatech/media-pipeline-mcp-openai': 0.3.0
-      '@reaatech/media-pipeline-mcp-pipeline': 0.3.0(sharp@0.35.5(@types/node@26.6.5))
-      '@reaatech/media-pipeline-mcp-provenance': 0.3.0
-      '@reaatech/media-pipeline-mcp-provider-core': 0.3.0
-      '@reaatech/media-pipeline-mcp-replicate': 0.4.0
-      '@reaatech/media-pipeline-mcp-security': 0.3.0
-      '@reaatech/media-pipeline-mcp-server': 0.3.1(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ioredis@5.11.1)(sharp@0.35.5(@types/node@26.6.5))(utf-8-validate@6.0.6)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
-      '@reaatech/media-pipeline-mcp-stability': 0.3.0
-      '@reaatech/media-pipeline-mcp-storage': 0.3.0
-      '@reaatech/structured-repair-core': 1.1.0(zod@4.6.7)
-      '@sendgrid/eventwebhook': 8.0.0
-      '@sendgrid/mail': 8.0.0
-      '@sentry/nestjs': 10.56.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@opentelemetry/exporter-trace-otlp-http@0.219.0(@opentelemetry/api@1.10.0))
-      '@sentry/profiling-node': 10.56.0(@opentelemetry/exporter-trace-otlp-http@0.219.0(@opentelemetry/api@1.10.0))
-      '@swc/helpers': 0.5.23
-      bcrypt: 6.0.0
-      canvas: 3.2.3
-      class-transformer: 0.5.1
-      class-validator-jsonschema: 5.1.0(class-transformer@0.5.1)(class-validator@0.14.4)
-      facebook-nodejs-business-sdk: 21.0.5
-      fflate: 0.8.2
-      ffmpeg-static: 5.3.0
-      file-type: 22.0.2
-      firebase-admin: 13.10.0
-      fluent-ffmpeg: 2.1.3
-      form-data: 2.5.6
-      google-auth-library: 9.15.1
-      googleapis: 137.1.0
-      image-to-pdf: 3.0.2
-      inngest: 4.18.1(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(express@5.2.1)(fastify@5.12.5)(hono@4.12.31)(next@16.4.2(@babel/core@7.29.7)(@opentelemetry/api@1.10.0)(@playwright/test@1.58.2)(@types/node@26.6.5)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(sass@1.100.0))(react@19.2.7)(typescript@5.9.3)(zod@4.6.7)
-      ioredis: 5.11.1
-      jsdom: 22.1.0(bufferutil@4.1.0)(canvas@3.2.3)(utf-8-validate@6.0.6)
-      json-to-graphql-query: 2.3.0
-      mailgun.js: 11.0.0
-      mastra: 1.12.2(@hono/node-server@1.19.14(hono@4.12.31))(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(@opentelemetry/api@1.10.0)(bufferutil@4.1.0)(rxjs@7.8.2)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
-      mime: 3.0.0
-      mime-types: 2.1.35
-      multer: 2.5.0
-      music-metadata: 11.12.3
-      nestjs-command: 3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@18.1.0)
-      nestjs-real-ip: 3.0.1(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))
-      node-telegram-bot-api: 0.66.0(request@2.88.2)
-      nodemailer: 10.0.13
-      nostr-tools: 2.23.5(typescript@5.9.3)
-      openai: 7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
-      opentype.js: 2.0.0
-      p-limit: 3.1.0
-      pg: 8.23.0
-      postmark: 4.0.7
-      prisma: 6.5.0(typescript@5.9.3)
-      puppeteer: 25.8.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)(yauzl@3.4.0)
-      resend: 6.12.4(@react-email/render@0.0.16(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
-      rss-parser: 3.13.0
-      sharp: 0.35.5(@types/node@26.6.5)
-      slugify: 1.6.9
-      socks: 2.8.9
-      subtitle: 4.2.2-alpha.0
-      svix: 1.63.0
-      transloadit: 3.0.2
-      twitter-api-v2: 1.29.0
-      twitter-text: 3.1.0
-      undici: 8.12.3
-      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      zod: 4.6.7
-    transitivePeerDependencies:
-      - '@ag-ui/client'
-      - '@ag-ui/core'
-      - '@arcjet/redact'
-      - '@aws-crypto/sha256-js'
-      - '@aws-sdk/client-dynamodb'
-      - '@aws-sdk/client-kms'
-      - '@aws-sdk/client-lambda'
-      - '@aws-sdk/client-rds-data'
-      - '@aws-sdk/client-sagemaker-runtime'
-      - '@aws-sdk/client-secrets-manager'
-      - '@aws-sdk/client-sfn'
-      - '@aws-sdk/credential-provider-node'
-      - '@aws-sdk/dsql-signer'
-      - '@azure/identity'
-      - '@azure/keyvault-keys'
-      - '@azure/search-documents'
-      - '@azure/storage-blob'
-      - '@browserbasehq/sdk'
-      - '@browserbasehq/stagehand'
-      - '@bufbuild/protobuf'
-      - '@cfworker/json-schema'
-      - '@clickhouse/client'
-      - '@cloudflare/workers-types'
-      - '@copilotkit/runtime'
-      - '@datastax/astra-db-ts'
-      - '@elastic/elasticsearch'
-      - '@electric-sql/pglite'
-      - '@fastify/static'
-      - '@getmetal/metal-sdk'
-      - '@getzep/zep-cloud'
-      - '@getzep/zep-js'
-      - '@gomomento/sdk-core'
-      - '@google-cloud/kms'
-      - '@google-cloud/secret-manager'
-      - '@google-cloud/speech'
-      - '@google-cloud/storage'
-      - '@gradientai/nodejs-sdk'
-      - '@grpc/grpc-js'
-      - '@hono/node-server'
-      - '@huggingface/inference'
-      - '@huggingface/transformers'
-      - '@ibm-cloud/watsonx-ai'
-      - '@lancedb/lancedb'
-      - '@layerup/layerup-security'
-      - '@libsql/client'
-      - '@libsql/client-wasm'
-      - '@mastra/client-js'
-      - '@mendable/firecrawl-js'
-      - '@mlc-ai/web-llm'
-      - '@mozilla/readability'
-      - '@neondatabase/serverless'
-      - '@nestjs/websockets'
-      - '@notionhq/client'
-      - '@op-engineering/op-sqlite'
-      - '@opensearch-project/opensearch'
-      - '@opentelemetry/core'
-      - '@opentelemetry/exporter-trace-otlp-proto'
-      - '@opentelemetry/sdk-trace-base'
-      - '@pinecone-database/pinecone'
-      - '@planetscale/database'
-      - '@premai/prem-sdk'
-      - '@qdrant/js-client-rest'
-      - '@raycast/api'
-      - '@react-email/render'
-      - '@rockset/client'
-      - '@smithy/eventstream-codec'
-      - '@smithy/hash-node'
-      - '@smithy/protocol-http'
-      - '@smithy/signature-v4'
-      - '@smithy/util-utf8'
-      - '@spider-cloud/spider-client'
-      - '@supabase/supabase-js'
-      - '@sveltejs/kit'
-      - '@tensorflow-models/universal-sentence-encoder'
-      - '@tensorflow/tfjs-core'
-      - '@tidbcloud/serverless'
-      - '@types/better-sqlite3'
-      - '@types/node'
-      - '@types/pg'
-      - '@types/sql.js'
-      - '@upstash/ratelimit'
-      - '@upstash/redis'
-      - '@upstash/vector'
-      - '@vercel/kv'
-      - '@vercel/node'
-      - '@vercel/postgres'
-      - '@writerai/writer-sdk'
-      - '@xata.io/client'
-      - '@xenova/transformers'
-      - '@zilliz/milvus2-sdk-node'
-      - ai
-      - amqp-connection-manager
-      - amqplib
-      - apify-client
-      - assemblyai
-      - aws-crt
-      - aws-lambda
-      - azion
-      - bare-abort-controller
-      - bare-buffer
-      - better-sqlite3
-      - bufferutil
-      - bun-types
-      - c2pa-node
-      - cache-manager
-      - cassandra-driver
-      - cborg
-      - cheerio
-      - chromadb
-      - class-validator
-      - closevector-common
-      - closevector-node
-      - closevector-web
-      - cohere-ai
-      - convex
-      - couchbase
-      - crypto-js
-      - d3-dsv
-      - debug
-      - discord.js
-      - duck-duck-scrape
-      - encoding
-      - epub2
-      - expo-sqlite
-      - express
-      - faiss-node
-      - fast-xml-parser
-      - fastify
-      - gel
-      - h3
-      - hnswlib-node
-      - hono
-      - html-to-text
-      - ibm-cloud-sdk-core
-      - ignore
-      - interface-datastore
-      - it-all
-      - jsonwebtoken
-      - kafkajs
-      - knex
-      - koa
-      - kysely
-      - lodash
-      - lunary
-      - mammoth
-      - mariadb
-      - mem0ai
-      - mongodb
-      - mqtt
-      - mysql2
-      - nats
-      - neo4j-driver
-      - next
-      - node-llama-cpp
-      - notion-to-md
-      - officeparser
-      - pdf-parse
-      - peggy
-      - pg-copy-streams
-      - pg-native
-      - pickleparser
-      - playwright
-      - portkey-ai
-      - proxy-agent
-      - pyodide
-      - react
-      - react-dom
-      - react-native-b4a
-      - redis
-      - reflect-metadata
-      - replicate
-      - request
-      - rxjs
-      - sonix-speech-recognition
-      - sql.js
-      - sqlite3
-      - srt-parser-2
-      - supports-color
-      - svelte
-      - typeorm
-      - typescript
-      - typesense
-      - usearch
-      - utf-8-validate
-      - voy-search
-      - vue
-      - weaviate-client
-      - word-extractor
-      - workflow
-      - yargs
-      - yauzl
-      - youtubei.js
-      - zod-to-json-schema
-
-  '@postmill-ai/nestjs-libraries@file:libraries/nestjs-libraries(578c61e458492661a827a0a98af44410)':
+  '@postmill-ai/nestjs-libraries@file:libraries/nestjs-libraries(00ff1879a78c35f5d9252a6808688115)':
     dependencies:
       '@ag-ui/mastra': 1.1.2(@ag-ui/client@0.0.57)(@ag-ui/core@0.0.59)(@copilotkit/runtime@1.69.3(ac20ab6d0c719650d374099003a07cd9))(@mastra/client-js@1.23.2(@bufbuild/protobuf@2.13.0)(@cfworker/json-schema@4.1.1)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
       '@ai-sdk/amazon-bedrock': 2.2.12(zod@4.6.7)
@@ -29691,7 +29350,7 @@ snapshots:
       mime-types: 2.1.35
       multer: 2.5.0
       music-metadata: 11.12.3
-      nestjs-command: 3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@18.1.0)
+      nestjs-command: 3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@17.7.3)
       nestjs-real-ip: 3.0.1(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))
       node-telegram-bot-api: 0.66.0(request@2.88.2)
       nodemailer: 10.0.13
@@ -29715,6 +29374,7 @@ snapshots:
       twitter-text: 3.1.0
       undici: 8.12.3
       ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      yargs: 17.7.3
       zod: 4.6.7
     transitivePeerDependencies:
       - '@ag-ui/client'
@@ -29906,7 +29566,353 @@ snapshots:
       - weaviate-client
       - word-extractor
       - workflow
-      - yargs
+      - yauzl
+      - youtubei.js
+      - zod-to-json-schema
+
+  '@postmill-ai/nestjs-libraries@file:libraries/nestjs-libraries(27d019bc61513f2b4190745b93eb09b1)':
+    dependencies:
+      '@ag-ui/mastra': 1.1.2(@ag-ui/client@0.0.57)(@ag-ui/core@0.0.59)(@copilotkit/runtime@1.69.3(4b0d32216dd3074360df548a5e503459))(@mastra/client-js@1.23.2(@bufbuild/protobuf@2.13.0)(@cfworker/json-schema@4.1.1)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
+      '@ai-sdk/amazon-bedrock': 2.2.12(zod@4.6.7)
+      '@ai-sdk/anthropic': 2.0.89(zod@4.6.7)
+      '@ai-sdk/azure': 2.0.143(zod@4.6.7)
+      '@ai-sdk/cohere': 2.0.46(zod@4.6.7)
+      '@ai-sdk/deepseek': 2.0.77(zod@4.6.7)
+      '@ai-sdk/fireworks': 2.0.97(zod@4.6.7)
+      '@ai-sdk/gateway': 3.0.220(zod@4.6.7)
+      '@ai-sdk/google': 2.0.84(zod@4.6.7)
+      '@ai-sdk/google-vertex': 2.2.27(zod@4.6.7)
+      '@ai-sdk/groq': 2.0.59(zod@4.6.7)
+      '@ai-sdk/mistral': 2.0.53(zod@4.6.7)
+      '@ai-sdk/openai': 2.0.136(zod@4.6.7)
+      '@ai-sdk/perplexity': 2.1.4(zod@4.6.7)
+      '@ai-sdk/togetherai': 2.0.93(zod@4.6.7)
+      '@ai-sdk/xai': 2.0.100(zod@4.6.7)
+      '@atproto/api': 0.19.19
+      '@aws-sdk/client-s3': 3.1062.0
+      '@aws-sdk/client-sesv2': 3.800.0
+      '@aws-sdk/s3-request-presigner': 3.1062.0
+      '@langchain/anthropic': 1.4.0(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))
+      '@langchain/community': 1.1.29(a381cb0f376d91d8bf77cb2e99c149ca)
+      '@langchain/core': 1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@langchain/langgraph': 1.3.5(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
+      '@langchain/openai': 1.7.0(@aws-sdk/credential-provider-node@3.972.88)(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@langchain/tavily': 1.2.0(@langchain/core@1.3.0(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))
+      '@mastra/core': 1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7)
+      '@mastra/mcp': 1.17.2(@cfworker/json-schema@4.1.1)(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)
+      '@mastra/memory': 1.28.0(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
+      '@mastra/pg': 1.22.0(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
+      '@nest-lab/throttler-storage-redis': 1.2.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@nestjs/throttler@6.5.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(reflect-metadata@0.2.2))(ioredis@5.11.1)(reflect-metadata@0.2.2)
+      '@nestjs/common': 11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core': 11.2.7(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/microservices@11.2.7)(@nestjs/platform-express@11.2.7)(@nestjs/websockets@11.2.7)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/microservices': 11.2.7(@grpc/grpc-js@1.14.4)(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@nestjs/websockets@11.2.7)(cache-manager@7.2.8)(ioredis@5.11.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/platform-express': 11.2.7(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)
+      '@nestjs/schedule': 6.1.3(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)
+      '@nestjs/swagger': 11.4.4(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)
+      '@nestjs/throttler': 6.5.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(reflect-metadata@0.2.2)
+      '@neynar/nodejs-sdk': 3.176.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
+      '@openrouter/ai-sdk-provider': 2.10.0(ai@6.0.313(zod@4.6.7))(zod@4.6.7)
+      '@opentelemetry/api': 1.10.0
+      '@opentelemetry/auto-instrumentations-node': 0.77.0(@opentelemetry/api@1.10.0)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))
+      '@opentelemetry/exporter-trace-otlp-http': 0.219.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-node': 0.218.0(@opentelemetry/api@1.10.0)
+      '@postmill-ai/provider-kernel': file:libraries/providers/kernel(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
+      '@prisma/client': 6.5.0(prisma@6.5.0(typescript@5.9.3))(typescript@5.9.3)
+      '@reaatech/a2a-reference-auth': 0.2.0
+      '@reaatech/a2a-reference-mcp-bridge': 0.1.2(@cfworker/json-schema@4.1.1)
+      '@reaatech/a2a-reference-observability': 0.2.0
+      '@reaatech/agent-auth-proxy-server': 2.0.0(@opentelemetry/api@1.10.0)(@prisma/client@6.5.0(prisma@6.5.0(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.15.6)(@upstash/redis@1.36.3)(pg@8.23.0)(prisma@6.5.0(typescript@5.9.3))
+      '@reaatech/agent-budget-engine': 0.1.1
+      '@reaatech/agent-budget-llm-router-plugin': 0.1.1
+      '@reaatech/agent-budget-middleware': 0.1.1
+      '@reaatech/agent-budget-otel-bridge': 0.1.1(@opentelemetry/api@1.10.0)
+      '@reaatech/agent-budget-pricing': 0.1.1
+      '@reaatech/agent-budget-spend-tracker': 0.1.1
+      '@reaatech/agent-budget-types': 0.1.1
+      '@reaatech/agent-chaos-core': 0.1.0
+      '@reaatech/agent-mesh': 1.2.0
+      '@reaatech/agent-mesh-postgres': 0.2.0(pg@8.23.0)
+      '@reaatech/agent-mesh-redis': 0.2.0(ioredis@5.11.1)
+      '@reaatech/agent-mesh-registry': 1.0.2
+      '@reaatech/agent-mesh-router': 1.1.0(@cfworker/json-schema@4.1.1)(zod@4.6.7)
+      '@reaatech/agent-mesh-session': 1.1.1
+      '@reaatech/agent-mesh-utils': 1.1.1
+      '@reaatech/context-window-planner': 0.1.0
+      '@reaatech/guardrail-chain': 0.1.0
+      '@reaatech/guardrail-chain-observability': 0.1.0
+      '@reaatech/hybrid-rag': 0.1.0
+      '@reaatech/hybrid-rag-embedding': 0.1.0(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
+      '@reaatech/hybrid-rag-ingestion': 0.1.0
+      '@reaatech/hybrid-rag-observability': 0.1.0
+      '@reaatech/hybrid-rag-qdrant': 0.1.0(typescript@5.9.3)
+      '@reaatech/hybrid-rag-retrieval': 0.1.0(typescript@5.9.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
+      '@reaatech/idempotency-middleware-adapter-redis': 1.0.0
+      '@reaatech/idempotency-middleware-express': 1.0.0(express@5.2.1)
+      '@reaatech/media-pipeline-mcp-anthropic': 0.3.0
+      '@reaatech/media-pipeline-mcp-core': 0.3.0
+      '@reaatech/media-pipeline-mcp-cost': 0.3.0
+      '@reaatech/media-pipeline-mcp-deepgram': 0.4.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@reaatech/media-pipeline-mcp-elevenlabs': 0.3.0
+      '@reaatech/media-pipeline-mcp-fal': 0.3.0
+      '@reaatech/media-pipeline-mcp-google': 0.4.0
+      '@reaatech/media-pipeline-mcp-keyvault': 0.3.0
+      '@reaatech/media-pipeline-mcp-luma': 0.3.0
+      '@reaatech/media-pipeline-mcp-ollama': 0.3.0
+      '@reaatech/media-pipeline-mcp-openai': 0.3.0
+      '@reaatech/media-pipeline-mcp-pipeline': 0.3.0(sharp@0.35.5(@types/node@26.6.5))
+      '@reaatech/media-pipeline-mcp-provenance': 0.3.0
+      '@reaatech/media-pipeline-mcp-provider-core': 0.3.0
+      '@reaatech/media-pipeline-mcp-replicate': 0.4.0
+      '@reaatech/media-pipeline-mcp-security': 0.3.0
+      '@reaatech/media-pipeline-mcp-server': 0.3.1(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ioredis@5.11.1)(sharp@0.35.5(@types/node@26.6.5))(utf-8-validate@6.0.6)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@reaatech/media-pipeline-mcp-stability': 0.3.0
+      '@reaatech/media-pipeline-mcp-storage': 0.3.0
+      '@reaatech/structured-repair-core': 1.1.0(zod@4.6.7)
+      '@sendgrid/eventwebhook': 8.0.0
+      '@sendgrid/mail': 8.0.0
+      '@sentry/nestjs': 10.56.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@opentelemetry/exporter-trace-otlp-http@0.219.0(@opentelemetry/api@1.10.0))
+      '@sentry/profiling-node': 10.56.0(@opentelemetry/exporter-trace-otlp-http@0.219.0(@opentelemetry/api@1.10.0))
+      '@swc/helpers': 0.5.23
+      bcrypt: 6.0.0
+      canvas: 3.2.3
+      class-transformer: 0.5.1
+      class-validator-jsonschema: 5.1.0(class-transformer@0.5.1)(class-validator@0.14.4)
+      facebook-nodejs-business-sdk: 21.0.5
+      fflate: 0.8.2
+      ffmpeg-static: 5.3.0
+      file-type: 22.0.2
+      firebase-admin: 13.10.0
+      fluent-ffmpeg: 2.1.3
+      form-data: 2.5.6
+      google-auth-library: 9.15.1
+      googleapis: 137.1.0
+      image-to-pdf: 3.0.2
+      inngest: 4.18.1(@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0))(express@5.2.1)(fastify@5.12.5)(hono@4.12.31)(next@16.4.2(@babel/core@7.29.7)(@opentelemetry/api@1.10.0)(@playwright/test@1.58.2)(@types/node@26.6.5)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(sass@1.100.0))(react@19.2.7)(typescript@5.9.3)(zod@4.6.7)
+      ioredis: 5.11.1
+      jsdom: 22.1.0(bufferutil@4.1.0)(canvas@3.2.3)(utf-8-validate@6.0.6)
+      json-to-graphql-query: 2.3.0
+      mailgun.js: 11.0.0
+      mastra: 1.12.2(@hono/node-server@1.19.14(hono@4.12.31))(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(@opentelemetry/api@1.10.0)(bufferutil@4.1.0)(rxjs@7.8.2)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
+      mime: 3.0.0
+      mime-types: 2.1.35
+      multer: 2.5.0
+      music-metadata: 11.12.3
+      nestjs-command: 3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@17.7.3)
+      nestjs-real-ip: 3.0.1(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))
+      node-telegram-bot-api: 0.66.0(request@2.88.2)
+      nodemailer: 10.0.13
+      nostr-tools: 2.23.5(typescript@5.9.3)
+      openai: 7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
+      opentype.js: 2.0.0
+      p-limit: 3.1.0
+      pg: 8.23.0
+      postmark: 4.0.7
+      prisma: 6.5.0(typescript@5.9.3)
+      puppeteer: 25.8.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)(yauzl@3.4.0)
+      resend: 6.12.4(@react-email/render@0.0.16(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
+      rss-parser: 3.13.0
+      sharp: 0.35.5(@types/node@26.6.5)
+      slugify: 1.6.9
+      socks: 2.8.9
+      subtitle: 4.2.2-alpha.0
+      svix: 1.63.0
+      transloadit: 3.0.2
+      twitter-api-v2: 1.29.0
+      twitter-text: 3.1.0
+      undici: 8.12.3
+      ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      yargs: 17.7.3
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - '@ag-ui/client'
+      - '@ag-ui/core'
+      - '@arcjet/redact'
+      - '@aws-crypto/sha256-js'
+      - '@aws-sdk/client-dynamodb'
+      - '@aws-sdk/client-kms'
+      - '@aws-sdk/client-lambda'
+      - '@aws-sdk/client-rds-data'
+      - '@aws-sdk/client-sagemaker-runtime'
+      - '@aws-sdk/client-secrets-manager'
+      - '@aws-sdk/client-sfn'
+      - '@aws-sdk/credential-provider-node'
+      - '@aws-sdk/dsql-signer'
+      - '@azure/identity'
+      - '@azure/keyvault-keys'
+      - '@azure/search-documents'
+      - '@azure/storage-blob'
+      - '@browserbasehq/sdk'
+      - '@browserbasehq/stagehand'
+      - '@bufbuild/protobuf'
+      - '@cfworker/json-schema'
+      - '@clickhouse/client'
+      - '@cloudflare/workers-types'
+      - '@copilotkit/runtime'
+      - '@datastax/astra-db-ts'
+      - '@elastic/elasticsearch'
+      - '@electric-sql/pglite'
+      - '@fastify/static'
+      - '@getmetal/metal-sdk'
+      - '@getzep/zep-cloud'
+      - '@getzep/zep-js'
+      - '@gomomento/sdk-core'
+      - '@google-cloud/kms'
+      - '@google-cloud/secret-manager'
+      - '@google-cloud/speech'
+      - '@google-cloud/storage'
+      - '@gradientai/nodejs-sdk'
+      - '@grpc/grpc-js'
+      - '@hono/node-server'
+      - '@huggingface/inference'
+      - '@huggingface/transformers'
+      - '@ibm-cloud/watsonx-ai'
+      - '@lancedb/lancedb'
+      - '@layerup/layerup-security'
+      - '@libsql/client'
+      - '@libsql/client-wasm'
+      - '@mastra/client-js'
+      - '@mendable/firecrawl-js'
+      - '@mlc-ai/web-llm'
+      - '@mozilla/readability'
+      - '@neondatabase/serverless'
+      - '@nestjs/websockets'
+      - '@notionhq/client'
+      - '@op-engineering/op-sqlite'
+      - '@opensearch-project/opensearch'
+      - '@opentelemetry/core'
+      - '@opentelemetry/exporter-trace-otlp-proto'
+      - '@opentelemetry/sdk-trace-base'
+      - '@pinecone-database/pinecone'
+      - '@planetscale/database'
+      - '@premai/prem-sdk'
+      - '@qdrant/js-client-rest'
+      - '@raycast/api'
+      - '@react-email/render'
+      - '@rockset/client'
+      - '@smithy/eventstream-codec'
+      - '@smithy/hash-node'
+      - '@smithy/protocol-http'
+      - '@smithy/signature-v4'
+      - '@smithy/util-utf8'
+      - '@spider-cloud/spider-client'
+      - '@supabase/supabase-js'
+      - '@sveltejs/kit'
+      - '@tensorflow-models/universal-sentence-encoder'
+      - '@tensorflow/tfjs-core'
+      - '@tidbcloud/serverless'
+      - '@types/better-sqlite3'
+      - '@types/node'
+      - '@types/pg'
+      - '@types/sql.js'
+      - '@upstash/ratelimit'
+      - '@upstash/redis'
+      - '@upstash/vector'
+      - '@vercel/kv'
+      - '@vercel/node'
+      - '@vercel/postgres'
+      - '@writerai/writer-sdk'
+      - '@xata.io/client'
+      - '@xenova/transformers'
+      - '@zilliz/milvus2-sdk-node'
+      - ai
+      - amqp-connection-manager
+      - amqplib
+      - apify-client
+      - assemblyai
+      - aws-crt
+      - aws-lambda
+      - azion
+      - bare-abort-controller
+      - bare-buffer
+      - better-sqlite3
+      - bufferutil
+      - bun-types
+      - c2pa-node
+      - cache-manager
+      - cassandra-driver
+      - cborg
+      - cheerio
+      - chromadb
+      - class-validator
+      - closevector-common
+      - closevector-node
+      - closevector-web
+      - cohere-ai
+      - convex
+      - couchbase
+      - crypto-js
+      - d3-dsv
+      - debug
+      - discord.js
+      - duck-duck-scrape
+      - encoding
+      - epub2
+      - expo-sqlite
+      - express
+      - faiss-node
+      - fast-xml-parser
+      - fastify
+      - gel
+      - h3
+      - hnswlib-node
+      - hono
+      - html-to-text
+      - ibm-cloud-sdk-core
+      - ignore
+      - interface-datastore
+      - it-all
+      - jsonwebtoken
+      - kafkajs
+      - knex
+      - koa
+      - kysely
+      - lodash
+      - lunary
+      - mammoth
+      - mariadb
+      - mem0ai
+      - mongodb
+      - mqtt
+      - mysql2
+      - nats
+      - neo4j-driver
+      - next
+      - node-llama-cpp
+      - notion-to-md
+      - officeparser
+      - pdf-parse
+      - peggy
+      - pg-copy-streams
+      - pg-native
+      - pickleparser
+      - playwright
+      - portkey-ai
+      - proxy-agent
+      - pyodide
+      - react
+      - react-dom
+      - react-native-b4a
+      - redis
+      - reflect-metadata
+      - replicate
+      - request
+      - rxjs
+      - sonix-speech-recognition
+      - sql.js
+      - sqlite3
+      - srt-parser-2
+      - supports-color
+      - svelte
+      - typeorm
+      - typescript
+      - typesense
+      - usearch
+      - utf-8-validate
+      - voy-search
+      - vue
+      - weaviate-client
+      - word-extractor
+      - workflow
       - yauzl
       - youtubei.js
       - zod-to-json-schema
@@ -30582,9 +30588,9 @@ snapshots:
       - ws
       - zod
 
-  '@postmill-ai/provider-generic@file:libraries/providers/generic(05384a49536d76834a07664cd743595f)':
+  '@postmill-ai/provider-generic@file:libraries/providers/generic(e104f067858e2c9d3926a375f2c40e82)':
     dependencies:
-      '@postmill-ai/nestjs-libraries': file:libraries/nestjs-libraries(178222a960c07c1c7f6bf08fc5aa7d6e)
+      '@postmill-ai/nestjs-libraries': file:libraries/nestjs-libraries(27d019bc61513f2b4190745b93eb09b1)
       '@postmill-ai/provider-kernel': file:libraries/providers/kernel(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
     transitivePeerDependencies:
       - '@ag-ui/client'
@@ -30781,7 +30787,6 @@ snapshots:
       - word-extractor
       - workflow
       - ws
-      - yargs
       - yauzl
       - youtubei.js
       - zod
@@ -30804,9 +30809,9 @@ snapshots:
       - ws
       - zod
 
-  '@postmill-ai/provider-github@file:libraries/providers/github(05384a49536d76834a07664cd743595f)':
+  '@postmill-ai/provider-github@file:libraries/providers/github(e104f067858e2c9d3926a375f2c40e82)':
     dependencies:
-      '@postmill-ai/nestjs-libraries': file:libraries/nestjs-libraries(178222a960c07c1c7f6bf08fc5aa7d6e)
+      '@postmill-ai/nestjs-libraries': file:libraries/nestjs-libraries(27d019bc61513f2b4190745b93eb09b1)
       '@postmill-ai/provider-kernel': file:libraries/providers/kernel(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
     transitivePeerDependencies:
       - '@ag-ui/client'
@@ -31003,7 +31008,6 @@ snapshots:
       - word-extractor
       - workflow
       - ws
-      - yargs
       - yauzl
       - youtubei.js
       - zod
@@ -44431,13 +44435,13 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  nestjs-command@3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@18.1.0):
+  nestjs-command@3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@17.7.3):
     dependencies:
       '@nestjs/common': 11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 11.2.7(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/microservices@11.2.7)(@nestjs/platform-express@11.2.7)(@nestjs/websockets@11.2.7)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       lodash.compact: 3.0.1
       lodash.flattendeep: 4.4.0
-      yargs: 18.1.0
+      yargs: 17.7.3
 
   nestjs-real-ip@3.0.1(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)):
     dependencies:

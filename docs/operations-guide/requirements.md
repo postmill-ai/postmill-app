@@ -80,23 +80,23 @@ The `apps/commands` package provides NestJS CLI commands for operator tasks:
 pnpm run commands:build:development
 
 # Check configuration for issues
-pnpm exec nestjs-command config:check
+pnpm --filter ./apps/commands run start config:check
 
 # Refresh all OAuth tokens
-pnpm exec nestjs-command refresh
+pnpm --filter ./apps/commands run start refresh
 
 # Run the AI agent
-pnpm exec nestjs-command run:agent <org>
+pnpm --filter ./apps/commands run start run:agent <org>
 
 # Preview the one-time English owner announcement (no provider calls)
-pnpm exec nestjs-command announcement:open-beta-end preview
+pnpm --filter ./apps/commands run start announcement:open-beta-end preview
 
 # Send one explicit preview recipient, then inspect delivery status
-pnpm exec nestjs-command announcement:open-beta-end test test-meta@test.com
-pnpm exec nestjs-command announcement:open-beta-end status
+pnpm --filter ./apps/commands run start announcement:open-beta-end test test-meta@test.com
+pnpm --filter ./apps/commands run start announcement:open-beta-end status
 
 # Full send requires the exact operator confirmation token
-pnpm exec nestjs-command announcement:open-beta-end send <confirmation>
+pnpm --filter ./apps/commands run start announcement:open-beta-end send <confirmation>
 ```
 
 Run these inside the application container or with the same environment variables as the backend. The announcement command requires the active Resend provider, selects each eligible active owner mailbox once, and uses campaign log claims plus Resend idempotency keys to prevent duplicate sends on rerun. Failed sends are re-claimed with the same log id on rerun; queued or otherwise ambiguous claims remain skipped for inspection. Full sends wait 600 ms between recipients to stay below Resend's default rate limit. Preview mode performs reads only.
