@@ -36,7 +36,17 @@ export class EmailLogRepository {
         },
       });
       if (!log) throw error;
-      return { log, claimed: false as const };
+      if (log.status !== 'failed') return { log, claimed: false as const };
+
+      const reclaimed = await this._db.model.emailLog.updateMany({
+        where: { id: log.id, status: 'failed' },
+        data: { status: 'queued', error: null },
+      });
+      if (reclaimed.count !== 1) return { log, claimed: false as const };
+      return {
+        log: { ...log, status: 'queued', error: null },
+        claimed: true as const,
+      };
     }
   }
 

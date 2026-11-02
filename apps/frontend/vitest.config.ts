@@ -65,6 +65,7 @@ export default defineConfig({
       'src/components/layout/top.menu.spec.{ts,tsx}',
       'src/components/layout/layout.context.spec.{ts,tsx}',
       'src/components/layout/preferred-language.client.spec.{ts,tsx}',
+      'src/components/layout/language.component.spec.{ts,tsx}',
       'src/components/layout/use-preferred-language-sync.spec.{ts,tsx}',
       'src/components/layout/prompt-modal.spec.{ts,tsx}',
       'src/components/layout/copilot.provider.spec.{ts,tsx}',

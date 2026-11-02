@@ -108,6 +108,8 @@ describe('OwnerEmailCampaignService', () => {
       failed: 0,
       stoppedEarly: false,
     });
+    const { timer } = await import('@postmill-ai/helpers/utils/timer');
+    expect(timer).toHaveBeenCalledExactlyOnceWith(600);
   });
 
   it('returns aggregate campaign delivery status', async () => {

@@ -99,7 +99,7 @@ pnpm exec nestjs-command announcement:open-beta-end status
 pnpm exec nestjs-command announcement:open-beta-end send <confirmation>
 ```
 
-Run these inside the application container or with the same environment variables as the backend. The announcement command requires the active Resend provider, selects each eligible active owner mailbox once, and uses campaign log claims plus Resend idempotency keys to prevent duplicate sends on rerun. Preview mode performs reads only.
+Run these inside the application container or with the same environment variables as the backend. The announcement command requires the active Resend provider, selects each eligible active owner mailbox once, and uses campaign log claims plus Resend idempotency keys to prevent duplicate sends on rerun. Failed sends are re-claimed with the same log id on rerun; queued or otherwise ambiguous claims remain skipped for inspection. Full sends wait 600 ms between recipients to stay below Resend's default rate limit. Preview mode performs reads only.
 
 ## Native dependency notes
 

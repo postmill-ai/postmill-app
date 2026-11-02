@@ -135,7 +135,7 @@ Inngest sees a terminal failure. `sendEmailSync` no-ops without `EMAIL_FROM_ADDR
 
 `NotificationService.sendCampaignEmail` is the chokepoint for explicitly operator-triggered announcement campaigns. It calls `EmailService.sendEmailSync` directly with a campaign id, plain-text alternative, and notification-footer content; no digest, push, in-app, or comms delivery is involved. This path deliberately has broadcast-style preference override semantics and must only be used by an explicit operator command, not ordinary feature notifications.
 
-`EmailLog.campaignId` has a unique `(campaignId, toAddress)` constraint. The repository atomically claims that row before the provider call; a rerun sees the existing claim and skips the recipient. Resend also receives the stable log id as its idempotency key. Existing failed or ambiguous deliveries are not automatically retried — inspect provider/log state first. Recipient addresses remain redacted from logs and command output is aggregate-only.
+`EmailLog.campaignId` has a unique `(campaignId, toAddress)` constraint. The repository atomically claims that row before the provider call; a rerun skips an existing non-failed claim and atomically re-claims a failed row with the same id. Resend also receives the stable log id as its idempotency key. Full sends wait 600 ms between recipients to stay below Resend's default 2 requests/second API limit. Queued or otherwise ambiguous deliveries are not automatically retried — inspect provider/log state first. Recipient addresses remain redacted from logs and command output is aggregate-only.
 
 ## Push specifics (verified)
 

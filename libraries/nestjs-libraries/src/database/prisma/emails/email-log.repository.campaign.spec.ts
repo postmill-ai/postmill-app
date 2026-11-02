@@ -5,6 +5,7 @@ describe('EmailLogRepository campaign claims', () => {
   const create = vi.fn();
   const findUnique = vi.fn();
   const groupBy = vi.fn();
+  const updateMany = vi.fn();
   let repository: EmailLogRepository;
   const data = {
     provider: 'resend',
@@ -17,7 +18,7 @@ describe('EmailLogRepository campaign claims', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     repository = new EmailLogRepository({
-      model: { emailLog: { create, findUnique, groupBy } },
+      model: { emailLog: { create, findUnique, groupBy, updateMany } },
     } as any);
   });
 
@@ -32,9 +33,9 @@ describe('EmailLogRepository campaign claims', () => {
 
   it('returns the existing recipient after a unique-key collision', async () => {
     create.mockRejectedValue({ code: 'P2002' });
-    findUnique.mockResolvedValue({ id: 'existing-log' });
+    findUnique.mockResolvedValue({ id: 'existing-log', status: 'sent' });
     await expect(repository.claimCampaignLog(data)).resolves.toEqual({
-      log: { id: 'existing-log' },
+      log: { id: 'existing-log', status: 'sent' },
       claimed: false,
     });
     expect(findUnique).toHaveBeenCalledWith({
@@ -44,6 +45,31 @@ describe('EmailLogRepository campaign claims', () => {
           toAddress: 'owner@example.com',
         },
       },
+    });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('re-claims a failed recipient with the same log id', async () => {
+    create.mockRejectedValue({ code: 'P2002' });
+    findUnique.mockResolvedValue({ id: 'existing-log', status: 'failed', error: '429' });
+    updateMany.mockResolvedValue({ count: 1 });
+    await expect(repository.claimCampaignLog(data)).resolves.toEqual({
+      log: { id: 'existing-log', status: 'queued', error: null },
+      claimed: true,
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'existing-log', status: 'failed' },
+      data: { status: 'queued', error: null },
+    });
+  });
+
+  it('skips a failed recipient when another process claims it first', async () => {
+    create.mockRejectedValue({ code: 'P2002' });
+    findUnique.mockResolvedValue({ id: 'existing-log', status: 'failed', error: '429' });
+    updateMany.mockResolvedValue({ count: 0 });
+    await expect(repository.claimCampaignLog(data)).resolves.toEqual({
+      log: { id: 'existing-log', status: 'failed', error: '429' },
+      claimed: false,
     });
   });
 

@@ -74,7 +74,7 @@ export class OwnerEmailCampaignService {
           break;
         }
       }
-      if (index < selection.recipients.length - 1) await timer(150);
+      if (index < selection.recipients.length - 1) await timer(600);
     }
 
     return {

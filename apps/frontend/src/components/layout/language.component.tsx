@@ -78,9 +78,9 @@ export const ChangeLanguageComponent = () => {
     if (saving) return;
     setSaving(true);
     try {
+      await applyPreferredLanguage(language);
       const response = await savePreferredLanguage(fetch, language);
       if (!response.ok) throw new Error('Language save failed');
-      await applyPreferredLanguage(language);
       modals.closeCurrent();
     } catch {
       toaster.show(
