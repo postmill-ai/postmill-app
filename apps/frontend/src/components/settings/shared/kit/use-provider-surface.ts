@@ -120,8 +120,8 @@ export function useProviderSurface<Meta = any>(
         // Some surfaces (media, content-packs) return HTTP 200 with `{ ok: false }`
         // on a failed connection; others throw a non-2xx. Honor both: a non-2xx
         // OR an explicit `ok === false` in the body is a failure. Either way,
-        // thread the adapter's reason (`error` / NestJS `message`) through so the
-        // UI can show "Invalid API key" instead of a generic failure.
+        // thread the adapter's reason (`error` / adapter or NestJS `message`)
+        // through so the UI can show "Invalid API key" instead of a generic failure.
         let ok = res.ok;
         let error: string | undefined;
         try {
@@ -129,7 +129,7 @@ export function useProviderSurface<Meta = any>(
           if (data && data.ok === false) ok = false;
           if (data && typeof data.error === 'string' && data.error) {
             error = data.error;
-          } else if (!res.ok && data && typeof data.message === 'string' && data.message) {
+          } else if ((!res.ok || data?.ok === false) && typeof data?.message === 'string' && data.message) {
             error = data.message;
           }
         } catch {

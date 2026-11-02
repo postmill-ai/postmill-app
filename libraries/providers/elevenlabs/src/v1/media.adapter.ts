@@ -354,7 +354,13 @@ export class ElevenLabsAdapter implements MediaProviderAdapter {
     const res = await this._fetch('https://api.elevenlabs.io/v1/user', {
       headers: { 'xi-api-key': apiKey },
     });
-    if (!res.ok) throw await mediaUpstreamError(this, res, 'audio');
+    if (!res.ok) {
+      const error = await mediaUpstreamError(this, res, 'audio');
+      if (res.status === 401 && /missing the permission user_read/i.test(error.message)) {
+        return { ok: true, message: 'Connection successful (user_read scope not granted)' };
+      }
+      throw error;
+    }
     return { ok: true, message: 'Connection successful' };
   }
 
