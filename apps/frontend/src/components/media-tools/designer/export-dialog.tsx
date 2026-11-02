@@ -616,6 +616,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const [posterUrl, setPosterUrl] = useState<string>('');
   const [posterTimeMs, setPosterTimeMs] = useState<number | undefined>();
   const [posterUploading, setPosterUploading] = useState(false);
+  const posterUploadInputRef = useRef<HTMLInputElement>(null);
   const [renderedPosterUrl, setRenderedPosterUrl] = useState<string>('');
   const [posterSource, setPosterSource] = useState<'rendered' | 'custom'>('rendered');
 
@@ -1017,7 +1018,10 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
           return;
         }
         const data = await res.json();
-        await applyPosterSelection(data.path, 'custom');
+        const applied = await applyPosterSelection(data.path, 'custom');
+        if (applied) {
+          toaster.show(t('designer_custom_poster_selected', 'Custom thumbnail selected'), 'success');
+        }
       } catch {
         toaster.show(t('designer_poster_upload_failed', 'Poster upload failed'), 'warning');
       } finally {
@@ -2240,6 +2244,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
               <div className="text-[13px] font-medium text-textColor">{t('designer_poster_thumbnail_label', 'Poster / Thumbnail')}</div>
               <div className="flex items-center gap-2">
                 <input
+                  ref={posterUploadInputRef}
                   type="file"
                   aria-label={t('designer_upload_custom_poster', 'Upload custom poster')}
                   accept="image/*"
@@ -2249,8 +2254,18 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                     if (file) await handlePosterUpload(file);
                     e.target.value = '';
                   }}
-                  className="text-[12px] text-textColor file:mr-2 file:px-2 file:py-1 file:rounded-sm file:border-0 file:bg-designerAccent file:text-white"
+                  className="hidden"
                 />
+                <button
+                  type="button"
+                  disabled={posterUploading}
+                  onClick={() => posterUploadInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-[5px] border border-studioBorder text-[12px] text-textColor hover:bg-boxHover disabled:opacity-50"
+                >
+                  {posterUploading
+                    ? t('designer_uploading_ellipsis', 'Uploading...')
+                    : t('designer_upload_custom_thumbnail', 'Upload custom thumbnail')}
+                </button>
                 {posterUrl && (
                   <button
                     onClick={() => {

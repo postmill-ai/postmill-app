@@ -313,11 +313,20 @@ export const FileManager: FC<{
         closeOnEscape: true,
         withCloseButton: true,
         classNames: { modal: 'w-[100%] max-w-[820px] text-textColor' },
-        children: <FilePreviewModal file={file} onDetails={setDetailsFile} />,
+        children: (
+          <FilePreviewModal
+            file={file}
+            onDetails={setDetailsFile}
+            onRefresh={() => {
+              mutate();
+              mutateFolders();
+            }}
+          />
+        ),
         size: '80%',
       });
     },
-    [modals]
+    [modals, mutate, mutateFolders]
   );
 
   // With `urlSync` the navigation IS the state change: pushing the path makes
@@ -332,11 +341,13 @@ export const FileManager: FC<{
       const segments = ancestorsOf(foldersData || [], folderId).map(f =>
         encodeURIComponent(f.name)
       );
-      router.push(segments.length ? `${FILES_ROUTE}/${segments.join('/')}` : FILES_ROUTE, {
-        scroll: false,
-      });
+      window.history.pushState(
+        null,
+        '',
+        segments.length ? `${FILES_ROUTE}/${segments.join('/')}` : FILES_ROUTE
+      );
     },
-    [urlSync, foldersData, router]
+    [urlSync, foldersData]
   );
 
   const refresh = useCallback(() => {

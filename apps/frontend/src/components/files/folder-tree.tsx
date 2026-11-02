@@ -30,8 +30,9 @@ export const FolderTree: FC<{
   const toaster = useToaster();
   const t = useT();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
+  const [newFolderParent, setNewFolderParent] = useState<string | null | undefined>(undefined);
   const [newFolderName, setNewFolderName] = useState('');
+  const creatingFolder = useRef(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renamingName, setRenamingName] = useState('');
   const { menu, openAt: openMenu, close: closeMenu } = useContextMenu<string>();
@@ -49,15 +50,30 @@ export const FolderTree: FC<{
   };
 
   const handleCreateFolder = useCallback(async (parentId: string | null) => {
-    if (!newFolderName.trim()) return;
-    await fetch('/files/folders', {
-      method: 'POST',
-      body: JSON.stringify({ name: newFolderName.trim(), parentId }),
-    });
-    setNewFolderName('');
-    setNewFolderParent(null);
-    onRefresh();
-    toaster.show(t('folder_created', 'Folder created'), 'success');
+    const name = newFolderName.trim();
+    if (!name || creatingFolder.current) return;
+    creatingFolder.current = true;
+    try {
+      const res = await fetch('/files/folders', {
+        method: 'POST',
+        body: JSON.stringify({ name, parentId }),
+      });
+      if (!res.ok) {
+        toaster.show(
+          await readErrorMessage(res, t('failed_to_create_folder', 'Failed to create folder')),
+          'warning'
+        );
+        return;
+      }
+      setNewFolderName('');
+      setNewFolderParent(undefined);
+      onRefresh();
+      toaster.show(t('folder_created', 'Folder created'), 'success');
+    } catch {
+      toaster.show(t('failed_to_create_folder', 'Failed to create folder'), 'warning');
+    } finally {
+      creatingFolder.current = false;
+    }
   }, [newFolderName, fetch, onRefresh, toaster, t]);
 
   const handleRename = useCallback(async (id: string) => {
@@ -236,7 +252,7 @@ export const FolderTree: FC<{
 
         {folders.map((folder) => renderFolder(folder))}
 
-        {newFolderParent !== null && (
+        {newFolderParent !== undefined && (
           <div className="flex items-center gap-[6px] px-[12px] py-[6px]" style={{ paddingLeft: '20px' }}>
             <AutoFocusInput
               value={newFolderName}
@@ -244,7 +260,7 @@ export const FolderTree: FC<{
               onBlur={() => handleCreateFolder(newFolderParent)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleCreateFolder(newFolderParent);
-                if (e.key === 'Escape') { setNewFolderParent(null); setNewFolderName(''); }
+                if (e.key === 'Escape') { setNewFolderParent(undefined); setNewFolderName(''); }
               }}
               placeholder={t('folder_name_placeholder', 'Folder name...')}
               className="flex-1 bg-transparent border-b border-[#2B5CD3] text-textColor text-[13px] outline-hidden placeholder:text-newTextColor/30"

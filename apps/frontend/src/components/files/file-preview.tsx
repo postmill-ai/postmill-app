@@ -1,6 +1,7 @@
 'use client';
 
 import React, { FC, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import clsx from 'clsx';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -26,6 +27,86 @@ const DocumentFallback: FC<{ file: FileItem; compact?: boolean }> = ({ file, com
           ? t(designLabel.key, designLabel.fallback)
           : t('document_preview_unavailable', 'No preview available')}
       </div>
+    </div>
+  );
+};
+
+const ThumbnailImage = React.forwardRef<HTMLImageElement, {
+  src: string;
+  alt: string;
+  className?: string;
+}>(({ src, alt, className }, ref) => {
+  if (src.startsWith('/') && !src.startsWith('//')) {
+    return (
+      <Image
+        ref={ref}
+        src={src}
+        alt={alt}
+        fill
+        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
+        className={clsx('object-cover', className)}
+        loading="lazy"
+        decoding="async"
+      />
+    );
+  }
+  return (
+    // Remote storage URLs need a configured loader; keep the original path there.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      ref={ref}
+      src={src}
+      alt={alt}
+      className={clsx('h-full w-full object-cover', className)}
+      loading="lazy"
+      decoding="async"
+    />
+  );
+});
+ThumbnailImage.displayName = 'ThumbnailImage';
+
+const LazyVideoThumbnail: FC<{
+  src: string;
+  className?: string;
+  captionsLabel: string;
+}> = ({ src, className, captionsLabel }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [nearViewport, setNearViewport] = useState(false);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      const timeout = setTimeout(() => setNearViewport(true), 0);
+      return () => clearTimeout(timeout);
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setNearViewport(true);
+      observer.disconnect();
+    }, { rootMargin: '200px' });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [src]);
+
+  return (
+    <div ref={containerRef} className="h-full w-full">
+      {!nearViewport ? (
+        <div className="flex h-full w-full items-center justify-center bg-newBgColorInner text-newTextColor/60" aria-hidden="true">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </div>
+      ) : (
+        <video
+          src={src}
+          className={clsx('h-full w-full object-cover', className)}
+          muted
+          preload="metadata"
+        >
+          <track kind="captions" label={captionsLabel} default />
+        </video>
+      )}
     </div>
   );
 };
@@ -62,41 +143,33 @@ export const FileThumbnail: FC<{ file: FileItem; className?: string }> = ({ file
 
   if (thumbnail && !broken) {
     return (
-      // Dynamic storage URLs cannot use next/image without a configured loader.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
+      <ThumbnailImage
         ref={imageRef}
         src={mediaDirectory.set(thumbnail)}
         alt={file.alt || file.originalName || file.name}
-        className={clsx('h-full w-full object-cover', className)}
-        loading="lazy"
+        className={className}
       />
     );
   }
 
   if (presentation.mediaKind === 'image' && !broken) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
+      <ThumbnailImage
         ref={imageRef}
         src={mediaDirectory.set(file.path)}
         alt={file.alt || file.originalName || file.name}
-        className={clsx('h-full w-full object-cover', className)}
-        loading="lazy"
+        className={className}
       />
     );
   }
 
   if (presentation.mediaKind === 'video') {
     return (
-      <video
+      <LazyVideoThumbnail
         src={mediaDirectory.set(file.path)}
-        className={clsx('h-full w-full object-cover', className)}
-        muted
-        preload="metadata"
-      >
-        <track kind="captions" label={t('no_captions', 'No captions')} default />
-      </video>
+        className={className}
+        captionsLabel={t('no_captions', 'No captions')}
+      />
     );
   }
 
