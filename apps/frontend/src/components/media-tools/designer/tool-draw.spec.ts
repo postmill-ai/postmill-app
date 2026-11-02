@@ -1,5 +1,6 @@
 import {
   rectFromDrag,
+  rectFromTap,
   isMeaningfulDraw,
   shapeForTool,
   buildShapeElement,
@@ -61,6 +62,26 @@ describe('rectFromDrag', () => {
     expect(isMeaningfulDraw({ x: 0, y: 0, width: MIN_DRAW_SIZE, height: 0 })).toBe(true);
     expect(isMeaningfulDraw({ x: 0, y: 0, width: 0, height: MIN_DRAW_SIZE })).toBe(true);
     expect(isMeaningfulDraw({ x: 0, y: 0, width: 1, height: 1 })).toBe(false);
+  });
+});
+
+describe('rectFromTap', () => {
+  it('centres a useful default shape on the tap', () => {
+    expect(rectFromTap(at(500, 400), { width: 1000, height: 800 })).toEqual({
+      x: 400,
+      y: 320,
+      width: 200,
+      height: 160,
+    });
+  });
+
+  it('keeps tap shapes inside the canvas edges', () => {
+    expect(rectFromTap(at(5, 795), { width: 1000, height: 800 })).toEqual({
+      x: 0,
+      y: 640,
+      width: 200,
+      height: 160,
+    });
   });
 });
 

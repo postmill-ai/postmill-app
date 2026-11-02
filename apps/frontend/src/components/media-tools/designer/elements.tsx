@@ -54,6 +54,15 @@ import {
 
 type SelectHandler = (id: string, evt?: Konva.KonvaEventObject<any>) => void;
 
+export const fullBoxHitProps = (width: number, height: number) => ({
+  hitFunc: (context: Konva.Context, shape: Konva.Shape) => {
+    context.beginPath();
+    context.rect(0, 0, width, height);
+    context.closePath();
+    context.fillStrokeShape(shape);
+  },
+});
+
 interface ElementsProps {
   elements: DesignerElement[];
   /** Symbol definitions from the document, for expanding instances. */
@@ -1169,6 +1178,7 @@ export const CanvasElements: FC<ElementsProps> = ({
                   <TextPath
                     key={el.id}
                     {...commonProps}
+                    {...fullBoxHitProps(el.width, el.height)}
                     data={textPathData}
                     text={flatText}
                     {...gradientFillProps(el.fillGradient, el.width, el.height)}
@@ -1202,6 +1212,7 @@ export const CanvasElements: FC<ElementsProps> = ({
 
               return (
                 <Group key={el.id} {...commonProps}>
+                  <Rect x={0} y={0} width={el.width} height={el.height} fill="rgba(0,0,0,0)" />
                   {segments.map((seg, i) => (
                     <KonvaText
                       key={`${seg.x}-${seg.y}-${seg.text}-${seg.run.fontFamily}-${seg.run.fontSize}-${seg.run.fontStyle}-${seg.run.fontWeight}-${seg.run.fill}-${seg.run.underline ? 'u' : 'n'}-${seg.run.lineThrough ? 's' : 'n'}`}
@@ -1246,6 +1257,7 @@ export const CanvasElements: FC<ElementsProps> = ({
                 <TextPath
                   key={el.id}
                   {...commonProps}
+                  {...fullBoxHitProps(el.width, el.height)}
                   data={textPathData}
                   {...gradientFillProps(el.fillGradient, el.width, el.height)}
                   text={el.text || ''}
@@ -1322,6 +1334,7 @@ export const CanvasElements: FC<ElementsProps> = ({
               };
               return (
                 <Group key={el.id} {...commonProps} scaleX={scaleX}>
+                  <Rect x={0} y={0} width={boxWidth} height={el.height} fill="rgba(0,0,0,0)" />
                   {rows.map((row, i) => {
                     const words = justifyMeasure
                       ? // A paragraph's last line keeps natural spacing, like
@@ -1380,6 +1393,7 @@ export const CanvasElements: FC<ElementsProps> = ({
               <KonvaText
                 key={el.id}
                 {...commonProps}
+                {...fullBoxHitProps(el.width / scaleX, el.height)}
                 scaleX={scaleX}
                 width={el.width / scaleX}
                 // Text was the only type that ignored `fillGradient`, though

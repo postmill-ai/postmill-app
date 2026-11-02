@@ -185,6 +185,7 @@ class DesignerMocks {
   readonly customFonts: Array<Record<string, unknown>> = [];
   dashboardJobReads = 0;
   studioStatusReads = 0;
+  designWrites = 0;
   doc = blankDoc();
   name = 'Generated video E2E';
   jobOutcome: 'completed' | 'failed' = 'completed';
@@ -534,6 +535,7 @@ class DesignerMocks {
         const body = request.postDataJSON() as { name: string; doc: DesignerDocSnapshot };
         this.name = body.name;
         this.doc = body.doc;
+        this.designWrites++;
         await json(route, { id: DESIGN_ID, name: this.name, doc: this.doc });
         return;
       }
@@ -1596,6 +1598,93 @@ test.describe('Designer video canvas movement and grouping (mocked local documen
     await expect.poll(() => mocks.savedClips().map((item) => item.id).sort()).toEqual(['clip-a', 'clip-b', 'clip-c']);
     await expectPosition('clip-a', 70, 60);
     await expectPosition('clip-b', 180, 60);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
+async function touchDragDocumentPoints(
+  page: Page,
+  start: { x: number; y: number },
+  end: { x: number; y: number }
+) {
+  const session = await page.context().newCDPSession(page);
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: start.x, y: start.y }],
+  });
+  for (let step = 1; step <= 8; step++) {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{
+        x: start.x + (end.x - start.x) * step / 8,
+        y: start.y + (end.y - start.y) * step / 8,
+      }],
+    });
+  }
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await session.detach();
+}
+
+test.describe('Designer mobile touch editing (mocked local document)', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('draws and taps shapes, moves text by its full box, edits, saves, and reloads', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    mocks.doc.outputs[0].children = [{
+      id: 'mobile-text',
+      type: 'text',
+      text: 'Move me',
+      x: 40,
+      y: 40,
+      width: 200,
+      height: 80,
+      fontFamily: 'Arial',
+      fontSize: 32,
+      fontWeight: 400,
+      fill: '#ffffff',
+    }];
+    mocks.name = 'Mobile touch E2E';
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+    const point = (x: number, y: number) => canvasDocumentPoint(page, 400, 300, x, y);
+
+    await page.getByRole('button', { name: 'Rectangle (U)', exact: true }).click();
+    await touchDragDocumentPoints(page, await point(250, 150), await point(350, 250));
+    await expect.poll(() => mocks.doc.outputs[0].children?.filter((item) => item.type === 'shape').length).toBe(1);
+
+    const tap = await point(100, 200);
+    await page.touchscreen.tap(tap.x, tap.y);
+    await expect.poll(() => mocks.doc.outputs[0].children?.filter((item) => item.type === 'shape').length).toBe(2);
+
+    await page.getByRole('button', { name: 'Move (V)', exact: true }).click();
+    await touchDragDocumentPoints(page, await point(225, 105), await point(285, 165));
+    await expect.poll(() => mocks.doc.outputs[0].children?.find((item) => item.id === 'mobile-text')?.x).toBeGreaterThan(40);
+    const moved = mocks.doc.outputs[0].children!.find((item) => item.id === 'mobile-text')!;
+    expect(moved.y).toBeGreaterThan(40);
+
+    const editPoint = await point(moved.x! + 100, moved.y! + 40);
+    await page.touchscreen.tap(editPoint.x, editPoint.y);
+    await page.touchscreen.tap(editPoint.x, editPoint.y);
+    const editor = page.locator('[data-text-editor-id="mobile-text"]');
+    await expect(editor).toBeVisible();
+    await editor.fill('Mobile edited');
+    await page.getByRole('button', { name: 'Move (V)', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.find((item) => item.id === 'mobile-text')?.text).toBe('Mobile edited');
+
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => mocks.designWrites).toBeGreaterThan(0);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    expect(mocks.doc.outputs[0].children?.filter((item) => item.type === 'shape')).toHaveLength(2);
+    expect(mocks.doc.outputs[0].children?.find((item) => item.id === 'mobile-text')).toMatchObject({
+      text: 'Mobile edited',
+      x: moved.x,
+      y: moved.y,
+    });
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

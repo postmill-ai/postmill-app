@@ -245,6 +245,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   selected visible node commits through silent clip updates plus ONE history push. Shift/Ctrl/Cmd-click
   and marquee use `selectedClips`; grouped members select together, duplicate/paste remaps group ids,
   and `video-reflow.ts` supplies one group box so relative geometry survives resize/seed.
+- **Canvas input works with mouse and touch.** Stage tools share `MouseEvent | TouchEvent` handlers,
+  the canvas owns its gesture with `touchAction: none`, and a short touch tap places a default shape
+  through `rectFromTap` while a drag uses the authored box. Text and caption hit surfaces cover the
+  full box (`fullBoxHitProps` or a transparent hit Rect), never just the painted glyphs; coarse
+  pointers enlarge the Transformer anchors. Do not add mouse-only Stage handlers or reintroduce a
+  synthetic-mouse duplicate commit after a touch gesture.
 - **Timeline transport and Inspector essentials.** `timeline-split.ts` is the single split guard for
   the transport, S shortcut, context menu, and store: an unlocked selected clip, a strictly interior
   playhead, and at least 100 ms on both sides. Invalid cuts are no-ops; valid splits select the right

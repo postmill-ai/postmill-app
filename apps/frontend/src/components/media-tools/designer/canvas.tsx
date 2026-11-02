@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useMemo, useRef, useEffect, useState } from 'react';
+import React, { FC, useCallback, useMemo, useRef, useEffect, useState, useSyncExternalStore } from 'react';
 import { Stage, Layer, Transformer, Rect, Group, Line as KonvaLine, Image as KonvaImage, Shape, Text as KonvaText } from 'react-konva';
 import {
   findEqualSpacing,
@@ -33,7 +33,7 @@ import { sharedStageRef } from './stage-ref';
 import { bakeElementTransform, buildResizePatch } from './transform-resize';
 import { useGeometryNonce } from './use-geometry-nonce';
 import { getTool, resolveToolShortcut } from './tools';
-import { rectFromDrag, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
+import { rectFromDrag, rectFromTap, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
 import { addText } from './add-text';
 import { CropOverlay } from './crop-overlay';
 import { ensureFontsUsed } from './fonts';
@@ -73,6 +73,15 @@ import { clipsInMarquee, expandClipRefs } from './video-selection';
  * Anything at 1 would butt the canvas against the chrome on every side.
  */
 const FIT_PADDING = 0.85;
+const COARSE_POINTER_QUERY = '(pointer: coarse)';
+type CanvasInputEvent = Konva.KonvaEventObject<MouseEvent | TouchEvent>;
+
+const subscribeToCoarsePointer = (onChange: () => void) => {
+  const query = window.matchMedia(COARSE_POINTER_QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+};
+const readCoarsePointer = () => window.matchMedia(COARSE_POINTER_QUERY).matches;
 
 interface CanvasProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -117,6 +126,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   }, [stageRef]);
   const transformerRef = useRef<Konva.Transformer>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const coarsePointer = useSyncExternalStore(subscribeToCoarsePointer, readCoarsePointer, () => false);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   /**
@@ -642,7 +652,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   );
 
   const handleStageMouseDown = useCallback(
-    (e: Konva.KonvaEventObject<MouseEvent>) => {
+    (e: CanvasInputEvent) => {
       // The canvas-scoped shortcuts live on the container div's onKeyDown, and
       // a div only receives keys while focused — on macOS clicking a div never
       // focuses it, so ⌘G / ⌘Z / arrows were dead until something else stole
@@ -837,7 +847,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   );
 
   const handleStageMouseMove = useCallback(
-    (e: Konva.KonvaEventObject<MouseEvent>) => {
+    (e: CanvasInputEvent) => {
       const stagePos = stageRef.current?.getRelativePointerPosition();
 
       if (stagePos && isPaintTool(effectiveTool)) {
@@ -892,7 +902,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     [effectiveTool, paint]
   );
 
-  const handleStageMouseUp = useCallback((e?: Konva.KonvaEventObject<MouseEvent>) => {
+  const handleStageMouseUp = useCallback((e?: CanvasInputEvent) => {
     setIsPanning(false);
     penDragging.current = false;
 
@@ -965,7 +975,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       const rect = marquee
         ? { x: marquee.x, y: marquee.y, width: marquee.w, height: marquee.h }
         : null;
-      if (rect && isMeaningfulDraw(rect)) {
+      const committedRect = rect && isMeaningfulDraw(rect)
+        ? rect
+        : e?.evt.type === 'touchend'
+          ? rectFromTap(drawStart.current, output)
+          : null;
+      if (committedRect) {
         const opts = store.getState().toolOptions[effectiveTool] || {};
         if (isVideo) {
           // A shape drawn on a timeline is a clip on a shape track, created on
@@ -982,11 +997,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             store.getState().addClip(
               st.currentOutput,
               track.id,
-              buildShapeClip(effectiveTool, rect, st.playheadMs, vo.durationMs, opts)
+              buildShapeClip(effectiveTool, committedRect, st.playheadMs, vo.durationMs, opts)
             );
           }
         } else {
-          store.getState().addElement(buildShapeElement(effectiveTool, rect, opts));
+          store.getState().addElement(buildShapeElement(effectiveTool, committedRect, opts));
         }
         // addElement/addClip both push history themselves — a trailing push
         // stacked an identical snapshot and Undo took two clicks.
@@ -1716,6 +1731,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       // Space-to-pan always wins over the tool's own cursor, so the transient
       // Hand reads correctly no matter which tool is selected.
       style={{
+        touchAction: 'none',
         cursor: isPanning
           ? 'grabbing'
           : isSpacePressed
@@ -1783,6 +1799,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleStageMouseUp}
+        onTouchStart={handleStageMouseDown}
+        onTouchMove={handleStageMouseMove}
+        onTouchEnd={handleStageMouseUp}
         onMouseLeave={() => {
           setIsPanning(false);
           marqueeStart.current = null;
@@ -2212,9 +2231,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               borderStrokeWidth={1.5}
               anchorFill="#ffffff"
               anchorStroke="#2B5CD3"
-              anchorSize={10}
-              anchorCornerRadius={5}
-              rotateAnchorOffset={24}
+              anchorSize={coarsePointer ? 22 : 10}
+              anchorCornerRadius={coarsePointer ? 8 : 5}
+              rotateAnchorOffset={coarsePointer ? 40 : 24}
               onTransformStart={() => { if (!isVideo) noteGestureStart(); }}
               onTransform={handleTransform}
               onTransformEnd={handleTransformEnd}

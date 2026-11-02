@@ -80,6 +80,20 @@ export const rectFromDrag = (
 export const isMeaningfulDraw = (rect: DrawRect): boolean =>
   rect.width >= MIN_DRAW_SIZE || rect.height >= MIN_DRAW_SIZE;
 
+export const rectFromTap = (
+  point: { x: number; y: number },
+  canvas: { width: number; height: number }
+): DrawRect => {
+  const width = Math.min(canvas.width, Math.max(40, Math.round(canvas.width * 0.2)));
+  const height = Math.min(canvas.height, Math.max(40, Math.round(canvas.height * 0.2)));
+  return {
+    x: Math.max(0, Math.min(canvas.width - width, Math.round(point.x - width / 2))),
+    y: Math.max(0, Math.min(canvas.height - height, Math.round(point.y - height / 2))),
+    width,
+    height,
+  };
+};
+
 /** Which `shape` value a shape-tool id produces. */
 export const shapeForTool = (toolId: string): DesignerElement['shape'] => {
   switch (toolId) {
