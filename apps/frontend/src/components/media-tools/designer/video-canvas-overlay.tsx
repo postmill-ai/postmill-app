@@ -34,7 +34,7 @@ import {
   pointsForShape,
   flattenPoints,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
-import { gradientFillProps } from './elements';
+import { fullBoxHitProps, gradientFillProps } from './elements';
 import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 import { groupRefsForClip, toggleClipRefs } from './video-selection';
 
@@ -774,6 +774,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               rotation={props.rotation}
               opacity={props.opacity}
             >
+              <KonvaRect width={props.width} height={props.height} fill="rgba(0,0,0,0)" />
               <CaptionClip
                 clip={clip}
                 width={props.width}
@@ -855,6 +856,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               key={clip.id}
               ref={captureNode}
               {...nodeProps}
+              {...fullBoxHitProps(props.width, props.height)}
               visible={clip.id !== editingTextId}
               x={props.x}
               y={props.y}

@@ -314,7 +314,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
   }, [store, output, stageRef]);
 
   const beginPaint = useCallback(
-    (toolId: string, point: { x: number; y: number }, evt: MouseEvent) => {
+    (toolId: string, point: { x: number; y: number }, evt: MouseEvent | TouchEvent) => {
       // Alt-click sets the Clone Stamp source instead of painting.
       if (toolId === 'clone-stamp' && evt.altKey) {
         cloneAnchor.current = { x: point.x, y: point.y };
@@ -491,7 +491,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
   );
 
   const beginSelection = useCallback(
-    (toolId: string, point: { x: number; y: number }, evt: MouseEvent) => {
+    (toolId: string, point: { x: number; y: number }, evt: MouseEvent | TouchEvent) => {
       const { w, h } = docSize();
       const mode = modeFromModifiers(evt.shiftKey, evt.altKey);
 
@@ -566,7 +566,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
   );
 
   const endSelection = useCallback(
-    (toolId: string, point: { x: number; y: number }, evt: MouseEvent) => {
+    (toolId: string, point: { x: number; y: number }, evt: MouseEvent | TouchEvent) => {
       const { w, h } = docSize();
       const mode = modeFromModifiers(evt.shiftKey, evt.altKey);
 
