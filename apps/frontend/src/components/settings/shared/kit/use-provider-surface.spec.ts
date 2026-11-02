@@ -63,6 +63,14 @@ describe('useProviderSurface.test', () => {
     expect(result).toEqual({ ok: false, error: 'Unknown provider' });
   });
 
+  it('threads the adapter message from a 200 { ok: false } body without rendering raw JSON', async () => {
+    const message = 'ElevenLabs rejected the API key (HTTP 401): Invalid API key';
+    mockFetch.mockResolvedValue(jsonResponse(200, { ok: false, message }));
+    const result = await run().test('elevenlabs', {});
+    expect(result).toEqual({ ok: false, error: message });
+    expect(mockToasterShow).toHaveBeenCalledWith(message, 'warning');
+  });
+
   it('reports success on a 200 { ok: true } body', async () => {
     mockFetch.mockResolvedValue(jsonResponse(200, { ok: true }));
     const result = await run().test('openai', {});

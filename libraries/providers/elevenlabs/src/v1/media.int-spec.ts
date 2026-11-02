@@ -387,6 +387,27 @@ describe('elevenlabs flows video (submit + lifecycle poll)', () => {
     });
   });
 
+  it('accepts a valid restricted key that lacks only the optional user_read scope', async () => {
+    const { ctx } = makeCtx(() =>
+      res(
+        { detail: { message: 'The API key you used is missing the permission user_read to execute this operation.' } },
+        false,
+        401,
+      ),
+    );
+    const adapter: any = elevenlabsMediaModule.create(ctx as any);
+    await expect(adapter.testConnection({ apiKey: 'k' })).resolves.toEqual({
+      ok: true,
+      message: 'Connection successful (user_read scope not granted)',
+    });
+  });
+
+  it('still rejects other 401 responses from the user probe', async () => {
+    const { ctx } = makeCtx(() => res({ detail: { message: 'Invalid API key' } }, false, 401));
+    const adapter: any = elevenlabsMediaModule.create(ctx as any);
+    await expect(adapter.testConnection({ apiKey: 'bad' })).rejects.toThrow(/Invalid API key/);
+  });
+
   it('pollJob routes on the job-id modality prefix: pending/generating → pending, completed → artifactUrl, failed → failure_reason mapped', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
