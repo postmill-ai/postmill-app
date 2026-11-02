@@ -12,6 +12,7 @@ import type { FileItem } from './file-manager';
 import { FilePreview } from './file-preview';
 import { formatVideoDuration, getDesignLabel, getFilePresentation } from './file-presentation';
 import { useOpenFileInDesigner } from './use-open-file-in-designer';
+import { VideoPosterControls } from './video-poster-controls';
 
 const formatDate = (dateStr: string) => {
   try {
@@ -89,6 +90,7 @@ export const FileDetailsPanel: FC<{
   const duration = formatVideoDuration(file.metadata?.durationMs);
   const isOpening = pendingFileId === file.id;
 
+  const [previewFile, setPreviewFile] = useState(file);
   const [editingName, setEditingName] = useState(false);
   // The display name is `originalName || name` everywhere else; edit the same
   // value so all three surfaces (grid, list, panel) agree.
@@ -190,8 +192,20 @@ export const FileDetailsPanel: FC<{
 
       <div className="p-[16px]">
         <div className="mb-[16px]">
-          <FilePreview file={file} drawer />
+          <FilePreview file={previewFile} drawer />
         </div>
+
+        {presentation.mediaKind === 'video' && (
+          <div className="mb-[16px]">
+            <VideoPosterControls
+              file={previewFile}
+              onUpdated={(thumbnail) => {
+                setPreviewFile((current) => ({ ...current, thumbnail }));
+                onRefresh();
+              }}
+            />
+          </div>
+        )}
 
         <div className="space-y-[14px]">
           <div>

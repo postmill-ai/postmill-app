@@ -4,8 +4,8 @@ import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-li
 import { SWRConfig } from 'swr';
 
 const mockFetch = vi.fn();
-const mockPush = vi.fn();
 const mockReplace = vi.fn();
+const mockPushState = vi.spyOn(window.history, 'pushState');
 const navigation = { pathname: '/files' };
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
@@ -27,7 +27,7 @@ vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: vi.fn() }),
 }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useRouter: () => ({ replace: mockReplace }),
   usePathname: () => navigation.pathname,
 }));
 vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
@@ -91,8 +91,9 @@ const renderManager = (props: Record<string, unknown> = {}) =>
 beforeEach(() => {
   localStorage.clear();
   mockFetch.mockReset();
-  mockPush.mockReset();
   mockReplace.mockReset();
+  mockPushState.mockClear();
+  window.history.replaceState(null, '', '/files');
   navigation.pathname = '/files';
   respondWith();
 });
@@ -303,15 +304,16 @@ describe('FileManager URL sync', () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it('pushes the folder path when navigating', async () => {
+  it('pushes the folder path without a server navigation', async () => {
     renderManager({ urlSync: true });
     await waitFor(() => expect(screen.getByLabelText('Open folder Brand assets')).toBeTruthy());
 
     fireEvent.click(screen.getByLabelText('Open folder Brand assets'));
 
     await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith('/files/Brand%20assets', { scroll: false })
+      expect(mockPushState).toHaveBeenCalledWith(null, '', '/files/Brand%20assets')
     );
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it('falls back to the root when the path no longer resolves', async () => {
@@ -329,7 +331,7 @@ describe('FileManager URL sync', () => {
     fireEvent.click(screen.getByLabelText('Open folder Brand assets'));
 
     await waitFor(() => expect(lastFilesQuery()).toContain('folderId=d1'));
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockPushState).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });

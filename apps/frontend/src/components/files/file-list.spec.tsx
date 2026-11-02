@@ -50,7 +50,7 @@ afterEach(cleanup);
 describe('FileList', () => {
   it('uses design thumbnails, meaningful type labels, and known video durations without a play overlay', () => {
     const { container } = renderList([file({ metadata: { kind: 'template', mode: 'video', durationMs: 65_000 } })]);
-    expect(screen.getByRole('img').getAttribute('src')).toBe('/thumbnails/snapshot.png');
+    expect(screen.getByRole('img').getAttribute('src')).toContain('url=%2Fthumbnails%2Fsnapshot.png');
     expect(screen.getByText('Video template')).toBeTruthy();
     expect(screen.getByTestId('video-duration-badge').textContent).toBe('1:05');
     expect(screen.queryByTestId('video-play-overlay')).toBeNull();

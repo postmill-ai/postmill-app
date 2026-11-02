@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC } from 'react';
+import React, { FC, useState } from 'react';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -8,6 +8,7 @@ import type { FileItem } from './file-manager';
 import { FilePreview } from './file-preview';
 import { getDesignLabel, getFilePresentation } from './file-presentation';
 import { useOpenFileInDesigner } from './use-open-file-in-designer';
+import { VideoPosterControls } from './video-poster-controls';
 
 const fileSize = (bytes: number, t: ReturnType<typeof useT>) => {
   if (!bytes) return '-';
@@ -20,17 +21,23 @@ const fileSize = (bytes: number, t: ReturnType<typeof useT>) => {
 export const FilePreviewModal: FC<{
   file: FileItem;
   onDetails?: (file: FileItem) => void;
+  onRefresh?: () => void;
   // Optional extra action (used by the campaign Files tab) — opens the composer
   // with this file preloaded. Not passed by the /files library, so unchanged there.
   onNewPostDraft?: (file: FileItem) => void;
   // Optional danger action (campaign Files tab) — untag the file from the
   // campaign. The caller handles confirmation. Not passed by /files.
   onRemoveFromCampaign?: (file: FileItem) => void;
-}> = ({ file, onDetails, onNewPostDraft, onRemoveFromCampaign }) => {
+}> = ({ file, onDetails, onRefresh, onNewPostDraft, onRemoveFromCampaign }) => {
   const modal = useModals();
   const mediaDirectory = useMediaDirectory();
   const t = useT();
   const { openFile, pendingFileId } = useOpenFileInDesigner();
+  const [preview, setPreview] = useState({ source: file, current: file });
+  if (preview.source !== file) {
+    setPreview({ source: file, current: file });
+  }
+  const previewFile = preview.current;
   const presentation = getFilePresentation(file);
   const designLabel = getDesignLabel(file);
   const canCreatePost = presentation.mediaKind !== null;
@@ -40,7 +47,20 @@ export const FilePreviewModal: FC<{
     <div className="flex flex-col gap-[15px] w-[760px] max-w-full text-textColor">
       <div className="text-[16px] font-[600] truncate">{file.name}</div>
 
-      <FilePreview file={file} />
+      <FilePreview file={previewFile} />
+
+      {presentation.mediaKind === 'video' && (
+        <VideoPosterControls
+          file={previewFile}
+          onUpdated={(thumbnail) => {
+            setPreview((current) => ({
+              source: file,
+              current: { ...current.current, thumbnail },
+            }));
+            onRefresh?.();
+          }}
+        />
+      )}
 
       <div className="flex items-center justify-between gap-[10px] flex-wrap">
         <div className="text-[12px] text-newTextColor/65">

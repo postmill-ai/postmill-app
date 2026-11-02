@@ -9,7 +9,7 @@ const ASYMMETRIC_URL = '/mock-storage/asymmetric-8x2.png';
 const REPLACEMENT_IMAGE_URL = '/mock-storage/replacement-image.png';
 const TRANSPARENT_IMAGE_URL = '/mock-storage/transparent.png';
 const CUSTOM_POSTER_URL = '/mock-storage/custom-poster.png';
-const GENERATED_POSTER_URL = '/mock-storage/generated-poster.jpg';
+const GENERATED_POSTER_URL = 'https://app.postmill.ai/mock-storage/generated-poster.jpg';
 const RENDERED_VIDEO_URL = '/mock-storage/designer-render.mp4';
 const GENERATE_PATH = '/media/generate-video';
 
@@ -305,7 +305,13 @@ class DesignerMocks {
         return;
       }
 
-      const fixture = this.fixtures[pathname as keyof typeof this.fixtures];
+      const optimizerSource = pathname === '/_next/image'
+        ? new URL(request.url()).searchParams.get('url')
+        : null;
+      const fixturePath = new URL(optimizerSource || pathname, 'https://app.postmill.ai').pathname;
+      const fixture = Object.entries(this.fixtures).find(([source]) =>
+        new URL(source, 'https://app.postmill.ai').pathname === fixturePath
+      )?.[1];
       if (fixture && method === 'GET') {
         await fulfillVideo(route, fixture.file, fixture.contentType);
         return;
@@ -1408,7 +1414,17 @@ test.describe('Designer posters and custom fonts (mocked local document)', () =>
     });
 
     await page.goto('/files', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator(`img[src="${CUSTOM_POSTER_URL}"]`).first()).toBeVisible();
+    await expect(page.locator('img[src*="custom-poster.png"]').first()).toBeVisible();
+    await page.getByText('designer-render.mp4', { exact: true }).dblclick();
+    await page.getByLabel('Upload custom thumbnail', { exact: true }).setInputFiles(
+      path.join(__dirname, '../fixtures/asymmetric-8x2.png'),
+    );
+    await expect(page.getByText('Thumbnail updated', { exact: true })).toBeVisible();
+    expect(mocks.fileInformationUpdates).toHaveLength(3);
+    expect(mocks.fileInformationUpdates[2]).toMatchObject({
+      id: 'file-rendered-e2e',
+      thumbnail: CUSTOM_POSTER_URL,
+    });
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });
