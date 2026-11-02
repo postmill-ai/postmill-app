@@ -108,6 +108,36 @@ describe('FilePreviewModal', () => {
     expect(screen.getByRole('button', { name: 'Open in Designer' })).toBeTruthy();
   });
 
+  it('passes the updated poster to Details after an upload', async () => {
+    const onDetails = vi.fn();
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ path: '/thumbnails/new.png' }) })
+      .mockResolvedValueOnce({ ok: true });
+    render(
+      <FilePreviewModal
+        file={file({
+          id: 'video-file',
+          name: 'clip.mov',
+          originalName: 'clip.mov',
+          path: '/uploads/clip.mov',
+          type: 'video/quicktime',
+          metadata: null,
+        })}
+        onDetails={onDetails}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Upload custom thumbnail'), {
+      target: { files: [new File(['image'], 'poster.png', { type: 'image/png' })] },
+    });
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Thumbnail updated', 'success'));
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(onDetails).toHaveBeenCalledWith(expect.objectContaining({
+      thumbnail: '/thumbnails/new.png',
+    }));
+  });
+
   it('retains the existing media Designer handoff and video poster', () => {
     const video = file({
       id: 'video-file',

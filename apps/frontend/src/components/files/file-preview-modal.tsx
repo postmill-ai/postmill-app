@@ -81,7 +81,7 @@ export const FilePreviewModal: FC<{
             <button
               onClick={() => {
                 modal.closeAll();
-                onDetails(file);
+                onDetails(previewFile);
               }}
               className="px-[16px] py-[10px] rounded-[8px] border border-newColColor text-textColor text-[13px] font-[500] hover:bg-boxHover transition-all"
             >
