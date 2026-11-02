@@ -13,6 +13,7 @@ import { AiModule } from '@postmill-ai/nestjs-libraries/ai/ai.module';
 import { ProvidersModule } from '@postmill-ai/nestjs-libraries/providers/providers.module';
 import { FeatureFlagsModule } from '@postmill-ai/nestjs-libraries/feature-flags/feature-flags.module';
 import { VpnModule } from '@postmill-ai/nestjs-libraries/vpn/vpn.module';
+import { CommsDeliveryModule } from '@postmill-ai/nestjs-libraries/comms/comms-delivery.module';
 import { MediaStudioModule } from '@postmill-ai/nestjs-libraries/media/studio/studio.module';
 import { ProvidersBootstrap } from '@postmill-ai/backend/providers.bootstrap';
 import { VideoRenderModule } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.module';
@@ -20,13 +21,14 @@ import { OwnerAnnouncement } from './tasks/owner-announcement';
 import { OwnerEmailCampaignService } from '@postmill-ai/nestjs-libraries/services/owner-email-campaign.service';
 
 @Module({
-  // UploadModule/AiModule/ProvidersModule/FeatureFlagsModule/VpnModule are
-  // @Global — DatabaseModule's services (IntegrationService→StorageService,
-  // PostsService→RagService, OrgProviderConfigService→OrgVpnConfigService, …)
-  // depend on providers only those modules export. Mirrors the global set in
-  // apps/backend/src/app.module.ts (minus ChatModule — its toolList pulls
-  // MediaStudioService through a chain the standalone app can't satisfy and
-  // the commands don't need it).
+  // UploadModule/AiModule/ProvidersModule/FeatureFlagsModule/VpnModule and
+  // CommsDeliveryModule are @Global — DatabaseModule's services
+  // (IntegrationService→StorageService, PostsService→RagService,
+  // OrgProviderConfigService→OrgVpnConfigService,
+  // NotificationService→CommsDeliveryService, …) depend on providers only those
+  // modules export. Mirrors the global set in apps/backend/src/app.module.ts
+  // (minus ChatModule and the agent-facing parts of CommsModule, which the
+  // standalone commands don't need).
   imports: [
     ExternalCommandModule,
     DatabaseModule,
@@ -36,6 +38,7 @@ import { OwnerEmailCampaignService } from '@postmill-ai/nestjs-libraries/service
     ProvidersModule,
     FeatureFlagsModule,
     VpnModule,
+    CommsDeliveryModule,
     MediaStudioModule,
     // ChromiumFrameCaptureService, for video-design thumbnails in the backfill.
     VideoRenderModule,

@@ -1,9 +1,6 @@
 import { Global, Module } from '@nestjs/common';
-import { CommsConfigRepository } from './comms-config.repository';
-import { CommsLinkRepository } from './comms-link.repository';
-import { CommsConfigService } from './comms-config.service';
+import { CommsDeliveryModule } from './comms-delivery.module';
 import { CommsLinkService } from './comms-link.service';
-import { CommsDeliveryService } from './comms-delivery.service';
 import { CommsAgentActivity } from './comms-agent.activity';
 import { CommsInboundService } from './comms-inbound.service';
 import { CommsPlatformWebhookService } from './comms-platform-webhook.service';
@@ -13,22 +10,16 @@ import { CommsPlatformWebhookService } from './comms-platform-webhook.service';
 // providers here. Mirrors VpnModule.
 @Global()
 @Module({
+  imports: [CommsDeliveryModule],
   providers: [
-    CommsConfigRepository,
-    CommsLinkRepository,
-    CommsConfigService,
     CommsLinkService,
-    CommsDeliveryService,
     CommsAgentActivity,
     CommsInboundService,
     CommsPlatformWebhookService,
   ],
   exports: [
-    CommsConfigRepository,
-    CommsLinkRepository,
-    CommsConfigService,
+    CommsDeliveryModule,
     CommsLinkService,
-    CommsDeliveryService,
     CommsAgentActivity,
     CommsInboundService,
     CommsPlatformWebhookService,
