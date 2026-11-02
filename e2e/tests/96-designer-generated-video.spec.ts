@@ -9,7 +9,7 @@ const ASYMMETRIC_URL = '/mock-storage/asymmetric-8x2.png';
 const REPLACEMENT_IMAGE_URL = '/mock-storage/replacement-image.png';
 const TRANSPARENT_IMAGE_URL = '/mock-storage/transparent.png';
 const CUSTOM_POSTER_URL = '/mock-storage/custom-poster.png';
-const GENERATED_POSTER_URL = '/mock-storage/generated-poster.jpg';
+const GENERATED_POSTER_URL = 'https://app.postmill.ai/mock-storage/generated-poster.jpg';
 const RENDERED_VIDEO_URL = '/mock-storage/designer-render.mp4';
 const GENERATE_PATH = '/media/generate-video';
 
@@ -308,7 +308,10 @@ class DesignerMocks {
       const optimizerSource = pathname === '/_next/image'
         ? new URL(request.url()).searchParams.get('url')
         : null;
-      const fixture = this.fixtures[(optimizerSource || pathname) as keyof typeof this.fixtures];
+      const fixturePath = new URL(optimizerSource || pathname, 'https://app.postmill.ai').pathname;
+      const fixture = Object.entries(this.fixtures).find(([source]) =>
+        new URL(source, 'https://app.postmill.ai').pathname === fixturePath
+      )?.[1];
       if (fixture && method === 'GET') {
         await fulfillVideo(route, fixture.file, fixture.contentType);
         return;

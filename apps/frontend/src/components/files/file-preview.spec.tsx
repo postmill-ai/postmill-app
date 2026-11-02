@@ -65,6 +65,20 @@ describe('FileThumbnail loading', () => {
     expect(String(mockNextImage.mock.calls[0][0].sizes)).toContain('200px');
   });
 
+  it('optimizes absolute same-origin storage URLs through their local path', () => {
+    render(
+      <FileThumbnail
+        file={file({ path: `${window.location.origin}/uploads/asset.png?version=2` })}
+      />
+    );
+
+    expect(mockNextImage).toHaveBeenCalledTimes(1);
+    expect(mockNextImage.mock.calls[0][0]).toMatchObject({
+      src: '/uploads/asset.png?version=2',
+      fill: true,
+    });
+  });
+
   it('keeps the plain image fallback for remote storage', () => {
     render(<FileThumbnail file={file({ path: 'https://cdn.example.com/asset.png' })} />);
 

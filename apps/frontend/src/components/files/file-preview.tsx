@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useEffect, useRef, useState } from 'react';
+import React, { FC, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Image from 'next/image';
 import clsx from 'clsx';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
@@ -31,16 +31,32 @@ const DocumentFallback: FC<{ file: FileItem; compact?: boolean }> = ({ file, com
   );
 };
 
+const subscribeToOrigin = () => () => {};
+const readOrigin = () => window.location.origin;
+
+const optimizedImageSource = (src: string, origin: string) => {
+  if (src.startsWith('/') && !src.startsWith('//')) return src;
+  if (!origin) return null;
+  try {
+    const url = new URL(src);
+    return url.origin === origin ? `${url.pathname}${url.search}` : null;
+  } catch {
+    return null;
+  }
+};
+
 const ThumbnailImage = React.forwardRef<HTMLImageElement, {
   src: string;
   alt: string;
   className?: string;
 }>(({ src, alt, className }, ref) => {
-  if (src.startsWith('/') && !src.startsWith('//')) {
+  const origin = useSyncExternalStore(subscribeToOrigin, readOrigin, () => '');
+  const optimizedSource = optimizedImageSource(src, origin);
+  if (optimizedSource) {
     return (
       <Image
         ref={ref}
-        src={src}
+        src={optimizedSource}
         alt={alt}
         fill
         sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
