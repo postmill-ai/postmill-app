@@ -170,7 +170,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     try {
       const candidate = await aiRemoveBackground({ fetch, store, elementId: element.id });
       if (!candidate) {
-        toaster.show(t('designer_bg_result_outdated', 'The image changed before the result was ready. Please try again.'), 'warning');
+        toaster.show(t('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'), 'warning');
         return;
       }
       modals.openModal({
@@ -186,7 +186,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               const output = state.doc.outputs[state.currentOutput];
               const applied = applyAiRemoveBackground({ store, candidate, output, fit });
               if (applied) close();
-              else toaster.show(t('designer_bg_result_outdated', 'The image changed before the result was ready. Please try again.'), 'warning');
+              else toaster.show(t('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'), 'warning');
             }}
           />
         ),
