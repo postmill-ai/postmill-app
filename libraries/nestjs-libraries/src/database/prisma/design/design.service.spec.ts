@@ -275,6 +275,23 @@ describe('DesignService', () => {
       expect(payload).not.toHaveProperty('previewDataUrl');
       expect(fileService.softDelete).not.toHaveBeenCalled();
     });
+
+    it('throttles thumbnail-less static preview renders without blocking later regeneration', async () => {
+      previewService.renderPreviewBuffer.mockResolvedValue(Buffer.from('png'));
+      previewService.uploadPreview.mockResolvedValue('server-preview');
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      try {
+        await service.updateDesign('org-1', 'd1', { doc: makeDoc() });
+        await service.updateDesign('org-1', 'd1', { doc: makeDoc() });
+        expect(previewService.renderPreviewBuffer).toHaveBeenCalledTimes(1);
+
+        now.mockReturnValue(1_061_000);
+        await service.updateDesign('org-1', 'd1', { doc: makeDoc() });
+        expect(previewService.renderPreviewBuffer).toHaveBeenCalledTimes(2);
+      } finally {
+        now.mockRestore();
+      }
+    });
   });
 
   describe('createTemplate', () => {

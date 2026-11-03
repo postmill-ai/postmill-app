@@ -221,7 +221,7 @@ export class DesignService {
       delete payload.previewDataUrl;
     }
     const previous = await this._designRepository.findById(orgId, id);
-    const regenId = (!isVideo || this._previewRegenDue(id))
+    const regenId = this._previewRegenDue(id)
       ? await this._renderPreview(orgId, validatedDoc)
       : null;
     if (regenId) {
