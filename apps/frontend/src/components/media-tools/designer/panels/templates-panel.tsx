@@ -13,6 +13,7 @@ import type { DesignerDoc } from '../designer.store';
 import { captureStageThumbnail } from '../stage-thumbnail';
 import { readErrorMessage } from '../read-error-message';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
+import { DesignPreviewImage } from './design-preview-image';
 import {
   ALL_CATEGORIES_KEY,
   VIDEO_CATEGORY_KEY,
@@ -567,12 +568,13 @@ const TemplateCard: FC<{
         }}
         className="relative aspect-4/3 bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20 cursor-pointer hover:ring-2 hover:ring-designerAccent/60 focus-visible:ring-2 focus-visible:ring-designerAccent"
       >
-        {template.thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element -- server-rendered template thumbnail
-          <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" draggable={false} />
-        ) : (
-          template.isSystem ? '◧' : '▣'
-        )}
+        <DesignPreviewImage
+          src={template.thumbnail}
+          alt={template.name}
+          className="w-full h-full object-cover"
+          draggable={false}
+          fallback={template.isSystem ? '◧' : '▣'}
+        />
         {templateModeOf(template) === 'video' ? (
           <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
             {t('templates_panel_video_badge', 'VIDEO')}
