@@ -236,9 +236,9 @@ Invariants:
    `app.close()`; Socket.IO `IoAdapter`.
 5. `startMcp(app)`.
 6. Global `ValidationPipe` (`transform`, `whitelist`, `forbidNonWhitelisted`).
-7. 50mb JSON limit on `/copilot/{*splat}`, `/posts`, and the design save routes
-   (`/media/designs`, `/media/design-templates`, `/media/designer/{*splat}`);
-   `cookieParser()`; `compression()`.
+7. 50mb JSON limit on `/copilot/{*splat}`, `/posts`, the design save routes
+   (`/media/designs`, `/media/design-templates`, `/media/designer/{*splat}`), and
+   `/media/remove-background` for inline image input; `cookieParser()`; `compression()`.
 8. `helmet(...)` — skipped under `NOT_SECURED` (+ dev); CSP/HSTS/frameguard/noSniff otherwise.
 9. Global filters (see §6).
 10. `ConfigurationChecker` fail-fast — fatal-missing secrets exit non-zero before `listen` in

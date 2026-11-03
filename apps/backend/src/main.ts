@@ -108,8 +108,9 @@ async function start() {
     })
   );
 
-  // Design documents routinely exceed Nest's default 100kb JSON body limit (a
-  // real design save 413'd at 845KB — POSTMILL-APP-10). Verified against
+  // Design documents and inline image-edit inputs routinely exceed Nest's
+  // default 100kb JSON body limit (real 413s on design save and remove-background
+  // — POSTMILL-APP-10). Verified against
   // express 5.2.1 / path-to-regexp 8.4.2: a `{*splat}` entry does NOT match the
   // bare path (so exact-path POSTs like POST /media/designs need the plain
   // entry too), while a bare entry DOES prefix-match its sub-paths (covering
@@ -124,6 +125,7 @@ async function start() {
       '/media/design-templates',
       '/media/design-templates/{*splat}',
       '/media/designer/{*splat}',
+      '/media/remove-background',
     ],
     (req: any, res: any, next: any) => {
       json({ limit: '50mb' })(req, res, next);
