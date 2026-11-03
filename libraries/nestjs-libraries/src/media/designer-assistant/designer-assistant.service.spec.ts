@@ -1,8 +1,16 @@
 import { BadGatewayException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 import { DesignerAssistantService } from './designer-assistant.service';
 import { DesignerCopyKind } from '@postmill-ai/nestjs-libraries/dtos/design/designer-assistant.dto';
+
+const validSuggestion = {
+  suggestions: [{
+    category: 'font',
+    title: 'Use a clearer pairing',
+    rationale: 'A display face will distinguish the headline.',
+    style: { fontFamily: 'Georgia' },
+  }],
+};
 
 const makeService = () => {
   const ai = { generateObject: vi.fn().mockResolvedValue({}) };
@@ -21,6 +29,7 @@ const makeService = () => {
 describe('DesignerAssistantService', () => {
   it('generates three-copy requests with bounded design and Brand style context', async () => {
     const { service, ai } = makeService();
+    ai.generateObject.mockResolvedValue({ variants: ['One', 'Two', 'Three'] });
     await service.generateCopy('org-1', {
       kind: DesignerCopyKind.Headline,
       prompt: 'Holiday sale',
@@ -28,8 +37,9 @@ describe('DesignerAssistantService', () => {
       context: { type: 'text', text: 'Old headline', width: 400, height: 100 },
     });
 
-    const [scope, prompt, _schema, options] = ai.generateObject.mock.calls[0];
+    const [scope, prompt, schema, options] = ai.generateObject.mock.calls[0];
     expect(scope).toBe('generator');
+    expect(schema).toBeUndefined();
     expect(options.orgId).toBe('org-1');
     expect(prompt).toContain('exactly three distinct short headline alternatives');
     expect(prompt).toContain('#123456');
@@ -39,13 +49,15 @@ describe('DesignerAssistantService', () => {
 
   it('requests only structured, whitelisted suggestions with no asset inputs', async () => {
     const { service, ai } = makeService();
+    ai.generateObject.mockResolvedValue(validSuggestion);
     await service.getSuggestions('org-1', {
       prompt: 'Improve spacing',
       context: { type: 'text', text: 'Headline', fill: '#ffffff' },
     });
 
-    const [scope, prompt, _schema, options] = ai.generateObject.mock.calls[0];
+    const [scope, prompt, schema, options] = ai.generateObject.mock.calls[0];
     expect(scope).toBe('generator');
+    expect(schema).toBeUndefined();
     expect(options.orgId).toBe('org-1');
     expect(prompt).toContain('font pairings, color combinations, layout, and spacing');
     expect(prompt).toContain('never include layout operations or asset URLs');
@@ -54,6 +66,7 @@ describe('DesignerAssistantService', () => {
 
   it('falls back to the first Brand when no default is selected', async () => {
     const { service, brands, ai } = makeService();
+    ai.generateObject.mockResolvedValue(validSuggestion);
     brands.getDefaultBrand.mockResolvedValue(null);
     brands.getBrands.mockResolvedValue([{ name: 'Fallback', palette: [], fontFamilies: [] }]);
 
@@ -65,7 +78,16 @@ describe('DesignerAssistantService', () => {
 
   it.each(['copy', 'suggestions'] as const)('turns malformed %s responses into a readable 502', async (operation) => {
     const { service, ai } = makeService();
-    ai.generateObject.mockRejectedValue(new z.ZodError([]));
+    ai.generateObject.mockResolvedValue(operation === 'copy'
+      ? { variants: ['Only', 'Two'] }
+      : {
+        suggestions: [{
+          category: 'font',
+          title: 'Unexpected key',
+          rationale: 'The provider added an unapproved style property.',
+          style: { fontFamily: 'Georgia', position: 'absolute' },
+        }],
+      });
     const request = operation === 'copy'
       ? service.generateCopy('org-1', { kind: DesignerCopyKind.Headline, prompt: 'Holiday sale' })
       : service.getSuggestions('org-1', {});
