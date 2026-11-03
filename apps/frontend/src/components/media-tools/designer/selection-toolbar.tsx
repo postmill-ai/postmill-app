@@ -61,7 +61,7 @@ export const SelectionToolbar = React.memo(function SelectionToolbar({
   const showAi = !!aiActive && singleImage;
 
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 px-2 py-1 rounded-lg bg-newBgColorInner border border-studioBorder shadow-lg">
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 px-2 py-1 rounded-lg bg-newBgColorInner border border-studioBorder shadow-lg mobile:hidden">
       <Btn onClick={() => reorder(selectedIds, 'front')} title={t('bring_to_front', 'Bring to front')}>⤒</Btn>
       <Btn onClick={() => reorder(selectedIds, 'forward')} title={t('bring_forward', 'Bring forward')}>↑</Btn>
       <Btn onClick={() => reorder(selectedIds, 'backward')} title={t('send_backward', 'Send backward')}>↓</Btn>
