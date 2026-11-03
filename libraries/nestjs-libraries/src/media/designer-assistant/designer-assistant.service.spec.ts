@@ -1,4 +1,6 @@
+import { BadGatewayException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { DesignerAssistantService } from './designer-assistant.service';
 import { DesignerCopyKind } from '@postmill-ai/nestjs-libraries/dtos/design/designer-assistant.dto';
 
@@ -59,5 +61,16 @@ describe('DesignerAssistantService', () => {
 
     expect(brands.getBrands).toHaveBeenCalledWith('org-1');
     expect(ai.generateObject.mock.calls[0][1]).toContain('Fallback');
+  });
+
+  it.each(['copy', 'suggestions'] as const)('turns malformed %s responses into a readable 502', async (operation) => {
+    const { service, ai } = makeService();
+    ai.generateObject.mockRejectedValue(new z.ZodError([]));
+    const request = operation === 'copy'
+      ? service.generateCopy('org-1', { kind: DesignerCopyKind.Headline, prompt: 'Holiday sale' })
+      : service.getSuggestions('org-1', {});
+
+    await expect(request).rejects.toThrow(BadGatewayException);
+    await expect(request).rejects.toThrow('The AI provider returned an invalid structured response. Please try again.');
   });
 });

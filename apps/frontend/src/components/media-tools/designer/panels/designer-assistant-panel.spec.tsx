@@ -5,10 +5,12 @@ import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { createDesignerStore } from '../designer.store';
 
 const fetchMock = vi.hoisted(() => vi.fn());
+const ensureFontLoaded = vi.hoisted(() => vi.fn());
 
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => fetchMock,
 }));
+vi.mock('../fonts', () => ({ ensureFontLoaded }));
 
 const setup = () => {
   const store = createDesignerStore();
@@ -33,6 +35,7 @@ const renderPanel = (store: ReturnType<typeof createDesignerStore>) => render(
 describe('DesignerAssistantPanel', () => {
   beforeEach(() => {
     fetchMock.mockReset();
+    ensureFontLoaded.mockClear();
   });
 
   it('generates copy and applies the selected alternative with fresh text state', async () => {
@@ -75,6 +78,7 @@ describe('DesignerAssistantPanel', () => {
       fontFamily: 'Georgia',
       fill: '#123456',
     });
+    expect(ensureFontLoaded).toHaveBeenCalledWith('Georgia');
     expect(fetchMock.mock.calls[0][0]).toBe('/media/designer-assistant/suggestions');
   });
 });

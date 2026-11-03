@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadGatewayException, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
@@ -45,6 +45,13 @@ export class DesignerAssistantService {
     };
   }
 
+  private _rethrowProviderError(error: unknown): never {
+    if (error instanceof z.ZodError) {
+      throw new BadGatewayException('The AI provider returned an invalid structured response. Please try again.');
+    }
+    throw error;
+  }
+
   async generateCopy(orgId: string, input: GenerateDesignerCopyDto) {
     const brand = await this._brandStyle(orgId);
     const labels: Record<DesignerCopyKind, string> = {
@@ -53,36 +60,44 @@ export class DesignerAssistantService {
       caption: 'social media caption',
       cta: 'call-to-action phrase',
     };
-    return this._aiModelProvider.generateObject<z.infer<typeof copySchema>>(
-      'generator',
-      `Create exactly three distinct ${labels[input.kind]} alternatives for a design.\n\n` +
-      `User brief: ${JSON.stringify(input.prompt)}\n` +
-      `Selected text to replace or improve: ${JSON.stringify(input.selectedText || '')}\n` +
-      `Design summary: ${contextText(input.context)}\n` +
-      `Brand style: ${JSON.stringify(brand)}\n\n` +
-      'Keep each option concise, production-ready, and distinct in angle. Do not use markdown or numbering.',
-      copySchema,
-      {
-        orgId,
-        system: 'You are a senior marketing copywriter embedded in a visual design editor. Return only the requested structured alternatives.',
-      }
-    );
+    try {
+      return await this._aiModelProvider.generateObject<z.infer<typeof copySchema>>(
+        'generator',
+        `Create exactly three distinct ${labels[input.kind]} alternatives for a design.\n\n` +
+        `User brief: ${JSON.stringify(input.prompt)}\n` +
+        `Selected text to replace or improve: ${JSON.stringify(input.selectedText || '')}\n` +
+        `Design summary: ${contextText(input.context)}\n` +
+        `Brand style: ${JSON.stringify(brand)}\n\n` +
+        'Keep each option concise, production-ready, and distinct in angle. Do not use markdown or numbering.',
+        copySchema,
+        {
+          orgId,
+          system: 'You are a senior marketing copywriter embedded in a visual design editor. Return only the requested structured alternatives.',
+        }
+      );
+    } catch (error) {
+      this._rethrowProviderError(error);
+    }
   }
 
   async getSuggestions(orgId: string, input: DesignerSuggestionsDto) {
     const brand = await this._brandStyle(orgId);
-    return this._aiModelProvider.generateObject<z.infer<typeof suggestionsSchema>>(
-      'generator',
-      `Review this design and recommend font pairings, color combinations, layout, and spacing improvements.\n\n` +
-      `Optional user goal: ${JSON.stringify(input.prompt || '')}\n` +
-      `Design/selected-element summary: ${contextText(input.context)}\n` +
-      `Brand style: ${JSON.stringify(brand)}\n\n` +
-      'Give 2-6 specific, practical recommendations. Include a fontFamily or #RRGGBB fill only when it is a compatible style change that can be applied directly; never include layout operations or asset URLs.',
-      suggestionsSchema,
-      {
-        orgId,
-        system: 'You are an art director giving concise, brand-aware design feedback. Return only structured suggestions, not document operations.',
-      }
-    );
+    try {
+      return await this._aiModelProvider.generateObject<z.infer<typeof suggestionsSchema>>(
+        'generator',
+        `Review this design and recommend font pairings, color combinations, layout, and spacing improvements.\n\n` +
+        `Optional user goal: ${JSON.stringify(input.prompt || '')}\n` +
+        `Design/selected-element summary: ${contextText(input.context)}\n` +
+        `Brand style: ${JSON.stringify(brand)}\n\n` +
+        'Give 2-6 specific, practical recommendations. Include a fontFamily or #RRGGBB fill only when it is a compatible style change that can be applied directly; never include layout operations or asset URLs.',
+        suggestionsSchema,
+        {
+          orgId,
+          system: 'You are an art director giving concise, brand-aware design feedback. Return only structured suggestions, not document operations.',
+        }
+      );
+    } catch (error) {
+      this._rethrowProviderError(error);
+    }
   }
 }

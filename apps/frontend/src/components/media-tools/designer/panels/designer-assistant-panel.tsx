@@ -3,6 +3,7 @@
 import React, { FC, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { ensureFontLoaded } from '../fonts';
 
 type Store = ReturnType<typeof import('../designer.store').createDesignerStore>;
 type CopyKind = 'headline' | 'promotion' | 'caption' | 'cta';
@@ -39,6 +40,7 @@ export const DesignerAssistantPanel: FC<{
     }
   };
   const applyStyle = (style: NonNullable<Suggestion['style']>) => {
+    if (style.fontFamily) void ensureFontLoaded(style.fontFamily);
     const state = store.getState();
     if (clipTarget) {
       state.updateClip(clipTarget.outputIndex, clipTarget.trackId, clipTarget.clipId, style);

@@ -40,13 +40,13 @@ export class DesignerAssistantContextDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(-16384)
   @Max(16384)
   x?: number;
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(-16384)
   @Max(16384)
   y?: number;
 

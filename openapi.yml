@@ -11036,11 +11036,11 @@ components:
           pattern: ^#?([0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{6}|[0-9A-F]{8})$
         x:
           type: number
-          minimum: 0
+          minimum: -16384
           maximum: 16384
         y:
           type: number
-          minimum: 0
+          minimum: -16384
           maximum: 16384
         width:
           type: number

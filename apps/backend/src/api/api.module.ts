@@ -96,7 +96,7 @@ import { HeyGenModule } from '@postmill-ai/nestjs-libraries/media/heygen/heygen.
 import { HeyGenController } from './routes/heygen.controller';
 import { MediaStudioModule } from '@postmill-ai/nestjs-libraries/media/studio/studio.module';
 import { MediaStudioController } from './routes/media-studio.controller';
-import { DesignerAssistantService } from '@postmill-ai/nestjs-libraries/media/designer-assistant/designer-assistant.service';
+import { DesignerAssistantModule } from '@postmill-ai/nestjs-libraries/media/designer-assistant/designer-assistant.module';
 import { DeepgramModule } from '@postmill-ai/nestjs-libraries/media/deepgram/deepgram.module';
 import { DeepgramController } from './routes/deepgram.controller';
 import { AiDesignerModule } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.module';
@@ -170,7 +170,7 @@ export const authenticatedController = [
   ProvidersController,
 ];
 @Module({
-  imports: [UploadModule, InngestModule, ReplicateStudioModule, HeyGenModule, MediaStudioModule, DeepgramModule, AiDesignerModule],
+  imports: [UploadModule, InngestModule, ReplicateStudioModule, HeyGenModule, MediaStudioModule, DesignerAssistantModule, DeepgramModule, AiDesignerModule],
   controllers: [
     RootController,
     HealthController,
@@ -221,7 +221,6 @@ export const authenticatedController = [
     HealthService,
     AiDesignerGateway,
     MediaStreamService,
-    DesignerAssistantService,
   ],
   get exports() {
     return [...this.imports, ...this.providers];
