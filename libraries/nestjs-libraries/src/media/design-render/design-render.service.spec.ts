@@ -1514,6 +1514,17 @@ describe('DesignRenderService.assertVisualAssets', () => {
     expect([...data.subarray(0, 3)]).toEqual([0, 0, 0]);
   });
 
+  it('accepts and renders raw SVG icon markup', async () => {
+    const service = makeService();
+    const doc = docWithImage('<path d="M0 0h100v100H0z"/>');
+    Object.assign(doc.outputs[0].children[0], { type: 'icon', fill: '#000000' });
+
+    await expect(service.assertVisualAssets(doc, 0)).resolves.toBeUndefined();
+    const png = await service.renderPage(doc, 0);
+    const { data } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    expect([...data.subarray(0, 3)]).toEqual([0, 0, 0]);
+  });
+
   it('does not require assets for hidden content', async () => {
     const service = makeService();
     const doc = docWithImage('https://unreachable.invalid/image.png');
