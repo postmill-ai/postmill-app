@@ -188,6 +188,14 @@ class DesignerMocks {
   designWrites = 0;
   doc = blankDoc();
   name = 'Generated video E2E';
+  brand: {
+    id: string;
+    name: string;
+    palette: string[];
+    fontFamilies: string[];
+    logoFileIds: string[];
+    isDefault: boolean;
+  } | null = null;
   jobOutcome: 'completed' | 'failed' = 'completed';
   renderFile = {
     id: 'file-rendered-e2e',
@@ -297,7 +305,11 @@ class DesignerMocks {
         await json(route, [{ id: 'e2e-org', name: 'E2E Org', users: [{ disabled: false }] }]);
         return;
       }
-      if (method === 'GET' && ['/announcements', '/notifications', '/brands', '/integrations/list'].includes(pathname)) {
+      if (method === 'GET' && pathname === '/brands') {
+        await json(route, this.brand ? [this.brand] : []);
+        return;
+      }
+      if (method === 'GET' && ['/announcements', '/notifications', '/integrations/list'].includes(pathname)) {
         await json(route, []);
         return;
       }
@@ -1748,6 +1760,48 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
     await page.getByRole('button', { name: 'Inspector', exact: true }).click();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect.poll(() => mocks.designWrites).toBeGreaterThan(0);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('applies Brand styles and inserts a logo in a video design', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = blankDoc();
+    mocks.name = 'Mobile Brand E2E';
+    mocks.brand = {
+      id: 'brand-e2e',
+      name: 'E2E Brand',
+      palette: ['#123456'],
+      fontFamilies: ['Georgia'],
+      logoFileIds: ['replacement-image-file'],
+      isDefault: true,
+    };
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+
+    await selectMobileTool(page, 'Horizontal Type');
+    const point = await canvasDocumentPoint(page, 1080, 1920, 540, 960);
+    await page.touchscreen.tap(point.x, point.y);
+    await expect.poll(() => mocks.savedClips().length).toBe(1);
+    await page.getByRole('button', { name: 'Expand timeline', exact: true }).click();
+    await page.getByRole('slider', { name: 'Clip', exact: true }).click();
+
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Brand', exact: true }).click();
+    await page.getByRole('button', { name: '#123456', exact: true }).click();
+    await expect.poll(() => mocks.savedClips()[0]?.fill).toBe('#123456');
+    await page.getByRole('button', { name: 'Georgia', exact: true }).click();
+    await expect.poll(() => mocks.savedClips()[0]?.fontFamily).toBe('Georgia');
+
+    await page.getByRole('button', { name: 'replacement-image.png', exact: true }).click();
+    await expect.poll(() => mocks.savedClips().length).toBe(2);
+    expect(mocks.savedClips()[1]).toMatchObject({
+      fileId: 'replacement-image-file',
+      src: REPLACEMENT_IMAGE_URL,
+      mediaType: 'image',
+    });
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });
