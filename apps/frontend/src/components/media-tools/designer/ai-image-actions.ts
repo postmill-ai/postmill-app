@@ -2,6 +2,12 @@
 
 import { detectFocalPoint } from './reflow';
 import { probeImageNaturalSize } from './elements';
+import type { DesignerElement } from './designer.store';
+import {
+  backgroundRemovalPatch,
+  type BackgroundRemovalAsset,
+  type BackgroundRemovalFit,
+} from './background-removal';
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 type StoreApi = ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -31,14 +37,17 @@ interface AiActionArgs {
   fetch: FetchLike;
   store: StoreApi;
   elementId: string;
+  probe?: (src: string) => Promise<{ width: number; height: number } | null>;
 }
 
-const getSrc = (store: StoreApi, elementId: string): string | undefined => {
+const getElement = (store: StoreApi, elementId: string): DesignerElement | undefined => {
   const st = store.getState();
   const out = st.doc.outputs[st.currentOutput] as any;
-  const el = out?.children?.find((c: any) => c.id === elementId);
-  return el?.src;
+  return out?.children?.find((c: any) => c.id === elementId);
 };
+
+const getSrc = (store: StoreApi, elementId: string): string | undefined =>
+  getElement(store, elementId)?.src;
 
 // Shared by the inspector AI Tools and the Tools menu so the implementation
 // lives in exactly one place (D-10).
@@ -54,17 +63,70 @@ export const readErrorMessage = async (res: Response, fallback: string): Promise
   }
 };
 
-export const aiRemoveBackground = async ({ fetch, store, elementId }: AiActionArgs): Promise<void> => {
-  const src = getSrc(store, elementId);
-  if (!src) throw new Error('No image');
+export interface StaticBackgroundRemovalCandidate {
+  before: DesignerElement;
+  asset: BackgroundRemovalAsset;
+  history: unknown;
+}
+
+const staticMediaMatches = (before: DesignerElement, current?: DesignerElement) => !!current &&
+  current.src === before.src &&
+  current.originalSrc === before.originalSrc &&
+  current.originalFileId === before.originalFileId &&
+  JSON.stringify(current.smartFilters || []) === JSON.stringify(before.smartFilters || []);
+
+export const aiRemoveBackground = async ({
+  fetch,
+  store,
+  elementId,
+  probe = probeImageNaturalSize,
+}: AiActionArgs): Promise<StaticBackgroundRemovalCandidate | null> => {
+  const before = getElement(store, elementId);
+  if (!before?.src) throw new Error('No image');
+  const history = store.getState().history;
   const res = await fetch('/media/remove-background', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageUrl: src }),
+    body: JSON.stringify({ imageUrl: before.src }),
   });
   if (!res.ok) throw new Error(await readErrorMessage(res, 'Background removal failed'));
-  const data = await res.json();
-  store.getState().updateElement(elementId, { src: data.url, fileId: undefined });
+  const data = await res.json() as { url?: string; fileId?: string };
+  if (!data.url) throw new Error('Background removal failed');
+  const natural = await probe(data.url);
+  const candidate = {
+    before,
+    history,
+    asset: {
+      url: data.url,
+      fileId: data.fileId,
+      naturalWidth: natural?.width,
+      naturalHeight: natural?.height,
+    },
+  };
+  return store.getState().history === history && staticMediaMatches(before, getElement(store, elementId))
+    ? candidate
+    : null;
+};
+
+export const applyAiRemoveBackground = ({
+  store,
+  candidate,
+  output,
+  fit = 'frame',
+}: {
+  store: StoreApi;
+  candidate: StaticBackgroundRemovalCandidate;
+  output: { width: number; height: number };
+  fit?: BackgroundRemovalFit;
+}): boolean => {
+  if (store.getState().history !== candidate.history ||
+    !staticMediaMatches(candidate.before, getElement(store, candidate.before.id))) return false;
+  store.getState().updateElement(
+    candidate.before.id,
+    backgroundRemovalPatch({ asset: candidate.asset, output, fit })
+  );
+  store.getState().pushHistory('Remove background');
+  return true;
 };
 
 export const aiUpscale = async ({ fetch, store, elementId }: AiActionArgs, scale: number): Promise<void> => {

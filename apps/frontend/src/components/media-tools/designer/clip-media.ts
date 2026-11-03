@@ -1,6 +1,11 @@
 import type { VideoClip } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { probeImageNaturalSize } from './elements';
 import { readErrorMessage } from './read-error-message';
+import {
+  backgroundRemovalPatch,
+  type BackgroundRemovalAsset,
+  type BackgroundRemovalFit,
+} from './background-removal';
 
 type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -104,6 +109,12 @@ export const clipMediaSourceMatches = (
   current.originalFileId === before.originalFileId &&
   JSON.stringify(current.smartFilters || []) === JSON.stringify(before.smartFilters || []);
 
+export interface ClipBackgroundRemovalCandidate {
+  before: VideoClip;
+  asset: BackgroundRemovalAsset;
+  operation: ClipMediaOperation;
+}
+
 export const removeClipImageBackground = async ({
   fetch,
   store,
@@ -114,7 +125,7 @@ export const removeClipImageBackground = async ({
   store: Store;
   target: ClipMediaTarget;
   probe?: (src: string) => Promise<{ width: number; height: number } | null>;
-}): Promise<boolean> => {
+}): Promise<ClipBackgroundRemovalCandidate | null> => {
   const before = clipAt(store, target);
   const operation = beginClipMediaOperation(store, target);
   if (!before?.src) throw new Error('No image');
@@ -130,19 +141,43 @@ export const removeClipImageBackground = async ({
   if (!data.url) throw new Error('Background removal failed');
   const natural = await probe(data.url);
   if (!clipMediaOperationIsCurrent(store, target, operation) ||
-    !clipMediaSourceMatches(before, clipAt(store, target))) return false;
-  const updated = store.getState().updateClipSilent(target.outputIndex, target.trackId, target.clipId, {
-    src: data.url,
-    fileId: data.fileId,
-    mediaType: 'image',
-    naturalWidth: natural?.width,
-    naturalHeight: natural?.height,
-    crop: undefined,
-    focalPoint: undefined,
-    originalSrc: undefined,
-    originalFileId: undefined,
-    smartFilters: undefined,
-  });
+    !clipMediaSourceMatches(before, clipAt(store, target))) return null;
+  return {
+    before,
+    operation,
+    asset: {
+      url: data.url,
+      fileId: data.fileId,
+      naturalWidth: natural?.width,
+      naturalHeight: natural?.height,
+    },
+  };
+};
+
+export const applyClipImageBackground = ({
+  store,
+  target,
+  candidate,
+  output,
+  fit = 'frame',
+}: {
+  store: Store;
+  target: ClipMediaTarget;
+  candidate: ClipBackgroundRemovalCandidate;
+  output: { width: number; height: number };
+  fit?: BackgroundRemovalFit;
+}): boolean => {
+  if (!clipMediaOperationIsCurrent(store, target, candidate.operation) ||
+    !clipMediaSourceMatches(candidate.before, clipAt(store, target))) return false;
+  const updated = store.getState().updateClipSilent(
+    target.outputIndex,
+    target.trackId,
+    target.clipId,
+    {
+      ...backgroundRemovalPatch({ asset: candidate.asset, output, fit }),
+      mediaType: 'image',
+    }
+  );
   if (updated) store.getState().pushHistory();
   return updated;
 };

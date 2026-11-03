@@ -16,8 +16,10 @@ import type {
 import { useMediaPicker } from '../../use-media-picker';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
-import { aiRemoveBackground, aiUpscale, aiOutpaint, readErrorMessage } from '../ai-image-actions';
+import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiOutpaint, readErrorMessage } from '../ai-image-actions';
 import { OutpaintDialog } from '../outpaint-dialog';
+import { BackgroundRemovalDialog } from '../background-removal-dialog';
+import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
 import { cropFromSourceRect } from '../crop-geometry';
 
 interface ImageInspectorProps {
@@ -166,13 +168,54 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     if (!element.src) return;
     setAiLoading('remove-bg');
     try {
-      await aiRemoveBackground({ fetch, store, elementId: element.id });
+      const candidate = await aiRemoveBackground({ fetch, store, elementId: element.id });
+      if (!candidate) {
+        toaster.show(t('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'), 'warning');
+        return;
+      }
+      modals.openModal({
+        title: t('designer_review_background_removal', 'Review background removal'),
+        size: 720,
+        children: (close: () => void) => (
+          <BackgroundRemovalDialog
+            originalUrl={candidate.before.src!}
+            asset={candidate.asset}
+            onCancel={close}
+            onApply={(fit) => {
+              const state = store.getState();
+              const output = state.doc.outputs[state.currentOutput];
+              const applied = applyAiRemoveBackground({ store, candidate, output, fit });
+              if (applied) close();
+              else toaster.show(t('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'), 'warning');
+            }}
+          />
+        ),
+      });
     } catch (err) {
       // The shared action throws the server's error message — show it verbatim.
       toaster.show((err as Error)?.message || t('designer_bg_removal_failed', 'Background removal failed'), 'warning');
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const fitImageToFrame = () => updateElement(element.id, { fitMode: 'contain' });
+  const fitImageToCanvas = () => {
+    if (!element.naturalWidth || !element.naturalHeight) {
+      fitImageToFrame();
+      return;
+    }
+    const state = store.getState();
+    const output = state.doc.outputs[state.currentOutput];
+    updateElement(element.id, {
+      ...fitMediaToCanvas(element.naturalWidth, element.naturalHeight, output),
+      fitMode: 'contain',
+    });
+  };
+  const centerImage = () => {
+    const state = store.getState();
+    const output = state.doc.outputs[state.currentOutput];
+    updateElement(element.id, centeredMediaFrame(element, output));
   };
 
   const handleUpscale = async () => {
@@ -879,6 +922,17 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               {aiLoading === 'remove-bg' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_remove_background', 'Remove Background')}
             </button>
           )}
+          <div className="grid grid-cols-3 gap-1">
+            <button type="button" onClick={fitImageToFrame} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+              {t('designer_fit_to_frame', 'Fit to frame')}
+            </button>
+            <button type="button" onClick={fitImageToCanvas} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+              {t('designer_fit_to_canvas', 'Fit to canvas')}
+            </button>
+            <button type="button" onClick={centerImage} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+              {t('designer_center', 'Center')}
+            </button>
+          </div>
 
           {operationAvailable('upscale') && (
           <div className="flex gap-2">

@@ -50,8 +50,9 @@ import { NewDesignDialog } from './new-design-dialog';
 import { CanvasInspector } from './panels/canvas-inspector';
 import { useMediaPicker } from '../use-media-picker';
 import { StartDialog } from './start-dialog';
-import { aiRemoveBackground, aiUpscale, aiDetectSubject, aiOutpaint } from './ai-image-actions';
+import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiDetectSubject, aiOutpaint } from './ai-image-actions';
 import { OutpaintDialog } from './outpaint-dialog';
+import { BackgroundRemovalDialog } from './background-removal-dialog';
 import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
@@ -1222,11 +1223,11 @@ export const Designer: FC<DesignerProps> = ({
   }, [store]);
 
   const runAi = useCallback(
-    async (fn: (id: string) => Promise<void>, failMsg: string) => {
+    async <T,>(fn: (id: string) => Promise<T>, failMsg: string): Promise<T | undefined> => {
       const id = selectedImageId();
-      if (!id) return;
+      if (!id) return undefined;
       try {
-        await fn(id);
+        return await fn(id);
       } catch (err) {
         // The shared AI actions throw the server's error message (502/409 envelope);
         // show it so an upstream failure isn't reported as a bare "failed".
@@ -1393,7 +1394,28 @@ export const Designer: FC<DesignerProps> = ({
           ),
         }),
       onAiRemoveBg: () =>
-        runAi((id) => aiRemoveBackground({ fetch, store, elementId: id }), translate('background_removal_failed', 'Background removal failed')),
+        runAi(async (id) => {
+          const candidate = await aiRemoveBackground({ fetch, store, elementId: id });
+          if (!candidate) throw new Error(translate('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'));
+          modals.openModal({
+            title: translate('designer_review_background_removal', 'Review background removal'),
+            size: 720,
+            children: (close: () => void) => (
+              <BackgroundRemovalDialog
+                originalUrl={candidate.before.src!}
+                asset={candidate.asset}
+                onCancel={close}
+                onApply={(fit) => {
+                  const state = store.getState();
+                  const output = state.doc.outputs[state.currentOutput];
+                  const applied = applyAiRemoveBackground({ store, candidate, output, fit });
+                  if (applied) close();
+                  else toaster.show(translate('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'), 'warning');
+                }}
+              />
+            ),
+          });
+        }, translate('background_removal_failed', 'Background removal failed')),
       onAiUpscale: (scale) =>
         runAi((id) => aiUpscale({ fetch, store, elementId: id }, scale), translate('upscale_failed', 'Upscale failed')),
       onAiInpaint: () => {
