@@ -208,6 +208,21 @@ describe('DesignService', () => {
       expect(saved.outputs[0].width).toBeLessThanOrEqual(16384);
       expect(saved.outputs[0].height).toBeLessThanOrEqual(16384);
     });
+
+    it('renders a server preview when an image design has no client thumbnail', async () => {
+      previewService.renderPreviewBuffer.mockResolvedValue(Buffer.from('png'));
+      previewService.uploadPreview.mockResolvedValue('server-preview');
+
+      await service.createDesign('org-1', 'user-1', { name: 'Image', doc: makeDoc() });
+
+      expect(previewService.renderPreviewBuffer).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: 'image' }),
+        { orgId: 'org-1' }
+      );
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ previewFileId: 'server-preview', previewDataUrl: null })
+      );
+    });
   });
 
   describe('updateDesign', () => {
@@ -248,6 +263,18 @@ describe('DesignService', () => {
         })
       );
     });
+
+    it('preserves the previous preview when the server fallback cannot render', async () => {
+      repository.findById.mockResolvedValue({ id: 'd1', previewFileId: 'previous-preview' });
+      previewService.renderPreviewBuffer.mockRejectedValue(new Error('renderer unavailable'));
+
+      await service.updateDesign('org-1', 'd1', { doc: makeDoc() });
+
+      const payload = repository.update.mock.calls[0][2];
+      expect(payload).not.toHaveProperty('previewFileId');
+      expect(payload).not.toHaveProperty('previewDataUrl');
+      expect(fileService.softDelete).not.toHaveBeenCalled();
+    });
   });
 
   describe('createTemplate', () => {
@@ -279,6 +306,48 @@ describe('DesignService', () => {
           doc: { mode: 'image', outputs: [] },
         })
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('uses a server preview when no template thumbnail is supplied', async () => {
+      previewService.renderPreviewBuffer.mockResolvedValue(Buffer.from('png'));
+      previewService.uploadPreview.mockResolvedValue('server-template-preview');
+
+      await service.createTemplate({
+        organizationId: 'org-1',
+        name: 'Tmpl',
+        category: 'social',
+        doc: makeDoc(),
+      });
+
+      expect(repository.createTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({ thumbnailFileId: 'server-template-preview' })
+      );
+    });
+
+    it('renders video template previews server-side instead of trusting a stage snapshot', async () => {
+      fileService.getFileById.mockResolvedValue({ id: 'client-preview' });
+      previewService.renderPreviewBuffer.mockResolvedValue(Buffer.from('png'));
+      previewService.uploadPreview.mockResolvedValue('server-video-preview');
+      const doc = {
+        mode: 'video',
+        outputs: [{
+          id: 'out-1', formatId: 'reel', name: 'Reel', width: 1080, height: 1920,
+          fps: 30, durationMs: 5000, tracks: [],
+        }],
+      };
+
+      await service.createTemplate({
+        organizationId: 'org-1',
+        name: 'Video tmpl',
+        category: 'video',
+        doc,
+        thumbnailFileId: 'client-preview',
+      });
+
+      expect(repository.createTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({ thumbnailFileId: 'server-video-preview' })
+      );
+      expect(fileService.softDelete).toHaveBeenCalledWith('client-preview', 'org-1');
     });
   });
 
@@ -935,13 +1004,17 @@ describe('DesignService', () => {
       expect(fileService.softDelete).toHaveBeenCalledWith('client-file', 'org-1');
     });
 
-    it('createDesign does not render a preview for an image doc', async () => {
+    it('createDesign keeps an image client preview without rendering a duplicate', async () => {
       await service.createDesign('org-1', 'user-1', {
         name: 'Image',
         doc: makeDoc(),
+        previewFileId: 'client-file',
       });
 
       expect(previewService.renderPreviewBuffer).not.toHaveBeenCalled();
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ previewFileId: 'client-file' })
+      );
     });
 
     it('two video saves inside 60 seconds cannot replace the good server poster', async () => {

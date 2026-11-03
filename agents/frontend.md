@@ -231,6 +231,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   stored videos via `media/video-frame.ts`). Preview rendering fails when a visible required
   time-zero poster or other visual asset cannot be loaded; intentional black pixels remain valid.
   `renderPage` still rejects video outputs.
+- **Design/template previews are best-effort, never save blockers.** Video saves render through
+  `DesignPreviewService`; image saves use that server renderer when no client thumbnail arrives.
+  `.pdesign` export also renders when its source has no resolvable preview. A render failure keeps
+  the previous preview, and preview replacement cleans up only the old File row it actually replaced.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
   carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame

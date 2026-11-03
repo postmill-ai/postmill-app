@@ -7,6 +7,7 @@ import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { DesignPreviewImage } from './design-preview-image';
 
 interface MyDesign {
   id: string;
@@ -124,18 +125,16 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose }) => 
                 }}
                 className="group relative border border-studioBorder rounded-lg overflow-hidden hover:border-designerAccent/50 transition-colors cursor-pointer bg-newBgColorInner"
               >
-                {d.previewUrl || d.previewDataUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- file URL or data URL preview
-                  <img
-                    src={d.previewUrl || d.previewDataUrl || undefined}
-                    alt={d.name}
-                    className="w-full aspect-square object-cover"
-                  />
-                ) : (
-                  <div className="w-full aspect-square bg-studioBorder/10 flex items-center justify-center text-newTextColor/70 text-xs">
-                    {t('my_designs_panel_no_preview', 'No preview')}
-                  </div>
-                )}
+                <DesignPreviewImage
+                  src={d.previewUrl || d.previewDataUrl}
+                  alt={d.name}
+                  className="w-full aspect-square object-cover"
+                  fallback={(
+                    <div className="w-full aspect-square bg-studioBorder/10 flex items-center justify-center text-newTextColor/70 text-xs">
+                      {t('my_designs_panel_no_preview', 'No preview')}
+                    </div>
+                  )}
+                />
                 <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
                   {d.mode === 'video'
                     ? t('my_designs_panel_video_badge', 'VIDEO')

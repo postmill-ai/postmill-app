@@ -111,6 +111,11 @@ const makeService = (over: {
   const brandsService = {
     getCustomFonts: vi.fn(async () => over.customFonts ?? []),
   };
+  const designPreviewService = {
+    renderPreviewBuffer: vi.fn(async () => {
+      throw new Error('No preview fixture');
+    }),
+  };
 
   const service = new DesignExportService(
     lifecycle as any,
@@ -119,10 +124,11 @@ const makeService = (over: {
     new DesignerDocService(),
     fileService as any,
     storageService as any,
-    brandsService as any
+    brandsService as any,
+    designPreviewService as any
   );
 
-  return { service, lifecycle, aiSettings, designService, fileService, assetAdapter, localAdapter, brandsService, storageService };
+  return { service, lifecycle, aiSettings, designService, fileService, assetAdapter, localAdapter, brandsService, storageService, designPreviewService };
 };
 
 const pendingExportJob = {
@@ -441,7 +447,32 @@ describe('DesignExportService.processExport', () => {
     );
   });
 
-  it('completes without a thumbnail when the source has no preview file', async () => {
+  it('renders an export thumbnail when the source has no preview file', async () => {
+    const { service, localAdapter, fileService, designPreviewService } = makeService({
+      job: pendingExportJob,
+      design: { id: 'd1', name: 'Hero', doc: docWithMedia() },
+      files: {},
+      customFonts: [],
+    });
+    designPreviewService.renderPreviewBuffer.mockResolvedValue(PNG_BYTES);
+    primePayload({ organizationId: 'org-1', kind: 'design', sourceId: 'd1' });
+
+    await service.processExport('job-1');
+
+    expect(designPreviewService.renderPreviewBuffer).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'image' }),
+      { orgId: 'org-1' }
+    );
+    expect(localAdapter.writeBuffer).toHaveBeenCalledTimes(2);
+    expect(localAdapter.writeBuffer.mock.calls[1][0]).toEqual(PNG_BYTES);
+    expect(localAdapter.writeBuffer.mock.calls[1][1]).toBe('image/png');
+    expect(fileService.saveMediaInformation).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({ id: 'artifact-file-1', thumbnail: expect.any(String) })
+    );
+  });
+
+  it('completes without a thumbnail when the source has no preview file and rendering fails', async () => {
     const { service, aiSettings, localAdapter, fileService } = makeService({
       job: pendingExportJob,
       design: { id: 'd1', name: 'Hero', doc: docWithMedia() },

@@ -139,7 +139,7 @@ export class DesignService {
       await this._assertOwnedFile(orgId, data.previewFileId);
     }
     let regenId: string | null = null;
-    let isVideo = false;
+    let discardClientPreview = false;
     if (data.doc !== undefined) {
       const validatedDoc = this._designerDocService.validate(data.doc);
       const firstOutput = validatedDoc.outputs[0];
@@ -149,17 +149,23 @@ export class DesignService {
         width: firstOutput.width,
         height: firstOutput.height,
       };
-      if (validatedDoc.mode === 'video') {
-        isVideo = true;
-        delete payload.previewFileId;
-        delete payload.previewDataUrl;
-        regenId = await this._renderVideoPreview(orgId, validatedDoc);
-        if (regenId) payload.previewFileId = regenId;
+      const isVideo = validatedDoc.mode === 'video';
+      if (isVideo || (!data.previewFileId && !data.previewDataUrl)) {
+        discardClientPreview = isVideo;
+        if (isVideo) {
+          delete payload.previewFileId;
+          delete payload.previewDataUrl;
+        }
+        regenId = await this._renderPreview(orgId, validatedDoc);
+        if (regenId) {
+          payload.previewFileId = regenId;
+          payload.previewDataUrl = null;
+        }
       }
     }
     try {
       const created = await this._designRepository.create(payload);
-      if (isVideo) {
+      if (discardClientPreview) {
         await this._cleanupReplacedFile(orgId, data.previewFileId, regenId);
       }
       return created;
@@ -200,7 +206,8 @@ export class DesignService {
       width: firstOutput.width,
       height: firstOutput.height,
     };
-    if (validatedDoc.mode !== 'video') {
+    const isVideo = validatedDoc.mode === 'video';
+    if (!isVideo && (data.previewFileId || data.previewDataUrl)) {
       const previous = payload.previewFileId !== undefined
         ? await this._designRepository.findById(orgId, id)
         : null;
@@ -209,13 +216,18 @@ export class DesignService {
       return updated;
     }
 
-    delete payload.previewFileId;
-    delete payload.previewDataUrl;
+    if (isVideo) {
+      delete payload.previewFileId;
+      delete payload.previewDataUrl;
+    }
     const previous = await this._designRepository.findById(orgId, id);
-    const regenId = this._previewRegenDue(id)
-      ? await this._renderVideoPreview(orgId, validatedDoc)
+    const regenId = (!isVideo || this._previewRegenDue(id))
+      ? await this._renderPreview(orgId, validatedDoc)
       : null;
-    if (regenId) payload.previewFileId = regenId;
+    if (regenId) {
+      payload.previewFileId = regenId;
+      payload.previewDataUrl = null;
+    }
     try {
       const updated = await this._designRepository.update(id, orgId, payload);
       if (regenId) {
@@ -381,11 +393,26 @@ export class DesignService {
       folderId = await this.resolveOwnedFolderId(data.organizationId, data.folderId);
     }
     const validatedDoc = this._designerDocService.validate(data.doc);
-    return this._designRepository.createTemplate({
-      ...data,
-      folderId,
-      doc: validatedDoc,
-    });
+    const discardClientPreview = validatedDoc.mode === 'video' && !!data.organizationId;
+    let regenId: string | null = null;
+    if (data.organizationId && (discardClientPreview || !data.thumbnailFileId)) {
+      regenId = await this._renderPreview(data.organizationId, validatedDoc);
+    }
+    try {
+      const created = await this._designRepository.createTemplate({
+        ...data,
+        thumbnailFileId: regenId || (discardClientPreview ? undefined : data.thumbnailFileId),
+        folderId,
+        doc: validatedDoc,
+      });
+      if (discardClientPreview) {
+        await this._cleanupReplacedFile(data.organizationId!, data.thumbnailFileId, regenId);
+      }
+      return created;
+    } catch (err) {
+      if (regenId) await this._cleanupReplacedFile(data.organizationId!, regenId, null);
+      throw err;
+    }
   }
 
   async updateTemplate(orgId: string, id: string, data: {
@@ -398,17 +425,41 @@ export class DesignService {
     if (data.thumbnailFileId) {
       await this._assertOwnedFile(orgId, data.thumbnailFileId);
     }
-    if (data.doc !== undefined) {
-      const validatedDoc = this._designerDocService.validate(data.doc);
+    const validatedDoc = data.doc !== undefined
+      ? this._designerDocService.validate(data.doc)
+      : undefined;
+    if (validatedDoc) {
       payload = { ...payload, doc: validatedDoc };
     }
-    // Only look up the previous row when this write moves the thumbnail pointer.
-    const previous = data.thumbnailFileId
-      ? await this._designRepository.findTemplateForOrg(id, orgId)
-      : null;
-    const updated = await this._designRepository.updateTemplate(id, orgId, payload);
-    await this._cleanupReplacedFile(orgId, previous?.thumbnailFileId, payload.thumbnailFileId);
-    return updated;
+    const needsServerPreview = !!validatedDoc &&
+      (validatedDoc.mode === 'video' || !data.thumbnailFileId);
+    if (!needsServerPreview) {
+      const previous = data.thumbnailFileId
+        ? await this._designRepository.findTemplateForOrg(id, orgId)
+        : null;
+      const updated = await this._designRepository.updateTemplate(id, orgId, payload);
+      await this._cleanupReplacedFile(orgId, previous?.thumbnailFileId, payload.thumbnailFileId);
+      return updated;
+    }
+
+    const isVideo = validatedDoc!.mode === 'video';
+    if (isVideo) delete payload.thumbnailFileId;
+    const previous = await this._designRepository.findTemplateForOrg(id, orgId);
+    const regenId = await this._renderPreview(orgId, validatedDoc!);
+    if (regenId) payload.thumbnailFileId = regenId;
+    try {
+      const updated = await this._designRepository.updateTemplate(id, orgId, payload);
+      if (regenId) {
+        await this._cleanupReplacedFile(orgId, previous?.thumbnailFileId, regenId);
+      }
+      if (data.thumbnailFileId !== previous?.thumbnailFileId) {
+        await this._cleanupReplacedFile(orgId, data.thumbnailFileId, regenId);
+      }
+      return updated;
+    } catch (err) {
+      if (regenId) await this._cleanupReplacedFile(orgId, regenId, null);
+      throw err;
+    }
   }
 
   async deleteTemplate(orgId: string, id: string) {
@@ -702,7 +753,7 @@ export class DesignService {
   }
 
   /** Render failures preserve the stored preview and never fail the doc save. */
-  private async _renderVideoPreview(
+  private async _renderPreview(
     orgId: string,
     doc: DesignerDoc
   ): Promise<string | null> {
@@ -711,7 +762,7 @@ export class DesignService {
       return await this._designPreviewService.uploadPreview(orgId, buffer);
     } catch (err) {
       this._logger.warn(
-        `Server-side video preview regen failed; preserving the stored preview: ${(err as Error)?.message}`
+        `Server-side preview regen failed; preserving the stored preview: ${(err as Error)?.message}`
       );
       return null;
     }

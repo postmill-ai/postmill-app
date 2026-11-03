@@ -10,6 +10,7 @@ import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.servi
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { NO_CREDIT } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
+import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
 import {
   collectDocFileIds,
   collectDocFontFamilies,
@@ -142,6 +143,7 @@ export class DesignExportService {
     private _fileService: FileService,
     private _storageService: StorageService,
     private _brandsService: BrandsService,
+    private _designPreviewService: DesignPreviewService,
   ) {}
 
   /** Org-scoped status read (mirrors VideoRenderService.getJob). */
@@ -286,7 +288,7 @@ export class DesignExportService {
 
     try {
       const payload = JSON.parse(raw) as DesignExportPayload;
-      const { name, bytes, previewPath, metadata } = await this._buildBundle(orgId, jobId, payload);
+      const { name, bytes, previewPath, previewBuffer, metadata } = await this._buildBundle(orgId, jobId, payload);
 
       const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
       const path = await adapter.writeBuffer(bytes, 'application/zip');
@@ -308,10 +310,10 @@ export class DesignExportService {
       // the preview file itself: DesignService._cleanupReplacedFile
       // soft-deletes it the moment autosave replaces the design preview.
       // Best-effort: an export must never fail over a thumbnail.
-      if (previewPath) {
+      if (previewPath || previewBuffer) {
         try {
-          const previewBytes = await adapter.readFile(previewPath);
-          const ext = pathExtension(previewPath);
+          const previewBytes = previewBuffer ?? await adapter.readFile(previewPath!);
+          const ext = previewPath ? pathExtension(previewPath) : undefined;
           const copiedPath = await adapter.writeBuffer(
             previewBytes,
             ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png'
@@ -356,6 +358,7 @@ export class DesignExportService {
     name: string;
     bytes: Buffer;
     previewPath: string | null;
+    previewBuffer?: Buffer;
     metadata: NonNullable<ReturnType<typeof designFileMetadata>>;
   }> {
     const { name, doc, previewPath } = await this._loadSource(orgId, {
@@ -443,7 +446,17 @@ export class DesignExportService {
       { name: 'doc.json', data: strToU8(JSON.stringify(doc)), compress: true },
       ...assetEntries,
     ]);
-    return { name, bytes, previewPath, metadata: designFileMetadata(doc)! };
+    let previewBuffer: Buffer | undefined;
+    if (!previewPath) {
+      try {
+        previewBuffer = await this._designPreviewService.renderPreviewBuffer(doc, { orgId });
+      } catch (err) {
+        this._logger.warn(
+          `Design export ${jobId}: preview render failed; exporting without a thumbnail: ${(err as Error)?.message}`
+        );
+      }
+    }
+    return { name, bytes, previewPath, previewBuffer, metadata: designFileMetadata(doc)! };
   }
 
   private async _writeProgress(jobId: string, done: number, total: number): Promise<void> {
