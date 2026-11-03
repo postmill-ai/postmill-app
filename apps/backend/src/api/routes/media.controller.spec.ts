@@ -16,7 +16,8 @@ const org = { id: 'org-1' } as any;
 
 function build(
   defaultsOverride: Record<string, any> = {},
-  serviceOverride: Record<string, any> = {}
+  serviceOverride: Record<string, any> = {},
+  assistantOverride: Record<string, any> = {}
 ) {
   const aiDefaults = {
     imageToImage: vi.fn().mockResolvedValue('https://cdn/out.png'),
@@ -46,6 +47,11 @@ function build(
   const fileService = {
     getFileByPath: vi.fn().mockResolvedValue(null),
   };
+  const designerAssistant = {
+    generateCopy: vi.fn().mockResolvedValue({ variants: ['One', 'Two', 'Three'] }),
+    getSuggestions: vi.fn().mockResolvedValue({ suggestions: [] }),
+    ...assistantOverride,
+  };
   const controller = new MediaController(
     aiDefaults as any,
     aiMediaService as any,
@@ -54,9 +60,10 @@ function build(
     {} as any, // _storageService
     {} as any, // _stockMediaService
     {} as any, // _brandsService
-    {} as any // _videoSegmentTransform
+    {} as any, // _videoSegmentTransform
+    designerAssistant as any
   );
-  return { controller, aiDefaults, aiMediaService, fileService };
+  return { controller, aiDefaults, aiMediaService, fileService, designerAssistant };
 }
 
 afterEach(() => {
@@ -113,6 +120,24 @@ describe('MediaController — Designer AI-media routes', () => {
       await expect(
         controller.upscaleVideo(org, { videoUrl: 'https://x/v.mp4' } as any)
       ).rejects.toMatchObject({ status: HttpStatus.CONFLICT });
+    });
+  });
+
+  describe('designer assistant', () => {
+    it('delegates copy generation with the org and bounded input', async () => {
+      const { controller, designerAssistant } = build();
+      const body = { kind: 'headline', prompt: 'Holiday sale', selectedText: 'Old headline' };
+      await expect(controller.generateDesignerCopy(org, body as any)).resolves.toEqual({
+        variants: ['One', 'Two', 'Three'],
+      });
+      expect(designerAssistant.generateCopy).toHaveBeenCalledWith('org-1', body);
+    });
+
+    it('delegates design suggestions with the org and context', async () => {
+      const { controller, designerAssistant } = build();
+      const body = { context: { type: 'text', text: 'Headline' } };
+      await controller.getDesignerSuggestions(org, body as any);
+      expect(designerAssistant.getSuggestions).toHaveBeenCalledWith('org-1', body);
     });
   });
 

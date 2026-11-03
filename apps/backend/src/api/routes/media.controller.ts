@@ -55,6 +55,8 @@ import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetc
 import { UseFilters } from '@nestjs/common';
 import { MediaCapabilityFilter } from '@postmill-ai/backend/api/routes/media-capability.filter';
 import { presentMediaMetadata } from '@postmill-ai/nestjs-libraries/media/video-artifact';
+import { DesignerAssistantService } from '@postmill-ai/nestjs-libraries/media/designer-assistant/designer-assistant.service';
+import { DesignerSuggestionsDto, GenerateDesignerCopyDto } from '@postmill-ai/nestjs-libraries/dtos/design/designer-assistant.dto';
 
 @ApiTags('Media')
 @Controller('/media')
@@ -70,7 +72,8 @@ export class MediaController {
     private _storageService: StorageService,
     private _stockMediaService: StockMediaService,
     private _brandsService: BrandsService,
-    private _videoSegmentTransform: VideoSegmentTransformService
+    private _videoSegmentTransform: VideoSegmentTransformService,
+    private _designerAssistant: DesignerAssistantService
   ) {}
 
   @Post('/generate-video')
@@ -164,6 +167,26 @@ export class MediaController {
       org.id,
       operation as GenerationOperation
     );
+  }
+
+  @Post('/designer-assistant/copy')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async generateDesignerCopy(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: GenerateDesignerCopyDto
+  ) {
+    return this._designerAssistant.generateCopy(org.id, body);
+  }
+
+  @Post('/designer-assistant/suggestions')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async getDesignerSuggestions(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: DesignerSuggestionsDto
+  ) {
+    return this._designerAssistant.getSuggestions(org.id, body);
   }
 
   /**
