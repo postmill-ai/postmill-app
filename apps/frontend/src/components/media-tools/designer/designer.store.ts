@@ -239,6 +239,7 @@ export interface DesignerActions {
   removeElement: (id: string) => void;
   removeElements: (ids: string[]) => void;
   duplicateElement: (id: string) => void;
+  duplicateElements: (ids: string[]) => void;
   setSelectedIds: (ids: string[]) => void;
   requestRename: (id: string | null) => void;
   // `commit: false` writes without a history entry — continuous controls
@@ -755,46 +756,53 @@ export const createDesignerStore = (
         ids.forEach(disposeElementBuffers);
       },
 
-      duplicateElement: (id) => {
+      duplicateElement: (id) => get().duplicateElements([id]),
+
+      duplicateElements: (ids) => {
         if (isVideoMode()) return;
         const children = activePageChildren();
-        const el = children.find((e) => e.id === id);
-        if (!el) return;
+        const selectedIds: string[] = [];
+        const copies = [...new Set(ids)].flatMap((id) => {
+          const el = children.find((e) => e.id === id);
+          if (!el) return [];
 
-        // Duplicating a group takes its contents with it.
-        const subtree = el.type === 'group' ? descendantIds(children, id) : [];
-        const sourceIds = [id, ...subtree];
-        const idMap = new Map(sourceIds.map((sid) => [sid, genId()]));
-        const groupRemap: Record<string, string> = {};
+          // Duplicating a group takes its contents with it.
+          const subtree = el.type === 'group' ? descendantIds(children, id) : [];
+          const sourceIds = [id, ...subtree];
+          const idMap = new Map(sourceIds.map((sid) => [sid, genId()]));
+          const groupRemap: Record<string, string> = {};
+          selectedIds.push(idMap.get(id) as string);
 
-        const copies = children
-          .filter((c) => idMap.has(c.id))
-          .map((c) => {
-            const clone = JSON.parse(JSON.stringify(c)) as DesignerElement;
-            // Remap groupId rather than copying it verbatim — the old code
-            // silently joined every duplicate to the ORIGINAL's reflow group.
-            if (clone.groupId) {
-              groupRemap[clone.groupId] = groupRemap[clone.groupId] || genId();
-              clone.groupId = groupRemap[clone.groupId];
-            }
-            return {
-              ...clone,
-              id: idMap.get(c.id) as string,
-              originId: genId(),
-              // Re-point at the copied parent when it came along; otherwise
-              // keep the original parent so a duplicate stays in its folder.
-              parentId: clone.parentId && idMap.has(clone.parentId)
-                ? idMap.get(clone.parentId)
-                : clone.parentId,
-              x: c.x + 20,
-              y: c.y + 20,
-            };
-          });
+          return children
+            .filter((c) => idMap.has(c.id))
+            .map((c) => {
+              const clone = JSON.parse(JSON.stringify(c)) as DesignerElement;
+              // Remap groupId rather than copying it verbatim — the old code
+              // silently joined every duplicate to the ORIGINAL's reflow group.
+              if (clone.groupId) {
+                groupRemap[clone.groupId] = groupRemap[clone.groupId] || genId();
+                clone.groupId = groupRemap[clone.groupId];
+              }
+              return {
+                ...clone,
+                id: idMap.get(c.id) as string,
+                originId: genId(),
+                // Re-point at the copied parent when it came along; otherwise
+                // keep the original parent so a duplicate stays in its folder.
+                parentId: clone.parentId && idMap.has(clone.parentId)
+                  ? idMap.get(clone.parentId)
+                  : clone.parentId,
+                x: c.x + 20,
+                y: c.y + 20,
+              };
+            });
+        });
+        if (!copies.length) return;
 
         set({
           doc: { ...get().doc, outputs: withActiveChildren([...children, ...copies]) },
           isDirty: true,
-          selectedIds: [idMap.get(id) as string],
+          selectedIds,
         });
         get().pushHistory();
       },

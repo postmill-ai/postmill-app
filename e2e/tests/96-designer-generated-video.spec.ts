@@ -1639,6 +1639,12 @@ async function touchDragDocumentPoints(
   await session.detach();
 }
 
+async function selectMobileTool(page: Page, name: string) {
+  await page.getByRole('button', { name: 'Tools', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name, exact: true }).click();
+  await page.keyboard.press('Escape');
+}
+
 test.describe('Designer mobile touch editing (mocked local document)', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -1665,7 +1671,7 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
     await fitDesignerCanvas(page);
     const point = (x: number, y: number) => canvasDocumentPoint(page, 400, 300, x, y);
 
-    await page.getByRole('button', { name: 'Rectangle (U)', exact: true }).click();
+    await selectMobileTool(page, 'Rectangle');
     await touchDragDocumentPoints(page, await point(250, 150), await point(350, 250));
     await expect.poll(() => mocks.doc.outputs[0].children?.filter((item) => item.type === 'shape').length).toBe(1);
 
@@ -1673,7 +1679,7 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
     await page.touchscreen.tap(tap.x, tap.y);
     await expect.poll(() => mocks.doc.outputs[0].children?.filter((item) => item.type === 'shape').length).toBe(2);
 
-    await page.getByRole('button', { name: 'Move (V)', exact: true }).click();
+    await selectMobileTool(page, 'Move');
     await touchDragDocumentPoints(page, await point(225, 105), await point(285, 165));
     await expect.poll(() => mocks.doc.outputs[0].children?.find((item) => item.id === 'mobile-text')?.x).toBeGreaterThan(40);
     const moved = mocks.doc.outputs[0].children!.find((item) => item.id === 'mobile-text')!;
@@ -1685,7 +1691,7 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
     const editor = page.locator('[data-text-editor-id="mobile-text"]');
     await expect(editor).toBeVisible();
     await editor.fill('Mobile edited');
-    await page.getByRole('button', { name: 'Move (V)', exact: true }).click();
+    await selectMobileTool(page, 'Move');
     await expect.poll(() => mocks.doc.outputs[0].children?.find((item) => item.id === 'mobile-text')?.text).toBe('Mobile edited');
 
     await page.keyboard.press('Control+s');
@@ -1698,6 +1704,50 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
       x: moved.x,
       y: moved.y,
     });
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('uses mobile quick actions, bottom tools, Inspector, and a collapsible timeline', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = blankDoc();
+    mocks.name = 'Mobile workspace E2E';
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+
+    await expect(page.getByRole('toolbar', { name: 'Designer quick actions', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Expand timeline', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Collapse timeline', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Collapse timeline', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Expand timeline', exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    const toolsDialog = page.getByRole('dialog', { name: 'Tools', exact: true });
+    await toolsDialog.getByRole('button', { name: 'Horizontal Type', exact: true }).click();
+    await toolsDialog.getByRole('button', { name: 'Rectangle', exact: true }).click();
+    await expect(toolsDialog.getByRole('button', { name: 'Rectangle', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await toolsDialog.getByLabel('Radius', { exact: true }).fill('18');
+    await expect(toolsDialog.getByLabel('Radius', { exact: true })).toHaveValue('18');
+    await page.keyboard.press('Escape');
+    const point = await canvasDocumentPoint(page, 1080, 1920, 540, 960);
+    await page.touchscreen.tap(point.x, point.y);
+    await expect.poll(() => mocks.savedClips().length).toBe(1);
+    expect(mocks.savedClips()[0].borderRadius).toBe(18);
+    await page.getByRole('button', { name: 'Expand timeline', exact: true }).click();
+    await page.getByRole('slider', { name: 'Clip', exact: true }).click();
+    const quickActions = page.getByRole('toolbar', { name: 'Designer quick actions', exact: true });
+    await quickActions.getByRole('button', { name: 'Duplicate', exact: true }).click();
+    await expect.poll(() => mocks.savedClips().length).toBe(2);
+    await quickActions.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect.poll(() => mocks.savedClips().length).toBe(1);
+
+    await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+    await expect(page.getByText('Inspector', { exact: true }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => mocks.designWrites).toBeGreaterThan(0);
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

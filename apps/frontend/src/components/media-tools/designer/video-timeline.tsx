@@ -1463,6 +1463,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   const [zoomPxPerMs, setZoomPxPerMs] = useState(1 / MS_PER_PIXEL_DEFAULT);
   const [keyframeLaneOpen, setKeyframeLaneOpen] = useState(false);
+  const [timelineCollapsed, setTimelineCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 1025
+  );
   const [isPlaying, setIsPlaying] = useState(false);
   // Mirror playback state into the store so sibling subtrees (the canvas
   // overlay's repaint loop) can gate per-frame work on it — the timeline owns
@@ -2833,24 +2836,23 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   }, [rulerMenu, store, currentOutput]);
 
   // Timeline height drag-splitter (the panel grows upward from the bottom).
-  const handleSplitterMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const handleSplitterPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
       const startY = e.clientY;
       const startHeight = store.getState().timelineHeight;
-      const onMove = (ev: MouseEvent) => {
+      const onMove = (ev: PointerEvent) => {
         store.getState().setTimelineHeight(startHeight + (startY - ev.clientY));
       };
       const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
         window.removeEventListener('pointercancel', onUp);
         window.removeEventListener('blur', onUp);
       };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-      // pointercancel / window blur are the lost-mouseup paths — without them
-      // the resize listeners leaked until the next splitter drag.
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
       window.addEventListener('pointercancel', onUp);
       window.addEventListener('blur', onUp);
     },
@@ -3640,8 +3642,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         role="separator"
         aria-orientation="horizontal"
         aria-label={translate('resize_timeline', 'Resize timeline')}
-        className="h-1 shrink-0 cursor-row-resize bg-studioBorder/40 hover:bg-designerAccent/60"
-        onMouseDown={handleSplitterMouseDown}
+        className={`${timelineCollapsed ? 'hidden' : ''} h-2 shrink-0 cursor-row-resize touch-none bg-studioBorder/40 hover:bg-designerAccent/60`}
+        onPointerDown={handleSplitterPointerDown}
       />
       {/* Caption import picker — opened from the Captions menu. */}
       <input
@@ -3653,7 +3655,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         aria-hidden="true"
         onChange={handleCaptionFilePicked}
       />
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-studioBorder">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-studioBorder mobile:flex-wrap">
         <button
           onClick={handlePlayPause}
           className="w-7 h-7 flex items-center justify-center rounded-sm text-textColor hover:bg-studioBorder/30 text-[13px]"
@@ -3678,7 +3680,18 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           / {formatTime(vo.durationMs)}
         </span>
         <TimelineTransportControls store={store} outputIndex={currentOutput} />
+        <button
+          type="button"
+          onClick={() => setTimelineCollapsed((collapsed) => !collapsed)}
+          aria-expanded={!timelineCollapsed}
+          aria-label={timelineCollapsed ? translate('expand_timeline', 'Expand timeline') : translate('collapse_timeline', 'Collapse timeline')}
+          title={timelineCollapsed ? translate('expand_timeline', 'Expand timeline') : translate('collapse_timeline', 'Collapse timeline')}
+          className="w-8 h-8 flex items-center justify-center rounded-sm text-textColor hover:bg-studioBorder/30"
+        >
+          {timelineCollapsed ? '⌃' : '⌄'}
+        </button>
         <div className="flex-1" />
+        <div className="contents mobile:hidden">
         <button
           onClick={() => store.getState().setTimelineSnap(!timelineSnap)}
           aria-pressed={timelineSnap}
@@ -3833,12 +3846,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         >
           {translate('slideshow', 'Slideshow')}
         </button>
+        </div>
       </div>
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-auto"
-        style={{ height: timelineHeight }}
+        className={`flex-1 overflow-auto ${timelineCollapsed ? 'hidden' : ''}`}
+        style={{ height: timelineCollapsed ? 0 : timelineHeight }}
+        aria-hidden={timelineCollapsed}
       >
         <div style={{ position: 'relative', width: LABEL_WIDTH + totalPixels + 40, minWidth: '100%' }}>
           {/* Ruler */}

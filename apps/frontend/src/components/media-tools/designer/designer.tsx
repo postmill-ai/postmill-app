@@ -53,6 +53,7 @@ import { StartDialog } from './start-dialog';
 import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiDetectSubject, aiOutpaint } from './ai-image-actions';
 import { OutpaintDialog } from './outpaint-dialog';
 import { BackgroundRemovalDialog } from './background-removal-dialog';
+import { MobileQuickActions, MobileToolsDialog } from './mobile-designer-tools';
 import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
@@ -218,6 +219,7 @@ export const Designer: FC<DesignerProps> = ({
   const [inspectorCollapsed, setInspectorCollapsed] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 1025
   );
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   // Required startup picker on a fresh editor (no deep-linked asset/design and
   // no caller-supplied size) — forces an explicit format choice instead of the
   // silent 1080² "Instagram Post" default.
@@ -1521,7 +1523,7 @@ export const Designer: FC<DesignerProps> = ({
   // Full screen fills the browser window, not the display: the root goes immersive
   // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root
   // (z 200+) and stay above this z-100 layer.
-  const surface = useFullscreenSurface('relative mobile:h-[calc(100vh-200px)]');
+  const surface = useFullscreenSurface('relative mobile:h-[calc(100dvh-200px)]');
 
   return (
     <div className={`flex flex-col h-full w-full overflow-hidden bg-newBgColorInner ${surface}`}>
@@ -1657,21 +1659,25 @@ export const Designer: FC<DesignerProps> = ({
 
       {/* Tool options for the active tool — Photoshop's options bar. Image mode
           only: video mode drives the timeline, which owns its own bindings. */}
-      <ToolOptionsBar
-        activeTool={activeTool}
-        options={activeToolOptions}
-        onChange={onToolOptionChange}
-      />
+      <div className="contents mobile:hidden">
+        <ToolOptionsBar
+          activeTool={activeTool}
+          options={activeToolOptions}
+          onChange={onToolOptionChange}
+        />
+      </div>
 
       <div className="relative flex flex-1 min-h-0 w-full overflow-hidden">
         {/* The tools apply to video as much as to images — a clip is a canvas
             object like any other. */}
-        <ToolRail
-          activeTool={activeTool}
-          lastToolPerGroup={lastToolPerGroup}
-          onSelect={setActiveTool}
-          aiAvailable={aiActive}
-        />
+        <div className="contents mobile:hidden">
+          <ToolRail
+            activeTool={activeTool}
+            lastToolPerGroup={lastToolPerGroup}
+            onSelect={setActiveTool}
+            aiAvailable={aiActive}
+          />
+        </div>
         {brandPanel.state.open && (
           <FloatingPanel
             title={translate('brand_label', 'Brand')}
@@ -1765,7 +1771,7 @@ export const Designer: FC<DesignerProps> = ({
                 relative parent), so it never covers the timeline/format tabs
                 that sit below the canvas. */}
             {!inspectorCollapsed && (
-              <div className="absolute right-0 top-0 bottom-0 w-[280px] z-20 border-l border-studioBorder bg-newBgColorInner overflow-y-auto p-3 shadow-xl">
+              <div className="absolute right-0 top-0 bottom-0 w-[280px] z-20 border-l border-studioBorder bg-newBgColorInner overflow-y-auto p-3 shadow-xl mobile:inset-x-0 mobile:bottom-0 mobile:top-auto mobile:w-full mobile:max-h-[55dvh] mobile:rounded-t-xl mobile:border-l-0 mobile:border-t">
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
                     {hasInspectorTarget ? translate('inspector_panel_label', 'Inspector') : translate('canvas_panel_label', 'Canvas')}
@@ -1793,7 +1799,7 @@ export const Designer: FC<DesignerProps> = ({
             {inspectorCollapsed && (
               <button
                 onClick={() => setInspectorCollapsed(false)}
-                className="absolute right-0 top-2 z-20 px-1.5 py-3 rounded-l-md border border-r-0 border-studioBorder bg-newBgColorInner text-textColor/60 hover:text-textColor shadow-xl text-[14px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
+                className="absolute right-0 top-2 z-20 px-1.5 py-3 rounded-l-md border border-r-0 border-studioBorder bg-newBgColorInner text-textColor/60 hover:text-textColor shadow-xl text-[14px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset mobile:hidden"
                 title={translate('show_properties', 'Show properties')}
                 aria-label={translate('expand_properties_panel', 'Expand properties panel')}
               >
@@ -1801,6 +1807,12 @@ export const Designer: FC<DesignerProps> = ({
               </button>
             )}
           </div>
+          <MobileQuickActions
+            store={store}
+            onSave={handleSave}
+            onOpenTools={() => setMobileToolsOpen(true)}
+            onToggleInspector={() => setInspectorCollapsed((collapsed) => !collapsed)}
+          />
           {docMode === 'video' && <VideoTimeline store={store} sendTimelineAwareness={collabData.sendTimelineAwareness} />}
           <PagesPanel store={store} visible={showPagesBar} />
           <OutputTabs store={store} />
@@ -1810,6 +1822,20 @@ export const Designer: FC<DesignerProps> = ({
       {showStart && (
         <StartDialog store={store} fetchFn={fetch} onDone={() => setShowStart(false)} />
       )}
+      <MobileToolsDialog
+        open={mobileToolsOpen}
+        onClose={() => setMobileToolsOpen(false)}
+        activeTool={activeTool}
+        lastToolPerGroup={lastToolPerGroup}
+        aiAvailable={aiActive}
+        onSelect={setActiveTool}
+        activeToolOptions={activeToolOptions}
+        onToolOptionChange={onToolOptionChange}
+        onOpenBrand={() => {
+          setMobileToolsOpen(false);
+          brandPanel.setOpen(true);
+        }}
+      />
       {mediaPicker.element}
       <input
         ref={importInputRef}

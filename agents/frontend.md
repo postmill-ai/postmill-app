@@ -255,6 +255,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   full box (`fullBoxHitProps` or a transparent hit Rect), never just the painted glyphs; coarse
   pointers enlarge the Transformer anchors. Do not add mouse-only Stage handlers or reintroduce a
   synthetic-mouse duplicate commit after a touch gesture.
+- **Mobile workspace uses the same store and tool registry.** `mobile-designer-tools.tsx` provides
+  prominent quick actions and a bottom tool sheet; it never forks editing behavior. The desktop
+  rail/options stay unchanged, the Inspector becomes a bottom sheet, and the timeline collapses to
+  compact transport controls. Timeline resizing uses pointer events, never a mouse-only splitter.
 - **Timeline transport and Inspector essentials.** `timeline-split.ts` is the single split guard for
   the transport, S shortcut, context menu, and store: an unlocked selected clip, a strictly interior
   playhead, and at least 100 ms on both sides. Invalid cuts are no-ops; valid splits select the right
