@@ -260,7 +260,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   playhead, and at least 100 ms on both sides. Invalid cuts are no-ops; valid splits select the right
   half. The transport's duration stepper uses `setVideoDuration` and the shared 1–180 s cap. Image
   replacement/background removal lives in `clip-media.ts`: preserve editing semantics, update media
-  identity/intrinsics, and clear crop/original/smart-filter state. `use-pixel-ops.tsx` must not let an
+  identity/intrinsics, and clear crop/original/smart-filter state. Generation returns a review
+  candidate and does not edit the doc; Apply commits once after the before/after dialog. Static
+  (`ai-image-actions.ts`) and clip paths share `background-removal.ts` geometry: preserve-frame
+  contain by default, aspect-correct canvas fitting as an option. `use-pixel-ops.tsx` must not let an
   older rebake overwrite a newer media source. Static and video Inspectors share
   `corner-radius-control.tsx` and `text-style-control.tsx`.
 - **Timeline hit-testing starts at the scroll viewport.** `timeline-geometry.ts` owns row/new-track

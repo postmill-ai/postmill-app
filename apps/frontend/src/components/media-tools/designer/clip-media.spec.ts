@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDesignerStore, type VideoClip, type VideoOutput } from './designer.store';
 import {
+  applyClipImageBackground,
   clipMediaSourceMatches,
   imageReplacementPatch,
   removeClipImageBackground,
@@ -114,17 +115,29 @@ describe('replaceClipImage', () => {
 });
 
 describe('removeClipImageBackground', () => {
-  it('writes the transparent result only after success and preserves editing semantics', async () => {
+  it('commits the transparent result only after review and preserves editing semantics', async () => {
     const { store, trackId, target } = setup();
     const before = clip(store, trackId);
+    const historyLength = store.getState().history.length;
     const fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ url: '/transparent.png' }),
     });
 
-    await expect(removeClipImageBackground({
+    const candidate = await removeClipImageBackground({
       fetch, store, target, probe: async () => ({ width: 800, height: 600 }),
-    })).resolves.toBe(true);
+    });
+
+    expect(candidate).not.toBeNull();
+    expect(clip(store, trackId).src).toBe('/old.png');
+    expect(store.getState().history).toHaveLength(historyLength);
+    expect(applyClipImageBackground({
+      store,
+      target,
+      candidate: candidate!,
+      output: { width: 1080, height: 1920 },
+    })).toBe(true);
+    expect(store.getState().history).toHaveLength(historyLength + 1);
 
     const after = clip(store, trackId);
     expect(after).toMatchObject({
@@ -145,6 +158,7 @@ describe('removeClipImageBackground', () => {
       mediaType: 'image',
       naturalWidth: 800,
       naturalHeight: 600,
+      fitMode: 'contain',
     });
     expect(after.fileId).toBeUndefined();
     expect(after.crop).toBeUndefined();
@@ -181,8 +195,37 @@ describe('removeClipImageBackground', () => {
     store.getState().updateClipSilent(0, trackId, 'image', { src: '/replacement.png' });
     resolveResponse({ ok: true, json: async () => ({ url: '/stale-transparent.png' }) });
 
-    await expect(pending).resolves.toBe(false);
+    await expect(pending).resolves.toBeNull();
     expect(clip(store, trackId).src).toBe('/replacement.png');
+  });
+
+  it('fits the reviewed result to the canvas without distortion', async () => {
+    const { store, trackId, target } = setup();
+    const candidate = await removeClipImageBackground({
+      store,
+      target,
+      fetch: vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ url: '/transparent.png', fileId: 'new-file' }),
+      }),
+      probe: async () => ({ width: 800, height: 600 }),
+    });
+
+    expect(applyClipImageBackground({
+      store,
+      target,
+      candidate: candidate!,
+      output: { width: 1080, height: 1080 },
+      fit: 'canvas',
+    })).toBe(true);
+    expect(clip(store, trackId)).toMatchObject({
+      x: 0,
+      y: 135,
+      width: 1080,
+      height: 810,
+      fitMode: 'contain',
+      fileId: 'new-file',
+    });
   });
 });
 

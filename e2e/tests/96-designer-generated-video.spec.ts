@@ -1079,6 +1079,12 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
 
     await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Processing...', exact: true })).toBeVisible();
+    const review = page.getByRole('dialog', { name: 'Review background removal', exact: true });
+    await expect(review).toBeVisible();
+    await expect(review.getByRole('img', { name: 'Before', exact: true })).toBeVisible();
+    await expect(review.getByRole('img', { name: 'After', exact: true })).toBeVisible();
+    expect(mocks.doc.outputs[0].tracks[0].clips[1]?.src).toBe(REPLACEMENT_IMAGE_URL);
+    await review.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[1]?.src).toBe(TRANSPARENT_IMAGE_URL);
     expect(mocks.backgroundRemovalPosts).toHaveLength(1);
     expect(JSON.parse(mocks.backgroundRemovalPosts[0])).toEqual({ imageUrl: REPLACEMENT_IMAGE_URL });
@@ -1087,6 +1093,13 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     expect(transparent.filters).toEqual(beforeReplacement.filters);
     expect(transparent.smartFilters).toBeUndefined();
     expect(transparent.originalSrc).toBeUndefined();
+    expect(transparent.fitMode).toBe('contain');
+    expect(transparent).toMatchObject({
+      x: beforeReplacement.x,
+      y: beforeReplacement.y,
+      width: beforeReplacement.width,
+      height: beforeReplacement.height,
+    });
 
     await clipOnTrack(page, 'Shape').click();
     await page.getByRole('button', { name: 'Per corner', exact: true }).click();

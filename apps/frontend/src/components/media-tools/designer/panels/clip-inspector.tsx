@@ -53,7 +53,10 @@ import { FontFamilyPicker } from './font-family-picker';
 import { VoiceoverClipSection } from './voiceover-clip-section';
 import { useMediaPicker } from '../../use-media-picker';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
-import { removeClipImageBackground, replaceClipImage } from '../clip-media';
+import { applyClipImageBackground, removeClipImageBackground, replaceClipImage } from '../clip-media';
+import { BackgroundRemovalDialog } from '../background-removal-dialog';
+import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { CornerRadiusControl } from './corner-radius-control';
 import { TextStyleControl } from './text-style-control';
 
@@ -389,6 +392,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   // Named `translate` (not `t`) — this component already uses `t` as a `.find()` callback var.
   const translate = useT();
   const toaster = useToaster();
+  const modals = useModals();
   const doc = store((s: any) => s.doc);
   const hasKeyframeClipboard = store((s: any) => !!s.keyframeClipboard?.length);
   const brandEnforcement = store((s: any) => s.brandEnforcement);
@@ -782,10 +786,38 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     setImageBgRemovalRunning(true);
     setImageBgRemovalError(null);
     try {
-      await removeClipImageBackground({
+      const candidate = await removeClipImageBackground({
         fetch,
         store,
         target: { outputIndex, trackId, clipId },
+      });
+      if (!candidate) throw new Error(translate('designer_bg_result_outdated', 'The image changed before the result was ready. Please try again.'));
+      modals.openModal({
+        title: translate('designer_review_background_removal', 'Review background removal'),
+        size: 720,
+        children: (close: () => void) => (
+          <BackgroundRemovalDialog
+            originalUrl={candidate.before.src!}
+            asset={candidate.asset}
+            onCancel={close}
+            onApply={(fit) => {
+              const output = store.getState().doc.outputs[outputIndex];
+              const applied = applyClipImageBackground({
+                store,
+                target: { outputIndex, trackId, clipId },
+                candidate,
+                output,
+                fit,
+              });
+              if (applied) close();
+              else {
+                const message = translate('designer_bg_result_outdated', 'The image changed before the result was ready. Please try again.');
+                setImageBgRemovalError(message);
+                toaster.show(message, 'warning');
+              }
+            }}
+          />
+        ),
       });
     } catch (error) {
       const message = (error as Error)?.message ||
@@ -797,7 +829,26 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     } finally {
       if (mountedRef.current) setImageBgRemovalRunning(false);
     }
-  }, [clip?.src, imageBgRemovalRunning, fetch, store, outputIndex, trackId, clipId, translate, toaster]);
+  }, [clip?.src, imageBgRemovalRunning, fetch, store, outputIndex, trackId, clipId, translate, toaster, modals]);
+
+  const fitClipToFrame = () => updateClip({ fitMode: 'contain' });
+  const fitClipToCanvas = () => {
+    if (!clip?.naturalWidth || !clip.naturalHeight) {
+      fitClipToFrame();
+      return;
+    }
+    updateClip({
+      ...fitMediaToCanvas(clip.naturalWidth, clip.naturalHeight, vo),
+      fitMode: 'contain',
+    });
+  };
+  const centerClip = () => {
+    if (!clip) return;
+    updateClip(centeredMediaFrame({
+      width: clip.width ?? 1,
+      height: clip.height ?? 1,
+    }, vo));
+  };
 
   if (!clip) return null;
 
@@ -864,6 +915,19 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           onChange={(n) => updateClip({ height: n })}
         />
       </div>
+      {clipTrackType === 'image' && (
+        <div className="grid grid-cols-3 gap-1">
+          <button type="button" onClick={fitClipToFrame} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+            {translate('designer_fit_to_frame', 'Fit to frame')}
+          </button>
+          <button type="button" onClick={fitClipToCanvas} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+            {translate('designer_fit_to_canvas', 'Fit to canvas')}
+          </button>
+          <button type="button" onClick={centerClip} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+            {translate('designer_center', 'Center')}
+          </button>
+        </div>
+      )}
 
       <Slider
         label={translate('designer_label_rotation', 'Rotation')}
