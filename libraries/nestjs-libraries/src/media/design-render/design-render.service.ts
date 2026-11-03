@@ -3340,7 +3340,17 @@ export class DesignRenderService {
   private async _loadImageUncached(src: string): Promise<any | null> {
     try {
       const { loadImage } = await loadCanvasModule();
-      if (src.startsWith('data:')) return await loadImage(src);
+      if (src.startsWith('data:')) {
+        const separator = src.indexOf(',');
+        if (separator < 0) return null;
+        const metadata = src.slice(0, separator);
+        const payload = src.slice(separator + 1);
+        const buffer = metadata.endsWith(';base64')
+          ? Buffer.from(payload, 'base64')
+          : Buffer.from(decodeURIComponent(payload));
+        if (buffer.byteLength > MAX_IMAGE_BYTES) return null;
+        return await this._decodeImage(buffer, loadImage);
+      }
       // Local-storage uploads (dev/local disk) resolve to a localhost URL that
       // safeFetch rightly refuses (private host). Read them from disk instead —
       // same pattern as the vision critic — with a traversal guard.
@@ -3363,8 +3373,7 @@ export class DesignRenderService {
     }
   }
 
-  /** node-canvas can't decode WebP (uploads store generated assets as .webp);
-   *  transcode through sharp when direct decode fails. */
+  /** Transcode formats node-canvas cannot decode, including WebP and SVG. */
   private async _decodeImage(buffer: Buffer, loadImage: (b: Buffer) => Promise<any>) {
     try {
       return await loadImage(buffer);
