@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, ReactNode } from 'react';
+import React, { FC, ReactNode, useEffect } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { DeleteLayerIcon, DuplicateClipIcon } from '@postmill-ai/frontend/components/ui/icons/designer-tools';
 import { TOOL_GROUPS } from './tools';
@@ -42,10 +42,11 @@ export const MobileQuickActions: FC<{
   const historyLength = store((state) => state.history.length);
   const isSaving = store((state) => state.isSaving);
   const hasSelection = docMode === 'video' ? !!selectedClip : selectedIds.length > 0;
-  const selectedTrack = docMode === 'video' && selectedClip
-    ? (store.getState().doc.outputs[currentOutput] as any)?.tracks
-      ?.find((track: any) => track.id === selectedClip.trackId)
-    : undefined;
+  const selectedTrack = store((state) => {
+    if (state.doc.mode !== 'video' || !state.selectedClip) return undefined;
+    return (state.doc.outputs[state.currentOutput] as any)?.tracks
+      ?.find((track: any) => track.id === state.selectedClip!.trackId);
+  });
 
   const duplicate = () => {
     const state = store.getState();
@@ -54,7 +55,7 @@ export const MobileQuickActions: FC<{
       state.duplicateClip(currentOutput, selectedClip.trackId, selectedClip.clipId);
       return;
     }
-    selectedIds.forEach((id) => state.duplicateElement(id));
+    state.duplicateElements(selectedIds);
   };
   const remove = () => {
     const state = store.getState();
@@ -67,7 +68,7 @@ export const MobileQuickActions: FC<{
       if (refs.length) state.removeClips(currentOutput, refs);
       return;
     }
-    selectedIds.forEach((id) => state.removeElement(id));
+    state.removeElements(selectedIds);
   };
 
   return (
@@ -87,7 +88,7 @@ export const MobileQuickActions: FC<{
   );
 };
 
-export const MobileToolsSheet: FC<{
+type MobileToolsSheetProps = {
   activeTool: string;
   lastToolPerGroup: Record<string, string>;
   aiAvailable: boolean;
@@ -95,7 +96,9 @@ export const MobileToolsSheet: FC<{
   activeToolOptions: Record<string, unknown>;
   onToolOptionChange: (key: string, value: unknown) => void;
   onOpenBrand: () => void;
-}> = ({ activeTool, lastToolPerGroup, aiAvailable, onSelect, activeToolOptions, onToolOptionChange, onOpenBrand }) => {
+};
+
+export const MobileToolsSheet: FC<MobileToolsSheetProps> = ({ activeTool, lastToolPerGroup, aiAvailable, onSelect, activeToolOptions, onToolOptionChange, onOpenBrand }) => {
   const t = useT();
   return (
     <div className="flex flex-col gap-4">
@@ -127,6 +130,35 @@ export const MobileToolsSheet: FC<{
         })}
       </div>
       <ToolOptionsBar activeTool={activeTool} options={activeToolOptions} onChange={onToolOptionChange} />
+    </div>
+  );
+};
+
+export const MobileToolsDialog: FC<MobileToolsSheetProps & {
+  open: boolean;
+  onClose: () => void;
+}> = ({ open, onClose, ...sheetProps }) => {
+  const t = useT();
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div className="hidden mobile:block fixed inset-0 z-[210]">
+      <button type="button" aria-label={t('designer_close_tools_overlay', 'Close tools overlay')} onClick={onClose} className="absolute inset-0 h-full w-full bg-black/50" />
+      <div role="dialog" aria-modal="true" aria-label={t('designer_tools', 'Tools')} className="absolute inset-x-0 bottom-0 max-h-[75dvh] overflow-y-auto rounded-t-xl border border-studioBorder bg-newBgColorInner p-4 shadow-2xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[14px] font-medium text-textColor">{t('designer_tools', 'Tools')}</h2>
+          <button type="button" onClick={onClose} aria-label={t('designer_close_tools', 'Close tools')} className="min-h-[36px] min-w-[36px] rounded-md text-[20px] text-textColor hover:bg-boxHover">×</button>
+        </div>
+        <MobileToolsSheet {...sheetProps} />
+      </div>
     </div>
   );
 };

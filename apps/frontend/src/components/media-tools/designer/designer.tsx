@@ -53,7 +53,7 @@ import { StartDialog } from './start-dialog';
 import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiDetectSubject, aiOutpaint } from './ai-image-actions';
 import { OutpaintDialog } from './outpaint-dialog';
 import { BackgroundRemovalDialog } from './background-removal-dialog';
-import { MobileQuickActions, MobileToolsSheet } from './mobile-designer-tools';
+import { MobileQuickActions, MobileToolsDialog } from './mobile-designer-tools';
 import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
@@ -219,6 +219,7 @@ export const Designer: FC<DesignerProps> = ({
   const [inspectorCollapsed, setInspectorCollapsed] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 1025
   );
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   // Required startup picker on a fresh editor (no deep-linked asset/design and
   // no caller-supplied size) — forces an explicit format choice instead of the
   // silent 1080² "Instagram Post" default.
@@ -1519,26 +1520,6 @@ export const Designer: FC<DesignerProps> = ({
     return () => window.removeEventListener('keydown', handler);
   }, [handleSaveToFiles, modals, store]);
 
-  const openMobileTools = useCallback(() => {
-    modals.openModal({
-      title: translate('designer_tools', 'Tools'),
-      children: (close: () => void) => (
-        <MobileToolsSheet
-          activeTool={activeTool}
-          lastToolPerGroup={lastToolPerGroup}
-          aiAvailable={aiActive}
-          onSelect={setActiveTool}
-          activeToolOptions={activeToolOptions}
-          onToolOptionChange={onToolOptionChange}
-          onOpenBrand={() => {
-            close();
-            brandPanel.setOpen(true);
-          }}
-        />
-      ),
-    });
-  }, [modals, translate, activeTool, lastToolPerGroup, aiActive, setActiveTool, activeToolOptions, onToolOptionChange, brandPanel]);
-
   // Full screen fills the browser window, not the display: the root goes immersive
   // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root
   // (z 200+) and stay above this z-100 layer.
@@ -1829,7 +1810,7 @@ export const Designer: FC<DesignerProps> = ({
           <MobileQuickActions
             store={store}
             onSave={handleSave}
-            onOpenTools={openMobileTools}
+            onOpenTools={() => setMobileToolsOpen(true)}
             onToggleInspector={() => setInspectorCollapsed((collapsed) => !collapsed)}
           />
           {docMode === 'video' && <VideoTimeline store={store} sendTimelineAwareness={collabData.sendTimelineAwareness} />}
@@ -1841,6 +1822,20 @@ export const Designer: FC<DesignerProps> = ({
       {showStart && (
         <StartDialog store={store} fetchFn={fetch} onDone={() => setShowStart(false)} />
       )}
+      <MobileToolsDialog
+        open={mobileToolsOpen}
+        onClose={() => setMobileToolsOpen(false)}
+        activeTool={activeTool}
+        lastToolPerGroup={lastToolPerGroup}
+        aiAvailable={aiActive}
+        onSelect={setActiveTool}
+        activeToolOptions={activeToolOptions}
+        onToolOptionChange={onToolOptionChange}
+        onOpenBrand={() => {
+          setMobileToolsOpen(false);
+          brandPanel.setOpen(true);
+        }}
+      />
       {mediaPicker.element}
       <input
         ref={importInputRef}

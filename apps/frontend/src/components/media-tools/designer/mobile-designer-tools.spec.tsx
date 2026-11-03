@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { MobileQuickActions, MobileToolsSheet } from './mobile-designer-tools';
+import { MobileQuickActions, MobileToolsDialog, MobileToolsSheet } from './mobile-designer-tools';
 import { createDesignerStore, type VideoOutput } from './designer.store';
 
 const imageElement = {
@@ -37,7 +37,29 @@ describe('MobileQuickActions', () => {
     expect(onSave).toHaveBeenCalledOnce();
   });
 
-  it('uses the selected video clip for duplicate and multi-clip deletion', async () => {
+  it('batches static multi-duplicate and multi-delete into one undo entry each', () => {
+    const store = createDesignerStore();
+    act(() => {
+      store.getState().addElement(imageElement);
+      store.getState().addElement({ ...imageElement, id: 'image-2' });
+      store.getState().setSelectedIds(['image-1', 'image-2']);
+    });
+    render(<MobileQuickActions store={store} onSave={vi.fn()} onOpenTools={vi.fn()} onToggleInspector={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate', exact: true }));
+    expect((store.getState().doc.outputs[0] as any).children).toHaveLength(4);
+    expect(store.getState().selectedIds).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+    expect((store.getState().doc.outputs[0] as any).children).toHaveLength(2);
+
+    act(() => store.getState().setSelectedIds(['image-1', 'image-2']));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }));
+    expect((store.getState().doc.outputs[0] as any).children).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+    expect((store.getState().doc.outputs[0] as any).children).toHaveLength(2);
+  });
+
+  it('uses the selected video clip and reacts to track lock changes', async () => {
     const store = createDesignerStore();
     store.getState().setMode('video');
     const output = store.getState().doc.outputs[0] as VideoOutput;
@@ -50,6 +72,12 @@ describe('MobileQuickActions', () => {
     store.getState().setSelectedClip(selected);
     store.getState().setSelectedClips([{ trackId, clipId: 'clip-1' }]);
     render(<MobileQuickActions store={store} onSave={vi.fn()} onOpenTools={vi.fn()} onToggleInspector={vi.fn()} />);
+
+    act(() => store.getState().setTrackLocked(0, trackId, true));
+    expect(screen.getByRole('button', { name: 'Duplicate', exact: true }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Delete', exact: true }).disabled).toBe(true);
+    act(() => store.getState().setTrackLocked(0, trackId, false));
+    expect(screen.getByRole('button', { name: 'Duplicate', exact: true }).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate', exact: true }));
     expect((store.getState().doc.outputs[0] as VideoOutput).tracks[0].clips).toHaveLength(2);
@@ -82,5 +110,37 @@ describe('MobileToolsSheet', () => {
     expect(onSelect).toHaveBeenCalledWith('type-horizontal');
     fireEvent.click(screen.getByRole('button', { name: 'Brand', exact: true }));
     expect(onOpenBrand).toHaveBeenCalledOnce();
+  });
+});
+
+describe('MobileToolsDialog', () => {
+  it('keeps the active tool, options, and option writes live while open', () => {
+    const store = createDesignerStore();
+    const LiveHarness = () => {
+      const activeTool = store((state) => state.activeTool);
+      const lastToolPerGroup = store((state) => state.lastToolPerGroup);
+      const activeToolOptions = store((state) => state.toolOptions[activeTool]);
+      return (
+        <MobileToolsDialog
+          open
+          onClose={vi.fn()}
+          activeTool={activeTool}
+          lastToolPerGroup={lastToolPerGroup}
+          aiAvailable
+          onSelect={(toolId) => store.getState().setActiveTool(toolId)}
+          activeToolOptions={activeToolOptions || {}}
+          onToolOptionChange={(key, value) => store.getState().setToolOption(activeTool, key, value)}
+          onOpenBrand={vi.fn()}
+        />
+      );
+    };
+    render(<LiveHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rectangle', exact: true }));
+    expect(screen.getByRole('button', { name: 'Rectangle', exact: true }).getAttribute('aria-pressed')).toBe('true');
+    const radius = screen.getByRole('spinbutton', { name: 'Radius', exact: true });
+    fireEvent.change(radius, { target: { value: '24' } });
+    expect(store.getState().toolOptions['shape-rect']?.cornerRadius).toBe(24);
+    expect(store.getState().toolOptions.move).toBeUndefined();
   });
 });

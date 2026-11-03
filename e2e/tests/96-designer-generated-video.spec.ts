@@ -1723,10 +1723,18 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
     await page.getByRole('button', { name: 'Collapse timeline', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Expand timeline', exact: true })).toBeVisible();
 
-    await selectMobileTool(page, 'Rectangle');
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    const toolsDialog = page.getByRole('dialog', { name: 'Tools', exact: true });
+    await toolsDialog.getByRole('button', { name: 'Horizontal Type', exact: true }).click();
+    await toolsDialog.getByRole('button', { name: 'Rectangle', exact: true }).click();
+    await expect(toolsDialog.getByRole('button', { name: 'Rectangle', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await toolsDialog.getByLabel('Radius', { exact: true }).fill('18');
+    await expect(toolsDialog.getByLabel('Radius', { exact: true })).toHaveValue('18');
+    await page.keyboard.press('Escape');
     const point = await canvasDocumentPoint(page, 1080, 1920, 540, 960);
     await page.touchscreen.tap(point.x, point.y);
     await expect.poll(() => mocks.savedClips().length).toBe(1);
+    expect(mocks.savedClips()[0].borderRadius).toBe(18);
     await page.getByRole('button', { name: 'Expand timeline', exact: true }).click();
     await page.getByRole('slider', { name: 'Clip', exact: true }).click();
     const quickActions = page.getByRole('toolbar', { name: 'Designer quick actions', exact: true });
