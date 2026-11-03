@@ -9,6 +9,7 @@ const mockNextImage = vi.fn();
 vi.mock('next/image', () => ({
   default: React.forwardRef<HTMLImageElement, Record<string, unknown>>(function MockNextImage(props, ref) {
     mockNextImage(props);
+    // eslint-disable-next-line @next/next/no-img-element -- test mock
     return <img ref={ref} src={String(props.src)} alt={String(props.alt)} />;
   }),
 }));

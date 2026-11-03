@@ -56,6 +56,7 @@ export const CharacterReferenceTray: FC<{
         <ul className="flex flex-wrap gap-2">
           {value.map((reference, index) => (
             <li key={reference.fileId} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element -- external media reference */}
               <img
                 src={reference.src}
                 alt={reference.name || t('designer_character_reference_image', 'Character reference {{index}}', { index: index + 1 })}
