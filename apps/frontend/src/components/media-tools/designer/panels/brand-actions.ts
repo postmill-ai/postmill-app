@@ -1,6 +1,7 @@
 import { addImageClipToTimeline } from '../add-media-to-timeline';
 import { probeImageNaturalSize } from '../elements';
 import { fitWithin } from './fit-within';
+import { ensureFontLoaded } from '../fonts';
 
 type Store = ReturnType<typeof import('../designer.store').createDesignerStore>;
 
@@ -34,6 +35,7 @@ export const applyBrandFont = (store: Store, fontFamily: string): boolean => {
   if (state.doc.mode === 'video') {
     const target = selectedVideoTarget(store, ['text', 'caption']);
     if (!target) return false;
+    void ensureFontLoaded(fontFamily);
     state.updateClip(state.currentOutput, target.selection.trackId, target.selection.clipId, { fontFamily });
     return true;
   }
@@ -41,6 +43,7 @@ export const applyBrandFont = (store: Store, fontFamily: string): boolean => {
   const output = state.doc.outputs[state.currentOutput] as any;
   const selected = output?.children?.find((element: any) => element.id === state.selectedIds[0]);
   if (selected?.type !== 'text') return false;
+  void ensureFontLoaded(fontFamily);
   state.updateElement(selected.id, { fontFamily });
   state.pushHistory('Apply brand font');
   return true;

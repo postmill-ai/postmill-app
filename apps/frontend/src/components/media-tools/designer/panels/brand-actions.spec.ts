@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addBrandLogo, applyBrandColor, applyBrandFont } from './brand-actions';
 import { createDesignerStore, type VideoOutput } from '../designer.store';
+
+const ensureFontLoaded = vi.hoisted(() => vi.fn());
+vi.mock('../fonts', () => ({ ensureFontLoaded }));
 
 const textElement = {
   id: 'text-1', type: 'text' as const, text: 'Headline', x: 0, y: 0, width: 300, height: 80,
@@ -8,6 +11,8 @@ const textElement = {
 };
 
 describe('Brand actions', () => {
+  beforeEach(() => ensureFontLoaded.mockClear());
+
   it('applies color and font to a selected static text element with one undo entry each', () => {
     const store = createDesignerStore();
     store.getState().addElement(textElement);
@@ -18,6 +23,7 @@ describe('Brand actions', () => {
     const selected = (store.getState().doc.outputs[0] as any).children[0];
     expect(selected.fill).toBe('#ff0000');
     expect(selected.fontFamily).toBe('Georgia');
+    expect(ensureFontLoaded).toHaveBeenCalledWith('Georgia');
     expect(store.getState().historyLabels).toContain('Apply brand color');
     expect(store.getState().historyLabels).toContain('Apply brand font');
   });
@@ -40,12 +46,14 @@ describe('Brand actions', () => {
       .find((item) => item.id === track.id)!.clips[0];
     expect(clip.fill).toBe('#00ff00');
     expect(clip.fontFamily).toBe('Georgia');
+    expect(ensureFontLoaded).toHaveBeenCalledWith('Georgia');
   });
 
   it('rejects Brand style actions without a compatible selection', () => {
     const store = createDesignerStore();
     expect(applyBrandColor(store, '#ff0000')).toBe(false);
     expect(applyBrandFont(store, 'Georgia')).toBe(false);
+    expect(ensureFontLoaded).not.toHaveBeenCalled();
   });
 
   it('inserts a static logo with its aspect ratio preserved and centered', async () => {
