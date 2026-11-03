@@ -10,6 +10,7 @@ import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon'
 import { useCustomFonts, useUploadCustomFont, fontServerRenderable, CustomFontEntry } from './use-brand-fonts';
 import { getBrandViolations } from '../brand-compliance';
 import { useMediaPicker } from '../../use-media-picker';
+import { addBrandLogo, applyBrandColor, applyBrandFont } from './brand-actions';
 
 interface BrandProfile {
   id: string;
@@ -39,6 +40,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   const user = useUser();
   const toaster = useToaster();
   const selectedIds = store((s: any) => s.selectedIds);
+  const selectedClip = store((s: any) => s.selectedClip);
   const out = store((s: any) => s.doc.outputs[s.currentOutput]);
   const [saving, setSaving] = useState(false);
 
@@ -62,11 +64,23 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   );
 
   const selectedElement = useMemo(() => {
+    if (out?.tracks) {
+      if (!selectedClip) return null;
+      return out.tracks
+        .find((track: any) => track.id === selectedClip.trackId)
+        ?.clips.find((clip: any) => clip.id === selectedClip.clipId) || null;
+    }
     if (selectedIds.length !== 1) return null;
     return out?.children.find(
       (el: any) => el.id === selectedIds[0]
     );
-  }, [selectedIds, out]);
+  }, [selectedIds, selectedClip, out]);
+  const selectedTrackType = out?.tracks
+    ? out.tracks.find((track: any) => track.id === selectedClip?.trackId)?.type
+    : selectedElement?.type;
+  const canApplyColor = out?.tracks
+    ? ['text', 'caption', 'shape'].includes(selectedTrackType)
+    : !!selectedElement;
 
   const palette: string[] = useMemo(
     () => (Array.isArray(activeBrand?.palette) ? activeBrand!.palette! : []),
@@ -146,18 +160,16 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
 
   const handleColorClick = useCallback(
     (color: string) => {
-      if (!selectedElement) return;
-      store.getState().updateElement(selectedElement.id, { fill: color });
+      applyBrandColor(store, color);
     },
-    [store, selectedElement]
+    [store]
   );
 
   const handleFontClick = useCallback(
     (font: string) => {
-      if (!selectedElement || selectedElement.type !== 'text') return;
-      store.getState().updateElement(selectedElement.id, { fontFamily: font });
+      applyBrandFont(store, font);
     },
-    [store, selectedElement]
+    [store]
   );
 
   const persist = useCallback(
@@ -200,23 +212,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
 
   const addLogoToCanvas = useCallback(
     (file: FileItem) => {
-      const state = store.getState();
-      const out = state.doc.outputs[state.currentOutput];
-      const w = Math.min(300, out.width * 0.5);
-      state.addElement({
-        id: '',
-        type: 'image',
-        x: (out.width - w) / 2,
-        y: (out.height - w) / 2,
-        width: w,
-        height: w,
-        rotation: 0,
-        opacity: 1,
-        locked: false,
-        hidden: false,
-        src: file.path,
-        fileId: file.id,
-      });
+      void addBrandLogo(store, file);
     },
     [store]
   );
@@ -577,16 +573,16 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
               <button
                 key={i}
                 onClick={() => handleColorClick(color)}
-                disabled={!selectedElement}
+                disabled={!canApplyColor}
                 className={`w-8 h-8 rounded-[6px] border-2 border-studioBorder hover:scale-110 transition-all ${
-                  !selectedElement ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                  !canApplyColor ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
                 }`}
                 style={{ backgroundColor: color }}
                 title={color}
               />
             ))}
           </div>
-          {!selectedElement && (
+          {!canApplyColor && (
             <div className="text-[11px] text-newTextColor/60">
               {t('designer_select_element_apply_color', 'Select an element to apply color')}
             </div>
@@ -605,9 +601,9 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
               <button
                 key={i}
                 onClick={() => handleFontClick(font)}
-                disabled={!selectedElement || selectedElement.type !== 'text'}
+                disabled={selectedTrackType !== 'text' && selectedTrackType !== 'caption'}
                 className={`text-left px-3 py-2 rounded-[6px] border border-studioBorder text-[13px] transition-all ${
-                  !selectedElement || selectedElement.type !== 'text'
+                  selectedTrackType !== 'text' && selectedTrackType !== 'caption'
                     ? 'opacity-40 cursor-not-allowed text-textColor/60'
                     : 'text-textColor hover:border-designerAccent hover:bg-boxHover cursor-pointer'
                 }`}
@@ -617,7 +613,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
               </button>
             ))}
           </div>
-          {(!selectedElement || selectedElement.type !== 'text') && (
+          {(selectedTrackType !== 'text' && selectedTrackType !== 'caption') && (
             <div className="text-[11px] text-newTextColor/60">
               {t('designer_select_text_apply_font', 'Select a text element to apply font')}
             </div>
@@ -642,9 +638,9 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
                   <button
                     type="button"
                     onClick={() => handleFontClick(f.family)}
-                    disabled={!selectedElement || selectedElement.type !== 'text'}
+                    disabled={selectedTrackType !== 'text' && selectedTrackType !== 'caption'}
                     className={`text-left w-full text-[13px] truncate ${
-                      !selectedElement || selectedElement.type !== 'text'
+                      selectedTrackType !== 'text' && selectedTrackType !== 'caption'
                         ? 'text-textColor/60'
                         : 'text-textColor hover:text-btnPrimaryAccent cursor-pointer'
                     }`}

@@ -322,6 +322,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `upload(file)` wrapper remains for single-file callers. Sequential posts are required because
   the endpoint read/modify/writes brand `customFonts` JSON; parallel posts lose entries. Batch
   toasts summarize full/partial success and retain the WOFF2 server-render warning.
+- **Brand actions work in both document modes.** `panels/brand-actions.ts` applies palette/font
+  choices to static elements or selected video text/caption/shape clips. `addBrandLogo` preserves
+  aspect ratio in static designs and uses `addImageClipToTimeline` for video; never call the
+  static-only `addElement` path for video media.
 - **Video poster state distinguishes effective and generated images.** The export dialog sends
   only an uploaded File path as `posterUrl` and may send the paused playhead as `posterTimeMs`.
   Polling reads `thumbnailUrl` (effective), `generatedPosterUrl` (rendered alternative), `fileId`,
