@@ -59,6 +59,7 @@ import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { CornerRadiusControl } from './corner-radius-control';
 import { TextStyleControl } from './text-style-control';
+import { DesignerAssistantPanel } from './designer-assistant-panel';
 
 // Same weight ladder the image-mode text panel offers.
 const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
@@ -857,6 +858,26 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
       <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
         {translate('designer_video_clip', 'Video Clip')}
       </div>
+
+      {(clipTrackType === 'text' || clipTrackType === 'caption') && (
+        <DesignerAssistantPanel
+          store={store}
+          clipTarget={{ outputIndex, trackId, clipId }}
+          selectedText={clip.text || ''}
+          context={{
+            type: clipTrackType,
+            text: clip.text || '',
+            x: clip.x ?? 0,
+            y: clip.y ?? 0,
+            width: clip.width ?? 1,
+            height: clip.height ?? 1,
+            canvasWidth: vo.width,
+            canvasHeight: vo.height,
+            fontFamily: clip.fontFamily,
+            fill: clip.fill,
+          }}
+        />
+      )}
 
       {clipTrackType === 'image' && !!clip.src && (
         <div className="space-y-2">

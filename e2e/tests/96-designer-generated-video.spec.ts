@@ -175,6 +175,8 @@ const json = (route: Route, body: unknown, status = 200) =>
 class DesignerMocks {
   readonly generatePosts: string[] = [];
   readonly backgroundRemovalPosts: string[] = [];
+  readonly assistantCopyPosts: string[] = [];
+  readonly assistantSuggestionPosts: string[] = [];
   readonly unexpectedProviderPosts: string[] = [];
   readonly httpErrors: string[] = [];
   readonly consoleErrors: string[] = [];
@@ -418,6 +420,25 @@ class DesignerMocks {
             },
           ],
           total: 2,
+        });
+        return;
+      }
+
+      if (pathname === '/media/designer-assistant/copy' && method === 'POST') {
+        this.assistantCopyPosts.push(request.postData() || '');
+        await json(route, { variants: ['AI holiday headline', 'Second option', 'Third option'] });
+        return;
+      }
+
+      if (pathname === '/media/designer-assistant/suggestions' && method === 'POST') {
+        this.assistantSuggestionPosts.push(request.postData() || '');
+        await json(route, {
+          suggestions: [{
+            category: 'font',
+            title: 'Use a serif headline',
+            rationale: 'Improve seasonal contrast',
+            style: { fontFamily: 'Georgia', fill: '#123456' },
+          }],
         });
         return;
       }
@@ -1802,6 +1823,40 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
       src: REPLACEMENT_IMAGE_URL,
       mediaType: 'image',
     });
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('generates and applies AI copy and design suggestions', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = blankDoc();
+    mocks.name = 'Mobile AI assistant E2E';
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+
+    await selectMobileTool(page, 'Horizontal Type');
+    const point = await canvasDocumentPoint(page, 1080, 1920, 540, 960);
+    await page.touchscreen.tap(point.x, point.y);
+    await expect.poll(() => mocks.savedClips().length).toBe(1);
+    await page.getByRole('button', { name: 'Expand timeline', exact: true }).click();
+    await page.getByRole('slider', { name: 'Clip', exact: true }).click();
+    await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+
+    await page.getByRole('textbox', { name: 'Design brief', exact: true }).fill('Holiday sale');
+    await page.getByRole('button', { name: 'Generate copy', exact: true }).click();
+    await page.getByRole('button', { name: 'Apply text', exact: true }).first().click();
+    await expect.poll(() => mocks.savedClips()[0]?.text).toBe('AI holiday headline');
+    expect(mocks.assistantCopyPosts).toHaveLength(1);
+    expect(mocks.assistantCopyPosts[0]).toContain('Holiday sale');
+    expect(mocks.assistantCopyPosts[0]).not.toContain('/uploads/');
+
+    await page.getByRole('button', { name: 'Smart suggestions', exact: true }).click();
+    await page.getByRole('button', { name: 'Apply style', exact: true }).click();
+    await expect.poll(() => mocks.savedClips()[0]?.fontFamily).toBe('Georgia');
+    expect(mocks.savedClips()[0]?.fill).toBe('#123456');
+    expect(mocks.assistantSuggestionPosts).toHaveLength(1);
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

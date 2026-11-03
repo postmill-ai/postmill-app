@@ -3182,6 +3182,36 @@ paths:
         it feeds, never `media-config:manage`.
       tags:
         - Media
+  /media/designer-assistant/copy:
+    post:
+      operationId: MediaController_generateDesignerCopy
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateDesignerCopyDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Media
+  /media/designer-assistant/suggestions:
+    post:
+      operationId: MediaController_getDesignerSuggestions
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DesignerSuggestionsDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Media
   /media/icons/resolve:
     get:
       operationId: MediaController_resolveIcon
@@ -10989,6 +11019,74 @@ components:
           type: string
         output:
           type: string
+    DesignerAssistantContextDto:
+      type: object
+      properties:
+        type:
+          type: string
+          maxLength: 40
+        text:
+          type: string
+          maxLength: 4000
+        fontFamily:
+          type: string
+          maxLength: 120
+        fill:
+          type: string
+          pattern: ^#?([0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{6}|[0-9A-F]{8})$
+        x:
+          type: number
+          minimum: -16384
+          maximum: 16384
+        y:
+          type: number
+          minimum: -16384
+          maximum: 16384
+        width:
+          type: number
+          minimum: 0
+          maximum: 16384
+        height:
+          type: number
+          minimum: 0
+          maximum: 16384
+        canvasWidth:
+          type: number
+          minimum: 1
+          maximum: 16384
+        canvasHeight:
+          type: number
+          minimum: 1
+          maximum: 16384
+    GenerateDesignerCopyDto:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - headline
+            - promotion
+            - caption
+            - cta
+        prompt:
+          type: string
+          maxLength: 2000
+        selectedText:
+          type: string
+          maxLength: 4000
+        context:
+          $ref: "#/components/schemas/DesignerAssistantContextDto"
+      required:
+        - kind
+        - prompt
+    DesignerSuggestionsDto:
+      type: object
+      properties:
+        prompt:
+          type: string
+          maxLength: 2000
+        context:
+          $ref: "#/components/schemas/DesignerAssistantContextDto"
     VideoFunctionDto:
       type: object
       properties:

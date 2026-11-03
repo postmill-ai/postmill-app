@@ -7,6 +7,7 @@ import { ensureFontLoaded } from '../fonts';
 import { sharedStageRef } from '../stage-ref';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement } from '../designer.store';
+import { DesignerAssistantPanel } from './designer-assistant-panel';
 
 interface TextInspectorProps {
   store: any;
@@ -313,6 +314,25 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
       )}
 
       <TextFormatPanel store={store} />
+      {primary && (
+        <DesignerAssistantPanel
+          store={store}
+          selectedElementId={primary.id}
+          selectedText={primary.text || ''}
+          context={{
+            type: 'text',
+            text: primary.text || '',
+            x: primary.x,
+            y: primary.y,
+            width: primary.width,
+            height: primary.height,
+            canvasWidth: out.width,
+            canvasHeight: out.height,
+            fontFamily: primary.fontFamily,
+            fill: primary.fill,
+          }}
+        />
+      )}
     </div>
   );
 };
