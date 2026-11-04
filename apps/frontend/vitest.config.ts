@@ -87,6 +87,7 @@ export default defineConfig({
       'src/components/composer/picks.socials.component.spec.{ts,tsx}',
       'src/components/composer/manage.modal.spec.{ts,tsx}',
       'src/components/composer/store.spec.{ts,tsx}',
+      'src/components/composer/providers/*.spec.{ts,tsx}',
       'src/components/composer/bulk/*.spec.{ts,tsx}',
       'src/components/composer/content-qa/*.spec.{ts,tsx}',
       'src/components/composer/ghost-completion/*.spec.{ts,tsx}',

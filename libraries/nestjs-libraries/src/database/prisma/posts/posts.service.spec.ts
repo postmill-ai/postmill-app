@@ -1283,3 +1283,50 @@ describe('POLL-11 — cap draft scheduling loops', () => {
     expect(postRepository.getPostsCountsByDates).not.toHaveBeenCalled();
   });
 });
+
+describe('getPostsByGroup', () => {
+  it('returns 404 for an unknown, deleted, or inaccessible group', async () => {
+    const { service, postRepository } = makePostsService();
+    postRepository.getPostsByGroup.mockResolvedValue([]);
+
+    await expect(service.getPostsByGroup('org-1', 'missing')).rejects.toMatchObject({
+      status: 404,
+      message: 'Post not found',
+    });
+  });
+
+  it('preserves the group response and strips integration secrets', async () => {
+    const { service, postRepository } = makePostsService();
+    postRepository.getPostsByGroup.mockResolvedValue([
+      {
+        id: 'post-1',
+        group: 'group-1',
+        integrationId: 'channel-1',
+        settings: '{}',
+        image: '[]',
+        integration: {
+          id: 'channel-1',
+          providerIdentifier: 'x',
+          name: 'Test channel',
+          picture: 'picture.png',
+          profile: 'profile',
+          token: 'SECRET_TOKEN',
+          refreshToken: 'SECRET_REFRESH',
+        },
+      },
+    ]);
+
+    const result = await service.getPostsByGroup('org-1', 'group-1');
+
+    expect(result.group).toBe('group-1');
+    expect(result.integration).toBe('channel-1');
+    expect(result.posts).toHaveLength(1);
+    expect(result.posts[0].integration).toEqual({
+      id: 'channel-1',
+      providerIdentifier: 'x',
+      name: 'Test channel',
+      picture: 'picture.png',
+      profile: 'profile',
+    });
+  });
+});
