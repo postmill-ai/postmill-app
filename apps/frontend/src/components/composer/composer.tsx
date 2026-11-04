@@ -88,14 +88,21 @@ export const Composer: FC<ComposerProps> = (props) => {
 
 const ComposerInner: FC<ComposerProps> = (props) => {
   const existingData = useExistingData();
-  const { addOrRemoveSelectedIntegration, selectedIntegrations, integrations } =
-    useLaunchStore(
-      useShallow((state) => ({
-        integrations: state.integrations,
-        selectedIntegrations: state.selectedIntegrations,
-        addOrRemoveSelectedIntegration: state.addOrRemoveSelectedIntegration,
-      }))
-    );
+  const {
+    addOrRemoveSelectedIntegration,
+    addInternalValue,
+    selectedIntegrations,
+    integrations,
+    setCurrent,
+  } = useLaunchStore(
+    useShallow((state) => ({
+      integrations: state.integrations,
+      selectedIntegrations: state.selectedIntegrations,
+      addOrRemoveSelectedIntegration: state.addOrRemoveSelectedIntegration,
+      addInternalValue: state.addInternalValue,
+      setCurrent: state.setCurrent,
+    }))
+  );
 
   // The store's `integrations` are seeded by the parent `Composer` effect, but a
   // child effect runs before its parent (React 19), so on first commit the store
@@ -128,6 +135,24 @@ const ComposerInner: FC<ComposerProps> = (props) => {
       );
       if (integration) {
         addOrRemoveSelectedIntegration(integration, existingData.settings);
+        addInternalValue(
+          0,
+          existingData.integration,
+          existingData.posts.map((post) => ({
+            delay: post.delay,
+            content:
+              post.content.indexOf('<p>') > -1
+                ? post.content
+                : post.content
+                    .split('\n')
+                    .map((line) => `<p>${line}</p>`)
+                    .join(''),
+            id: post.id,
+            // @ts-ignore
+            media: post.image as any[],
+          }))
+        );
+        setCurrent(existingData.integration);
       }
     }
 
@@ -144,8 +169,11 @@ const ComposerInner: FC<ComposerProps> = (props) => {
     props.set?.posts,
     props.selectedChannels,
     existingData.integration,
+    existingData.posts,
     existingData.settings,
     addOrRemoveSelectedIntegration,
+    addInternalValue,
+    setCurrent,
   ]);
 
   if (existingData.integration && selectedIntegrations.length === 0) {
@@ -162,7 +190,6 @@ const ComposerInnerInner: FC<ComposerProps> = (props) => {
   const {
     reset,
     addGlobalValue,
-    addInternalValue,
     global,
     setCurrent,
     internal,
@@ -173,7 +200,6 @@ const ComposerInnerInner: FC<ComposerProps> = (props) => {
     useShallow((state) => ({
       reset: state.reset,
       addGlobalValue: state.addGlobalValue,
-      addInternalValue: state.addInternalValue,
       setCurrent: state.setCurrent,
       global: state.global,
       internal: state.internal,
@@ -246,24 +272,6 @@ const ComposerInnerInner: FC<ComposerProps> = (props) => {
           value: p.tag.name,
         })) || []
       );
-      addInternalValue(
-        0,
-        existingData.integration,
-        existingData.posts.map((post) => ({
-          delay: post.delay,
-          content:
-            post.content.indexOf('<p>') > -1
-              ? post.content
-              : post.content
-                  .split('\n')
-                  .map((line: string) => `<p>${line}</p>`)
-                  .join(''),
-          id: post.id,
-          // @ts-ignore
-          media: post.image as any[],
-        }))
-      );
-      setCurrent(existingData.integration);
     } else {
       setEditor('normal');
     }
@@ -325,7 +333,6 @@ const ComposerInnerInner: FC<ComposerProps> = (props) => {
     isNewPost,
     setRepeater,
     setTags,
-    addInternalValue,
     setCurrent,
     setEditor,
     addGlobalValue,

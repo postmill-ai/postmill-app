@@ -86,6 +86,7 @@ export default defineConfig({
       'src/components/media-tools/*.spec.{ts,tsx}',
       'src/components/composer/picks.socials.component.spec.{ts,tsx}',
       'src/components/composer/manage.modal.spec.{ts,tsx}',
+      'src/components/composer/composer.spec.{ts,tsx}',
       'src/components/composer/store.spec.{ts,tsx}',
       'src/components/composer/providers/*.spec.{ts,tsx}',
       'src/components/composer/bulk/*.spec.{ts,tsx}',

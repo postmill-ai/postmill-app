@@ -248,6 +248,9 @@ export const useLaunchStore = create<StoreState>()((set) => ({
           state.integrations.find((i) => i.id === integrationId);
 
         if (!integration) {
+          console.warn(
+            'Composer content initialization skipped: channel unavailable'
+          );
           return {};
         }
 
