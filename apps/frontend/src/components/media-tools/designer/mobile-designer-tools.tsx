@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, ReactNode, useEffect } from 'react';
+import React, { FC, ReactNode, useEffect, useRef, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { DeleteLayerIcon, DuplicateClipIcon } from '@postmill-ai/frontend/components/ui/icons/designer-tools';
 import { TOOL_GROUPS } from './tools';
@@ -134,6 +134,112 @@ export const MobileToolsSheet: FC<MobileToolsSheetProps> = ({ activeTool, lastTo
   );
 };
 
+export type MobileSheetSnap = 'half' | 'expanded';
+
+export const MobileSheetHeader: FC<{
+  title: string;
+  snap: MobileSheetSnap;
+  onSnapChange: (snap: MobileSheetSnap) => void;
+  onClose: () => void;
+}> = ({ title, snap, onSnapChange, onClose }) => {
+  const t = useT();
+  const dragStartY = useRef<number | null>(null);
+  return (
+    <div className="flex items-center gap-2 border-b border-studioBorder px-3 py-2 shrink-0">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={t('designer_resize_sheet', 'Resize {{title}} panel', { title })}
+        className="hidden mobile:flex h-8 w-8 cursor-row-resize touch-none items-center justify-center text-textColor/50"
+        onPointerDown={(event) => {
+          dragStartY.current = event.clientY;
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerUp={(event) => {
+          const startY = dragStartY.current;
+          dragStartY.current = null;
+          if (startY === null) return;
+          const delta = event.clientY - startY;
+          if (delta < -32) onSnapChange('expanded');
+          else if (delta > 32) {
+            if (snap === 'expanded') onSnapChange('half');
+            else onClose();
+          }
+        }}
+        onPointerCancel={() => { dragStartY.current = null; }}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            onSnapChange('expanded');
+          } else if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (snap === 'expanded') onSnapChange('half');
+            else onClose();
+          }
+        }}
+      >
+        <span aria-hidden="true" className="h-1 w-6 rounded-full bg-studioBorder" />
+      </div>
+      <div className="flex-1 truncate text-[12px] font-medium uppercase tracking-wider text-textColor/60">
+        {title}
+      </div>
+      <div className="hidden mobile:flex items-center gap-1">
+        <button
+          type="button"
+          aria-pressed={snap === 'half'}
+          onClick={() => onSnapChange('half')}
+          className="min-h-[32px] rounded-sm px-2 text-[11px] text-textColor/70 hover:bg-studioBorder/30"
+        >
+          {t('designer_sheet_half', 'Half')}
+        </button>
+        <button
+          type="button"
+          aria-pressed={snap === 'expanded'}
+          onClick={() => onSnapChange('expanded')}
+          className="min-h-[32px] rounded-sm px-2 text-[11px] text-textColor/70 hover:bg-studioBorder/30"
+        >
+          {t('designer_sheet_expand', 'Expand')}
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label={t('collapse_panel', 'Collapse panel')}
+        title={t('collapse_panel', 'Collapse panel')}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor"
+      >
+        <span className="mobile:hidden">›</span>
+        <span className="hidden mobile:inline">⌄</span>
+      </button>
+    </div>
+  );
+};
+
+type MobileWorkspaceSheetProps = {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+};
+
+const MobileWorkspaceSheetContent: FC<MobileWorkspaceSheetProps> = ({ open, title, onClose, children }) => {
+  const [snap, setSnap] = useState<MobileSheetSnap>('half');
+  if (!open) return null;
+  return (
+    <section
+      aria-label={title}
+      className={`hidden mobile:flex min-h-0 shrink-0 flex-col border-t border-studioBorder bg-newBgColorInner ${snap === 'half' ? 'h-[32dvh]' : 'h-[65dvh]'}`}
+    >
+      <MobileSheetHeader title={title} snap={snap} onSnapChange={setSnap} onClose={onClose} />
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+    </section>
+  );
+};
+
+export const MobileWorkspaceSheet: FC<MobileWorkspaceSheetProps> = (props) => (
+  <MobileWorkspaceSheetContent key={props.open ? 'open' : 'closed'} {...props} />
+);
+
 export const MobileToolsDialog: FC<MobileToolsSheetProps & {
   open: boolean;
   onClose: () => void;
@@ -148,17 +254,9 @@ export const MobileToolsDialog: FC<MobileToolsSheetProps & {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, onClose]);
 
-  if (!open) return null;
   return (
-    <div className="hidden mobile:block fixed inset-0 z-[210]">
-      <button type="button" aria-label={t('designer_close_tools_overlay', 'Close tools overlay')} onClick={onClose} className="absolute inset-0 h-full w-full bg-black/50" />
-      <div role="dialog" aria-modal="true" aria-label={t('designer_tools', 'Tools')} className="absolute inset-x-0 bottom-0 max-h-[75dvh] overflow-y-auto rounded-t-xl border border-studioBorder bg-newBgColorInner p-4 shadow-2xl">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[14px] font-medium text-textColor">{t('designer_tools', 'Tools')}</h2>
-          <button type="button" onClick={onClose} aria-label={t('designer_close_tools', 'Close tools')} className="min-h-[36px] min-w-[36px] rounded-md text-[20px] text-textColor hover:bg-boxHover">×</button>
-        </div>
-        <MobileToolsSheet {...sheetProps} />
-      </div>
-    </div>
+    <MobileWorkspaceSheet open={open} title={t('designer_tools', 'Tools')} onClose={onClose}>
+      <MobileToolsSheet {...sheetProps} />
+    </MobileWorkspaceSheet>
   );
 };

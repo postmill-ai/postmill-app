@@ -6,6 +6,7 @@ import {
   timelineSnapThresholdMs,
   timelineTrackAtClientY,
   timelineTrackIndexAtClientY,
+  timelineHorizontalScrollDelta,
 } from './timeline-geometry';
 
 const geometry = { rulerHeight: 22, trackHeight: 36, trackGap: 4 };
@@ -44,6 +45,17 @@ describe('timeline thresholds', () => {
       );
       expect(timelineCollisionToleranceMs(zoom)).toBeLessThanOrEqual(40);
     }
+  });
+});
+
+describe('timelineHorizontalScrollDelta', () => {
+  it('ramps toward both horizontal edges and stops outside or in the middle', () => {
+    expect(timelineHorizontalScrollDelta(100, 500, 100)).toBe(-8);
+    expect(timelineHorizontalScrollDelta(100, 500, 114)).toBe(-4);
+    expect(timelineHorizontalScrollDelta(100, 500, 300)).toBe(0);
+    expect(timelineHorizontalScrollDelta(100, 500, 486)).toBe(4);
+    expect(timelineHorizontalScrollDelta(100, 500, 500)).toBe(8);
+    expect(timelineHorizontalScrollDelta(100, 500, 50)).toBe(0);
   });
 });
 

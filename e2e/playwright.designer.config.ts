@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: '**/96-designer-generated-video.spec.ts',
+  testMatch: '**/96-designer-*.spec.ts',
   timeout: 180_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,
@@ -22,6 +22,12 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } },
+    },
+    {
+      name: 'touch',
+      testMatch: '**/96-designer-generated-video.spec.ts',
+      grep: /Designer mobile workspace/,
+      use: { ...devices['Pixel 7'], viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true },
     },
   ],
 });

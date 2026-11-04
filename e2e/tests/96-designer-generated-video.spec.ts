@@ -1758,7 +1758,7 @@ async function touchDragDocumentPoints(
 
 async function selectMobileTool(page: Page, name: string) {
   await page.getByRole('button', { name: 'Tools', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name, exact: true }).click();
+  await page.getByRole('region', { name: 'Tools', exact: true }).getByRole('button', { name, exact: true }).click();
   await page.keyboard.press('Escape');
 }
 
@@ -1841,7 +1841,7 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
     await expect(page.getByRole('button', { name: 'Expand timeline', exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Tools', exact: true }).click();
-    const toolsDialog = page.getByRole('dialog', { name: 'Tools', exact: true });
+    const toolsDialog = page.getByRole('region', { name: 'Tools', exact: true });
     await toolsDialog.getByRole('button', { name: 'Horizontal Type', exact: true }).click();
     await toolsDialog.getByRole('button', { name: 'Rectangle', exact: true }).click();
     await expect(toolsDialog.getByRole('button', { name: 'Rectangle', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -1894,7 +1894,7 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
     await page.getByRole('slider', { name: 'Clip', exact: true }).click();
 
     await page.getByRole('button', { name: 'Tools', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Brand', exact: true }).click();
+    await page.getByRole('region', { name: 'Tools', exact: true }).getByRole('button', { name: 'Brand', exact: true }).click();
     await page.getByRole('button', { name: '#123456', exact: true }).click();
     await expect.poll(() => mocks.savedClips()[0]?.fill).toBe('#123456');
     await page.getByRole('button', { name: 'Georgia', exact: true }).click();
@@ -2014,6 +2014,146 @@ test.describe('Designer stock vectors and repeated output dimensions', () => {
     await page.getByRole('textbox', { name: 'Hex color', exact: true }).press('Enter');
     await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.fill).toBe('#123456');
     expect(await canvasFingerprint(page)).not.toBe(before);
+    mocks.expectClean();
+  });
+});
+
+test.describe('Designer mobile workspace', () => {
+  test.use({ viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
+
+  test('moves a clip across tracks, trims it, and enters exact timing with one undo', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = motionDoc();
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+
+    await page.getByRole('button', { name: 'Expand timeline', exact: true }).click();
+    const clip = page.getByRole('slider', { name: 'Clip', exact: true }).first();
+    await clip.scrollIntoViewIfNeeded();
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+    const box = await clip.boundingBox();
+    expect(box).not.toBeNull();
+    const grabX = box!.x + box!.width / 2;
+    await touchDragDocumentPoints(
+      page,
+      { x: grabX, y: box!.y + box!.height / 2 },
+      { x: grabX + 50, y: box!.y + box!.height / 2 + 40 }
+    );
+    await expect.poll(() => mocks.doc.outputs[0].tracks[1].clips[0]?.startMs).toBeGreaterThan(0);
+    const moved = mocks.doc.outputs[0].tracks[1].clips[0];
+    const movedDuration = moved.endMs - moved.startMs;
+
+    const endHandle = page.getByRole('slider', { name: 'Trim clip end', exact: true }).first();
+    await endHandle.scrollIntoViewIfNeeded();
+    const endBox = await endHandle.boundingBox();
+    expect(endBox).not.toBeNull();
+    await touchDragDocumentPoints(
+      page,
+      { x: endBox!.x + endBox!.width / 2, y: endBox!.y + endBox!.height / 2 },
+      { x: endBox!.x + endBox!.width / 2 - 12, y: endBox!.y + endBox!.height / 2 }
+    );
+    await expect.poll(() => {
+      const current = mocks.doc.outputs[0].tracks[1].clips[0];
+      return current.endMs - current.startMs;
+    }).toBeLessThan(movedDuration);
+    const trimmedDuration = (() => {
+      const current = mocks.doc.outputs[0].tracks[1].clips[0];
+      return current.endMs - current.startMs;
+    })();
+
+    const duration = page.getByRole('toolbar', { name: 'Video timeline', exact: true })
+      .getByRole('spinbutton', { name: 'Duration (s)', exact: true });
+    await duration.fill('1.5');
+    await duration.press('Enter');
+    await expect.poll(() => {
+      const current = mocks.doc.outputs[0].tracks[1].clips[0];
+      return current.endMs - current.startMs;
+    }).toBe(1500);
+    expect(mocks.doc.outputs[0].durationMs).toBe(12000);
+
+    await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Inspector', exact: true })
+      .getByRole('spinbutton', { name: 'Duration (s)', exact: true })).toHaveValue('1.5');
+    await page.getByRole('toolbar', { name: 'Designer quick actions', exact: true })
+      .getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect.poll(() => {
+      const current = mocks.doc.outputs[0].tracks[1].clips[0];
+      return current.endMs - current.startMs;
+    }).toBe(trimmedDuration);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('renames, fits the timeline, and keeps canvas-visible sheets with snap states', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = blankDoc();
+    mocks.name = 'Mobile before rename';
+    mocks.brand = {
+      id: 'brand-e2e', name: 'E2E Brand', palette: ['#123456'],
+      fontFamilies: ['Georgia'], logoFileIds: ['replacement-image-file'], isDefault: true,
+    };
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+
+    await page.getByRole('textbox', { name: 'Design name', exact: true }).fill('Mobile renamed E2E');
+    await expect.poll(() => mocks.name).toBe('Mobile renamed E2E');
+
+    await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+    const canvasSheet = page.getByRole('region', { name: 'Canvas', exact: true });
+    await expect(canvasSheet).toHaveClass(/h-\[32dvh\]/);
+    await canvasSheet.getByRole('button', { name: 'Expand', exact: true }).click();
+    await expect(canvasSheet).toHaveClass(/h-\[65dvh\]/);
+    await canvasSheet.getByRole('button', { name: 'Half', exact: true }).click();
+    await expect(canvasSheet).toHaveClass(/h-\[32dvh\]/);
+    await canvasSheet.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Canvas', exact: true })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    const toolsSheet = page.getByRole('region', { name: 'Tools', exact: true });
+    await toolsSheet.getByRole('button', { name: 'Expand', exact: true }).click();
+    await expect(toolsSheet).toHaveClass(/h-\[65dvh\]/);
+    await toolsSheet.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Tools', exact: true })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await page.getByRole('region', { name: 'Tools', exact: true })
+      .getByRole('button', { name: 'Brand', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Brand', exact: true })).toBeVisible();
+    await page.getByRole('region', { name: 'Brand', exact: true })
+      .getByRole('button', { name: 'Collapse panel', exact: true }).click();
+
+    await page.getByRole('button', { name: 'Zoom to fit', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Collapse timeline', exact: true })).toBeVisible();
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
+test.describe('Designer desktop Brand rail', () => {
+  test.use({ viewport: { width: 1440, height: 1000 } });
+
+  test('opens the existing Brand panel directly from the tool rail', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = blankDoc();
+    mocks.brand = {
+      id: 'brand-e2e', name: 'E2E Brand', palette: ['#123456'],
+      fontFamilies: ['Georgia'], logoFileIds: ['replacement-image-file'], isDefault: true,
+    };
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+
+    await page.getByRole('button', { name: 'Brand', exact: true }).click();
+    const panel = page.getByRole('dialog', { name: 'Brand', exact: true });
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole('button', { name: '#123456', exact: true })).toBeVisible();
+    await panel.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(panel).toHaveCount(0);
+    expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });
 });

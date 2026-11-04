@@ -592,6 +592,7 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = ({
 export interface StepperProps {
   value: number;
   onChange: (n: number) => void;
+  onCommit?: () => void;
   min?: number;
   max?: number;
   step?: number;
@@ -602,6 +603,7 @@ export interface StepperProps {
 export const Stepper: React.FC<StepperProps> = ({
   value,
   onChange,
+  onCommit,
   min = -Infinity,
   max = Infinity,
   step = 1,
@@ -612,7 +614,10 @@ export const Stepper: React.FC<StepperProps> = ({
   const id = useId();
   const clamp = (n: number) => Math.min(max, Math.max(min, n));
 
-  const bump = (dir: 1 | -1) => onChange(clamp(value + dir * step));
+  const bump = (dir: 1 | -1) => {
+    onChange(clamp(value + dir * step));
+    onCommit?.();
+  };
 
   return (
     <div className={compact ? 'flex' : 'flex flex-col gap-[6px]'}>
@@ -644,6 +649,16 @@ export const Stepper: React.FC<StepperProps> = ({
           onChange={(e) => {
             const n = Number(e.target.value);
             if (!Number.isNaN(n)) onChange(clamp(n));
+          }}
+          onBlur={(e) => {
+            if (e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) return;
+            onCommit?.();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
           }}
           className={`${compact ? 'w-[42px] text-[11px]' : 'w-[56px] text-[13px]'} h-full text-center bg-transparent text-textColor font-mono border-x border-studioBorder focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
         />
