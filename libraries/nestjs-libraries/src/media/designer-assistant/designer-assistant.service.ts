@@ -1,4 +1,4 @@
-import { BadGatewayException, Injectable } from '@nestjs/common';
+import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
@@ -11,7 +11,7 @@ import type {
 
 const copySchema = z.object({
   variants: z.array(z.string().trim().min(1).max(1000)).length(3),
-});
+}).strict();
 
 const suggestionsSchema = z.object({
   suggestions: z.array(z.object({
@@ -22,14 +22,26 @@ const suggestionsSchema = z.object({
       fontFamily: z.string().trim().min(1).max(120).optional(),
       fill: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
     }).strict().optional(),
-  }).strict()).min(1).max(6),
-});
+  }).strict()).min(2).max(6),
+}).strict();
+
+const copyResponseContract =
+  'Return only one JSON object with exactly this shape: {"variants":["alternative 1","alternative 2","alternative 3"]}. ' +
+  'The root object must contain only "variants", with exactly three distinct, non-empty strings of at most 1000 characters each.';
+
+const suggestionsResponseContract =
+  'Return only one JSON object with exactly this shape: {"suggestions":[{"category":"font","title":"Short title","rationale":"Practical reason","style":{"fontFamily":"Georgia","fill":"#123456"}},{"category":"spacing","title":"Add breathing room","rationale":"Separate the headline from supporting copy."}]}. ' +
+  'The root object must contain only "suggestions", with 2-6 entries. Every entry requires category, title, and rationale. ' +
+  'Category must be one of "font", "color", "layout", or "spacing". Title and rationale must be non-empty strings of at most 160 and 500 characters. ' +
+  'The optional style object may contain only fontFamily (a non-empty string of at most 120 characters) or fill (a #RRGGBB color); omit style when neither applies. Do not add other fields.';
 
 const contextText = (context?: DesignerAssistantContextDto) =>
   context ? JSON.stringify(context).slice(0, 4000) : 'No element selected.';
 
 @Injectable()
 export class DesignerAssistantService {
+  private readonly _logger = new Logger(DesignerAssistantService.name);
+
   constructor(
     private readonly _aiModelProvider: AIModelProvider,
     private readonly _brandsService: BrandsService,
@@ -45,12 +57,32 @@ export class DesignerAssistantService {
     };
   }
 
-  private _parseResponse<T>(schema: z.ZodType<T>, response: unknown): T {
-    const parsed = schema.safeParse(response);
-    if (!parsed.success) {
-      throw new BadGatewayException('The AI provider returned an invalid structured response. Please try again.');
+  private async _generateValidated<T>(
+    operation: 'copy' | 'suggestions',
+    prompt: string,
+    schema: z.ZodType<T>,
+    orgId: string,
+    system: string,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const response = await this._aiModelProvider.generateObject<unknown>(
+        'generator',
+        attempt === 1
+          ? prompt
+          : `${prompt}\n\nSCHEMA CORRECTION: the previous response did not match the exact JSON response contract above. Return a new JSON object that follows it exactly, without explanation or additional fields.`,
+        undefined,
+        { orgId, system },
+      );
+      const parsed = schema.safeParse(response);
+      if (parsed.success) {
+        return parsed.data;
+      }
+      const issues = parsed.error.issues
+        .map((issue) => `${issue.path.join('.') || '(root)'}:${issue.code}`)
+        .join(',');
+      this._logger.warn(`Designer assistant ${operation} schema validation failed on attempt ${attempt}/2: ${issues}`);
     }
-    return parsed.data;
+    throw new BadGatewayException('The AI provider returned an invalid structured response. Please try again.');
   }
 
   async generateCopy(orgId: string, input: GenerateDesignerCopyDto) {
@@ -61,38 +93,34 @@ export class DesignerAssistantService {
       caption: 'social media caption',
       cta: 'call-to-action phrase',
     };
-    const response = await this._aiModelProvider.generateObject<unknown>(
-      'generator',
+    return this._generateValidated(
+      'copy',
       `Create exactly three distinct ${labels[input.kind]} alternatives for a design.\n\n` +
       `User brief: ${JSON.stringify(input.prompt)}\n` +
       `Selected text to replace or improve: ${JSON.stringify(input.selectedText || '')}\n` +
       `Design summary: ${contextText(input.context)}\n` +
       `Brand style: ${JSON.stringify(brand)}\n\n` +
-      'Keep each option concise, production-ready, and distinct in angle. Do not use markdown or numbering.',
-      undefined,
-      {
-        orgId,
-        system: 'You are a senior marketing copywriter embedded in a visual design editor. Return only the requested structured alternatives.',
-      }
+      'Keep each option concise, production-ready, and distinct in angle. Do not use markdown or numbering.\n' +
+      copyResponseContract,
+      copySchema,
+      orgId,
+      'You are a senior marketing copywriter embedded in a visual design editor. Return only the requested structured alternatives.',
     );
-    return this._parseResponse(copySchema, response);
   }
 
   async getSuggestions(orgId: string, input: DesignerSuggestionsDto) {
     const brand = await this._brandStyle(orgId);
-    const response = await this._aiModelProvider.generateObject<unknown>(
-      'generator',
+    return this._generateValidated(
+      'suggestions',
       `Review this design and recommend font pairings, color combinations, layout, and spacing improvements.\n\n` +
       `Optional user goal: ${JSON.stringify(input.prompt || '')}\n` +
       `Design/selected-element summary: ${contextText(input.context)}\n` +
       `Brand style: ${JSON.stringify(brand)}\n\n` +
-      'Give 2-6 specific, practical recommendations. Include a fontFamily or #RRGGBB fill only when it is a compatible style change that can be applied directly; never include layout operations or asset URLs.',
-      undefined,
-      {
-        orgId,
-        system: 'You are an art director giving concise, brand-aware design feedback. Return only structured suggestions, not document operations.',
-      }
+      'Give 2-6 specific, practical recommendations. Include a fontFamily or #RRGGBB fill only when it is a compatible style change that can be applied directly; never include layout operations or asset URLs.\n' +
+      suggestionsResponseContract,
+      suggestionsSchema,
+      orgId,
+      'You are an art director giving concise, brand-aware design feedback. Return only structured suggestions, not document operations.',
     );
-    return this._parseResponse(suggestionsSchema, response);
   }
 }
