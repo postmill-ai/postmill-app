@@ -327,9 +327,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   aspect ratio in static designs and uses `addImageClipToTimeline` for video; never call the
   static-only `addElement` path for video media.
 - **Designer AI assistance is bounded and schema-driven.** `DesignerAssistantService` uses the
-  governed `AIModelProvider` and Brand style only. `/media/designer-assistant/copy` returns three
-  alternatives; `/suggestions` returns font/color/layout/spacing recommendations. The shared
-  Inspector panel applies text and whitelisted font/color styles only, never model-generated doc ops.
+  governed `AIModelProvider` and Brand style only. `/media/designer-assistant/copy` prompts for and
+  validates one root `variants` array containing exactly three alternatives; `/suggestions` prompts
+  for and validates one root `suggestions` array containing 2–6 font/color/layout/spacing entries.
+  A schema-invalid parsed response gets one correction retry; thrown provider errors do not. Strict
+  service-side Zod validation remains the security boundary, and the shared Inspector panel applies
+  text and whitelisted font/color styles only, never model-generated doc ops.
 - **Video poster state distinguishes effective and generated images.** The export dialog sends
   only an uploaded File path as `posterUrl` and may send the paused playhead as `posterTimeMs`.
   Polling reads `thumbnailUrl` (effective), `generatedPosterUrl` (rendered alternative), `fileId`,
