@@ -1,5 +1,7 @@
 'use client';
 
+// `/files/import` deliberately rejects SVG, so stock vectors are rasterized
+// before upload. Remote images must allow anonymous CORS for canvas export.
 export async function rasterizeSvgUrlToPngBlob(url: string, size = 512): Promise<Blob> {
   const img = new Image();
   img.crossOrigin = 'anonymous';

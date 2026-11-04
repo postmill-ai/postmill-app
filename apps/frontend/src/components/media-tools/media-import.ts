@@ -25,7 +25,7 @@ export const useImportStockMedia = () => {
       if (item.source === 'file' && item.fileId) return item;
       let res: Response;
       if (/\.svg(?:$|[?#])/i.test(item.url)) {
-        const blob = await rasterizeSvgUrlToPngBlob(item.url);
+        const blob = await rasterizeSvgUrlToPngBlob(item.url, item.stockSource === 'pixabay' ? 2048 : 512);
         const name = `${(opts.name || item.name || 'Reference').replace(/\.[^.]+$/, '')}.png`;
         const form = new FormData();
         form.append('file', blob, name);

@@ -151,4 +151,17 @@ describe('OutputTabs repeated dimensions', () => {
       formatId: 'ig-post', name: 'Instagram Post 2', width: 1080, height: 1080,
     });
   });
+
+  it('keeps the recommended-set shortcut limited to formats not already present', () => {
+    const store = createDesignerStore();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Recommended set (IG Post + Story + Linked + X)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add 3 format' }));
+
+    expect(store.getState().doc.outputs.map((out) => out.formatId)).toEqual([
+      'ig-post', 'ig-story', 'linkedin-post', 'x-post',
+    ]);
+  });
 });

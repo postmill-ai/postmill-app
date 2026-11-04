@@ -86,7 +86,7 @@ describe('useImportStockMedia', () => {
       aiDesigner: 'reference',
     });
 
-    expect(rasterizeMock).toHaveBeenCalledWith(svgItem.url);
+    expect(rasterizeMock).toHaveBeenCalledWith(svgItem.url, 2048);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/files/upload-simple');
     const form = init.body as FormData;

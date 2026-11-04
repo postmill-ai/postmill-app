@@ -141,7 +141,7 @@ export const StockPreviewModal: FC<StockPreviewModalProps> = ({ item: initialIte
           type={type}
           downloadLocation={downloadLocation}
           attribution={item.attribution}
-          uploadBlob={type === 'icon' || type === 'vector' ? () => rasterizeSvgUrlToPngBlob(item.url) : undefined}
+          uploadBlob={type === 'icon' || type === 'vector' ? () => rasterizeSvgUrlToPngBlob(item.url, type === 'vector' ? 2048 : 512) : undefined}
         />
       ),
       size: 'lg',

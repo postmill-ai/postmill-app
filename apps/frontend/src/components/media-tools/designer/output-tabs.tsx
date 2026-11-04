@@ -497,7 +497,9 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           {mode === 'image' && (
           <button
             onClick={() => {
-              setPendingFormats(new Set(RECOMMENDED_IDS));
+              setPendingFormats(new Set(RECOMMENDED_IDS.filter(
+                (id) => !outputs.some((output) => output.formatId === id)
+              )));
             }}
             className="w-full text-left px-2 py-1.5 rounded-sm text-[11px] text-btnPrimaryAccent hover:bg-designerAccent/10 mb-2 border border-designerAccent/30"
           >

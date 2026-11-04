@@ -725,8 +725,9 @@ export class StockMediaService {
     // before withCache, so `configured:false` only reaches this point on a
     // transient provider failure — caching it would suppress the tab for 60s.
     if ((result as { configured?: boolean }).configured !== false) {
+      const cacheTtl = (result as { error?: string }).error ? CACHE_TTL_SECONDS : ttl;
       try {
-        await this._redis.set(key, JSON.stringify(result), ttl).catch(() => {});
+        await this._redis.set(key, JSON.stringify(result), cacheTtl).catch(() => {});
       } catch {
         // ignore
       }
@@ -773,9 +774,12 @@ export class StockMediaService {
   }
 
   private mapPixabayVector(hit: any): StockVectorItem {
+    const vectorUrl = typeof hit.vectorURL === 'string' && /\.svg(?:$|[?#])/i.test(hit.vectorURL)
+      ? hit.vectorURL
+      : '';
     return {
       id: String(hit.id),
-      url: hit.vectorURL || hit.largeImageURL || hit.imageURL || hit.webformatURL || '',
+      url: vectorUrl || hit.largeImageURL || hit.imageURL || hit.webformatURL || '',
       thumbUrl: hit.previewURL || hit.webformatURL || '',
       description: hit.tags || null,
       author: hit.user || 'Unknown',
