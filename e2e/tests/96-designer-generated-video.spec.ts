@@ -1393,7 +1393,8 @@ test.describe('Designer crop and browser export artifacts (mocked local document
       expect(clip).toMatchObject({ naturalWidth: 720, naturalHeight: 1280, fitMode: 'cover' });
       expect(clip.crop!.x).toBeCloseTo(0, 0);
       expect(clip.crop!.y).toBeCloseTo(690, 0);
-      expect(clip.crop!.width).toBeGreaterThan(359);
+      // Fractional canvas scaling can quantize the half-width drag by ~2 source px.
+      expect(clip.crop!.width).toBeGreaterThan(358);
       expect(clip.crop!.width).toBeLessThan(361.5);
       expect(clip.crop!.height).toBeGreaterThan(359);
       expect(clip.crop!.height).toBeLessThan(361.5);

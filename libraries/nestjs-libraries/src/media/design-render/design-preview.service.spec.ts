@@ -244,7 +244,7 @@ describe('DesignPreviewService', () => {
       });
     });
 
-    it('self-heals a missing thumbnail via on-demand extraction (local only)', async () => {
+    it('self-heals a missing thumbnail through the owning storage adapter', async () => {
       fileService.getByIds.mockResolvedValue([{ id: 'file-vid-1', thumbnail: null }]);
       videoThumbnailService.generateForFile.mockResolvedValue('/uploads/org-1/thumb-new.jpg');
 
@@ -252,8 +252,7 @@ describe('DesignPreviewService', () => {
 
       expect(videoThumbnailService.generateForFile).toHaveBeenCalledWith(
         'org-1',
-        'file-vid-1',
-        { localOnly: true }
+        'file-vid-1'
       );
       const [renderDoc] = renderService.renderPage.mock.calls[0];
       expect(renderDoc.outputs[0].children[0]).toMatchObject({
@@ -317,8 +316,7 @@ describe('DesignPreviewService', () => {
 
       expect(videoThumbnailService.generateForFile).toHaveBeenCalledWith(
         'org-1',
-        'file-vid-1',
-        { localOnly: true }
+        'file-vid-1'
       );
       const [renderDoc] = renderService.renderPage.mock.calls[0];
       expect(renderDoc.outputs[0].children[0]).toMatchObject({

@@ -170,6 +170,63 @@ describe('DesignerDocService', () => {
     expect(clip.originId).toBe(clip.id);
   });
 
+  it('re-mints nested group parent references on every page and output', () => {
+    const service = makeService();
+    const group = (id: string, name: string, parentId?: string) => ({
+      id, originId: id, type: 'group', name, parentId,
+      x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    const leaf = (id: string, name: string, parentId: string) => ({
+      id, originId: id, type: 'image', name, parentId,
+      x: 12, y: 24, width: 100, height: 80,
+      rotation: 3, opacity: 0.9, locked: false, hidden: false,
+      src: 'data:image/png;base64,aa', maskSrc: 'data:image/png;base64,bb',
+      styles: [{ type: 'drop-shadow', angle: 45, distance: 4, useGlobalLight: true }],
+      symbolId: 'symbol-1', symbolOverrides: { 'symbol-text': { text: 'Kept' } },
+    });
+    const doc: any = {
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-1', originId: 'out-1', children: [
+            group('outer-1', 'Outer'), group('inner-1', 'Inner', 'outer-1'),
+            leaf('leaf-1', 'Leaf', 'inner-1'),
+          ],
+          pages: [{ id: 'page-2', children: [group('page-group', 'Page group'), leaf('page-leaf', 'Page leaf', 'page-group')] }],
+        },
+        { id: 'out-2', originId: 'out-2', children: [group('other-group', 'Other group'), leaf('other-leaf', 'Other leaf', 'other-group')] },
+      ],
+    };
+
+    const result = service.assignIdsAndNormalize(service.stripIds(doc));
+    const firstChildren = result.outputs[0].children;
+    const outer = firstChildren.find((el: any) => el.name === 'Outer');
+    const inner = firstChildren.find((el: any) => el.name === 'Inner');
+    const first = firstChildren.find((el: any) => el.name === 'Leaf');
+    expect(inner.parentId).toBe(outer.id);
+    expect(first.parentId).toBe(inner.id);
+    expect(inner.id).not.toBe('inner-1');
+    expect(first).toMatchObject({
+      x: 12, y: 24, width: 100, height: 80, rotation: 3,
+      maskSrc: 'data:image/png;base64,bb', symbolId: 'symbol-1',
+      styles: [{ type: 'drop-shadow', angle: 45, distance: 4, useGlobalLight: true }],
+      symbolOverrides: { 'symbol-text': { text: 'Kept' } },
+    });
+    expect(first.id).not.toBe('leaf-1');
+    for (const el of firstChildren) expect(el.originId).toBe(el.id);
+
+    const assertSingleGroup = (children: any[], groupName: string, leafName: string) => {
+      const groupEl = children.find((el) => el.name === groupName);
+      const leafEl = children.find((el) => el.name === leafName);
+      expect(leafEl.parentId).toBe(groupEl.id);
+      for (const el of children) expect(el.originId).toBe(el.id);
+    };
+    assertSingleGroup(result.outputs[0].pages[0].children, 'Page group', 'Page leaf');
+    assertSingleGroup(result.outputs[1].children, 'Other group', 'Other leaf');
+    expect(result.outputs.map((out: any) => out.id)).not.toEqual(['out-1', 'out-2']);
+  });
+
   it('throws DesignerDocOpError for image-only op on video output', () => {
     const service = makeService();
     const doc = {

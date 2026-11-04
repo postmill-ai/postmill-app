@@ -90,6 +90,76 @@ describe('DesignRenderService', () => {
     expect(data[i + 1]).toBeLessThan(60);
   });
 
+  it('preserves grouped-layer pixels and effects through a .pdesign id remint', async () => {
+    const { DesignerDocService } = await import('../designer-doc/designer-doc.service');
+    const maskPng = await sharp({
+      create: { width: 1, height: 1, channels: 4, background: '#ffffff' },
+    }).png().toBuffer();
+    const group = (id: string, parentId?: string): any => ({
+      id, type: 'group', parentId, x: 0, y: 0, width: 0, height: 0,
+      rotation: id === 'outer' ? 12 : -5, opacity: 1, locked: false, hidden: false,
+    });
+    const leaf: any = {
+      id: 'leaf', type: 'shape', shape: 'rect', parentId: 'inner',
+      x: 20, y: 25, width: 60, height: 45,
+      rotation: 3, opacity: 1, locked: false, hidden: false, fill: '#ff0000',
+      maskSrc: `data:image/png;base64,${maskPng.toString('base64')}`,
+      styles: [{ type: 'drop-shadow', enabled: true, color: '#000000', opacity: 0.5, angle: 45, distance: 4, size: 3, useGlobalLight: true }],
+    };
+    const textLayer: any = {
+      id: 'text', type: 'text', parentId: 'inner', text: 'Grouped text',
+      x: 15, y: 65, width: 75, height: 20,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+      fontFamily: 'Inter', fontSize: 12, lineHeight: 1.2, letterSpacing: 0.5,
+      textShadow: { color: '#000000', blur: 2, offsetX: 1, offsetY: 2 },
+    };
+    const doc: any = {
+      version: 9, mode: 'image',
+      outputs: [
+        {
+          id: 'out-1', formatId: 'square', name: 'Square',
+          width: 100, height: 100, background: '#ffffff',
+          children: [group('outer'), group('inner', 'outer'), leaf, textLayer],
+          pages: [{
+            id: 'page-2', children: [
+              { ...group('page-group'), name: 'Page group' },
+              { ...leaf, id: 'page-leaf', parentId: 'page-group' },
+            ],
+          }],
+        },
+        {
+          id: 'out-2', formatId: 'square', name: 'Square 2',
+          width: 100, height: 100, background: '#ffffff',
+          children: [{ ...leaf, id: 'symbol-leaf', type: 'symbol', symbolId: 'symbol-1', parentId: undefined }],
+        },
+      ],
+    };
+
+    const service = makeService();
+    const original = await service.renderPage(doc, 0, { pixelRatio: 1 });
+    const docService = new DesignerDocService();
+    const imported = docService.assignIdsAndNormalize(docService.stripIds(doc));
+    const rerendered = await service.renderPage(imported, 0, { pixelRatio: 1 });
+
+    const children = imported.outputs[0].children as any[];
+    const outer = children.find((el) => el.type === 'group' && !el.parentId);
+    const inner = children.find((el) => el.type === 'group' && el.parentId === outer.id);
+    const importedLeaf = children.find((el) => el.type === 'shape');
+    const importedText = children.find((el) => el.type === 'text');
+    expect(importedLeaf.parentId).toBe(inner.id);
+    expect(importedText.parentId).toBe(inner.id);
+    expect(importedLeaf.styles).toEqual(leaf.styles);
+    expect(importedLeaf.maskSrc).toBe(leaf.maskSrc);
+    expect(importedText).toMatchObject({
+      x: textLayer.x, y: textLayer.y, lineHeight: 1.2, letterSpacing: 0.5,
+      textShadow: textLayer.textShadow,
+    });
+    expect(imported.outputs[1].children[0]).toMatchObject({ symbolId: 'symbol-1' });
+    const pageChildren = imported.outputs[0].pages![0].children as any[];
+    expect(pageChildren[1].parentId).toBe(pageChildren[0].id);
+    expect(rerendered.equals(original)).toBe(true);
+  });
+
   it('composites a painted layer mask, hiding where the mask is black', async () => {
     // A 1x2 mask: left half transparent (hides), right half opaque (reveals).
     const raw = Buffer.alloc(2 * 1 * 4);

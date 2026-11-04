@@ -227,9 +227,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   path. Server-side previews of a video output (AI Designer saver, contact sheets, critic re-check)
   render the t=0 POSTER projection `designer-doc/video-poster.ts` — a render-only synthetic image
   output (clips→elements; `video`-track clips draw from their File row's stored thumbnail poster
-  when one is resolved by the caller — `DesignPreviewService` self-heals missing ones for locally
-  stored videos via `media/video-frame.ts`). Preview rendering fails when a visible required
-  time-zero poster or other visual asset cannot be loaded; intentional black pixels remain valid.
+  when one is resolved by the caller — `DesignPreviewService` self-heals missing ones through the
+  File row's local or cloud storage adapter via `media/video-frame.ts`). Preview rendering fails
+  when a visible required time-zero poster or other visual asset cannot be loaded; intentional
+  black pixels remain valid.
   `renderPage` still rejects video outputs.
 - **Design/template previews are best-effort, never save blockers.** Video saves render through
   `DesignPreviewService`; image saves use that server renderer when no client thumbnail arrives.
