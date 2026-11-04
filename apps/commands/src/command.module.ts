@@ -16,7 +16,6 @@ import { VpnModule } from '@postmill-ai/nestjs-libraries/vpn/vpn.module';
 import { CommsDeliveryModule } from '@postmill-ai/nestjs-libraries/comms/comms-delivery.module';
 import { MediaStudioModule } from '@postmill-ai/nestjs-libraries/media/studio/studio.module';
 import { ProvidersBootstrap } from '@postmill-ai/backend/providers.bootstrap';
-import { VideoRenderModule } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.module';
 import { OwnerAnnouncement } from './tasks/owner-announcement';
 import { OwnerEmailCampaignService } from '@postmill-ai/nestjs-libraries/services/owner-email-campaign.service';
 
@@ -40,8 +39,6 @@ import { OwnerEmailCampaignService } from '@postmill-ai/nestjs-libraries/service
     VpnModule,
     CommsDeliveryModule,
     MediaStudioModule,
-    // ChromiumFrameCaptureService, for video-design thumbnails in the backfill.
-    VideoRenderModule,
   ],
   controllers: [],
   // ProvidersBootstrap registers every provider package with the kernel —

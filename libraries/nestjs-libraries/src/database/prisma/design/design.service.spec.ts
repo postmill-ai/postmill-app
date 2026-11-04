@@ -428,6 +428,37 @@ describe('DesignService', () => {
       expect(instance.outputs[0].id).toMatch(/^out-/);
     });
 
+    it('preserves grouped-layer relationships and effects when instantiating', async () => {
+      const doc = makeDoc({
+        output: {
+          children: [
+            {
+              id: 'tpl-group', type: 'group', name: 'Group',
+              x: 0, y: 0, width: 0, height: 0,
+              rotation: 0, opacity: 1, locked: false, hidden: false,
+            },
+            {
+              id: 'tpl-leaf', type: 'text', name: 'Leaf', parentId: 'tpl-group',
+              x: 10, y: 20, width: 200, height: 60,
+              rotation: 0, opacity: 1, locked: false, hidden: false,
+              text: 'Grouped', styles: [{ type: 'drop-shadow', angle: 45, distance: 4 }],
+            },
+          ],
+        },
+      });
+      repository.findTemplateForOrg.mockResolvedValue({
+        id: 't1', organizationId: null, isSystem: true, doc,
+      });
+
+      const instance = await service.instantiateTemplate('org-1', 't1');
+      const [group, leaf] = instance.outputs[0].children as any[];
+
+      expect(leaf.parentId).toBe(group.id);
+      expect(group.id).not.toBe('tpl-group');
+      expect(leaf.id).not.toBe('tpl-leaf');
+      expect(leaf.styles).toEqual([{ type: 'drop-shadow', angle: 45, distance: 4 }]);
+    });
+
     it('throws NotFoundException for a cross-org template', async () => {
       repository.findTemplateForOrg.mockResolvedValue(null);
 

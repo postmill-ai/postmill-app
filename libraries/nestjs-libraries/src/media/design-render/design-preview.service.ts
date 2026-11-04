@@ -34,8 +34,8 @@ export class DesignPreviewService {
 
   /**
    * Resolve every poster required by output 0's visible t=0 video clips. A
-   * missing thumbnail is self-healed from local storage; unresolved media is
-   * an incomplete render and must fail rather than silently painting black.
+   * missing thumbnail is self-healed through the File row's storage adapter;
+   * unresolved media must fail rather than silently painting black.
    */
   private async _resolveVideoPosters(
     doc: DesignerDoc,
@@ -65,11 +65,7 @@ export class DesignPreviewService {
       }
       for (const fileId of fileIds) {
         if (posters.has(fileId)) continue;
-        const extracted = await this._videoThumbnailService.generateForFile(
-          orgId,
-          fileId,
-          { localOnly: true }
-        );
+        const extracted = await this._videoThumbnailService.generateForFile(orgId, fileId);
         if (extracted) posters.set(fileId, extracted);
       }
     }
@@ -80,9 +76,7 @@ export class DesignPreviewService {
       const thumb = isImageFile(file.type)
         ? file.path
         : file.thumbnail ??
-          (await this._videoThumbnailService.generateForFile(orgId, file.id, {
-            localOnly: true,
-          }));
+          (await this._videoThumbnailService.generateForFile(orgId, file.id));
       if (thumb) posters.set(clip.id, thumb);
     }
     return posters.size ? posters : undefined;

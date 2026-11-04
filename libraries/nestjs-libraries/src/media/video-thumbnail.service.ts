@@ -18,9 +18,8 @@ import {
  * - going forward: uploads (`/files/upload-*`) and provider-downloaded media
  *   jobs enqueue `media/video-thumbnail.generate` (fire-and-forget — never
  *   blocks the upload/completion response);
- * - on demand: the design preview renderer self-heals a missing thumbnail for
- *   LOCALLY stored videos while resolving posters (`localOnly`), so a video
- *   design preview is never black;
+ * - on demand: the design preview renderer self-heals a missing thumbnail
+ *   through the video File row's resolved storage adapter;
  * - backfill: the design preview maintenance sweep backfills the org first.
  *
  * Every method is fail-soft: undecodable video keeps a null thumbnail, while
@@ -76,10 +75,10 @@ export class VideoThumbnailService {
 
   /**
    * Generate + persist the thumbnail for one video File. Idempotent: a file
-   * that already has a thumbnail returns it unchanged. `localOnly` restricts
-   * extraction to the org's LOCAL storage adapter — the synchronous preview
-   * path never waits on a remote bucket read. Returns the thumbnail path, or
-   * null when none could be produced; never throws.
+   * that already has a thumbnail returns it unchanged. `localOnly` remains
+   * available for callers that explicitly cannot wait on a remote bucket;
+   * design previews omit it and use the File row's resolved adapter. Returns
+   * the thumbnail path, or null when none could be produced; never throws.
    */
   async generateForFile(
     orgId: string,

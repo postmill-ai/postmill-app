@@ -630,48 +630,26 @@ export class DesignerDocService {
   }
 
   /**
-   * Remove every id/originId (outputs, children, pages, tracks, clips) so a
-   * re-mint via `assignIdsAndNormalize` never collides with the source doc —
-   * template instantiation and `.pdesign` import both funnel through it.
+   * Re-mint every id/originId for template instantiation and `.pdesign` import.
+   * Group parent references must follow the new element ids within each page.
    */
   stripIds(doc: DesignerDoc): DesignerDoc {
     const outputs = doc.outputs.map((out: any) => {
-      const base = { ...out };
-      delete base.id;
-      delete base.originId;
+      const base = this._normalizeItems([out], 'out', true)[0];
       if ('children' in base) {
-        base.children = base.children.map((el: any) => {
-          const e = { ...el };
-          delete e.id;
-          delete e.originId;
-          return e;
-        });
-        // Pages (v8): strip page ids and their elements' ids the same way.
+        base.children = this._normalizeItems(base.children, 'el', true);
         if (Array.isArray(base.pages)) {
           base.pages = base.pages.map((page: any) => {
-            const p = { ...page };
-            delete p.id;
-            p.children = (p.children || []).map((el: any) => {
-              const e = { ...el };
-              delete e.id;
-              delete e.originId;
-              return e;
-            });
+            const p = this._normalizeItems([page], 'pg', true)[0];
+            p.children = this._normalizeItems(p.children || [], 'el', true);
             return p;
           });
         }
       }
       if ('tracks' in base) {
         base.tracks = base.tracks.map((track: any) => {
-          const t = { ...track };
-          delete t.id;
-          delete t.originId;
-          t.clips = t.clips.map((clip: any) => {
-            const c = { ...clip };
-            delete c.id;
-            delete c.originId;
-            return c;
-          });
+          const t = this._normalizeItems([track], 'trk', true)[0];
+          t.clips = this._normalizeItems(t.clips, 'clip', true);
           return t;
         });
       }
@@ -683,27 +661,22 @@ export class DesignerDocService {
   assignIdsAndNormalize(doc: DesignerDoc): DesignerDoc {
     const outputs = doc.outputs.map((out) => {
       if (isImageOutput(out)) {
-        const children = out.children.map((el) => this._normalizeId(el, 'el'));
+        const children = this._normalizeItems(out.children, 'el');
         // Page elements are normalized exactly like page-1 children; page ids
         // get their own prefix so a missing one never collides with elements.
         const pages = out.pages?.map((page) => ({
           ...page,
           id: page.id || `pg-${randomUUID()}`,
-          children: page.children.map((el) => this._normalizeId(el, 'el')),
+          children: this._normalizeItems(page.children, 'el'),
         }));
         return { ...out, id: out.id || `out-${randomUUID()}`, children, pages };
       }
       if (isVideoOutput(out)) {
-        const tracks = out.tracks.map((track) => {
-          const clips = track.clips.map((clip) =>
-            this._normalizeId(clip, 'clip')
-          );
-          return {
-            ...track,
-            id: track.id || `trk-${randomUUID()}`,
-            clips,
-          };
-        });
+        const tracks = out.tracks.map((track) => ({
+          ...track,
+          id: track.id || `trk-${randomUUID()}`,
+          clips: this._normalizeItems(track.clips, 'clip'),
+        }));
         return { ...out, id: out.id || `out-${randomUUID()}`, tracks };
       }
       return out;
@@ -711,12 +684,29 @@ export class DesignerDocService {
     return { ...doc, outputs };
   }
 
-  private _normalizeId<T extends { id?: string; originId?: string }>(
-    item: T,
-    prefix: string
-  ): T {
-    const id = item.id || `${prefix}-${randomUUID()}`;
-    return { ...item, id, originId: item.originId ?? id };
+  private _normalizeItems<T extends { id?: string; originId?: string; parentId?: string }>(
+    items: T[],
+    prefix: string,
+    remint = false
+  ): T[] {
+    const ids = items.map((item) =>
+      remint || !item.id ? `${prefix}-${randomUUID()}` : item.id
+    );
+    const idMap = new Map<string, string>();
+    items.forEach((item, index) => {
+      if (item.id) idMap.set(item.id, ids[index]);
+    });
+    return items.map((item, index) => {
+      const next = {
+        ...item,
+        id: ids[index],
+        originId: remint ? ids[index] : item.originId ?? ids[index],
+      };
+      if (next.parentId) {
+        next.parentId = idMap.get(next.parentId) ?? next.parentId;
+      }
+      return next;
+    });
   }
 
   buildPlaceImageOp(input: {

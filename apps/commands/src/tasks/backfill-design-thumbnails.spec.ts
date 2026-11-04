@@ -1,192 +1,191 @@
 import { describe, it, expect, vi } from 'vitest';
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
 import { BackfillDesignThumbnails } from './backfill-design-thumbnails';
 
 const VALID_DOC = {
   mode: 'image',
   outputs: [{ id: 'out-1', width: 1080, height: 1080, children: [] as unknown[] }],
 };
+const VIDEO_DOC = {
+  mode: 'video',
+  outputs: [{ id: 'out-v', width: 1080, height: 1920, durationMs: 10000, tracks: [] }],
+};
 
 function createMocks() {
   const store: Record<string, any[]> = {
     design: [
-      // Already has a file preview — must not be touched.
-      { id: 'd-skip-file', organizationId: 'org-1', name: 'A', doc: VALID_DOC, deletedAt: null, previewFileId: 'file-x', previewDataUrl: null },
-      // Already has a data-URL preview — must not be touched.
-      { id: 'd-skip-data', organizationId: 'org-1', name: 'B', doc: VALID_DOC, deletedAt: null, previewFileId: null, previewDataUrl: 'data:image/jpeg;base64,bbb' },
-      // Soft-deleted — must not be touched.
-      { id: 'd-deleted', organizationId: 'org-1', name: 'C', doc: VALID_DOC, deletedAt: new Date(), previewFileId: null, previewDataUrl: null },
-      // Missing both previews — the only row to backfill.
-      { id: 'd-fill', organizationId: 'org-1', name: 'D', doc: VALID_DOC, deletedAt: null, previewFileId: null, previewDataUrl: null },
+      { id: 'd-skip-file', organizationId: 'org-1', doc: VALID_DOC, deletedAt: null, previewFileId: 'file-x', previewDataUrl: null },
+      { id: 'd-skip-data', organizationId: 'org-1', doc: VALID_DOC, deletedAt: null, previewFileId: null, previewDataUrl: 'data:image/jpeg;base64,bbb' },
+      { id: 'd-deleted', organizationId: 'org-1', doc: VALID_DOC, deletedAt: new Date(), previewFileId: null, previewDataUrl: null },
+      { id: 'd-fill', organizationId: 'org-1', doc: VIDEO_DOC, deletedAt: null, previewFileId: null, previewDataUrl: null },
+      { id: 'd-other', organizationId: 'org-2', doc: VALID_DOC, deletedAt: null, previewFileId: null, previewDataUrl: null },
     ],
     designTemplate: [
-      // System template — can never own a File, must be skipped.
-      { id: 't-system', organizationId: null, name: 'Sys', doc: VALID_DOC, deletedAt: null, isSystem: true, thumbnailFileId: null },
-      // Already has a thumbnail — must not be touched.
-      { id: 't-skip', organizationId: 'org-1', name: 'T1', doc: VALID_DOC, deletedAt: null, isSystem: false, thumbnailFileId: 'file-y' },
-      // Org template without a thumbnail — the only row to backfill.
-      { id: 't-fill', organizationId: 'org-1', name: 'T2', doc: VALID_DOC, deletedAt: null, isSystem: false, thumbnailFileId: null },
-      // Null-org non-system template — no org storage to persist to, must be skipped.
-      { id: 't-no-org', organizationId: null, name: 'T0', doc: VALID_DOC, deletedAt: null, isSystem: false, thumbnailFileId: null },
+      { id: 't-system', organizationId: null, doc: VALID_DOC, deletedAt: null, isSystem: true, thumbnailFileId: null },
+      { id: 't-skip', organizationId: 'org-1', doc: VALID_DOC, deletedAt: null, isSystem: false, thumbnailFileId: 'file-y' },
+      { id: 't-fill', organizationId: 'org-1', doc: VALID_DOC, deletedAt: null, isSystem: false, thumbnailFileId: null },
+      { id: 't-no-org', organizationId: null, doc: VALID_DOC, deletedAt: null, isSystem: false, thumbnailFileId: null },
+    ],
+    file: [
+      { id: 'x-skip', organizationId: 'org-1', folderId: null, type: 'document', deletedAt: null, thumbnail: '/already.png', metadata: { source: 'design-export', kind: 'design', designId: 'd-fill' } },
+      { id: 'x-design', organizationId: 'org-1', folderId: 'folder-cloud', type: 'document', deletedAt: null, thumbnail: null, metadata: { source: 'design-export', kind: 'design', designId: 'd-fill' } },
+      { id: 'x-template', organizationId: 'org-1', folderId: null, type: 'document', deletedAt: null, thumbnail: null, metadata: { source: 'design-export', kind: 'template', templateId: 't-fill' } },
+      { id: 'x-missing', organizationId: 'org-1', folderId: null, type: 'document', deletedAt: null, thumbnail: null, metadata: { source: 'design-export', kind: 'design', designId: 'd-deleted' } },
+      { id: 'x-other', organizationId: 'org-2', folderId: null, type: 'document', deletedAt: null, thumbnail: null, metadata: { source: 'design-export', kind: 'design', designId: 'd-other' } },
     ],
   };
 
-  // Minimal Prisma where-subset: exact equality, plus `{ not: v }` negation.
   const matches = (row: any, where: any) =>
-    Object.entries(where).every(([key, value]) =>
-      value && typeof value === 'object' && 'not' in (value as any)
-        ? row[key] !== (value as any).not
-        : row[key] === value
-    );
+    Object.entries(where).every(([key, value]: [string, any]) => {
+      if (value && typeof value === 'object' && 'not' in value) return row[key] !== value.not;
+      if (value && typeof value === 'object' && 'path' in value) {
+        const actual = value.path.reduce((acc: any, part: string) => acc?.[part], row[key]);
+        return actual === value.equals;
+      }
+      return row[key] === value;
+    });
+
+  const selected = (row: any, select?: any) => {
+    if (!row || !select) return row;
+    return Object.fromEntries(Object.keys(select).map((key) => [key, row[key]]));
+  };
 
   const modelProxy = (modelName: string) => ({
-    findMany: ({ where, select }: { where: any; select?: any }) =>
+    findMany: vi.fn(({ where, select, take, cursor }: any) =>
       Promise.resolve(
-        (store[modelName] || [])
+        store[modelName]
           .filter((row) => matches(row, where))
-          .map((row) => {
-            if (!select) return row;
-            const selected: any = {};
-            for (const key of Object.keys(select)) selected[key] = row[key];
-            return selected;
-          })
-      ),
-    update: ({ where, data }: { where: { id: string }; data: any }) => {
-      const row = (store[modelName] || []).find((r) => r.id === where.id);
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .filter((row) => !cursor || row.id > cursor.id)
+          .slice(0, take)
+          .map((row) => selected(row, select))
+      )
+    ),
+    findFirst: vi.fn(({ where, select }: any) =>
+      Promise.resolve(selected(store[modelName].find((row) => matches(row, where)) ?? null, select))
+    ),
+    update: vi.fn(({ where, data }: any) => {
+      const row = store[modelName].find((candidate) => candidate.id === where.id);
       if (row) Object.assign(row, data);
       return Promise.resolve(row);
-    },
+    }),
   });
 
   const prisma = {
     design: modelProxy('design'),
     designTemplate: modelProxy('designTemplate'),
+    file: modelProxy('file'),
   };
-
-  const designRenderService = {
-    renderPage: vi.fn().mockResolvedValue(Buffer.from('png-bytes')),
+  const designPreviewService = {
+    renderPreviewBuffer: vi.fn().mockResolvedValue(Buffer.from('png-bytes')),
+    uploadPreview: vi.fn()
+      .mockResolvedValueOnce('preview-1')
+      .mockResolvedValueOnce('preview-2')
+      .mockResolvedValue('preview-next'),
+  };
+  const adapter = {
+    writeBuffer: vi.fn().mockResolvedValue('/uploads/export-preview.png'),
+    removeFile: vi.fn().mockResolvedValue(undefined),
   };
   const storageService = {
-    resolveAdapterForFolderWithConfigId: vi.fn().mockResolvedValue({
-      adapter: { writeBuffer: vi.fn().mockResolvedValue('http://localhost/uploads/thumb.png') },
-      configId: null,
-    }),
+    resolveAdapterForFolder: vi.fn().mockResolvedValue(adapter),
   };
   const fileService = {
-    saveFile: vi.fn().mockImplementation((_org: string, name: string) =>
-      Promise.resolve({ id: `file-for-${name}`, path: 'http://localhost/uploads/thumb.png' })
-    ),
+    saveMediaInformation: vi.fn((orgId: string, data: any) => {
+      const row = store.file.find((file) => file.id === data.id && file.organizationId === orgId);
+      if (row) row.thumbnail = data.thumbnail;
+      return Promise.resolve(row);
+    }),
+    deleteFile: vi.fn().mockResolvedValue(undefined),
   };
 
-  return { prisma, store, designRenderService, storageService, fileService };
+  return { prisma, store, designPreviewService, storageService, fileService, adapter };
 }
 
+const makeCommand = (mocks: ReturnType<typeof createMocks>) =>
+  new BackfillDesignThumbnails(
+    mocks.prisma as any,
+    mocks.designPreviewService as any,
+    mocks.fileService as any,
+    mocks.storageService as any
+  );
+
 describe('BackfillDesignThumbnails', () => {
-  it('only processes rows with no preview at all', async () => {
-    const { prisma, store, designRenderService, storageService, fileService } = createMocks();
-    const command = new BackfillDesignThumbnails(
-      prisma as any,
-      designRenderService as any,
-      fileService as any,
-      storageService as any,
-      { captureFrames: vi.fn() } as any
-    );
+  it('uses the shared preview renderer for designs, templates and existing exports', async () => {
+    const mocks = createMocks();
+    const stats = await makeCommand(mocks).run('org-1');
 
-    await command.run();
-
-    const designs = Object.fromEntries(store.design.map((d) => [d.id, d]));
-    expect(designs['d-fill'].previewFileId).toBe('file-for-design-d-fill-thumbnail.png');
-    expect(designs['d-skip-file'].previewFileId).toBe('file-x');
-    expect(designs['d-skip-data'].previewFileId).toBeNull();
-    expect(designs['d-deleted'].previewFileId).toBeNull();
-
-    const templates = Object.fromEntries(store.designTemplate.map((t) => [t.id, t]));
-    expect(templates['t-fill'].thumbnailFileId).toBe('file-for-design-template-t-fill-thumbnail.png');
-    expect(templates['t-skip'].thumbnailFileId).toBe('file-y');
-    // System templates are never rendered or updated.
-    expect(templates['t-system'].thumbnailFileId).toBeNull();
-    // Null-org templates have no org storage to persist to — never touched.
-    expect(templates['t-no-org'].thumbnailFileId).toBeNull();
-
-    // Two renders only: d-fill and t-fill.
-    expect(designRenderService.renderPage).toHaveBeenCalledTimes(2);
+    expect(stats).toEqual({ processed: 5, updated: 4, skipped: 1, dryRun: false });
+    expect(mocks.store.design.find((row) => row.id === 'd-fill').previewFileId).toBe('preview-1');
+    expect(mocks.store.designTemplate.find((row) => row.id === 't-fill').thumbnailFileId).toBe('preview-2');
+    expect(mocks.store.file.find((row) => row.id === 'x-design').thumbnail).toBe('/uploads/export-preview.png');
+    expect(mocks.store.file.find((row) => row.id === 'x-template').thumbnail).toBe('/uploads/export-preview.png');
+    expect(mocks.store.file.find((row) => row.id === 'x-skip').thumbnail).toBe('/already.png');
+    expect(mocks.store.file).toHaveLength(5);
+    expect(mocks.designPreviewService.renderPreviewBuffer).toHaveBeenCalledTimes(4);
+    expect(mocks.designPreviewService.renderPreviewBuffer).toHaveBeenCalledWith(VIDEO_DOC, { orgId: 'org-1' });
+    expect(mocks.designPreviewService.uploadPreview).toHaveBeenCalledTimes(2);
+    expect(mocks.storageService.resolveAdapterForFolder).toHaveBeenCalledWith('folder-cloud', 'org-1');
+    expect(mocks.fileService.saveMediaInformation).toHaveBeenCalledTimes(2);
   });
 
-  it('skips a row whose render fails and continues with the rest', async () => {
-    const { prisma, store, designRenderService, storageService, fileService } = createMocks();
-    // Fail only the design render (first call), succeed for the template.
-    designRenderService.renderPage
-      .mockRejectedValueOnce(new Error('canvas exploded'))
-      .mockResolvedValue(Buffer.from('png'));
+  it('counts all candidates in dry-run mode without rendering or writing', async () => {
+    const mocks = createMocks();
+    const stats = await makeCommand(mocks).run('dry-run');
 
-    const command = new BackfillDesignThumbnails(
-      prisma as any,
-      designRenderService as any,
-      fileService as any,
-      storageService as any,
-      { captureFrames: vi.fn() } as any
-    );
-
-    await command.run();
-
-    const designs = Object.fromEntries(store.design.map((d) => [d.id, d]));
-    expect(designs['d-fill'].previewFileId).toBeNull();
-    const templates = Object.fromEntries(store.designTemplate.map((t) => [t.id, t]));
-    expect(templates['t-fill'].thumbnailFileId).toBe('file-for-design-template-t-fill-thumbnail.png');
+    expect(stats).toEqual({ processed: 7, updated: 0, skipped: 1, dryRun: true });
+    expect(mocks.designPreviewService.renderPreviewBuffer).not.toHaveBeenCalled();
+    expect(mocks.designPreviewService.uploadPreview).not.toHaveBeenCalled();
+    expect(mocks.adapter.writeBuffer).not.toHaveBeenCalled();
+    expect(mocks.prisma.design.update).not.toHaveBeenCalled();
+    expect(mocks.prisma.designTemplate.update).not.toHaveBeenCalled();
+    expect(mocks.fileService.saveMediaInformation).not.toHaveBeenCalled();
   });
 
-  it('limits the run to a single org when the positional arg is given', async () => {
-    const { prisma, store, designRenderService, storageService, fileService } = createMocks();
-    store.design.push({
-      id: 'd-other-org', organizationId: 'org-2', name: 'E', doc: VALID_DOC, deletedAt: null, previewFileId: null, previewDataUrl: null,
-    });
+  it('applies org scoping to all three candidate types', async () => {
+    const mocks = createMocks();
+    const stats = await makeCommand(mocks).run('org-2');
 
-    const command = new BackfillDesignThumbnails(
-      prisma as any,
-      designRenderService as any,
-      fileService as any,
-      storageService as any,
-      { captureFrames: vi.fn() } as any
-    );
-
-    await command.run('org-2');
-
-    const designs = Object.fromEntries(store.design.map((d) => [d.id, d]));
-    expect(designs['d-other-org'].previewFileId).toBe('file-for-design-d-other-org-thumbnail.png');
-    expect(designs['d-fill'].previewFileId).toBeNull();
+    expect(stats).toEqual({ processed: 2, updated: 2, skipped: 0, dryRun: false });
+    expect(mocks.store.design.find((row) => row.id === 'd-other').previewFileId).toBe('preview-1');
+    expect(mocks.store.file.find((row) => row.id === 'x-other').thumbnail).toBe('/uploads/export-preview.png');
+    expect(mocks.store.design.find((row) => row.id === 'd-fill').previewFileId).toBeNull();
+    expect(mocks.store.file.find((row) => row.id === 'x-design').thumbnail).toBeNull();
   });
 
-  it('thumbnails a VIDEO design from its first frame', async () => {
-    const { prisma, store, designRenderService, storageService, fileService } = createMocks();
-    // A video output has tracks, not children — the still renderer refused it
-    // and every video design kept a permanent "No preview" card.
-    store.design.push({
-      id: 'd-video', organizationId: 'org-1', name: 'V',
-      doc: { mode: 'video', outputs: [{ id: 'out-v', width: 1080, height: 1920, durationMs: 10000, tracks: [] }] },
-      deletedAt: null, previewFileId: null, previewDataUrl: null,
-    });
-    const captureFrames = vi.fn(async (_output: unknown, fps: number, frameDir: string) => {
-      // The fps contract: ceil(duration * fps) === 1 — exactly one frame.
-      expect(Math.ceil(10 * fps)).toBe(1);
-      await writeFile(join(frameDir, 'frame-00001.png'), Buffer.from('png-bytes'));
-      return 1;
-    });
+  it('continues after a render failure', async () => {
+    const mocks = createMocks();
+    mocks.designPreviewService.renderPreviewBuffer.mockRejectedValueOnce(new Error('canvas exploded'));
 
-    const command = new BackfillDesignThumbnails(
-      prisma as any,
-      designRenderService as any,
-      fileService as any,
-      storageService as any,
-      { captureFrames } as any
-    );
-    await command.run('org-1');
+    const stats = await makeCommand(mocks).run('org-1');
 
-    expect(captureFrames).toHaveBeenCalledTimes(1);
-    const row = store.design.find((d) => d.id === 'd-video');
-    expect(row.previewFileId).toBeTruthy();
-    // The still renderer must never have been asked to render the video doc.
-    const stillCalls = designRenderService.renderPage.mock.calls.map((c: any[]) => c[0]?.mode);
-    expect(stillCalls).not.toContain('video');
+    expect(stats).toEqual({ processed: 5, updated: 3, skipped: 2, dryRun: false });
+    expect(mocks.store.design.find((row) => row.id === 'd-fill').previewFileId).toBeNull();
+    expect(mocks.store.designTemplate.find((row) => row.id === 't-fill').thumbnailFileId).toBe('preview-1');
+    expect(mocks.store.file.find((row) => row.id === 'x-design').thumbnail).toBe('/uploads/export-preview.png');
+  });
+
+  it('removes an unlinked preview when the design update fails', async () => {
+    const mocks = createMocks();
+    mocks.prisma.design.update.mockRejectedValueOnce(new Error('db down'));
+
+    const stats = await makeCommand(mocks).run('org-1');
+
+    expect(stats.updated).toBe(3);
+    expect(mocks.fileService.deleteFile).toHaveBeenCalledWith('org-1', 'preview-1');
+  });
+
+  it('removes an export thumbnail object when its File update fails', async () => {
+    const mocks = createMocks();
+    mocks.fileService.saveMediaInformation.mockRejectedValueOnce(new Error('db down'));
+
+    const stats = await makeCommand(mocks).run('org-1');
+
+    expect(stats.updated).toBe(3);
+    expect(mocks.adapter.removeFile).toHaveBeenCalledWith('/uploads/export-preview.png');
+  });
+
+  it('rejects an unknown mode', async () => {
+    const mocks = createMocks();
+    await expect(makeCommand(mocks).run('org-1', 'apply')).rejects.toThrow("Mode must be 'dry-run'");
   });
 });
