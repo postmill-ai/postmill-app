@@ -16,6 +16,7 @@ import {
 import { SaveToFilesModal } from './save-to-files-modal';
 import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { rasterizeSvgUrlToPngBlob } from './media-svg';
 
 // Premium BYOK content packs mint a licensed download URL from the item id at
 // import time (mint-then-ingest). Keep in sync with the backend registry.
@@ -30,41 +31,6 @@ const CONTENT_PACK_LABELS: Record<string, string> = {
 interface StockPreviewModalProps {
   item: StockPhotoItem | StockVideoItem | StockVectorItem | StockStickerItem | StockIconItem;
   type: 'photo' | 'video' | 'vector' | 'sticker' | 'icon';
-}
-
-// Icons are SVG. `/files/import` intentionally rejects `image/svg+xml` (anti-XSS — never
-// ingest raw SVG). To keep "Save to Files" functional for icons we rasterize the SVG to a
-// PNG client-side and upload the raster instead (6.3g). Iconify's API sends `ACAO: *`, so the
-// canvas stays untainted with `crossOrigin='anonymous'`.
-async function rasterizeSvgUrlToPngBlob(url: string, size = 512): Promise<Blob> {
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  const loaded = new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error('icon load failed'));
-  });
-  img.src = url;
-  await loaded;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('no canvas context');
-
-  const iw = img.naturalWidth || size;
-  const ih = img.naturalHeight || size;
-  const scale = Math.min(size / iw, size / ih);
-  const dw = iw * scale;
-  const dh = ih * scale;
-  ctx.drawImage(img, (size - dw) / 2, (size - dh) / 2, dw, dh);
-
-  return await new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error('rasterize failed'))),
-      'image/png',
-    ),
-  );
 }
 
 export const StockPreviewModal: FC<StockPreviewModalProps> = ({ item: initialItem, type }) => {
@@ -140,7 +106,7 @@ export const StockPreviewModal: FC<StockPreviewModalProps> = ({ item: initialIte
         name = `${source}-${item.id}.mp4`;
         break;
       case 'vector':
-        name = `${source}-${item.id}.jpg`;
+        name = `${source}-${item.id}.png`;
         break;
       case 'sticker':
         name = `${source}-${item.id}.gif`;
@@ -175,7 +141,7 @@ export const StockPreviewModal: FC<StockPreviewModalProps> = ({ item: initialIte
           type={type}
           downloadLocation={downloadLocation}
           attribution={item.attribution}
-          uploadBlob={type === 'icon' ? () => rasterizeSvgUrlToPngBlob(item.url) : undefined}
+          uploadBlob={type === 'icon' || type === 'vector' ? () => rasterizeSvgUrlToPngBlob(item.url) : undefined}
         />
       ),
       size: 'lg',

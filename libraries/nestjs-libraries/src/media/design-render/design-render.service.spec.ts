@@ -1595,6 +1595,18 @@ describe('DesignRenderService.assertVisualAssets', () => {
     expect([...data.subarray(0, 3)]).toEqual([0, 0, 0]);
   });
 
+  it('paints outline icons using the selected fill as currentColor', async () => {
+    const service = makeService();
+    const doc = docWithImage('<rect x="10" y="10" width="80" height="80" fill="none" stroke="currentColor" stroke-width="20"/>');
+    Object.assign(doc.outputs[0].children[0], { type: 'icon', fill: '#2b5cd3' });
+
+    const png = await service.renderPage(doc, 0);
+    const { data } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    expect([...data.subarray(0, 3)]).toEqual([43, 92, 211]);
+    const pdf = await service.renderPdf(doc);
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+  });
+
   it('does not require assets for hidden content', async () => {
     const service = makeService();
     const doc = docWithImage('https://unreachable.invalid/image.png');

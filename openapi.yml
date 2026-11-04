@@ -11302,6 +11302,10 @@ components:
           maxLength: 64
         attribution:
           type: object
+        aiDesigner:
+          type: string
+          enum:
+            - reference
     SaveMediaDto:
       type: object
       properties:

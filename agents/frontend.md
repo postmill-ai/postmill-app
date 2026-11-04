@@ -218,7 +218,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
 - **Video outputs have variants too.** The `+` add-format flow works in video mode: a new output
   CLONES the current output's tracks/clips with fresh ids and smart-reflows the geometry onto the
   new canvas via `designer-doc/video-reflow.ts` (clips map onto pseudo-elements and go through
-  `smartReflow` — timing, fps and durationMs are invariant). `originId` on `VideoClip` links sibling
+  `smartReflow` — timing, fps and durationMs are invariant). Repeated presets and custom dimensions
+  are allowed in both document modes; the store disambiguates names (`Name 2`, `Name 3`, …) and
+  enforces `MAX_OUTPUTS`. `originId` on `VideoClip` links sibling
   clips across variants: content/style edits propagate through `applyLinkedVideoClip`
   (`apply-linked.ts`), geometry and timing stay local (`VIDEO_CLIP_LOCAL_KEYS`). The same branches
   serve the backend `addOutput`/`resizeOutput` ops, so agent-driven edits match the UI. The backend
@@ -281,6 +283,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   for picture + sound; the overlay paints its frames and seeks only for scrubbing/entry/drift. Never
   create a second hidden video for canvas drawing, and never let one consumer's teardown destroy the
   other's element. Same-id `src` changes must reload the shared element.
+
+- **Stock vectors and icons.** Pixabay vector searches omit blank `q`, cache for 24 hours, and
+  prefer `vectorURL` with the documented raster fallback. Vector picks are rasterized into an
+  owned PNG File before insertion. Icon wrappers set both `fill` and inherited `color`, so outline
+  artwork using `stroke="currentColor"` follows the selected fill in Konva, server PNG/PDF and SVG export.
 
 - **Effects, warp and text metrics are SHARED code, not two implementations.** `designer-doc/`
   carries the painter (`layer-style-render.ts`), the deformation (`warp.ts`), the fitter

@@ -19,6 +19,7 @@ fixtures/*
 !fixtures/replacement.webm
 !fixtures/asymmetric-8x2.png
 !fixtures/transparent-2x2.png
+!fixtures/outline-vector.svg
 
 # Local npm lockfile (this is a standalone Playwright project, deps pinned in package.json)
 package-lock.json

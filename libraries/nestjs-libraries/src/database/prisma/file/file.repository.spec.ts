@@ -58,6 +58,22 @@ describe('FileRepository — metadata storage', () => {
     expect(typeof data.metadata).not.toBe('string');
   });
 
+  it('preserves the AI Designer reference stamp on a raster upload', async () => {
+    const { repo, model } = makeRepo();
+    model.file.create.mockResolvedValue({ id: 'file-reference' });
+
+    await repo.saveFile(
+      'org-1', 'vector.png', 'https://cdn.example.com/vector.png',
+      'vector.png', undefined, 1000,
+      { source: 'pixabay', aiDesigner: 'reference' },
+    );
+
+    const data = model.file.create.mock.calls[0][0].data;
+    expect(data.metadata).toEqual(expect.objectContaining({
+      source: 'pixabay', aiDesigner: 'reference',
+    }));
+  });
+
   it('stores generated-media metadata as a JSON object', async () => {
     const { repo, model } = makeRepo();
     model.file.create.mockResolvedValue({ id: 'file-2' });

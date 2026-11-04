@@ -51,6 +51,7 @@ import {
   blurFilterRadius,
   hasFilterEffect,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/filter-pixels';
+import { wrapIconSvgDataUrl } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-src';
 
 type SelectHandler = (id: string, evt?: Konva.KonvaEventObject<any>) => void;
 
@@ -783,11 +784,13 @@ const IconNode: FC<IconNodeProps> = ({ element, onSelect, onContextMenu, interac
     if (!element.src) return;
     // Not every collection draws on Iconify's 24 grid; an icon carries its own
     // viewBox when it differs, or it renders cropped inside its box.
-    const svg =
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${element.viewBox || '0 0 24 24'}" width="${element.width}" height="${element.height}" fill="${element.fill || '#000000'}">${element.src}</svg>`;
-    // URL-encode rather than btoa: btoa throws on non-Latin-1 characters (e.g. an
-    // SVG carrying a non-ASCII title/glyph).
-    const dataUrl = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    const dataUrl = wrapIconSvgDataUrl(
+      element.src,
+      element.width,
+      element.height,
+      element.fill,
+      element.viewBox
+    );
     const img = new Image();
     img.onload = () => setImageObj(img);
     img.src = dataUrl;

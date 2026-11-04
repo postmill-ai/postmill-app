@@ -116,7 +116,9 @@ return <><Button onClick={picker.open} />{picker.element}</>;
 - **Never wrap it in `openModal`** (rule 8 below) and never render `MediaSelectorModal` yourself.
 - **`requireFile`** replaces the hand-rolled "if `!fileId` → `POST /files/import`" block that had been
   copied into six surfaces. Use it whenever you persist a reference. Don't combine it with a caller
-  that imports the batch itself (the AI Designer does).
+  that imports the batch itself (the AI Designer does). SVG stock assets are rasterized client-side
+  and uploaded through `/files/upload-simple` instead of sending active SVG markup to `/files/import`;
+  raster assets still use `/files/import`. Folder, attribution and AI-reference metadata are preserved.
 - The picker opens on **My Files**, not stock. `FileManager` embedded there renders no page chrome —
   that is gated on its `standalone` prop.
 

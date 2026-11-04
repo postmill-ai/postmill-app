@@ -9,6 +9,10 @@ const ASYMMETRIC_URL = '/mock-storage/asymmetric-8x2.png';
 const REPLACEMENT_IMAGE_URL = '/mock-storage/replacement-image.png';
 const TRANSPARENT_IMAGE_URL = '/mock-storage/transparent.png';
 const CUSTOM_POSTER_URL = '/mock-storage/custom-poster.png';
+const STOCK_VECTOR_URL = '/mock-storage/outline-vector.svg';
+const STOCK_ICON_URL = '/mock-storage/outline-icon.svg';
+const STOCK_VECTOR_THUMB_URL = '/mock-storage/vector-thumb.png';
+const IMPORTED_VECTOR_URL = '/mock-storage/imported-vector.png';
 const GENERATED_POSTER_URL = 'https://app.postmill.ai/mock-storage/generated-poster.jpg';
 const RENDERED_VIDEO_URL = '/mock-storage/designer-render.mp4';
 const GENERATE_PATH = '/media/generate-video';
@@ -249,6 +253,22 @@ class DesignerMocks {
       file: 'asymmetric-8x2.png',
       contentType: 'image/png',
     },
+    [STOCK_VECTOR_URL]: {
+      file: 'outline-vector.svg',
+      contentType: 'image/svg+xml',
+    },
+    [STOCK_ICON_URL]: {
+      file: 'outline-vector.svg',
+      contentType: 'image/svg+xml',
+    },
+    [STOCK_VECTOR_THUMB_URL]: {
+      file: 'asymmetric-8x2.png',
+      contentType: 'image/png',
+    },
+    [IMPORTED_VECTOR_URL]: {
+      file: 'asymmetric-8x2.png',
+      contentType: 'image/png',
+    },
     '/mock-fonts/WendyOne-Regular.ttf': {
       file: 'WendyOne-Regular.ttf',
       contentType: 'font/ttf',
@@ -475,8 +495,67 @@ class DesignerMocks {
         return;
       }
 
+      if (pathname === '/media/detect-focal-point' && method === 'POST') {
+        await json(route, { x: 0.5, y: 0.5 });
+        return;
+      }
+
       if (pathname === '/media/upscale-video' && method === 'POST') {
         await json(route, { id: REPLACEMENT_URL });
+        return;
+      }
+
+      if (pathname === '/media/stock/icons' && method === 'GET') {
+        await json(route, {
+          results: [{
+            id: 'mdi:square',
+            url: STOCK_ICON_URL,
+            thumbUrl: STOCK_ICON_URL,
+            description: 'QA outline icon',
+            author: 'QA Icons',
+            authorUrl: 'https://example.com/icons',
+            sourceUrl: 'https://example.com/icon',
+            width: 24,
+            height: 24,
+            source: 'iconify',
+            prefix: 'mdi',
+            iconName: 'square',
+            license: 'MIT',
+            attribution: { provider: 'Iconify', license: 'MIT' },
+          }],
+          page: 1,
+          totalPages: 1,
+          configured: true,
+          source: 'iconify',
+        });
+        return;
+      }
+
+      if (pathname === '/media/icons/resolve' && method === 'GET') {
+        await json(route, { body: '<rect x="3" y="3" width="18" height="18" fill="none" stroke="currentColor" stroke-width="4"/>' });
+        return;
+      }
+
+      if (pathname === '/media/stock/vectors' && method === 'GET') {
+        await json(route, {
+          results: [{
+            id: 'vector-1',
+            url: STOCK_VECTOR_URL,
+            thumbUrl: STOCK_VECTOR_THUMB_URL,
+            description: 'QA outline vector',
+            author: 'QA Artist',
+            authorUrl: 'https://example.com/qa-artist',
+            sourceUrl: 'https://example.com/vector',
+            width: 24,
+            height: 24,
+            source: 'pixabay',
+            attribution: { provider: 'Pixabay', userId: 42 },
+          }],
+          page: 1,
+          totalPages: 1,
+          configured: true,
+          source: 'pixabay',
+        });
         return;
       }
 
@@ -552,6 +631,10 @@ class DesignerMocks {
 
       if (pathname === '/files/upload-simple' && method === 'POST') {
         const multipart = request.postDataBuffer()?.toString('latin1') || '';
+        if (multipart.includes('QA outline vector.png')) {
+          await json(route, { id: 'vector-file-1', path: IMPORTED_VECTOR_URL });
+          return;
+        }
         const customPoster = multipart.includes('asymmetric-8x2.png');
         await json(route, customPoster
           ? { id: 'custom-poster-e2e', path: CUSTOM_POSTER_URL }
@@ -1859,6 +1942,78 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
     expect(mocks.savedClips()[0]?.fill).toBe('#123456');
     expect(mocks.assistantSuggestionPosts).toHaveLength(1);
     expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
+test.describe('Designer stock vectors and repeated output dimensions', () => {
+  test('adds the same preset twice with unique names that survive save and reload', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    mocks.doc.outputs[0].formatId = 'ig-post';
+    mocks.doc.outputs[0].name = 'Instagram Post';
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+
+    for (let index = 0; index < 2; index++) {
+      await page.getByRole('button', { name: 'Add format', exact: true }).click();
+      const checkbox = page.getByRole('checkbox', { name: /Instagram Post/ });
+      expect((await checkbox.isDisabled()).valueOf()).toBe(false);
+      await checkbox.click();
+      await page.getByRole('button', { name: 'Add 1 format', exact: true }).click();
+    }
+
+    await expect.poll(() => mocks.doc.outputs.length).toBe(3);
+    expect(mocks.doc.outputs.map((output) => output.formatId)).toEqual(['ig-post', 'ig-post', 'ig-post']);
+    expect(mocks.doc.outputs.map((output) => output.name)).toEqual([
+      'Instagram Post', 'Instagram Post 2', 'Instagram Post 3',
+    ]);
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByText('Instagram Post 3', { exact: true })).toBeVisible();
+    expect(mocks.doc.outputs).toHaveLength(3);
+    mocks.expectClean();
+  });
+
+  test('imports an SVG vector to an owned PNG before inserting it', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+
+    await page.getByRole('menuitem', { name: 'Insert', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Vector…', exact: true }).click();
+    await page.getByRole('button', { name: 'QA outline vector', exact: true }).click();
+
+    await expect.poll(() => mocks.doc.outputs[0].children?.some(
+      (element) => element.fileId === 'vector-file-1' && element.src === IMPORTED_VECTOR_URL
+    )).toBe(true);
+    expect(mocks.doc.outputs[0].children?.some(
+      (element) => element.src === STOCK_VECTOR_URL
+    )).toBe(false);
+    mocks.expectClean();
+  });
+
+  test('recolors an outline stock icon on the canvas', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    mocks.doc.outputs[0].background = '#ffffff';
+    delete mocks.doc.outputs[0].bg;
+    mocks.doc.outputs[0].children = [];
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+
+    await page.getByRole('menuitem', { name: 'Insert', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Stock Icon…', exact: true }).click();
+    await page.getByRole('button', { name: 'QA outline icon', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.type).toBe('icon');
+    const before = await canvasFingerprint(page);
+
+    await page.getByRole('button', { name: '#2B5CD3', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Hex color', exact: true }).fill('#123456');
+    await page.getByRole('textbox', { name: 'Hex color', exact: true }).press('Enter');
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.fill).toBe('#123456');
+    expect(await canvasFingerprint(page)).not.toBe(before);
     mocks.expectClean();
   });
 });

@@ -3,9 +3,13 @@ import { renderHook } from '@testing-library/react';
 import { useImportStockMedia } from './media-import';
 
 const fetchMock = vi.fn();
+const rasterizeMock = vi.fn();
 
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => fetchMock,
+}));
+vi.mock('./media-svg', () => ({
+  rasterizeSvgUrlToPngBlob: (...args: unknown[]) => rasterizeMock(...args),
 }));
 
 const stockItem = {
@@ -26,6 +30,8 @@ const okResponse = () =>
 beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(okResponse());
+  rasterizeMock.mockReset();
+  rasterizeMock.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
 });
 
 describe('useImportStockMedia', () => {
@@ -63,5 +69,32 @@ describe('useImportStockMedia', () => {
       fileId: 'file-1',
       url: '/uploads/file-1.jpg',
     });
+  });
+
+  it('rasterizes SVG sources and preserves folder, attribution, and AI reference metadata', async () => {
+    const { result } = renderHook(() => useImportStockMedia());
+    const svgItem = {
+      ...stockItem,
+      url: 'https://cdn.example/vector.svg',
+      name: 'Vector artwork.svg',
+      stockSource: 'pixabay',
+      attribution: { provider: 'Pixabay', userId: 42 },
+    };
+
+    const imported = await result.current(svgItem as any, {
+      folderId: 'folder-1',
+      aiDesigner: 'reference',
+    });
+
+    expect(rasterizeMock).toHaveBeenCalledWith(svgItem.url);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/files/upload-simple');
+    const form = init.body as FormData;
+    expect((form.get('file') as File).name).toBe('Vector artwork.png');
+    expect(form.get('folderId')).toBe('folder-1');
+    expect(form.get('source')).toBe('pixabay');
+    expect(form.get('attribution')).toBe(JSON.stringify(svgItem.attribution));
+    expect(form.get('aiDesigner')).toBe('reference');
+    expect(imported).toMatchObject({ source: 'file', fileId: 'file-1' });
   });
 });

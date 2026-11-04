@@ -29,6 +29,7 @@ describe('wrapIconSvgDataUrl', () => {
     expect(svg).toContain('width="120"');
     expect(svg).toContain('height="120"');
     expect(svg).toContain('fill="#2B5CD3"');
+    expect(svg).toContain('color="#2B5CD3"');
     expect(svg).toContain('<path d="M0 0h1v1z"/>');
   });
 

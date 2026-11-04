@@ -202,7 +202,12 @@ export class FilesController {
         originalName,
         folderId,
         file?.size,
-        { internal: body.internal, source: body.source, attribution: body.attribution }
+        {
+          internal: body.internal,
+          source: body.source,
+          attribution: body.attribution,
+          aiDesigner: body.aiDesigner,
+        }
       );
       this._enqueueVideoThumbnail(org.id, file, saved.id);
       return saved;
