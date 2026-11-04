@@ -8,7 +8,7 @@ import {
 } from './raster-layers';
 import { DEFAULT_TOOL_ID, getTool } from './tools';
 import type { SelectionMask } from './selection-mask';
-import { DESIGNER_DOC_VERSION, MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { DESIGNER_DOC_VERSION, MAX_OUTPUTS, MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { splitSpeedCurveForClip } from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
 import {
   pageChildren,
@@ -1274,6 +1274,12 @@ export const createDesignerStore = (
 
       addOutput: (preset) => {
         const { doc, currentOutput } = get();
+        if (doc.outputs.length >= MAX_OUTPUTS) return;
+        let name = preset.name;
+        for (let suffix = 2; doc.outputs.some((out) => out.name === name); suffix++) {
+          name = `${preset.name} ${suffix}`;
+        }
+        const namedPreset = { ...preset, name };
         if (isVideoMode()) {
           // Video variant: clone the CURRENT output's tracks/clips with fresh
           // ids (originId shared, backfilled on the source) and smart-reflow
@@ -1281,7 +1287,7 @@ export const createDesignerStore = (
           // unchanged — see designer-doc/video-reflow.
           const source = doc.outputs[currentOutput] as VideoOutput;
           if (!source || !('tracks' in source)) return;
-          const { output, sourceTracks } = seedVideoOutput(source, preset);
+          const { output, sourceTracks } = seedVideoOutput(source, namedPreset);
           const outs = doc.outputs.map((o, i) =>
             i === currentOutput ? { ...(o as VideoOutput), tracks: sourceTracks } : o
           );
@@ -1300,7 +1306,7 @@ export const createDesignerStore = (
         }
         const source = doc.outputs[currentOutput] as DesignerOutput;
         const sourceChildren = source.children.map((el) => (el.originId ? el : { ...el, originId: genId() }));
-        const targetBasis = { ...preset, id: '', background: '#fff', children: [] } as DesignerOutput;
+        const targetBasis = { ...namedPreset, id: '', background: '#fff', children: [] } as DesignerOutput;
         const groupBoxes = computeGroupBoxes(sourceChildren, source);
         const children = sourceChildren.map((el) =>
           seedCopy(el, source, targetBasis, el.originId as string, el.groupId ? groupBoxes.get(el.groupId) : undefined),
@@ -1318,8 +1324,8 @@ export const createDesignerStore = (
           };
         });
         const newOutput: DesignerOutput = {
-          id: genId(), formatId: preset.formatId, name: preset.name,
-          width: preset.width, height: preset.height,
+          id: genId(), formatId: namedPreset.formatId, name: namedPreset.name,
+          width: namedPreset.width, height: namedPreset.height,
           background: source.background, bg: source.bg, children,
           ...(pages?.length ? { pages } : {}),
         };

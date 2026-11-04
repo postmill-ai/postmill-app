@@ -20,8 +20,8 @@ export const isSvgMarkupSrc = (src: string): boolean =>
 
 /**
  * Wrap a raw SVG body as a loadable data URL. Mirrors the client `IconNode`
- * (elements.tsx) exactly: `fill` baked in, URL-encoded rather than base64
- * because btoa throws on non-Latin-1 glyphs.
+ * (elements.tsx) exactly: `fill` and inherited `color` baked in, URL-encoded
+ * rather than base64 because btoa throws on non-Latin-1 glyphs.
  *
  * The viewBox defaults to 24×24 — Iconify's own grid and what the bundled icons
  * use — but an icon from a collection drawn on 16, 32 or 512 carries its own,
@@ -36,7 +36,7 @@ export const wrapIconSvgDataUrl = (
 ): string => {
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox || '0 0 24 24'}" ` +
-    `width="${width}" height="${height}" fill="${fill || '#000000'}">${body}</svg>`;
+    `width="${width}" height="${height}" fill="${fill || '#000000'}" color="${fill || '#000000'}">${body}</svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 };
 

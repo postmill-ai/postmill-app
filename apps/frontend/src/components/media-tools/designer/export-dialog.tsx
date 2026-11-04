@@ -1595,7 +1595,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                   className="flex items-center justify-between gap-2 px-2 py-1 rounded-[6px] bg-newBgColorInner border border-studioBorder/50"
                 >
                   <span className="text-[12px] text-textColor truncate flex-1">
-                    {preset?.name || output.name || output.formatId}
+                    {output.name || preset?.name || output.formatId}
                   </span>
                   <select
                     value={fmt}
@@ -1914,7 +1914,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                 const preset = CHANNEL_PRESETS.find((p) => p.id === o.formatId);
                 return (
                   <span key={o.id} className="bg-newBgColorInner px-2 py-0.5 rounded-[4px]">
-                    {preset?.name || o.name}: {fmt.toUpperCase()}
+                    {o.name || preset?.name || o.formatId}: {fmt.toUpperCase()}
                   </span>
                 );
               })}

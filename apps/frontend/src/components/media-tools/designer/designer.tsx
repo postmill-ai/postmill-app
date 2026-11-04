@@ -1169,6 +1169,7 @@ export const Designer: FC<DesignerProps> = ({
       mediaPicker.openWith({
         title: TITLES[kind],
         tabs: TABS[kind],
+        requireFile: kind === 'vector',
         onSelect: (item) => {
           if (isTimelineMedia) {
             void addMediaToTimeline(store, {

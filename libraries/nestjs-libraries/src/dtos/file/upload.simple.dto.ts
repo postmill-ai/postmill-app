@@ -52,4 +52,8 @@ export class UploadSimpleBodyDto {
     }
   })
   attribution?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsIn(['reference'])
+  aiDesigner?: 'reference';
 }

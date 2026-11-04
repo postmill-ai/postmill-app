@@ -197,10 +197,6 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
 
   const linkedUpdateFlash: Record<number, number> = store((s: any) => s.linkedUpdateFlash) || {};
 
-  const existingFormatIds = new Set(
-    outputs.map((o: any) => o.formatId),
-  );
-
   const reduceMotion =
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -244,7 +240,6 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
   };
 
   const toggleFormat = (id: string) => {
-    if (existingFormatIds.has(id)) return;
     setPendingFormats((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -502,13 +497,9 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           {mode === 'image' && (
           <button
             onClick={() => {
-              setPendingFormats(
-                new Set(
-                  RECOMMENDED_IDS.filter(
-                    (id) => !existingFormatIds.has(id),
-                  ),
-                ),
-              );
+              setPendingFormats(new Set(RECOMMENDED_IDS.filter(
+                (id) => !outputs.some((output) => output.formatId === id)
+              )));
             }}
             className="w-full text-left px-2 py-1.5 rounded-sm text-[11px] text-btnPrimaryAccent hover:bg-designerAccent/10 mb-2 border border-designerAccent/30"
           >
@@ -529,28 +520,19 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
                       {key === 'custom' ? t('designer_group_custom', 'Custom') : group.label}
                     </div>
                     {group.presets.map((p) => {
-                      const already = existingFormatIds.has(p.id);
                       return (
                         <label
                           key={p.id}
                           className={`flex items-center gap-2 px-2 py-1.5 rounded text-[12px] ${
-                            already
-                              ? 'text-textColor/25 cursor-not-allowed'
-                              : pendingFormats.has(p.id)
-                                ? 'text-btnPrimaryAccent bg-designerAccent/10 cursor-pointer hover:bg-designerAccent/15'
-                                : 'text-textColor cursor-pointer hover:bg-studioBorder/10'
+                            pendingFormats.has(p.id)
+                              ? 'text-btnPrimaryAccent bg-designerAccent/10 cursor-pointer hover:bg-designerAccent/15'
+                              : 'text-textColor cursor-pointer hover:bg-studioBorder/10'
                           }`}
                         >
                           <input
                             type="checkbox"
-                            checked={
-                              already ||
-                              pendingFormats.has(p.id)
-                            }
-                            disabled={already}
-                            onChange={() =>
-                              toggleFormat(p.id)
-                            }
+                            checked={pendingFormats.has(p.id)}
+                            onChange={() => toggleFormat(p.id)}
                             className="w-3.5 h-3.5 accent-designerAccent disabled:opacity-30 shrink-0"
                           />
                           <span className="flex-1 truncate">

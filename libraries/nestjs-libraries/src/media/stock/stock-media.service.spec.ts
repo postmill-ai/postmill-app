@@ -354,6 +354,56 @@ describe('StockMediaService', () => {
     });
   });
 
+  describe('Pixabay vectors', () => {
+    it('omits a blank query, preserves filters, and caches successful responses for 24 hours', async () => {
+      process.env.PIXABAY_API_KEY = 'secret-key';
+      mockSafeFetch.mockResolvedValue(jsonResponse({ hits: [], totalHits: 0 }));
+      const { service, redis } = makeService();
+
+      await service.searchVectors('org-1', '  ', 1, 'horizontal', 'blue');
+
+      const url = new URL(mockSafeFetch.mock.calls[0][0] as string);
+      expect(url.searchParams.has('q')).toBe(false);
+      expect(url.searchParams.get('orientation')).toBe('horizontal');
+      expect(url.searchParams.get('colors')).toBe('blue');
+      expect(url.searchParams.get('safesearch')).toBe('true');
+      expect(redis.set).toHaveBeenCalledWith(expect.any(String), expect.any(String), 86400);
+    });
+
+    it('uses the short cache TTL for provider errors', async () => {
+      process.env.PIXABAY_API_KEY = 'secret-key';
+      mockSafeFetch.mockResolvedValue(jsonResponse({ error: 'invalid key' }, false));
+      const { service, redis } = makeService();
+
+      const result = await service.searchVectors('org-1', 'icons', 1);
+
+      expect(result.error).toBe('pixabay request failed (HTTP 403)');
+      expect(redis.set).toHaveBeenCalledWith(expect.any(String), expect.any(String), 60);
+    });
+
+    it('prefers SVG vectorURL values and otherwise falls back to a documented raster URL', async () => {
+      process.env.PIXABAY_API_KEY = 'secret-key';
+      mockSafeFetch.mockResolvedValue(jsonResponse({
+        totalHits: 3,
+        hits: [
+          { id: 1, vectorURL: 'https://cdn.example/vector.svg', largeImageURL: 'https://cdn.example/vector.png', user: 'A', user_id: 10 },
+          { id: 2, vectorURL: 'https://pixabay.com/get/vector.ai', largeImageURL: 'https://cdn.example/vector-ai.png', user: 'B', user_id: 20 },
+          { id: 3, largeImageURL: 'https://cdn.example/raster.png', user: 'C', user_id: 30 },
+        ],
+      }));
+      const { service } = makeService();
+
+      const result = await service.searchVectors('org-1', 'icons', 1);
+
+      expect(result.results.map((item) => item.url)).toEqual([
+        'https://cdn.example/vector.svg',
+        'https://cdn.example/vector-ai.png',
+        'https://cdn.example/raster.png',
+      ]);
+      expect(new URL(mockSafeFetch.mock.calls[0][0] as string).searchParams.get('q')).toBe('icons');
+    });
+  });
+
   describe('Iconify icons — license normalization (POSTMILL-APP-J)', () => {
     const searchWith = (collections: Record<string, unknown>) => {
       mockSafeFetch.mockResolvedValueOnce(

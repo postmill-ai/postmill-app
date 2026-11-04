@@ -304,17 +304,24 @@ export class StockMediaService {
       try {
         const params = new URLSearchParams({
           key: this.pixabayKey!,
-          q: query || '',
           page: String(page),
           per_page: '20',
           image_type: 'vector',
           safesearch: 'true',
         });
+        if (query.trim()) params.set('q', query.trim());
         if (orientation) params.set('orientation', orientation);
         if (color) params.set('colors', color);
 
         const res = await safeFetch(`https://pixabay.com/api/?${params}`);
         if (!res.ok) {
+          const body = (await res.text().catch(() => ''))
+            .replace(/([?&]key=)[^&\s]+/gi, '$1[redacted]')
+            .replace(/[A-Za-z0-9_-]{24,}/g, '[redacted]')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 200);
+          this._logger.warn(`Pixabay vector search failed (HTTP ${res.status}): ${body || 'no response body'}`);
           return { results: [], page, totalPages: 0, configured: true, source: 'pixabay', error: `pixabay request failed (HTTP ${res.status})` };
         }
         const data = (await res.json()) as any;
@@ -332,7 +339,7 @@ export class StockMediaService {
         this._logger.warn(`Pixabay vector search failed: ${(err as Error).message}`);
         return { results: [], page, totalPages: 0, configured: true, source: 'pixabay', error: 'pixabay request failed (network or invalid response)' };
       }
-    });
+    }, 24 * 60 * 60);
   }
 
   // ── Stickers (GIPHY) ───────────────────────────────────────
@@ -718,8 +725,9 @@ export class StockMediaService {
     // before withCache, so `configured:false` only reaches this point on a
     // transient provider failure — caching it would suppress the tab for 60s.
     if ((result as { configured?: boolean }).configured !== false) {
+      const cacheTtl = (result as { error?: string }).error ? CACHE_TTL_SECONDS : ttl;
       try {
-        await this._redis.set(key, JSON.stringify(result), ttl).catch(() => {});
+        await this._redis.set(key, JSON.stringify(result), cacheTtl).catch(() => {});
       } catch {
         // ignore
       }
@@ -766,9 +774,12 @@ export class StockMediaService {
   }
 
   private mapPixabayVector(hit: any): StockVectorItem {
+    const vectorUrl = typeof hit.vectorURL === 'string' && /\.svg(?:$|[?#])/i.test(hit.vectorURL)
+      ? hit.vectorURL
+      : '';
     return {
       id: String(hit.id),
-      url: hit.largeImageURL || hit.imageURL || hit.webformatURL || '',
+      url: vectorUrl || hit.largeImageURL || hit.imageURL || hit.webformatURL || '',
       thumbUrl: hit.previewURL || hit.webformatURL || '',
       description: hit.tags || null,
       author: hit.user || 'Unknown',

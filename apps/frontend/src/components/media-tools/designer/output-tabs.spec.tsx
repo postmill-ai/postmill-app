@@ -114,4 +114,54 @@ describe('OutputTabs in video mode', () => {
     expect(out.height).toBe(1920);
     expect(out.formatId).toBe('custom-tall');
   });
+
+  it('allows a repeated video preset with a disambiguated name', () => {
+    const store = videoStore();
+    const preset = { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 };
+
+    store.getState().addOutput(preset);
+    store.getState().addOutput(preset);
+
+    expect(store.getState().doc.outputs.map((out) => out.formatId)).toEqual([
+      'ig-post', 'custom-tall', 'custom-tall',
+    ]);
+    expect(store.getState().doc.outputs.map((out) => out.name)).toEqual([
+      'Instagram Post', 'Tall', 'Tall 2',
+    ]);
+  });
+});
+
+describe('OutputTabs repeated dimensions', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('allows selecting an already-used preset and adds a numbered output', () => {
+    const store = createDesignerStore();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    const checkbox = screen.getByRole('checkbox', { name: /Instagram Post/ });
+    expect((checkbox as HTMLInputElement).disabled).toBe(false);
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole('button', { name: 'Add 1 format' }));
+
+    expect(store.getState().doc.outputs).toHaveLength(2);
+    expect(store.getState().doc.outputs[1]).toMatchObject({
+      formatId: 'ig-post', name: 'Instagram Post 2', width: 1080, height: 1080,
+    });
+  });
+
+  it('keeps the recommended-set shortcut limited to formats not already present', () => {
+    const store = createDesignerStore();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Recommended set (IG Post + Story + Linked + X)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add 3 format' }));
+
+    expect(store.getState().doc.outputs.map((out) => out.formatId)).toEqual([
+      'ig-post', 'ig-story', 'linkedin-post', 'x-post',
+    ]);
+  });
 });

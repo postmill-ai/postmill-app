@@ -396,6 +396,45 @@ describe('Designer smoke: multi-format linked editing', () => {
   });
 });
 
+describe('repeated output dimensions', () => {
+  it('allows repeated presets and custom sizes with unique names and format-local geometry', () => {
+    const store = createDesignerStore();
+    const preset = { formatId: 'x-post', name: 'X Post', width: 1600, height: 900 };
+
+    store.getState().addOutput(preset);
+    store.getState().addOutput(preset);
+    store.getState().addOutput({ formatId: 'custom', name: '500×500', width: 500, height: 500 });
+    store.getState().addOutput({ formatId: 'custom', name: '500×500', width: 500, height: 500 });
+
+    expect(store.getState().doc.outputs.map((out) => out.formatId)).toEqual([
+      'ig-post', 'x-post', 'x-post', 'custom', 'custom',
+    ]);
+    expect(store.getState().doc.outputs.map((out) => out.name)).toEqual([
+      'Instagram Post', 'X Post', 'X Post 2', '500×500', '500×500 2',
+    ]);
+    store.getState().resizeOutput(1, 600, 600);
+    expect(store.getState().doc.outputs[1].width).toBe(600);
+    expect(store.getState().doc.outputs[2].width).toBe(1600);
+  });
+
+  it('enforces MAX_OUTPUTS without changing the existing document', () => {
+    const store = createDesignerStore();
+    const doc = store.getState().doc;
+    store.setState({
+      doc: {
+        ...doc,
+        outputs: Array.from({ length: 30 }, (_, index) => ({
+          ...doc.outputs[0], id: `out-${index}`, name: `Output ${index}`,
+        })),
+      },
+    });
+
+    store.getState().addOutput({ formatId: 'x-post', name: 'X Post', width: 1600, height: 900 });
+
+    expect(store.getState().doc.outputs).toHaveLength(30);
+  });
+});
+
 describe('raster buffer lifecycle', () => {
   beforeEach(() => {
     // jsdom's canvas rejects drawImage of an unloaded Image; the pixels are

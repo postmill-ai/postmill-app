@@ -123,6 +123,7 @@ export class FileRepository {
       internal?: 'design-preview';
       source?: string;
       attribution?: Record<string, unknown>;
+      aiDesigner?: 'reference';
     }
   ) {
     const mimeType = mimeFromName(fileName);
@@ -137,6 +138,7 @@ export class FileRepository {
     // Stock provenance, same metadata keys FileService.importFromUrl writes.
     if (options?.source) meta.source = options.source;
     if (options?.attribution) meta.attribution = options.attribution;
+    if (options?.aiDesigner) meta.aiDesigner = options.aiDesigner;
 
     let resolvedFileSize = fileSize ?? 0;
 

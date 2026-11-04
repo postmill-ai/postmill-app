@@ -177,6 +177,7 @@ export class FileService {
       internal?: 'design-preview';
       source?: string;
       attribution?: Record<string, unknown>;
+      aiDesigner?: 'reference';
     }
   ) {
     await this._storageService.assertWithinQuota(org, fileSize ?? 0);

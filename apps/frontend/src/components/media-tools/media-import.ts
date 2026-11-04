@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import type { MediaSelectorItem } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { rasterizeSvgUrlToPngBlob } from './media-svg';
 
 /**
  * Import a stock-sourced media item into the org's `/files` library so it has a
@@ -22,24 +23,35 @@ export const useImportStockMedia = () => {
       opts: { folderId?: string | null; name?: string; aiDesigner?: 'reference' } = {}
     ): Promise<MediaSelectorItem> => {
       if (item.source === 'file' && item.fileId) return item;
-      const body: Record<string, unknown> = {
-        url: item.url,
-        name: opts.name || item.name || 'Reference',
-        type: item.type,
-      };
-      if (item.stockSource) body.source = item.stockSource;
-      if (item.downloadLocation) body.downloadLocation = item.downloadLocation;
-      if (item.attribution) body.attribution = item.attribution;
-      if (opts.folderId) body.folderId = opts.folderId;
-      // AI Designer reference images are intermediates: the stamp hides them
-      // from the library listing and lets session teardown purge them.
-      if (opts.aiDesigner) body.aiDesigner = opts.aiDesigner;
+      let res: Response;
+      if (/\.svg(?:$|[?#])/i.test(item.url)) {
+        const blob = await rasterizeSvgUrlToPngBlob(item.url, item.stockSource === 'pixabay' ? 2048 : 512);
+        const name = `${(opts.name || item.name || 'Reference').replace(/\.[^.]+$/, '')}.png`;
+        const form = new FormData();
+        form.append('file', blob, name);
+        if (opts.folderId) form.append('folderId', opts.folderId);
+        if (item.stockSource) form.append('source', item.stockSource);
+        if (item.attribution) form.append('attribution', JSON.stringify(item.attribution));
+        if (opts.aiDesigner) form.append('aiDesigner', opts.aiDesigner);
+        res = await fetch('/files/upload-simple', { method: 'POST', body: form });
+      } else {
+        const body: Record<string, unknown> = {
+          url: item.url,
+          name: opts.name || item.name || 'Reference',
+          type: item.type,
+        };
+        if (item.stockSource) body.source = item.stockSource;
+        if (item.downloadLocation) body.downloadLocation = item.downloadLocation;
+        if (item.attribution) body.attribution = item.attribution;
+        if (opts.folderId) body.folderId = opts.folderId;
+        if (opts.aiDesigner) body.aiDesigner = opts.aiDesigner;
 
-      const res = await fetch('/files/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+        res = await fetch('/files/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      }
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(text || `Import failed (${res.status})`);

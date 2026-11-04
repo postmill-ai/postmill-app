@@ -22,6 +22,11 @@ A typical workflow moves from `/media` to `/files` and back:
 4. From `/files`, you can **Open in Designer**, or use the asset as a source image/video/audio in
    another studio.
 
+Stock selections that need a persistent File reference are imported into your organization's storage.
+SVG vectors are rasterized to PNG before upload rather than stored as active SVG documents; ordinary
+raster stock assets use the normal URL import path. Attribution and AI Designer reference metadata
+are preserved.
+
 System artifacts are kept out of the library listing: the preview thumbnails saved with designs and
 templates, and the intermediate asset/reference files the AI Designer imports while working on a
 session, are hidden from `/files` (they stay reachable by the designs that use them).

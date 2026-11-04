@@ -341,6 +341,19 @@ describe('source crop and focal geometry', () => {
     expect(bottom[3]).toBe(255);
   });
 
+  it('keeps the selected icon color on filled and currentColor outline artwork', () => {
+    const svg = outputToSvg(output([
+      el({
+        type: 'icon', fill: '#2b5cd3',
+        src: '<rect x="10" y="10" width="80" height="80" fill="none" stroke="currentColor" stroke-width="20"/>',
+      }),
+    ]));
+
+    expect(svg).toContain('fill%3D%22%232b5cd3%22');
+    expect(svg).toContain('color%3D%22%232b5cd3%22');
+    expect(svg).toContain('stroke%3D%22currentColor%22');
+  });
+
   it('rasterizes older cropped content that lacks intrinsic dimensions', () => {
     const cropped = el({ type: 'image', crop: { x: 1, y: 0, width: 2, height: 2 } });
     expect(isVectorExportable(cropped)).toBe(false);
