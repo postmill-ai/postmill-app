@@ -68,6 +68,28 @@ describe('useLaunchStore', () => {
     });
   });
 
+  describe('addInternalValue initialization', () => {
+    it('uses the loaded channel when the editor initializes before selection', () => {
+      const store = useLaunchStore;
+      const int = integration('a');
+      const value = [
+        { id: 'post-1', content: 'Existing post', delay: 0, media: [] },
+      ];
+
+      store.getState().setAllIntegrations([int]);
+      expect(() =>
+        store.getState().addInternalValue(0, int.id, value)
+      ).not.toThrow();
+      expect(store.getState().internal).toEqual([
+        expect.objectContaining({ integration: int, integrationValue: value }),
+      ]);
+
+      store.getState().addOrRemoveSelectedIntegration(int, {});
+      expect(store.getState().selectedIntegrations).toHaveLength(1);
+      expect(store.getState().internal[0].integrationValue).toEqual(value);
+    });
+  });
+
   describe('deleteGlobalValue (4.5g documented id-reuse)', () => {
     it('keeps ids pinned to slot position while content shifts up', () => {
       const store = useLaunchStore;
