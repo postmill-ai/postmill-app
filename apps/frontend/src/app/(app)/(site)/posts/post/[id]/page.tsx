@@ -24,7 +24,11 @@ export default function EditPostPage() {
   }, [fetch]);
 
   const loadPost = useCallback(async (path: string) => {
-    return await (await fetch(path)).json();
+    const response = await fetch(path);
+    if (!response.ok) {
+      return null;
+    }
+    return response.json();
   }, [fetch]);
 
   const { data: integrations, isLoading: integrationsLoading } = useSWR<
@@ -60,7 +64,7 @@ export default function EditPostPage() {
 
   // Never blank-page: a deleted post or a since-disconnected channel both
   // used to render `null` with no way out.
-  if (!postData) {
+  if (!postData?.posts?.length) {
     return (
       <div className="flex justify-center p-[40px]">
         <EmptyState

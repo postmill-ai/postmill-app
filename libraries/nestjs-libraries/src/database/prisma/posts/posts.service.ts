@@ -6,6 +6,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
   ValidationPipe,
 } from '@nestjs/common';
 import { PostValidationException } from '@postmill-ai/nestjs-libraries/errors/post-validation.exception';
@@ -662,9 +663,12 @@ export class PostsService {
     const posts = this._stripIntegrationSecrets(
       this.arrangePostsByGroup(loadAll, undefined)
     );
+    if (!posts.length) {
+      throw new NotFoundException('Post not found');
+    }
 
     return {
-      group: posts?.[0]?.group,
+      group: posts[0].group,
       posts: await Promise.all(
         (posts || []).map(async (post) => ({
           ...post,

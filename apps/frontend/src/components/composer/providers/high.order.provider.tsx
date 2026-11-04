@@ -12,7 +12,10 @@ import { useForm, FormProvider } from 'react-hook-form';
 import { IsOptional } from 'class-validator';
 import { classValidatorResolver } from '@hookform/resolvers/class-validator';
 import { sanitizeProviderSettings } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/sanitize.settings';
-import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
+import {
+  SelectedIntegrations,
+  useLaunchStore,
+} from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
 import { GeneralPreviewComponent } from '@postmill-ai/frontend/components/launches/general.preview.component';
 import { IntegrationContext } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
@@ -61,11 +64,32 @@ export const withProvider = function <T extends object>(params: {
   } = params;
 
   const Wrapped = forwardRef(function Wrapped(props: { id: string }, ref) {
+    const selectedIntegration = useLaunchStore((state) =>
+      state.selectedIntegrations.find((p) => p.integration.id === props.id)
+    );
+
+    if (!selectedIntegration) {
+      return null;
+    }
+
+    return (
+      <ProviderForm
+        {...props}
+        ref={ref}
+        selectedIntegration={selectedIntegration}
+      />
+    );
+  });
+
+  const ProviderForm = forwardRef(function ProviderForm(
+    props: { id: string; selectedIntegration: SelectedIntegrations },
+    ref
+  ) {
+    const { selectedIntegration } = props;
     const t = useT();
     const fetch = useFetch();
     const {
       current,
-      selectedIntegration,
       setCurrent,
       internal,
       global,
@@ -100,9 +124,6 @@ export const withProvider = function <T extends object>(params: {
         setPostComment: state.setPostComment,
         setEditor: state.setEditor,
         setChars: state.setChars,
-        selectedIntegration: state.selectedIntegrations.find(
-          (p) => p.integration.id === props.id
-        ),
       }))
     );
 
