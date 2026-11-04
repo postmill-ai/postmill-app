@@ -241,13 +241,24 @@ export const useLaunchStore = create<StoreState>()((set) => ({
       );
 
       if (integrationIndex === -1) {
+        const integration =
+          state.selectedIntegrations.find(
+            (i) => i.integration.id === integrationId
+          )?.integration ||
+          state.integrations.find((i) => i.id === integrationId);
+
+        if (!integration) {
+          console.warn(
+            'Composer content initialization skipped: channel unavailable'
+          );
+          return {};
+        }
+
         return {
           internal: [
             ...state.internal,
             {
-              integration: state.selectedIntegrations.find(
-                (i) => i.integration.id === integrationId
-              )!.integration,
+              integration,
               integrationValue: value,
             },
           ],
