@@ -269,8 +269,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   scrolls when expanded panels exceed the viewport, and Brand mounts only in its active layout.
   Mobile keeps design rename and timeline collapse/zoom-to-fit available; desktop adds a direct rail
   Brand button through the same `brandPanel.toggle()` action as the Window menu.
-- **Timeline gestures and exact timing.** Clip move/trim and ruler scrub use pointer capture with
-  pointer-id checks, cancellation/lost-capture handling, and bounded horizontal/vertical auto-scroll.
+- **Timeline gestures and exact timing.** Clip move/trim and ruler scrub use `trySetPointerCapture`
+  from `pointer-capture.ts` (an inactive pointer returns false instead of throwing; every Designer
+  capture call goes through it), with pointer-id checks, cancellation/lost-capture handling, and
+  bounded horizontal/vertical auto-scroll.
   `clip-timing.ts` shares the drag's move/trim rules with the Inspector's Start/End/Duration steppers
   and the expanded mobile timeline's compact selected-clip editor. These are clip-local and separate
   from the output-duration stepper. Each changed stepper edit commits one history entry (unchanged

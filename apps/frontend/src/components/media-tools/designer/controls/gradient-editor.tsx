@@ -4,6 +4,7 @@ import React, { FC, useCallback, useRef } from 'react';
 import { ColorSwatch, SegmentedControl, Slider } from './index';
 import type { DesignerGradient } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { trySetPointerCapture } from '../pointer-capture';
 
 /**
  * The gradient editor.
@@ -100,7 +101,7 @@ export const GradientEditor: FC<{
   const onPointerDown = (index: number) => (e: React.PointerEvent) => {
     e.preventDefault();
     dragging.current = index;
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    trySetPointerCapture(e.target as HTMLElement, e.pointerId);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {

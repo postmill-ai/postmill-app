@@ -5,6 +5,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { DeleteLayerIcon, DuplicateClipIcon } from '@postmill-ai/frontend/components/ui/icons/designer-tools';
 import { TOOL_GROUPS } from './tools';
 import { ToolOptionsBar } from './tool-options-bar';
+import { trySetPointerCapture } from './pointer-capture';
 
 type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
 
@@ -153,7 +154,7 @@ export const MobileSheetHeader: FC<{
         className="hidden mobile:flex h-8 w-8 cursor-row-resize touch-none items-center justify-center text-textColor/50"
         onPointerDown={(event) => {
           dragStartY.current = event.clientY;
-          event.currentTarget.setPointerCapture(event.pointerId);
+          trySetPointerCapture(event.currentTarget, event.pointerId);
         }}
         onPointerUp={(event) => {
           const startY = dragStartY.current;

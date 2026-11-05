@@ -4,6 +4,7 @@ import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 're
 import type { VideoClip, VideoTrack, VideoOutput, DesignerElement, ClipTransition } from './designer.store';
 import { MAX_TRACKS } from './designer.store';
 import { VideoPreviewEngine } from './video-preview';
+import { trySetPointerCapture } from './pointer-capture';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useModals, usePromptModal } from '@postmill-ai/frontend/components/layout/new-modal';
@@ -1791,7 +1792,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0 || !e.isPrimary) return;
       e.currentTarget.focus({ preventScroll: true });
-      e.currentTarget.setPointerCapture(e.pointerId);
+      trySetPointerCapture(e.currentTarget, e.pointerId);
       scrubPointerIdRef.current = e.pointerId;
       seekFromClientX(e.clientX);
       scrubLastXRef.current = e.clientX;
@@ -2039,7 +2040,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       dragPointerPositionRef.current = { x: e.clientX, y: e.clientY };
       e.preventDefault();
       e.currentTarget.focus({ preventScroll: true });
-      e.currentTarget.setPointerCapture(e.pointerId);
+      trySetPointerCapture(e.currentTarget, e.pointerId);
       setDragging({
         trackId,
         clipId: clip.id,
@@ -2885,7 +2886,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const handleSplitterPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
+      trySetPointerCapture(e.currentTarget, e.pointerId);
       const startY = e.clientY;
       const startHeight = store.getState().timelineHeight;
       const onMove = (ev: PointerEvent) => {

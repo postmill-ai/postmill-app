@@ -100,6 +100,19 @@ describe('FileRepository — metadata storage', () => {
       select: expect.objectContaining({ metadata: true }),
     }));
   });
+  it('finds a live inline Designer asset by organization and content hash', async () => {
+    const { repo, model } = makeRepo();
+    await repo.findInlineAssetByHash('org-1', 'abc123');
+    expect(model.file.findFirst).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        deletedAt: null,
+        metadata: { path: ['designerInlineSha256'], equals: 'abc123' },
+      },
+      select: { id: true, path: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  });
 });
 
 describe('FileRepository — deleteFolder', () => {

@@ -164,4 +164,32 @@ describe('MobileWorkspaceSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Collapse panel', exact: true }));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it('continues resizing when pointer capture finds no active pointer', () => {
+    const original = Element.prototype.setPointerCapture;
+    Object.defineProperty(Element.prototype, 'setPointerCapture', {
+      configurable: true,
+      value: vi.fn(() => {
+        throw new DOMException('No active pointer', 'NotFoundError');
+      }),
+    });
+    try {
+      render(
+        <MobileWorkspaceSheet open title="Inspector" onClose={vi.fn()}>
+          <div>Panel content</div>
+        </MobileWorkspaceSheet>
+      );
+      const handle = screen.getByRole('button', { name: 'Resize Inspector panel' });
+      const pointerDown = new MouseEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 100 });
+      Object.defineProperty(pointerDown, 'pointerId', { value: 1 });
+      expect(() => fireEvent(handle, pointerDown)).not.toThrow();
+      expect(Element.prototype.setPointerCapture).toHaveBeenCalledWith(1);
+      expect(() => fireEvent.pointerCancel(handle, { pointerId: 1 })).not.toThrow();
+    } finally {
+      Object.defineProperty(Element.prototype, 'setPointerCapture', {
+        configurable: true,
+        value: original,
+      });
+    }
+  });
 });

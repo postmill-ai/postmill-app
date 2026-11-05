@@ -10,6 +10,7 @@ import React, {
   useState,
 } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { trySetPointerCapture } from './pointer-capture';
 
 /**
  * A movable, height-resizable floating window for the Designer.
@@ -118,7 +119,7 @@ export const FloatingPanel: FC<FloatingPanelProps> = ({
   const onDragPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Let the close button work — it lives inside the drag handle.
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    trySetPointerCapture(e.currentTarget, e.pointerId);
     dragOffset.current = { dx: e.clientX - position.x, dy: e.clientY - position.y };
     setDragging(true);
   };
@@ -143,7 +144,7 @@ export const FloatingPanel: FC<FloatingPanelProps> = ({
   };
 
   const onResizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    trySetPointerCapture(e.currentTarget, e.pointerId);
     resizeStart.current = { y: e.clientY, height: position.height };
     setResizing(true);
   };

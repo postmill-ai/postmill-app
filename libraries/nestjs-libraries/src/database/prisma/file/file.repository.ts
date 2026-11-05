@@ -332,6 +332,18 @@ export class FileRepository {
     });
   }
 
+  findInlineAssetByHash(org: string, hash: string) {
+    return this._file.model.file.findFirst({
+      where: {
+        organizationId: org,
+        deletedAt: null,
+        metadata: { path: ['designerInlineSha256'], equals: hash },
+      },
+      select: { id: true, path: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   // M-03: batched path lookup so callers (e.g. media studio listJobs) can resolve
   // many completed jobs in one query instead of N+1.
   getFilesByPaths(org: string, filePaths: string[]) {

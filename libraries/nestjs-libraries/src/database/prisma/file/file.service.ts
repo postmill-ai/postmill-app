@@ -261,6 +261,10 @@ export class FileService {
     });
   }
 
+  findInlineAssetByHash(org: string, hash: string) {
+    return this._fileRepository.findInlineAssetByHash(org, hash);
+  }
+
   async saveGeneratedMedia(
     org: string,
     data: {
