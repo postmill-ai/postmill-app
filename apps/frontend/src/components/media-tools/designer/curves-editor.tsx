@@ -9,6 +9,7 @@ import {
   type CurveChannel,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/adjustment-descriptors';
 import { Histogram } from './histogram';
+import { trySetPointerCapture } from './pointer-capture';
 
 /**
  * Photoshop's Curves, drawn from the same LUT the renderers use.
@@ -141,14 +142,14 @@ export const CurvesEditor: FC<CurvesEditorProps> = ({
     const hit = findPoint(points, x, y);
     if (hit >= 0) {
       setDragging(hit);
-      (e.target as Element).setPointerCapture?.(e.pointerId);
+      trySetPointerCapture(e.target as Element, e.pointerId);
       return;
     }
     const next = addPoint(points, x, y);
     if (next !== points) {
       write(next);
       setDragging(next.findIndex((p) => Math.abs(p.x - Math.round(x)) < 1));
-      (e.target as Element).setPointerCapture?.(e.pointerId);
+      trySetPointerCapture(e.target as Element, e.pointerId);
     }
   };
 

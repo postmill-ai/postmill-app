@@ -8,6 +8,7 @@ import { useMediaPicker } from '../../use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerBackground, DesignerGradient, DesignerOutput, DesignerTexture, VideoOutput } from '../designer.store';
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { trySetPointerCapture } from '../pointer-capture';
 
 interface CanvasInspectorProps {
   store: any;
@@ -132,7 +133,7 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
   };
 
   const handleFocalPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    trySetPointerCapture(e.currentTarget, e.pointerId);
     setFocalDrag(focalFromEvent(e));
   };
 

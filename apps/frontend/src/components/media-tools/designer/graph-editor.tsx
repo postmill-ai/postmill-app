@@ -10,6 +10,7 @@ import {
   type Keyframe,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
 import type { VideoClip } from './designer.store';
+import { trySetPointerCapture } from './pointer-capture';
 
 /**
  * After Effects' graph editor: each animated property as a curve, with the
@@ -294,7 +295,7 @@ export const GraphEditor: FC<GraphEditorProps> = ({
                       strokeWidth={1.5}
                       vectorEffect="non-scaling-stroke"
                       onPointerDown={(e) => {
-                        (e.target as Element).setPointerCapture?.(e.pointerId);
+                        trySetPointerCapture(e.target as Element, e.pointerId);
                         setDrag({ index: i, which });
                       }}
                     />

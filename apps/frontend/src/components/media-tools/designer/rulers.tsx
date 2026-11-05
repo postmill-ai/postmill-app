@@ -1,6 +1,7 @@
 'use client';
 
 import React, { FC, useEffect, useRef } from 'react';
+import { trySetPointerCapture } from './pointer-capture';
 
 export const RULER_SIZE = 20;
 
@@ -131,11 +132,7 @@ export const Rulers: FC<RulersProps> = ({
     // Best-effort: capturing an already-released pointer (pen lifted between
     // down and here, or a synthetic event) throws NotFoundError, and the
     // window listeners below work without capture anyway.
-    try {
-      canvas.setPointerCapture?.(e.pointerId);
-    } catch {
-      // Nothing to do — the drag proceeds uncaptured.
-    }
+    trySetPointerCapture(canvas, e.pointerId);
     const rect = canvas.getBoundingClientRect();
     const at = (ev: { clientX: number; clientY: number }) =>
       axis === 'x'

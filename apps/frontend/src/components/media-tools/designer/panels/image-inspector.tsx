@@ -22,6 +22,7 @@ import { BackgroundRemovalDialog } from '../background-removal-dialog';
 import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
 import { cropFromSourceRect } from '../crop-geometry';
 import { CutoutRefineControls } from './cutout-refine-controls';
+import { trySetPointerCapture } from '../pointer-capture';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -368,7 +369,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   };
 
   const handleMaskPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    trySetPointerCapture(e.currentTarget, e.pointerId);
     setIsDrawingMask(true);
     const { x, y } = getMaskPos(e);
     drawMaskStroke(x, y);
@@ -423,7 +424,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   };
 
   const handleFocalPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    trySetPointerCapture(e.currentTarget, e.pointerId);
     setDraggingFocal(true);
     updateFocalFromEvent(e);
   };

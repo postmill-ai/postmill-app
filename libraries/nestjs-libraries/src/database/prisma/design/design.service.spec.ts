@@ -120,6 +120,9 @@ describe('DesignService', () => {
       getFileByPath: vi.fn(),
       softDelete: vi.fn(),
       saveFile: vi.fn(),
+      findInlineAssetByHash: vi.fn().mockResolvedValue(null),
+      saveGeneratedMedia: vi.fn(),
+      deleteFile: vi.fn().mockResolvedValue(undefined),
       backfillDesignMetadata: vi
         .fn()
         .mockResolvedValue({ scanned: 0, updated: 0, skipped: 0, failed: 0 }),
@@ -156,6 +159,60 @@ describe('DesignService', () => {
   });
 
   describe('createDesign', () => {
+    const docWithLargeInline = () => makeDoc({
+      output: {
+        children: [{
+          id: 'image-1',
+          type: 'image',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+          src: `data:image/png;base64,${Buffer.alloc(300_000).toString('base64')}`,
+        }],
+      },
+    });
+
+    const mockInlineStorage = () => {
+      const adapter = {
+        writeBuffer: vi.fn().mockResolvedValue('/uploads/org-1/inline.png'),
+        removeFile: vi.fn().mockResolvedValue(undefined),
+      };
+      storageService.getLocalAdapterForOrg.mockResolvedValue(adapter);
+      fileService.saveGeneratedMedia.mockResolvedValue({
+        id: 'inline-file', path: '/uploads/org-1/inline.png',
+      });
+      fileService.getFileById.mockResolvedValue({ id: 'preview-1' });
+      return adapter;
+    };
+
+    it('persists an oversized inline image before validating and saving', async () => {
+      mockInlineStorage();
+      repository.create.mockImplementation((payload: any) => payload);
+      const created = await service.createDesign('org-1', 'user-1', {
+        name: 'Inline', doc: docWithLargeInline(), previewFileId: 'preview-1',
+      });
+
+      expect(created.doc.outputs[0].children[0]).toMatchObject({
+        src: '/uploads/org-1/inline.png', fileId: 'inline-file',
+      });
+      expect(fileService.saveGeneratedMedia).toHaveBeenCalledTimes(1);
+      expect(fileService.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('cleans a new inline File when the design save fails', async () => {
+      mockInlineStorage();
+      repository.create.mockRejectedValue(new Error('insert failed'));
+      await expect(service.createDesign('org-1', 'user-1', {
+        name: 'Inline', doc: docWithLargeInline(), previewFileId: 'preview-1',
+      })).rejects.toThrow('insert failed');
+      expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'inline-file');
+    });
+
     it('validates the doc and reconciles width/height from outputs[0]', async () => {
       const doc = makeDoc({ output: { width: 1200, height: 628 } });
       await service.createDesign('org-1', 'user-1', {

@@ -27,6 +27,10 @@ import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.servi
 import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
 import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 import { isBlankDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-blank';
+import {
+  cleanupDesignerInlineFiles,
+  materializeDesignerInlineAssets,
+} from './design-inline-assets';
 
 // Resolve a multer-supplied spool path and confine it to the OS temp dir,
 // returning the resolved path only when it stays inside tmpdir (else null).
@@ -134,6 +138,29 @@ export class DesignService {
     previewFileId?: string;
     campaignId?: string;
   }) {
+    const { doc, createdFileIds } = await materializeDesignerInlineAssets(
+      orgId,
+      data.doc,
+      this._fileService,
+      this._storageService
+    );
+    try {
+      return await this.createDesignPersisted(orgId, userId, { ...data, doc });
+    } catch (error) {
+      await cleanupDesignerInlineFiles(orgId, createdFileIds, this._fileService);
+      throw error;
+    }
+  }
+
+  private async createDesignPersisted(orgId: string, userId: string, data: {
+    name: string;
+    doc: any;
+    width?: number;
+    height?: number;
+    previewDataUrl?: string;
+    previewFileId?: string;
+    campaignId?: string;
+  }) {
     let payload: any = { ...data, organizationId: orgId, createdById: userId };
     if (data.previewFileId) {
       await this._assertOwnedFile(orgId, data.previewFileId);
@@ -176,6 +203,28 @@ export class DesignService {
   }
 
   async updateDesign(orgId: string, id: string, data: {
+    name?: string;
+    doc?: any;
+    width?: number;
+    height?: number;
+    previewDataUrl?: string;
+    previewFileId?: string;
+  }) {
+    const { doc, createdFileIds } = await materializeDesignerInlineAssets(
+      orgId,
+      data.doc,
+      this._fileService,
+      this._storageService
+    );
+    try {
+      return await this.updateDesignPersisted(orgId, id, { ...data, doc });
+    } catch (error) {
+      await cleanupDesignerInlineFiles(orgId, createdFileIds, this._fileService);
+      throw error;
+    }
+  }
+
+  private async updateDesignPersisted(orgId: string, id: string, data: {
     name?: string;
     doc?: any;
     width?: number;
@@ -373,6 +422,31 @@ export class DesignService {
     thumbnailFileId?: string;
     folderId?: string;
   }) {
+    if (!data.organizationId) return this.createTemplatePersisted(data);
+    const orgId = data.organizationId;
+    const { doc, createdFileIds } = await materializeDesignerInlineAssets(
+      orgId,
+      data.doc,
+      this._fileService,
+      this._storageService
+    );
+    try {
+      return await this.createTemplatePersisted({ ...data, doc });
+    } catch (error) {
+      await cleanupDesignerInlineFiles(orgId, createdFileIds, this._fileService);
+      throw error;
+    }
+  }
+
+  private async createTemplatePersisted(data: {
+    organizationId?: string;
+    name: string;
+    category: string;
+    doc: any;
+    isSystem?: boolean;
+    thumbnailFileId?: string;
+    folderId?: string;
+  }) {
     if (data.thumbnailFileId) {
       // System templates have no organizationId; running the ownership check
       // with `undefined` would let Prisma ignore it and pass any org's file.
@@ -416,6 +490,26 @@ export class DesignService {
   }
 
   async updateTemplate(orgId: string, id: string, data: {
+    name?: string;
+    category?: string;
+    doc?: any;
+    thumbnailFileId?: string;
+  }) {
+    const { doc, createdFileIds } = await materializeDesignerInlineAssets(
+      orgId,
+      data.doc,
+      this._fileService,
+      this._storageService
+    );
+    try {
+      return await this.updateTemplatePersisted(orgId, id, { ...data, doc });
+    } catch (error) {
+      await cleanupDesignerInlineFiles(orgId, createdFileIds, this._fileService);
+      throw error;
+    }
+  }
+
+  private async updateTemplatePersisted(orgId: string, id: string, data: {
     name?: string;
     category?: string;
     doc?: any;
