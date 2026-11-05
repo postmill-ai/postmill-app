@@ -126,6 +126,8 @@ const getOrCreateImage = (src?: string): HTMLImageElement | null => {
   if (cached) return cached;
   const img = new Image();
   img.crossOrigin = 'anonymous';
+  img.onload = notifyFrameReady;
+  img.onerror = notifyFrameReady;
   img.src = src;
   imageElements.set(src, img);
   return img;
@@ -503,9 +505,9 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     setTick((t) => t + 1);
   }, []);
 
-  // First paint and post-seek paint: the hidden <video> announces a fresh
-  // frame via loadeddata/seeked (wired in getOrCreateVideo) — repaint then,
-  // never before the seek completes.
+  // Images announce their first paintable frame through getOrCreateImage; a
+  // hidden <video> does the same on loadeddata/seeked (wired in getOrCreateVideo).
+  // Never paint a video before its seek completes.
   useEffect(() => {
     frameReadyListeners.add(redrawLayer);
     return () => {
