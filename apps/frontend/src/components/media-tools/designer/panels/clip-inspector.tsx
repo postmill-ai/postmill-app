@@ -60,6 +60,7 @@ import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { CornerRadiusControl } from './corner-radius-control';
 import { TextStyleControl } from './text-style-control';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
+import { ClipTimingControls } from './clip-timing-controls';
 
 // Same weight ladder the image-mode text panel offers.
 const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
@@ -908,6 +909,15 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         </div>
       )}
       {replacePicker.element ? createPortal(replacePicker.element, document.body) : null}
+
+      <ClipTimingControls
+        clip={clip}
+        trackType={clipTrackType}
+        outputDurationMs={vo.durationMs}
+        onChange={updateClipSilent}
+        onCommit={commitClip}
+        disabled={!!parentTrack?.locked}
+      />
 
       {/* Position & Size */}
       <div className="grid grid-cols-2 gap-2">

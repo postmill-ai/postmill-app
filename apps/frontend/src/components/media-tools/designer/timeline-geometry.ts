@@ -1,3 +1,24 @@
+import { DRAG_SCROLL_EDGE_PX, DRAG_SCROLL_MAX_SPEED_PX } from './panels/drag-auto-scroll';
+
+export const timelineHorizontalScrollDelta = (
+  containerLeft: number,
+  containerRight: number,
+  pointerX: number,
+  edgePx: number = DRAG_SCROLL_EDGE_PX,
+  maxSpeedPx: number = DRAG_SCROLL_MAX_SPEED_PX
+): number => {
+  if (pointerX < containerLeft || pointerX > containerRight) return 0;
+  const fromLeft = pointerX - containerLeft;
+  if (fromLeft < edgePx) {
+    return -Math.max(1, Math.round(maxSpeedPx * (1 - fromLeft / edgePx)));
+  }
+  const fromRight = containerRight - pointerX;
+  if (fromRight < edgePx) {
+    return Math.max(1, Math.round(maxSpeedPx * (1 - fromRight / edgePx)));
+  }
+  return 0;
+};
+
 export interface TimelineRowGeometry {
   rulerHeight: number;
   trackHeight: number;
@@ -47,6 +68,15 @@ export const timelineSnapThresholdMs = (pixelsPerMs: number): number =>
 
 export const timelineCollisionToleranceMs = (pixelsPerMs: number): number =>
   boundedScreenThreshold(pixelsPerMs, 2, 40);
+
+export const timelineDragDeltaMs = (
+  startClientX: number,
+  clientX: number,
+  startScrollLeft: number,
+  scrollLeft: number,
+  pixelsPerMs: number
+): number =>
+  (clientX - startClientX + scrollLeft - startScrollLeft) / Math.max(0.0001, pixelsPerMs);
 
 export const moveClipPreservingDuration = (
   clip: { startMs: number; endMs: number },

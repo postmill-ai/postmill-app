@@ -58,9 +58,10 @@ via headless Chromium + FFmpeg.
   them; grouped members select and move together, stay grouped after save/reload, and keep their
   relative layout when another format is added. Locked tracks cannot be moved or deleted.
 - **Transitions** — cut, fade, dissolve, slide, wipe, zoom, and blur between clips.
-- **Clip inspector** — speed and speed ramps, reverse, volume (keyframable), fade in/out, auto-duck
-  under voice, **Looks** presets, filters, blend modes, motion blur, Ken Burns presets, and
-  per-property keyframes with a graph editor. Image clips can be replaced through the media picker
+- **Clip inspector** — exact clip **Start**, **End**, and **Duration** fields in seconds (separate
+  from the whole-output duration stepper), speed and speed ramps, reverse, volume (keyframable),
+  fade in/out, auto-duck under voice, **Looks** presets, filters, blend modes, motion blur, Ken Burns
+  presets, and per-property keyframes with a graph editor. Image clips can be replaced through the media picker
   or have their background removed when a provider is configured. Shape clips have uniform or
   per-corner radius controls; text clips have Normal, Bold, Italic, and Bold Italic styles.
   **Animations** presets apply to text, shape, image, and sticker clips; text clips also get a
@@ -103,6 +104,20 @@ Provider support is specific:
 **Default** fallback and first-frame-only providers do not use saved character references, and the
 dialog says so. A first frame is source conditioning, not an equivalent character reference;
 references do not guarantee consistency.
+
+## Mobile workspace and Brand
+
+On touch screens, clip movement, cross-track placement, trimming, and ruler scrubbing use the same
+pointer gestures as a mouse. Selected clips have visible trim handles, and dragging near a timeline
+edge scrolls toward more tracks or time. **Zoom to fit** expands the timeline and fits the full
+composition; the collapse control leaves compact transport controls and the total duration visible.
+With the timeline expanded, the selected clip's exact **Start**, **End**, and **Duration** fields are
+available directly below its tracks as well as in the Inspector.
+
+Tools, Brand, and the Inspector open as inline bottom sheets rather than covering the canvas. Use
+**Half** or **Expand**, drag the sheet handle, or collapse the sheet to restore the full canvas. The
+design name remains editable beside the logo. On desktop, **Brand** is available directly from the
+tool rail as well as the Window menu.
 
 ## Canvas tools
 

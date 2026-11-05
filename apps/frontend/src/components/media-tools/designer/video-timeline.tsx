@@ -27,6 +27,7 @@ import { runClipTransformRequest, VIDEO_BG_REMOVAL_MODELS } from './clip-transfo
 import { postTextToSpeech } from './text-to-speech';
 import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, planTrackDrop, resolveClipPlacement } from './clip-geometry';
+import { getSourceDurationMs } from './clip-source-duration';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
 import { expandClipRefs } from './video-selection';
 import {
@@ -35,7 +36,10 @@ import {
   timelineIsNewTrackZone,
   timelineSnapThresholdMs,
   timelineTrackAtClientY,
+  timelineHorizontalScrollDelta,
+  timelineDragDeltaMs,
 } from './timeline-geometry';
+import { dragScrollDelta } from './panels/drag-auto-scroll';
 import { directFetchForAbsoluteUrls, type WaveformFetch } from './waveform-fetch';
 import { KeyframeLane } from './keyframe-lane';
 import { timelineBeats } from './beat-sync';
@@ -73,6 +77,7 @@ import {
 } from './captions';
 import { TimelineTransportControls } from './timeline-transport-controls';
 import { canSplitClipAt } from './timeline-split';
+import { ClipTimingControls } from './panels/clip-timing-controls';
 
 interface VideoTimelineProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -119,44 +124,6 @@ const formatTime = (ms: number): string => {
   const seconds = totalSec % 60;
   const millis = Math.floor((ms % 1000) / 10);
   return `${minutes}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(2, '0')}`;
-};
-
-// Trim clamps need the SOURCE duration, which a clip does not store (the doc
-// schema stays untouched) — probe it lazily per src, exactly as a media drop
-// does, and cache it. Returns undefined until the probe lands; the end-edge
-// clamp only applies once the duration is known.
-// Bounded LRU (insertion order doubles as recency: hits re-insert, overflow
-// evicts the oldest entry) — same discipline as the peaks and filmstrip caches
-// below, so a long-lived session doesn't accumulate one entry per probed src.
-const SOURCE_DURATION_CACHE_MAX = 50;
-const sourceDurationCache = new Map<string, number>();
-const sourceDurationInflight = new Set<string>();
-const getSourceDurationMs = (
-  src: string,
-  kind: 'video' | 'audio'
-): number | undefined => {
-  const cached = sourceDurationCache.get(src);
-  if (cached !== undefined) {
-    sourceDurationCache.delete(src);
-    sourceDurationCache.set(src, cached);
-    return cached;
-  }
-  if (!sourceDurationInflight.has(src)) {
-    sourceDurationInflight.add(src);
-    const probe =
-      kind === 'audio'
-        ? probeAudioDuration(src)
-        : probeVideoMetadata(src).then((r) => r.durationMs);
-    probe.then((ms) => {
-      sourceDurationCache.set(src, ms);
-      if (sourceDurationCache.size > SOURCE_DURATION_CACHE_MAX) {
-        const oldest = sourceDurationCache.keys().next().value;
-        if (oldest !== undefined) sourceDurationCache.delete(oldest);
-      }
-      sourceDurationInflight.delete(src);
-    });
-  }
-  return undefined;
 };
 
 const audioContextSingleton =
@@ -469,8 +436,8 @@ interface ClipRowProps {
   onSelectClip: (trackId: string, clipId: string) => void;
   onClipKeyDown: (e: React.KeyboardEvent, trackId: string, clip: VideoClip) => void;
   onSliderKeyUp: (e: React.KeyboardEvent) => void;
-  onClipMouseDown: (
-    e: React.MouseEvent,
+  onClipPointerDown: (
+    e: React.PointerEvent<HTMLElement>,
     trackId: string,
     trackType: VideoTrack['type'],
     clip: VideoClip,
@@ -499,7 +466,7 @@ const ClipRow = React.memo(function ClipRow({
   onSelectClip,
   onClipKeyDown,
   onSliderKeyUp,
-  onClipMouseDown,
+  onClipPointerDown,
   onClipContextMenu,
   onEdgeKeyDown,
 }: ClipRowProps) {
@@ -523,7 +490,7 @@ const ClipRow = React.memo(function ClipRow({
       aria-valuemax={Math.round(durationMs - (clip.endMs - clip.startMs))}
       aria-valuetext={translate('clip_start_time', 'Start {{time}}', { time: formatTime(clip.startMs) })}
       tabIndex={0}
-      className={`absolute top-1 rounded-[4px] group ${
+      className={`absolute top-1 rounded-[4px] group touch-none select-none ${
         locked ? 'cursor-not-allowed' : 'cursor-pointer'
       } ${
         // The primary (inspector target) keeps the white ring;
@@ -551,7 +518,7 @@ const ClipRow = React.memo(function ClipRow({
       }}
       onKeyDown={(e) => onClipKeyDown(e, trackId, clip)}
       onKeyUp={onSliderKeyUp}
-      onMouseDown={(e) => onClipMouseDown(e, trackId, trackType, clip, 'move')}
+      onPointerDown={(e) => onClipPointerDown(e, trackId, trackType, clip, 'move')}
       onContextMenu={(e) => onClipContextMenu(e, trackId, clip.id)}
     >
       {trackType === 'video' && <ClipFilmstrip src={clip.src} />}
@@ -613,8 +580,8 @@ const ClipRow = React.memo(function ClipRow({
         aria-valuemax={Math.round(clip.endMs - 100)}
         aria-valuetext={formatTime(clip.startMs)}
         tabIndex={0}
-        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-black/20 rounded-l-[4px]"
-        onMouseDown={(e) => onClipMouseDown(e, trackId, trackType, clip, 'start')}
+        className={`absolute left-0 top-0 bottom-0 w-2 mobile:w-4 cursor-ew-resize touch-none bg-black/20 rounded-l-[4px] ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+        onPointerDown={(e) => onClipPointerDown(e, trackId, trackType, clip, 'start')}
         onKeyDown={(e) => onEdgeKeyDown(e, trackId, clip, 'start')}
         onKeyUp={onSliderKeyUp}
       />
@@ -627,8 +594,8 @@ const ClipRow = React.memo(function ClipRow({
         aria-valuemax={Math.round(durationMs)}
         aria-valuetext={formatTime(clip.endMs)}
         tabIndex={0}
-        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-black/20 rounded-r-[4px]"
-        onMouseDown={(e) => onClipMouseDown(e, trackId, trackType, clip, 'end')}
+        className={`absolute right-0 top-0 bottom-0 w-2 mobile:w-4 cursor-ew-resize touch-none bg-black/20 rounded-r-[4px] ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+        onPointerDown={(e) => onClipPointerDown(e, trackId, trackType, clip, 'end')}
         onKeyDown={(e) => onEdgeKeyDown(e, trackId, clip, 'end')}
         onKeyUp={onSliderKeyUp}
       />
@@ -653,7 +620,7 @@ interface TrackRowProps {
   onSelectClip: (trackId: string, clipId: string) => void;
   onClipKeyDown: (e: React.KeyboardEvent, trackId: string, clip: VideoClip) => void;
   onSliderKeyUp: (e: React.KeyboardEvent) => void;
-  onClipMouseDown: ClipRowProps['onClipMouseDown'];
+  onClipPointerDown: ClipRowProps['onClipPointerDown'];
   onClipContextMenu: (e: React.MouseEvent, trackId: string, clipId: string) => void;
   onEdgeKeyDown: ClipRowProps['onEdgeKeyDown'];
   onToggleLock: (trackId: string) => void;
@@ -688,7 +655,7 @@ const TrackRow = React.memo(function TrackRow({
   onSelectClip,
   onClipKeyDown,
   onSliderKeyUp,
-  onClipMouseDown,
+  onClipPointerDown,
   onClipContextMenu,
   onEdgeKeyDown,
   onToggleLock,
@@ -771,7 +738,7 @@ const TrackRow = React.memo(function TrackRow({
             onSelectClip={onSelectClip}
             onClipKeyDown={onClipKeyDown}
             onSliderKeyUp={onSliderKeyUp}
-            onClipMouseDown={onClipMouseDown}
+            onClipPointerDown={onClipPointerDown}
             onClipContextMenu={onClipContextMenu}
             onEdgeKeyDown={onEdgeKeyDown}
           />
@@ -1478,7 +1445,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     trackId: string;
     clipId: string;
     edge: 'start' | 'end' | 'move';
+    pointerId: number;
     startX: number;
+    startY: number;
+    startScrollLeft: number;
     origStart: number;
     origEnd: number;
     /** The clip as it was at mousedown — trim deltas are computed against it. */
@@ -1497,6 +1467,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   // Set once a drag actually moved, so the click that follows mouseup does not
   // collapse a multi-selection the user just finished dragging.
   const dragMovedRef = useRef(false);
+  const dragPointerPositionRef = useRef({ x: 0, y: 0 });
   // Rubber-band selection rect in scroll-content coordinates (null = inactive).
   const [marquee, setMarquee] = useState<MarqueeRect | null>(null);
   const marqueeAnchorRef = useRef<{ x: number; y: number } | null>(null);
@@ -1531,6 +1502,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   // True while a dragged clip hovers the virtual row below the last track —
   // dropping there creates a new track of the clip's type and lands on it.
   const [dragOverNewTrack, setDragOverNewTrack] = useState(false);
+  const dragOverNewTrackRef = useRef(false);
+  useEffect(() => {
+    dragOverNewTrackRef.current = dragOverNewTrack;
+  }, [dragOverNewTrack]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<VideoPreviewEngine | null>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
@@ -1542,6 +1517,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
   const isVideo = doc.mode === 'video' && !!vo;
+  const selectedTimingTrack = selectedClip?.outputIndex === currentOutput
+    ? vo?.tracks.find((track) => track.id === selectedClip.trackId)
+    : undefined;
+  const selectedTimingClip = selectedTimingTrack?.clips.find((clip) => clip.id === selectedClip?.clipId);
 
   const pixelsPerMs = zoomPxPerMs;
   const totalPixels = isVideo ? vo.durationMs * pixelsPerMs : 0;
@@ -1802,19 +1781,18 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     [pixelsPerMs, setPlayhead, vo?.durationMs, store, currentOutput],
   );
 
-  // Ruler drag-scrub: mousedown seeks, mousemove-while-down keeps scrubbing
-  // (rAF-throttled so a fast drag doesn't seek the media elements per pixel),
-  // mouseup releases.
+  // Ruler drag-scrub uses pointer capture so touch and mouse share one path.
   const [scrubbing, setScrubbing] = useState(false);
   const scrubRafRef = useRef<number | null>(null);
   const scrubLastXRef = useRef(0);
+  const scrubPointerIdRef = useRef<number | null>(null);
 
-  const handleRulerMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button !== 0) return;
-      // Focus the ruler (no preventDefault — that would suppress focus and
-      // break the ruler's keyboard stepping) so arrows keep working mid-scrub.
-      (e.currentTarget as HTMLElement).focus();
+  const handleRulerPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0 || !e.isPrimary) return;
+      e.currentTarget.focus({ preventScroll: true });
+      e.currentTarget.setPointerCapture(e.pointerId);
+      scrubPointerIdRef.current = e.pointerId;
       seekFromClientX(e.clientX);
       scrubLastXRef.current = e.clientX;
       setScrubbing(true);
@@ -1824,7 +1802,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   useEffect(() => {
     if (!scrubbing) return;
-    const onMove = (e: MouseEvent) => {
+    let finished = false;
+    const onMove = (e: PointerEvent) => {
+      if (finished || e.pointerId !== scrubPointerIdRef.current) return;
       scrubLastXRef.current = e.clientX;
       if (scrubRafRef.current !== null) return;
       scrubRafRef.current = requestAnimationFrame(() => {
@@ -1832,19 +1812,25 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         seekFromClientX(scrubLastXRef.current);
       });
     };
-    const onUp = () => setScrubbing(false);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    // A lost mouseup (pointer leaves the window, OS steals the pointer, window
-    // blurs mid-scrub) must also release the gesture, or the listeners leak
-    // until the next scrub.
+    const finish = (pointerId?: number) => {
+      if (finished || (pointerId !== undefined && pointerId !== scrubPointerIdRef.current)) return;
+      finished = true;
+      scrubPointerIdRef.current = null;
+      setScrubbing(false);
+    };
+    const onUp = (e: PointerEvent) => finish(e.pointerId);
+    const onBlur = () => finish();
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
-    window.addEventListener('blur', onUp);
+    window.addEventListener('lostpointercapture', onUp);
+    window.addEventListener('blur', onBlur);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
-      window.removeEventListener('blur', onUp);
+      window.removeEventListener('lostpointercapture', onUp);
+      window.removeEventListener('blur', onBlur);
       if (scrubRafRef.current !== null) cancelAnimationFrame(scrubRafRef.current);
       scrubRafRef.current = null;
     };
@@ -2008,9 +1994,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     [store]
   );
 
-  const handleClipMouseDown = useCallback(
-    (e: React.MouseEvent, trackId: string, trackType: VideoTrack['type'], clip: VideoClip, edge: 'start' | 'end' | 'move') => {
+  const handleClipPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLElement>, trackId: string, trackType: VideoTrack['type'], clip: VideoClip, edge: 'start' | 'end' | 'move') => {
       e.stopPropagation();
+      if (e.button !== 0 || !e.isPrimary) return;
       dragMovedRef.current = false;
       // Shift-click is pure selection: toggle membership and never start a
       // drag, or the toggle would immediately drag the clip it just selected.
@@ -2031,9 +2018,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const downState = store.getState();
       const downVo = downState.doc.outputs[currentOutput] as VideoOutput | undefined;
       if (downVo?.tracks.find((t) => t.id === trackId)?.locked) return;
-      // Multi-clip move: snapshot every selected clip's geometry at mousedown
-      // so mousemove can apply one dx to all of them (silent writes, one
-      // history entry on mouseup — the same discipline as a single drag).
+      // Multi-clip move: snapshot every selected clip's geometry at pointerdown
+      // so pointermove can apply one dx to all of them (silent writes, one
+      // history entry on pointerup — the same discipline as a single drag).
       let group: { trackId: string; clipId: string; origStart: number; origEnd: number }[] | undefined;
       if (edge === 'move' && inSelection) {
         const state = store.getState();
@@ -2049,11 +2036,18 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         });
         if (snapshot.length > 1) group = snapshot;
       }
+      dragPointerPositionRef.current = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+      e.currentTarget.focus({ preventScroll: true });
+      e.currentTarget.setPointerCapture(e.pointerId);
       setDragging({
         trackId,
         clipId: clip.id,
         edge,
+        pointerId: e.pointerId,
         startX: e.clientX,
+        startY: e.clientY,
+        startScrollLeft: scrollRef.current?.scrollLeft ?? 0,
         origStart: clip.startMs,
         origEnd: clip.endMs,
         origClip: clip,
@@ -2070,6 +2064,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   useEffect(() => {
     if (!dragging || !isVideo || !vo) return;
+    let finished = false;
+    let autoScrollRaf: number | null = null;
+    const pointerPosition = dragPointerPositionRef.current;
 
     const trackAtY = (clientY: number): VideoTrack | undefined => {
       const viewport = scrollRef.current;
@@ -2096,7 +2093,28 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       );
     };
 
-    // The drop's proposed members: mousedown geometry (orig*, for reverts)
+    const autoScroll = () => {
+      if (finished) return;
+      const viewport = scrollRef.current;
+      if (viewport && dragMovedRef.current) {
+        const rect = viewport.getBoundingClientRect();
+        const previousLeft = viewport.scrollLeft;
+        const previousTop = viewport.scrollTop;
+        viewport.scrollLeft += timelineHorizontalScrollDelta(rect.left, rect.right, pointerPosition.x);
+        viewport.scrollTop += dragScrollDelta(rect.top, rect.bottom, pointerPosition.y);
+        if (viewport.scrollLeft !== previousLeft || viewport.scrollTop !== previousTop) {
+          handlePointerMove({
+            pointerId: dragging.pointerId,
+            clientX: pointerPosition.x,
+            clientY: pointerPosition.y,
+          } as PointerEvent);
+        }
+      }
+      autoScrollRaf = requestAnimationFrame(autoScroll);
+    };
+    autoScrollRaf = requestAnimationFrame(autoScroll);
+
+    // The drop's proposed members: pointerdown geometry (orig*, for reverts)
     // plus the CURRENT dragged timing read off the live tracks.
     const dropMembers = (tracks: VideoTrack[]) => {
       const base = dragging.group ?? [
@@ -2144,7 +2162,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       return best;
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
+      if (finished || e.pointerId !== dragging.pointerId) return;
+      pointerPosition.x = e.clientX;
+      pointerPosition.y = e.clientY;
       const hovered = trackAtY(e.clientY);
       // Drop affordances (move drags only). A cross-track target highlights
       // when EVERY member of the (possibly grouped) drag can land one track-
@@ -2165,11 +2186,15 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         dragging.edge === 'move' && !dragging.group && !hovered && isNewTrackZone(e.clientY)
       );
 
-      // dx is measured from the gesture's mousedown and applied to the values
-      // captured AT mousedown — folding it into the previously written value
-      // compounded every mousemove into the next, and made the trim-in delta
-      // uncomputable. Writes stay silent; mouseup pushes one history entry.
-      const dx = (e.clientX - dragging.startX) / pixelsPerMs;
+      // Include auto-scroll displacement so a held pointer keeps moving the
+      // clip through time instead of only moving the viewport beneath it.
+      const dx = timelineDragDeltaMs(
+        dragging.startX,
+        e.clientX,
+        dragging.startScrollLeft,
+        scrollRef.current?.scrollLeft ?? dragging.startScrollLeft,
+        pixelsPerMs
+      );
       if (Math.abs(e.clientX - dragging.startX) > 3) dragMovedRef.current = true;
 
       if (dragging.edge === 'move') {
@@ -2216,7 +2241,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       });
     };
 
-    const handleMouseUp = (e: MouseEvent) => {
+    const handlePointerUp = (e: PointerEvent) => {
+      if (finished || e.pointerId !== dragging.pointerId) return;
+      finished = true;
       const hovered = trackAtY(e.clientY);
       // Rendering the virtual row can scroll it into view before mouseup. The
       // active hover state still identifies the intentional drop zone when that
@@ -2224,7 +2251,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const newTrackZone =
         dragging.edge === 'move' &&
         !dragging.group &&
-        (dragOverNewTrack || isNewTrackZone(e.clientY));
+        (dragOverNewTrackRef.current || isNewTrackZone(e.clientY));
       const allowOverlap = e.altKey;
       const snapMs = timelineCollisionToleranceMs(pixelsPerMs);
       const state = store.getState();
@@ -2336,28 +2363,44 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       state.pushHistory();
     };
 
-    // A lost mouseup (pointer leaves the window, pointercancel, window blur
-    // mid-drag) ends the gesture where it stands: the cross-track drop needs a
-    // pointer position we no longer have, so it is skipped — but any geometry
-    // already written still lands as one history entry.
-    const handleCancel = () => {
+    // A lost pointerup (pointercancel, lost capture, or window blur) ends the
+    // gesture where it stands without inventing a cross-track drop.
+    const handleCancel = (pointerId?: number) => {
+      if (finished || (pointerId !== undefined && pointerId !== dragging.pointerId)) return;
+      finished = true;
       setDragging(null);
       setDragOverTrackId(null);
       setDragOverNewTrack(false);
       if (dragMovedRef.current) store.getState().pushHistory();
     };
+    const handlePointerCancel = (e: PointerEvent) => handleCancel(e.pointerId);
+    const handleBlur = () => handleCancel();
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('pointercancel', handleCancel);
-    window.addEventListener('blur', handleCancel);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    window.addEventListener('lostpointercapture', handlePointerCancel);
+    window.addEventListener('blur', handleBlur);
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('pointercancel', handleCancel);
-      window.removeEventListener('blur', handleCancel);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+      window.removeEventListener('lostpointercapture', handlePointerCancel);
+      window.removeEventListener('blur', handleBlur);
+      if (autoScrollRaf !== null) cancelAnimationFrame(autoScrollRaf);
     };
   }, [dragging, isVideo, vo, pixelsPerMs, store, currentOutput, toaster, translate]);
+
+  useEffect(() => () => {
+    setDragging(null);
+    setScrubbing(false);
+    setDragOverTrackId(null);
+    setDragOverNewTrack(false);
+    if (dragMovedRef.current) {
+      store.getState().pushHistory();
+      dragMovedRef.current = false;
+    }
+  }, [currentOutput, isVideo, store]);
 
   // Marquee (rubber-band) selection: mousedown on empty track area starts the
   // rect; clips/edges/ruler/buttons stopPropagation or are excluded by the
@@ -2677,6 +2720,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     (e: React.MouseEvent, trackId: string, clipId: string) => {
       e.preventDefault();
       e.stopPropagation();
+      if (dragMovedRef.current) return;
+      // A stationary long-press opens the menu instead of leaving a pending drag.
+      setDragging(null);
       // Right-clicking a clip that is already in the multi-selection keeps the
       // group (so Copy/etc. apply to it); otherwise the selection collapses.
       const inSelection = store
@@ -3691,6 +3737,18 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           {timelineCollapsed ? '⌃' : '⌄'}
         </button>
         <div className="flex-1" />
+        <button
+          type="button"
+          onClick={() => {
+            setTimelineCollapsed(false);
+            handleZoomToFit();
+          }}
+          className="hidden mobile:flex w-8 h-8 items-center justify-center rounded-sm text-textColor/70 hover:bg-studioBorder/30 hover:text-textColor"
+          title={translate('zoom_to_fit', 'Zoom to fit')}
+          aria-label={translate('zoom_to_fit', 'Zoom to fit')}
+        >
+          ⛶
+        </button>
         <div className="contents mobile:hidden">
         <button
           onClick={() => store.getState().setTimelineSnap(!timelineSnap)}
@@ -3867,9 +3925,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             aria-valuemax={Math.round(vo.durationMs)}
             aria-valuetext={formatTime(store.getState().playheadMs)}
             tabIndex={0}
-            className="sticky top-0 z-10 bg-newBgColorInner border-b border-studioBorder/40 select-none"
+            className="sticky top-0 z-10 bg-newBgColorInner border-b border-studioBorder/40 select-none touch-none"
             style={{ height: RULER_HEIGHT, marginLeft: LABEL_WIDTH }}
-            onMouseDown={handleRulerMouseDown}
+            onPointerDown={handleRulerPointerDown}
             onKeyDown={handleRulerKeyDown}
             onKeyUp={handleSliderKeyUp}
             onContextMenu={handleRulerContextMenu}
@@ -3927,7 +3985,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               onSelectClip={handleSelectClip}
               onClipKeyDown={handleClipKeyDown}
               onSliderKeyUp={handleSliderKeyUp}
-              onClipMouseDown={handleClipMouseDown}
+              onClipPointerDown={handleClipPointerDown}
               onClipContextMenu={handleClipContextMenu}
               onEdgeKeyDown={handleEdgeKeyDown}
               onToggleLock={handleToggleTrackLock}
@@ -3986,6 +4044,24 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           <PlayheadIndicator store={store} pixelsPerMs={pixelsPerMs} />
         </div>
       </div>
+
+      {!timelineCollapsed && selectedTimingTrack && selectedTimingClip && selectedClip && (
+        <div className="hidden mobile:block border-t border-studioBorder px-3 py-2">
+          <ClipTimingControls
+            clip={selectedTimingClip}
+            trackType={selectedTimingTrack.type}
+            outputDurationMs={vo.durationMs}
+            onChange={(update) => store.getState().updateClipSilent(
+              currentOutput,
+              selectedClip.trackId,
+              selectedClip.clipId,
+              update
+            )}
+            onCommit={() => store.getState().pushHistory()}
+            disabled={!!selectedTimingTrack.locked}
+          />
+        </div>
+      )}
 
       {/* Duration indicator */}
       <div className="flex items-center justify-end px-3 py-1 text-[10px] text-textColor/40">

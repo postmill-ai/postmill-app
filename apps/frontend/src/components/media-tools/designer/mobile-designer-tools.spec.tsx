@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { MobileQuickActions, MobileToolsDialog, MobileToolsSheet } from './mobile-designer-tools';
+import { MobileQuickActions, MobileToolsDialog, MobileToolsSheet, MobileWorkspaceSheet } from './mobile-designer-tools';
 import { createDesignerStore, type VideoOutput } from './designer.store';
 
 const imageElement = {
@@ -142,5 +142,26 @@ describe('MobileToolsDialog', () => {
     fireEvent.change(radius, { target: { value: '24' } });
     expect(store.getState().toolOptions['shape-rect']?.cornerRadius).toBe(24);
     expect(store.getState().toolOptions.move).toBeUndefined();
+  });
+});
+
+describe('MobileWorkspaceSheet', () => {
+  it('is non-modal and switches between half, expanded, and collapsed states', () => {
+    const onClose = vi.fn();
+    render(
+      <MobileWorkspaceSheet open title="Inspector" onClose={onClose}>
+        <div>Panel content</div>
+      </MobileWorkspaceSheet>
+    );
+    const sheet = screen.getByRole('region', { name: 'Inspector' });
+    expect(sheet.className).toContain('h-[32dvh]');
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand', exact: true }));
+    expect(sheet.className).toContain('h-[65dvh]');
+    fireEvent.click(screen.getByRole('button', { name: 'Half', exact: true }));
+    expect(sheet.className).toContain('h-[32dvh]');
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse panel', exact: true }));
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

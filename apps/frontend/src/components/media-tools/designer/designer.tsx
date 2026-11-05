@@ -53,7 +53,7 @@ import { StartDialog } from './start-dialog';
 import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiDetectSubject, aiOutpaint } from './ai-image-actions';
 import { OutpaintDialog } from './outpaint-dialog';
 import { BackgroundRemovalDialog } from './background-removal-dialog';
-import { MobileQuickActions, MobileToolsDialog } from './mobile-designer-tools';
+import { MobileQuickActions, MobileSheetHeader, MobileToolsDialog, MobileWorkspaceSheet, type MobileSheetSnap } from './mobile-designer-tools';
 import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
@@ -65,6 +65,7 @@ import { captureStageThumbnail } from './stage-thumbnail';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
 import { DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
+import { useMediaQuery } from '@mantine/hooks';
 
 // 4.4: hoisted so the memoized onPeerTimeline callback has no changing closure dep.
 const PEER_COLORS = ['#f43f5e', '#8b5cf6', '#06b6d4', '#f59e0b', '#22c55e', '#ec4899'];
@@ -214,12 +215,14 @@ export const Designer: FC<DesignerProps> = ({
   // single-page designs, shown for multi-page), true/false = the user's
   // explicit choice, persisted per org and adopted in the effect below.
   const [pagesBarOverride, setPagesBarOverride] = useState<boolean | null>(null);
-  // Default the inspector collapsed on mobile so it doesn't cover the canvas
-  // (≤1025px = the repo `mobile` breakpoint). Desktop stays expanded.
+  // Start mobile with the full canvas visible; the inline Inspector opens at
+  // half height on demand. Desktop stays expanded and docked.
   const [inspectorCollapsed, setInspectorCollapsed] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 1025
   );
+  const [inspectorSnap, setInspectorSnap] = useState<MobileSheetSnap>('half');
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  const mobileLayout = useMediaQuery('(max-width: 1025px)');
   // Required startup picker on a fresh editor (no deep-linked asset/design and
   // no caller-supplied size) — forces an explicit format choice instead of the
   // silent 1080² "Instagram Post" default.
@@ -1535,7 +1538,7 @@ export const Designer: FC<DesignerProps> = ({
             value={designName}
             onChange={(e) => store.getState().setDesignName(e.target.value)}
             aria-label={translate('design_name_label', 'Design name')}
-            className="mobile:hidden bg-transparent border-none text-textColor text-[14px] font-medium outline-hidden focus:border-b focus:border-designerAccent px-1 py-0.5 w-[150px]"
+            className="w-[150px] mobile:w-[110px] min-w-0 bg-transparent border-none text-textColor text-[14px] font-medium outline-hidden focus:border-b focus:border-designerAccent px-1 py-0.5"
           />
         </div>
 
@@ -1677,19 +1680,23 @@ export const Designer: FC<DesignerProps> = ({
             lastToolPerGroup={lastToolPerGroup}
             onSelect={setActiveTool}
             aiAvailable={aiActive}
+            onOpenBrand={brandPanel.toggle}
+            brandOpen={brandPanel.state.open}
           />
         </div>
-        {brandPanel.state.open && (
-          <FloatingPanel
-            title={translate('brand_label', 'Brand')}
-            onClose={() => brandPanel.setOpen(false)}
-            position={brandPanel.state}
-            onPositionChange={brandPanel.setPosition}
-            width={300}
-          >
-            <BrandPanel store={store as any} />
-          </FloatingPanel>
-        )}
+        <div className="contents mobile:hidden">
+          {!mobileLayout && brandPanel.state.open && (
+            <FloatingPanel
+              title={translate('brand_label', 'Brand')}
+              onClose={() => brandPanel.setOpen(false)}
+              position={brandPanel.state}
+              onPositionChange={brandPanel.setPosition}
+              width={300}
+            >
+              <BrandPanel store={store as any} />
+            </FloatingPanel>
+          )}
+        </div>
 
         {templatePanel.state.open && (
           <FloatingPanel
@@ -1742,8 +1749,8 @@ export const Designer: FC<DesignerProps> = ({
           </FloatingPanel>
         )}
 
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="relative flex-1 flex min-h-0 min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 mobile:overflow-y-auto">
+          <div className="relative flex-1 flex min-h-0 min-w-0 mobile:flex-col mobile:flex-[1_0_auto]">
             <DesignerCanvas
               store={store}
               showSafeZones={showSafeZones}
@@ -1768,32 +1775,30 @@ export const Designer: FC<DesignerProps> = ({
               store={store}
             />
 
-            {/* Inspector overlays the canvas area ONLY (bounded by this
-                relative parent), so it never covers the timeline/format tabs
-                that sit below the canvas. */}
+            {/* Desktop docks over the canvas edge; mobile is an inline sheet so
+                its height participates in layout and leaves the canvas visible. */}
             {!inspectorCollapsed && (
-              <div className="absolute right-0 top-0 bottom-0 w-[280px] z-20 border-l border-studioBorder bg-newBgColorInner overflow-y-auto p-3 shadow-xl mobile:inset-x-0 mobile:bottom-0 mobile:top-auto mobile:w-full mobile:max-h-[55dvh] mobile:rounded-t-xl mobile:border-l-0 mobile:border-t">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
-                    {hasInspectorTarget ? translate('inspector_panel_label', 'Inspector') : translate('canvas_panel_label', 'Canvas')}
-                  </div>
-                  <button
-                    onClick={() => setInspectorCollapsed(true)}
-                    className="w-6 h-6 flex items-center justify-center rounded-sm text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor text-[14px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
-                    title={translate('collapse_panel', 'Collapse panel')}
-                    aria-label={translate('collapse_properties_panel', 'Collapse properties panel')}
-                  >
-                    ›
-                  </button>
+              <div
+                role="region"
+                aria-label={hasInspectorTarget ? translate('inspector_panel_label', 'Inspector') : translate('canvas_panel_label', 'Canvas')}
+                className={`absolute right-0 top-0 bottom-0 w-[280px] z-20 flex flex-col border-l border-studioBorder bg-newBgColorInner shadow-xl mobile:relative mobile:inset-auto mobile:z-auto mobile:w-full mobile:shrink-0 mobile:rounded-t-xl mobile:border-l-0 mobile:border-t mobile:shadow-none ${inspectorSnap === 'half' ? 'mobile:h-[32dvh]' : 'mobile:h-[65dvh]'}`}
+              >
+                <MobileSheetHeader
+                  title={hasInspectorTarget ? translate('inspector_panel_label', 'Inspector') : translate('canvas_panel_label', 'Canvas')}
+                  snap={inspectorSnap}
+                  onSnapChange={setInspectorSnap}
+                  onClose={() => setInspectorCollapsed(true)}
+                />
+                <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                  {hasInspectorTarget ? (
+                    <InspectorPanel store={store} />
+                  ) : (
+                    <CanvasInspector
+                      key={`canvas-${currentOutput}-${currentOutputSizeKey}`}
+                      store={store}
+                    />
+                  )}
                 </div>
-                {hasInspectorTarget ? (
-                  <InspectorPanel store={store} />
-                ) : (
-                  <CanvasInspector
-                    key={`canvas-${currentOutput}-${currentOutputSizeKey}`}
-                    store={store}
-                  />
-                )}
               </div>
             )}
 
@@ -1808,11 +1813,41 @@ export const Designer: FC<DesignerProps> = ({
               </button>
             )}
           </div>
+          <MobileToolsDialog
+            open={mobileToolsOpen}
+            onClose={() => setMobileToolsOpen(false)}
+            activeTool={activeTool}
+            lastToolPerGroup={lastToolPerGroup}
+            aiAvailable={aiActive}
+            onSelect={setActiveTool}
+            activeToolOptions={activeToolOptions}
+            onToolOptionChange={onToolOptionChange}
+            onOpenBrand={() => {
+              setMobileToolsOpen(false);
+              setInspectorCollapsed(true);
+              brandPanel.setOpen(true);
+            }}
+          />
+          <MobileWorkspaceSheet
+            open={mobileLayout && brandPanel.state.open}
+            title={translate('brand_label', 'Brand')}
+            onClose={() => brandPanel.setOpen(false)}
+          >
+            <BrandPanel store={store as any} />
+          </MobileWorkspaceSheet>
           <MobileQuickActions
             store={store}
             onSave={handleSave}
-            onOpenTools={() => setMobileToolsOpen(true)}
-            onToggleInspector={() => setInspectorCollapsed((collapsed) => !collapsed)}
+            onOpenTools={() => {
+              setInspectorCollapsed(true);
+              brandPanel.setOpen(false);
+              setMobileToolsOpen(true);
+            }}
+            onToggleInspector={() => {
+              setMobileToolsOpen(false);
+              brandPanel.setOpen(false);
+              setInspectorCollapsed((collapsed) => !collapsed);
+            }}
           />
           {docMode === 'video' && <VideoTimeline store={store} sendTimelineAwareness={collabData.sendTimelineAwareness} />}
           <PagesPanel store={store} visible={showPagesBar} />
@@ -1823,20 +1858,6 @@ export const Designer: FC<DesignerProps> = ({
       {showStart && (
         <StartDialog store={store} fetchFn={fetch} onDone={() => setShowStart(false)} />
       )}
-      <MobileToolsDialog
-        open={mobileToolsOpen}
-        onClose={() => setMobileToolsOpen(false)}
-        activeTool={activeTool}
-        lastToolPerGroup={lastToolPerGroup}
-        aiAvailable={aiActive}
-        onSelect={setActiveTool}
-        activeToolOptions={activeToolOptions}
-        onToolOptionChange={onToolOptionChange}
-        onOpenBrand={() => {
-          setMobileToolsOpen(false);
-          brandPanel.setOpen(true);
-        }}
-      />
       {mediaPicker.element}
       <input
         ref={importInputRef}

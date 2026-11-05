@@ -259,9 +259,19 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   pointers enlarge the Transformer anchors. Do not add mouse-only Stage handlers or reintroduce a
   synthetic-mouse duplicate commit after a touch gesture.
 - **Mobile workspace uses the same store and tool registry.** `mobile-designer-tools.tsx` provides
-  prominent quick actions and a bottom tool sheet; it never forks editing behavior. The desktop
-  rail/options stay unchanged, the Inspector becomes a bottom sheet, and the timeline collapses to
-  compact transport controls. Timeline resizing uses pointer events, never a mouse-only splitter.
+  prominent quick actions and inline, non-modal Tools/Brand sheets; it never forks editing behavior.
+  The Inspector participates in layout at half or expanded height instead of covering the canvas,
+  with collapse, accessible snap buttons, and a pointer/keyboard drag handle. The main mobile column
+  scrolls when expanded panels exceed the viewport, and Brand mounts only in its active layout.
+  Mobile keeps design rename and timeline collapse/zoom-to-fit available; desktop adds a direct rail
+  Brand button through the same `brandPanel.toggle()` action as the Window menu.
+- **Timeline gestures and exact timing.** Clip move/trim and ruler scrub use pointer capture with
+  pointer-id checks, cancellation/lost-capture handling, and bounded horizontal/vertical auto-scroll.
+  `clip-timing.ts` shares the drag's move/trim rules with the Inspector's Start/End/Duration steppers
+  and the expanded mobile timeline's compact selected-clip editor. These are clip-local and separate
+  from the output-duration stepper. Each changed stepper edit commits one history entry (unchanged
+  blur is a no-op), and `clip-source-duration.ts` supplies a reactive, retryable source bound.
+  Auto-scroll adds viewport displacement to drag deltas and only runs after actual pointer movement.
 - **Timeline transport and Inspector essentials.** `timeline-split.ts` is the single split guard for
   the transport, S shortcut, context menu, and store: an unlocked selected clip, a strictly interior
   playhead, and at least 100 ms on both sides. Invalid cuts are no-ops; valid splits select the right

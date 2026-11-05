@@ -8,6 +8,7 @@ import {
   type DesignerTool,
   type DesignerToolGroup,
 } from './tools';
+import { BrandIcon } from '@postmill-ai/frontend/components/ui/icons/designer-tools';
 
 /**
  * The Photoshop-style tool palette rail.
@@ -28,6 +29,8 @@ interface ToolRailProps {
   onSelect: (toolId: string) => void;
   /** Tools requiring AI are hidden when the org has no active provider. */
   aiAvailable: boolean;
+  onOpenBrand: () => void;
+  brandOpen?: boolean;
 }
 
 const visibleTools = (group: DesignerToolGroup, aiAvailable: boolean): DesignerTool[] =>
@@ -49,6 +52,8 @@ export const ToolRail = React.memo(function ToolRail({
   lastToolPerGroup,
   onSelect,
   aiAvailable,
+  onOpenBrand,
+  brandOpen = false,
 }: ToolRailProps) {
   const t = useT();
   const [flyout, setFlyout] = useState<string | null>(null);
@@ -214,6 +219,22 @@ export const ToolRail = React.memo(function ToolRail({
           </div>
         );
       })}
+      <div className="my-1 h-px w-6 bg-studioBorder" />
+      <button
+        type="button"
+        onClick={onOpenBrand}
+        aria-label={t('brand_label', 'Brand')}
+        aria-pressed={brandOpen}
+        data-tooltip-id="tooltip"
+        data-tooltip-content={t('brand_label', 'Brand')}
+        className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all ${
+          brandOpen
+            ? 'bg-designerAccent/20 text-btnPrimaryAccent'
+            : 'text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor'
+        }`}
+      >
+        <BrandIcon size={18} />
+      </button>
     </div>
   );
 });

@@ -397,3 +397,11 @@ export const LayerMaskIcon = toolIcon(
     <circle cx="10" cy="10" r="3" fill="currentColor" stroke="none" />
   </>
 );
+
+export const BrandIcon = toolIcon(
+  <>
+    <circle cx="7" cy="7" r="3.2" />
+    <circle cx="13.5" cy="7" r="2.2" opacity="0.65" />
+    <path d="M3.5 15.5h13M5 12.5h10" />
+  </>
+);
