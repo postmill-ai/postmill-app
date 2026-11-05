@@ -168,9 +168,9 @@ export const ContinueIntegration: FC<{
                 : ''
             }`
           : null;
-        // A user cancelling consent is normal flow — not Sentry noise. A
-        // platform error or a code-less callback signals misconfiguration.
-        if (!denied) {
+        // Explicit provider outcomes are expected authorization results. Only
+        // an unexplained callback with neither a code nor an error is an app fault.
+        if (!denied && !providerError) {
           Sentry.captureException(
             new Error(
               `Channel connect failed for ${provider}: ${
@@ -272,18 +272,18 @@ export const ContinueIntegration: FC<{
         const message = Array.isArray(rawMessage)
           ? rawMessage.join(', ')
           : rawMessage;
-        // Connect failures must never be silent: the backend maps provider
-        // errors to generic messages (or returns no body at all), so capture
-        // the full context — without this a failing OAuth callback is
-        // undiagnosable (first seen 2026-09-05, Discord connect).
-        Sentry.captureException(
-          new Error(
-            `Channel connect failed for ${provider}: ${
-              message || `HTTP ${data.status}`
-            }`
-          ),
-          { extra: { provider, status: data.status, body } }
-        );
+        // Expected provider rejections are user-correctable and already logged
+        // by the backend. Unexpected responses still need full Sentry context.
+        if (body.code !== 'CHANNEL_AUTHORIZATION_REJECTED') {
+          Sentry.captureException(
+            new Error(
+              `Channel connect failed for ${provider}: ${
+                message || `HTTP ${data.status}`
+              }`
+            ),
+            { extra: { provider, status: data.status, body } }
+          );
+        }
         setErrorMessage(
           message ||
             tRef.current(

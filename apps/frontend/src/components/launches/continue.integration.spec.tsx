@@ -246,6 +246,31 @@ describe('ContinueIntegration popup completion', () => {
     expect(closeSpy).not.toHaveBeenCalled();
   });
 
+  it('shows an expected authorization rejection without reporting it to Sentry', async () => {
+    setOpener({ postMessage });
+    mockFetch.mockResolvedValue({
+      status: 409,
+      json: async () => ({
+        msg: 'Invalid client credential',
+        code: 'CHANNEL_AUTHORIZATION_REJECTED',
+      }),
+    });
+
+    render(
+      <ContinueIntegration
+        provider="instagram-standalone"
+        searchParams={{ state: 's', code: 'c' }}
+        logged={true}
+      />
+    );
+
+    await screen.findByText('Invalid client credential');
+    expect(mockCaptureException).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(closeSpy).not.toHaveBeenCalled();
+  });
+
   it('sends only DTO-whitelisted fields in the connect body, never raw callback params', async () => {
     setOpener({ postMessage });
     mockFetch.mockResolvedValue(okResponse({ id: 'int-1', inBetweenSteps: false }));
@@ -319,6 +344,12 @@ describe('ContinueIntegration popup completion', () => {
     );
 
     await screen.findByText('Could not add provider (error 500)');
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Channel connect failed for discord: HTTP 500',
+      }),
+      expect.anything()
+    );
     // The popup-only copy must not appear in the full-page flow.
     expect(
       screen.queryByText('You can close this window and try again.')
@@ -370,7 +401,7 @@ describe('ContinueIntegration popup completion', () => {
     );
   });
 
-  it('shows the provider error on an OAuth error redirect and reports it', async () => {
+  it('shows an OAuth provider error without reporting an application exception', async () => {
     setOpener({ postMessage });
 
     render(
@@ -389,7 +420,7 @@ describe('ContinueIntegration popup completion', () => {
       'Authorization failed: unauthorized_scope_error: Scope &quot;rw_organization_admin&quot; is not authorized'
     );
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(mockCaptureException).toHaveBeenCalled();
+    expect(mockCaptureException).not.toHaveBeenCalled();
   });
 
   it('treats a user-cancelled consent as normal flow — clean message, no Sentry noise', async () => {

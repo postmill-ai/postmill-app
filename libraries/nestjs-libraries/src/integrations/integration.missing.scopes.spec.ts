@@ -20,11 +20,14 @@ describe('NotEnoughScopesFilter', () => {
     filter = new NotEnoughScopesFilter();
   });
 
-  it('returns HTTP 409 Conflict with the exception message', () => {
+  it('returns HTTP 409 Conflict with the exception message and expected-error code', () => {
     const exception = new NotEnoughScopes('Missing required scopes');
     filter.catch(exception, mockHost);
     expect(mockResponse.status).toHaveBeenCalledWith(409);
-    expect(mockResponse.json).toHaveBeenCalledWith({ msg: 'Missing required scopes' });
+    expect(mockResponse.json).toHaveBeenCalledWith({
+      msg: 'Missing required scopes',
+      code: 'CHANNEL_AUTHORIZATION_REJECTED',
+    });
   });
 
   it('uses the default message when none is provided', () => {
@@ -33,6 +36,7 @@ describe('NotEnoughScopesFilter', () => {
     expect(mockResponse.status).toHaveBeenCalledWith(409);
     expect(mockResponse.json).toHaveBeenCalledWith({
       msg: 'Not enough scopes, when choosing a provider, please add all the scopes',
+      code: 'CHANNEL_AUTHORIZATION_REJECTED',
     });
   });
 

@@ -226,14 +226,10 @@ export class NoAuthIntegrationsController {
           providerMessage = instagramOAuthErrorDetail(providerJson);
         }
 
-        // Never swallow the provider's real error — an opaque "Authentication
-        // failed" makes OAuth regressions undiagnosable (first seen 2026-09-05
-        // with a Discord connect that failed invisibly). Log it, then map to
-        // the generic client-facing message.
         this._logger.warn(
-          `social-connect authenticate failed for ${integration}: ${
-            providerMessage || (err as Error)?.message || String(err)
-          }`
+          `social-connect authorization rejected: provider=${integration} organization=${org.id} providerConfig=${
+            providerConfigId || 'platform'
+          } detail=${providerMessage || (err as Error)?.message || String(err)}`
         );
 
         return res({
