@@ -190,7 +190,7 @@ The one-paragraph version of the conventions — details and recipes in the link
 
 ### Numbers stated once (do not let them drift)
 
-- **AI providers: 30** (17 direct + 13 hubs/gateways), BYOK, no env fallback.
+- **AI providers: 31** (17 direct + 14 hubs/gateways), BYOK, no env fallback.
 - **Media tools: 46** = Designer + AI Designer + **38 provider studios** + **6 stock browsers**.
 - **Channels: 45+.**
 - **Background jobs: Inngest** (the previous workflow orchestrator was removed — there is **no

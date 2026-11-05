@@ -20,6 +20,7 @@ import cyberghostModules from '@postmill-ai/provider-cyberghost';
 import deepgramModules from '@postmill-ai/provider-deepgram';
 import deepinfraModules from '@postmill-ai/provider-deepinfra';
 import deepseekModules from '@postmill-ai/provider-deepseek';
+import demonrouteModules from '@postmill-ai/provider-demonroute';
 import devtoModules from '@postmill-ai/provider-devto';
 import didModules from '@postmill-ai/provider-did';
 import digitaloceanspacesModules from '@postmill-ai/provider-digitalocean-spaces';
@@ -187,6 +188,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...deepgramModules,
   ...deepinfraModules,
   ...deepseekModules,
+  ...demonrouteModules,
   ...devtoModules,
   ...didModules,
   ...digitaloceanspacesModules,

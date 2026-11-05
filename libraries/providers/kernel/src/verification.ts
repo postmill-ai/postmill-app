@@ -12,6 +12,8 @@ import { ProviderDomain } from './identity';
 // Keys are `domain/providerId` (version-agnostic). Membership is intentionally narrow:
 // only the documented "built without a live key" media + content-pack providers.
 export const BETA_PROVIDER_KEYS: ReadonlySet<string> = new Set<string>([
+  // AI — OpenAI-compatible hub built without a live key
+  'ai/demonroute',
   // Media — bespoke own-key studios built without a live key
   'media/wan',
   'media/higgsfield',

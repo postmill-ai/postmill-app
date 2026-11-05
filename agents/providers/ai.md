@@ -46,7 +46,7 @@ validateCredentials: async (ctx) => {
 
 ## Fast path: `OpenAICompatibleAdapter`
 
-14 of the 30 AI providers are thin instantiations of the shared base class in `libraries/providers/kernel/src/domains/ai-helpers.ts` — no bespoke class needed: `siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`, `apertus`, `nvidia`, `openai-compatible`. (The stale comment on the class says "nine"; the code has 14.)
+15 of the 31 AI providers are thin instantiations of the shared base class in `libraries/providers/kernel/src/domains/ai-helpers.ts` — no bespoke class needed: `siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`, `apertus`, `nvidia`, `openai-compatible`, `demonroute`.
 
 Constructor signature (`ai-helpers.ts`):
 

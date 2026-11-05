@@ -6,12 +6,12 @@ kernel vitest alias. One row per **module** (multi-module packages — e.g. `ope
 get multiple rows). The `has-spec?` column reflects whether the **package** contains any
 `*.spec.ts` / `*.int-spec.ts` under `src/**`.
 
-- **Modules:** 192  (== `providerModules.length`)
-- **Packages:** 164  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
-  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **165** on a clean checkout because it also counts the `node_modules/` dir; **164** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **166** — both `node_modules/` and `coverage/` are non-package artifacts.)
-- **Packages with at least one spec:** 139 / 164  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
+- **Modules:** 193  (== `providerModules.length`)
+- **Packages:** 165  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
+  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **166** on a clean checkout because it also counts the `node_modules/` dir; **165** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **167** — both `node_modules/` and `coverage/` are non-package artifacts.)
+- **Packages with at least one spec:** 140 / 165  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
 
-Modules per domain: ai=30, auth=10, comms=5, contentpack=4, email=7, media=37, payments=4, shortlink=20, social=45, storage=14, vpn=16
+Modules per domain: ai=31, auth=10, comms=5, contentpack=4, email=7, media=37, payments=4, shortlink=20, social=45, storage=14, vpn=16
 
 | package | domain | providerId | version | status | has-spec? |
 |---|---|---|---|---|---|
@@ -23,6 +23,7 @@ Modules per domain: ai=30, auth=10, comms=5, contentpack=4, email=7, media=37, p
 | cohere | ai | cohere | v1 | active | yes |
 | deepinfra | ai | deepinfra | v1 | active | no |
 | deepseek | ai | deepseek | v1 | active | yes |
+| demonroute | ai | demonroute | v1 | active | yes |
 | fireworks | ai | fireworks | v1 | active | yes |
 | gateway | ai | gateway | v1 | active | yes |
 | gmihub | ai | gmihub | v1 | active | no |
