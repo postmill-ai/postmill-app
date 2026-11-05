@@ -61,7 +61,8 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * user makes a layer group we set both, so a folder also reflows as a unit.
  */
 // v11 adds optional painted mask fields to still-image video clips.
-export const DESIGNER_DOC_VERSION = 11;
+// v12 adds 3D extrusion layer styles and text-clip extrusion.
+export const DESIGNER_DOC_VERSION = 12;
 
 /**
  * Maximum pages per image output, INCLUDING page 1 (`output.children` itself).

@@ -8,6 +8,7 @@ import { sharedStageRef } from '../stage-ref';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement } from '../designer.store';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
+import { TextEffectPresets } from './text-effect-presets';
 
 interface TextInspectorProps {
   store: any;
@@ -313,6 +314,7 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
         </div>
       )}
 
+      <TextEffectPresets store={store} textElements={textElements} />
       <TextFormatPanel store={store} />
       {primary && (
         <DesignerAssistantPanel

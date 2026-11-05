@@ -8,6 +8,9 @@ import { styleBlur, styleOffset } from './layer-styles';
 import { canvasCompositeFor, isNativeBlend } from './pixel-ops';
 import { canvasColor } from './canvas-color';
 import { drawPatternTile, tileSizeFor } from './pattern-tiles';
+import { extrusionOffsets } from './text-extrusion';
+
+export { extrusionOffsets, MAX_EXTRUSION_DEPTH } from './text-extrusion';
 
 /**
  * How a layer style is painted, shared by the Konva canvas and the server
@@ -196,7 +199,7 @@ export const buildStyleGradient = (
 export const styleGradientSource = (): string =>
   `const canvasColor = ${String(canvasColor)};\nconst buildStyleGradient = ${String(buildStyleGradient)};`;
 
-/** Drop Shadow / Outer Glow — the layer's silhouette, blurred behind it. */
+/** Drop Shadow / Outer Glow / 3D Extrusion — silhouettes behind the layer. */
 export const drawUnderStyle = (
   ctx: any,
   layer: any,
@@ -215,6 +218,16 @@ export const drawUnderStyle = (
   sctx.globalCompositeOperation = 'source-in';
   sctx.fillStyle = canvasColor(style.color || '#000000');
   sctx.fillRect(0, 0, w, h);
+
+  if (style.type === 'extrusion') {
+    ctx.save();
+    ctx.globalAlpha = style.opacity ?? 0.85;
+    for (const offset of extrusionOffsets(style, ratio)) {
+      ctx.drawImage(shadow, surface.x + offset.x, surface.y + offset.y, surface.width, surface.height);
+    }
+    ctx.restore();
+    return;
+  }
 
   // Blurred in the buffer's own device pixels, so the softness is the same
   // whatever scale the page is being rendered at.

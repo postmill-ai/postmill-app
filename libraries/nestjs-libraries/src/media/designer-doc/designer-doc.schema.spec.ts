@@ -247,6 +247,28 @@ describe('DesignerDoc schema', () => {
     expect(DesignerDocLenientSchema.safeParse(migrateDoc(v10)).success).toBe(true);
   });
 
+  it('accepts bounded v12 text extrusion in both parsers', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.version = 12;
+    doc.outputs[0].tracks[0].clips[0].textExtrusion = {
+      depth: 24,
+      angle: 45,
+      color: '#123456',
+      opacity: 0.85,
+    };
+    for (const schema of [DesignerDocLenientSchema, DesignerDocStrictSchema]) {
+      expect(schema.parse(migrateDoc(doc)).outputs[0].tracks[0].clips[0].textExtrusion).toEqual({
+        depth: 24,
+        angle: 45,
+        color: '#123456',
+        opacity: 0.85,
+      });
+    }
+    doc.outputs[0].tracks[0].clips[0].textExtrusion.depth = 201;
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(false);
+    expect(DesignerDocLenientSchema.safeParse(migrateDoc(doc)).success).toBe(false);
+  });
+
   it('keeps v9 clips valid without the optional v10 fontStyle', () => {
     const doc = { ...JSON.parse(JSON.stringify(videoDocFixture)), version: 9 };
     expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(true);

@@ -1,11 +1,14 @@
 import type { VideoClip } from './designer.store';
 import type { EaseType } from './video-preview';
 
+export type AnimationPresetCategory = 'entrance' | 'emphasis' | 'exit';
+
 export interface TextAnimationPreset {
   /** Stable identifier/value — persisted on the clip and used for matching. Never translate. */
   name: string;
   /** i18n key for the display label — the `name` above stays the canonical stored value. */
   nameKey: string;
+  category: AnimationPresetCategory;
   keyframes: VideoClip['keyframes'];
   /**
    * Progressive text reveal instead of transform keyframes (Typewriter):
@@ -22,7 +25,7 @@ export interface TextAnimationPreset {
  * x/y/rotation/opacity for any clip and both renderers honour it); only the
  * reveal presets stay text-only, since they animate the text content itself.
  */
-export const ANIMATION_TRACK_TYPES = new Set(['text', 'shape', 'image', 'sticker']);
+export const ANIMATION_TRACK_TYPES = new Set(['text', 'caption', 'shape', 'image', 'sticker', 'raster', 'video']);
 
 /** Typewriter pacing: each character appears every ~80ms of the reveal window. */
 export const TYPEWRITER_MS_PER_CHAR = 80;
@@ -33,6 +36,7 @@ export const TYPEWRITER_MS_PER_CHAR = 80;
  * (opacity, …) is absolute.
  */
 export const TEXT_ANIM_RELATIVE_PROPS = new Set(['x', 'y', 'rotation']);
+export const TEXT_ANIM_SCALE_PROPS = new Set(['width', 'height']);
 
 export const TEXT_ANIMATION_PRESETS: TextAnimationPreset[] = [
   {
@@ -41,12 +45,14 @@ export const TEXT_ANIMATION_PRESETS: TextAnimationPreset[] = [
     // A text reveal, not an opacity fade: the string is drawn as a growing
     // prefix (see designer-doc/text-reveal) at ~80ms per character — the old
     // 300ms opacity ramp was indistinguishable from Pop.
+    category: 'entrance',
     keyframes: [],
     textReveal: { mode: 'chars' },
   },
   {
     name: 'Pop',
     nameKey: 'designer_text_anim_pop',
+    category: 'entrance',
     keyframes: [
       { tMs: 0, props: { opacity: 0 }, ease: 'easeOut' as EaseType },
       { tMs: 400, props: { opacity: 1 }, ease: 'easeOut' as EaseType },
@@ -55,6 +61,7 @@ export const TEXT_ANIMATION_PRESETS: TextAnimationPreset[] = [
   {
     name: 'Fade Up',
     nameKey: 'designer_text_anim_fade_up',
+    category: 'entrance',
     keyframes: [
       { tMs: 0, props: { y: 20, opacity: 0 }, ease: 'easeOut' as EaseType },
       { tMs: 500, props: { y: 0, opacity: 1 }, ease: 'easeOut' as EaseType },
@@ -63,6 +70,7 @@ export const TEXT_ANIMATION_PRESETS: TextAnimationPreset[] = [
   {
     name: 'Fade Down',
     nameKey: 'designer_text_anim_fade_down',
+    category: 'entrance',
     keyframes: [
       { tMs: 0, props: { y: -20, opacity: 0 }, ease: 'easeOut' as EaseType },
       { tMs: 500, props: { y: 0, opacity: 1 }, ease: 'easeOut' as EaseType },
@@ -71,6 +79,7 @@ export const TEXT_ANIMATION_PRESETS: TextAnimationPreset[] = [
   {
     name: 'Slide In Left',
     nameKey: 'designer_text_anim_slide_in_left',
+    category: 'entrance',
     keyframes: [
       { tMs: 0, props: { x: -60, opacity: 0 }, ease: 'easeOut' as EaseType },
       { tMs: 500, props: { x: 0, opacity: 1 }, ease: 'easeOut' as EaseType },
@@ -79,6 +88,7 @@ export const TEXT_ANIMATION_PRESETS: TextAnimationPreset[] = [
   {
     name: 'Slide In Right',
     nameKey: 'designer_text_anim_slide_in_right',
+    category: 'entrance',
     keyframes: [
       { tMs: 0, props: { x: 60, opacity: 0 }, ease: 'easeOut' as EaseType },
       { tMs: 500, props: { x: 0, opacity: 1 }, ease: 'easeOut' as EaseType },
@@ -87,6 +97,7 @@ export const TEXT_ANIMATION_PRESETS: TextAnimationPreset[] = [
   {
     name: 'Rotate In',
     nameKey: 'designer_text_anim_rotate_in',
+    category: 'entrance',
     keyframes: [
       { tMs: 0, props: { rotation: -12, opacity: 0 }, ease: 'easeOut' as EaseType },
       { tMs: 500, props: { rotation: 0, opacity: 1 }, ease: 'easeOut' as EaseType },
@@ -95,10 +106,126 @@ export const TEXT_ANIMATION_PRESETS: TextAnimationPreset[] = [
   {
     name: 'Bounce Up',
     nameKey: 'designer_text_anim_bounce_up',
+    category: 'entrance',
     keyframes: [
       { tMs: 0, props: { y: 30, opacity: 0 }, ease: 'easeOut' as EaseType },
       { tMs: 350, props: { y: -6, opacity: 1 }, ease: 'easeOut' as EaseType },
       { tMs: 550, props: { y: 0, opacity: 1 }, ease: 'easeInOut' as EaseType },
+    ],
+  },
+  {
+    name: 'Zoom In',
+    nameKey: 'designer_anim_zoom_in',
+    category: 'entrance',
+    keyframes: [
+      { tMs: 0, props: { width: 0.5, height: 0.5, opacity: 0 }, ease: 'easeOut' as EaseType },
+      { tMs: 500, props: { width: 1, height: 1, opacity: 1 }, ease: 'easeOut' as EaseType },
+    ],
+  },
+  {
+    name: 'Zoom Out',
+    nameKey: 'designer_anim_zoom_out',
+    category: 'entrance',
+    keyframes: [
+      { tMs: 0, props: { width: 1.5, height: 1.5, opacity: 0 }, ease: 'easeOut' as EaseType },
+      { tMs: 500, props: { width: 1, height: 1, opacity: 1 }, ease: 'easeOut' as EaseType },
+    ],
+  },
+  {
+    name: 'Spin In',
+    nameKey: 'designer_anim_spin_in',
+    category: 'entrance',
+    keyframes: [
+      { tMs: 0, props: { rotation: -180, opacity: 0 }, ease: 'easeOut' as EaseType },
+      { tMs: 650, props: { rotation: 0, opacity: 1 }, ease: 'easeOut' as EaseType },
+    ],
+  },
+  {
+    name: 'Pulse',
+    nameKey: 'designer_anim_pulse',
+    category: 'emphasis',
+    keyframes: [
+      { tMs: 0, props: { width: 1, height: 1 }, ease: 'easeInOut' as EaseType },
+      { tMs: 300, props: { width: 1.08, height: 1.08 }, ease: 'easeInOut' as EaseType },
+      { tMs: 600, props: { width: 1, height: 1 }, ease: 'easeInOut' as EaseType },
+    ],
+  },
+  {
+    name: 'Shake',
+    nameKey: 'designer_anim_shake',
+    category: 'emphasis',
+    keyframes: [
+      { tMs: 0, props: { x: 0 }, ease: 'easeInOut' as EaseType },
+      { tMs: 100, props: { x: -10 }, ease: 'easeInOut' as EaseType },
+      { tMs: 200, props: { x: 10 }, ease: 'easeInOut' as EaseType },
+      { tMs: 300, props: { x: -6 }, ease: 'easeInOut' as EaseType },
+      { tMs: 400, props: { x: 0 }, ease: 'easeInOut' as EaseType },
+    ],
+  },
+  {
+    name: 'Swing',
+    nameKey: 'designer_anim_swing',
+    category: 'emphasis',
+    keyframes: [
+      { tMs: 0, props: { rotation: -8 }, ease: 'easeInOut' as EaseType },
+      { tMs: 250, props: { rotation: 6 }, ease: 'easeInOut' as EaseType },
+      { tMs: 500, props: { rotation: -3 }, ease: 'easeInOut' as EaseType },
+      { tMs: 750, props: { rotation: 0 }, ease: 'easeInOut' as EaseType },
+    ],
+  },
+  {
+    name: 'Fade Out',
+    nameKey: 'designer_anim_fade_out',
+    category: 'exit',
+    keyframes: [
+      { tMs: -500, props: { opacity: 1 }, ease: 'easeIn' as EaseType },
+      { tMs: 0, props: { opacity: 0 }, ease: 'easeIn' as EaseType },
+    ],
+  },
+  {
+    name: 'Slide Out Left',
+    nameKey: 'designer_anim_slide_out_left',
+    category: 'exit',
+    keyframes: [
+      { tMs: -500, props: { x: 0, opacity: 1 }, ease: 'easeIn' as EaseType },
+      { tMs: 0, props: { x: -60, opacity: 0 }, ease: 'easeIn' as EaseType },
+    ],
+  },
+  {
+    name: 'Slide Out Right',
+    nameKey: 'designer_anim_slide_out_right',
+    category: 'exit',
+    keyframes: [
+      { tMs: -500, props: { x: 0, opacity: 1 }, ease: 'easeIn' as EaseType },
+      { tMs: 0, props: { x: 60, opacity: 0 }, ease: 'easeIn' as EaseType },
+    ],
+  },
+  {
+    name: 'Zoom Out Exit',
+    nameKey: 'designer_anim_zoom_out_exit',
+    category: 'exit',
+    keyframes: [
+      { tMs: -500, props: { width: 1, height: 1, opacity: 1 }, ease: 'easeIn' as EaseType },
+      { tMs: 0, props: { width: 0.5, height: 0.5, opacity: 0 }, ease: 'easeIn' as EaseType },
+    ],
+  },
+  {
+    name: 'Spin Out',
+    nameKey: 'designer_anim_spin_out',
+    category: 'exit',
+    keyframes: [
+      { tMs: -650, props: { rotation: 0, opacity: 1 }, ease: 'easeIn' as EaseType },
+      { tMs: 0, props: { rotation: 180, opacity: 0 }, ease: 'easeIn' as EaseType },
+    ],
+  },
+  {
+    name: 'Bounce Out',
+    nameKey: 'designer_anim_bounce_out',
+    category: 'exit',
+    keyframes: [
+      { tMs: -550, props: { y: 0, opacity: 1 }, ease: 'easeInOut' as EaseType },
+      { tMs: -250, props: { y: -8, opacity: 1 }, ease: 'easeInOut' as EaseType },
+      { tMs: 0, props: { y: 30, opacity: 0 }, ease: 'easeIn' as EaseType },
     ],
   },
 ];
@@ -113,22 +240,28 @@ export const TEXT_ANIMATION_PRESETS: TextAnimationPreset[] = [
  */
 export const buildTextAnimationUpdate = (
   preset: TextAnimationPreset,
-  clip: Pick<VideoClip, 'x' | 'y' | 'rotation' | 'text' | 'startMs' | 'endMs'>
+  clip: Pick<VideoClip, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'text' | 'startMs' | 'endMs'>
 ): Pick<VideoClip, 'keyframes' | 'textReveal'> => {
   const base: Record<string, number> = {
     x: clip.x ?? 0,
     y: clip.y ?? 0,
+    width: clip.width ?? 1,
+    height: clip.height ?? 1,
     rotation: clip.rotation ?? 0,
   };
+  const clipDuration = clip.endMs - clip.startMs;
   const keyframes = (preset.keyframes ?? [])
     .map((kf) => ({
       ...kf,
+      tMs: preset.category === 'exit' ? clipDuration + kf.tMs : kf.tMs,
       props: Object.fromEntries(
         Object.entries(kf.props).map(([key, value]) => [
           key,
-          // Relative props ride on the clip's base transform; omitting a key
-          // the preset doesn't animate keeps it out of the keyframe lane.
-          TEXT_ANIM_RELATIVE_PROPS.has(key) ? (base[key] ?? 0) + value : value,
+          TEXT_ANIM_RELATIVE_PROPS.has(key)
+            ? (base[key] ?? 0) + value
+            : TEXT_ANIM_SCALE_PROPS.has(key)
+              ? (base[key] ?? 1) * value
+              : value,
         ])
       ),
     }))
@@ -136,7 +269,6 @@ export const buildTextAnimationUpdate = (
 
   let textReveal: VideoClip['textReveal'];
   if (preset.textReveal) {
-    const clipDuration = clip.endMs - clip.startMs;
     const chars = (clip.text || '').length;
     const paced = Math.max(1, Math.round(chars * TYPEWRITER_MS_PER_CHAR));
     textReveal = {
@@ -162,7 +294,10 @@ export const matchTextAnimationPreset = (
   baseX: number,
   baseY: number,
   baseRotation = 0,
-  textReveal?: VideoClip['textReveal']
+  textReveal?: VideoClip['textReveal'],
+  baseWidth = 1,
+  baseHeight = 1,
+  durationMs = 0
 ): string | null => {
   if (textReveal) {
     const revealPreset = TEXT_ANIMATION_PRESETS.find(
@@ -175,7 +310,8 @@ export const matchTextAnimationPreset = (
     const pk = preset.keyframes ?? [];
     if (pk.length !== keyframes.length) continue;
     for (let i = 0; i < pk.length; i++) {
-      if (pk[i].tMs !== keyframes[i].tMs) continue outer;
+      const expectedTime = preset.category === 'exit' ? durationMs + pk[i].tMs : pk[i].tMs;
+      if (expectedTime !== keyframes[i].tMs) continue outer;
       const expected: Record<string, number> = {};
       for (const [k, v] of Object.entries(pk[i].props)) {
         expected[k] =
@@ -185,7 +321,11 @@ export const matchTextAnimationPreset = (
               ? baseY + v
               : k === 'rotation'
                 ? baseRotation + v
-                : v;
+                : k === 'width'
+                  ? baseWidth * v
+                  : k === 'height'
+                    ? baseHeight * v
+                    : v;
       }
       const actual = keyframes[i].props;
       const keys = Object.keys(expected);

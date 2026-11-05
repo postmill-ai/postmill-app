@@ -323,7 +323,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `video-text-layout.ts`: paragraphs, long-token splitting, fixed-box overflow, one-fontSize line
   height, centred baselines and justified offsets. The frame script receives it through
   `videoTextLayoutSource()`; never reintroduce a second `wrapText` there. Shape clips use the same
-  `buildStyleGradient` and `gradientFillProps` as image shapes.
+  `buildStyleGradient` and `gradientFillProps` as image shapes. Static 3D is an `extrusion` layer
+  style rendered from the layer alpha; text clips use optional v12 `textExtrusion`. Both derive
+  offsets from the bounded `text-extrusion.ts` module (depth ≤200), which is injected into the frame
+  script and projected onto the poster as an extrusion style. Animation presets live in
+  `text-animation-presets.ts`, grouped into entrance/emphasis/exit, and write only the existing
+  keyframe/reveal channels — never a parallel animation model.
 - **node-canvas is not a browser canvas.** `ctx.filter = 'blur(…)'` is accepted and ignored, and
   `ctx.scale()` does not condense glyphs — text is rasterised at the font size with only the origin
   moving. Anything that needs either must work in pixel space (`blurCanvas`) or squeeze a rendered

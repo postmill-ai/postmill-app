@@ -137,6 +137,17 @@ export const LAYER_STYLE_DESCRIPTORS: LayerStyleDescriptor[] = [
     color: true,
   },
   {
+    type: 'extrusion',
+    label: '3D Extrusion',
+    params: [
+      OPACITY,
+      ANGLE,
+      { key: 'depth', label: 'Depth', min: 0, max: 200, step: 1, suffix: 'px' },
+    ],
+    color: true,
+    globalLight: true,
+  },
+  {
     type: 'color-overlay',
     label: 'Color Overlay',
     params: [OPACITY],

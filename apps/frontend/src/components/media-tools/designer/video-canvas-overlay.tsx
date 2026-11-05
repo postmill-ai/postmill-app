@@ -37,6 +37,7 @@ import {
 import { fullBoxHitProps, gradientFillProps } from './elements';
 import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 import { groupRefsForClip, toggleClipRefs } from './video-selection';
+import { extrusionOffsets } from '@postmill-ai/nestjs-libraries/media/designer-doc/text-extrusion';
 
 interface VideoCanvasOverlayProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -869,6 +870,64 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
         }
 
         if (trackType === 'text') {
+          const text = applyTextReveal(
+            clip.text || '',
+            clip.textReveal,
+            Math.max(0, playheadMs - clip.startMs),
+            clip.endMs - clip.startMs
+          );
+          const fontStyle = `${clip.fontStyle === 'italic' ? 'italic ' : ''}${clip.fontWeight ?? 400}`;
+          if (clip.textExtrusion?.depth) {
+            const extrusion = clip.textExtrusion;
+            const offsets = extrusionOffsets(extrusion, 1);
+            return (
+              <Group
+                key={clip.id}
+                ref={captureNode}
+                {...nodeProps}
+                visible={clip.id !== editingTextId}
+                x={props.x}
+                y={props.y}
+                rotation={props.rotation}
+                opacity={props.opacity}
+                globalCompositeOperation={blendGco}
+              >
+                {offsets.map((offset, index) => (
+                  <KonvaText
+                    key={`${clip.id}-extrusion-${index}`}
+                    {...fullBoxHitProps(props.width, props.height)}
+                    listening={false}
+                    x={offset.x}
+                    y={offset.y}
+                    width={props.width}
+                    height={props.height}
+                    text={text}
+                    fontFamily={clip.fontFamily || 'Arial'}
+                    fontSize={props.fontSize}
+                    lineHeight={1}
+                    align={clip.align || 'left'}
+                    fontStyle={fontStyle}
+                    fill={canvasColor(extrusion.color || '#000000')}
+                    opacity={extrusion.opacity ?? 0.85}
+                  />
+                ))}
+                <KonvaText
+                  {...fullBoxHitProps(props.width, props.height)}
+                  x={0}
+                  y={0}
+                  width={props.width}
+                  height={props.height}
+                  text={text}
+                  fontFamily={clip.fontFamily || 'Arial'}
+                  fontSize={props.fontSize}
+                  lineHeight={1}
+                  align={clip.align || 'left'}
+                  fontStyle={fontStyle}
+                  fill={canvasColor(clip.fill || '#000000')}
+                />
+              </Group>
+            );
+          }
           return (
             <KonvaText
               key={clip.id}
@@ -880,20 +939,12 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               y={props.y}
               width={props.width}
               height={props.height}
-              // Progressive reveal (typewriter) — the shared helper the frame
-              // renderer is injected with, so preview and export slice the
-              // string identically.
-              text={applyTextReveal(
-                clip.text || '',
-                clip.textReveal,
-                Math.max(0, playheadMs - clip.startMs),
-                clip.endMs - clip.startMs
-              )}
+              text={text}
               fontFamily={clip.fontFamily || 'Arial'}
               fontSize={props.fontSize}
               lineHeight={1}
               align={clip.align || 'left'}
-              fontStyle={`${clip.fontStyle === 'italic' ? 'italic ' : ''}${clip.fontWeight ?? 400}`}
+              fontStyle={fontStyle}
               fill={canvasColor(clip.fill || '#000000')}
               rotation={props.rotation}
               opacity={props.opacity}

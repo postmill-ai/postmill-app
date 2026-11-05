@@ -129,7 +129,14 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      (`applyTextReveal` / `textRevealProgress`); the preview overlay imports it and
      the frame page is handed it as source (`textRevealSource()`, injected like
      `keyframesSource`). The Typewriter preset (`text-animation-presets.ts`) writes
-     it at ~80 ms/char; a reveal preset clears the keyframe lanes and vice versa.
+     it at ~80 ms/char; a reveal preset clears the keyframe lanes and vice versa. Presets are grouped
+     into entrance, emphasis and exit. Exits are timed relative to the clip end; zoom presets scale
+     width/height from the clip base and motion presets offset x/y/rotation. All visual track types
+     share the same keyframe evaluator, while reveal stays text-only.
+   - Text extrusion (`clip.textExtrusion`, optional-additive doc v12) draws bounded far-to-near
+     silhouette copies behind the original text. `designer-doc/text-extrusion.ts` owns the offsets
+     (depth ≤200) and is injected with `textExtrusionSource()`; the preview uses the same helper and
+     the poster projects it to the static `extrusion` layer style. Reflow scales depth with font size.
    - Speed (`clip.speed`) is pitch-preserving on both sides: the preview sets
      `playbackRate` with `preservesPitch`/`webkitPreservesPitch`, and the mixer's
      `atempo` is likewise pitch-preserving, so preview and export audio match.

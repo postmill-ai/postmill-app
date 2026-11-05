@@ -81,11 +81,20 @@ describe('matchTextAnimationPreset', () => {
   });
 
   it('every preset round-trips through the matcher after the apply transform', () => {
-    const clip = { x: 320, y: 480, rotation: 5, text: 'Hello there', startMs: 0, endMs: 5000 };
+    const clip = { x: 320, y: 480, width: 200, height: 100, rotation: 5, text: 'Hello there', startMs: 0, endMs: 5000 };
     for (const preset of TEXT_ANIMATION_PRESETS) {
       const update = buildTextAnimationUpdate(preset, clip);
       expect(
-        matchTextAnimationPreset(update.keyframes, clip.x, clip.y, clip.rotation, update.textReveal)
+        matchTextAnimationPreset(
+          update.keyframes,
+          clip.x,
+          clip.y,
+          clip.rotation,
+          update.textReveal,
+          clip.width,
+          clip.height,
+          clip.endMs - clip.startMs
+        )
       ).toBe(preset.name);
     }
   });
@@ -146,5 +155,34 @@ describe('buildTextAnimationUpdate', () => {
       endMs: 3000,
     });
     expect(update.textReveal).toEqual({ mode: 'chars' });
+  });
+
+  it('scales width and height from the clip base for zoom presets', () => {
+    const update = buildTextAnimationUpdate(presetByName('Zoom In'), {
+      width: 200,
+      height: 100,
+      startMs: 0,
+      endMs: 5000,
+    });
+    expect(update.keyframes?.[0].props).toMatchObject({ width: 100, height: 50, opacity: 0 });
+    expect(update.keyframes?.[1].props).toMatchObject({ width: 200, height: 100, opacity: 1 });
+  });
+
+  it('places exit presets at the end of the clip', () => {
+    const update = buildTextAnimationUpdate(presetByName('Slide Out Left'), {
+      x: 100,
+      startMs: 2000,
+      endMs: 7000,
+    });
+    expect(update.keyframes?.map((frame) => frame.tMs)).toEqual([4500, 5000]);
+    expect(update.keyframes?.[1].props).toMatchObject({ x: 40, opacity: 0 });
+  });
+
+  it('covers entrance, emphasis, and exit categories', () => {
+    expect(new Set(TEXT_ANIMATION_PRESETS.map((preset) => preset.category))).toEqual(
+      new Set(['entrance', 'emphasis', 'exit'])
+    );
+    expect(presetByName('Pulse').category).toBe('emphasis');
+    expect(presetByName('Spin Out').category).toBe('exit');
   });
 });

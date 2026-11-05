@@ -32,6 +32,7 @@ import { textRevealSource } from '../designer-doc/text-reveal';
 import { styleGradientSource } from '../designer-doc/layer-style-render';
 import { videoTextLayoutSource } from '../designer-doc/video-text-layout';
 import { mediaGeometrySource } from '../designer-doc/media-geometry';
+import { textExtrusionSource } from '../designer-doc/text-extrusion';
 
 /**
  * The ...Source() helpers serialize functions with String(fn). The backend runs
@@ -58,6 +59,7 @@ ${stripExportsNamespace(captionStylesSource())}
 ${stripExportsNamespace(backgroundTextureSource())}
 ${stripExportsNamespace(transitionsSource())}
 ${stripExportsNamespace(textRevealSource())}
+${stripExportsNamespace(textExtrusionSource())}
 ${stripExportsNamespace(styleGradientSource())}
 ${stripExportsNamespace(videoTextLayoutSource())}
 ${stripExportsNamespace(mediaGeometrySource())}
@@ -496,9 +498,7 @@ ${stripExportsNamespace(mediaGeometrySource())}
       clip.endMs - clip.startMs
     );
     if (!text) return;
-    ctx.save();
-    ctx.globalAlpha = props.opacity;
-    drawVideoText(ctx, {
+    const textOptions = {
       text,
       width: props.width,
       height: props.height,
@@ -508,7 +508,19 @@ ${stripExportsNamespace(mediaGeometrySource())}
       fontStyle: clip.fontStyle || 'normal',
       fill: clip.fill || '#000000',
       align: clip.align || 'left',
-    });
+    };
+    if (clip.textExtrusion?.depth) {
+      for (const offset of extrusionOffsets(clip.textExtrusion, 1)) {
+        ctx.save();
+        ctx.globalAlpha = props.opacity * (clip.textExtrusion.opacity ?? 0.85);
+        ctx.translate(offset.x, offset.y);
+        drawVideoText(ctx, { ...textOptions, fill: clip.textExtrusion.color || '#000000' });
+        ctx.restore();
+      }
+    }
+    ctx.save();
+    ctx.globalAlpha = props.opacity;
+    drawVideoText(ctx, textOptions);
     ctx.restore();
   }
 
