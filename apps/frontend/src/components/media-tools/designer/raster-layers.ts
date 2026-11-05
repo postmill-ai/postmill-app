@@ -75,6 +75,21 @@ export const ensureBuffer = (
   return next;
 };
 
+/** Seed a live buffer from a same-origin canvas without losing its pixels. */
+export const seedBufferFromCanvas = (
+  id: string,
+  source: HTMLCanvasElement
+): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  canvas.getContext('2d')?.drawImage(source, 0, 0);
+  bumpReseedToken(id);
+  committedSrcs.delete(id);
+  buffers.set(id, canvas);
+  return canvas;
+};
+
 /** Seed a buffer from an already-uploaded bitmap (reopening a saved design). */
 export const seedBufferFromImage = (
   id: string,
@@ -86,11 +101,25 @@ export const seedBufferFromImage = (
   canvas.width = Math.max(1, Math.round(width));
   canvas.height = Math.max(1, Math.round(height));
   canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
-  bumpReseedToken(id);
-  // Seeded pixels have not been uploaded under any `src` yet.
-  committedSrcs.delete(id);
-  buffers.set(id, canvas);
-  return canvas;
+  return seedBufferFromCanvas(id, canvas);
+};
+
+export const primeBufferFromSrc = async (
+  id: string,
+  src: string | undefined,
+  width: number,
+  height: number
+): Promise<void> => {
+  if (!src || buffers.has(id)) return;
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error('Could not load the saved mask.'));
+    image.src = src;
+  });
+  seedBufferFromImage(id, image, width, height);
+  committedSrcs.set(id, src);
 };
 
 /**
@@ -184,14 +213,23 @@ const collectSurfaces = (doc: DesignerDoc): PaintSurface[] => {
     }
     }
     for (const track of (out as VideoOutput).tracks || []) {
-      if (track.type !== 'raster') continue;
       for (const clip of track.clips) {
-        surfaces.push({
-          key: clip.id,
-          src: clip.src,
-          width: clip.width ?? out.width,
-          height: clip.height ?? out.height,
-        });
+        if (track.type === 'raster') {
+          surfaces.push({
+            key: clip.id,
+            src: clip.src,
+            width: clip.width ?? out.width,
+            height: clip.height ?? out.height,
+          });
+        }
+        if (clip.maskSrc) {
+          surfaces.push({
+            key: `${clip.id}:mask`,
+            src: clip.maskSrc,
+            width: clip.width ?? out.width,
+            height: clip.height ?? out.height,
+          });
+        }
       }
     }
   }
@@ -273,17 +311,14 @@ export interface CommitResult {
 }
 
 /**
- * Flatten a buffer to a PNG and upload it, returning the `src`/`fileId` to
- * store on the element. Uses the same endpoints as the inpaint-mask upload and
- * the exporter, so painted layers travel the proven path.
+ * Flatten a canvas to a PNG and upload it. Painted layers and generated masks
+ * use the same owned-file endpoints and size switch.
  */
-export const commitBuffer = async (
+export const commitCanvas = async (
+  canvas: HTMLCanvasElement,
   id: string,
   fetchFn: (url: string, init?: RequestInit) => Promise<Response>
 ): Promise<CommitResult | null> => {
-  const canvas = buffers.get(id);
-  if (!canvas) return null;
-
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, 'image/png')
   );
@@ -302,6 +337,14 @@ export const commitBuffer = async (
   // From here the buffer and the document agree — until the next stroke.
   committedSrcs.set(id, src);
   return { src, fileId: data.id };
+};
+
+export const commitBuffer = async (
+  id: string,
+  fetchFn: (url: string, init?: RequestInit) => Promise<Response>
+): Promise<CommitResult | null> => {
+  const canvas = buffers.get(id);
+  return canvas ? commitCanvas(canvas, id, fetchFn) : null;
 };
 
 /** A blank raster element sized to the current output. */

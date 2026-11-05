@@ -1,11 +1,10 @@
 /**
- * Every fileId a designer doc references: image elements and output
- * backgrounds carry `fileId` (alongside `src`), and that pointer is what keeps
- * an asset File row alive once the AI Designer session that minted it is gone.
+ * Every asset reference a designer doc carries. Original and mask files need
+ * the same retention as the visible src, including on still-image clips.
  * A JSON-string scan is deliberate: doc shapes evolve (outputs, children,
  * tracks, clips) and a structural walk would silently miss new carriers.
  */
-const FILE_ID_RE = /"fileId"\s*:\s*"([^"]+)"/g;
+const FILE_ID_RE = /"(?:fileId|originalFileId|maskFileId)"\s*:\s*"([^"]+)"/g;
 
 export function collectDocFileIds(doc: unknown): Set<string> {
   const ids = new Set<string>();

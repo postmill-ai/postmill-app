@@ -99,6 +99,7 @@ export const TOOL_OPTION_SPECS: Record<string, ToolOptionSpec[]> = {
   ],
   eraser: [
     { kind: 'number', key: 'size', label: 'Size', labelKey: 'tool_opt_size', min: 1, max: 500, def: 32 },
+    { kind: 'number', key: 'hardness', label: 'Hardness', labelKey: 'tool_opt_hardness', min: 0, max: 100, suffix: '%', def: 100 },
     { kind: 'number', key: 'opacity', label: 'Opacity', labelKey: 'tool_opt_opacity', min: 1, max: 100, suffix: '%', def: 100 },
   ],
   'clone-stamp': [

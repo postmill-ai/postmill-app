@@ -20,10 +20,12 @@ describe('BackgroundRemovalDialog', () => {
     expect((await screen.findByRole('img', { name: 'After' })).getAttribute('src')).toBe('/after.png');
     fireEvent.click(screen.getByRole('button', { name: 'Apply result' }));
     expect(onApply).toHaveBeenLastCalledWith('frame');
+    await screen.findByRole('button', { name: 'Apply result' });
 
     fireEvent.click(screen.getByRole('radio', { name: /Fit to canvas/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply result' }));
     expect(onApply).toHaveBeenLastCalledWith('canvas');
+    await screen.findByRole('button', { name: 'Apply result' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledOnce();

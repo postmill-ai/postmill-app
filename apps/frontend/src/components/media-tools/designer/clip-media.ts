@@ -3,9 +3,14 @@ import { probeImageNaturalSize } from './elements';
 import { readErrorMessage } from './read-error-message';
 import {
   backgroundRemovalPatch,
+  flattenedBackgroundRemovalPatch,
   type BackgroundRemovalAsset,
   type BackgroundRemovalFit,
 } from './background-removal';
+import {
+  discardBackgroundRemovalMask,
+  uploadBackgroundRemovalMask,
+} from './background-removal-mask';
 
 type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -69,6 +74,9 @@ export const imageReplacementPatch = (item: {
   originalSrc: undefined,
   originalFileId: undefined,
   smartFilters: undefined,
+  maskSrc: undefined,
+  maskFileId: undefined,
+  maskEnabled: undefined,
 });
 
 export const replaceClipImage = async ({
@@ -111,6 +119,7 @@ export const clipMediaSourceMatches = (
 
 export interface ClipBackgroundRemovalCandidate {
   before: VideoClip;
+  source: BackgroundRemovalAsset;
   asset: BackgroundRemovalAsset;
   operation: ClipMediaOperation;
 }
@@ -139,12 +148,24 @@ export const removeClipImageBackground = async ({
   }
   const data = await response.json() as { url?: string; fileId?: string };
   if (!data.url) throw new Error('Background removal failed');
-  const natural = await probe(data.url);
+  const sourceSize = before.naturalWidth && before.naturalHeight
+    ? { width: before.naturalWidth, height: before.naturalHeight }
+    : null;
+  const [natural, originalNatural] = await Promise.all([
+    probe(data.url),
+    sourceSize ? Promise.resolve(sourceSize) : probe(before.src),
+  ]);
   if (!clipMediaOperationIsCurrent(store, target, operation) ||
     !clipMediaSourceMatches(before, clipAt(store, target))) return null;
   return {
     before,
     operation,
+    source: {
+      url: before.src,
+      fileId: before.fileId,
+      naturalWidth: originalNatural?.width,
+      naturalHeight: originalNatural?.height,
+    },
     asset: {
       url: data.url,
       fileId: data.fileId,
@@ -154,27 +175,62 @@ export const removeClipImageBackground = async ({
   };
 };
 
-export const applyClipImageBackground = ({
+export const applyClipImageBackground = async ({
   store,
   target,
   candidate,
   output,
   fit = 'frame',
+  fetch,
+  createMask = uploadBackgroundRemovalMask,
 }: {
   store: Store;
   target: ClipMediaTarget;
   candidate: ClipBackgroundRemovalCandidate;
   output: { width: number; height: number };
   fit?: BackgroundRemovalFit;
-}): boolean => {
+  fetch: Fetch;
+  createMask?: typeof uploadBackgroundRemovalMask;
+}): Promise<boolean> => {
   if (!clipMediaOperationIsCurrent(store, target, candidate.operation) ||
     !clipMediaSourceMatches(candidate.before, clipAt(store, target))) return false;
+  const reviewedPatch = backgroundRemovalPatch({
+    source: candidate.source,
+    mask: candidate.asset,
+    output,
+    fit,
+  });
+  let mask: Awaited<ReturnType<typeof uploadBackgroundRemovalMask>> | null = null;
+  try {
+    mask = await createMask({
+      fetch,
+      source: candidate.source,
+      cutout: candidate.asset,
+      frame: {
+        width: reviewedPatch.width ?? candidate.before.width,
+        height: reviewedPatch.height ?? candidate.before.height,
+        crop: reviewedPatch.crop,
+        fitMode: reviewedPatch.fitMode ?? candidate.before.fitMode ?? 'cover',
+        focalPoint: reviewedPatch.focalPoint,
+      },
+      id: candidate.before.id,
+    });
+  } catch {
+    // Preserve the pre-refinement behavior when only mask preparation fails.
+  }
+  if (!clipMediaOperationIsCurrent(store, target, candidate.operation) ||
+    !clipMediaSourceMatches(candidate.before, clipAt(store, target))) {
+    if (mask) await discardBackgroundRemovalMask(fetch, mask);
+    return false;
+  }
   const updated = store.getState().updateClipSilent(
     target.outputIndex,
     target.trackId,
     target.clipId,
     {
-      ...backgroundRemovalPatch({ asset: candidate.asset, output, fit }),
+      ...(mask
+        ? { ...reviewedPatch, maskSrc: mask.src, maskFileId: mask.fileId, maskEnabled: true }
+        : flattenedBackgroundRemovalPatch({ asset: candidate.asset, output, fit })),
       mediaType: 'image',
     }
   );

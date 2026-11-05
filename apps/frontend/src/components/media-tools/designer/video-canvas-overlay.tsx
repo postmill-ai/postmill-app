@@ -49,6 +49,7 @@ interface VideoCanvasOverlayProps {
   interactive?: boolean;
   /** Double-click on a text clip asks the host to open the inline editor. */
   onEditText?: (clipId: string) => void;
+  onRefineCutout?: (clipId: string) => void;
   /**
    * The clip currently open in the inline editor. Its Konva node is hidden
    * while the DOM overlay is up, or the two paint the same string doubled.
@@ -224,6 +225,9 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
     : isVideoClip
       ? (clipErrored ? null : sharedVideoElement(clip.id) ?? null)
       : getOrCreateImage(stickerFrameUrl ?? clip.src);
+  const maskSource = !isVideoClip && clip.maskEnabled !== false
+    ? getBuffer(`${clip.id}:mask`) ?? getOrCreateImage(clip.maskSrc)
+    : null;
   const filterString = useMemo(
     () => {
       const base = mapFiltersToCss(clip.filters);
@@ -261,7 +265,7 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
   );
 
   useEffect(() => {
-    if (!source || !filterString) return;
+    if (!source || (!filterString && !maskSource)) return;
     let c = filterCanvasCache.get(canvasId);
     if (!c) {
       c = document.createElement('canvas');
@@ -274,12 +278,17 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
     if (!ctx) return;
 
     ctx.clearRect(0, 0, c.width, c.height);
-    ctx.filter = filterString;
+    ctx.filter = filterString || 'none';
     const { source: src, destination: dest } = geometry;
     ctx.drawImage(source, src.x, src.y, src.width, src.height, dest.x, dest.y, dest.width, dest.height);
+    if (maskSource) {
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.drawImage(maskSource, 0, 0, c.width, c.height);
+      ctx.globalCompositeOperation = 'source-over';
+    }
     ctx.filter = 'none';
     store.emit();
-  }, [source, filterString, width, height, tick, canvasId, store, geometry]);
+  }, [source, maskSource, filterString, width, height, tick, canvasId, store, geometry, clip.maskSrc]);
 
   useEffect(() => {
     return () => {
@@ -322,7 +331,7 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
   // server copy to it). Transition opacity stays on the wrapping Group, so the
   // blend never changes how transitions compose.
   const blendGco = canvasCompositeFor(clip.blendMode) as never;
-  if (!filterString) {
+  if (!filterString && !maskSource) {
     return (
       <KonvaImage
         image={source}
@@ -454,6 +463,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   height,
   interactive = false,
   onEditText,
+  onRefineCutout,
   editingTextId,
   getTransformAnchor,
   onClipContextMenu,
@@ -753,6 +763,12 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
             ? {
                 onDblClick: () => onEditText(clip.id),
                 onDblTap: () => onEditText(clip.id),
+              }
+            : {}),
+          ...(trackType === 'image' && clip.maskSrc && onRefineCutout
+            ? {
+                onDblClick: () => onRefineCutout(clip.id),
+                onDblTap: () => onRefineCutout(clip.id),
               }
             : {}),
         };

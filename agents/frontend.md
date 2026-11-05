@@ -280,9 +280,17 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   identity/intrinsics, and clear crop/original/smart-filter state. Generation returns a review
   candidate and does not edit the doc; Apply commits once after the before/after dialog. Static
   (`ai-image-actions.ts`) and clip paths share `background-removal.ts` geometry: preserve-frame
-  contain by default, aspect-correct canvas fitting as an option. `use-pixel-ops.tsx` must not let an
-  older rebake overwrite a newer media source. Static and video Inspectors share
-  `corner-radius-control.tsx` and `text-style-control.tsx`.
+  contain by default, aspect-correct canvas fitting as an option. Apply keeps original pixels as
+  `src`, rasterizes the reviewed alpha into the final element box through `computeMediaDraw`
+  (contain/cover/crop all included), uploads that box-space bitmap as `maskSrc` through
+  `background-removal-mask.ts`, and commits once after the before/after dialog. If mask preparation
+  fails, Apply falls back to the old flattened cutout rather than discarding the provider result.
+  `cutout-refine-controls.tsx` arms the same mask for Restore
+  (white brush) and Erase (alpha removal); still-image clip masks use optional-additive doc v11
+  fields and mirror through `video-canvas-overlay.tsx` and the isolated frame-render buffer. Legacy
+  flattened cutouts without originals say so. `doc-file-refs.ts` collects and remaps all three file
+  references. `use-pixel-ops.tsx` must not let an older rebake overwrite a newer media source. Static
+  and video Inspectors share `corner-radius-control.tsx` and `text-style-control.tsx`.
 - **Timeline hit-testing starts at the scroll viewport.** `timeline-geometry.ts` owns row/new-track
   geometry, duration-preserving keyboard moves, and the separate zoom-aware snap and collision
   thresholds. Never measure drop rows from the toolbar wrapper or reuse edge-snap tolerance to

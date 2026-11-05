@@ -708,6 +708,10 @@ export interface VideoClip {
    * prefer it over the sniff and fall back to the sniff when it is absent.
    */
   mediaType?: 'video' | 'image';
+  /** Optional-additive doc v11: painted alpha mask for a still-image clip. */
+  maskSrc?: string;
+  maskFileId?: string;
+  maskEnabled?: boolean;
   /**
    * A non-destructive filter stack, exactly as on a layer (see `smartFilters`
    * on `DesignerElement`). Only meaningful for clips whose pixels do not change
@@ -1679,6 +1683,9 @@ const clipCommon = {
   // Media-type hint for extensionless sources (see the VideoClip interface) —
   // additive, so docs saved before it existed keep validating unchanged.
   mediaType: z.enum(['video', 'image']).optional(),
+  maskSrc: SrcSchema.optional(),
+  maskFileId: z.string().max(200).optional(),
+  maskEnabled: z.boolean().optional(),
   smartFilters: SmartFilterStackSchema,
   originalSrc: SrcSchema.optional(),
   originalFileId: z.string().max(200).optional(),

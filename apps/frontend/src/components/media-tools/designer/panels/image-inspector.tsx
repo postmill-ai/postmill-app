@@ -21,6 +21,7 @@ import { OutpaintDialog } from '../outpaint-dialog';
 import { BackgroundRemovalDialog } from '../background-removal-dialog';
 import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
 import { cropFromSourceRect } from '../crop-geometry';
+import { CutoutRefineControls } from './cutout-refine-controls';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -61,6 +62,9 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         naturalHeight: item.height || undefined,
         crop: undefined,
         mask: undefined,
+        maskSrc: undefined,
+        maskFileId: undefined,
+        maskEnabled: undefined,
       });
     },
   });
@@ -181,12 +185,12 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
             originalUrl={candidate.before.src!}
             asset={candidate.asset}
             onCancel={close}
-            onApply={(fit) => {
+            onApply={async (fit) => {
               const state = store.getState();
               const output = state.doc.outputs[state.currentOutput];
-              const applied = applyAiRemoveBackground({ store, candidate, output, fit });
+              const applied = await applyAiRemoveBackground({ store, candidate, output, fit, fetch });
               if (applied) close();
-              else toaster.show(t('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'), 'warning');
+              else throw new Error(t('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'));
             }}
           />
         ),
@@ -1066,6 +1070,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         </div>
       </div>
     </div>
+    <CutoutRefineControls store={store} targetId={element.id} />
     {replacePicker.element}
     </>
   );

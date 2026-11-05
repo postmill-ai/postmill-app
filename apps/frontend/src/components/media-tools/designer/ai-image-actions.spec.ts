@@ -26,62 +26,89 @@ const setup = () => {
 const element = (store: ReturnType<typeof createDesignerStore>) =>
   (store.getState().doc.outputs[0] as any).children[0] as DesignerElement;
 
+const candidateFor = async (store: ReturnType<typeof createDesignerStore>) => aiRemoveBackground({
+  store,
+  elementId: 'image-1',
+  fetch: vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ url: '/transparent.png', fileId: 'transparent-file' }),
+  }),
+  probe: async () => ({ width: 1200, height: 800 }),
+});
+
 describe('AI background removal review', () => {
-  it('generates without editing, then applies the reviewed result with fresh intrinsics', async () => {
+  it('generates without editing, then applies original pixels plus the reviewed mask', async () => {
     const store = setup();
     const historyLength = store.getState().history.length;
-    const candidate = await aiRemoveBackground({
-      store,
-      elementId: 'image-1',
-      fetch: vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ url: '/transparent.png', fileId: 'transparent-file' }),
-      }),
-      probe: async () => ({ width: 1200, height: 800 }),
-    });
+    const candidate = await candidateFor(store);
 
     expect(candidate).not.toBeNull();
     expect(element(store).src).toBe('/before.png');
     expect(store.getState().history).toHaveLength(historyLength);
-    expect(applyAiRemoveBackground({
+    await expect(applyAiRemoveBackground({
       store,
       candidate: candidate!,
       output: { width: 1080, height: 1080 },
-    })).toBe(true);
+      fetch: vi.fn(),
+      createMask: async () => ({ src: '/mask.png', fileId: 'mask-file' }),
+    })).resolves.toBe(true);
     expect(element(store)).toMatchObject({
-      src: '/transparent.png',
-      fileId: 'transparent-file',
+      src: '/before.png',
+      fileId: 'before-file',
+      originalSrc: '/before.png',
+      originalFileId: 'before-file',
       naturalWidth: 1200,
       naturalHeight: 800,
+      maskSrc: '/mask.png',
+      maskFileId: 'mask-file',
+      maskEnabled: true,
       x: 10,
       y: 20,
       width: 300,
       height: 200,
       fitMode: 'contain',
     });
-    expect(element(store).originalSrc).toBeUndefined();
     expect(element(store).smartFilters).toBeUndefined();
     expect(store.getState().history).toHaveLength(historyLength + 1);
   });
 
-  it('rejects an Apply after the source changes', async () => {
+  it('rejects an Apply after the source changes without creating a mask', async () => {
     const store = setup();
-    const candidate = await aiRemoveBackground({
-      store,
-      elementId: 'image-1',
-      fetch: vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ url: '/transparent.png' }),
-      }),
-      probe: async () => null,
-    });
+    const candidate = await candidateFor(store);
     store.getState().updateElement('image-1', { src: '/newer.png' });
+    const createMask = vi.fn(async () => ({ src: '/mask.png', fileId: 'mask-file' }));
 
-    expect(applyAiRemoveBackground({
+    await expect(applyAiRemoveBackground({
       store,
       candidate: candidate!,
       output: { width: 1080, height: 1080 },
-    })).toBe(false);
+      fetch: vi.fn(),
+      createMask,
+    })).resolves.toBe(false);
+    expect(createMask).not.toHaveBeenCalled();
+    expect(element(store).src).toBe('/newer.png');
+  });
+
+  it('discards an uploaded mask instead of overwriting a newer edit', async () => {
+    const store = setup();
+    const candidate = await candidateFor(store);
+    let resolveMask!: (value: { src: string; fileId: string }) => void;
+    const createMask = vi.fn(() => new Promise<{ src: string; fileId: string }>((resolve) => {
+      resolveMask = resolve;
+    }));
+    const fetch = vi.fn().mockResolvedValue({ ok: true });
+    const pending = applyAiRemoveBackground({
+      store,
+      candidate: candidate!,
+      output: { width: 1080, height: 1080 },
+      fetch,
+      createMask,
+    });
+    store.getState().updateElement('image-1', { src: '/newer.png' });
+    resolveMask({ src: '/mask.png', fileId: 'mask-file' });
+
+    await expect(pending).resolves.toBe(false);
+    expect(fetch).toHaveBeenCalledWith('/files/mask-file', { method: 'DELETE' });
     expect(element(store).src).toBe('/newer.png');
   });
 
@@ -100,5 +127,53 @@ describe('AI background removal review', () => {
 
     await expect(pending).resolves.toBeNull();
     expect(element(store).src).toBe('/newer.png');
+  });
+
+  it('builds the mask at the reviewed frame geometry', async () => {
+    const store = setup();
+    const candidate = await candidateFor(store);
+    const createMask = vi.fn(async () => ({ src: '/mask.png', fileId: 'mask-file' }));
+
+    await applyAiRemoveBackground({
+      store,
+      candidate: candidate!,
+      output: { width: 1080, height: 1080 },
+      fetch: vi.fn(),
+      createMask,
+    });
+
+    expect(createMask).toHaveBeenCalledWith(expect.objectContaining({
+      frame: {
+        width: 300,
+        height: 200,
+        crop: undefined,
+        fitMode: 'contain',
+        focalPoint: undefined,
+      },
+    }));
+  });
+
+  it('applies the flattened cutout when mask preparation fails', async () => {
+    const store = setup();
+    const candidate = await candidateFor(store);
+
+    await expect(applyAiRemoveBackground({
+      store,
+      candidate: candidate!,
+      output: { width: 1080, height: 1080 },
+      fetch: vi.fn(),
+      createMask: async () => { throw new Error('CORS blocked'); },
+    })).resolves.toBe(true);
+
+    expect(element(store)).toMatchObject({
+      src: '/transparent.png',
+      fileId: 'transparent-file',
+      originalSrc: undefined,
+      originalFileId: undefined,
+      maskSrc: undefined,
+      maskFileId: undefined,
+      maskEnabled: undefined,
+      fitMode: 'contain',
+    });
   });
 });

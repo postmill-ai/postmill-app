@@ -7,11 +7,13 @@ import type { BackgroundRemovalAsset, BackgroundRemovalFit } from './background-
 export const BackgroundRemovalDialog: FC<{
   originalUrl: string;
   asset: BackgroundRemovalAsset;
-  onApply: (fit: BackgroundRemovalFit) => void;
+  onApply: (fit: BackgroundRemovalFit) => void | Promise<void>;
   onCancel: () => void;
 }> = ({ originalUrl, asset, onApply, onCancel }) => {
   const t = useT();
   const [fit, setFit] = useState<BackgroundRemovalFit>('frame');
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const options: { value: BackgroundRemovalFit; label: string; description: string }[] = [
     {
       value: 'frame',
@@ -29,6 +31,18 @@ export const BackgroundRemovalDialog: FC<{
       description: t('designer_bg_fit_manual_hint', 'Keep the current frame and fitting mode so you can adjust it yourself.'),
     },
   ];
+  const apply = async () => {
+    if (applying) return;
+    setApplying(true);
+    setError(null);
+    try {
+      await onApply(fit);
+      setApplying(false);
+    } catch (cause) {
+      setError((cause as Error)?.message || t('background_removal_failed', 'Background removal failed'));
+      setApplying(false);
+    }
+  };
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -45,7 +59,7 @@ export const BackgroundRemovalDialog: FC<{
           </div>
         ))}
       </div>
-      <fieldset className="flex flex-col gap-2">
+      <fieldset disabled={applying} className="flex flex-col gap-2">
         <legend className="text-[12px] font-medium text-textColor mb-1">
           {t('designer_bg_result_sizing', 'Result sizing')}
         </legend>
@@ -67,12 +81,13 @@ export const BackgroundRemovalDialog: FC<{
           </label>
         ))}
       </fieldset>
+      {error && <div role="alert" className="text-[12px] text-dangerText">{error}</div>}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded-md border border-studioBorder text-[12px] text-textColor hover:bg-boxHover">
+        <button type="button" onClick={onCancel} disabled={applying} className="px-3 py-1.5 rounded-md border border-studioBorder text-[12px] text-textColor hover:bg-boxHover disabled:opacity-50">
           {t('cancel', 'Cancel')}
         </button>
-        <button type="button" onClick={() => onApply(fit)} className="px-3 py-1.5 rounded-md bg-designerAccent text-[12px] text-white hover:bg-designerAccent/80">
-          {t('designer_apply_result', 'Apply result')}
+        <button type="button" onClick={apply} disabled={applying} className="px-3 py-1.5 rounded-md bg-designerAccent text-[12px] text-white hover:bg-designerAccent/80 disabled:opacity-50">
+          {applying ? t('designer_processing_ellipsis', 'Processing...') : t('designer_apply_result', 'Apply result')}
         </button>
       </div>
     </div>

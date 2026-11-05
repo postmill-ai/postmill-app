@@ -57,6 +57,9 @@ describe('imageReplacementPatch', () => {
       originalSrc: undefined,
       originalFileId: undefined,
       smartFilters: undefined,
+      maskSrc: undefined,
+      maskFileId: undefined,
+      maskEnabled: undefined,
     });
   });
 });
@@ -131,12 +134,14 @@ describe('removeClipImageBackground', () => {
     expect(candidate).not.toBeNull();
     expect(clip(store, trackId).src).toBe('/old.png');
     expect(store.getState().history).toHaveLength(historyLength);
-    expect(applyClipImageBackground({
+    await expect(applyClipImageBackground({
       store,
       target,
       candidate: candidate!,
       output: { width: 1080, height: 1920 },
-    })).toBe(true);
+      fetch,
+      createMask: async () => ({ src: '/mask.png', fileId: 'mask-file' }),
+    })).resolves.toBe(true);
     expect(store.getState().history).toHaveLength(historyLength + 1);
 
     const after = clip(store, trackId);
@@ -154,16 +159,19 @@ describe('removeClipImageBackground', () => {
       opacity: before.opacity,
       filters: before.filters,
       keyframes: before.keyframes,
-      src: '/transparent.png',
+      src: '/old.png',
+      fileId: 'old-file',
+      originalSrc: '/old.png',
+      originalFileId: 'old-file',
+      maskSrc: '/mask.png',
+      maskFileId: 'mask-file',
+      maskEnabled: true,
       mediaType: 'image',
-      naturalWidth: 800,
-      naturalHeight: 600,
+      naturalWidth: 40,
+      naturalHeight: 20,
       fitMode: 'contain',
     });
-    expect(after.fileId).toBeUndefined();
     expect(after.crop).toBeUndefined();
-    expect(after.originalSrc).toBeUndefined();
-    expect(after.originalFileId).toBeUndefined();
     expect(after.smartFilters).toBeUndefined();
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ imageUrl: '/old.png' });
   });
@@ -211,20 +219,56 @@ describe('removeClipImageBackground', () => {
       probe: async () => ({ width: 800, height: 600 }),
     });
 
-    expect(applyClipImageBackground({
+    await expect(applyClipImageBackground({
       store,
       target,
       candidate: candidate!,
       output: { width: 1080, height: 1080 },
       fit: 'canvas',
-    })).toBe(true);
+      fetch: vi.fn(),
+      createMask: async () => ({ src: '/mask.png', fileId: 'mask-file' }),
+    })).resolves.toBe(true);
     expect(clip(store, trackId)).toMatchObject({
       x: 0,
-      y: 135,
+      y: 270,
       width: 1080,
-      height: 810,
+      height: 540,
       fitMode: 'contain',
+      fileId: 'old-file',
+      maskSrc: '/mask.png',
+    });
+  });
+
+  it('applies the flattened cutout when mask preparation fails', async () => {
+    const { store, trackId, target } = setup();
+    const candidate = await removeClipImageBackground({
+      store,
+      target,
+      fetch: vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ url: '/transparent.png', fileId: 'new-file' }),
+      }),
+      probe: async () => ({ width: 800, height: 600 }),
+    });
+
+    await expect(applyClipImageBackground({
+      store,
+      target,
+      candidate: candidate!,
+      output: { width: 1080, height: 1080 },
+      fetch: vi.fn(),
+      createMask: async () => { throw new Error('CORS blocked'); },
+    })).resolves.toBe(true);
+
+    expect(clip(store, trackId)).toMatchObject({
+      src: '/transparent.png',
       fileId: 'new-file',
+      originalSrc: undefined,
+      originalFileId: undefined,
+      maskSrc: undefined,
+      maskFileId: undefined,
+      maskEnabled: undefined,
+      mediaType: 'image',
     });
   });
 });

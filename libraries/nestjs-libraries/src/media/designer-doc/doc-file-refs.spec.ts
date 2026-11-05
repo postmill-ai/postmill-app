@@ -71,7 +71,14 @@ describe('rewriteDocFileRefs', () => {
             { id: 'e3', maskFileId: 'old-1', maskSrc: 'uploads/org-a/mask.png' },
           ],
         },
-        { tracks: [{ clips: [{ id: 'c1', fileId: 'old-1', src: '/uploads/org-a/zzzz', mediaType: 'video' }] }] },
+        { tracks: [{ clips: [{
+          id: 'c1',
+          fileId: 'old-1',
+          src: '/uploads/org-a/zzzz',
+          mediaType: 'video',
+          maskFileId: 'old-2',
+          maskSrc: 'uploads/org-a/mask.png',
+        }] }] },
       ],
     };
 
@@ -86,6 +93,9 @@ describe('rewriteDocFileRefs', () => {
     expect(out.outputs[0].children[2]).toEqual({ id: 'e3', maskFileId: 'new-1', maskSrc: '/uploads/org-b/aaaa.mp4' });
     expect(out.outputs[1].tracks[0].clips[0].fileId).toBe('new-1');
     expect(out.outputs[1].tracks[0].clips[0].src).toBe('/uploads/org-b/aaaa.mp4');
+    expect(out.outputs[1].tracks[0].clips[0].maskFileId).toBe('new-2');
+    expect(out.outputs[1].tracks[0].clips[0].maskSrc).toBe('https://host.example/uploads/org-b/bbbb.png');
+    expect(collectDocFileIds(doc)).toEqual(new Set(['old-1', 'old-2']));
     // Input untouched.
     expect(doc.outputs[0].children[0].fileId).toBe('old-1');
   });

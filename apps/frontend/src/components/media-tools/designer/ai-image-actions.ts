@@ -5,9 +5,14 @@ import { probeImageNaturalSize } from './elements';
 import type { DesignerElement } from './designer.store';
 import {
   backgroundRemovalPatch,
+  flattenedBackgroundRemovalPatch,
   type BackgroundRemovalAsset,
   type BackgroundRemovalFit,
 } from './background-removal';
+import {
+  discardBackgroundRemovalMask,
+  uploadBackgroundRemovalMask,
+} from './background-removal-mask';
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 type StoreApi = ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -65,6 +70,7 @@ export const readErrorMessage = async (res: Response, fallback: string): Promise
 
 export interface StaticBackgroundRemovalCandidate {
   before: DesignerElement;
+  source: BackgroundRemovalAsset;
   asset: BackgroundRemovalAsset;
   history: unknown;
 }
@@ -92,10 +98,22 @@ export const aiRemoveBackground = async ({
   if (!res.ok) throw new Error(await readErrorMessage(res, 'Background removal failed'));
   const data = await res.json() as { url?: string; fileId?: string };
   if (!data.url) throw new Error('Background removal failed');
-  const natural = await probe(data.url);
+  const sourceSize = before.naturalWidth && before.naturalHeight
+    ? { width: before.naturalWidth, height: before.naturalHeight }
+    : null;
+  const [natural, originalNatural] = await Promise.all([
+    probe(data.url),
+    sourceSize ? Promise.resolve(sourceSize) : probe(before.src),
+  ]);
   const candidate = {
     before,
     history,
+    source: {
+      url: before.src,
+      fileId: before.fileId,
+      naturalWidth: originalNatural?.width,
+      naturalHeight: originalNatural?.height,
+    },
     asset: {
       url: data.url,
       fileId: data.fileId,
@@ -108,22 +126,57 @@ export const aiRemoveBackground = async ({
     : null;
 };
 
-export const applyAiRemoveBackground = ({
+export const applyAiRemoveBackground = async ({
   store,
   candidate,
   output,
   fit = 'frame',
+  fetch,
+  createMask = uploadBackgroundRemovalMask,
 }: {
   store: StoreApi;
   candidate: StaticBackgroundRemovalCandidate;
   output: { width: number; height: number };
   fit?: BackgroundRemovalFit;
-}): boolean => {
+  fetch: FetchLike;
+  createMask?: typeof uploadBackgroundRemovalMask;
+}): Promise<boolean> => {
   if (store.getState().history !== candidate.history ||
     !staticMediaMatches(candidate.before, getElement(store, candidate.before.id))) return false;
+  const reviewedPatch = backgroundRemovalPatch({
+    source: candidate.source,
+    mask: candidate.asset,
+    output,
+    fit,
+  });
+  let mask: Awaited<ReturnType<typeof uploadBackgroundRemovalMask>> | null = null;
+  try {
+    mask = await createMask({
+      fetch,
+      source: candidate.source,
+      cutout: candidate.asset,
+      frame: {
+        width: reviewedPatch.width ?? candidate.before.width,
+        height: reviewedPatch.height ?? candidate.before.height,
+        crop: reviewedPatch.crop,
+        fitMode: reviewedPatch.fitMode ?? candidate.before.fitMode,
+        focalPoint: reviewedPatch.focalPoint,
+      },
+      id: candidate.before.id,
+    });
+  } catch {
+    // A mask that cannot be read or saved must not discard the provider result.
+  }
+  if (store.getState().history !== candidate.history ||
+    !staticMediaMatches(candidate.before, getElement(store, candidate.before.id))) {
+    if (mask) await discardBackgroundRemovalMask(fetch, mask);
+    return false;
+  }
   store.getState().updateElement(
     candidate.before.id,
-    backgroundRemovalPatch({ asset: candidate.asset, output, fit })
+    mask
+      ? { ...reviewedPatch, maskSrc: mask.src, maskFileId: mask.fileId, maskEnabled: true }
+      : flattenedBackgroundRemovalPatch({ asset: candidate.asset, output, fit })
   );
   store.getState().pushHistory('Remove background');
   return true;
@@ -139,7 +192,13 @@ export const aiUpscale = async ({ fetch, store, elementId }: AiActionArgs, scale
   });
   if (!res.ok) throw new Error(await readErrorMessage(res, 'Upscale failed'));
   const data = await res.json();
-  store.getState().updateElement(elementId, { src: data.url, fileId: undefined });
+  store.getState().updateElement(elementId, {
+    src: data.url,
+    fileId: undefined,
+    maskSrc: undefined,
+    maskFileId: undefined,
+    maskEnabled: undefined,
+  });
 };
 
 export const aiDetectSubject = async ({ fetch, store, elementId }: AiActionArgs): Promise<void> => {
@@ -163,17 +222,18 @@ export const aiOutpaint = async (
   });
   if (!res.ok) throw new Error(await readErrorMessage(res, 'Image expansion failed'));
   const data = await res.json();
-  // The result is a NEW, larger image: a stale crop window would cut into the
-  // expanded area and a stale originalSrc would let a smart-filter re-bake
-  // silently revert the expansion — both must go (unlike the bg-remove/upscale
-  // updates above, which keep that defect). The result lives at a provider /
-  // job artifact URL, not in the Files library, so fileId clears too.
+  // The result is a NEW, larger image: stale crop, original-source and mask
+  // state would cut into it or restore the wrong pixels, so all three clear.
+  // The result lives at a provider/job artifact URL, so fileId clears too.
   const natural = await probeImageNaturalSize(data.url);
   store.getState().updateElement(elementId, {
     src: data.url,
     fileId: undefined,
     crop: undefined,
     originalSrc: undefined,
+    maskSrc: undefined,
+    maskFileId: undefined,
+    maskEnabled: undefined,
     naturalWidth: natural?.width,
     naturalHeight: natural?.height,
   });

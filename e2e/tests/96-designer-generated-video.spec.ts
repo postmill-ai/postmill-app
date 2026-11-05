@@ -1,6 +1,8 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { buildFramePage } from '../../libraries/nestjs-libraries/src/media/design-render/frame-page';
+import { escapeForScriptTag, FRAME_RENDERER_SCRIPT } from '../../libraries/nestjs-libraries/src/media/design-render/frame-renderer-script';
 
 const DESIGN_ID = 'design-generated-video-e2e';
 const GENERATED_URL = '/mock-storage/generated.mp4';
@@ -8,6 +10,10 @@ const REPLACEMENT_URL = '/mock-storage/replacement.webm';
 const ASYMMETRIC_URL = '/mock-storage/asymmetric-8x2.png';
 const REPLACEMENT_IMAGE_URL = '/mock-storage/replacement-image.png';
 const TRANSPARENT_IMAGE_URL = '/mock-storage/transparent.png';
+const CUTOUT_SOURCE_URL = '/mock-storage/cutout-source.png';
+const CUTOUT_RESULT_URL = '/mock-storage/cutout-result.png';
+const CUTOUT_VERTICAL_SOURCE_URL = '/mock-storage/cutout-vertical-source.png';
+const CUTOUT_VERTICAL_RESULT_URL = '/mock-storage/cutout-vertical-result.png';
 const CUSTOM_POSTER_URL = '/mock-storage/custom-poster.png';
 const STOCK_VECTOR_URL = '/mock-storage/outline-vector.svg';
 const STOCK_ICON_URL = '/mock-storage/outline-icon.svg';
@@ -49,6 +55,9 @@ interface VideoClipSnapshot {
   smartFilters?: unknown[];
   originalSrc?: string;
   originalFileId?: string;
+  maskSrc?: string;
+  maskFileId?: string;
+  maskEnabled?: boolean;
   keyframes?: unknown[];
   shape?: string;
   fill?: string;
@@ -179,6 +188,7 @@ const json = (route: Route, body: unknown, status = 200) =>
 class DesignerMocks {
   readonly generatePosts: string[] = [];
   readonly backgroundRemovalPosts: string[] = [];
+  readonly maskUploads = new Map<string, Buffer>();
   readonly assistantCopyPosts: string[] = [];
   readonly assistantSuggestionPosts: string[] = [];
   readonly unexpectedProviderPosts: string[] = [];
@@ -243,6 +253,22 @@ class DesignerMocks {
     },
     [TRANSPARENT_IMAGE_URL]: {
       file: 'transparent-2x2.png',
+      contentType: 'image/png',
+    },
+    [CUTOUT_SOURCE_URL]: {
+      file: 'cutout-source-8x2.png',
+      contentType: 'image/png',
+    },
+    [CUTOUT_RESULT_URL]: {
+      file: 'cutout-result-8x2.png',
+      contentType: 'image/png',
+    },
+    [CUTOUT_VERTICAL_SOURCE_URL]: {
+      file: 'cutout-vertical-source-8x2.png',
+      contentType: 'image/png',
+    },
+    [CUTOUT_VERTICAL_RESULT_URL]: {
+      file: 'cutout-vertical-result-8x2.png',
       contentType: 'image/png',
     },
     [CUSTOM_POSTER_URL]: {
@@ -338,6 +364,14 @@ class DesignerMocks {
       if (method === 'GET' && ['/settings/media/config', '/settings/ai/config', '/settings/storage', '/files/limits'].includes(pathname)) {
         await json(route, {});
         return;
+      }
+
+      if (method === 'GET' && pathname.startsWith('/mock-masks/')) {
+        const body = this.maskUploads.get(pathname);
+        if (body) {
+          await route.fulfill({ status: 200, contentType: 'image/png', body });
+          return;
+        }
       }
 
       const optimizerSource = pathname === '/_next/image'
@@ -464,9 +498,16 @@ class DesignerMocks {
       }
 
       if (pathname === '/media/remove-background' && method === 'POST') {
+        const body = request.postDataJSON() as { imageUrl?: string };
         this.backgroundRemovalPosts.push(request.postData() || '');
         await new Promise((resolve) => setTimeout(resolve, 250));
-        await json(route, { url: TRANSPARENT_IMAGE_URL });
+        await json(route, {
+          url: body.imageUrl === CUTOUT_VERTICAL_SOURCE_URL
+            ? CUTOUT_VERTICAL_RESULT_URL
+            : [CUTOUT_SOURCE_URL, ASYMMETRIC_URL, REPLACEMENT_IMAGE_URL].includes(body.imageUrl || '')
+              ? CUTOUT_RESULT_URL
+              : TRANSPARENT_IMAGE_URL,
+        });
         return;
       }
 
@@ -633,6 +674,16 @@ class DesignerMocks {
         const multipart = request.postDataBuffer()?.toString('latin1') || '';
         if (multipart.includes('QA outline vector.png')) {
           await json(route, { id: 'vector-file-1', path: IMPORTED_VECTOR_URL });
+          return;
+        }
+        if (multipart.includes(':mask')) {
+          const raw = request.postDataBuffer()!;
+          const start = raw.indexOf(Buffer.from('\r\n\r\n')) + 4;
+          const end = raw.lastIndexOf(Buffer.from('\r\n--'));
+          const fileId = `mask-file-${this.maskUploads.size + 1}`;
+          const path = `/mock-masks/${fileId}.png`;
+          this.maskUploads.set(path, raw.subarray(start, end));
+          await json(route, { id: fileId, path });
           return;
         }
         const customPoster = multipart.includes('asymmetric-8x2.png');
@@ -1201,14 +1252,17 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await expect(review.getByRole('img', { name: 'After', exact: true })).toBeVisible();
     expect(mocks.doc.outputs[0].tracks[0].clips[1]?.src).toBe(REPLACEMENT_IMAGE_URL);
     await review.getByRole('button', { name: 'Apply result', exact: true }).click();
-    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[1]?.src).toBe(TRANSPARENT_IMAGE_URL);
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[1]?.maskSrc).toContain('/mock-masks/');
     expect(mocks.backgroundRemovalPosts).toHaveLength(1);
     expect(JSON.parse(mocks.backgroundRemovalPosts[0])).toEqual({ imageUrl: REPLACEMENT_IMAGE_URL });
     const transparent = mocks.doc.outputs[0].tracks[0].clips[1];
     expect(transparent.id).toBe(beforeReplacement.id);
+    expect(transparent.src).toBe(REPLACEMENT_IMAGE_URL);
     expect(transparent.filters).toEqual(beforeReplacement.filters);
     expect(transparent.smartFilters).toBeUndefined();
-    expect(transparent.originalSrc).toBeUndefined();
+    expect(transparent.originalSrc).toBe(REPLACEMENT_IMAGE_URL);
+    expect(transparent.originalFileId).toBe('replacement-image-file');
+    expect(transparent.maskEnabled).toBe(true);
     expect(transparent.fitMode).toBe('contain');
     expect(transparent).toMatchObject({
       x: beforeReplacement.x,
@@ -1250,10 +1304,12 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       originId: beforeReplacement.originId,
       startMs: 1000,
       endMs: 4000,
-      src: TRANSPARENT_IMAGE_URL,
+      src: REPLACEMENT_IMAGE_URL,
       filters: beforeReplacement.filters,
-      naturalWidth: 2,
+      naturalWidth: 8,
       naturalHeight: 2,
+      maskSrc: expect.stringContaining('/mock-masks/'),
+      maskEnabled: true,
     });
     expect(mocks.savedClips().find((clip) => clip.id === 'shape-original')?.borderRadius)
       .toEqual([0, 18, 0, 0]);
@@ -1293,6 +1349,48 @@ async function canvasDocumentPoint(
     x: stage!.x + (stage!.width - outputWidth * zoom) / 2 + x * zoom,
     y: stage!.y + (stage!.height - outputHeight * zoom) / 2 + y * zoom,
   };
+}
+
+async function canvasRgbaAtDocumentPoint(
+  page: Page,
+  outputWidth: number,
+  outputHeight: number,
+  x: number,
+  y: number
+): Promise<number[]> {
+  const point = await canvasDocumentPoint(page, outputWidth, outputHeight, x, y);
+  return page.evaluate(({ x: clientX, y: clientY }) => {
+    const canvas = document.elementsFromPoint(clientX, clientY)
+      .find((element): element is HTMLCanvasElement => element instanceof HTMLCanvasElement);
+    if (!canvas) throw new Error('No canvas at document point');
+    const rect = canvas.getBoundingClientRect();
+    const context = canvas.getContext('2d')!;
+    const pixelX = Math.max(0, Math.min(canvas.width - 1, Math.round((clientX - rect.left) * canvas.width / rect.width)));
+    const pixelY = Math.max(0, Math.min(canvas.height - 1, Math.round((clientY - rect.top) * canvas.height / rect.height)));
+    return Array.from(context.getImageData(pixelX, pixelY, 1, 1).data);
+  }, point);
+}
+
+async function renderedFrameRgba(
+  page: Page,
+  mocks: DesignerMocks,
+  x: number,
+  y: number
+): Promise<number[]> {
+  const output = mocks.doc.outputs[0];
+  await page.setContent(buildFramePage({
+    outputLiteral: escapeForScriptTag(output),
+    baseUrlLiteral: '"https://app.postmill.ai"',
+    baseUrl: 'https://app.postmill.ai',
+    script: FRAME_RENDERER_SCRIPT,
+    fontLinks: '',
+  }), { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => !!(window as any).__FRAME_API);
+  await page.evaluate(() => (window as any).__FRAME_API.renderFrame(0));
+  return page.locator('#frame-canvas').evaluate((canvas, point) => {
+    const context = (canvas as HTMLCanvasElement).getContext('2d')!;
+    return Array.from(context.getImageData(point.x, point.y, 1, 1).data);
+  }, { x, y });
 }
 
 async function cropFromRightHandle(
@@ -2199,6 +2297,225 @@ test.describe('Designer desktop Brand rail', () => {
     await panel.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(panel).toHaveCount(0);
     expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
+test.describe('Designer non-destructive cutout refinement', () => {
+  test('keeps a vertically asymmetric mask aligned with a letterboxed image', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    delete mocks.doc.outputs[0].bg;
+    Object.assign(mocks.doc.outputs[0].children![0], {
+      src: CUTOUT_VERTICAL_SOURCE_URL,
+      fileId: 'source-file',
+      originalSrc: CUTOUT_VERTICAL_SOURCE_URL,
+      originalFileId: 'source-file',
+      naturalWidth: 8,
+      naturalHeight: 2,
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+      fitMode: 'fill',
+      crop: undefined,
+      focalPoint: undefined,
+    });
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    const center = await canvasDocumentPoint(page, 400, 300, 200, 150);
+    await page.mouse.click(center.x, center.y);
+
+    await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
+    await page.getByRole('button', { name: 'Apply result', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).toContain('/mock-masks/');
+
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 200, 50)).toEqual([0, 0, 0, 255]);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 200, 125)).toEqual([255, 0, 0, 255]);
+    await expect.poll(async () => {
+      const rgba = await canvasRgbaAtDocumentPoint(page, 400, 300, 200, 175);
+      return rgba[0] === 0 && rgba[1] === 0 && rgba[2] <= 2 && rgba[3] === 255;
+    }).toBe(true);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 200, 250)).toEqual([0, 0, 0, 255]);
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({
+      src: CUTOUT_VERTICAL_SOURCE_URL,
+      fitMode: 'contain',
+    });
+    mocks.expectClean();
+  });
+
+  test('double-clicking masked text opens the text editor', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    mocks.doc.outputs[0].children = [{
+      id: 'masked-text',
+      type: 'text',
+      text: 'Masked headline',
+      x: 40,
+      y: 40,
+      width: 320,
+      height: 80,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      fontSize: 40,
+      fontFamily: 'Inter',
+      fill: '#ffffff',
+      maskSrc: CUTOUT_RESULT_URL,
+      maskEnabled: true,
+    }];
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    const text = await canvasDocumentPoint(page, 400, 300, 180, 80);
+    await page.mouse.dblclick(text.x, text.y);
+
+    await expect(page.locator('[data-text-editor-id="masked-text"]')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Restore', exact: true })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    mocks.expectClean();
+  });
+
+  test('retains original pixels and restores, erases, undoes, and reloads a static cutout', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    delete mocks.doc.outputs[0].bg;
+    const image = mocks.doc.outputs[0].children![0];
+    Object.assign(image, {
+      src: CUTOUT_SOURCE_URL,
+      fileId: 'source-file',
+      originalSrc: CUTOUT_SOURCE_URL,
+      originalFileId: 'source-file',
+      naturalWidth: 8,
+      naturalHeight: 2,
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+      fitMode: 'fill',
+      crop: undefined,
+      focalPoint: undefined,
+    });
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    const center = await canvasDocumentPoint(page, 400, 300, 200, 150);
+    await page.mouse.click(center.x, center.y);
+
+    await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
+    await page.getByRole('button', { name: 'Apply result', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).toContain('/mock-masks/');
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({
+      src: CUTOUT_SOURCE_URL,
+      fileId: 'source-file',
+      originalSrc: CUTOUT_SOURCE_URL,
+      originalFileId: 'source-file',
+      maskEnabled: true,
+    });
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 150, 150)).toEqual([255, 0, 0, 255]);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 150)).toEqual([0, 0, 0, 255]);
+
+    await page.getByRole('button', { name: 'Restore', exact: true }).click();
+    await page.getByRole('spinbutton', { name: 'Brush size', exact: true }).fill('500');
+    const restoredMask = mocks.doc.outputs[0].children![0].maskSrc;
+    const restorePoint = await canvasDocumentPoint(page, 400, 300, 250, 150);
+    await page.mouse.click(restorePoint.x, restorePoint.y);
+    await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).not.toBe(restoredMask);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 150)).toEqual([0, 0, 255, 255]);
+
+    await page.getByRole('button', { name: 'Erase', exact: true }).click();
+    await page.getByRole('spinbutton', { name: 'Brush size', exact: true }).fill('500');
+    const erasedMask = mocks.doc.outputs[0].children![0].maskSrc;
+    const erasePoint = await canvasDocumentPoint(page, 400, 300, 150, 150);
+    await page.mouse.click(erasePoint.x, erasePoint.y);
+    await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).not.toBe(erasedMask);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 150, 150)).toEqual([0, 0, 0, 255]);
+
+    await page.keyboard.press('Control+z');
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 150, 150)).toEqual([255, 0, 0, 255]);
+    await page.keyboard.press('Control+Shift+z');
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 150, 150)).toEqual([0, 0, 0, 255]);
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+    expect(mocks.doc.outputs[0].children![0].maskSrc).toContain('/mock-masks/');
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 150, 150)).toEqual([0, 0, 0, 255]);
+
+    const reselected = await canvasDocumentPoint(page, 400, 300, 200, 150);
+    await page.mouse.click(reselected.x, reselected.y);
+    await page.getByRole('button', { name: 'Show original', exact: true }).click();
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 150, 150)).toEqual([255, 0, 0, 255]);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 150)).toEqual([0, 0, 255, 255]);
+    await page.getByRole('button', { name: 'Show cutout', exact: true }).click();
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 150, 150)).toEqual([0, 0, 0, 255]);
+    mocks.expectClean();
+  });
+
+  test('applies a still-image clip mask in the overlay and real video-frame renderer', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = motionDoc();
+    mocks.doc.outputs[0].width = 400;
+    mocks.doc.outputs[0].height = 300;
+    mocks.doc.outputs[0].durationMs = 4000;
+    const track = mocks.doc.outputs[0].tracks[0];
+    mocks.doc.outputs[0].tracks = [track];
+    track.type = 'image';
+    Object.assign(track.clips[0], {
+      src: CUTOUT_SOURCE_URL,
+      fileId: 'source-file',
+      originalSrc: CUTOUT_SOURCE_URL,
+      originalFileId: 'source-file',
+      mediaType: 'image',
+      naturalWidth: 8,
+      naturalHeight: 2,
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+      fitMode: 'fill',
+    });
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    await page.getByRole('slider', { name: 'Clip', exact: true }).first().click();
+
+    await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
+    await page.getByRole('button', { name: 'Apply result', exact: true }).click();
+    await expect.poll(() => mocks.savedClips()[0].maskSrc).toContain('/mock-masks/');
+    expect(mocks.savedClips()[0]).toMatchObject({
+      src: CUTOUT_SOURCE_URL,
+      fileId: 'source-file',
+      originalSrc: CUTOUT_SOURCE_URL,
+      originalFileId: 'source-file',
+      mediaType: 'image',
+      maskEnabled: true,
+    });
+    const framePage = await page.context().newPage();
+    await mocks.install(framePage);
+    await expect.poll(() => renderedFrameRgba(framePage, mocks, 150, 150)).toEqual([255, 0, 0, 255]);
+    await expect.poll(() => renderedFrameRgba(framePage, mocks, 250, 150)).toEqual([0, 0, 0, 255]);
+    await framePage.close();
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 150, 150)).toEqual([255, 0, 0, 255]);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 150)).toEqual([0, 0, 0, 255]);
+
+    await page.getByRole('button', { name: 'Restore', exact: true }).click();
+    await page.getByRole('spinbutton', { name: 'Brush size', exact: true }).fill('500');
+    const restoredMask = mocks.savedClips()[0].maskSrc;
+    const restorePoint = await canvasDocumentPoint(page, 400, 300, 250, 150);
+    await page.mouse.click(restorePoint.x, restorePoint.y);
+    await expect.poll(() => mocks.savedClips()[0].maskSrc).not.toBe(restoredMask);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 150)).toEqual([0, 0, 255, 255]);
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    expect(mocks.savedClips()[0].maskSrc).toContain('/mock-masks/');
+    await expect.poll(() => renderedFrameRgba(page, mocks, 150, 150)).toEqual([255, 0, 0, 255]);
+    await expect.poll(() => renderedFrameRgba(page, mocks, 250, 150)).toEqual([0, 0, 255, 255]);
     mocks.expectClean();
   });
 });

@@ -105,6 +105,27 @@ describe('buildPostmillFile / parsePostmillFile round-trip', () => {
     expect(parsed.manifest.docVersion).toBe(10);
     expect(parsed.doc).toEqual(doc);
   });
+
+  it('round-trips v11 still-image clip masks verbatim', () => {
+    const doc = {
+      version: 11,
+      mode: 'video',
+      outputs: [{
+        id: 'video-out', width: 1080, height: 1080, fps: 30, durationMs: 1000,
+        tracks: [{
+          id: 'image-track', type: 'image',
+          clips: [{
+            id: 'image-clip', startMs: 0, endMs: 1000,
+            src: '/uploads/org/original.png', fileId: 'original-file', mediaType: 'image',
+            maskSrc: '/uploads/org/mask.png', maskFileId: 'mask-file', maskEnabled: true,
+          }],
+        }],
+      }],
+    } as unknown as DesignerDoc;
+    const parsed = parsePostmillFile(buildPostmillFile(doc, 'Cutout'));
+    expect(parsed.manifest.docVersion).toBe(11);
+    expect(parsed.doc).toEqual(doc);
+  });
 });
 
 describe('format v2 (bundled assets + fonts)', () => {

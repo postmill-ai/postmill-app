@@ -162,7 +162,7 @@ export const stamp = (
     case 'eraser':
       // Erasing is a composite mode, not a colour.
       ctx.globalCompositeOperation = 'destination-out';
-      ctx.fillStyle = '#000';
+      ctx.fillStyle = brushGradient(ctx, x, y, r, '#000', settings.hardness);
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
