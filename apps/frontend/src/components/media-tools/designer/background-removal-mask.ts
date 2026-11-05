@@ -15,7 +15,7 @@ export interface BackgroundRemovalMaskFrame {
   focalPoint?: { x: number; y: number };
 }
 
-const loadMaskImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+export const loadMaskImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
   const image = new Image();
   image.crossOrigin = 'anonymous';
   image.onload = () => resolve(image);

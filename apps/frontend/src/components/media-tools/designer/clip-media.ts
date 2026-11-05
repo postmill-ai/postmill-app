@@ -50,7 +50,7 @@ const beginClipMediaOperation = (store: Store, target: ClipMediaTarget): ClipMed
   return { id, history: store.getState().history };
 };
 
-const clipMediaOperationIsCurrent = (
+export const clipMediaOperationIsCurrent = (
   store: Store,
   target: ClipMediaTarget,
   operation: ClipMediaOperation

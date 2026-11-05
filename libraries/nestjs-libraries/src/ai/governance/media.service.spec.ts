@@ -1030,6 +1030,26 @@ describe('AiMediaService', () => {
     });
   });
 
+  describe('magicGrab', () => {
+    it('persists the cutout and reconstructed background once each', async () => {
+      const service = bareService();
+      const inpaint = vi.spyOn(service, 'inpaintImage').mockResolvedValue('https://x/background.png');
+      const save = vi.spyOn(service, 'saveUrlToFile')
+        .mockResolvedValueOnce({ id: 'subject-file', path: '/uploads/org/subject.png', name: 'subject.png' })
+        .mockResolvedValueOnce({ id: 'background-file', path: '/uploads/org/background.png', name: 'background.png' });
+
+      const result = await service.magicGrab('/original.png', '/cutout.png', '/mask.png', { orgId: 'org-1' });
+
+      expect(inpaint).toHaveBeenCalledWith('/original.png', '/mask.png', expect.any(String), { orgId: 'org-1' });
+      expect(save).toHaveBeenNthCalledWith(1, 'org-1', '/cutout.png', 'magic-grab-subject');
+      expect(save).toHaveBeenNthCalledWith(2, 'org-1', 'https://x/background.png', 'magic-grab-background');
+      expect(result).toEqual({
+        subject: { url: '/uploads/org/subject.png', fileId: 'subject-file' },
+        background: { url: '/uploads/org/background.png', fileId: 'background-file' },
+      });
+    });
+  });
+
   describe('outpaintImage', () => {
     it('throws CapabilityNotAvailable when no provider configured', async () => {
       const service = bareService();

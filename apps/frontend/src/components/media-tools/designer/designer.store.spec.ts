@@ -1966,3 +1966,62 @@ describe('persistent video clip groups', () => {
     expect(pasted[0].groupId).not.toBe(duplicate.groupId);
   });
 });
+
+describe('Magic Grab actions', () => {
+  it('splits a static image into background and subject with one history entry', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'photo', type: 'image', x: 10, y: 20, width: 300, height: 200,
+      rotation: 0, opacity: 1, locked: false, hidden: false, src: '/photo.png',
+    });
+    const original = store.getState().doc.outputs[0].children[0];
+    const depth = store.getState().history.length;
+    store.getState().applyMagicGrab('photo',
+      { ...original, src: '/background.png' },
+      { ...original, id: '', src: '/photo.png', maskSrc: '/subject-mask.png' }
+    );
+
+    const children = store.getState().doc.outputs[0].children;
+    expect(children.map((child) => child.src)).toEqual(['/background.png', '/photo.png']);
+    expect(store.getState().history.length).toBe(depth + 1);
+    expect(store.getState().selectedIds).toHaveLength(1);
+    expect(store.getState().selectedIds[0]).not.toBe('photo');
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].children).toHaveLength(1);
+    expect(store.getState().doc.outputs[0].children[0].src).toBe('/photo.png');
+  });
+
+  it('splits a still clip into background and subject tracks with one history entry', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'image');
+    const output = store.getState().doc.outputs[0] as VideoOutput;
+    const track = output.tracks.find((item) => item.type === 'image')!;
+    store.getState().addClip(0, track.id, {
+      id: 'photo', startMs: 1000, endMs: 3000, src: '/photo.png',
+      x: 10, y: 20, width: 300, height: 200,
+    });
+    const original = (store.getState().doc.outputs[0] as VideoOutput).tracks
+      .find((item) => item.id === track.id)!.clips[0];
+    const depth = store.getState().history.length;
+    store.getState().applyMagicGrabClip(
+      { outputIndex: 0, trackId: track.id, clipId: 'photo' },
+      { ...original, src: '/background.png' },
+      { ...original, id: '', maskSrc: '/subject-mask.png' }
+    );
+
+    const tracks = (store.getState().doc.outputs[0] as VideoOutput).tracks;
+    expect(tracks).toHaveLength(3);
+    expect(tracks.find((item) => item.id === track.id)?.clips[0].src).toBe('/background.png');
+    const subjectTrackId = store.getState().selectedClip?.trackId;
+    const subjectTrack = tracks.find((item) => item.id === subjectTrackId)!;
+    expect(subjectTrack.type).toBe('image');
+    expect(subjectTrack.clips[0]).toMatchObject({
+      src: '/photo.png', startMs: 1000, endMs: 3000, maskSrc: '/subject-mask.png',
+    });
+    expect(store.getState().history.length).toBe(depth + 1);
+    expect(subjectTrackId).not.toBe(track.id);
+    store.getState().undo();
+    expect((store.getState().doc.outputs[0] as VideoOutput).tracks).toHaveLength(2);
+  });
+});

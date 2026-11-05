@@ -23,6 +23,8 @@ import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
 import { cropFromSourceRect } from '../crop-geometry';
 import { CutoutRefineControls } from './cutout-refine-controls';
 import { trySetPointerCapture } from '../pointer-capture';
+import { applyStaticMagicGrab, prepareStaticMagicGrab } from '../magic-grab';
+import { MagicGrabDialog } from '../magic-grab-dialog';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -199,6 +201,39 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     } catch (err) {
       // The shared action throws the server's error message — show it verbatim.
       toaster.show((err as Error)?.message || t('designer_bg_removal_failed', 'Background removal failed'), 'warning');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleMagicGrab = async () => {
+    if (!element.src) return;
+    setAiLoading('magic-grab');
+    try {
+      const candidate = await prepareStaticMagicGrab({ fetch, store, elementId: element.id });
+      if (!candidate) {
+        toaster.show(t('designer_magic_grab_outdated', 'The design changed before this result could be applied. Please try again.'), 'warning');
+        return;
+      }
+      modals.openModal({
+        title: t('designer_magic_grab_title', 'Magic Grab / Select Subject'),
+        size: 900,
+        children: (close: () => void) => (
+          <MagicGrabDialog
+            originalUrl={candidate.source.url}
+            subjectUrl={candidate.asset.url}
+            backgroundUrl={candidate.background.url}
+            onCancel={close}
+            onApply={async () => {
+              const applied = await applyStaticMagicGrab({ fetch, store, candidate });
+              if (applied) close();
+              return applied;
+            }}
+          />
+        ),
+      });
+    } catch (err) {
+      toaster.show((err as Error)?.message || t('designer_magic_grab_failed', 'Magic Grab failed'), 'warning');
     } finally {
       setAiLoading(false);
     }
@@ -925,6 +960,15 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               disabled={!!aiLoading}
             >
               {aiLoading === 'remove-bg' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_remove_background', 'Remove Background')}
+            </button>
+          )}
+          {operationAvailable('bg-remove') && operationAvailable('inpaint') && (
+            <button
+              className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
+              onClick={handleMagicGrab}
+              disabled={!!aiLoading}
+            >
+              {aiLoading === 'magic-grab' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_magic_grab', 'Magic Grab / Select Subject')}
             </button>
           )}
           <div className="grid grid-cols-3 gap-1">

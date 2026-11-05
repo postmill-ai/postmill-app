@@ -62,6 +62,8 @@ import { TextStyleControl } from './text-style-control';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { ClipTimingControls } from './clip-timing-controls';
 import { CutoutRefineControls } from './cutout-refine-controls';
+import { applyClipMagicGrab, prepareClipMagicGrab } from '../magic-grab';
+import { MagicGrabDialog } from '../magic-grab-dialog';
 
 // Same weight ladder the image-mode text panel offers.
 const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
@@ -831,6 +833,50 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     }
   }, [clip?.src, imageBgRemovalRunning, fetch, store, outputIndex, trackId, clipId, translate, toaster, modals]);
 
+  const runMagicGrab = useCallback(async () => {
+    if (!clip?.src || imageBgRemovalRunning) return;
+    setImageBgRemovalRunning(true);
+    setImageBgRemovalError(null);
+    try {
+      const candidate = await prepareClipMagicGrab({
+        fetch,
+        store,
+        target: { outputIndex, trackId, clipId },
+      });
+      if (!candidate) throw new Error(translate('designer_magic_grab_outdated', 'The design changed before this result could be applied. Please try again.'));
+      modals.openModal({
+        title: translate('designer_magic_grab_title', 'Magic Grab / Select Subject'),
+        size: 900,
+        children: (close: () => void) => (
+          <MagicGrabDialog
+            originalUrl={candidate.source.url}
+            subjectUrl={candidate.asset.url}
+            backgroundUrl={candidate.background.url}
+            onCancel={close}
+            onApply={async () => {
+              const applied = await applyClipMagicGrab({
+                fetch,
+                store,
+                target: { outputIndex, trackId, clipId },
+                candidate,
+              });
+              if (applied) close();
+              return applied;
+            }}
+          />
+        ),
+      });
+    } catch (error) {
+      const message = (error as Error)?.message || translate('designer_magic_grab_failed', 'Magic Grab failed');
+      if (mountedRef.current) {
+        setImageBgRemovalError(message);
+        toaster.show(message, 'warning');
+      }
+    } finally {
+      if (mountedRef.current) setImageBgRemovalRunning(false);
+    }
+  }, [clip?.src, imageBgRemovalRunning, fetch, store, outputIndex, trackId, clipId, translate, toaster, modals]);
+
   const fitClipToFrame = () => updateClip({ fitMode: 'contain' });
   const fitClipToCanvas = () => {
     if (!clip?.naturalWidth || !clip.naturalHeight) {
@@ -897,6 +943,18 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
               {imageBgRemovalRunning
                 ? translate('designer_processing_ellipsis', 'Processing...')
                 : translate('designer_remove_background', 'Remove Background')}
+            </button>
+          )}
+          {operationAvailable('bg-remove') && operationAvailable('inpaint') && (
+            <button
+              type="button"
+              onClick={runMagicGrab}
+              disabled={imageBgRemovalRunning}
+              className="w-full px-3 py-2 rounded-sm text-[12px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {imageBgRemovalRunning
+                ? translate('designer_processing_ellipsis', 'Processing...')
+                : translate('designer_magic_grab', 'Magic Grab / Select Subject')}
             </button>
           )}
           {imageBgRemovalError && (

@@ -238,6 +238,12 @@ export interface DesignerActions {
   updateElementEphemeral: (id: string, updates: Partial<DesignerElement>) => void;
   removeElement: (id: string) => void;
   removeElements: (ids: string[]) => void;
+  applyMagicGrab: (id: string, background: DesignerElement, subject: DesignerElement) => void;
+  applyMagicGrabClip: (
+    target: { outputIndex: number; trackId: string; clipId: string },
+    background: VideoClip,
+    subject: VideoClip
+  ) => void;
   duplicateElement: (id: string) => void;
   duplicateElements: (ids: string[]) => void;
   setSelectedIds: (ids: string[]) => void;
@@ -754,6 +760,26 @@ export const createDesignerStore = (
         });
         get().pushHistory();
         ids.forEach(disposeElementBuffers);
+      },
+
+      applyMagicGrab: (id, background, subject) => {
+        if (isVideoMode()) return;
+        const children = activePageChildren();
+        const index = children.findIndex((element) => element.id === id);
+        if (index < 0) return;
+        const subjectId = subject.id || genId();
+        const next = [...children];
+        next.splice(index, 1, background, {
+          ...subject,
+          id: subjectId,
+          originId: subject.originId || genId(),
+        });
+        set({
+          doc: { ...get().doc, outputs: withActiveChildren(next) },
+          isDirty: true,
+          selectedIds: [subjectId],
+        });
+        get().pushHistory('Magic Grab');
       },
 
       duplicateElement: (id) => get().duplicateElements([id]),
@@ -1651,6 +1677,38 @@ export const createDesignerStore = (
         outs[outputIndex] = updated;
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
+      },
+
+      applyMagicGrabClip: (target, background, subject) => {
+        const { doc } = get();
+        const vo = doc.outputs[target.outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return;
+        const trackIndex = vo.tracks.findIndex((track) => track.id === target.trackId);
+        if (trackIndex < 0 || vo.tracks.length >= MAX_TRACKS) return;
+        const track = vo.tracks[trackIndex];
+        const clipIndex = track.clips.findIndex((clip) => clip.id === target.clipId);
+        if (clipIndex < 0) return;
+        const subjectId = subject.id || genId();
+        const subjectTrackId = genId();
+        const clips = [...track.clips];
+        clips.splice(clipIndex, 1, background);
+        const tracks = [...vo.tracks];
+        tracks[trackIndex] = { ...track, clips };
+        tracks.splice(trackIndex + 1, 0, {
+          id: subjectTrackId,
+          type: 'image',
+          clips: [{ ...subject, id: subjectId, originId: subject.originId || genId() }],
+        });
+        const outs = [...doc.outputs];
+        outs[target.outputIndex] = { ...vo, tracks };
+        set({
+          doc: { ...doc, outputs: outs },
+          isDirty: true,
+          selectedClip: { outputIndex: target.outputIndex, trackId: subjectTrackId, clipId: subjectId },
+          selectedClips: [{ trackId: subjectTrackId, clipId: subjectId }],
+          selectedIds: [],
+        });
+        get().pushHistory('Magic Grab');
       },
 
       addClip: (outputIndex, trackId, clip) => {

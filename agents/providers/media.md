@@ -120,6 +120,12 @@ Reel.Farm slideshow polls return typed `slideshow: { slides: string[] }` instead
 
 Generated video ingestion uses `media/video-artifact.ts`: best-effort ffprobe writes canonical `metadata.dimensions` + `durationMs`, and MP4/M4V/MOV are stream-copied with `+faststart` (never transcoded; original bytes win on any failure). Studio/Replicate job responses expose only sanitized `dimensions`/`durationMs`/`mime`, which the Designer uses before browser probing. The frontend `/uploads` route supports single byte ranges for reliable timeline seeking; preserve its 206/416 behavior when changing media serving.
 
+**Magic Grab persistence.** `POST /media/magic-grab` accepts the original image, provider cutout,
+and source-space subject mask. `AiMediaService.magicGrab` performs the existing inpaint operation,
+then persists the cutout and reconstructed background once each and returns `{url,fileId}` for both.
+The Designer deletes its temporary source-mask File after Apply; provider errors use the normal
+sanitized provider envelope.
+
 **Designer genAI modal picker endpoints** (`media.controller.ts`, read-level, no admin gate): `GET /media/generation-providers?operation=image|video|audio|avatar|tts` (400 otherwise) → `{ providers: [{ identifier, name }], default: { providerId, model } | null }` — `providers` is exactly the candidate list generation would consider (`AiMediaService.listGenerationProviders` reuses `_resolveForOperation`); generation for a non-default pick goes through the studio endpoints above. `POST /media/text-to-speech` also accepts an optional `provider` pin: unknown / not-enabled / unconfigured / non-`tts` provider → 400, and a pinned call makes exactly one attempt (no fallback to other candidates).
 
 ### CI gate (do not skip)

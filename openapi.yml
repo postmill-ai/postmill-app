@@ -3320,6 +3320,21 @@ paths:
           description: ""
       tags:
         - Media
+  /media/magic-grab:
+    post:
+      operationId: MediaController_magicGrab
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagicGrabImageDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Media
   /media/outpaint:
     post:
       operationId: MediaController_outpaint
@@ -11122,6 +11137,19 @@ components:
         - imageUrl
         - maskUrl
         - prompt
+    MagicGrabImageDto:
+      type: object
+      properties:
+        imageUrl:
+          type: string
+        cutoutUrl:
+          type: string
+        maskUrl:
+          type: string
+      required:
+        - imageUrl
+        - cutoutUrl
+        - maskUrl
     OutpaintImageDto:
       type: object
       properties:
