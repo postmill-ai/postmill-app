@@ -354,7 +354,7 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     }
   });
 
-  it('sets globalCompositeOperation from clip.blendMode for the clip draw', async () => {
+  it.each(['multiply', 'screen', 'overlay', 'soft-light'])('sets globalCompositeOperation from clip.blendMode for the %s clip draw', async (blendMode) => {
     // A recording context (the Proxy stub swallows sets) pins the drawClip
     // contract: the clip's own draw composites under its blend mode, framed by
     // the frame-start 'source-over' reset.
@@ -390,7 +390,7 @@ describe('FRAME_RENDERER_SCRIPT', () => {
                   shape: 'rect',
                   fill: '#ff0000',
                   x: 0, y: 0, width: 50, height: 50,
-                  blendMode: 'multiply',
+                  blendMode,
                 },
               ],
             },
@@ -408,7 +408,7 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     const api = win.__FRAME_API as { renderFrame: (ms: number) => Promise<void> };
     await api.renderFrame(500);
     expect(gcoWrites[0]).toBe('source-over');
-    expect(gcoWrites).toContain('multiply');
+    expect(gcoWrites).toContain(blendMode);
   });
 
   it('draws a textReveal clip as a growing prefix, via the SHARED module', async () => {

@@ -285,6 +285,58 @@ describe('DesignRenderService', () => {
     expect(multiplied[2]).toBeLessThan(plain[2]);
   });
 
+  it('applies native and pixel-ops blends to text, shape, image and grouped layers on a non-flat background', async () => {
+    const service = makeService();
+    const grey = await sharp({
+      create: { width: 1, height: 1, channels: 4, background: '#808080' },
+    }).png().toBuffer();
+    const imageSrc = `data:image/png;base64,${grey.toString('base64')}`;
+    const layer = (id: string, type: string, x: number, blendMode?: string): any => ({
+      id, type, x, y: 0, width: 100, height: 100,
+      rotation: 0, opacity: 1, locked: false, hidden: false, blendMode,
+    });
+    const doc = (blendMode?: string): any => ({
+      version: 4,
+      mode: 'image',
+      outputs: [{
+        id: 'out-1', formatId: 'wide', name: 'Wide',
+        width: 400, height: 100, background: '#ffffff',
+        children: [
+          { ...layer('base-left', 'shape', 0), shape: 'rect', fill: '#3a7bd5' },
+          { ...layer('base-right', 'shape', 100), width: 300, shape: 'rect', fill: '#d53a7b' },
+          { ...layer('text', 'text', 0, blendMode), text: 'B', fontFamily: 'Inter', fontSize: 72, fill: '#808080' },
+          { ...layer('shape', 'shape', 100, blendMode), shape: 'rect', fill: '#808080' },
+          { ...layer('image', 'image', 200, blendMode), src: imageSrc, naturalWidth: 1, naturalHeight: 1, fitMode: 'fill' },
+          { ...layer('group', 'group', 300, blendMode) },
+          { ...layer('group-child', 'shape', 300), parentId: 'group', shape: 'rect', fill: '#808080' },
+        ],
+      }],
+    });
+    const pixels = async (blendMode?: string) => {
+      const png = await service.renderPage(doc(blendMode), 0, { pixelRatio: 1 });
+      const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      return { data, info };
+    };
+    const changedPixels = (before: any, after: any, region: number) => {
+      let changed = 0;
+      for (let y = 0; y < 100; y++) {
+        for (let x = region * 100; x < (region + 1) * 100; x++) {
+          const i = (y * before.info.width + x) * before.info.channels;
+          if (before.data[i] !== after.data[i] || before.data[i + 1] !== after.data[i + 1] || before.data[i + 2] !== after.data[i + 2]) changed++;
+        }
+      }
+      return changed;
+    };
+
+    const plain = await pixels();
+    for (const blendMode of ['multiply', 'screen', 'overlay', 'soft-light', 'vivid-light']) {
+      const blended = await pixels(blendMode);
+      for (let region = 0; region < 4; region++) {
+        expect(changedPixels(plain, blended, region), `${blendMode} region ${region}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it('renders a warped shape deformed, and an unwarped one exactly as before', async () => {
     const service = makeService();
     const doc = (warp?: any): any => ({

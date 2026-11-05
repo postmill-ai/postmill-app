@@ -1877,6 +1877,8 @@ export class DesignRenderService {
           await this.drawMaskedElement(ctx, el, ratio);
         } else if (elementStyles(el)?.length) {
           await this.drawElementWithStyles(ctx, el, ratio);
+        } else if (!isNativeBlend(el.blendMode)) {
+          await this.drawElementWithCustomBlend(ctx, el, ratio);
         } else {
           await this.drawElement(ctx, el);
         }
@@ -1886,6 +1888,21 @@ export class DesignRenderService {
         );
       }
     }
+  }
+
+  private async drawElementWithCustomBlend(
+    ctx: any,
+    el: DesignerElement,
+    ratio: number
+  ): Promise<void> {
+    const { createCanvas } = await loadCanvasModule();
+    const buffer = createCanvas(ctx.canvas.width, ctx.canvas.height);
+    const bctx: any = buffer.getContext('2d');
+    bctx.scale(ratio, ratio);
+    await this.drawElement(bctx, el, true);
+    ctx.save();
+    this.applyBlend(ctx, buffer, el.blendMode, ratio);
+    ctx.restore();
   }
 
   /**

@@ -3,7 +3,9 @@
 import React, { FC, useState } from 'react';
 import { Slider, SegmentedControl, Stepper } from '../controls';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import type { DesignerElement } from '../designer.store';
+import type { DesignerBlendMode, DesignerElement } from '../designer.store';
+import { SELECTABLE_BLEND_MODES } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
+import { BLEND_LABELS } from './layers-panel';
 
 interface CommonInspectorProps {
   selected: DesignerElement[];
@@ -22,6 +24,7 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
   const updateElement = store((s: any) => s.updateElement);
   const updateElements = store((s: any) => s.updateElements);
   const updateElementsSilent = store((s: any) => s.updateElementsSilent);
+  const setLayerBlend = store((s: any) => s.setLayerBlend);
   const reorder = store((s: any) => s.reorder);
   const pushHistory = store((s: any) => s.pushHistory);
   const currentOutput = store((s: any) => s.currentOutput);
@@ -218,6 +221,20 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
         onChange={(n) => updateElementsSilent(ids, { opacity: n / 100 })}
         onCommit={() => pushHistory()}
       />
+
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] text-textColor/50">{t('layer_blend_mode', 'Blend mode')}</span>
+        <select
+          aria-label={t('layer_blend_mode', 'Blend mode')}
+          value={primary.blendMode || 'normal'}
+          onChange={(e) => setLayerBlend(ids, e.target.value as DesignerBlendMode)}
+          className="w-[160px] h-[26px] px-1.5 rounded-md bg-newBgColor border border-studioBorder text-[11px] text-textColor outline-hidden"
+        >
+          {SELECTABLE_BLEND_MODES.map((m) => (
+            <option key={m} value={m}>{BLEND_LABELS[m] || m}</option>
+          ))}
+        </select>
+      </div>
 
       <div className="flex items-center justify-between">
         <span className="text-[11px] text-textColor/50">{t('designer_label_lock', 'Lock')}</span>

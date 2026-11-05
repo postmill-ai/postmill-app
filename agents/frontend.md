@@ -193,6 +193,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
 - **Groups are flat.** `output.children` stays a flat array; nesting is expressed by `parentId` and
   resolved by `buildLayerTree`. A group renders at the position of its **first** member. Never add a
   nested `children[]` to an element — ~87 call sites iterate the flat array.
+- **Blend controls share the existing compositors.** Static single/multi-selections use the Common
+  Inspector's `SELECTABLE_BLEND_MODES` and `setLayerBlend`; clips keep the native-only subset in their
+  own Inspector. Plain non-native static layers must go through the server's offscreen `applyBlend`
+  path just like styled, masked, and grouped layers — drawing them directly drops the blend.
 - **A clipped adjustment masks by the base layer's ALPHA, not its bounding box.** The canvas caches
   the base layer alone and filters that bitmap, so its transparent gaps keep the backdrop; the server
   mirrors this by rendering the base node alone and feathering the write-back by that mask.

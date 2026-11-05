@@ -136,6 +136,14 @@ around the adjustable focal point, **Fit** letterboxes without cropping, and **F
 video and image clips default to Cover when no fit was saved. Image backgrounds, thumbnails, SVG,
 and video exports use the same crop and focal-point geometry as the canvas.
 
+### Blend modes
+
+Select one or more layers and choose **Blend mode** in the Inspector's **Common** section. The same
+control works on desktop and mobile, supports mixed selections, and includes Multiply, Screen,
+Overlay, Soft Light, and additional native and pixel-based modes. Video clips have their own **Blend**
+selector with the modes supported by the video renderer. Blend edits are undoable, persist with the
+design, and are preserved in static and video exports.
+
 ### Cutout Restore and Erase
 
 After **Remove Background**, Apply keeps the original image and turns the reviewed cutout's alpha
