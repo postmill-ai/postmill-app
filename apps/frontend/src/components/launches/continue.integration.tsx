@@ -160,7 +160,11 @@ export const ContinueIntegration: FC<{
       if (!modifiedParams.code) {
         // X (OAuth 1.0a) signals denial as ?denied=<token>.
         const denied =
-          searchParams.error === 'access_denied' || !!searchParams.denied;
+          ['access_denied', 'user_cancelled_login', 'user_cancelled_authorize'].includes(
+            searchParams.error
+          ) || !!searchParams.denied;
+        const expectedProviderOutcome =
+          denied || searchParams.error === 'consent_required';
         const providerError = searchParams.error
           ? `${searchParams.error}${
               searchParams.error_description
@@ -168,9 +172,7 @@ export const ContinueIntegration: FC<{
                 : ''
             }`
           : null;
-        // A user cancelling consent is normal flow — not Sentry noise. A
-        // platform error or a code-less callback signals misconfiguration.
-        if (!denied) {
+        if (!expectedProviderOutcome) {
           Sentry.captureException(
             new Error(
               `Channel connect failed for ${provider}: ${
@@ -272,18 +274,18 @@ export const ContinueIntegration: FC<{
         const message = Array.isArray(rawMessage)
           ? rawMessage.join(', ')
           : rawMessage;
-        // Connect failures must never be silent: the backend maps provider
-        // errors to generic messages (or returns no body at all), so capture
-        // the full context — without this a failing OAuth callback is
-        // undiagnosable (first seen 2026-09-05, Discord connect).
-        Sentry.captureException(
-          new Error(
-            `Channel connect failed for ${provider}: ${
-              message || `HTTP ${data.status}`
-            }`
-          ),
-          { extra: { provider, status: data.status, body } }
-        );
+        // Expected provider rejections are user-correctable and already logged
+        // by the backend. Unexpected responses still need full Sentry context.
+        if (body.code !== 'CHANNEL_AUTHORIZATION_REJECTED') {
+          Sentry.captureException(
+            new Error(
+              `Channel connect failed for ${provider}: ${
+                message || `HTTP ${data.status}`
+              }`
+            ),
+            { extra: { provider, status: data.status, body } }
+          );
+        }
         setErrorMessage(
           message ||
             tRef.current(

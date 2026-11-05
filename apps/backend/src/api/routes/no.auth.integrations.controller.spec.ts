@@ -95,7 +95,8 @@ vi.mock('@postmill-ai/nestjs-libraries/integrations/social.abstract', () => ({
   SocialAbstract: class {},
   NotEnoughScopes: class {
     constructor(
-      public message = 'Not enough scopes, when choosing a provider, please add all the scopes'
+      public message = 'Not enough scopes, when choosing a provider, please add all the scopes',
+      public expected = true
     ) {}
   },
 }));
@@ -419,11 +420,16 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
     expect(err2.message).toBe('Invalid or expired state');
   });
 
-  it('returns the mapped Instagram OAuth error instead of generic authentication failure', async () => {
+  it('returns a sanitized Instagram OAuth error and logs non-secret operator context', async () => {
+    const warn = vi
+      .spyOn((controller as any)._logger, 'warn')
+      .mockImplementation(() => {});
     const provider = makeProvider({
       authenticate: vi.fn().mockRejectedValue({
         message: 'Unknown Error',
-        json: JSON.stringify({ error: { message: 'Invalid client credential' } }),
+        json: JSON.stringify({
+          error: { message: 'Invalid client credential; access_token=secret' },
+        }),
       }),
       handleErrors: vi.fn(),
     });
@@ -431,13 +437,36 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
     getAllowedSocialsIntegrations.mockReturnValue(['testprovider', 'instagram-standalone']);
     redisStore.set('login:state-ig-error', 'verifier');
     redisStore.set('organization:state-ig-error', 'org-1');
+    redisStore.set('config:state-ig-error', 'config-1');
 
     const err = await controller
       .connectSocialMedia('instagram-standalone', body('state-ig-error'))
       .catch((error) => error);
 
     expect(provider.handleErrors).not.toHaveBeenCalled();
-    expect(err.message).toBe('Invalid client credential');
+    expect(err.message).toBe('Invalid client credential; access_token=[redacted]');
     expect(err.message).not.toBe('Authentication failed');
+    expect(err.expected).toBe(true);
+    expect(warn).toHaveBeenCalledWith(
+      'social-connect authentication failed: provider=instagram-standalone organization=org-1 providerConfig=config-1 expected=true detail=Invalid client credential; access_token=[redacted]'
+    );
+    expect(warn.mock.calls[0][0]).not.toContain('secret');
+    expect(warn.mock.calls[0][0]).not.toContain('state-ig-error');
+  });
+
+  it('keeps an opaque provider exception unexpected so the frontend still reports it', async () => {
+    const provider = makeProvider({
+      authenticate: vi.fn().mockRejectedValue(new TypeError('provider bug')),
+    });
+    getSocialIntegration.mockResolvedValue(provider);
+    redisStore.set('login:state-opaque-error', 'verifier');
+    redisStore.set('organization:state-opaque-error', 'org-1');
+
+    const err = await controller
+      .connectSocialMedia('testprovider', body('state-opaque-error'))
+      .catch((error) => error);
+
+    expect(err.message).toBe('Authentication failed');
+    expect(err.expected).toBe(false);
   });
 });

@@ -139,7 +139,8 @@ export const BadBody: new (...a: any[]) => Error = new Proxy(
 
 export class NotEnoughScopes {
   constructor(
-    public message = 'Not enough scopes, when choosing a provider, please add all the scopes'
+    public message = 'Not enough scopes, when choosing a provider, please add all the scopes',
+    public expected = true
   ) {}
 }
 
