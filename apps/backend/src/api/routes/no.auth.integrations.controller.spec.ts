@@ -425,10 +425,7 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
         message: 'Unknown Error',
         json: JSON.stringify({ error: { message: 'Invalid client credential' } }),
       }),
-      handleErrors: vi.fn(() => ({
-        type: 'bad-body',
-        value: 'Instagram App Secret is invalid — check the channel settings',
-      })),
+      handleErrors: vi.fn(),
     });
     getSocialIntegration.mockResolvedValue(provider);
     getAllowedSocialsIntegrations.mockReturnValue(['testprovider', 'instagram-standalone']);
@@ -439,11 +436,8 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
       .connectSocialMedia('instagram-standalone', body('state-ig-error'))
       .catch((error) => error);
 
-    expect(provider.handleErrors).toHaveBeenCalledWith(
-      JSON.stringify({ error: { message: 'Invalid client credential' } }),
-      400
-    );
-    expect(err.message).toBe('Instagram App Secret is invalid — check the channel settings');
+    expect(provider.handleErrors).not.toHaveBeenCalled();
+    expect(err.message).toBe('Invalid client credential');
     expect(err.message).not.toBe('Authentication failed');
   });
 });

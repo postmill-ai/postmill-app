@@ -32,6 +32,7 @@ import { CampaignTagService } from '@postmill-ai/nestjs-libraries/database/prism
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { isAllowedReturnUrl } from '@postmill-ai/nestjs-libraries/security/return-url.validator';
 import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
+import { instagramOAuthErrorDetail } from '@postmill-ai/provider-kernel';
 
 @ApiTags('Integrations')
 @Controller('/integrations')
@@ -218,10 +219,11 @@ export class NoAuthIntegrationsController {
 
         let providerMessage: string | undefined;
         const providerJson = (err as { json?: unknown })?.json;
-        if (integration === 'instagram-standalone' && typeof providerJson === 'string') {
-          providerMessage = (integrationProvider as unknown as {
-            handleErrors(body: string, status: number): { value?: string } | undefined;
-          }).handleErrors(providerJson, 400)?.value;
+        if (
+          integration === 'instagram-standalone' &&
+          typeof providerJson === 'string'
+        ) {
+          providerMessage = instagramOAuthErrorDetail(providerJson);
         }
 
         // Never swallow the provider's real error — an opaque "Authentication

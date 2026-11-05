@@ -9,6 +9,7 @@ import {
   INSTAGRAM_MAX_MEDIA_UPLOAD_POLL_ATTEMPTS,
   INSTAGRAM_MAX_CAROUSEL_CONTAINER_POLL_ATTEMPTS,
   INSTAGRAM_MAX_PAGES_PAGINATION_DEPTH,
+  instagramOAuthErrorDetail,
 } from './instagram-base';
 import { setSocialFetchPorts, SocialFetchPorts } from '../social-base';
 import { Integration } from '@prisma/client';
@@ -321,6 +322,25 @@ describe('InstagramProvider', () => {
       );
     });
 
+    it.each([401, 500])(
+      'leaves structured Meta messages unmapped at HTTP %i for default auth/retry handling',
+      (status) => {
+        const body = JSON.stringify({
+          error: {
+            message: 'An unexpected error has occurred. Please retry your request later.',
+            code: 2,
+          },
+        });
+        expect(provider.handleErrors(body, status)).toBeUndefined();
+      }
+    );
+
+    it('returns undefined for unmapped bodies', () => {
+      expect(provider.handleErrors('{"some":"other error"}', 400)).toBeUndefined();
+    });
+  });
+
+  describe('instagramOAuthErrorDetail', () => {
     it('surfaces structured Meta error details instead of Unknown Error', () => {
       const body = JSON.stringify({
         error: {
@@ -328,23 +348,18 @@ describe('InstagramProvider', () => {
           message: 'Error validating client secret. Check the Instagram app settings.',
         },
       });
-      expect(provider.handleErrors(body, 400)).toEqual({
-        type: 'bad-body',
-        value: 'Instagram authentication failed: Error validating client secret. Check the Instagram app settings.',
-      });
+      expect(instagramOAuthErrorDetail(body)).toBe(
+        'Error validating client secret. Check the Instagram app settings.'
+      );
     });
 
     it('redacts credential values from structured error details', () => {
       const body = JSON.stringify({
         error_message: 'OAuth failed for access_token=secret-token and client_secret=secret-value',
       });
-      expect(provider.handleErrors(body, 400)?.value).toBe(
-        'Instagram authentication failed: OAuth failed for access_token=[redacted] and client_secret=[redacted]'
+      expect(instagramOAuthErrorDetail(body)).toBe(
+        'OAuth failed for access_token=[redacted] and client_secret=[redacted]'
       );
-    });
-
-    it('returns undefined for unmapped bodies', () => {
-      expect(provider.handleErrors('{"some":"other error"}', 400)).toBeUndefined();
     });
   });
 });

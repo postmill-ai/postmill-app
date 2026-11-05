@@ -27,7 +27,7 @@ export const INSTAGRAM_MAX_CAROUSEL_CONTAINER_POLL_ATTEMPTS = 60;
 /** Maximum pagination depth for page / Business Manager discovery. */
 export const INSTAGRAM_MAX_PAGES_PAGINATION_DEPTH = 100;
 
-const instagramOAuthErrorDetail = (body: string): string | undefined => {
+export const instagramOAuthErrorDetail = (body: string): string | undefined => {
   try {
     const payload = JSON.parse(body) as any;
     const nested = payload?.error;
@@ -444,14 +444,6 @@ export class InstagramProvider
       return {
         type: 'bad-body' as const,
         value: 'Collaborators are not allowed for carousel',
-      };
-    }
-
-    const detail = instagramOAuthErrorDetail(body);
-    if (detail) {
-      return {
-        type: 'bad-body' as const,
-        value: `Instagram authentication failed: ${detail}`,
       };
     }
 
