@@ -425,6 +425,17 @@ deduped `addCustomFont`, then runs the stage-1 pipeline: validate → `stripIds`
 `assignIdsAndNormalize` → create a NEW design. **v1 files (no `assets` key) still import exactly
 as stage 1** — references verbatim; same-org round-trips resolve, cross-org media shows broken.
 
+## Designer: Bulk Create
+
+`bulk-create-dialog.tsx` is opened from File ▸ Bulk Create for static designs. The shared CSV parser
+supports RFC-4180 quoting, escaped quotes, multiline cells, TSV detection, CRLF and BOM input;
+duplicate/blank headers, malformed quoting, files over 5 MB and batches over 200 rows are rejected
+before enqueue. `designer-doc/bulk-variables.ts` is the one substitution/discovery engine for the
+preview, saved variation and renderer: it covers all outputs/pages, rich text, mustache variables,
+text/image/color slots and symbol overrides. The batch runs through `DesignBulkCreateService` and
+creates editable Designs plus per-page PNG Files and a ZIP; never substitute a client-only flattened
+image for the editable result.
+
 ## Forms
 
 - `react-hook-form` + `FormProvider` is the standard; shared form primitives self-register against the

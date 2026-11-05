@@ -209,5 +209,16 @@ Exports can save back into `/files` (with folder selection) or post directly int
 After a static-canvas export, the done step also lists each exported file as a download link so you
 can save a copy to your computer.
 
+## Bulk Create from a spreadsheet
+
+For a static design, choose **File ▸ Bulk Create…** and upload a CSV or TSV file (maximum 5 MB and
+200 data rows). Add `{{variable}}` placeholders to text or image sources, or use template text,
+image and color slots. The dialog discovers those variables across all outputs, pages and symbols;
+map each one to a spreadsheet column, then preview the first row before starting the batch.
+
+Each successful row creates a separate editable design and saves every output and page as a PNG in
+Files. The completed batch provides links to those designs and a ZIP containing all PNGs and a
+`results.json` report. A failed row is reported without stopping the remaining rows.
+
 ---
 > Verified against v1.4.0

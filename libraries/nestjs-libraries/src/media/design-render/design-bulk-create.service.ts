@@ -1,0 +1,309 @@
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { strToU8 } from 'fflate';
+import { DesignBulkService, MAX_BULK_ROWS } from './design-bulk.service';
+import { DesignRenderService } from './design-render.service';
+import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
+import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { NO_CREDIT } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
+import {
+  DESIGN_EXPORT_EVENT,
+  DESIGN_EXPORT_PROVIDER,
+  designExportEventId,
+} from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
+import { applyBulkRow } from '../designer-doc/bulk-variables';
+import { pageCount } from '../designer-doc/designer-doc.pages';
+import { sanitizeDownloadName } from '../designer-doc/postmill-file';
+import { zipBulkEntries, type BulkZipEntry } from './design-bulk-zip';
+import type { DesignerDoc, DesignerElement } from './design-render.types';
+
+export const DESIGN_BULK_CREATE_OPERATION = 'design-bulk-create';
+const PAYLOAD_TTL_SECONDS = 24 * 60 * 60;
+const payloadKey = (jobId: string) => `design-bulk:payload:${jobId}`;
+const claimKey = (jobId: string) => `design-bulk:claim:${jobId}`;
+const progressKey = (jobId: string) => `design-bulk:progress:${jobId}`;
+
+export interface DesignBulkCreatePayload {
+  organizationId: string;
+  userId: string;
+  nameBase: string;
+  folderId?: string;
+  doc: DesignerDoc;
+  rows: Record<string, string>[];
+  enqueuedAt: string;
+}
+
+export interface DesignBulkCreateRowResult {
+  row: number;
+  designId?: string;
+  fileIds: string[];
+  error?: string;
+}
+
+@Injectable()
+export class DesignBulkCreateService extends DesignBulkService {
+  private readonly _logger = new Logger(DesignBulkCreateService.name);
+
+  constructor(
+    renderService: DesignRenderService,
+    private readonly _lifecycle: MediaJobLifecycleService,
+    private readonly _aiSettings: AiSettingsService,
+    private readonly _designService: DesignService,
+    private readonly _designerDocService: DesignerDocService,
+    private readonly _fileService: FileService,
+    private readonly _storageService: StorageService,
+    private readonly _aiMediaService: AiMediaService,
+  ) {
+    super(renderService);
+  }
+
+  async getJob(orgId: string, jobId: string) {
+    const job = await this._aiSettings.getMediaJobById(orgId, jobId);
+    if (!job || job.organizationId !== orgId || job.operation !== DESIGN_BULK_CREATE_OPERATION) {
+      return null;
+    }
+    let progress: unknown = null;
+    let results: DesignBulkCreateRowResult[] | undefined;
+    try {
+      const raw = await ioRedis.get(progressKey(jobId));
+      if (raw) progress = JSON.parse(raw);
+    } catch {
+      progress = null;
+    }
+    try {
+      const parsed = job.inputJson ? JSON.parse(job.inputJson) : undefined;
+      if (Array.isArray(parsed)) results = parsed;
+    } catch {
+      results = undefined;
+    }
+    return { ...job, progress, results };
+  }
+
+  async enqueueBulkCreate(
+    orgId: string,
+    userId: string,
+    input: {
+      doc: DesignerDoc;
+      rows: Record<string, string>[];
+      nameBase?: string;
+      folderId?: string;
+    }
+  ) {
+    const doc = this._designerDocService.validate(input.doc);
+    if (doc.mode !== 'image') {
+      throw new BadRequestException('Bulk Create currently supports static image designs only.');
+    }
+    if (!input.rows.length) throw new BadRequestException('Add at least one data row.');
+    if (input.rows.length > MAX_BULK_ROWS) {
+      throw new BadRequestException(`Bulk Create is limited to ${MAX_BULK_ROWS} rows.`);
+    }
+    const rows = input.rows.map((row) => {
+      const entries = Object.entries(row);
+      if (entries.length > 100) {
+        throw new BadRequestException('Each Bulk Create row is limited to 100 columns.');
+      }
+      for (const [key, value] of entries) {
+        if (!key.trim() || key.length > 120 || typeof value !== 'string' || value.length > 10000) {
+          throw new BadRequestException('Spreadsheet values must be strings of at most 10,000 characters with named columns.');
+        }
+      }
+      return Object.fromEntries(entries);
+    });
+    if (input.folderId) await this._fileService.getFolder(orgId, input.folderId);
+
+    const job = await this._lifecycle.createPendingJob({
+      organizationId: orgId,
+      userId,
+      provider: DESIGN_EXPORT_PROVIDER,
+      operation: DESIGN_BULK_CREATE_OPERATION,
+      costUsd: 0,
+      creditType: NO_CREDIT,
+    });
+    const payload: DesignBulkCreatePayload = {
+      organizationId: orgId,
+      userId,
+      nameBase: sanitizeDownloadName(input.nameBase || 'Bulk variation') || 'Bulk variation',
+      folderId: input.folderId,
+      doc,
+      rows,
+      enqueuedAt: new Date().toISOString(),
+    };
+    await ioRedis.set(payloadKey(job.id), JSON.stringify(payload), 'EX', PAYLOAD_TTL_SECONDS);
+    if (isInngestEnabled()) {
+      await inngest.send({
+        name: DESIGN_EXPORT_EVENT,
+        data: { jobId: job.id },
+        id: designExportEventId(job.id),
+      });
+    }
+    return { id: job.id, status: job.status };
+  }
+
+  private async _writeProgress(jobId: string, done: number, total: number): Promise<void> {
+    try {
+      await ioRedis.set(
+        progressKey(jobId),
+        JSON.stringify({ done, total, updatedAt: Date.now() }),
+        'EX',
+        PAYLOAD_TTL_SECONDS
+      );
+    } catch {
+      // Progress is best-effort.
+    }
+  }
+
+  private async _persistRemoteImages(
+    orgId: string,
+    doc: DesignerDoc,
+    cache: Map<string, { id: string; path: string }>
+  ): Promise<void> {
+    const importUrl = async (url: string) => {
+      if (!cache.has(url)) {
+        cache.set(url, await this._aiMediaService.saveUrlToFile(orgId, url, 'bulk-create'));
+      }
+      return cache.get(url)!;
+    };
+    const persist = async (element: DesignerElement) => {
+      if (element.src && /^https?:\/\//i.test(element.src)) {
+        const file = await importUrl(element.src);
+        element.src = file.path;
+        element.fileId = file.id;
+      }
+      for (const override of Object.values(element.symbolOverrides || {})) {
+        if (!override.src || !/^https?:\/\//i.test(override.src)) continue;
+        const file = await importUrl(override.src);
+        override.src = file.path;
+        override.fileId = file.id;
+      }
+    };
+    for (const output of doc.outputs) {
+      if (!('children' in output)) continue;
+      for (const element of output.children || []) await persist(element);
+      for (const page of output.pages || []) {
+        for (const element of page.children || []) await persist(element);
+      }
+    }
+    for (const symbol of doc.symbols || []) {
+      for (const element of symbol.children || []) await persist(element);
+    }
+  }
+
+  private async _saveBuffer(
+    orgId: string,
+    data: { name: string; bytes: Buffer; folderId?: string; jobId: string }
+  ): Promise<{ id: string; path: string }> {
+    const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
+    const path = await adapter.writeBuffer(data.bytes, 'image/png');
+    return this._fileService.saveGeneratedMedia(orgId, {
+      name: data.name,
+      path,
+      type: 'image',
+      folderId: data.folderId,
+      fileSize: data.bytes.length,
+      metadata: { source: DESIGN_BULK_CREATE_OPERATION, jobId: data.jobId, mime: 'image/png' },
+    });
+  }
+
+  async processBulkCreate(jobId: string): Promise<void> {
+    const job = await this._aiSettings.getMediaJobByIdUnscoped(jobId);
+    if (!job || job.operation !== DESIGN_BULK_CREATE_OPERATION || job.status !== 'pending') return;
+    const orgId = job.organizationId;
+    const raw = await ioRedis.get(payloadKey(jobId));
+    if (!raw) {
+      await this._aiSettings.updateMediaJob(orgId, jobId, {
+        status: 'failed',
+        error: 'Bulk Create payload expired — please start the batch again',
+      });
+      return;
+    }
+    const claimed = (await ioRedis.set(claimKey(jobId), '1', 'EX', PAYLOAD_TTL_SECONDS, 'NX')) !== null;
+    if (!claimed) return;
+    await this._aiSettings.updateMediaJob(orgId, jobId, { status: 'processing' });
+
+    try {
+      const payload = JSON.parse(raw) as DesignBulkCreatePayload;
+      const results: DesignBulkCreateRowResult[] = [];
+      const zipEntries: BulkZipEntry[] = [];
+      const remoteImageCache = new Map<string, { id: string; path: string }>();
+      let zipBytes = 0;
+      let succeeded = 0;
+      for (let index = 0; index < payload.rows.length; index++) {
+        const result: DesignBulkCreateRowResult = { row: index + 1, fileIds: [] };
+        try {
+          const doc = applyBulkRow(payload.doc, payload.rows[index]);
+          await this._persistRemoteImages(orgId, doc, remoteImageCache);
+          const name = `${payload.nameBase} ${index + 1}`;
+          const design = await this._designService.createDesign(orgId, payload.userId, { name, doc });
+          result.designId = design.id;
+          for (let outputIndex = 0; outputIndex < doc.outputs.length; outputIndex++) {
+            const output = doc.outputs[outputIndex];
+            if (!('children' in output)) continue;
+            for (let page = 0; page < pageCount(output); page++) {
+              const bytes = await this._renderService.renderPage(doc, outputIndex, { orgId }, page);
+              zipBytes += bytes.length;
+              if (zipBytes > 512 * 1024 * 1024) {
+                throw new Error('Bulk Create PNG output exceeds the 512 MB batch limit.');
+              }
+              const filename = `row-${String(index + 1).padStart(3, '0')}-output-${outputIndex + 1}-page-${page + 1}.png`;
+              const file = await this._saveBuffer(orgId, {
+                name: `${payload.nameBase} ${filename}`,
+                bytes,
+                folderId: payload.folderId,
+                jobId,
+              });
+              result.fileIds.push(file.id);
+              zipEntries.push({ name: filename, data: new Uint8Array(bytes), compress: false });
+            }
+          }
+          succeeded++;
+        } catch (error) {
+          result.error = ((error as Error)?.message || 'Row failed').slice(0, 500);
+          this._logger.warn(`Bulk Create ${jobId}: row ${index + 1} failed: ${result.error}`);
+        }
+        results.push(result);
+        await this._writeProgress(jobId, index + 1, payload.rows.length);
+      }
+
+      if (!succeeded) throw new Error(results[0]?.error || 'Every Bulk Create row failed.');
+      const bytes = await zipBulkEntries([
+        {
+          name: 'results.json',
+          data: strToU8(JSON.stringify(results, null, 2)),
+          compress: true,
+        },
+        ...zipEntries,
+      ]);
+      const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
+      const artifactPath = await adapter.writeBuffer(bytes, 'application/zip');
+      await this._fileService.saveGeneratedMedia(orgId, {
+        name: `${payload.nameBase}.zip`,
+        path: artifactPath,
+        type: 'document',
+        folderId: payload.folderId,
+        fileSize: bytes.length,
+        metadata: { source: DESIGN_BULK_CREATE_OPERATION, jobId, mime: 'application/zip' },
+      });
+      await this._aiSettings.updateMediaJob(orgId, jobId, {
+        status: 'completed',
+        artifactUrl: artifactPath,
+        inputJson: JSON.stringify(results),
+        error: null,
+      });
+    } catch (error) {
+      const message = ((error as Error)?.message || 'Bulk Create failed').slice(0, 1000);
+      this._logger.warn(`Bulk Create ${jobId} failed: ${message}`);
+      await this._aiSettings.updateMediaJob(orgId, jobId, { status: 'failed', error: message });
+    } finally {
+      await Promise.all([
+        ioRedis.del(payloadKey(jobId)),
+        ioRedis.del(claimKey(jobId)),
+      ]);
+    }
+  }
+}

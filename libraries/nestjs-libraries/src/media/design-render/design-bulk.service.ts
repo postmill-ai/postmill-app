@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DesignRenderService } from './design-render.service';
-import { DesignerDoc, DesignerElement, DesignerOutput, RenderOptions } from './design-render.types';
+import { DesignerDoc, RenderOptions } from './design-render.types';
+import { applyBulkRow } from '../designer-doc/bulk-variables';
 
 export const MAX_BULK_ROWS = 200;
 
@@ -12,7 +13,7 @@ export interface BulkGenerateResult {
 
 @Injectable()
 export class DesignBulkService {
-  constructor(private readonly _renderService: DesignRenderService) {}
+  constructor(protected readonly _renderService: DesignRenderService) {}
 
   /**
    * For each data row, deep-clone the template doc, substitute `{{var}}`
@@ -42,44 +43,6 @@ export class DesignBulkService {
     templateDoc: DesignerDoc,
     row: Record<string, string>
   ): DesignerDoc {
-    const doc: DesignerDoc =
-      typeof structuredClone === 'function'
-        ? structuredClone(templateDoc)
-        : JSON.parse(JSON.stringify(templateDoc));
-
-    for (const page of (doc.outputs ?? []).filter(o => 'children' in o) as DesignerOutput[]) {
-      for (const el of (page.children ?? [])) {
-        this.substituteElement(el, row);
-      }
-    }
-    return doc;
-  }
-
-  private substituteElement(
-    el: DesignerElement,
-    row: Record<string, string>
-  ): void {
-    if (typeof el.text === 'string') {
-      el.text = this.substitute(el.text, row);
-    }
-    if (el.richText?.length) {
-      for (const run of el.richText) {
-        if (typeof run.text === 'string') {
-          run.text = this.substitute(run.text, row);
-        }
-      }
-    }
-    if (typeof el.src === 'string') {
-      el.src = this.substitute(el.src, row);
-    }
-  }
-
-  private substitute(value: string, row: Record<string, string>): string {
-    return value.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (match, key: string) => {
-      const replacement = row[key];
-      return replacement === undefined || replacement === null
-        ? match
-        : String(replacement);
-    });
+    return applyBulkRow(templateDoc, row);
   }
 }

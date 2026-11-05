@@ -18,12 +18,14 @@ const makeActivity = (opts: { job?: any; exportResult?: 'completed' | 'failed' |
   };
   const organizationService = { getOrgById: vi.fn(async () => ({ id: 'org-1' })) };
   const designExportService = { processExport: vi.fn(async () => undefined) };
+  const designBulkCreateService = { processBulkCreate: vi.fn(async () => undefined) };
   const activity = new DesignExportActivity(
     aiSettings as any,
     organizationService as any,
-    designExportService as any
+    designExportService as any,
+    designBulkCreateService as any
   );
-  return { activity, aiSettings, designExportService };
+  return { activity, aiSettings, designExportService, designBulkCreateService };
 };
 
 describe('DesignExportActivity.processExportJob', () => {
@@ -55,11 +57,24 @@ describe('DesignExportActivity.processExportJob', () => {
     await expect(activity.processExportJob('job-1')).rejects.toThrow(/did not complete/);
   });
 
+  it('routes Bulk Create operations to their processor without calling bundle export', async () => {
+    const bulkJob = { ...pending, operation: 'design-bulk-create' };
+    const { activity, designExportService, designBulkCreateService } = makeActivity({
+      job: bulkJob,
+      exportResult: 'completed',
+    });
+
+    await activity.processExportJob('job-1');
+
+    expect(designBulkCreateService.processBulkCreate).toHaveBeenCalledWith('job-1');
+    expect(designExportService.processExport).not.toHaveBeenCalled();
+  });
+
   it('no-ops when the org is gone', async () => {
     const aiSettings = { getMediaJobByIdUnscoped: vi.fn(async () => pending) };
     const organizationService = { getOrgById: vi.fn(async () => null) };
     const svc = { processExport: vi.fn() };
-    const a = new DesignExportActivity(aiSettings as any, organizationService as any, svc as any);
+    const a = new DesignExportActivity(aiSettings as any, organizationService as any, svc as any, {} as any);
     await a.processExportJob('job-1');
     expect(svc.processExport).not.toHaveBeenCalled();
   });

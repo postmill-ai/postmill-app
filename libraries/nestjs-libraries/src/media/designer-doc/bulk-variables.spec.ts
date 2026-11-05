@@ -1,0 +1,107 @@
+import { describe, expect, it } from 'vitest';
+import { applyBulkRow, collectBulkVariables } from './bulk-variables';
+
+const element = (id: string, extra: Record<string, unknown>) => ({
+  id,
+  type: 'text',
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 100,
+  rotation: 0,
+  opacity: 1,
+  locked: false,
+  hidden: false,
+  ...extra,
+});
+
+const makeDoc = (): any => ({
+  version: 11,
+  mode: 'image',
+  outputs: [
+    {
+      id: 'out-1',
+      formatId: 'square',
+      name: 'Square',
+      width: 1080,
+      height: 1080,
+      children: [
+        element('text-1', {
+          text: 'Hello {{name}}',
+          richText: [{ text: 'Welcome {{name}}', fontWeight: 700 }],
+        }),
+        element('image-1', { type: 'image', src: '{{hero}}' }),
+        element('shape-1', {
+          type: 'shape',
+          shape: 'rect',
+          fill: '#000000',
+          slot: { name: 'brandColor', kind: 'color' },
+        }),
+      ],
+      pages: [
+        {
+          id: 'page-2',
+          children: [element('text-2', { text: 'Second page for {{name}}' })],
+        },
+      ],
+    },
+  ],
+  symbols: [
+    {
+      id: 'symbol-1',
+      name: 'Footer',
+      width: 100,
+      height: 100,
+      children: [element('symbol-text', { text: '{{footer}}' })],
+    },
+  ],
+});
+
+describe('Bulk Create variables', () => {
+  it('collects mustache and slot variables across outputs, pages and symbols', () => {
+    expect(collectBulkVariables(makeDoc())).toEqual([
+      { name: 'brandColor', kind: 'color' },
+      { name: 'footer', kind: 'text' },
+      { name: 'hero', kind: 'image' },
+      { name: 'name', kind: 'text' },
+    ]);
+  });
+
+  it('applies one row without mutating the template', () => {
+    const template = makeDoc();
+    template.outputs[0].children.push(
+      element('slotted', { text: 'Old', slot: { name: 'headline', kind: 'text' } })
+    );
+    template.outputs[0].children[1].symbolOverrides = {
+      'symbol-text': { text: 'Override {{footer}}', src: '{{hero}}' },
+    };
+    const row = {
+      name: 'Ada',
+      hero: 'https://cdn.example.test/ada.png',
+      brandColor: '#ff00ff',
+      footer: 'Thanks',
+      headline: 'New headline',
+    };
+
+    const result = applyBulkRow(template, row);
+
+    expect(template.outputs[0].children[0].text).toBe('Hello {{name}}');
+    expect(result.outputs[0].children[0].text).toBe('Hello Ada');
+    expect(result.outputs[0].children[0].richText[0].text).toBe('Welcome Ada');
+    expect(result.outputs[0].children[1].src).toBe(row.hero);
+    expect(result.outputs[0].children[1].symbolOverrides['symbol-text']).toEqual({
+      text: 'Override Thanks',
+      src: row.hero,
+    });
+    expect(result.outputs[0].children[2].fill).toBe('#ff00ff');
+    expect(result.outputs[0].children[3].text).toBe('New headline');
+    expect(result.outputs[0].pages[0].children[0].text).toBe('Second page for Ada');
+    expect(result.symbols[0].children[0].text).toBe('Thanks');
+  });
+
+  it('leaves unknown variables intact and supports explicit empty values', () => {
+    const result = applyBulkRow(makeDoc(), { name: '' });
+    expect(result.outputs[0].children[0].text).toBe('Hello ');
+    expect(result.outputs[0].children[1].src).toBe('{{hero}}');
+  });
+});

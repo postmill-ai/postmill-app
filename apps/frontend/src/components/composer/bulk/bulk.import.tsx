@@ -5,57 +5,13 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useBulkImport, BulkRow } from './useBulkImport';
 import { DataTable } from '@postmill-ai/frontend/components/ui/data-table';
+import { parseCsv } from '@postmill-ai/frontend/components/shared/csv';
+
+export { parseCsv } from '@postmill-ai/frontend/components/shared/csv';
 
 // 5 MB is generous for a text CSV of posts; anything larger is almost certainly a
 // mistaken upload and would block the main thread in `readAsText`.
 const MAX_CSV_BYTES = 5 * 1024 * 1024;
-
-// Minimal RFC-4180 parser: honours double-quoted fields (which may embed commas,
-// newlines, and escaped `""` quotes) so post content containing a comma isn't
-// truncated and shifted into the channel/date columns.
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += ch;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ',') {
-      row.push(field);
-      field = '';
-    } else if (ch === '\r') {
-      // ignore — handled by the following \n (or end of input)
-    } else if (ch === '\n') {
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
-    } else {
-      field += ch;
-    }
-  }
-  if (field.length > 0 || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-  // Drop blank rows (trailing newline, empty lines).
-  return rows.filter((r) => r.some((c) => c.trim() !== ''));
-}
 
 // Rendered as the body of the "Bulk Import" modal, opened from the layout "+" create
 // menu (`CreateMenuItems`). The modal supplies the title bar + outer padding, so this

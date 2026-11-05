@@ -47,6 +47,8 @@ import {
   RenderVideoStatusDto,
 } from '@postmill-ai/nestjs-libraries/dtos/design/render-video.design.dto';
 import { BulkGenerateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/bulk.generate.design.dto';
+import { BulkCreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/bulk-create.design.dto';
+import { DesignBulkCreateService } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service';
 import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design.dto';
 import { ImportLibraryDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/import-library-design.dto';
 import { UpdateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-design.dto';
@@ -101,6 +103,7 @@ export class DesignController {
     private _designerDocService: DesignerDocService,
     private _fontLoaderService: FontLoaderService,
     private _designExportService: DesignExportService,
+    private _designBulkCreateService: DesignBulkCreateService,
   ) {}
 
   @Get('/')
@@ -393,6 +396,35 @@ export class DesignController {
     return {
       elements: await textToOutlines(el, { fontPath, perGlyph: body.perGlyph !== false }),
     };
+  }
+
+  @Post('/bulk-create')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async bulkCreate(
+    @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
+    @Body() body: BulkCreateDesignDto,
+  ) {
+    return this._designBulkCreateService.enqueueBulkCreate(org.id, user.id, {
+      doc: body.doc as any,
+      rows: body.rows,
+      nameBase: body.nameBase,
+      folderId: body.folderId,
+    });
+  }
+
+  @Get('/bulk-create/:jobId')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  @Throttle({ default: { limit: 2000, ttl: 3600000 } })
+  async bulkCreateStatus(
+    @GetOrgFromRequest() org: Organization,
+    @Param('jobId') jobId: string,
+  ) {
+    const job = await this._designBulkCreateService.getJob(org.id, jobId);
+    if (!job) throw new NotFoundException('Bulk Create job not found');
+    return job;
   }
 
   @Post('/bulk-generate')
