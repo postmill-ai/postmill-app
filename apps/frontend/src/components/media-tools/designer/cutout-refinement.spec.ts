@@ -48,6 +48,15 @@ describe('cutout refinement', () => {
     expect(store.getState().maskTargetId).toBe('image-1');
     expect(store.getState().activeTool).toBe('brush');
     expect(store.getState().toolOptions.brush?.color).toBe('#ffffff');
+    expect(uploadMock).toHaveBeenCalledWith(expect.objectContaining({
+      frame: {
+        width: 200,
+        height: 100,
+        crop: undefined,
+        fitMode: undefined,
+        focalPoint: undefined,
+      },
+    }));
   });
 
   it('updates and primes still-image clip masks through the same path', async () => {

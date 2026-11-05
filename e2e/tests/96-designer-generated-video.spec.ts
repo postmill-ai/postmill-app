@@ -12,6 +12,8 @@ const REPLACEMENT_IMAGE_URL = '/mock-storage/replacement-image.png';
 const TRANSPARENT_IMAGE_URL = '/mock-storage/transparent.png';
 const CUTOUT_SOURCE_URL = '/mock-storage/cutout-source.png';
 const CUTOUT_RESULT_URL = '/mock-storage/cutout-result.png';
+const CUTOUT_VERTICAL_SOURCE_URL = '/mock-storage/cutout-vertical-source.png';
+const CUTOUT_VERTICAL_RESULT_URL = '/mock-storage/cutout-vertical-result.png';
 const CUSTOM_POSTER_URL = '/mock-storage/custom-poster.png';
 const STOCK_VECTOR_URL = '/mock-storage/outline-vector.svg';
 const STOCK_ICON_URL = '/mock-storage/outline-icon.svg';
@@ -261,6 +263,14 @@ class DesignerMocks {
       file: 'cutout-result-8x2.png',
       contentType: 'image/png',
     },
+    [CUTOUT_VERTICAL_SOURCE_URL]: {
+      file: 'cutout-vertical-source-8x2.png',
+      contentType: 'image/png',
+    },
+    [CUTOUT_VERTICAL_RESULT_URL]: {
+      file: 'cutout-vertical-result-8x2.png',
+      contentType: 'image/png',
+    },
     [CUSTOM_POSTER_URL]: {
       file: 'asymmetric-8x2.png',
       contentType: 'image/png',
@@ -492,9 +502,11 @@ class DesignerMocks {
         this.backgroundRemovalPosts.push(request.postData() || '');
         await new Promise((resolve) => setTimeout(resolve, 250));
         await json(route, {
-          url: [CUTOUT_SOURCE_URL, ASYMMETRIC_URL, REPLACEMENT_IMAGE_URL].includes(body.imageUrl || '')
-            ? CUTOUT_RESULT_URL
-            : TRANSPARENT_IMAGE_URL,
+          url: body.imageUrl === CUTOUT_VERTICAL_SOURCE_URL
+            ? CUTOUT_VERTICAL_RESULT_URL
+            : [CUTOUT_SOURCE_URL, ASYMMETRIC_URL, REPLACEMENT_IMAGE_URL].includes(body.imageUrl || '')
+              ? CUTOUT_RESULT_URL
+              : TRANSPARENT_IMAGE_URL,
         });
         return;
       }
@@ -2290,6 +2302,82 @@ test.describe('Designer desktop Brand rail', () => {
 });
 
 test.describe('Designer non-destructive cutout refinement', () => {
+  test('keeps a vertically asymmetric mask aligned with a letterboxed image', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    delete mocks.doc.outputs[0].bg;
+    Object.assign(mocks.doc.outputs[0].children![0], {
+      src: CUTOUT_VERTICAL_SOURCE_URL,
+      fileId: 'source-file',
+      originalSrc: CUTOUT_VERTICAL_SOURCE_URL,
+      originalFileId: 'source-file',
+      naturalWidth: 8,
+      naturalHeight: 2,
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+      fitMode: 'fill',
+      crop: undefined,
+      focalPoint: undefined,
+    });
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    const center = await canvasDocumentPoint(page, 400, 300, 200, 150);
+    await page.mouse.click(center.x, center.y);
+
+    await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
+    await page.getByRole('button', { name: 'Apply result', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).toContain('/mock-masks/');
+
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 200, 50)).toEqual([0, 0, 0, 255]);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 200, 125)).toEqual([255, 0, 0, 255]);
+    await expect.poll(async () => {
+      const rgba = await canvasRgbaAtDocumentPoint(page, 400, 300, 200, 175);
+      return rgba[0] === 0 && rgba[1] === 0 && rgba[2] <= 2 && rgba[3] === 255;
+    }).toBe(true);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 200, 250)).toEqual([0, 0, 0, 255]);
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({
+      src: CUTOUT_VERTICAL_SOURCE_URL,
+      fitMode: 'contain',
+    });
+    mocks.expectClean();
+  });
+
+  test('double-clicking masked text opens the text editor', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    mocks.doc.outputs[0].children = [{
+      id: 'masked-text',
+      type: 'text',
+      text: 'Masked headline',
+      x: 40,
+      y: 40,
+      width: 320,
+      height: 80,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      fontSize: 40,
+      fontFamily: 'Inter',
+      fill: '#ffffff',
+      maskSrc: CUTOUT_RESULT_URL,
+      maskEnabled: true,
+    }];
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    const text = await canvasDocumentPoint(page, 400, 300, 180, 80);
+    await page.mouse.dblclick(text.x, text.y);
+
+    await expect(page.locator('[data-text-editor-id="masked-text"]')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Restore', exact: true })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    mocks.expectClean();
+  });
+
   test('retains original pixels and restores, erases, undoes, and reloads a static cutout', async ({ page }) => {
     const mocks = new DesignerMocks();
     mocks.doc = staticCropDoc();

@@ -5,6 +5,7 @@ import { probeImageNaturalSize } from './elements';
 import type { DesignerElement } from './designer.store';
 import {
   backgroundRemovalPatch,
+  flattenedBackgroundRemovalPatch,
   type BackgroundRemovalAsset,
   type BackgroundRemovalFit,
 } from './background-removal';
@@ -142,25 +143,40 @@ export const applyAiRemoveBackground = async ({
 }): Promise<boolean> => {
   if (store.getState().history !== candidate.history ||
     !staticMediaMatches(candidate.before, getElement(store, candidate.before.id))) return false;
-  const mask = await createMask({
-    fetch,
+  const reviewedPatch = backgroundRemovalPatch({
     source: candidate.source,
-    cutout: candidate.asset,
-    id: candidate.before.id,
+    mask: candidate.asset,
+    output,
+    fit,
   });
+  let mask: Awaited<ReturnType<typeof uploadBackgroundRemovalMask>> | null = null;
+  try {
+    mask = await createMask({
+      fetch,
+      source: candidate.source,
+      cutout: candidate.asset,
+      frame: {
+        width: reviewedPatch.width ?? candidate.before.width,
+        height: reviewedPatch.height ?? candidate.before.height,
+        crop: reviewedPatch.crop,
+        fitMode: reviewedPatch.fitMode ?? candidate.before.fitMode,
+        focalPoint: reviewedPatch.focalPoint,
+      },
+      id: candidate.before.id,
+    });
+  } catch {
+    // A mask that cannot be read or saved must not discard the provider result.
+  }
   if (store.getState().history !== candidate.history ||
     !staticMediaMatches(candidate.before, getElement(store, candidate.before.id))) {
-    await discardBackgroundRemovalMask(fetch, mask);
+    if (mask) await discardBackgroundRemovalMask(fetch, mask);
     return false;
   }
   store.getState().updateElement(
     candidate.before.id,
-    backgroundRemovalPatch({
-      source: candidate.source,
-      mask: { url: mask.src, fileId: mask.fileId },
-      output,
-      fit,
-    })
+    mask
+      ? { ...reviewedPatch, maskSrc: mask.src, maskFileId: mask.fileId, maskEnabled: true }
+      : flattenedBackgroundRemovalPatch({ asset: candidate.asset, output, fit })
   );
   store.getState().pushHistory('Remove background');
   return true;

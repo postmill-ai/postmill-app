@@ -1572,7 +1572,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       }
       const target = e.target;
       const id = target.id() || target.getParent()?.id();
-      if (id && findCutoutTarget(store, id)?.maskSrc) {
+      const cutout = id ? findCutoutTarget(store, id) : undefined;
+      if (id && cutout?.maskSrc && (doc.mode === 'video' || cutout.type === 'image')) {
         void armCutoutRefinement(store, id);
         return;
       }

@@ -22,9 +22,9 @@ export interface BackgroundRemovalPatch {
   originalSrc?: string;
   originalFileId?: string;
   smartFilters: undefined;
-  maskSrc: string;
+  maskSrc?: string;
   maskFileId?: string;
-  maskEnabled: true;
+  maskEnabled?: true;
 }
 
 export const centeredMediaFrame = (
@@ -98,3 +98,20 @@ export const backgroundRemovalPatch = ({
   if (fit === 'frame' || !source.naturalWidth || !source.naturalHeight) return patch;
   return { ...patch, ...fitMediaToCanvas(source.naturalWidth, source.naturalHeight, output) };
 };
+
+export const flattenedBackgroundRemovalPatch = ({
+  asset,
+  output,
+  fit,
+}: {
+  asset: BackgroundRemovalAsset;
+  output: { width: number; height: number };
+  fit: BackgroundRemovalFit;
+}): BackgroundRemovalPatch => ({
+  ...backgroundRemovalPatch({ source: asset, mask: asset, output, fit }),
+  originalSrc: undefined,
+  originalFileId: undefined,
+  maskSrc: undefined,
+  maskFileId: undefined,
+  maskEnabled: undefined,
+});

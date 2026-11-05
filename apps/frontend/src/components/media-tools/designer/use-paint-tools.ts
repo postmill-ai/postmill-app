@@ -120,7 +120,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
       return {
         ...DEFAULT_PAINT,
         size: Number(o.size ?? DEFAULT_PAINT.size),
-        hardness: Number(o.hardness ?? 80) / 100,
+        hardness: Number(o.hardness ?? (toolId === 'eraser' && !store.getState().maskTargetId ? 100 : 80)) / 100,
         opacity: Number(o.opacity ?? 100) / 100,
         color: String(o.color ?? DEFAULT_PAINT.color),
         desaturate: o.mode === 'desaturate',

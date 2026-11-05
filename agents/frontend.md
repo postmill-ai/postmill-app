@@ -281,8 +281,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   candidate and does not edit the doc; Apply commits once after the before/after dialog. Static
   (`ai-image-actions.ts`) and clip paths share `background-removal.ts` geometry: preserve-frame
   contain by default, aspect-correct canvas fitting as an option. Apply keeps original pixels as
-  `src`, uploads the reviewed alpha as `maskSrc` through `background-removal-mask.ts`, and commits
-  once after the before/after dialog. `cutout-refine-controls.tsx` arms the same mask for Restore
+  `src`, rasterizes the reviewed alpha into the final element box through `computeMediaDraw`
+  (contain/cover/crop all included), uploads that box-space bitmap as `maskSrc` through
+  `background-removal-mask.ts`, and commits once after the before/after dialog. If mask preparation
+  fails, Apply falls back to the old flattened cutout rather than discarding the provider result.
+  `cutout-refine-controls.tsx` arms the same mask for Restore
   (white brush) and Erase (alpha removal); still-image clip masks use optional-additive doc v11
   fields and mirror through `video-canvas-overlay.tsx` and the isolated frame-render buffer. Legacy
   flattened cutouts without originals say so. `doc-file-refs.ts` collects and remaps all three file

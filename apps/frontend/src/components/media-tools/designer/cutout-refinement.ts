@@ -1,12 +1,14 @@
 'use client';
 
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import type { DesignerCrop } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { probeImageNaturalSize } from './elements';
 import { primeBufferFromSrc } from './raster-layers';
 import { uploadBackgroundRemovalMask } from './background-removal-mask';
 
 export interface CutoutTarget {
   id: string;
+  type?: string;
   src?: string;
   fileId?: string;
   originalSrc?: string;
@@ -15,6 +17,9 @@ export interface CutoutTarget {
   naturalHeight?: number;
   width?: number;
   height?: number;
+  crop?: DesignerCrop;
+  fitMode?: 'contain' | 'cover' | 'fill';
+  focalPoint?: { x: number; y: number };
   maskSrc?: string;
   maskFileId?: string;
   maskEnabled?: boolean;
@@ -84,7 +89,19 @@ export const createCutoutMask = async ({
     naturalWidth: natural?.width,
     naturalHeight: natural?.height,
   };
-  const mask = await uploadBackgroundRemovalMask({ fetch, source, cutout: source, id });
+  const mask = await uploadBackgroundRemovalMask({
+    fetch,
+    source,
+    cutout: source,
+    frame: {
+      width: target.width ?? natural?.width ?? 1,
+      height: target.height ?? natural?.height ?? 1,
+      crop: target.crop,
+      fitMode: target.fitMode ?? (store.getState().doc.mode === 'video' ? 'cover' : undefined),
+      focalPoint: target.focalPoint,
+    },
+    id,
+  });
   updateCutoutTarget(store, id, {
     maskSrc: mask.src,
     maskFileId: mask.fileId,

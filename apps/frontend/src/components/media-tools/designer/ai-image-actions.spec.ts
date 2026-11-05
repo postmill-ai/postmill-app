@@ -128,4 +128,52 @@ describe('AI background removal review', () => {
     await expect(pending).resolves.toBeNull();
     expect(element(store).src).toBe('/newer.png');
   });
+
+  it('builds the mask at the reviewed frame geometry', async () => {
+    const store = setup();
+    const candidate = await candidateFor(store);
+    const createMask = vi.fn(async () => ({ src: '/mask.png', fileId: 'mask-file' }));
+
+    await applyAiRemoveBackground({
+      store,
+      candidate: candidate!,
+      output: { width: 1080, height: 1080 },
+      fetch: vi.fn(),
+      createMask,
+    });
+
+    expect(createMask).toHaveBeenCalledWith(expect.objectContaining({
+      frame: {
+        width: 300,
+        height: 200,
+        crop: undefined,
+        fitMode: 'contain',
+        focalPoint: undefined,
+      },
+    }));
+  });
+
+  it('applies the flattened cutout when mask preparation fails', async () => {
+    const store = setup();
+    const candidate = await candidateFor(store);
+
+    await expect(applyAiRemoveBackground({
+      store,
+      candidate: candidate!,
+      output: { width: 1080, height: 1080 },
+      fetch: vi.fn(),
+      createMask: async () => { throw new Error('CORS blocked'); },
+    })).resolves.toBe(true);
+
+    expect(element(store)).toMatchObject({
+      src: '/transparent.png',
+      fileId: 'transparent-file',
+      originalSrc: undefined,
+      originalFileId: undefined,
+      maskSrc: undefined,
+      maskFileId: undefined,
+      maskEnabled: undefined,
+      fitMode: 'contain',
+    });
+  });
 });

@@ -288,7 +288,7 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
     }
     ctx.filter = 'none';
     store.emit();
-  }, [source, maskSource, filterString, width, height, tick, canvasId, store, geometry]);
+  }, [source, maskSource, filterString, width, height, tick, canvasId, store, geometry, clip.maskSrc]);
 
   useEffect(() => {
     return () => {

@@ -238,6 +238,39 @@ describe('removeClipImageBackground', () => {
       maskSrc: '/mask.png',
     });
   });
+
+  it('applies the flattened cutout when mask preparation fails', async () => {
+    const { store, trackId, target } = setup();
+    const candidate = await removeClipImageBackground({
+      store,
+      target,
+      fetch: vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ url: '/transparent.png', fileId: 'new-file' }),
+      }),
+      probe: async () => ({ width: 800, height: 600 }),
+    });
+
+    await expect(applyClipImageBackground({
+      store,
+      target,
+      candidate: candidate!,
+      output: { width: 1080, height: 1080 },
+      fetch: vi.fn(),
+      createMask: async () => { throw new Error('CORS blocked'); },
+    })).resolves.toBe(true);
+
+    expect(clip(store, trackId)).toMatchObject({
+      src: '/transparent.png',
+      fileId: 'new-file',
+      originalSrc: undefined,
+      originalFileId: undefined,
+      maskSrc: undefined,
+      maskFileId: undefined,
+      maskEnabled: undefined,
+      mediaType: 'image',
+    });
+  });
 });
 
 describe('clipMediaSourceMatches', () => {

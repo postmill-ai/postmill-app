@@ -143,7 +143,8 @@ into a grayscale mask. In the Inspector's **Cutout refinement** section, or by d
 double-tapping the masked image, choose **Restore** to paint original pixels back or **Erase** to
 remove more of the cutout. Brush size and hardness are adjustable, edits cost no additional AI
 credits, and **Show original** / **Show cutout** compares the result. Masks persist through undo,
-save/reload, `.pdesign` export/import, static export, and still-image video export.
+save/reload, `.pdesign` export/import, static export, and still-image video export. If a refinement
+mask cannot be prepared, Apply keeps the flattened cutout instead and Restore remains unavailable.
 
 Older flattened cutouts can gain a refinement mask, but an original background is only restorable
 when its pixels are still stored; the Inspector says when they are unavailable. Restore/Erase is
