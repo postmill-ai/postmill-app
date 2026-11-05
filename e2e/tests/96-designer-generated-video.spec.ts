@@ -2514,6 +2514,9 @@ test.describe('Designer non-destructive cutout refinement', () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
     expect(mocks.savedClips()[0].maskSrc).toContain('/mock-masks/');
+    await fitDesignerCanvas(page);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 150, 150)).toEqual([255, 0, 0, 255]);
+    await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 150)).toEqual([0, 0, 255, 255]);
     await expect.poll(() => renderedFrameRgba(page, mocks, 150, 150)).toEqual([255, 0, 0, 255]);
     await expect.poll(() => renderedFrameRgba(page, mocks, 250, 150)).toEqual([0, 0, 255, 255]);
     mocks.expectClean();
