@@ -36,6 +36,8 @@ const DEFAULT_UPSCALE_MODEL = 'nightmareai/real-esrgan';
 const DEFAULT_INPAINT_MODEL = 'stability-ai/stable-diffusion-inpainting';
 // flux-fill-pro carries the dedicated `outpaint` input (zoom-out / make-square /
 // directional) — declared in this package's metadata under `image-outpaint`.
+// Its runtime now requires `mask` even though its schema says outpaint ignores it;
+// outpaintImage therefore sends the same-dimension source as that ignored mask.
 const DEFAULT_OUTPAINT_MODEL = 'black-forest-labs/flux-fill-pro';
 // flux-fill-pro marks `prompt` REQUIRED (live 422 "input: prompt is required" when
 // omitted — it sits outside the tunables `fields` list in metadata.ts because the
@@ -300,6 +302,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     if (v2vField) allowed.add(v2vField);
     const i2iField = ReplicateMediaAdapter._i2iInputField(model);
     if (i2iField) allowed.add(i2iField);
+    if (model === DEFAULT_OUTPAINT_MODEL) allowed.add('mask');
     allowed.add(ReplicateMediaAdapter._bgRemoveInputField(model));
     return allowed;
   }
@@ -677,10 +680,12 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   }
 
   async outpaintImage(imageUrl: string, mode: OutpaintMode, prompt?: string, options?: MediaGenerateOptions): Promise<string> {
+    const model = options?.version || options?.model || DEFAULT_OUTPAINT_MODEL;
     return this._createAndResolveUrl(
-      { ...options, version: options?.version || options?.model || DEFAULT_OUTPAINT_MODEL },
+      { ...options, version: model },
       {
         image: imageUrl,
+        ...(model === DEFAULT_OUTPAINT_MODEL ? { mask: imageUrl } : {}),
         outpaint: OUTPAINT_TOKENS[mode] ?? OUTPAINT_TOKENS['zoom-1.5x'],
         prompt: prompt?.trim() || DEFAULT_OUTPAINT_PROMPT,
       },

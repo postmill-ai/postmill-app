@@ -4729,5 +4729,6 @@
   "designer_change_character_references": "参照画像を変更",
   "designer_add_character_references": "参照画像を追加",
   "designer_character_references_default_not_used": "デフォルトのプロバイダーは保存済みのキャラクター参照を使用しません。使用するには、MiniMax Subject Reference、Replicate Veo 3.1、または ElevenLabs Veo 3.1 を選択してください。",
-  "designer_character_references_model_not_used": "このプロバイダーまたはモデルは保存済みのキャラクター参照を使用しません。キャラクター参照を利用するには、MiniMax Subject Reference、Replicate Veo 3.1、または ElevenLabs Veo 3.1 を選択してください。"
+  "designer_character_references_model_not_used": "このプロバイダーまたはモデルは保存済みのキャラクター参照を使用しません。キャラクター参照を利用するには、MiniMax Subject Reference、Replicate Veo 3.1、または ElevenLabs Veo 3.1 を選択してください。",
+  "layer_blend_mode": "ブレンドモード"
 }

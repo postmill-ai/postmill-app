@@ -4729,5 +4729,6 @@
   "designer_change_character_references": "更改参考图片",
   "designer_add_character_references": "添加参考图片",
   "designer_character_references_default_not_used": "默认提供商不使用已保存的角色参考。请选择 MiniMax Subject Reference、Replicate Veo 3.1 或 ElevenLabs Veo 3.1 以使用这些参考。",
-  "designer_character_references_model_not_used": "此提供商或模型不使用已保存的角色参考。请使用 MiniMax Subject Reference、Replicate Veo 3.1 或 ElevenLabs Veo 3.1 以应用这些参考。"
+  "designer_character_references_model_not_used": "此提供商或模型不使用已保存的角色参考。请使用 MiniMax Subject Reference、Replicate Veo 3.1 或 ElevenLabs Veo 3.1 以应用这些参考。",
+  "layer_blend_mode": "混合模式"
 }

@@ -4729,5 +4729,6 @@
   "designer_change_character_references": "참조 이미지 변경",
   "designer_add_character_references": "참조 이미지 추가",
   "designer_character_references_default_not_used": "기본 제공업체는 저장된 캐릭터 참조를 사용하지 않습니다. 캐릭터 참조를 사용하려면 MiniMax Subject Reference, Replicate Veo 3.1 또는 ElevenLabs Veo 3.1을 선택하세요.",
-  "designer_character_references_model_not_used": "이 제공업체 또는 모델은 저장된 캐릭터 참조를 사용하지 않습니다. 캐릭터 참조를 사용하려면 MiniMax Subject Reference, Replicate Veo 3.1 또는 ElevenLabs Veo 3.1을 선택하세요."
+  "designer_character_references_model_not_used": "이 제공업체 또는 모델은 저장된 캐릭터 참조를 사용하지 않습니다. 캐릭터 참조를 사용하려면 MiniMax Subject Reference, Replicate Veo 3.1 또는 ElevenLabs Veo 3.1을 선택하세요.",
+  "layer_blend_mode": "혼합 모드"
 }
