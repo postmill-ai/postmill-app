@@ -40,6 +40,15 @@ describe('NotEnoughScopesFilter', () => {
     });
   });
 
+  it('omits the expected-error code for an opaque authentication failure', () => {
+    const exception = new NotEnoughScopes('Authentication failed', false);
+    filter.catch(exception, mockHost);
+    expect(mockResponse.status).toHaveBeenCalledWith(409);
+    expect(mockResponse.json).toHaveBeenCalledWith({
+      msg: 'Authentication failed',
+    });
+  });
+
   it('calls switchToHttp to get the response', () => {
     const exception = new NotEnoughScopes();
     filter.catch(exception, mockHost);

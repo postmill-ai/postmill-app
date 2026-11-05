@@ -149,6 +149,7 @@ export class NoAuthIntegrationsController {
 
     const {
       error,
+      expectedAuthorizationError,
       accessToken,
       expiresIn,
       refreshToken,
@@ -158,7 +159,9 @@ export class NoAuthIntegrationsController {
       username,
       additionalSettings,
       rootId,
-    } = await new Promise<AuthTokenDetails>(async (res) => {
+    } = await new Promise<
+      AuthTokenDetails & { expectedAuthorizationError?: boolean }
+    >(async (res) => {
       try {
         const auth = await integrationProvider.authenticate(
           {
@@ -172,6 +175,7 @@ export class NoAuthIntegrationsController {
         if (typeof auth === 'string') {
           return res({
             error: auth,
+            expectedAuthorizationError: true,
             accessToken: '',
             id: '',
             name: '',
@@ -208,6 +212,7 @@ export class NoAuthIntegrationsController {
         if (err instanceof NotEnoughScopes) {
           return res({
             error: err.message,
+            expectedAuthorizationError: err.expected,
             accessToken: '',
             id: '',
             name: '',
@@ -227,13 +232,16 @@ export class NoAuthIntegrationsController {
         }
 
         this._logger.warn(
-          `social-connect authorization rejected: provider=${integration} organization=${org.id} providerConfig=${
+          `social-connect authentication failed: provider=${integration} organization=${org.id} providerConfig=${
             providerConfigId || 'platform'
-          } detail=${providerMessage || (err as Error)?.message || String(err)}`
+          } expected=${Boolean(providerMessage)} detail=${
+            providerMessage || (err as Error)?.message || String(err)
+          }`
         );
 
         return res({
           error: providerMessage || 'Authentication failed',
+          expectedAuthorizationError: Boolean(providerMessage),
           accessToken: '',
           id: '',
           name: '',
@@ -245,7 +253,7 @@ export class NoAuthIntegrationsController {
     });
 
     if (error) {
-      throw new NotEnoughScopes(error);
+      throw new NotEnoughScopes(error, expectedAuthorizationError === true);
     }
 
     if (!id) {

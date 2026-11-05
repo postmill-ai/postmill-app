@@ -11,7 +11,9 @@ export class NotEnoughScopesFilter implements ExceptionFilter {
 
     response.status(HttpStatusCode.Conflict).json({
       msg: exception.message,
-      code: 'CHANNEL_AUTHORIZATION_REJECTED',
+      ...(exception.expected
+        ? { code: 'CHANNEL_AUTHORIZATION_REJECTED' }
+        : {}),
     });
   }
 }

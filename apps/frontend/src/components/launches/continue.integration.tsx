@@ -160,7 +160,11 @@ export const ContinueIntegration: FC<{
       if (!modifiedParams.code) {
         // X (OAuth 1.0a) signals denial as ?denied=<token>.
         const denied =
-          searchParams.error === 'access_denied' || !!searchParams.denied;
+          ['access_denied', 'user_cancelled_login', 'user_cancelled_authorize'].includes(
+            searchParams.error
+          ) || !!searchParams.denied;
+        const expectedProviderOutcome =
+          denied || searchParams.error === 'consent_required';
         const providerError = searchParams.error
           ? `${searchParams.error}${
               searchParams.error_description
@@ -168,9 +172,7 @@ export const ContinueIntegration: FC<{
                 : ''
             }`
           : null;
-        // Explicit provider outcomes are expected authorization results. Only
-        // an unexplained callback with neither a code nor an error is an app fault.
-        if (!denied && !providerError) {
+        if (!expectedProviderOutcome) {
           Sentry.captureException(
             new Error(
               `Channel connect failed for ${provider}: ${

@@ -95,7 +95,8 @@ vi.mock('@postmill-ai/nestjs-libraries/integrations/social.abstract', () => ({
   SocialAbstract: class {},
   NotEnoughScopes: class {
     constructor(
-      public message = 'Not enough scopes, when choosing a provider, please add all the scopes'
+      public message = 'Not enough scopes, when choosing a provider, please add all the scopes',
+      public expected = true
     ) {}
   },
 }));
@@ -445,10 +446,27 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
     expect(provider.handleErrors).not.toHaveBeenCalled();
     expect(err.message).toBe('Invalid client credential; access_token=[redacted]');
     expect(err.message).not.toBe('Authentication failed');
+    expect(err.expected).toBe(true);
     expect(warn).toHaveBeenCalledWith(
-      'social-connect authorization rejected: provider=instagram-standalone organization=org-1 providerConfig=config-1 detail=Invalid client credential; access_token=[redacted]'
+      'social-connect authentication failed: provider=instagram-standalone organization=org-1 providerConfig=config-1 expected=true detail=Invalid client credential; access_token=[redacted]'
     );
     expect(warn.mock.calls[0][0]).not.toContain('secret');
     expect(warn.mock.calls[0][0]).not.toContain('state-ig-error');
+  });
+
+  it('keeps an opaque provider exception unexpected so the frontend still reports it', async () => {
+    const provider = makeProvider({
+      authenticate: vi.fn().mockRejectedValue(new TypeError('provider bug')),
+    });
+    getSocialIntegration.mockResolvedValue(provider);
+    redisStore.set('login:state-opaque-error', 'verifier');
+    redisStore.set('organization:state-opaque-error', 'org-1');
+
+    const err = await controller
+      .connectSocialMedia('testprovider', body('state-opaque-error'))
+      .catch((error) => error);
+
+    expect(err.message).toBe('Authentication failed');
+    expect(err.expected).toBe(false);
   });
 });

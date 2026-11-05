@@ -271,6 +271,36 @@ describe('ContinueIntegration popup completion', () => {
     expect(closeSpy).not.toHaveBeenCalled();
   });
 
+  it('still reports an opaque 409 authentication failure without the expected-error code', async () => {
+    setOpener({ postMessage });
+    mockFetch.mockResolvedValue({
+      status: 409,
+      json: async () => ({ msg: 'Authentication failed' }),
+    });
+
+    render(
+      <ContinueIntegration
+        provider="discord"
+        searchParams={{ state: 's', code: 'c' }}
+        logged={true}
+      />
+    );
+
+    await screen.findByText('Authentication failed');
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Channel connect failed for discord: Authentication failed',
+      }),
+      {
+        extra: {
+          provider: 'discord',
+          status: 409,
+          body: { msg: 'Authentication failed' },
+        },
+      }
+    );
+  });
+
   it('sends only DTO-whitelisted fields in the connect body, never raw callback params', async () => {
     setOpener({ postMessage });
     mockFetch.mockResolvedValue(okResponse({ id: 'int-1', inBetweenSteps: false }));
@@ -401,7 +431,7 @@ describe('ContinueIntegration popup completion', () => {
     );
   });
 
-  it('shows an OAuth provider error without reporting an application exception', async () => {
+  it('reports a non-cancellation OAuth provider error with its callback context', async () => {
     setOpener({ postMessage });
 
     render(
@@ -420,7 +450,13 @@ describe('ContinueIntegration popup completion', () => {
       'Authorization failed: unauthorized_scope_error: Scope &quot;rw_organization_admin&quot; is not authorized'
     );
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(mockCaptureException).not.toHaveBeenCalled();
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Channel connect failed for linkedin: unauthorized_scope_error: Scope &quot;rw_organization_admin&quot; is not authorized',
+      }),
+      expect.anything()
+    );
   });
 
   it('treats a user-cancelled consent as normal flow — clean message, no Sentry noise', async () => {
