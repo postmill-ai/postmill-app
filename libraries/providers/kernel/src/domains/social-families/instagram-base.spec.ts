@@ -321,6 +321,28 @@ describe('InstagramProvider', () => {
       );
     });
 
+    it('surfaces structured Meta error details instead of Unknown Error', () => {
+      const body = JSON.stringify({
+        error: {
+          type: 'OAuthException',
+          message: 'Error validating client secret. Check the Instagram app settings.',
+        },
+      });
+      expect(provider.handleErrors(body, 400)).toEqual({
+        type: 'bad-body',
+        value: 'Instagram authentication failed: Error validating client secret. Check the Instagram app settings.',
+      });
+    });
+
+    it('redacts credential values from structured error details', () => {
+      const body = JSON.stringify({
+        error_message: 'OAuth failed for access_token=secret-token and client_secret=secret-value',
+      });
+      expect(provider.handleErrors(body, 400)?.value).toBe(
+        'Instagram authentication failed: OAuth failed for access_token=[redacted] and client_secret=[redacted]'
+      );
+    });
+
     it('returns undefined for unmapped bodies', () => {
       expect(provider.handleErrors('{"some":"other error"}', 400)).toBeUndefined();
     });

@@ -418,4 +418,32 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
     expect(err2).toBeInstanceOf(BadRequestException);
     expect(err2.message).toBe('Invalid or expired state');
   });
+
+  it('returns the mapped Instagram OAuth error instead of generic authentication failure', async () => {
+    const provider = makeProvider({
+      authenticate: vi.fn().mockRejectedValue({
+        message: 'Unknown Error',
+        json: JSON.stringify({ error: { message: 'Invalid client credential' } }),
+      }),
+      handleErrors: vi.fn(() => ({
+        type: 'bad-body',
+        value: 'Instagram App Secret is invalid — check the channel settings',
+      })),
+    });
+    getSocialIntegration.mockResolvedValue(provider);
+    getAllowedSocialsIntegrations.mockReturnValue(['testprovider', 'instagram-standalone']);
+    redisStore.set('login:state-ig-error', 'verifier');
+    redisStore.set('organization:state-ig-error', 'org-1');
+
+    const err = await controller
+      .connectSocialMedia('instagram-standalone', body('state-ig-error'))
+      .catch((error) => error);
+
+    expect(provider.handleErrors).toHaveBeenCalledWith(
+      JSON.stringify({ error: { message: 'Invalid client credential' } }),
+      400
+    );
+    expect(err.message).toBe('Instagram App Secret is invalid — check the channel settings');
+    expect(err.message).not.toBe('Authentication failed');
+  });
 });

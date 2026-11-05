@@ -614,13 +614,26 @@ export class OrgMediaProviderSettingsService {
     orgId: string,
     adapters: { identifier: string }[],
   ): Promise<Set<string>> {
-    const universal = adapters.filter((a) => UNIVERSAL_AI_CREDENTIAL.has(a.identifier));
-    const configured = new Set<string>();
-    await Promise.all(
-      universal.map(async (a) => {
-        if (await this._aiCredentials(orgId, a.identifier)) configured.add(a.identifier);
-      }),
+    const universal = new Set(
+      adapters.filter((a) => UNIVERSAL_AI_CREDENTIAL.has(a.identifier)).map((a) => a.identifier)
     );
+    const configured = new Set<string>();
+    if (!this._orgAiRepository || universal.size === 0) return configured;
+
+    const rows = await this._orgAiRepository.getByOrg(orgId);
+    const latestEnabled = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      if (!universal.has(row.identifier) || row.enabled === false || !row.credentials) continue;
+      const current = latestEnabled.get(row.identifier);
+      const rowTime = row.createdAt ? new Date(row.createdAt).getTime() : 0;
+      const currentTime = current?.createdAt ? new Date(current.createdAt).getTime() : 0;
+      if (!current || rowTime > currentTime) latestEnabled.set(row.identifier, row);
+    }
+    for (const [identifier, row] of latestEnabled) {
+      if (Object.keys(this._decryptCredentials(row.credentials)).length > 0) {
+        configured.add(identifier);
+      }
+    }
     return configured;
   }
 
