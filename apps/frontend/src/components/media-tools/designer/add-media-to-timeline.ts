@@ -253,23 +253,44 @@ export function probeVideoMetadata(
   });
 }
 
-export function probeAudioDuration(url: string): Promise<number> {
+export function probeAudioMetadata(
+  url: string,
+  onLateSuccess?: (metadata: VideoMetadata) => void
+): Promise<VideoMetadata> {
   return new Promise((resolve) => {
-    let settled = false;
-    const finish = (ms: number) => {
-      if (settled) return;
-      settled = true;
-      resolve(ms);
+    let resolved = false;
+    let succeeded = false;
+    const probe = document.createElement('audio');
+    const timeout = window.setTimeout(() => fail(), 5000);
+    const readMetadata = (): VideoMetadata => ({
+      durationMs: Math.max(1000, Math.round((probe.duration || 10) * 1000)),
+    });
+    const fail = () => {
+      if (resolved || succeeded) return;
+      resolved = true;
+      window.clearTimeout(timeout);
+      resolve({ durationMs: 10000, probeFailed: true });
     };
 
-    const probe = document.createElement('audio');
     probe.preload = 'metadata';
-    probe.onloadedmetadata = () =>
-      finish(Math.max(1000, Math.round((probe.duration || 10) * 1000)));
-    probe.onerror = () => finish(10000);
+    probe.onloadedmetadata = () => {
+      if (succeeded) return;
+      succeeded = true;
+      window.clearTimeout(timeout);
+      const metadata = readMetadata();
+      if (resolved) onLateSuccess?.(metadata);
+      else {
+        resolved = true;
+        resolve(metadata);
+      }
+    };
+    probe.onerror = fail;
     probe.src = url;
-    window.setTimeout(() => finish(10000), 5000);
   });
+}
+
+export function probeAudioDuration(url: string): Promise<number> {
+  return probeAudioMetadata(url).then((metadata) => metadata.durationMs);
 }
 
 /**

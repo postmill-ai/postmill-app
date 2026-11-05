@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useSyncExternalStore } from 'react';
-import { probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
+import { probeAudioMetadata, probeVideoMetadata, type VideoMetadata } from './add-media-to-timeline';
 
 const SOURCE_DURATION_CACHE_MAX = 50;
+export const SOURCE_DURATION_RETRY_MS = 30_000;
 const sourceDurationCache = new Map<string, number>();
+const sourceDurationFailures = new Map<string, number>();
 const sourceDurationInflight = new Set<string>();
 const sourceDurationListeners = new Set<() => void>();
 
@@ -12,34 +14,50 @@ const notifySourceDurationListeners = () => {
   for (const listener of sourceDurationListeners) listener();
 };
 
+const cacheSourceDuration = (key: string, durationMs: number) => {
+  sourceDurationFailures.delete(key);
+  sourceDurationCache.delete(key);
+  sourceDurationCache.set(key, durationMs);
+  if (sourceDurationCache.size > SOURCE_DURATION_CACHE_MAX) {
+    const oldest = sourceDurationCache.keys().next().value;
+    if (oldest !== undefined) sourceDurationCache.delete(oldest);
+  }
+};
+
 export const getSourceDurationMs = (
   src: string,
   kind: 'video' | 'audio'
 ): number | undefined => {
-  const cached = sourceDurationCache.get(src);
+  const key = `${kind}:${src}`;
+  const cached = sourceDurationCache.get(key);
   if (cached !== undefined) {
-    sourceDurationCache.delete(src);
-    sourceDurationCache.set(src, cached);
+    cacheSourceDuration(key, cached);
     return cached;
   }
-  if (!sourceDurationInflight.has(src)) {
-    sourceDurationInflight.add(src);
-    const probe =
-      kind === 'audio'
-        ? probeAudioDuration(src)
-        : probeVideoMetadata(src).then((result) => result.durationMs);
-    probe.then((ms) => {
-      sourceDurationCache.set(src, ms);
-      if (sourceDurationCache.size > SOURCE_DURATION_CACHE_MAX) {
-        const oldest = sourceDurationCache.keys().next().value;
-        if (oldest !== undefined) sourceDurationCache.delete(oldest);
-      }
-      sourceDurationInflight.delete(src);
+  const retryAt = sourceDurationFailures.get(key);
+  if (retryAt !== undefined) {
+    if (retryAt > Date.now()) return undefined;
+    sourceDurationFailures.delete(key);
+  }
+  if (!sourceDurationInflight.has(key)) {
+    sourceDurationInflight.add(key);
+    const succeed = (metadata: VideoMetadata) => {
+      cacheSourceDuration(key, metadata.durationMs);
       notifySourceDurationListeners();
-    }).catch(() => {
-      sourceDurationInflight.delete(src);
+    };
+    const fail = () => {
+      sourceDurationFailures.set(key, Date.now() + SOURCE_DURATION_RETRY_MS);
+      sourceDurationInflight.delete(key);
       notifySourceDurationListeners();
-    });
+    };
+    const probe = kind === 'audio'
+      ? probeAudioMetadata(src, succeed)
+      : probeVideoMetadata(src, succeed);
+    probe.then((metadata) => {
+      sourceDurationInflight.delete(key);
+      if (metadata.probeFailed) fail();
+      else succeed(metadata);
+    }).catch(fail);
   }
   return undefined;
 };

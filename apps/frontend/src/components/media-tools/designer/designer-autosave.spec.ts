@@ -626,6 +626,84 @@ describe('createDesignAutosave retry bound', () => {
     // Exactly one failed POST — the blank gate swallowed every retry.
     expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(1);
   });
+
+  it('adopts materialized assets from the save response without adding history', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-inline');
+    store.getState().addElement({
+      id: 'inline-image',
+      type: 'image',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      src: 'data:image/png;base64,aGVsbG8=',
+    });
+    const historyDepth = store.getState().history.length;
+    const persistedDoc = JSON.parse(JSON.stringify(store.getState().doc));
+    persistedDoc.outputs[0].children[0].src = '/uploads/org-1/inline.png';
+    persistedDoc.outputs[0].children[0].fileId = 'file-inline';
+    const fetchMock = vi.fn(() => Promise.resolve(okJson({ id: 'design-inline', doc: persistedDoc })));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    autosave.save(store.getState().doc);
+    await flush();
+
+    const image = store.getState().doc.outputs[0].children[0];
+    expect(image).toMatchObject({ src: '/uploads/org-1/inline.png', fileId: 'file-inline' });
+    expect(store.getState().history).toHaveLength(historyDepth);
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('does not overwrite an edit that lands while materialized save is in flight', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-inline');
+    store.getState().addElement({
+      id: 'inline-image',
+      type: 'image',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      src: 'data:image/png;base64,aGVsbG8=',
+    });
+    const sentDoc = store.getState().doc;
+    const persistedDoc = JSON.parse(JSON.stringify(sentDoc));
+    persistedDoc.outputs[0].children[0].src = '/uploads/org-1/inline.png';
+    let resolvePut: (res: Response) => void = () => {};
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
+      resolvePut = resolve;
+    }));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    autosave.save(sentDoc);
+    await flush();
+    addText(store, 'Newer edit');
+    const editedDoc = store.getState().doc;
+    resolvePut(okJson({ id: 'design-inline', doc: persistedDoc }));
+    await flush();
+
+    expect(store.getState().doc).toBe(editedDoc);
+    expect(store.getState().doc.outputs[0].children).toHaveLength(2);
+    expect(store.getState().doc.outputs[0].children[0].src).toBe('data:image/png;base64,aGVsbG8=');
+    expect(store.getState().isDirty).toBe(true);
+  });
 });
 
 describe('createAutosaveSubscription', () => {

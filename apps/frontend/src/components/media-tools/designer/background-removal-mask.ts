@@ -78,6 +78,92 @@ export const uploadBackgroundRemovalMask = async ({
   return uploaded;
 };
 
+export const maskFrameAspectChanged = (
+  before: Pick<BackgroundRemovalMaskFrame, 'width' | 'height'>,
+  after: Pick<BackgroundRemovalMaskFrame, 'width' | 'height'>
+): boolean => {
+  const beforeRatio = before.width / Math.max(1, before.height);
+  const afterRatio = after.width / Math.max(1, after.height);
+  return Math.abs(beforeRatio - afterRatio) / Math.max(0.0001, beforeRatio) > 0.001;
+};
+
+export const remapBackgroundRemovalMask = async ({
+  fetch,
+  maskSrc,
+  source,
+  previousFrame,
+  nextFrame,
+  id,
+}: {
+  fetch: FetchLike;
+  maskSrc: string;
+  source: Required<Pick<BackgroundRemovalAsset, 'naturalWidth' | 'naturalHeight'>>;
+  previousFrame: BackgroundRemovalMaskFrame;
+  nextFrame: BackgroundRemovalMaskFrame;
+  id: string;
+}): Promise<CommitResult> => {
+  const image = await loadMaskImage(maskSrc);
+  const dimensions = {
+    width: source.naturalWidth,
+    height: source.naturalHeight,
+  };
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = Math.max(1, Math.round(dimensions.width));
+  sourceCanvas.height = Math.max(1, Math.round(dimensions.height));
+  const sourceContext = sourceCanvas.getContext('2d');
+  if (!sourceContext) throw new Error('Could not read the existing Restore mask.');
+  const previous = computeMediaDraw({
+    sourceWidth: dimensions.width,
+    sourceHeight: dimensions.height,
+    targetWidth: previousFrame.width,
+    targetHeight: previousFrame.height,
+    crop: previousFrame.crop,
+    fitMode: previousFrame.fitMode,
+    focalPoint: previousFrame.focalPoint,
+  });
+  sourceContext.drawImage(
+    image,
+    previous.destination.x,
+    previous.destination.y,
+    previous.destination.width,
+    previous.destination.height
+  );
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(nextFrame.width));
+  canvas.height = Math.max(1, Math.round(nextFrame.height));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Could not resize the Restore mask.');
+  const next = computeMediaDraw({
+    sourceWidth: dimensions.width,
+    sourceHeight: dimensions.height,
+    targetWidth: canvas.width,
+    targetHeight: canvas.height,
+    crop: nextFrame.crop,
+    fitMode: nextFrame.fitMode,
+    focalPoint: nextFrame.focalPoint,
+  });
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.globalCompositeOperation = 'destination-in';
+  context.drawImage(
+    sourceCanvas,
+    next.source.x,
+    next.source.y,
+    next.source.width,
+    next.source.height,
+    next.destination.x,
+    next.destination.y,
+    next.destination.width,
+    next.destination.height
+  );
+  context.globalCompositeOperation = 'source-over';
+  seedBufferFromCanvas(`${id}:mask`, canvas);
+  const uploaded = await commitCanvas(canvas, `${id}:mask`, fetch);
+  if (!uploaded) throw new Error('Could not save the resized Restore mask.');
+  return uploaded;
+};
+
 export const discardBackgroundRemovalMask = async (
   fetch: FetchLike,
   mask: CommitResult

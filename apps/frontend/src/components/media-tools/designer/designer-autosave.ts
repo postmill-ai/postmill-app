@@ -245,7 +245,8 @@ export const createDesignAutosave = ({
         // rename mid-POST is unsaved work the PUT cycle must pick up.
         const after = store.getState();
         if (after.doc === sentDoc && after.designName === sentName) {
-          after.markSaved();
+          if (data.doc) after.adoptPersistedDoc(sentDoc, data.doc);
+          store.getState().markSaved();
         }
         notePersisted();
         return data.id as string;
@@ -302,8 +303,8 @@ export const createDesignAutosave = ({
       lastFailed = { doc: sentDoc, name: sentName, preview };
       throw await autosaveError(res, 'Autosave PUT failed');
     }
-    await res.json();
-    return sentName;
+    const data = await res.json();
+    return { sentName, persistedDoc: data.doc as DesignerDoc | undefined };
   };
 
   const save = (sentDoc: DesignerDoc) => {
@@ -346,14 +347,15 @@ export const createDesignAutosave = ({
     const designId = state.designId;
     state.setSaving(true);
     putDoc(designId, sentDoc)
-      .then((sentName) => {
+      .then(({ sentName, persistedDoc }) => {
         // Only clear isDirty when neither the doc nor the name moved on while
         // the PUT was in flight — it persisted exactly those two snapshots. A
         // mid-flight rename keeps the design dirty so the debounced effect
         // (which also watches the name) re-fires and persists it.
         const s = store.getState();
         if (s.doc === sentDoc && s.designName === sentName) {
-          s.markSaved();
+          if (persistedDoc) s.adoptPersistedDoc(sentDoc, persistedDoc);
+          store.getState().markSaved();
         } else {
           s.setSaving(false);
         }

@@ -219,6 +219,7 @@ export interface DesignerState {
 
 export interface DesignerActions {
   setDoc: (doc: DesignerDoc) => void;
+  adoptPersistedDoc: (sentDoc: DesignerDoc, persistedDoc: DesignerDoc) => boolean;
   setCharacterReferences: (references: DesignerDoc['characterReferences']) => void;
   setDesignName: (name: string) => void;
   setDesignId: (id: string | null) => void;
@@ -578,6 +579,13 @@ export const createDesignerStore = (
       maskTargetId: null,
       clipboard: [],
       setDoc: (doc) => set({ doc: migrateDoc(doc), isDirty: true }),
+      adoptPersistedDoc: (sentDoc, persistedDoc) => {
+        if (get().doc !== sentDoc || !persistedDoc || typeof persistedDoc !== 'object') return false;
+        const nextDoc = migrateDoc(persistedDoc);
+        set({ doc: nextDoc });
+        reconcileBuffersWithDoc(nextDoc);
+        return true;
+      },
       setCharacterReferences: (references) => {
         const { doc } = get();
         if (doc.mode !== 'video') return;

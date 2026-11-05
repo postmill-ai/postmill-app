@@ -430,15 +430,19 @@ export const Designer: FC<DesignerProps> = ({
   const brandAdminOverride = store((s) => s.brandAdminOverride);
   const undo = store((s) => s.undo);
   const redo = store((s) => s.redo);
+  const maskTargetId = store((s) => s.maskTargetId);
 
   // Memoized so the memo'd ToolOptionsBar re-renders only when the tool or
   // its options actually change.
   const activeToolOptions = useMemo(
     () => ({
       ...defaultToolOptions(activeTool),
+      ...(activeTool === 'eraser' && maskTargetId && toolOptions.eraser?.hardness === undefined
+        ? { hardness: 80 }
+        : {}),
       ...(toolOptions[activeTool] || {}),
     }),
-    [activeTool, toolOptions]
+    [activeTool, toolOptions, maskTargetId]
   );
   const onToolOptionChange = useCallback(
     (key: string, value: unknown) => setToolOption(activeTool, key, value),

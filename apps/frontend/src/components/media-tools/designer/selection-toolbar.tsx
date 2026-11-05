@@ -44,7 +44,7 @@ export const SelectionToolbar = React.memo(function SelectionToolbar({
   const currentPage = store((s: any) => s.currentPage);
   const updateElements = store((s: any) => s.updateElements);
   const removeElement = store((s: any) => s.removeElement);
-  const duplicateElement = store((s: any) => s.duplicateElement);
+  const duplicateElements = store((s: any) => s.duplicateElements);
   const reorder = store((s: any) => s.reorder);
   const groupSelection = store((s: any) => s.groupSelection);
   const ungroupSelection = store((s: any) => s.ungroupSelection);
@@ -73,7 +73,7 @@ export const SelectionToolbar = React.memo(function SelectionToolbar({
       >
         {allLocked ? '🔒' : '🔓'}
       </Btn>
-      <Btn onClick={() => selectedIds.forEach((id) => duplicateElement(id))} title={t('duplicate', 'Duplicate')}>⧉</Btn>
+      <Btn onClick={() => duplicateElements(selectedIds)} title={t('duplicate', 'Duplicate')}>⧉</Btn>
       {canGroup && <Btn onClick={() => groupSelection()} title={t('group', 'Group')}>▦</Btn>}
       {canUngroup && <Btn onClick={() => ungroupSelection()} title={t('ungroup', 'Ungroup')}>▢</Btn>}
       <div className="w-px h-5 bg-studioBorder mx-1" />
