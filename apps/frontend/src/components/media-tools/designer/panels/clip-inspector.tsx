@@ -61,6 +61,7 @@ import { CornerRadiusControl } from './corner-radius-control';
 import { TextStyleControl } from './text-style-control';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { ClipTimingControls } from './clip-timing-controls';
+import { CutoutRefineControls } from './cutout-refine-controls';
 
 // Same weight ladder the image-mode text panel offers.
 const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
@@ -802,21 +803,18 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             originalUrl={candidate.before.src!}
             asset={candidate.asset}
             onCancel={close}
-            onApply={(fit) => {
+            onApply={async (fit) => {
               const output = store.getState().doc.outputs[outputIndex];
-              const applied = applyClipImageBackground({
+              const applied = await applyClipImageBackground({
                 store,
                 target: { outputIndex, trackId, clipId },
                 candidate,
                 output,
                 fit,
+                fetch,
               });
               if (applied) close();
-              else {
-                const message = translate('designer_bg_result_outdated', 'The image changed before the result was ready. Please try again.');
-                setImageBgRemovalError(message);
-                toaster.show(message, 'warning');
-              }
+              else throw new Error(translate('designer_bg_result_outdated', 'The image changed before the result was ready. Please try again.'));
             }}
           />
         ),
@@ -1780,6 +1778,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           </button>
         )}
       </div>
+      {clipTrackType === 'image' && <CutoutRefineControls store={store} targetId={clip.id} />}
     </div>
   );
 };

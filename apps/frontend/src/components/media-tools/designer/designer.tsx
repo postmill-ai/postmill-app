@@ -1411,12 +1411,12 @@ export const Designer: FC<DesignerProps> = ({
                 originalUrl={candidate.before.src!}
                 asset={candidate.asset}
                 onCancel={close}
-                onApply={(fit) => {
+                onApply={async (fit) => {
                   const state = store.getState();
                   const output = state.doc.outputs[state.currentOutput];
-                  const applied = applyAiRemoveBackground({ store, candidate, output, fit });
+                  const applied = await applyAiRemoveBackground({ store, candidate, output, fit, fetch });
                   if (applied) close();
-                  else toaster.show(translate('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'), 'warning');
+                  else throw new Error(translate('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'));
                 }}
               />
             ),

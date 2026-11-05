@@ -393,23 +393,48 @@ ${stripExportsNamespace(mediaGeometrySource())}
       focalPoint: clip.focalPoint,
     });
 
+    const mask = !isVideo && trackType === 'image' && clip.maskEnabled !== false && clip.maskSrc
+      ? await loadImage(clip.maskSrc).catch(() => null)
+      : null;
+
     ctx.save();
     applyFilters(ctx, clip.filters, props.blurPx);
     ctx.globalAlpha = props.opacity;
 
     const source = geometry.source;
     const destination = geometry.destination;
-    ctx.drawImage(
-      element,
-      source.x,
-      source.y,
-      source.width,
-      source.height,
-      destination.x,
-      destination.y,
-      destination.width,
-      destination.height
-    );
+    if (mask) {
+      const masked = document.createElement('canvas');
+      masked.width = Math.max(1, Math.round(props.width));
+      masked.height = Math.max(1, Math.round(props.height));
+      const mctx = masked.getContext('2d');
+      mctx.drawImage(
+        element,
+        source.x,
+        source.y,
+        source.width,
+        source.height,
+        destination.x,
+        destination.y,
+        destination.width,
+        destination.height
+      );
+      mctx.globalCompositeOperation = 'destination-in';
+      mctx.drawImage(mask, 0, 0, masked.width, masked.height);
+      ctx.drawImage(masked, 0, 0, props.width, props.height);
+    } else {
+      ctx.drawImage(
+        element,
+        source.x,
+        source.y,
+        source.width,
+        source.height,
+        destination.x,
+        destination.y,
+        destination.width,
+        destination.height
+      );
+    }
 
     ctx.restore();
   }

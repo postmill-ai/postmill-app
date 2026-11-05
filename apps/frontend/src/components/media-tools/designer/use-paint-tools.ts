@@ -209,6 +209,27 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
           type: 'raster',
         } as DesignerElement;
       }
+      if (state.doc.mode === 'video') {
+        const vo = state.doc.outputs[state.currentOutput] as unknown as VideoOutput;
+        const ownerClip = vo.tracks.flatMap((track) => track.clips)
+          .find((clip) => clip.id === state.maskTargetId);
+        if (ownerClip) {
+          maskOwnerId.current = ownerClip.id;
+          return {
+            ...ownerClip,
+            id: `${ownerClip.id}:mask`,
+            type: 'raster',
+            x: ownerClip.x ?? 0,
+            y: ownerClip.y ?? 0,
+            width: ownerClip.width ?? w,
+            height: ownerClip.height ?? h,
+            rotation: 0,
+            opacity: 1,
+            locked: false,
+            hidden: false,
+          } as DesignerElement;
+        }
+      }
     }
     maskOwnerId.current = null;
 
@@ -418,8 +439,9 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
       }
       if (!origin) {
         const tracks = (out as unknown as VideoOutput)?.tracks || [];
+        const targetId = maskOwnerId.current || activeRasterId.current;
         for (const track of tracks) {
-          const clip = track.clips.find((c) => c.id === activeRasterId.current);
+          const clip = track.clips.find((c) => c.id === targetId);
           if (clip) {
             origin = { x: clip.x ?? 0, y: clip.y ?? 0 };
             break;
@@ -462,12 +484,25 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     if (result) {
       const owner = maskOwnerId.current;
       if (owner) {
-        store.getState().updateElement(owner, {
-          maskSrc: result.src,
-          maskFileId: result.fileId,
-          maskEnabled: true,
-        });
-        store.getState().pushHistory();
+        const state = store.getState();
+        const output = state.doc.outputs[state.currentOutput] as unknown as VideoOutput;
+        const ownerTrack = state.doc.mode === 'video'
+          ? output.tracks.find((track) => track.clips.some((clip) => clip.id === owner))
+          : undefined;
+        if (ownerTrack) {
+          state.updateClipSilent(state.currentOutput, ownerTrack.id, owner, {
+            maskSrc: result.src,
+            maskFileId: result.fileId,
+            maskEnabled: true,
+          });
+        } else {
+          state.updateElement(owner, {
+            maskSrc: result.src,
+            maskFileId: result.fileId,
+            maskEnabled: true,
+          });
+        }
+        state.pushHistory();
         return;
       }
       const trackId = rasterClipTrack.current;

@@ -227,6 +227,26 @@ describe('DesignerDoc schema', () => {
     expect(DesignerDocStrictSchema.safeParse(migrateDoc(v9)).success).toBe(true);
   });
 
+  it('accepts optional v11 still-image clip masks and keeps v10 documents valid', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.version = 11;
+    Object.assign(doc.outputs[0].tracks[0].clips[0], {
+      maskSrc: '/uploads/org/mask.png',
+      maskFileId: 'mask-file',
+      maskEnabled: true,
+    });
+    for (const schema of [DesignerDocLenientSchema, DesignerDocStrictSchema]) {
+      expect(schema.parse(migrateDoc(doc)).outputs[0].tracks[0].clips[0]).toMatchObject({
+        maskSrc: '/uploads/org/mask.png',
+        maskFileId: 'mask-file',
+        maskEnabled: true,
+      });
+    }
+    const v10 = { ...JSON.parse(JSON.stringify(videoDocFixture)), version: 10 };
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(v10)).success).toBe(true);
+    expect(DesignerDocLenientSchema.safeParse(migrateDoc(v10)).success).toBe(true);
+  });
+
   it('keeps v9 clips valid without the optional v10 fontStyle', () => {
     const doc = { ...JSON.parse(JSON.stringify(videoDocFixture)), version: 9 };
     expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(true);

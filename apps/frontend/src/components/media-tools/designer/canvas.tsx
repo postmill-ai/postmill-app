@@ -67,6 +67,7 @@ import {
 import { maskOutline, fullMask, invertMask } from './selection-mask';
 import { clipGeometryUpdate, type ClipBox } from './clip-geometry';
 import { clipsInMarquee, expandClipRefs } from './video-selection';
+import { armCutoutRefinement, findCutoutTarget } from './cutout-refinement';
 
 /**
  * How much of the viewport a fitted artboard fills, leaving the rest as margin.
@@ -1571,11 +1572,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       }
       const target = e.target;
       const id = target.id() || target.getParent()?.id();
+      if (id && findCutoutTarget(store, id)?.maskSrc) {
+        void armCutoutRefinement(store, id);
+        return;
+      }
       if (id && resolveTextEditTarget(pageOutput as DesignerOutput | undefined, doc.symbols, id)) {
         setEditingTextId(id);
       }
     },
-    [output, pageOutput, doc, effectiveTool, paint]
+    [output, pageOutput, doc, effectiveTool, paint, store]
   );
 
   // Drop from panels (designer elements) and OS file drops.
@@ -1923,6 +1928,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               height={output.height}
               interactive={effectiveTool === 'move' && !isSpacePressed}
               onEditText={setEditingTextId}
+              onRefineCutout={(clipId) => void armCutoutRefinement(store, clipId)}
               editingTextId={editingTextId}
               getTransformAnchor={() => transformerRef.current?.getActiveAnchor()}
               onClipContextMenu={(clipId, clientX, clientY) =>

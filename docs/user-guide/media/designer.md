@@ -136,6 +136,19 @@ around the adjustable focal point, **Fit** letterboxes without cropping, and **F
 video and image clips default to Cover when no fit was saved. Image backgrounds, thumbnails, SVG,
 and video exports use the same crop and focal-point geometry as the canvas.
 
+### Cutout Restore and Erase
+
+After **Remove Background**, Apply keeps the original image and turns the reviewed cutout's alpha
+into a grayscale mask. In the Inspector's **Cutout refinement** section, or by double-clicking /
+double-tapping the masked image, choose **Restore** to paint original pixels back or **Erase** to
+remove more of the cutout. Brush size and hardness are adjustable, edits cost no additional AI
+credits, and **Show original** / **Show cutout** compares the result. Masks persist through undo,
+save/reload, `.pdesign` export/import, static export, and still-image video export.
+
+Older flattened cutouts can gain a refinement mask, but an original background is only restorable
+when its pixels are still stored; the Inspector says when they are unavailable. Restore/Erase is
+for still images and still-image clips, not per-frame moving-video background removal.
+
 ## Opening the Designer
 
 The Designer accepts a few different entry points, all via the `/media/designer` route:
