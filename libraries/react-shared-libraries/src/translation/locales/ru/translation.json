@@ -4729,5 +4729,6 @@
   "designer_change_character_references": "Изменить референсные изображения",
   "designer_add_character_references": "Добавить референсные изображения",
   "designer_character_references_default_not_used": "Провайдер по умолчанию не использует сохранённые референсы персонажей. Выберите MiniMax Subject Reference, Replicate Veo 3.1 или ElevenLabs Veo 3.1, чтобы использовать их.",
-  "designer_character_references_model_not_used": "Этот провайдер или модель не использует сохранённые референсы персонажей. Используйте MiniMax Subject Reference, Replicate Veo 3.1 или ElevenLabs Veo 3.1, чтобы применить их."
+  "designer_character_references_model_not_used": "Этот провайдер или модель не использует сохранённые референсы персонажей. Используйте MiniMax Subject Reference, Replicate Veo 3.1 или ElevenLabs Veo 3.1, чтобы применить их.",
+  "layer_blend_mode": "Режим наложения"
 }

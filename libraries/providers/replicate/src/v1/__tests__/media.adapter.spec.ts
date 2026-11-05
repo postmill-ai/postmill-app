@@ -415,12 +415,13 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
     );
     expect(lastRequestBody(fetchMock).input).toEqual({
       image: 'https://cdn.example.com/in.png',
+      mask: 'https://cdn.example.com/in.png',
       outpaint: 'Zoom out 2x',
       prompt: expect.stringContaining('Extend the image naturally'),
     });
   });
 
-  it('maps every canonical mode to its flux-fill-pro token', async () => {
+  it('maps every canonical mode to its flux-fill-pro token with the required ignored mask', async () => {
     const tokens: Record<string, string> = {
       'zoom-1.5x': 'Zoom out 1.5x',
       'zoom-2x': 'Zoom out 2x',
@@ -435,6 +436,7 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
         credentials: { apiKey: 'k' },
       });
       expect(lastRequestBody(fetchMock).input.outpaint).toBe(token);
+      expect(lastRequestBody(fetchMock).input.mask).toBe('https://cdn.example.com/in.png');
     }
   });
 
@@ -462,6 +464,7 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
     });
     expect(lastRequestBody(fetchMock).input).toEqual({
       image: 'https://cdn.example.com/in.png',
+      mask: 'https://cdn.example.com/in.png',
       outpaint: 'Left outpaint',
       prompt: 'more ocean',
     });
@@ -475,6 +478,7 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
     expect(lastRequestUrl(fetchMock)).toBe(
       'https://api.replicate.com/v1/models/acme/custom-fill/predictions'
     );
+    expect(lastRequestBody(fetchMock).input.mask).toBeUndefined();
 
     const hash = 'c'.repeat(64);
     await adapter.outpaintImage('https://cdn.example.com/in.png', 'make-square', undefined, {
@@ -484,14 +488,19 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
     });
     expect(lastRequestUrl(fetchMock)).toBe('https://api.replicate.com/v1/predictions');
     expect(lastRequestBody(fetchMock).version).toBe(hash);
+    expect(lastRequestBody(fetchMock).input.mask).toBeUndefined();
   });
 
-  it('lets an explicit org tunable in options.input win over the mode mapping', async () => {
+  it('lets explicit org tunables win over the mode and mask mappings', async () => {
     await adapter.outpaintImage('https://cdn.example.com/in.png', 'zoom-1.5x', undefined, {
       credentials: { apiKey: 'k' },
-      input: { outpaint: 'Right outpaint' },
+      input: {
+        outpaint: 'Right outpaint',
+        mask: 'https://cdn.example.com/override-mask.png',
+      },
     });
     expect(lastRequestBody(fetchMock).input.outpaint).toBe('Right outpaint');
+    expect(lastRequestBody(fetchMock).input.mask).toBe('https://cdn.example.com/override-mask.png');
   });
 });
 

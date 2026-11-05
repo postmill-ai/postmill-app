@@ -4729,5 +4729,6 @@
   "designer_change_character_references": "Referans görselleri değiştir",
   "designer_add_character_references": "Referans görseller ekle",
   "designer_character_references_default_not_used": "Varsayılan sağlayıcı kayıtlı karakter referanslarını kullanmaz. Bunları kullanmak için MiniMax Subject Reference, Replicate Veo 3.1 veya ElevenLabs Veo 3.1 seç.",
-  "designer_character_references_model_not_used": "Bu sağlayıcı veya model kayıtlı karakter referanslarını kullanmaz. Bunları uygulamak için MiniMax Subject Reference, Replicate Veo 3.1 veya ElevenLabs Veo 3.1 seç."
+  "designer_character_references_model_not_used": "Bu sağlayıcı veya model kayıtlı karakter referanslarını kullanmaz. Bunları uygulamak için MiniMax Subject Reference, Replicate Veo 3.1 veya ElevenLabs Veo 3.1 seç.",
+  "layer_blend_mode": "Harmanlama modu"
 }

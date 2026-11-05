@@ -4729,5 +4729,6 @@
   "designer_change_character_references": "Modifier les images de référence",
   "designer_add_character_references": "Ajouter des images de référence",
   "designer_character_references_default_not_used": "Le fournisseur par défaut n’utilise pas les références de personnages enregistrées. Choisissez MiniMax Subject Reference, Replicate Veo 3.1 ou ElevenLabs Veo 3.1 pour les utiliser.",
-  "designer_character_references_model_not_used": "Ce fournisseur ou ce modèle n’utilise pas les références de personnages enregistrées. Utilisez MiniMax Subject Reference, Replicate Veo 3.1 ou ElevenLabs Veo 3.1 pour les utiliser."
+  "designer_character_references_model_not_used": "Ce fournisseur ou ce modèle n’utilise pas les références de personnages enregistrées. Utilisez MiniMax Subject Reference, Replicate Veo 3.1 ou ElevenLabs Veo 3.1 pour les utiliser.",
+  "layer_blend_mode": "Mode de fusion"
 }
