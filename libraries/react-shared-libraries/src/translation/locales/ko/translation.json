@@ -4751,5 +4751,18 @@
   "designer_character_references_default_not_used": "기본 제공업체는 저장된 캐릭터 참조를 사용하지 않습니다. 캐릭터 참조를 사용하려면 MiniMax Subject Reference, Replicate Veo 3.1 또는 ElevenLabs Veo 3.1을 선택하세요.",
   "designer_character_references_model_not_used": "이 제공업체 또는 모델은 저장된 캐릭터 참조를 사용하지 않습니다. 캐릭터 참조를 사용하려면 MiniMax Subject Reference, Replicate Veo 3.1 또는 ElevenLabs Veo 3.1을 선택하세요.",
   "layer_blend_mode": "혼합 모드",
-  "designer_effects_heading": "텍스트 효과"
+  "designer_effects_heading": "텍스트 효과",
+  "designer_qr_title": "QR 코드",
+  "designer_qr_value": "URL 또는 텍스트",
+  "designer_qr_value_placeholder": "https://example.com 또는 일반 텍스트",
+  "designer_qr_foreground": "코드 색상",
+  "designer_qr_background": "배경 색상",
+  "designer_qr_error_correction": "오류 정정",
+  "designer_qr_margin": "조용한 영역",
+  "designer_qr_export_hint": "QR 코드는 고해상도 PNG로 생성되며 여기에서 편집할 수 있습니다.",
+  "designer_qr_value_required": "QR 코드의 URL 또는 텍스트를 입력하세요.",
+  "designer_qr_generate_failed": "QR 코드를 생성할 수 없습니다.",
+  "designer_qr_insert": "QR 코드 삽입",
+  "designer_qr_apply": "QR 코드 업데이트",
+  "designer_action_insert_qr_code_qr_code": "QR 코드…"
 }

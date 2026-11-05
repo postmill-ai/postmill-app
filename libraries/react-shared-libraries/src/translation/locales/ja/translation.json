@@ -4751,5 +4751,18 @@
   "designer_character_references_default_not_used": "デフォルトのプロバイダーは保存済みのキャラクター参照を使用しません。使用するには、MiniMax Subject Reference、Replicate Veo 3.1、または ElevenLabs Veo 3.1 を選択してください。",
   "designer_character_references_model_not_used": "このプロバイダーまたはモデルは保存済みのキャラクター参照を使用しません。キャラクター参照を利用するには、MiniMax Subject Reference、Replicate Veo 3.1、または ElevenLabs Veo 3.1 を選択してください。",
   "layer_blend_mode": "ブレンドモード",
-  "designer_effects_heading": "テキスト効果"
+  "designer_effects_heading": "テキスト効果",
+  "designer_qr_title": "QR コード",
+  "designer_qr_value": "URL またはテキスト",
+  "designer_qr_value_placeholder": "https://example.com またはプレーンテキスト",
+  "designer_qr_foreground": "コードの色",
+  "designer_qr_background": "背景色",
+  "designer_qr_error_correction": "誤り訂正",
+  "designer_qr_margin": "クワイエットゾーン",
+  "designer_qr_export_hint": "QR コードは高解像度 PNG として生成され、ここで編集できます。",
+  "designer_qr_value_required": "QR コードの URL またはテキストを入力してください。",
+  "designer_qr_generate_failed": "QR コードを生成できませんでした。",
+  "designer_qr_insert": "QR コードを挿入",
+  "designer_qr_apply": "QR コードを更新",
+  "designer_action_insert_qr_code_qr_code": "QR コード…"
 }

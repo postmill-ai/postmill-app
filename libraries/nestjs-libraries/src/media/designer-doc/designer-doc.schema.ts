@@ -93,6 +93,14 @@ export const SrcSchema = z
     'src is too long'
   );
 
+export const QrCodeSettingsSchema = z.object({
+  value: z.string().min(1).max(2048),
+  foreground: z.string().regex(/^#[0-9a-f]{6}$/i),
+  background: z.string().regex(/^#[0-9a-f]{6}$/i),
+  errorCorrection: z.enum(['L', 'M', 'Q', 'H']),
+  margin: z.number().int().min(0).max(8),
+}).strict();
+
 export const DesignerFilterStringSchema = z
   .string()
   .max(32)
@@ -453,6 +461,14 @@ export interface DesignerSmartFilter {
   enabled?: boolean;
 }
 
+export interface QrCodeSettings {
+  value: string;
+  foreground: string;
+  background: string;
+  errorCorrection: 'L' | 'M' | 'Q' | 'H';
+  margin: number;
+}
+
 export interface DesignerElement {
   id: string;
   type:
@@ -548,6 +564,7 @@ export interface DesignerElement {
   // image
   src?: string;
   fileId?: string;
+  qr?: QrCodeSettings;
   /**
    * Source viewBox for an `icon` element whose SVG is not drawn on Iconify's
    * 24×24 grid. Both renderers default to 24×24 when absent.
@@ -701,6 +718,7 @@ export interface VideoClip {
   trimOutMs?: number;
   src?: string;
   fileId?: string;
+  qr?: QrCodeSettings;
   /**
    * Explicit media-type hint for the clip's `src` (optional-additive). AI-
    * generated videos are stored at extensionless URLs (`/uploads/<org>/…/<hash>`),
@@ -1342,6 +1360,7 @@ const elementCommon = {
   // image
   src: SrcSchema.optional(),
   fileId: z.string().max(200).optional(),
+  qr: QrCodeSettingsSchema.optional(),
   // Four numbers and nothing else — this is interpolated straight into SVG
   // markup, so it is validated as a shape, not merely as a string.
   viewBox: z
@@ -1691,6 +1710,7 @@ const clipCommon = {
   originId: z.string().max(200).optional(),
   src: SrcSchema.optional(),
   fileId: z.string().max(200).optional(),
+  qr: QrCodeSettingsSchema.optional(),
   // Media-type hint for extensionless sources (see the VideoClip interface) —
   // additive, so docs saved before it existed keep validating unchanged.
   mediaType: z.enum(['video', 'image']).optional(),

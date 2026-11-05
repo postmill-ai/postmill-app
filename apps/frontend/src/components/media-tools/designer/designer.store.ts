@@ -699,20 +699,23 @@ export const createDesignerStore = (
       updateElementsSilent: (ids, updates) => {
         if (isVideoMode()) return;
         const { doc, currentOutput, currentPage, editFormatOnly, linkedUpdateFlash } = get();
+        const mediaUpdates = updates.src !== undefined && updates.qr === undefined
+          ? { ...updates, qr: undefined }
+          : updates;
         if (currentPage > 0) {
           const idSet = new Set(ids);
           set({
             doc: {
               ...doc,
               outputs: withActiveChildren(
-                activePageChildren().map((el) => (idSet.has(el.id) ? applyElementPatch(el, updates) : el))
+                activePageChildren().map((el) => (idSet.has(el.id) ? applyElementPatch(el, mediaUpdates) : el))
               ),
             },
             isDirty: true,
           });
           return;
         }
-        const { outputs, affected } = applyLinked(doc, currentOutput, new Set(ids), updates, editFormatOnly);
+        const { outputs, affected } = applyLinked(doc, currentOutput, new Set(ids), mediaUpdates, editFormatOnly);
         const now = Date.now();
         const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
         affected.forEach((i) => (nextFlash[i] = now));
@@ -1792,7 +1795,9 @@ export const createDesignerStore = (
         const track = vo.tracks.find((t) => t.id === trackId);
         const clip = track?.clips.find((c) => c.id === clipId);
         if (!clip) return false;
-        let patched = updates;
+        let patched = updates.src !== undefined && updates.qr === undefined
+          ? { ...updates, qr: undefined }
+          : updates;
         // The range check applies only when timing is actually being edited —
         // a clip left out of bounds by a duration shrink must stay editable
         // (filters, scale, position…), or the whole inspector goes dead.
@@ -1806,7 +1811,7 @@ export const createDesignerStore = (
           // Both ends are written back clamped: editing the timing of a clip
           // whose other end was left out of bounds (duration shrink) heals it
           // instead of failing on the stale value forever.
-          patched = { ...updates, startMs: nextStart, endMs: nextEnd };
+          patched = { ...patched, startMs: nextStart, endMs: nextEnd };
           const previousDuration = clip.endMs - clip.startMs;
           const nextDuration = nextEnd - nextStart;
           if (previousDuration !== nextDuration && clip.keyframes?.length) {

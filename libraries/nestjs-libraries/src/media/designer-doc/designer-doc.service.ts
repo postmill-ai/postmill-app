@@ -413,7 +413,7 @@ export class DesignerDocService {
           // The source geometry describes the MEDIA, so it travels with the
           // swap (same contract as the image-element swap in the conductor's
           // _replaceSlotImagery).
-          const patch: Partial<VideoClip> = { src: op.src };
+          const patch: Partial<VideoClip> = { src: op.src, qr: undefined };
           if (op.fileId !== undefined) patch.fileId = op.fileId;
           if (op.focalPoint !== undefined) patch.focalPoint = op.focalPoint;
           if (op.naturalWidth !== undefined) patch.naturalWidth = op.naturalWidth;
@@ -468,7 +468,9 @@ export class DesignerDocService {
           doc,
           op.outputIndex,
           new Set([op.elementId]),
-          op.patch as Partial<DesignerElement>,
+          (op.patch.src !== undefined && op.patch.qr === undefined
+            ? { ...op.patch, qr: undefined }
+            : op.patch) as Partial<DesignerElement>,
           !isShared
         );
         return { ...doc, outputs } as DesignerDoc;

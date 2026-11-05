@@ -136,6 +136,14 @@ around the adjustable focal point, **Fit** letterboxes without cropping, and **F
 video and image clips default to Cover when no fit was saved. Image backgrounds, thumbnails, SVG,
 and video exports use the same crop and focal-point geometry as the canvas.
 
+### QR codes
+
+Choose **Insert ▸ QR Code…**, enter a URL or plain text, and optionally adjust the code/background
+colors, error-correction level, and quiet zone. Postmill inserts a high-resolution PNG on a static
+canvas or as a still-image clip on the video timeline. Select it later and use **QR code** in the
+Inspector to change its content or style without recreating the layer. The editable settings travel
+with saves and `.pdesign` files; previews and exports use the same generated pixels.
+
 ### Blend modes
 
 Select one or more layers and choose **Blend mode** in the Inspector's **Common** section. The same

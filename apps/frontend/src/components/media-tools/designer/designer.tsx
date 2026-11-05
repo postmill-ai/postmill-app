@@ -53,6 +53,7 @@ import { StartDialog } from './start-dialog';
 import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiDetectSubject, aiOutpaint } from './ai-image-actions';
 import { OutpaintDialog } from './outpaint-dialog';
 import { BackgroundRemovalDialog } from './background-removal-dialog';
+import { QrCodeDialog } from './qr-code-dialog';
 import { MobileQuickActions, MobileSheetHeader, MobileToolsDialog, MobileWorkspaceSheet, type MobileSheetSnap } from './mobile-designer-tools';
 import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
@@ -1301,6 +1302,12 @@ export const Designer: FC<DesignerProps> = ({
       onSaveAsTemplate: handleSaveAsTemplate,
       onOpenMedia,
       onInsertMedia,
+      onInsertQrCode: () =>
+        modals.openModal({
+          title: translate('designer_qr_title', 'QR code'),
+          size: 560,
+          children: (close: () => void) => <QrCodeDialog store={store} onClose={close} />,
+        }),
       onExport: handleSaveToFiles,
       onExportPostmill: handleExportPostmill,
       pdesignExporting,

@@ -55,6 +55,7 @@ import { useMediaPicker } from '../../use-media-picker';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { applyClipImageBackground, removeClipImageBackground, replaceClipImage } from '../clip-media';
 import { BackgroundRemovalDialog } from '../background-removal-dialog';
+import { QrCodeControls } from './qr-code-controls';
 import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { CornerRadiusControl } from './corner-radius-control';
@@ -924,6 +925,12 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             </div>
           )}
         </div>
+      )}
+      {clipTrackType === 'image' && clip.qr && (
+        <QrCodeControls
+          settings={clip.qr}
+          onApply={(patch) => updateClip(patch)}
+        />
       )}
       {replacePicker.element ? createPortal(replacePicker.element, document.body) : null}
 

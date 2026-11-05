@@ -4751,5 +4751,18 @@
   "designer_character_references_default_not_used": "默认提供商不使用已保存的角色参考。请选择 MiniMax Subject Reference、Replicate Veo 3.1 或 ElevenLabs Veo 3.1 以使用这些参考。",
   "designer_character_references_model_not_used": "此提供商或模型不使用已保存的角色参考。请使用 MiniMax Subject Reference、Replicate Veo 3.1 或 ElevenLabs Veo 3.1 以应用这些参考。",
   "layer_blend_mode": "混合模式",
-  "designer_effects_heading": "文本效果"
+  "designer_effects_heading": "文本效果",
+  "designer_qr_title": "二维码",
+  "designer_qr_value": "URL 或文本",
+  "designer_qr_value_placeholder": "https://example.com 或纯文本",
+  "designer_qr_foreground": "二维码颜色",
+  "designer_qr_background": "背景颜色",
+  "designer_qr_error_correction": "纠错级别",
+  "designer_qr_margin": "静区",
+  "designer_qr_export_hint": "二维码会生成为高分辨率 PNG，并可继续在此编辑。",
+  "designer_qr_value_required": "请输入二维码的 URL 或文本。",
+  "designer_qr_generate_failed": "无法生成二维码。",
+  "designer_qr_insert": "插入二维码",
+  "designer_qr_apply": "更新二维码",
+  "designer_action_insert_qr_code_qr_code": "二维码…"
 }

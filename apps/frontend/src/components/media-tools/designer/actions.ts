@@ -92,6 +92,7 @@ export interface DesignerActionCtx {
   onOpenMedia: () => void;
   /** Insert media of a specific kind, with the picker narrowed to match. */
   onInsertMedia: (kind: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio') => void;
+  onInsertQrCode: () => void;
   onExport: () => void;
   /** Download the saved design as a `.pdesign` interchange file (async bundle job). */
   onExportPostmill: () => void;
@@ -497,6 +498,7 @@ export const useDesignerActions = (
       // Image-kind inserts work in both modes: in a video document the pick
       // lands on the timeline as an image clip (see designer.tsx onInsertMedia).
       { id: 'insert-image', label: 'Image…', menu: 'insert', keywords: ['image', 'photo'], run: () => ctx.onInsertMedia('image') },
+      { id: 'insert-qr-code', label: 'QR Code…', menu: 'insert', keywords: ['qr', 'code', 'url', 'link'], run: ctx.onInsertQrCode },
       // Timeline media: only a video document has somewhere to put these.
       { id: 'insert-video', label: 'Video…', menu: 'insert', keywords: ['video', 'clip', 'footage'], enabled: () => live().mode === 'video', run: () => ctx.onInsertMedia('video') },
       { id: 'insert-audio', label: 'Audio…', menu: 'insert', keywords: ['audio', 'music', 'sound', 'track'], enabled: () => live().mode === 'video', run: () => ctx.onInsertMedia('audio') },

@@ -4751,5 +4751,18 @@
   "designer_character_references_default_not_used": "Der Standardanbieter verwendet keine gespeicherten Charakterreferenzen. Wähle MiniMax Subject Reference, Replicate Veo 3.1 oder ElevenLabs Veo 3.1, um sie zu verwenden.",
   "designer_character_references_model_not_used": "Dieser Anbieter oder dieses Modell verwendet keine gespeicherten Charakterreferenzen. Verwende MiniMax Subject Reference, Replicate Veo 3.1 oder ElevenLabs Veo 3.1, um sie zu nutzen.",
   "layer_blend_mode": "Mischmodus",
-  "designer_effects_heading": "Texteffekte"
+  "designer_effects_heading": "Texteffekte",
+  "designer_qr_title": "QR-Code",
+  "designer_qr_value": "URL oder Text",
+  "designer_qr_value_placeholder": "https://example.com oder Klartext",
+  "designer_qr_foreground": "Codefarbe",
+  "designer_qr_background": "Hintergrundfarbe",
+  "designer_qr_error_correction": "Fehlerkorrektur",
+  "designer_qr_margin": "Ruhezone",
+  "designer_qr_export_hint": "Der QR-Code wird als hochauflösendes PNG erstellt und bleibt hier bearbeitbar.",
+  "designer_qr_value_required": "Gib eine URL oder Text für den QR-Code ein.",
+  "designer_qr_generate_failed": "Der QR-Code konnte nicht erstellt werden.",
+  "designer_qr_insert": "QR-Code einfügen",
+  "designer_qr_apply": "QR-Code aktualisieren",
+  "designer_action_insert_qr_code_qr_code": "QR-Code…"
 }

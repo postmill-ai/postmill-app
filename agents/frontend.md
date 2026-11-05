@@ -332,6 +332,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   preserve the center and scale fontSize on text/caption clips. Exit frames are clamped at zero and
   re-anchored to the new duration by `updateClipSilent` when a timing edit changes a matched exit.
   Multi-select text effects compute each element's own path and commit one history entry.
+- **QR codes are ordinary raster media plus editable settings.** `qr-code.ts` uses the frontend's
+  `qrcode` dependency to make a 1024px PNG data URL, stored in the existing `src` on an image element
+  or still-image clip. Optional-additive doc v13 `qr` preserves value, six-digit colors, L/M/Q/H error
+  correction and a 0–8 quiet zone for the shared Inspector editor. `qrCodePatch` clears `fileId` and
+  derived media when regenerating pixels, and every media-replacement path clears `qr`; never retain
+  settings from a different image. Do not add a QR element type or renderer — Konva, node-canvas, the
+  frame renderer, SVG, previews, Files and `.pdesign` all use the existing raster source and document fields.
 - **node-canvas is not a browser canvas.** `ctx.filter = 'blur(…)'` is accepted and ignored, and
   `ctx.scale()` does not condense glyphs — text is rasterised at the font size with only the origin
   moving. Anything that needs either must work in pixel space (`blurCanvas`) or squeeze a rendered
