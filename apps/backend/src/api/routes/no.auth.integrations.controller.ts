@@ -32,6 +32,7 @@ import { CampaignTagService } from '@postmill-ai/nestjs-libraries/database/prism
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { isAllowedReturnUrl } from '@postmill-ai/nestjs-libraries/security/return-url.validator';
 import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
+import { instagramOAuthErrorDetail } from '@postmill-ai/provider-kernel';
 
 @ApiTags('Integrations')
 @Controller('/integrations')
@@ -216,18 +217,27 @@ export class NoAuthIntegrationsController {
           });
         }
 
+        let providerMessage: string | undefined;
+        const providerJson = (err as { json?: unknown })?.json;
+        if (
+          integration === 'instagram-standalone' &&
+          typeof providerJson === 'string'
+        ) {
+          providerMessage = instagramOAuthErrorDetail(providerJson);
+        }
+
         // Never swallow the provider's real error — an opaque "Authentication
         // failed" makes OAuth regressions undiagnosable (first seen 2026-09-05
         // with a Discord connect that failed invisibly). Log it, then map to
         // the generic client-facing message.
         this._logger.warn(
           `social-connect authenticate failed for ${integration}: ${
-            (err as Error)?.message || String(err)
+            providerMessage || (err as Error)?.message || String(err)
           }`
         );
 
         return res({
-          error: 'Authentication failed',
+          error: providerMessage || 'Authentication failed',
           accessToken: '',
           id: '',
           name: '',

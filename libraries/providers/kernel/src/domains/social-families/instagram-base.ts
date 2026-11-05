@@ -27,6 +27,32 @@ export const INSTAGRAM_MAX_CAROUSEL_CONTAINER_POLL_ATTEMPTS = 60;
 /** Maximum pagination depth for page / Business Manager discovery. */
 export const INSTAGRAM_MAX_PAGES_PAGINATION_DEPTH = 100;
 
+export const instagramOAuthErrorDetail = (body: string): string | undefined => {
+  try {
+    const payload = JSON.parse(body) as any;
+    const nested = payload?.error;
+    const candidates = [
+      nested?.error_user_msg,
+      nested?.message,
+      payload?.error_message,
+      payload?.error_description,
+      typeof nested === 'string' ? nested : undefined,
+    ];
+    const detail = candidates.find(
+      (value): value is string => typeof value === 'string' && !!value.trim()
+    );
+    if (!detail) return undefined;
+    return detail
+      .replace(/(access_?token|client_?secret|authorization|code)=([^&\s]+)/gi, '$1=[redacted]')
+      .replace(/(access_?token|client_?secret|authorization|code)"?\s*:\s*"[^"]*"/gi, '$1:"[redacted]"')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 240) || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 @Rules(
   "Instagram should have at least one attachment, if it's a story, it can have only one picture"
 )

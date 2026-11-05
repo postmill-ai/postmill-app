@@ -47,6 +47,7 @@ function makeService() {
     syncFromMediaProvider: vi.fn().mockResolvedValue(undefined),
   };
   const orgAiRepository = {
+    getByOrg: vi.fn().mockResolvedValue([]),
     getByIdentifier: vi.fn().mockResolvedValue(null),
     // 1.2: _aiCredentials reads the AI row version-agnostically. Delegate so a
     // per-test `getByIdentifier.mockResolvedValue(...)` drives both reads.
@@ -312,15 +313,38 @@ describe('OrgMediaProviderSettingsService', () => {
         { providerId: 'runway', displayName: 'Runway', capabilities: { video: true } },
       ]);
       repository.getByOrg.mockResolvedValue([]); // no media config rows
-      orgAiRepository.getByIdentifier.mockImplementation(async (_org: string, id: string) =>
-        id === 'qwen' ? { credentials: `enc(${JSON.stringify({ apiKey: 'k' })})` } : null,
-      );
+      orgAiRepository.getByOrg.mockResolvedValue([
+        { identifier: 'qwen', enabled: true, credentials: `enc(${JSON.stringify({ apiKey: 'k' })})` },
+      ]);
 
       const providers = await service.getProviders('org-1');
       const qwen = providers.find((p) => p.identifier === 'qwen');
       const runway = providers.find((p) => p.identifier === 'runway');
       expect(qwen).toMatchObject({ isConfigured: true, enabled: true });
       expect(runway).toMatchObject({ isConfigured: false, enabled: false });
+    });
+
+    it('uses one AI config query for all universal providers and preserves row semantics', async () => {
+      const { service, kernel, repository, orgAiRepository } = makeService();
+      kernel.listManifests.mockReturnValue([
+        { providerId: 'qwen', displayName: 'Qwen', capabilities: { image: true } },
+        { providerId: 'google', displayName: 'Google', capabilities: { image: true } },
+        { providerId: 'groq', displayName: 'Groq', capabilities: { image: true } },
+      ]);
+      repository.getByOrg.mockResolvedValue([]);
+      orgAiRepository.getByOrg.mockResolvedValue([
+        { identifier: 'qwen', version: 'v1', enabled: true, credentials: 'not-json', createdAt: new Date(1) },
+        { identifier: 'qwen', version: 'v2', enabled: true, credentials: `enc(${JSON.stringify({ apiKey: 'new' })})`, createdAt: new Date(2) },
+        { identifier: 'google', enabled: false, credentials: `enc(${JSON.stringify({ apiKey: 'off' })})` },
+        { identifier: 'groq', enabled: true, credentials: 'not-json' },
+      ]);
+
+      const providers = await service.getProviders('org-1');
+      expect(providers.find((p) => p.identifier === 'qwen')).toMatchObject({ isConfigured: true, enabled: true });
+      expect(providers.find((p) => p.identifier === 'google')).toMatchObject({ isConfigured: false, enabled: false });
+      expect(providers.find((p) => p.identifier === 'groq')).toMatchObject({ isConfigured: false, enabled: false });
+      expect(orgAiRepository.getByOrg).toHaveBeenCalledTimes(1);
+      expect(orgAiRepository.findAnyByIdentifier).not.toHaveBeenCalled();
     });
   });
 
