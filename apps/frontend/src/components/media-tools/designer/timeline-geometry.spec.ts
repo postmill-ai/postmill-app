@@ -7,6 +7,7 @@ import {
   timelineTrackAtClientY,
   timelineTrackIndexAtClientY,
   timelineHorizontalScrollDelta,
+  timelineDragDeltaMs,
 } from './timeline-geometry';
 
 const geometry = { rulerHeight: 22, trackHeight: 36, trackGap: 4 };
@@ -56,6 +57,14 @@ describe('timelineHorizontalScrollDelta', () => {
     expect(timelineHorizontalScrollDelta(100, 500, 486)).toBe(4);
     expect(timelineHorizontalScrollDelta(100, 500, 500)).toBe(8);
     expect(timelineHorizontalScrollDelta(100, 500, 50)).toBe(0);
+  });
+});
+
+describe('timelineDragDeltaMs', () => {
+  it('adds viewport auto-scroll to the pointer displacement in both directions', () => {
+    expect(timelineDragDeltaMs(100, 100, 0, 250, 0.25)).toBe(1000);
+    expect(timelineDragDeltaMs(100, 100, 250, 0, 0.25)).toBe(-1000);
+    expect(timelineDragDeltaMs(100, 150, 0, 250, 0.25)).toBe(1200);
   });
 });
 

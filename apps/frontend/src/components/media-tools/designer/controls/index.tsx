@@ -613,10 +613,17 @@ export const Stepper: React.FC<StepperProps> = ({
   const t = useT();
   const id = useId();
   const clamp = (n: number) => Math.min(max, Math.max(min, n));
+  const dirtyRef = useRef(false);
+  const commit = () => {
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    onCommit?.();
+  };
 
   const bump = (dir: 1 | -1) => {
+    dirtyRef.current = true;
     onChange(clamp(value + dir * step));
-    onCommit?.();
+    commit();
   };
 
   return (
@@ -648,11 +655,14 @@ export const Stepper: React.FC<StepperProps> = ({
           step={step}
           onChange={(e) => {
             const n = Number(e.target.value);
-            if (!Number.isNaN(n)) onChange(clamp(n));
+            if (!Number.isNaN(n)) {
+              dirtyRef.current = true;
+              onChange(clamp(n));
+            }
           }}
           onBlur={(e) => {
             if (e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) return;
-            onCommit?.();
+            commit();
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {

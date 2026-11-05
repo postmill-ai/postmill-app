@@ -69,6 +69,15 @@ export const timelineSnapThresholdMs = (pixelsPerMs: number): number =>
 export const timelineCollisionToleranceMs = (pixelsPerMs: number): number =>
   boundedScreenThreshold(pixelsPerMs, 2, 40);
 
+export const timelineDragDeltaMs = (
+  startClientX: number,
+  clientX: number,
+  startScrollLeft: number,
+  scrollLeft: number,
+  pixelsPerMs: number
+): number =>
+  (clientX - startClientX + scrollLeft - startScrollLeft) / Math.max(0.0001, pixelsPerMs);
+
 export const moveClipPreservingDuration = (
   clip: { startMs: number; endMs: number },
   deltaMs: number,

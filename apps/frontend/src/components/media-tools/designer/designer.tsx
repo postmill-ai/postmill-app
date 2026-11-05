@@ -65,6 +65,7 @@ import { captureStageThumbnail } from './stage-thumbnail';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
 import { DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
+import { useMediaQuery } from '@mantine/hooks';
 
 // 4.4: hoisted so the memoized onPeerTimeline callback has no changing closure dep.
 const PEER_COLORS = ['#f43f5e', '#8b5cf6', '#06b6d4', '#f59e0b', '#22c55e', '#ec4899'];
@@ -221,6 +222,7 @@ export const Designer: FC<DesignerProps> = ({
   );
   const [inspectorSnap, setInspectorSnap] = useState<MobileSheetSnap>('half');
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  const mobileLayout = useMediaQuery('(max-width: 1025px)');
   // Required startup picker on a fresh editor (no deep-linked asset/design and
   // no caller-supplied size) — forces an explicit format choice instead of the
   // silent 1080² "Instagram Post" default.
@@ -1683,7 +1685,7 @@ export const Designer: FC<DesignerProps> = ({
           />
         </div>
         <div className="contents mobile:hidden">
-          {brandPanel.state.open && (
+          {!mobileLayout && brandPanel.state.open && (
             <FloatingPanel
               title={translate('brand_label', 'Brand')}
               onClose={() => brandPanel.setOpen(false)}
@@ -1747,7 +1749,7 @@ export const Designer: FC<DesignerProps> = ({
           </FloatingPanel>
         )}
 
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 mobile:overflow-y-auto">
           <div className="relative flex-1 flex min-h-0 min-w-0 mobile:flex-col mobile:flex-[1_0_auto]">
             <DesignerCanvas
               store={store}
@@ -1827,7 +1829,7 @@ export const Designer: FC<DesignerProps> = ({
             }}
           />
           <MobileWorkspaceSheet
-            open={brandPanel.state.open}
+            open={mobileLayout && brandPanel.state.open}
             title={translate('brand_label', 'Brand')}
             onClose={() => brandPanel.setOpen(false)}
           >

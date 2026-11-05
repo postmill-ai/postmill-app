@@ -82,6 +82,30 @@ describe('ClipTimingControls', () => {
     expect(onCommit).toHaveBeenCalledTimes(1);
   });
 
+  it('skips unchanged blur commits and avoids a Safari-style duplicate click commit', () => {
+    const onCommit = vi.fn();
+    render(
+      <ClipTimingControls
+        clip={clip}
+        trackType="image"
+        outputDurationMs={10000}
+        onChange={vi.fn()}
+        onCommit={onCommit}
+      />
+    );
+    const input = screen.getByRole('spinbutton', { name: 'Duration (s)' });
+    input.focus();
+    fireEvent.blur(input);
+    expect(onCommit).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: '2' } });
+    fireEvent.blur(input, { relatedTarget: null });
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const increase = screen.getAllByRole('button', { name: 'Increase' })[2];
+    fireEvent.click(increase);
+    expect(onCommit).toHaveBeenCalledTimes(2);
+  });
+
   it('disables every timing input and button for a locked track', () => {
     render(
       <ClipTimingControls

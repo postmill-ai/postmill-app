@@ -1736,7 +1736,8 @@ test.describe('Designer video canvas movement and grouping (mocked local documen
 async function touchDragDocumentPoints(
   page: Page,
   start: { x: number; y: number },
-  end: { x: number; y: number }
+  end: { x: number; y: number },
+  holdMs = 0
 ) {
   const session = await page.context().newCDPSession(page);
   await session.send('Input.dispatchTouchEvent', {
@@ -1752,6 +1753,7 @@ async function touchDragDocumentPoints(
       }],
     });
   }
+  if (holdMs) await page.waitForTimeout(holdMs);
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await session.detach();
 }
@@ -2084,6 +2086,49 @@ test.describe('Designer mobile workspace', () => {
       return current.endMs - current.startMs;
     }).toBe(trimmedDuration);
     expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('auto-scrolls clip timing with a held pointer but not a stationary long-press', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = motionDoc();
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+
+    await page.getByRole('button', { name: 'Expand timeline', exact: true }).click();
+    const clip = page.getByRole('slider', { name: 'Clip', exact: true }).first();
+    await clip.scrollIntoViewIfNeeded();
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+    const box = await clip.boundingBox();
+    expect(box).not.toBeNull();
+    const scroller = page.getByRole('toolbar', { name: 'Video timeline', exact: true })
+      .locator('.overflow-auto').first();
+    const scrollRect = await scroller.boundingBox();
+    expect(scrollRect).not.toBeNull();
+    await touchDragDocumentPoints(
+      page,
+      { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 },
+      { x: scrollRect!.x + scrollRect!.width - 4, y: box!.y + box!.height / 2 },
+      1200
+    );
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[0].startMs).toBeGreaterThan(1000);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+
+    const beforeLongPress = await scroller.evaluate((element) => element.scrollLeft);
+    const longPressClip = page.getByRole('slider', { name: 'Clip', exact: true }).first();
+    const longPressBox = await longPressClip.boundingBox();
+    expect(longPressBox).not.toBeNull();
+    await touchDragDocumentPoints(
+      page,
+      { x: longPressBox!.x + longPressBox!.width / 2, y: longPressBox!.y + longPressBox!.height / 2 },
+      { x: longPressBox!.x + longPressBox!.width / 2, y: longPressBox!.y + longPressBox!.height / 2 },
+      650
+    );
+    expect(await scroller.evaluate((element) => element.scrollLeft)).toBe(beforeLongPress);
+    await page.keyboard.press('Escape');
     mocks.expectClean();
   });
 

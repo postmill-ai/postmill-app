@@ -5,7 +5,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import type { VideoClip, VideoTrack } from '../designer.store';
 import { Stepper } from '../controls';
 import { clipTimingTrackOptions, clipTimingUpdate, type ClipTimingField } from '../clip-timing';
-import { getSourceDurationMs } from '../clip-source-duration';
+import { useSourceDurationMs } from '../clip-source-duration';
 
 interface ClipTimingControlsProps {
   clip: VideoClip;
@@ -26,9 +26,10 @@ export const ClipTimingControls: FC<ClipTimingControlsProps> = ({
 }) => {
   const t = useT();
   const hasSourceWindow = trackType === 'video' || trackType === 'audio';
-  const sourceDurationMs = hasSourceWindow && clip.src
-    ? getSourceDurationMs(clip.src, trackType)
-    : undefined;
+  const sourceDurationMs = useSourceDurationMs(
+    hasSourceWindow ? clip.src : undefined,
+    hasSourceWindow ? trackType as 'video' | 'audio' : 'video'
+  );
   const update = (field: ClipTimingField, seconds: number) => {
     onChange(clipTimingUpdate(
       clip,

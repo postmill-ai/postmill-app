@@ -37,6 +37,7 @@ import {
   timelineSnapThresholdMs,
   timelineTrackAtClientY,
   timelineHorizontalScrollDelta,
+  timelineDragDeltaMs,
 } from './timeline-geometry';
 import { dragScrollDelta } from './panels/drag-auto-scroll';
 import { directFetchForAbsoluteUrls, type WaveformFetch } from './waveform-fetch';
@@ -1447,6 +1448,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     pointerId: number;
     startX: number;
     startY: number;
+    startScrollLeft: number;
     origStart: number;
     origEnd: number;
     /** The clip as it was at mousedown — trim deltas are computed against it. */
@@ -2045,6 +2047,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         pointerId: e.pointerId,
         startX: e.clientX,
         startY: e.clientY,
+        startScrollLeft: scrollRef.current?.scrollLeft ?? 0,
         origStart: clip.startMs,
         origEnd: clip.endMs,
         origClip: clip,
@@ -2093,10 +2096,19 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     const autoScroll = () => {
       if (finished) return;
       const viewport = scrollRef.current;
-      if (viewport) {
+      if (viewport && dragMovedRef.current) {
         const rect = viewport.getBoundingClientRect();
+        const previousLeft = viewport.scrollLeft;
+        const previousTop = viewport.scrollTop;
         viewport.scrollLeft += timelineHorizontalScrollDelta(rect.left, rect.right, pointerPosition.x);
         viewport.scrollTop += dragScrollDelta(rect.top, rect.bottom, pointerPosition.y);
+        if (viewport.scrollLeft !== previousLeft || viewport.scrollTop !== previousTop) {
+          handlePointerMove({
+            pointerId: dragging.pointerId,
+            clientX: pointerPosition.x,
+            clientY: pointerPosition.y,
+          } as PointerEvent);
+        }
       }
       autoScrollRaf = requestAnimationFrame(autoScroll);
     };
@@ -2174,11 +2186,15 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         dragging.edge === 'move' && !dragging.group && !hovered && isNewTrackZone(e.clientY)
       );
 
-      // dx is measured from the gesture's mousedown and applied to the values
-      // captured AT mousedown — folding it into the previously written value
-      // compounded every mousemove into the next, and made the trim-in delta
-      // uncomputable. Writes stay silent; mouseup pushes one history entry.
-      const dx = (e.clientX - dragging.startX) / pixelsPerMs;
+      // Include auto-scroll displacement so a held pointer keeps moving the
+      // clip through time instead of only moving the viewport beneath it.
+      const dx = timelineDragDeltaMs(
+        dragging.startX,
+        e.clientX,
+        dragging.startScrollLeft,
+        scrollRef.current?.scrollLeft ?? dragging.startScrollLeft,
+        pixelsPerMs
+      );
       if (Math.abs(e.clientX - dragging.startX) > 3) dragMovedRef.current = true;
 
       if (dragging.edge === 'move') {
