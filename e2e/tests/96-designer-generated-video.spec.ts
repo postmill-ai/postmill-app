@@ -63,6 +63,7 @@ interface VideoClipSnapshot {
   fill?: string;
   crop?: CropSnapshot;
   fitMode?: 'contain' | 'cover' | 'fill';
+  blendMode?: string;
   focalPoint?: { x: number; y: number };
   align?: 'left' | 'center' | 'right' | 'justify';
   fillGradient?: {
@@ -73,6 +74,7 @@ interface VideoClipSnapshot {
 
 interface DesignerElementSnapshot extends Omit<VideoClipSnapshot, 'startMs' | 'endMs'> {
   type?: string;
+  parentId?: string;
 }
 
 interface DesignerDocSnapshot {
@@ -2519,6 +2521,151 @@ test.describe('Designer non-destructive cutout refinement', () => {
     await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 150)).toEqual([0, 0, 255, 255]);
     await expect.poll(() => renderedFrameRgba(page, mocks, 150, 150)).toEqual([255, 0, 0, 255]);
     await expect.poll(() => renderedFrameRgba(page, mocks, 250, 150)).toEqual([0, 0, 255, 255]);
+    mocks.expectClean();
+  });
+});
+
+const staticBlendDoc = (): DesignerDocSnapshot => ({
+  version: 9,
+  mode: 'image',
+  outputs: [{
+    id: 'blend-static',
+    formatId: 'blend-static',
+    name: 'Blend static',
+    width: 400,
+    height: 100,
+    background: '#ffffff',
+    tracks: [],
+    children: [
+      { id: 'base-left', type: 'shape', shape: 'rect', fill: '#3a7bd5', x: 0, y: 0, width: 100, height: 100, rotation: 0, opacity: 1 },
+      { id: 'base-right', type: 'shape', shape: 'rect', fill: '#d53a7b', x: 100, y: 0, width: 300, height: 100, rotation: 0, opacity: 1 },
+      { id: 'text', type: 'text', text: 'B', fontFamily: 'Inter', fontSize: 72, fill: '#808080', x: 0, y: 0, width: 100, height: 100, rotation: 0, opacity: 1 },
+      { id: 'shape', type: 'shape', shape: 'rect', fill: '#808080', x: 100, y: 0, width: 100, height: 100, rotation: 0, opacity: 1 },
+      { id: 'image', type: 'image', src: REPLACEMENT_IMAGE_URL, fileId: 'replacement-image-file', naturalWidth: 8, naturalHeight: 2, fitMode: 'fill', x: 200, y: 0, width: 100, height: 100, rotation: 0, opacity: 1 },
+      { id: 'group', type: 'group', x: 300, y: 0, width: 100, height: 100, rotation: 0, opacity: 1 },
+      { id: 'group-child', parentId: 'group', type: 'shape', shape: 'rect', fill: '#808080', x: 300, y: 0, width: 100, height: 100, rotation: 0, opacity: 1 },
+    ],
+  }],
+});
+
+const videoBlendDoc = (): DesignerDocSnapshot => ({
+  version: 9,
+  mode: 'video',
+  outputs: [{
+    id: 'blend-video',
+    formatId: 'blend-video',
+    name: 'Blend video',
+    width: 400,
+    height: 300,
+    durationMs: 4000,
+    tracks: [
+      {
+        id: 'blend-base', type: 'shape',
+        clips: [{ id: 'blend-base-clip', shape: 'rect', fill: '#3a7bd5', startMs: 0, endMs: 4000, x: 0, y: 0, width: 400, height: 300 }],
+      },
+      {
+        id: 'blend-shape', type: 'shape',
+        clips: [{ id: 'blend-shape-clip', shape: 'rect', fill: '#808080', startMs: 0, endMs: 4000, x: 50, y: 50, width: 100, height: 100 }],
+      },
+      {
+        id: 'blend-image', type: 'image',
+        clips: [{ id: 'blend-image-clip', src: REPLACEMENT_IMAGE_URL, fileId: 'replacement-image-file', mediaType: 'image', naturalWidth: 8, naturalHeight: 2, fitMode: 'fill', startMs: 0, endMs: 4000, x: 200, y: 50, width: 100, height: 100 }],
+      },
+    ],
+  }],
+});
+
+test.describe('Designer blend controls and renderer parity', () => {
+  test('applies the shared Inspector selector to text, shape, image and groups with visible output and persistence', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticBlendDoc();
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    const select = page.getByRole('combobox', { name: 'Blend mode', exact: true });
+    const normal = [128, 128, 128, 255];
+
+    for (const [id, x] of [['text', 50], ['shape', 150], ['image', 250]] as const) {
+      const point = await canvasDocumentPoint(page, 400, 100, x, 50);
+      await page.mouse.click(point.x, point.y);
+      await expect(select).toBeVisible();
+      for (const blendMode of ['multiply', 'screen', 'overlay', 'soft-light']) {
+        await select.selectOption(blendMode);
+        await expect.poll(() => mocks.doc.outputs[0].children!.find((el) => el.id === id)?.blendMode).toBe(blendMode);
+        if (id === 'shape') {
+          await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 100, 150, 50)).not.toEqual(normal);
+        }
+      }
+    }
+
+    await page.keyboard.press('Control+k');
+    await page.getByRole('button', { name: 'Layers View', exact: true }).click();
+    await page.getByRole('option', { name: /\bGroup\b/ }).click();
+    await page.getByRole('button', { name: 'Close', exact: true }).first().click();
+    for (const blendMode of ['multiply', 'screen', 'overlay', 'soft-light']) {
+      await select.selectOption(blendMode);
+      await expect.poll(() => mocks.doc.outputs[0].children!.find((el) => el.id === 'group')?.blendMode).toBe(blendMode);
+    }
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    for (const id of ['text', 'shape', 'image', 'group']) {
+      expect(mocks.doc.outputs[0].children!.find((el) => el.id === id)?.blendMode).toBe('soft-light');
+    }
+    mocks.expectClean();
+  });
+
+  test('preserves native clip modes in the Inspector and real frame renderer', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = videoBlendDoc();
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    const framePage = await page.context().newPage();
+    await mocks.install(framePage);
+    const select = page.getByRole('combobox', { name: 'Blend', exact: true });
+    const normal = [128, 128, 128, 255];
+
+    await page.getByRole('slider', { name: 'Clip', exact: true }).nth(1).click();
+    for (const blendMode of ['multiply', 'screen', 'overlay', 'soft-light']) {
+      await select.selectOption(blendMode);
+      await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'blend-shape-clip')?.blendMode).toBe(blendMode);
+      await expect.poll(() => renderedFrameRgba(framePage, mocks, 100, 100)).not.toEqual(normal);
+    }
+    await framePage.close();
+
+    await clipOnTrack(page, 'Image').click();
+    for (const blendMode of ['multiply', 'screen', 'overlay', 'soft-light']) {
+      await select.selectOption(blendMode);
+      await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'blend-image-clip')?.blendMode).toBe(blendMode);
+    }
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    expect(mocks.savedClips().find((clip) => clip.id === 'blend-shape-clip')?.blendMode).toBe('soft-light');
+    expect(mocks.savedClips().find((clip) => clip.id === 'blend-image-clip')?.blendMode).toBe('soft-light');
+    mocks.expectClean();
+  });
+});
+
+test.describe('Designer mobile workspace', () => {
+  test('exposes the shared blend selector in the Inspector', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+    const center = await canvasDocumentPoint(page, 400, 300, 200, 150);
+    await page.mouse.click(center.x, center.y);
+    const inspectorButton = page.getByRole('button', { name: 'Inspector', exact: true });
+    if (await inspectorButton.isVisible()) await inspectorButton.click();
+
+    const select = page.getByRole('combobox', { name: 'Blend mode', exact: true });
+    await expect(select).toBeVisible();
+    await select.selectOption('soft-light');
+    await expect.poll(() => mocks.doc.outputs[0].children![0].blendMode).toBe('soft-light');
     mocks.expectClean();
   });
 });

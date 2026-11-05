@@ -158,9 +158,9 @@ describe('outputToSvg', () => {
     expect(wellFormed(svg)).toBe(true);
   });
 
-  it('carries a CSS-expressible blend mode', () => {
-    const svg = outputToSvg(output([el({ blendMode: 'multiply' })]));
-    expect(svg).toContain('mix-blend-mode:multiply');
+  it.each(['multiply', 'screen', 'overlay', 'soft-light'] as const)('carries the CSS-expressible %s blend mode', (blendMode) => {
+    const svg = outputToSvg(output([el({ blendMode })]));
+    expect(svg).toContain(`mix-blend-mode:${blendMode}`);
   });
 });
 

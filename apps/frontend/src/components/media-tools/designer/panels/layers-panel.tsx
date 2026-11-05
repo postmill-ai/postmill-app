@@ -48,7 +48,7 @@ const layerLabel = (el: DesignerElement): string => {
   return el.type.charAt(0).toUpperCase() + el.type.slice(1);
 };
 
-const BLEND_LABELS: Record<string, string> = {
+export const BLEND_LABELS: Record<string, string> = {
   'normal': 'Normal', 'multiply': 'Multiply', 'screen': 'Screen',
   'overlay': 'Overlay', 'darken': 'Darken', 'lighten': 'Lighten',
   'color-dodge': 'Color Dodge', 'color-burn': 'Color Burn',
