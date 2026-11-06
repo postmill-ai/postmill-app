@@ -132,8 +132,8 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: false,
   transpilePackages: ['crypto-hash', 'konva', 'react-konva'],
-  // Sourcemaps disabled for production security; Sentry gets hidden-source-map via webpack
-  productionBrowserSourceMaps: false,
+  // Browser maps stay off unless Epure needs them for secondary symbolication.
+  productionBrowserSourceMaps: !!process.env.NEXT_PUBLIC_EPURE_DSN,
 
   // Custom webpack config to ensure sourcemaps are generated properly
   webpack: (config, { buildId, dev, isServer, defaultLoaders }) => {
