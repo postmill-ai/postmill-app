@@ -44,6 +44,7 @@ import {
   maskFrameAspectChanged,
   remapBackgroundRemovalMask,
 } from './background-removal-mask';
+import { seedBufferFromCanvas } from './raster-layers';
 
 interface VideoCanvasOverlayProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -759,7 +760,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     }
     if (!updates.length) return;
 
-    const remapped: { trackId: string; clipId: string; src: string; fileId?: string }[] = [];
+    const remapped: { trackId: string; clipId: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
     if (fetchFn) {
       for (const { clip, trackId, trackType, before, after } of updates) {
         if (
@@ -776,7 +777,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
             nextFrame: { ...after, crop: clip.crop, fitMode: clip.fitMode, focalPoint: clip.focalPoint },
             id: clip.id,
           });
-          remapped.push({ trackId, clipId: clip.id, src: uploaded.src, fileId: uploaded.fileId });
+          remapped.push({ trackId, clipId: clip.id, src: uploaded.src, fileId: uploaded.fileId, canvas: uploaded.canvas });
         } catch {
           // Keep the existing mask if its pixels cannot be read or saved.
         }
@@ -793,7 +794,8 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
       if (fetchFn) await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetchFn, mask)));
       return;
     }
-    remapped.forEach(({ trackId, clipId, src, fileId }) => {
+    remapped.forEach(({ trackId, clipId, src, fileId, canvas }) => {
+      seedBufferFromCanvas(`${clipId}:mask`, canvas);
       store.getState().updateClipSilent(currentOutput, trackId, clipId, {
         maskSrc: src,
         maskFileId: fileId,

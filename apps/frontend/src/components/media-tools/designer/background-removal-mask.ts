@@ -101,7 +101,7 @@ export const remapBackgroundRemovalMask = async ({
   previousFrame: BackgroundRemovalMaskFrame;
   nextFrame: BackgroundRemovalMaskFrame;
   id: string;
-}): Promise<CommitResult> => {
+}): Promise<CommitResult & { canvas: HTMLCanvasElement }> => {
   const image = await loadMaskImage(maskSrc);
   const dimensions = {
     width: source.naturalWidth,
@@ -126,7 +126,11 @@ export const remapBackgroundRemovalMask = async ({
     previous.destination.x,
     previous.destination.y,
     previous.destination.width,
-    previous.destination.height
+    previous.destination.height,
+    previous.source.x,
+    previous.source.y,
+    previous.source.width,
+    previous.source.height
   );
 
   const canvas = document.createElement('canvas');
@@ -158,10 +162,9 @@ export const remapBackgroundRemovalMask = async ({
     next.destination.height
   );
   context.globalCompositeOperation = 'source-over';
-  seedBufferFromCanvas(`${id}:mask`, canvas);
   const uploaded = await commitCanvas(canvas, `${id}:mask`, fetch);
   if (!uploaded) throw new Error('Could not save the resized Restore mask.');
-  return uploaded;
+  return { ...uploaded, canvas };
 };
 
 export const discardBackgroundRemovalMask = async (

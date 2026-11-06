@@ -74,6 +74,7 @@ import {
   remapBackgroundRemovalMask,
 } from './background-removal-mask';
 import { canvasZoomAtPoint, measureCanvasPinch } from './canvas-pinch';
+import { seedBufferFromCanvas } from './raster-layers';
 
 /**
  * How much of the viewport a fitted artboard fills, leaving the rest as margin.
@@ -1345,7 +1346,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       const history = store.getState().history;
       patches.forEach(({ id, patch }) => updateElement(id, patch));
 
-      const remapped: { id: string; src: string; fileId?: string }[] = [];
+      const remapped: { id: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
       for (const { id, patch } of patches) {
         const original = originals.get(id);
         if (
@@ -1369,7 +1370,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             },
             id,
           });
-          remapped.push({ id, src: uploaded.src, fileId: uploaded.fileId });
+          remapped.push({ id, src: uploaded.src, fileId: uploaded.fileId, canvas: uploaded.canvas });
         } catch {
           // Keep the existing mask if its pixels cannot be read or saved.
         }
@@ -1386,11 +1387,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetch, mask)));
         return;
       }
-      remapped.forEach(({ id, src, fileId }) => updateElement(id, {
-        maskSrc: src,
-        maskFileId: fileId,
-        maskEnabled: true,
-      }));
+      remapped.forEach(({ id, src, fileId, canvas }) => {
+        seedBufferFromCanvas(`${id}:mask`, canvas);
+        updateElement(id, {
+          maskSrc: src,
+          maskFileId: fileId,
+          maskEnabled: true,
+        });
+      });
       pushHistory();
       // Same commit-time cache rebuild as dragEnd (see useGeometryNonce).
       bumpGeometryNow();
@@ -1436,6 +1440,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     e.preventDefault();
     e.stopPropagation();
     suppressTouchRef.current = true;
+    stageRef.current?.stopDrag();
     drawStart.current = null;
     marqueeStart.current = null;
     freeformTrail.current = null;

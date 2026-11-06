@@ -71,6 +71,9 @@ describe('uploadBackgroundRemovalMask', () => {
 });
 
 describe('remapBackgroundRemovalMask', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -98,7 +101,7 @@ describe('remapBackgroundRemovalMask', () => {
       }
     });
 
-    await remapBackgroundRemovalMask({
+    const result = await remapBackgroundRemovalMask({
       fetch: vi.fn(),
       maskSrc: '/old-mask.png',
       source: { naturalWidth: 8, naturalHeight: 2 },
@@ -107,9 +110,11 @@ describe('remapBackgroundRemovalMask', () => {
       id: 'image-1',
     });
 
-    expect(sourceContext.drawImage.mock.calls[0].slice(1)).toEqual([0, 100, 400, 100]);
+    expect(sourceContext.drawImage.mock.calls[0].slice(1)).toEqual([0, 100, 400, 100, 0, 0, 8, 2]);
     expect(nextContext.drawImage.mock.calls[0][0]).toBeDefined();
     expect(nextContext.drawImage.mock.calls[0].slice(1)).toEqual([0, 0, 8, 2, 0, 75, 200, 50]);
+    expect(result.canvas).toMatchObject({ width: 200, height: 200 });
+    expect(seedBufferFromCanvas).not.toHaveBeenCalled();
     expect(maskFrameAspectChanged({ width: 400, height: 300 }, { width: 200, height: 200 })).toBe(true);
     expect(maskFrameAspectChanged({ width: 400, height: 300 }, { width: 200, height: 150 })).toBe(false);
   });

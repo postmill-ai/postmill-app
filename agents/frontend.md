@@ -261,9 +261,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   through `rectFromTap` while a drag uses the authored box. Text and caption hit surfaces cover the
   full box (`fullBoxHitProps` or a transparent hit Rect), never just the painted glyphs; coarse
   pointers enlarge the Transformer anchors. Two-finger pinch-zoom is anchored at its centroid through
-  `canvas-pinch.ts`; the container capture phase suspends tool commits until every finger lifts, so a
-  pinch never finishes a shape, stroke, or selection. Do not add mouse-only Stage handlers or
-  reintroduce a synthetic-mouse duplicate commit after a touch gesture.
+  `canvas-pinch.ts`; pinch start explicitly stops the active Konva node drag and flushes any active
+  paint/marquee through its normal end handler, then the container capture phase suspends new tool
+  commits until every finger lifts. Do not add mouse-only Stage handlers or reintroduce a
+  synthetic-mouse duplicate commit after a touch gesture.
 - **Mobile workspace uses the same store and tool registry.** `mobile-designer-tools.tsx` provides
   prominent quick actions and inline, non-modal Tools/Brand sheets; it never forks editing behavior.
   The Inspector participates in layout at half or expanded height instead of covering the canvas,
@@ -296,8 +297,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `background-removal-mask.ts`, and commits once after the before/after dialog. If mask preparation
   fails, Apply falls back to the old flattened cutout rather than discarding the provider result.
   A later aspect-changing resize remaps the box-space mask through the old and new media geometry and
-  uploads it in the same history commit; no provider call is made. Broken image/mask elements are not
-  paintable and must not reach `drawImage`; a broken mask degrades to the plain source image.
+  uploads it in the same history commit; no provider call is made. It first samples the old box rect
+  into the old source rect (box → source), then renders the new source rect into the new box rect.
+  Pixels outside the old cover crop have no alpha information and remain transparent if a resize
+  reveals them. Live mask buffers are seeded only after the gesture's stale check. Broken image/mask
+  elements are not paintable and must not reach `drawImage`; a broken mask degrades to the plain source image.
   Magic Grab (`magic-grab.ts`) uses the same cutout plus a source-space inpaint mask and a review
   dialog, then splits the image into a reconstructed background and separately movable subject.
   Static Apply replaces/inserts adjacent layers; still-video Apply uses adjacent tracks. Both commit
