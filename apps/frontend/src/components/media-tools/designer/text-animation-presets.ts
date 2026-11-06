@@ -240,7 +240,8 @@ export const TEXT_ANIMATION_PRESETS: TextAnimationPreset[] = [
  */
 export const buildTextAnimationUpdate = (
   preset: TextAnimationPreset,
-  clip: Pick<VideoClip, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'text' | 'startMs' | 'endMs'>
+  clip: Pick<VideoClip, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'text' | 'startMs' | 'endMs' | 'fontSize'>,
+  scaleText = false
 ): Pick<VideoClip, 'keyframes' | 'textReveal'> => {
   const base: Record<string, number> = {
     x: clip.x ?? 0,
@@ -248,22 +249,30 @@ export const buildTextAnimationUpdate = (
     width: clip.width ?? 1,
     height: clip.height ?? 1,
     rotation: clip.rotation ?? 0,
+    fontSize: clip.fontSize ?? 16,
   };
   const clipDuration = clip.endMs - clip.startMs;
   const keyframes = (preset.keyframes ?? [])
     .map((kf) => ({
       ...kf,
-      tMs: preset.category === 'exit' ? clipDuration + kf.tMs : kf.tMs,
-      props: Object.fromEntries(
-        Object.entries(kf.props).map(([key, value]) => [
-          key,
-          TEXT_ANIM_RELATIVE_PROPS.has(key)
+      tMs: preset.category === 'exit' ? Math.max(0, clipDuration + kf.tMs) : kf.tMs,
+      props: (() => {
+        const props: Record<string, number> = {};
+        for (const [key, value] of Object.entries(kf.props)) {
+          props[key] = TEXT_ANIM_RELATIVE_PROPS.has(key)
             ? (base[key] ?? 0) + value
             : TEXT_ANIM_SCALE_PROPS.has(key)
               ? (base[key] ?? 1) * value
-              : value,
-        ])
-      ),
+              : value;
+          if (key === 'width') {
+            props.x = base.x + base.width * (1 - value) / 2;
+            if (scaleText) props.fontSize = base.fontSize * value;
+          } else if (key === 'height') {
+            props.y = base.y + base.height * (1 - value) / 2;
+          }
+        }
+        return props;
+      })(),
     }))
     .filter((kf) => Object.keys(kf.props).length > 0);
 
@@ -297,7 +306,9 @@ export const matchTextAnimationPreset = (
   textReveal?: VideoClip['textReveal'],
   baseWidth = 1,
   baseHeight = 1,
-  durationMs = 0
+  durationMs = 0,
+  baseFontSize = 16,
+  scaleText = false
 ): string | null => {
   if (textReveal) {
     const revealPreset = TEXT_ANIMATION_PRESETS.find(
@@ -310,7 +321,7 @@ export const matchTextAnimationPreset = (
     const pk = preset.keyframes ?? [];
     if (pk.length !== keyframes.length) continue;
     for (let i = 0; i < pk.length; i++) {
-      const expectedTime = preset.category === 'exit' ? durationMs + pk[i].tMs : pk[i].tMs;
+      const expectedTime = preset.category === 'exit' ? Math.max(0, durationMs + pk[i].tMs) : pk[i].tMs;
       if (expectedTime !== keyframes[i].tMs) continue outer;
       const expected: Record<string, number> = {};
       for (const [k, v] of Object.entries(pk[i].props)) {
@@ -326,6 +337,12 @@ export const matchTextAnimationPreset = (
                   : k === 'height'
                     ? baseHeight * v
                     : v;
+        if (k === 'width') {
+          expected.x = baseX + baseWidth * (1 - v) / 2;
+          if (scaleText) expected.fontSize = baseFontSize * v;
+        } else if (k === 'height') {
+          expected.y = baseY + baseHeight * (1 - v) / 2;
+        }
       }
       const actual = keyframes[i].props;
       const keys = Object.keys(expected);

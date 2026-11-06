@@ -4750,5 +4750,6 @@
   "designer_add_character_references": "Adicionar imagens de referência",
   "designer_character_references_default_not_used": "O provedor padrão não usa referências de personagens salvas. Escolha MiniMax Subject Reference, Replicate Veo 3.1 ou ElevenLabs Veo 3.1 para usá-las.",
   "designer_character_references_model_not_used": "Este provedor ou modelo não usa referências de personagens salvas. Use MiniMax Subject Reference, Replicate Veo 3.1 ou ElevenLabs Veo 3.1 para usá-las.",
-  "layer_blend_mode": "Modo de mesclagem"
+  "layer_blend_mode": "Modo de mesclagem",
+  "designer_effects_heading": "Efeitos de texto"
 }

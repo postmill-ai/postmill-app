@@ -328,7 +328,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   offsets from the bounded `text-extrusion.ts` module (depth ≤200), which is injected into the frame
   script and projected onto the poster as an extrusion style. Animation presets live in
   `text-animation-presets.ts`, grouped into entrance/emphasis/exit, and write only the existing
-  keyframe/reveal channels — never a parallel animation model.
+  keyframe/reveal channels — never a parallel animation model. Zoom/pulse frames compensate x/y to
+  preserve the center and scale fontSize on text/caption clips. Exit frames are clamped at zero and
+  re-anchored to the new duration by `updateClipSilent` when a timing edit changes a matched exit.
+  Multi-select text effects compute each element's own path and commit one history entry.
 - **node-canvas is not a browser canvas.** `ctx.filter = 'blur(…)'` is accepted and ignored, and
   `ctx.scale()` does not condense glyphs — text is rasterised at the font size with only the origin
   moving. Anything that needs either must work in pixel space (`blurCanvas`) or squeeze a rendered

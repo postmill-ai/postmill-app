@@ -4750,5 +4750,6 @@
   "designer_add_character_references": "Thêm hình ảnh tham chiếu",
   "designer_character_references_default_not_used": "Nhà cung cấp mặc định không sử dụng các tham chiếu nhân vật đã lưu. Chọn MiniMax Subject Reference, Replicate Veo 3.1 hoặc ElevenLabs Veo 3.1 để sử dụng chúng.",
   "designer_character_references_model_not_used": "Nhà cung cấp hoặc mô hình này không sử dụng các tham chiếu nhân vật đã lưu. Hãy dùng MiniMax Subject Reference, Replicate Veo 3.1 hoặc ElevenLabs Veo 3.1 để áp dụng chúng.",
-  "layer_blend_mode": "Chế độ hòa trộn"
+  "layer_blend_mode": "Chế độ hòa trộn",
+  "designer_effects_heading": "Hiệu ứng văn bản"
 }

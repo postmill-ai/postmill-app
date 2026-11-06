@@ -4749,5 +4749,6 @@
   "designer_add_character_references": "Add reference images",
   "designer_character_references_default_not_used": "The default provider does not use saved character references. Choose MiniMax Subject Reference, Replicate Veo 3.1, or ElevenLabs Veo 3.1 to use them.",
   "designer_character_references_model_not_used": "This provider or model does not use saved character references. Use MiniMax Subject Reference, Replicate Veo 3.1, or ElevenLabs Veo 3.1 to use them.",
-  "layer_blend_mode": "Blend mode"
+  "layer_blend_mode": "Blend mode",
+  "designer_effects_heading": "Text Effects"
 }

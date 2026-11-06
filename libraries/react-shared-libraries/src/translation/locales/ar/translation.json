@@ -4750,5 +4750,6 @@
   "designer_add_character_references": "إضافة صور مرجعية",
   "designer_character_references_default_not_used": "لا يستخدم المزوّد الافتراضي مراجع الشخصيات المحفوظة. اختر MiniMax Subject Reference أو Replicate Veo 3.1 أو ElevenLabs Veo 3.1 لاستخدامها.",
   "designer_character_references_model_not_used": "لا يستخدم هذا المزوّد أو هذا النموذج مراجع الشخصيات المحفوظة. استخدم MiniMax Subject Reference أو Replicate Veo 3.1 أو ElevenLabs Veo 3.1 لاستخدامها.",
-  "layer_blend_mode": "وضع المزج"
+  "layer_blend_mode": "وضع المزج",
+  "designer_effects_heading": "تأثيرات النص"
 }

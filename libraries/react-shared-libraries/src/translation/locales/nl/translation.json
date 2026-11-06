@@ -4749,5 +4749,6 @@
   "designer_add_character_references": "Referentieafbeeldingen toevoegen",
   "designer_character_references_default_not_used": "De standaardprovider gebruikt geen opgeslagen personagereferenties. Kies MiniMax Subject Reference, Replicate Veo 3.1 of ElevenLabs Veo 3.1 om ze te gebruiken.",
   "designer_character_references_model_not_used": "Deze provider of dit model gebruikt geen opgeslagen personagereferenties. Gebruik MiniMax Subject Reference, Replicate Veo 3.1 of ElevenLabs Veo 3.1 om ze te gebruiken.",
-  "layer_blend_mode": "Overvloeimodus"
+  "layer_blend_mode": "Overvloeimodus",
+  "designer_effects_heading": "Teksteffecten"
 }

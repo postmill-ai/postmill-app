@@ -63,7 +63,6 @@ export const TextEffectPresets: FC<{
 }> = ({ store, textElements }) => {
   const t = useT();
   if (!textElements.length) return null;
-  const primary = textElements[0];
   const effects: { kind: TextEffectKind; key: string; label: string }[] = [
     { kind: 'arc', key: 'designer_path_arc', label: 'Arc text' },
     { kind: 'wave', key: 'designer_path_wave', label: 'Wave text' },
@@ -73,6 +72,12 @@ export const TextEffectPresets: FC<{
     { kind: 'shadow', key: 'designer_label_drop_shadow', label: 'Text shadow' },
     { kind: 'extrusion', key: 'designer_style_extrusion', label: '3D Extrusion' },
   ];
+  const applyEffect = (kind: TextEffectKind) => {
+    for (const element of textElements) {
+      store.getState().updateElementsSilent([element.id], textEffectPatch(kind, element));
+    }
+    store.getState().pushHistory();
+  };
   return (
     <div className="flex flex-col gap-2">
       <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
@@ -83,10 +88,7 @@ export const TextEffectPresets: FC<{
           <button
             key={effect.kind}
             type="button"
-            onClick={() => store.getState().updateElements(
-              textElements.map((element) => element.id),
-              textEffectPatch(effect.kind, primary)
-            )}
+            onClick={() => applyEffect(effect.kind)}
             className="px-2.5 py-1.5 rounded-md border border-studioBorder bg-newBgColorInner text-[11px] text-textColor hover:border-designerAccent hover:bg-designerAccent/10"
           >
             {t(effect.key, effect.label)}

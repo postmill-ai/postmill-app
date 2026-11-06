@@ -723,7 +723,11 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     if (preset.textReveal && clipTrackType !== 'text') return;
     // One animation at a time: the builder clears the other channel (reveal ⇄
     // keyframes) as part of the patch.
-    const update = buildTextAnimationUpdate(preset, clip);
+    const update = buildTextAnimationUpdate(
+      preset,
+      clip,
+      clipTrackType === 'text' || clipTrackType === 'caption'
+    );
     updateClip(update);
     const clipDuration = clip.endMs - clip.startMs;
     const animWindowMs = preset.category === 'exit'
@@ -755,7 +759,9 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             clip.textReveal,
             clip.width ?? 1,
             clip.height ?? 1,
-            clip.endMs - clip.startMs
+            clip.endMs - clip.startMs,
+            clip.fontSize ?? 16,
+            clipTrackType === 'text' || clipTrackType === 'caption'
           )
         : null,
     [clip, clipTrackType]

@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { textEffectPatch } from './text-effect-presets';
+import React from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { TextEffectPresets, textEffectPatch } from './text-effect-presets';
 import type { DesignerElement } from '../designer.store';
+
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
+  useT: () => (_key: string, fallback: string) => fallback,
+}));
 
 const element = {
   id: 'text-1',
@@ -36,5 +42,23 @@ describe('text effect presets', () => {
     expect(patch.styles?.[0].type).toBe('drop-shadow');
     expect(patch.styles?.[1]).toMatchObject({ type: 'extrusion', depth: 24 });
     expect(textEffectPatch('extrusion', { ...element, styles: patch.styles }).styles).toHaveLength(2);
+  });
+
+  it('sizes effects per selected element and commits one history entry', () => {
+    const updateElementsSilent = vi.fn();
+    const pushHistory = vi.fn();
+    const store = { getState: () => ({ updateElementsSilent, pushHistory }) };
+    const second = { ...element, id: 'text-2', width: 800, height: 200 };
+    render(<TextEffectPresets store={store} textElements={[element, second]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Wave text' }));
+
+    expect(updateElementsSilent).toHaveBeenCalledTimes(2);
+    const firstPath = updateElementsSilent.mock.calls[0][1].textPath;
+    const secondPath = updateElementsSilent.mock.calls[1][1].textPath;
+    expect(firstPath).not.toBe(secondPath);
+    expect(updateElementsSilent.mock.calls[0][0]).toEqual(['text-1']);
+    expect(updateElementsSilent.mock.calls[1][0]).toEqual(['text-2']);
+    expect(pushHistory).toHaveBeenCalledOnce();
   });
 });

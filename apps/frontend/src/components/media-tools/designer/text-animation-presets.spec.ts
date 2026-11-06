@@ -5,6 +5,7 @@ import {
   buildTextAnimationUpdate,
   matchTextAnimationPreset,
 } from './text-animation-presets';
+import { createDesignerStore } from './designer.store';
 
 const presetByName = (name: string) => {
   const preset = TEXT_ANIMATION_PRESETS.find((p) => p.name === name);
@@ -176,6 +177,53 @@ describe('buildTextAnimationUpdate', () => {
     });
     expect(update.keyframes?.map((frame) => frame.tMs)).toEqual([4500, 5000]);
     expect(update.keyframes?.[1].props).toMatchObject({ x: 40, opacity: 0 });
+  });
+
+  it('centers zoom frames and scales text glyphs instead of re-wrapping at a fixed font size', () => {
+    const clip = {
+      x: 100, y: 200, width: 200, height: 100, fontSize: 24,
+      text: 'Zoom', startMs: 0, endMs: 5000,
+    };
+    const update = buildTextAnimationUpdate(presetByName('Zoom In'), clip, true);
+
+    expect(update.keyframes?.[0].props).toMatchObject({
+      x: 150, y: 225, width: 100, height: 50, fontSize: 12, opacity: 0,
+    });
+    expect(update.keyframes?.[1].props).toMatchObject({
+      x: 100, y: 200, width: 200, height: 100, fontSize: 24, opacity: 1,
+    });
+    expect(matchTextAnimationPreset(
+      update.keyframes, clip.x, clip.y, 0, undefined, clip.width, clip.height, 5000, clip.fontSize, true
+    )).toBe('Zoom In');
+  });
+
+  it('clamps exit keyframes for clips shorter than the exit window', () => {
+    const update = buildTextAnimationUpdate(presetByName('Spin Out'), {
+      startMs: 0, endMs: 400, rotation: 0,
+    });
+    expect(update.keyframes?.map((frame) => frame.tMs)).toEqual([0, 400]);
+  });
+
+  it('re-anchors a matched exit when the clip duration changes', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'text');
+    const track = (store.getState().doc.outputs[0] as any).tracks.find((item: any) => item.type === 'text');
+    const clip = {
+      id: 'clip-exit', startMs: 0, endMs: 3000, text: 'Exit', x: 0, y: 0,
+      width: 200, height: 100, fontSize: 24,
+    };
+    store.getState().addClip(0, track.id, clip);
+    store.getState().updateClipSilent(0, track.id, clip.id,
+      buildTextAnimationUpdate(presetByName('Fade Out'), clip)
+    );
+
+    store.getState().updateClipSilent(0, track.id, clip.id, { endMs: 6000 });
+
+    const updated = (store.getState().doc.outputs[0] as any).tracks
+      .find((item: any) => item.id === track.id).clips[0];
+    expect(updated.keyframes.map((frame: any) => frame.tMs)).toEqual([5500, 6000]);
+    expect(updated.keyframes[1].props.opacity).toBe(0);
   });
 
   it('covers entrance, emphasis, and exit categories', () => {

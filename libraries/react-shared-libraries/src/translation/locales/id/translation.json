@@ -4749,5 +4749,6 @@
   "designer_add_character_references": "Tambahkan gambar referensi",
   "designer_character_references_default_not_used": "Penyedia default tidak menggunakan referensi karakter tersimpan. Pilih MiniMax Subject Reference, Replicate Veo 3.1, atau ElevenLabs Veo 3.1 untuk menggunakannya.",
   "designer_character_references_model_not_used": "Penyedia atau model ini tidak menggunakan referensi karakter tersimpan. Gunakan MiniMax Subject Reference, Replicate Veo 3.1, atau ElevenLabs Veo 3.1 untuk menggunakannya.",
-  "layer_blend_mode": "Mode campuran"
+  "layer_blend_mode": "Mode campuran",
+  "designer_effects_heading": "Efek Teks"
 }
