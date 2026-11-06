@@ -22,14 +22,54 @@ const RUN_STYLE_PROPS = new Set([
   'text-decoration',
 ]);
 
+const MAX_FONT_FAMILY_LENGTH = 200;
+
+const primaryCssFontFamily = (value: string): string => {
+  let quote = '';
+  let escaped = false;
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === ',') {
+      return value.slice(0, i).trim().replace(/^["']|["']$/g, '');
+    }
+  }
+  return value.trim().replace(/^["']|["']$/g, '');
+};
+
+const normalizeRunFontFamily = (value: string | undefined): string | undefined => {
+  const family = value?.replace(/^["']|["']$/g, '');
+  if (!family || family === 'inherit') return undefined;
+  if (family.length <= MAX_FONT_FAMILY_LENGTH) return family;
+  const primary = primaryCssFontFamily(value || family);
+  return primary && primary !== 'inherit' && primary.length <= MAX_FONT_FAMILY_LENGTH
+    ? primary
+    : undefined;
+};
+
 const styleStringToRun = (
   style: CSSStyleDeclaration | undefined,
   base: Partial<TextRun>
 ): Partial<TextRun> => {
   if (!style) return base;
   const run: Partial<TextRun> = { ...base };
-  const family = style.fontFamily?.replace(/^["']|["']$/g, '');
-  if (family && family !== 'inherit') run.fontFamily = family;
+  const family = normalizeRunFontFamily(style.fontFamily);
+  if (family) run.fontFamily = family;
   const size = style.fontSize;
   if (size) {
     const px = parseFloat(size);
