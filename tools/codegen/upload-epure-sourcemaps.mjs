@@ -38,14 +38,18 @@ const flattenSourcemap = async (filePath) => {
     if (content != null) generator.setSourceContent(source, content);
   }
   consumer.destroy();
-  return generator.toJSON();
+  const flattened = generator.toJSON();
+  if (raw.debugId) flattened.debugId = raw.debugId;
+  if (raw.ignoreList) flattened.ignoreList = raw.ignoreList;
+  return flattened;
 };
 
 const sourceMappingAliases = async (files) => {
   const aliases = new Map();
   for (const filePath of files.filter((file) => file.endsWith('.js'))) {
     const contents = await fs.readFile(filePath, 'utf8');
-    const match = contents.match(/\/\/[#@]\s*sourceMappingURL=([^\s]+)/);
+    const matches = [...contents.matchAll(/\/\/[#@]\s*sourceMappingURL=([^\s]+)/g)];
+    const match = matches.at(-1);
     if (!match || match[1].includes('://')) continue;
     const reference = match[1].split(/[?#]/)[0];
     let decoded = reference;
@@ -115,13 +119,19 @@ const main = async () => {
       console.log(`Epure sourcemap upload failed (processing): ${relative}`);
       continue;
     }
+    const payload = JSON.stringify(sourcemap);
+    if (Buffer.byteLength(payload) > MAX_ARTIFACT_BYTES) {
+      oversized += 1;
+      console.log(`Epure sourcemap skipped (>2 MiB after flattening): ${relative}`);
+      continue;
+    }
     const artifactPath = aliases.get(filePath);
     const artifact = artifactPath
       ? path.relative(nextDir, artifactPath).split(path.sep).join('/')
       : relative;
     const form = new FormData();
     form.append('name', `~/_next/${artifact}`);
-    form.append('file', new Blob([JSON.stringify(sourcemap)], { type: 'application/json' }), path.basename(filePath));
+    form.append('file', new Blob([payload], { type: 'application/json' }), path.basename(filePath));
     try {
       const response = await fetch(
         `${url.origin}/api/${projectId}/releases/${encodeURIComponent(release)}/files/`,

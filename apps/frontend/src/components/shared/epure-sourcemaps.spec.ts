@@ -34,6 +34,8 @@ describe('Epure production sourcemap upload', () => {
       const contents = relative === 'static/chunks/renamed.js.map'
         ? JSON.stringify({
             version: 3,
+            debugId: 'qa-debug-id',
+            ignoreList: [0],
             sections: [{
               offset: { line: 0, column: 0 },
               map: {
@@ -50,7 +52,7 @@ describe('Epure production sourcemap upload', () => {
     }));
     await fs.writeFile(
       path.join(nextDir, 'static/chunks/served.js'),
-      '//# sourceMappingURL=renamed.js.map\n'
+      'const example = "//# sourceMappingURL=wrong.js.map";\n//# sourceMappingURL=renamed.js.map\n'
     );
 
     const uploads: Array<{ name: string; sourcemap: any }> = [];
@@ -93,6 +95,8 @@ describe('Epure production sourcemap upload', () => {
     ]);
     const flattened = uploads.find((upload) => upload.name.endsWith('/served.js.map'));
     expect(flattened?.sourcemap.sections).toBeUndefined();
+    expect(flattened?.sourcemap.debugId).toBe('qa-debug-id');
+    expect(flattened?.sourcemap.ignoreList).toEqual([0]);
     expect(flattened?.sourcemap.sources).toContain('src/app.ts');
     expect(flattened?.sourcemap.mappings).toBeTypeOf('string');
     expect(stdout).toContain('3 uploaded, 0 oversized, 1 unsupported, 0 failed');
