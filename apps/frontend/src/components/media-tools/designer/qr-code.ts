@@ -46,12 +46,24 @@ export const generateQrCode = async (settings: QrCodeSettings): Promise<string> 
 
 export const qrCodePatch = async (
   settings: QrCodeSettings
-): Promise<Pick<DesignerElement, 'src' | 'qr' | 'fileId' | 'naturalWidth' | 'naturalHeight'>> => ({
+): Promise<Pick<DesignerElement,
+  | 'src' | 'qr' | 'fileId' | 'naturalWidth' | 'naturalHeight'
+  | 'originalSrc' | 'originalFileId' | 'smartFilters'
+  | 'maskSrc' | 'maskFileId' | 'maskEnabled' | 'crop' | 'focalPoint'
+>> => ({
   src: await generateQrCode(settings),
   qr: normalizeQrCodeSettings(settings),
   fileId: undefined,
   naturalWidth: 1024,
   naturalHeight: 1024,
+  originalSrc: undefined,
+  originalFileId: undefined,
+  smartFilters: undefined,
+  maskSrc: undefined,
+  maskFileId: undefined,
+  maskEnabled: undefined,
+  crop: undefined,
+  focalPoint: undefined,
 });
 
 export const insertQrCode = async (

@@ -48,11 +48,49 @@ describe('editable QR codes', () => {
     expect(clip?.src).toMatch(/^data:image\/png;base64,/);
   });
 
-  it('clears the previous owned file when QR settings regenerate the pixels', async () => {
+  it('clears the previous owned file and derived media when QR settings regenerate the pixels', async () => {
     const patch = await qrCodePatch(settings);
-    expect(patch.fileId).toBeUndefined();
+    expect(patch).toMatchObject({
+      fileId: undefined,
+      originalSrc: undefined,
+      originalFileId: undefined,
+      smartFilters: undefined,
+      maskSrc: undefined,
+      maskFileId: undefined,
+      maskEnabled: undefined,
+      crop: undefined,
+      focalPoint: undefined,
+      naturalWidth: 1024,
+    });
     expect(patch.qr?.value).toBe('https://postmill.ai/docs');
-    expect(patch.naturalWidth).toBe(1024);
+  });
+
+  it('does not let a smart-filter rebake or old mask restore the previous QR code', async () => {
+    const store = createDesignerStore();
+    await insertQrCode(store, settings);
+    const element = (store.getState().doc.outputs[0] as any).children[0];
+    store.getState().updateElement(element.id, {
+      originalSrc: element.src,
+      originalFileId: 'old-qr-file',
+      smartFilters: [{ id: 'blur', params: { radius: 3 } }],
+      maskSrc: '/uploads/old-mask.png',
+      maskFileId: 'old-mask-file',
+      maskEnabled: true,
+      crop: { x: 0, y: 0, width: 100, height: 100 },
+    });
+
+    const patch = await qrCodePatch({ ...settings, value: 'https://postmill.ai/new' });
+    store.getState().updateElement(element.id, patch);
+
+    const regenerated = (store.getState().doc.outputs[0] as any).children[0];
+    expect(regenerated.qr.value).toBe('https://postmill.ai/new');
+    expect(regenerated.originalSrc).toBeUndefined();
+    expect(regenerated.originalFileId).toBeUndefined();
+    expect(regenerated.smartFilters).toBeUndefined();
+    expect(regenerated.maskSrc).toBeUndefined();
+    expect(regenerated.maskFileId).toBeUndefined();
+    expect(regenerated.maskEnabled).toBeUndefined();
+    expect(regenerated.crop).toBeUndefined();
   });
 
   it('normalizes picker colors and invalidates settings when pixels are replaced', async () => {

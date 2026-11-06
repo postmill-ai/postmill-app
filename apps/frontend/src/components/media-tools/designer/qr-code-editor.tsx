@@ -24,11 +24,12 @@ export const QrCodeEditor: FC<QrCodeEditorProps> = ({
   const [settings, setSettings] = useState<QrCodeSettings>({ ...initialSettings });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const initialSignature = JSON.stringify(initialSettings);
 
   useEffect(() => {
-    setSettings({ ...initialSettings });
+    setSettings(JSON.parse(initialSignature));
     setError('');
-  }, [initialSettings]);
+  }, [initialSignature]);
 
   const update = <K extends keyof QrCodeSettings>(key: K, value: QrCodeSettings[K]) => {
     setSettings((current) => ({ ...current, [key]: value }));
