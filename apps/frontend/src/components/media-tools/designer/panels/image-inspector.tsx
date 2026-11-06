@@ -24,7 +24,7 @@ import { cropFromSourceRect } from '../crop-geometry';
 import { CutoutRefineControls } from './cutout-refine-controls';
 import { trySetPointerCapture } from '../pointer-capture';
 import { applyStaticMagicGrab, prepareStaticMagicGrab } from '../magic-grab';
-import { MagicGrabDialog } from '../magic-grab-dialog';
+import { openMagicGrabReview } from '../magic-grab-modal';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -215,22 +215,17 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         toaster.show(t('designer_magic_grab_outdated', 'The design changed before this result could be applied. Please try again.'), 'warning');
         return;
       }
-      modals.openModal({
+      openMagicGrabReview({
+        modals,
         title: t('designer_magic_grab_title', 'Magic Grab / Select Subject'),
-        size: 900,
-        children: (close: () => void) => (
-          <MagicGrabDialog
-            originalUrl={candidate.source.url}
-            subjectUrl={candidate.asset.url}
-            backgroundUrl={candidate.background.url}
-            onCancel={close}
-            onApply={async () => {
-              const applied = await applyStaticMagicGrab({ fetch, store, candidate });
-              if (applied) close();
-              return applied;
-            }}
-          />
-        ),
+        fetch,
+        candidate,
+        onApply: () => applyStaticMagicGrab({
+          fetch,
+          store,
+          candidate,
+          subjectName: t('designer_magic_grab_subject', 'Movable subject'),
+        }),
       });
     } catch (err) {
       toaster.show((err as Error)?.message || t('designer_magic_grab_failed', 'Magic Grab failed'), 'warning');

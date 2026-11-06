@@ -43,6 +43,7 @@ function build(
     }),
     getJob: vi.fn(),
     magicGrab: vi.fn(),
+    cleanupMagicGrab: vi.fn(),
     ...serviceOverride,
   };
   const fileService = {
@@ -257,10 +258,9 @@ describe('MediaController — Designer AI-media routes', () => {
       expect(res).toEqual({ url: 'https://cdn/expanded.png' });
     });
 
-    it('magic-grab returns persisted subject and background assets', async () => {
+    it('magic-grab returns the reconstructed background without persisting a subject copy', async () => {
       const { controller, aiMediaService } = build({}, {
         magicGrab: vi.fn().mockResolvedValue({
-          subject: { url: '/uploads/org/subject.png', fileId: 'subject-file' },
           background: { url: '/uploads/org/background.png', fileId: 'background-file' },
         }),
       });
@@ -276,9 +276,16 @@ describe('MediaController — Designer AI-media routes', () => {
         { orgId: 'org-1' }
       );
       expect(res).toEqual({
-        subject: { url: '/uploads/org/subject.png', fileId: 'subject-file' },
         background: { url: '/uploads/org/background.png', fileId: 'background-file' },
       });
+    });
+
+    it('magic-grab cleanup delegates an org-scoped temporary background deletion', async () => {
+      const { controller, aiMediaService } = build();
+
+      await expect(controller.cleanupMagicGrab(org, { fileId: 'background-file' }))
+        .resolves.toEqual({ success: true });
+      expect(aiMediaService.cleanupMagicGrab).toHaveBeenCalledWith('background-file', 'org-1');
     });
 
     it('generate-image returns { output: <base64 dataUrl> }', async () => {

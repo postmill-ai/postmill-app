@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyStaticMagicGrab, uploadMagicGrabSourceMask } from './magic-grab';
+import { applyClipMagicGrab, applyStaticMagicGrab, uploadMagicGrabSourceMask } from './magic-grab';
+import { removeClipImageBackground } from './clip-media';
 import { uploadBackgroundRemovalMask } from './background-removal-mask';
 import { commitCanvas } from './raster-layers';
 import { createDesignerStore } from './designer.store';
@@ -95,6 +96,76 @@ describe('Magic Grab', () => {
       src: '/photo.png', originalSrc: '/photo.png', maskSrc: '/subject-mask.png',
     });
     expect(store.getState().selectedIds).toEqual([children[1].id]);
-    expect(fetch).toHaveBeenCalledWith('/files/source-mask', { method: 'DELETE' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns false and cleans the background when a static insert is rejected', async () => {
+    const store = createDesignerStore();
+    const before = {
+      id: 'missing', type: 'image' as const, x: 0, y: 0, width: 100, height: 100,
+      rotation: 0, opacity: 1, locked: false, hidden: false, src: '/photo.png',
+    };
+    const fetch = vi.fn(async () => ({ ok: true }) as Response);
+
+    const applied = await applyStaticMagicGrab({
+      fetch,
+      store,
+      candidate: {
+        before,
+        history: store.getState().history,
+        source: { url: '/photo.png', naturalWidth: 8, naturalHeight: 2 },
+        asset: { url: '/cutout.png', naturalWidth: 8, naturalHeight: 2 },
+        background: { url: '/background.png', fileId: 'background-file' },
+        sourceMask: { src: '/source-mask.png', fileId: 'source-mask' },
+      },
+    });
+
+    expect(applied).toBe(false);
+    expect(fetch).toHaveBeenCalledWith('/media/magic-grab/cleanup', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ fileId: 'background-file' }),
+    }));
+  });
+
+  it('applies a video subject and background when the clip still exists', async () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'image');
+    const track = (store.getState().doc.outputs[0] as any).tracks.find((item: any) => item.type === 'image');
+    store.getState().addClip(0, track.id, {
+      id: 'photo', startMs: 0, endMs: 3000, src: '/photo.png', mediaType: 'image',
+      naturalWidth: 8, naturalHeight: 2,
+    });
+    const target = { outputIndex: 0, trackId: track.id, clipId: 'photo' };
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ url: '/cutout.png', fileId: 'cutout-file' }),
+    }) as Response);
+    const candidate = await removeClipImageBackground({ fetch, store, target, probe: async () => ({ width: 8, height: 2 }) });
+    expect(candidate).toBeTruthy();
+
+    const applied = await applyClipMagicGrab({
+      fetch,
+      store,
+      target,
+      candidate: {
+        ...candidate!,
+        asset: { ...candidate!.asset, url: '/cutout.png' },
+        background: { url: '/background.png', fileId: 'background-file' },
+        sourceMask: { src: '/source-mask.png', fileId: 'source-mask' },
+      },
+    });
+
+    expect(applied).toBe(true);
+    const output = store.getState().doc.outputs[0] as any;
+    const backgroundTrack = output.tracks.find((track: any) => track.id === target.trackId);
+    const selected = store.getState().selectedClip;
+    const subjectTrack = output.tracks.find((track: any) => track.id === selected?.trackId);
+    expect(backgroundTrack.clips[0]).toMatchObject({ src: '/background.png', fileId: 'background-file' });
+    expect(subjectTrack.clips[0]).toMatchObject({
+      id: selected?.clipId,
+      src: '/photo.png',
+      maskSrc: '/subject-mask.png',
+    });
   });
 });

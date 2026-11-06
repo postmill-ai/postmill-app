@@ -63,7 +63,7 @@ import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { ClipTimingControls } from './clip-timing-controls';
 import { CutoutRefineControls } from './cutout-refine-controls';
 import { applyClipMagicGrab, prepareClipMagicGrab } from '../magic-grab';
-import { MagicGrabDialog } from '../magic-grab-dialog';
+import { openMagicGrabReview } from '../magic-grab-modal';
 
 // Same weight ladder the image-mode text panel offers.
 const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
@@ -844,27 +844,17 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         target: { outputIndex, trackId, clipId },
       });
       if (!candidate) throw new Error(translate('designer_magic_grab_outdated', 'The design changed before this result could be applied. Please try again.'));
-      modals.openModal({
+      openMagicGrabReview({
+        modals,
         title: translate('designer_magic_grab_title', 'Magic Grab / Select Subject'),
-        size: 900,
-        children: (close: () => void) => (
-          <MagicGrabDialog
-            originalUrl={candidate.source.url}
-            subjectUrl={candidate.asset.url}
-            backgroundUrl={candidate.background.url}
-            onCancel={close}
-            onApply={async () => {
-              const applied = await applyClipMagicGrab({
-                fetch,
-                store,
-                target: { outputIndex, trackId, clipId },
-                candidate,
-              });
-              if (applied) close();
-              return applied;
-            }}
-          />
-        ),
+        fetch,
+        candidate,
+        onApply: () => applyClipMagicGrab({
+          fetch,
+          store,
+          target: { outputIndex, trackId, clipId },
+          candidate,
+        }),
       });
     } catch (error) {
       const message = (error as Error)?.message || translate('designer_magic_grab_failed', 'Magic Grab failed');

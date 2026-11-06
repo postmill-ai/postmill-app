@@ -1708,23 +1708,36 @@ export class AiMediaService {
     maskUrl: string,
     options: { orgId: string },
   ): Promise<{
-    subject: { url: string; fileId: string };
     background: { url: string; fileId: string };
   }> {
-    const backgroundUrl = await this.inpaintImage(
-      imageUrl,
-      maskUrl,
-      'Remove the main subject and reconstruct the surrounding background naturally. Preserve the original style, lighting, colors, and framing.',
-      options,
-    );
-    const [subjectFile, backgroundFile] = await Promise.all([
-      this.saveUrlToFile(options.orgId, cutoutUrl, 'magic-grab-subject'),
-      this.saveUrlToFile(options.orgId, backgroundUrl, 'magic-grab-background'),
-    ]);
-    return {
-      subject: { url: subjectFile.path, fileId: subjectFile.id },
-      background: { url: backgroundFile.path, fileId: backgroundFile.id },
-    };
+    try {
+      const backgroundUrl = await this.inpaintImage(
+        imageUrl,
+        maskUrl,
+        'Remove the main subject and reconstruct the surrounding background naturally. Preserve the original style, lighting, colors, and framing.',
+        options,
+      );
+      const backgroundFile = await this.saveUrlToFile(
+        options.orgId,
+        backgroundUrl,
+        'magic-grab-background'
+      );
+      return {
+        background: { url: backgroundFile.path, fileId: backgroundFile.id },
+      };
+    } finally {
+      const maskFile = await this._fileService?.getFileByPath(options.orgId, maskUrl).catch(() => null);
+      if (maskFile) {
+        await this._fileService?.deleteFile(options.orgId, maskFile.id).catch(() => undefined);
+      }
+    }
+  }
+
+  async cleanupMagicGrab(fileId: string, orgId: string): Promise<void> {
+    if (!this._fileService) return;
+    const file = await this._fileService.getFileById(orgId, fileId).catch(() => null);
+    if (!file?.name.startsWith('magic-grab-background-')) return;
+    await this._fileService.deleteFile(orgId, file.id).catch(() => undefined);
   }
 
   async outpaintImage(

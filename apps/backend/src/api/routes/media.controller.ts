@@ -30,6 +30,7 @@ import { DetectFocalPointDto } from '@postmill-ai/nestjs-libraries/dtos/ai/detec
 import { UpscaleImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/upscale.image.dto';
 import { InpaintImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/inpaint.image.dto';
 import { MagicGrabImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/magic-grab.image.dto';
+import { MagicGrabCleanupDto } from '@postmill-ai/nestjs-libraries/dtos/ai/magic-grab-cleanup.dto';
 import { OutpaintImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/outpaint.image.dto';
 import { ImageToImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/image-to-image.dto';
 import { UpscaleVideoDto } from '@postmill-ai/nestjs-libraries/dtos/ai/upscale-video.dto';
@@ -352,6 +353,17 @@ export class MediaController {
       body.maskUrl,
       { orgId: org.id }
     );
+  }
+
+  @Post('/magic-grab/cleanup')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async cleanupMagicGrab(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: MagicGrabCleanupDto
+  ) {
+    await this._aiMediaService.cleanupMagicGrab(body.fileId, org.id);
+    return { success: true };
   }
 
   @Post('/outpaint')

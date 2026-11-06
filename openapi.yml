@@ -3335,6 +3335,21 @@ paths:
           description: ""
       tags:
         - Media
+  /media/magic-grab/cleanup:
+    post:
+      operationId: MediaController_cleanupMagicGrab
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagicGrabCleanupDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Media
   /media/outpaint:
     post:
       operationId: MediaController_outpaint
@@ -11150,6 +11165,14 @@ components:
         - imageUrl
         - cutoutUrl
         - maskUrl
+    MagicGrabCleanupDto:
+      type: object
+      properties:
+        fileId:
+          type: string
+          maxLength: 200
+      required:
+        - fileId
     OutpaintImageDto:
       type: object
       properties:

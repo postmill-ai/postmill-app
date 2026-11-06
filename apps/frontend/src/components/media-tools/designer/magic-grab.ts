@@ -142,34 +142,33 @@ export const prepareClipMagicGrab = async ({
   return completeMagicGrab(fetch, candidate);
 };
 
-const deleteFile = async (fetch: FetchLike, fileId?: string) => {
-  if (!fileId) return;
+export const cleanupMagicGrabCandidate = async (
+  fetch: FetchLike,
+  candidate: { background: MagicGrabAsset }
+): Promise<void> => {
   try {
-    await fetch(`/files/${fileId}`, { method: 'DELETE' });
+    await fetch('/media/magic-grab/cleanup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileId: candidate.background.fileId }),
+    });
   } catch {
-    // Best-effort cleanup of an unused generated asset.
+    // The server also expires provider artifacts; an unreachable cleanup is non-fatal.
   }
 };
 
-const cleanupCandidate = async (
-  fetch: FetchLike,
-  candidate: { background: MagicGrabAsset; sourceMask: CommitResult; asset: BackgroundRemovalAsset }
-) => {
-  await Promise.all([
-    deleteFile(fetch, candidate.background.fileId),
-    deleteFile(fetch, candidate.sourceMask.fileId),
-    deleteFile(fetch, candidate.asset.fileId),
-  ]);
-};
+const cleanupCandidate = cleanupMagicGrabCandidate;
 
 export const applyStaticMagicGrab = async ({
   fetch,
   store,
   candidate,
+  subjectName,
 }: {
   fetch: FetchLike;
   store: Store;
   candidate: StaticMagicGrabCandidate;
+  subjectName?: string;
 }): Promise<boolean> => {
   const before = candidate.before;
   const state = store.getState();
@@ -210,7 +209,7 @@ export const applyStaticMagicGrab = async ({
     ...before,
     id: '',
     originId: undefined,
-    name: before.name ? `${before.name} subject` : 'Subject',
+    name: before.name ? `${before.name} ${subjectName || 'Subject'}` : (subjectName || 'Subject'),
     src: candidate.source.url,
     fileId: candidate.source.fileId,
     originalSrc: candidate.source.url,
@@ -220,9 +219,11 @@ export const applyStaticMagicGrab = async ({
     maskFileId: mask.fileId,
     maskEnabled: true,
   };
-  store.getState().applyMagicGrab(before.id, background, subject);
-  await deleteFile(fetch, candidate.sourceMask.fileId);
-  return true;
+  const applied = store.getState().applyMagicGrab(before.id, background, subject);
+  if (!applied) {
+    await cleanupCandidate(fetch, candidate);
+  }
+  return applied;
 };
 
 export const applyClipMagicGrab = async ({
@@ -297,7 +298,9 @@ export const applyClipMagicGrab = async ({
     maskFileId: mask.fileId,
     maskEnabled: true,
   };
-  store.getState().applyMagicGrabClip(target, background, subject);
-  await deleteFile(fetch, candidate.sourceMask.fileId);
-  return true;
+  const applied = store.getState().applyMagicGrabClip(target, background, subject);
+  if (!applied) {
+    await cleanupCandidate(fetch, candidate);
+  }
+  return applied;
 };
