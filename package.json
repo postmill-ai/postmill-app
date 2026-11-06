@@ -117,7 +117,6 @@
   "pnpm": {
     "overrides": {
       "axios": "^1.20.0",
-      "gaxios": "6.7.1",
       "follow-redirects": "^1.16.2",
       "node-forge": "^1.4.2",
       "fastify": "^5.12.5",
