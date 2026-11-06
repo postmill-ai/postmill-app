@@ -4760,5 +4760,18 @@
   "designer_character_references_default_not_used": "Varsayılan sağlayıcı kayıtlı karakter referanslarını kullanmaz. Bunları kullanmak için MiniMax Subject Reference, Replicate Veo 3.1 veya ElevenLabs Veo 3.1 seç.",
   "designer_character_references_model_not_used": "Bu sağlayıcı veya model kayıtlı karakter referanslarını kullanmaz. Bunları uygulamak için MiniMax Subject Reference, Replicate Veo 3.1 veya ElevenLabs Veo 3.1 seç.",
   "layer_blend_mode": "Harmanlama modu",
-  "designer_effects_heading": "Metin Efektleri"
+  "designer_effects_heading": "Metin Efektleri",
+  "designer_qr_title": "QR kodu",
+  "designer_qr_value": "URL veya metin",
+  "designer_qr_value_placeholder": "https://example.com veya düz metin",
+  "designer_qr_foreground": "Kod rengi",
+  "designer_qr_background": "Arka plan rengi",
+  "designer_qr_error_correction": "Hata düzeltme",
+  "designer_qr_margin": "Sessiz bölge",
+  "designer_qr_export_hint": "QR kodu yüksek çözünürlüklü PNG olarak oluşturulur ve burada düzenlenebilir.",
+  "designer_qr_value_required": "QR kodu için bir URL veya metin girin.",
+  "designer_qr_generate_failed": "QR kodu oluşturulamadı.",
+  "designer_qr_insert": "QR kodu ekle",
+  "designer_qr_apply": "QR kodunu güncelle",
+  "designer_action_insert_qr_code_qr_code": "QR kodu…"
 }

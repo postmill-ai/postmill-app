@@ -22,6 +22,7 @@ import { BackgroundRemovalDialog } from '../background-removal-dialog';
 import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
 import { cropFromSourceRect } from '../crop-geometry';
 import { CutoutRefineControls } from './cutout-refine-controls';
+import { QrCodeControls } from './qr-code-controls';
 import { trySetPointerCapture } from '../pointer-capture';
 import { applyStaticMagicGrab, prepareStaticMagicGrab } from '../magic-grab';
 import { openMagicGrabReview } from '../magic-grab-modal';
@@ -61,6 +62,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       updateElement(element.id, {
         src: item.url,
         fileId: item.fileId,
+        qr: undefined,
         naturalWidth: item.width || undefined,
         naturalHeight: item.height || undefined,
         crop: undefined,
@@ -506,6 +508,13 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       >
         {t('designer_replace_image', 'Replace image…')}
       </button>
+
+      {element.qr && (
+        <QrCodeControls
+          settings={element.qr}
+          onApply={(patch) => updateElement(element.id, patch)}
+        />
+      )}
 
       <div>
         <div className="text-[11px] text-textColor/50 mb-1">{t('designer_label_fit_mode', 'Fit mode')}</div>

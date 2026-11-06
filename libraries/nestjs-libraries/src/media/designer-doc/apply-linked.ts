@@ -51,7 +51,10 @@ const applyPatch = (
   el: DesignerElement,
   updates: Partial<DesignerElement>
 ): DesignerElement => {
-  const patched = resizePathNodes(el, updates);
+  const mediaUpdates = updates.src !== undefined && updates.qr === undefined
+    ? { ...updates, qr: undefined }
+    : updates;
+  const patched = resizePathNodes(el, mediaUpdates);
   if (!updates.symbolOverrides || !el.symbolOverrides) {
     return { ...el, ...patched };
   }

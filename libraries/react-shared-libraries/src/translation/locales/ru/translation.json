@@ -4760,5 +4760,18 @@
   "designer_character_references_default_not_used": "Провайдер по умолчанию не использует сохранённые референсы персонажей. Выберите MiniMax Subject Reference, Replicate Veo 3.1 или ElevenLabs Veo 3.1, чтобы использовать их.",
   "designer_character_references_model_not_used": "Этот провайдер или модель не использует сохранённые референсы персонажей. Используйте MiniMax Subject Reference, Replicate Veo 3.1 или ElevenLabs Veo 3.1, чтобы применить их.",
   "layer_blend_mode": "Режим наложения",
-  "designer_effects_heading": "Текстовые эффекты"
+  "designer_effects_heading": "Текстовые эффекты",
+  "designer_qr_title": "QR-код",
+  "designer_qr_value": "URL или текст",
+  "designer_qr_value_placeholder": "https://example.com или обычный текст",
+  "designer_qr_foreground": "Цвет кода",
+  "designer_qr_background": "Цвет фона",
+  "designer_qr_error_correction": "Коррекция ошибок",
+  "designer_qr_margin": "Свободная зона",
+  "designer_qr_export_hint": "QR-код создаётся как PNG высокого разрешения и остаётся редактируемым здесь.",
+  "designer_qr_value_required": "Введите URL или текст для QR-кода.",
+  "designer_qr_generate_failed": "Не удалось создать QR-код.",
+  "designer_qr_insert": "Вставить QR-код",
+  "designer_qr_apply": "Обновить QR-код",
+  "designer_action_insert_qr_code_qr_code": "QR-код…"
 }

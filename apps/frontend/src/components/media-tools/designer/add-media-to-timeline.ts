@@ -146,6 +146,7 @@ export interface AddImageClipOptions {
   fileId?: string;
   width?: number;
   height?: number;
+  qr?: VideoClip['qr'];
   /**
    * Icon picks carry no meaningful intrinsic size (a 24×24 SVG would land
    * tiny — `fitWithin` never upscales), so they skip the aspect probe and take
@@ -325,6 +326,7 @@ export function addImageClipToTimeline(
     endMs,
     src: options.url,
     fileId: options.fileId,
+    qr: options.qr,
     // Explicit hint: the canvas overlay prefers it over the URL extension
     // sniff (extensionless AI-generated video URLs mis-sniff as images).
     mediaType: 'image',

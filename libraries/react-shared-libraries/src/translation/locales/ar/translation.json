@@ -4760,5 +4760,18 @@
   "designer_character_references_default_not_used": "لا يستخدم المزوّد الافتراضي مراجع الشخصيات المحفوظة. اختر MiniMax Subject Reference أو Replicate Veo 3.1 أو ElevenLabs Veo 3.1 لاستخدامها.",
   "designer_character_references_model_not_used": "لا يستخدم هذا المزوّد أو هذا النموذج مراجع الشخصيات المحفوظة. استخدم MiniMax Subject Reference أو Replicate Veo 3.1 أو ElevenLabs Veo 3.1 لاستخدامها.",
   "layer_blend_mode": "وضع المزج",
-  "designer_effects_heading": "تأثيرات النص"
+  "designer_effects_heading": "تأثيرات النص",
+  "designer_qr_title": "رمز QR",
+  "designer_qr_value": "عنوان URL أو نص",
+  "designer_qr_value_placeholder": "https://example.com أو نص عادي",
+  "designer_qr_foreground": "لون الرمز",
+  "designer_qr_background": "لون الخلفية",
+  "designer_qr_error_correction": "تصحيح الأخطاء",
+  "designer_qr_margin": "المنطقة الصامتة",
+  "designer_qr_export_hint": "يتم إنشاء رمز QR كصورة PNG عالية الدقة ويبقى قابلًا للتعديل هنا.",
+  "designer_qr_value_required": "أدخل عنوان URL أو نصًا لرمز QR.",
+  "designer_qr_generate_failed": "تعذر إنشاء رمز QR.",
+  "designer_qr_insert": "إدراج رمز QR",
+  "designer_qr_apply": "تحديث رمز QR",
+  "designer_action_insert_qr_code_qr_code": "رمز QR…"
 }

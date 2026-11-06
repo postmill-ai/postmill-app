@@ -66,6 +66,7 @@ export const imageReplacementPatch = (item: {
 }): Partial<VideoClip> => ({
   src: item.url,
   fileId: item.fileId,
+  qr: undefined,
   mediaType: 'image',
   naturalWidth: item.width || undefined,
   naturalHeight: item.height || undefined,

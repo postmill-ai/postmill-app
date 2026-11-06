@@ -4759,5 +4759,18 @@
   "designer_character_references_default_not_used": "De standaardprovider gebruikt geen opgeslagen personagereferenties. Kies MiniMax Subject Reference, Replicate Veo 3.1 of ElevenLabs Veo 3.1 om ze te gebruiken.",
   "designer_character_references_model_not_used": "Deze provider of dit model gebruikt geen opgeslagen personagereferenties. Gebruik MiniMax Subject Reference, Replicate Veo 3.1 of ElevenLabs Veo 3.1 om ze te gebruiken.",
   "layer_blend_mode": "Overvloeimodus",
-  "designer_effects_heading": "Teksteffecten"
+  "designer_effects_heading": "Teksteffecten",
+  "designer_qr_title": "QR-code",
+  "designer_qr_value": "URL of tekst",
+  "designer_qr_value_placeholder": "https://example.com of gewone tekst",
+  "designer_qr_foreground": "Codekleur",
+  "designer_qr_background": "Achtergrondkleur",
+  "designer_qr_error_correction": "Foutcorrectie",
+  "designer_qr_margin": "Rustzone",
+  "designer_qr_export_hint": "De QR-code wordt als hoge-resolutie-PNG gemaakt en blijft hier bewerkbaar.",
+  "designer_qr_value_required": "Voer een URL of tekst in voor de QR-code.",
+  "designer_qr_generate_failed": "Kan de QR-code niet maken.",
+  "designer_qr_insert": "QR-code invoegen",
+  "designer_qr_apply": "QR-code bijwerken",
+  "designer_action_insert_qr_code_qr_code": "QR-code…"
 }

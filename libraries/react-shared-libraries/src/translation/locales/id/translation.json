@@ -4759,5 +4759,18 @@
   "designer_character_references_default_not_used": "Penyedia default tidak menggunakan referensi karakter tersimpan. Pilih MiniMax Subject Reference, Replicate Veo 3.1, atau ElevenLabs Veo 3.1 untuk menggunakannya.",
   "designer_character_references_model_not_used": "Penyedia atau model ini tidak menggunakan referensi karakter tersimpan. Gunakan MiniMax Subject Reference, Replicate Veo 3.1, atau ElevenLabs Veo 3.1 untuk menggunakannya.",
   "layer_blend_mode": "Mode campuran",
-  "designer_effects_heading": "Efek Teks"
+  "designer_effects_heading": "Efek Teks",
+  "designer_qr_title": "Kode QR",
+  "designer_qr_value": "URL atau teks",
+  "designer_qr_value_placeholder": "https://example.com atau teks biasa",
+  "designer_qr_foreground": "Warna kode",
+  "designer_qr_background": "Warna latar",
+  "designer_qr_error_correction": "Koreksi kesalahan",
+  "designer_qr_margin": "Zona tenang",
+  "designer_qr_export_hint": "Kode QR dibuat sebagai PNG resolusi tinggi dan tetap dapat diedit di sini.",
+  "designer_qr_value_required": "Masukkan URL atau teks untuk kode QR.",
+  "designer_qr_generate_failed": "Tidak dapat membuat kode QR.",
+  "designer_qr_insert": "Sisipkan kode QR",
+  "designer_qr_apply": "Perbarui kode QR",
+  "designer_action_insert_qr_code_qr_code": "Kode QR…"
 }
