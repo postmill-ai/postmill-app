@@ -54,6 +54,16 @@ const sentryOrigin = (() => {
   }
 })();
 
+const epureOrigin = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_EPURE_DSN
+      ? new URL(process.env.NEXT_PUBLIC_EPURE_DSN).origin
+      : '';
+  } catch {
+    return '';
+  }
+})();
+
 // Sentry adds significant build overhead (source-map upload, release creation)
 // and should not run in local dev unless the developer explicitly configures it.
 const sentryEnabled =
@@ -84,7 +94,7 @@ const nextConfig: NextConfig = {
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://js.stripe.com",
           "img-src 'self' data: blob: https:",
           "font-src 'self' data: https://fonts.gstatic.com",
-          `connect-src 'self' ${backendOrigin} ${sentryOrigin} https://plausible.io https://api.stripe.com https://m.stripe.network https://www.googletagmanager.com ws://localhost:* wss://*`,
+          `connect-src 'self' ${backendOrigin} ${sentryOrigin} ${epureOrigin} https://plausible.io https://api.stripe.com https://m.stripe.network https://www.googletagmanager.com ws://localhost:* wss://*`,
           // Sentry Replay's compression worker boots from a blob: URL — without
           // worker-src the blob falls back to script-src and is blocked.
           "worker-src 'self' blob:",
@@ -170,7 +180,9 @@ const sentryConfig = {
       '**/*.test.js',
       '**/*.spec.js',
     ],
-    deleteSourcemapsAfterUpload: true,
+    // With Epure enabled, maps remain on disk for the secondary upload. Client maps
+    // are also served under /_next/static; this is expected for the open-source UI.
+    deleteSourcemapsAfterUpload: !process.env.NEXT_PUBLIC_EPURE_DSN,
   },
 
   // Release configuration

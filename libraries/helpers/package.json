@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@sentry/core": "10.76.2",
     "bcrypt": "^6.0.0",
     "dotenv": "^16.5.0",
     "evp_bytestokey": "^1.0.3",

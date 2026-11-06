@@ -3,6 +3,7 @@ import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { capitalize } from 'lodash';
 import { Logger } from '@nestjs/common';
 import { isAbortedRequestEvent } from './aborted-request';
+import { makeEpureTransport } from './epure-transport';
 
 const logger = new Logger('Sentry');
 
@@ -130,6 +131,16 @@ export const initializeSentry = (appName: string, allowLogs = false) => {
       ? tracesRateOverride
       : 0.2;
 
+  const epureDsn = process.env.EPURE_DSN;
+  const transport = makeEpureTransport({
+    sentryDsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    epureDsn,
+    createTransport: (options) => Sentry.makeNodeTransport(options),
+  });
+  if (epureDsn && !transport) {
+    logger.warn('Epure DSN is invalid; using Sentry only.');
+  }
+
   try {
     Sentry.init({
       initialScope: {
@@ -145,6 +156,7 @@ export const initializeSentry = (appName: string, allowLogs = false) => {
       },
       environment: process.env.NODE_ENV || 'development',
       dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+      transport,
       spotlight: process.env.SENTRY_SPOTLIGHT === '1',
       integrations: [
         // Profiling is opt-in in development to avoid the CPU/memory overhead of

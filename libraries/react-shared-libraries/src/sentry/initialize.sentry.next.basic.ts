@@ -1,6 +1,13 @@
 import * as Sentry from '@sentry/nextjs';
+import { makeFetchTransport } from '@sentry/browser';
+import { makeEpureTransport } from './epure-transport';
 
-export const initializeSentryBasic = (environment: string, dsn: string, extension: any) => {
+export const initializeSentryBasic = (
+  environment: string,
+  dsn: string,
+  extension: any,
+  createTransport = makeFetchTransport
+) => {
   if (!dsn) {
     return;
   }
@@ -26,6 +33,16 @@ export const initializeSentryBasic = (environment: string, dsn: string, extensio
     /^NetworkError when attempting to fetch resource\. .*/i,
   ];
 
+  const epureDsn = process.env.NEXT_PUBLIC_EPURE_DSN;
+  const transport = makeEpureTransport({
+    sentryDsn: dsn,
+    epureDsn,
+    createTransport,
+  });
+  if (epureDsn && !transport) {
+    console.warn('Epure DSN is invalid; using Sentry only.');
+  }
+
   try {
     Sentry.init({
       initialScope: {
@@ -47,6 +64,7 @@ export const initializeSentryBasic = (environment: string, dsn: string, extensio
       environment: environment || 'development',
       spotlight: process.env.SENTRY_SPOTLIGHT === '1',
       dsn,
+      transport,
       sendDefaultPii: false,
       ...extension,
       debug: environment === 'development',

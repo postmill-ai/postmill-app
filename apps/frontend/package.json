@@ -30,6 +30,7 @@
     "@postmill-ai/helpers": "workspace:*",
     "@postmill-ai/react-shared-libraries": "workspace:*",
     "@sentry/nextjs": "^10.75.2",
+    "@sentry/node": "^10.76.2",
     "@solana/wallet-adapter-base": "^0.9.23",
     "@solana/wallet-adapter-base-ui": "^0.1.0",
     "@solana/wallet-adapter-bitkeep": "^0.3.24",
