@@ -31,19 +31,31 @@ const main = async () => {
   }
 
   const nextDir = path.resolve('apps/frontend/.next');
-  let files = [];
+  const files = [];
   try {
-    files = await sourcemapFiles(nextDir);
+    for (const directory of ['static', 'server', 'serverless']) {
+      try {
+        files.push(...await sourcemapFiles(path.join(nextDir, directory)));
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
   } catch {
-    console.log('Epure sourcemaps skipped: frontend .next directory is unavailable.');
+    console.log('Epure sourcemaps skipped: frontend production artifacts are unavailable.');
     return;
   }
 
   let uploaded = 0;
   let oversized = 0;
+  let unsupported = 0;
   let failed = 0;
   for (const filePath of files) {
     const relative = path.relative(nextDir, filePath).split(path.sep).join('/');
+    if (relative.includes('..')) {
+      unsupported += 1;
+      console.log(`Epure sourcemap skipped (unsupported artifact path): ${relative}`);
+      continue;
+    }
     const stat = await fs.stat(filePath);
     if (stat.size > MAX_ARTIFACT_BYTES) {
       oversized += 1;
@@ -75,7 +87,7 @@ const main = async () => {
       console.log(`Epure sourcemap upload failed (network): ${relative}`);
     }
   }
-  console.log(`Epure sourcemaps: ${uploaded} uploaded, ${oversized} oversized, ${failed} failed.`);
+  console.log(`Epure sourcemaps: ${uploaded} uploaded, ${oversized} oversized, ${unsupported} unsupported, ${failed} failed.`);
 };
 
 await main();
