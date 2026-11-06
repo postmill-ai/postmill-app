@@ -4804,5 +4804,6 @@
   "designer_bulk_preview_failed": "미리보기를 생성할 수 없습니다.",
   "designer_bulk_start_failed": "일괄 만들기를 시작할 수 없습니다.",
   "designer_bulk_status_failed": "일괄 만들기 상태를 읽을 수 없습니다.",
-  "designer_action_bulk_create_bulk_create": "일괄 만들기…"
+  "designer_action_bulk_create_bulk_create": "일괄 만들기…",
+  "designer_bulk_no_variables": "변형을 만들기 전에 하나 이상의 {{variable}} 또는 템플릿 슬롯을 추가하세요."
 }

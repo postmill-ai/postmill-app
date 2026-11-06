@@ -4804,5 +4804,6 @@
   "designer_bulk_preview_failed": "Die Vorschau konnte nicht erstellt werden.",
   "designer_bulk_start_failed": "Die Massenerstellung konnte nicht gestartet werden.",
   "designer_bulk_status_failed": "Der Status der Massenerstellung konnte nicht gelesen werden.",
-  "designer_action_bulk_create_bulk_create": "Massenerstellung…"
+  "designer_action_bulk_create_bulk_create": "Massenerstellung…",
+  "designer_bulk_no_variables": "Füge mindestens eine {{variable}} oder ein Vorlagenfeld hinzu, bevor du Varianten erstellst."
 }

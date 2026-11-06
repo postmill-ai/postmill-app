@@ -34,6 +34,10 @@ const makeDoc = (): any => ({
     children: [{
       id: 'text-1', type: 'text', text: 'Hello {{name}}', x: 0, y: 0, width: 50, height: 20,
       rotation: 0, opacity: 1, locked: false, hidden: false,
+    }, {
+      id: 'existing-image', type: 'image', src: 'https://cdn.example.test/existing.png',
+      fileId: 'existing-file', x: 0, y: 0, width: 20, height: 20,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
     }],
     pages: [{
       id: 'page-2',
@@ -67,6 +71,7 @@ const makeService = () => {
   const designerDocService = { validate: vi.fn((doc) => doc) };
   const fileService = {
     getFolder: vi.fn(async () => ({ id: 'folder-1' })),
+    createFolder: vi.fn(async () => ({ id: 'batch-folder' })),
     saveGeneratedMedia: vi.fn(async (_org: string, data: any) => ({ id: `file-${++fileNumber}`, ...data })),
   };
   const writes: { bytes: Buffer; mime: string }[] = [];
@@ -125,6 +130,16 @@ describe('DesignBulkCreateService enqueue and status', () => {
     }));
   });
 
+  it('creates a dedicated batch folder when none was selected', async () => {
+    const { service, fileService } = makeService();
+    await service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(), rows: [{ name: 'Ada' }], nameBase: 'Launch',
+    });
+
+    expect(fileService.createFolder).toHaveBeenCalledWith('org-1', { name: 'Launch (job-1)' });
+    expect(JSON.parse(redis.get('design-bulk:payload:job-1')!).folderId).toBe('batch-folder');
+  });
+
   it('rejects video documents, empty batches and non-string cell values', async () => {
     const { service } = makeService();
     await expect(service.enqueueBulkCreate('org-1', 'user-1', {
@@ -147,6 +162,8 @@ describe('DesignBulkCreateService enqueue and status', () => {
       id: 'job-1', organizationId: 'org-1', operation: DESIGN_BULK_CREATE_OPERATION, inputJson: '{bad',
     });
     await expect(service.getJob('org-1', 'job-1')).resolves.toMatchObject({ results: undefined });
+    await expect(service.getJob('org-1', 'job-1')).resolves.not.toHaveProperty('inputJson');
+    await expect(service.getJob('org-1', 'job-1')).resolves.not.toHaveProperty('userId');
   });
 });
 
@@ -206,6 +223,32 @@ describe('DesignBulkCreateService processing', () => {
     expect(results[0].error).toBe('Bad first row');
     expect(results[1].designId).toBe('design-2');
     expect(writes.some((write) => write.mime === 'application/zip')).toBe(true);
+  });
+
+  it('heartbeats the job row and leaves existing template image URLs untouched', async () => {
+    const { service, aiSettings, designService } = makeService();
+    seedPayload();
+
+    await service.processBulkCreate('job-1');
+
+    expect(aiSettings.updateMediaJob.mock.calls.filter(([, , update]) => update.status === 'processing'))
+      .toHaveLength(3);
+    expect(designService.createDesign.mock.calls[0][2].doc.outputs[0].children[1]).toMatchObject({
+      src: 'https://cdn.example.test/existing.png', fileId: 'existing-file',
+    });
+  });
+
+  it('stops on a terminal sweep status and never resurrects the job as completed', async () => {
+    const { service, aiSettings, designService } = makeService();
+    seedPayload();
+    aiSettings.getMediaJobByIdUnscoped
+      .mockReturnValueOnce(Promise.resolve({ id: 'job-1', organizationId: 'org-1', operation: DESIGN_BULK_CREATE_OPERATION, status: 'pending' }))
+      .mockImplementation(async () => ({ id: 'job-1', organizationId: 'org-1', operation: DESIGN_BULK_CREATE_OPERATION, status: 'failed' }));
+
+    await service.processBulkCreate('job-1');
+
+    expect(designService.createDesign).toHaveBeenCalledTimes(1);
+    expect(aiSettings.updateMediaJob.mock.calls.some(([, , update]) => update.status === 'completed')).toBe(false);
   });
 
   it('fails an all-failed batch without creating a ZIP', async () => {

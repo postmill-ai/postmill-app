@@ -217,8 +217,10 @@ image and color slots. The dialog discovers those variables across all outputs, 
 map each one to a spreadsheet column, then preview the first row before starting the batch.
 
 Each successful row creates a separate editable design and saves every output and page as a PNG in
-Files. The completed batch provides links to those designs and a ZIP containing all PNGs and a
-`results.json` report. A failed row is reported without stopping the remaining rows.
+a dedicated batch folder in Files. The completed batch provides links to those designs and a ZIP
+containing all PNGs and a `results.json` report. Existing template assets stay in place; only remote
+images substituted by a row are imported. A failed row is reported without stopping the remaining
+rows. Batches heartbeat while running and stop if the job is cancelled or swept as stale.
 
 ---
 > Verified against v1.4.0

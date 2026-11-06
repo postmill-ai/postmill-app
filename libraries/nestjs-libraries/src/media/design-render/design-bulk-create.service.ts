@@ -83,7 +83,14 @@ export class DesignBulkCreateService extends DesignBulkService {
     } catch {
       results = undefined;
     }
-    return { ...job, progress, results };
+    return {
+      id: job.id,
+      status: job.status,
+      artifactUrl: job.status === 'completed' ? job.artifactUrl : undefined,
+      error: job.status === 'failed' ? job.error : undefined,
+      progress,
+      results,
+    };
   }
 
   async enqueueBulkCreate(
@@ -118,6 +125,7 @@ export class DesignBulkCreateService extends DesignBulkService {
     });
     if (input.folderId) await this._fileService.getFolder(orgId, input.folderId);
 
+    const nameBase = sanitizeDownloadName(input.nameBase || 'Bulk variation') || 'Bulk variation';
     const job = await this._lifecycle.createPendingJob({
       organizationId: orgId,
       userId,
@@ -126,11 +134,14 @@ export class DesignBulkCreateService extends DesignBulkService {
       costUsd: 0,
       creditType: NO_CREDIT,
     });
+    const folderId = input.folderId || (await this._fileService.createFolder(orgId, {
+      name: `${nameBase} (${job.id})`,
+    })).id;
     const payload: DesignBulkCreatePayload = {
       organizationId: orgId,
       userId,
-      nameBase: sanitizeDownloadName(input.nameBase || 'Bulk variation') || 'Bulk variation',
-      folderId: input.folderId,
+      nameBase,
+      folderId,
       doc,
       rows,
       enqueuedAt: new Date().toISOString(),
@@ -146,8 +157,32 @@ export class DesignBulkCreateService extends DesignBulkService {
     return { id: job.id, status: job.status };
   }
 
-  private async _writeProgress(jobId: string, done: number, total: number): Promise<void> {
+  private _templateSources(doc: DesignerDoc): Set<string> {
+    const sources = new Set<string>();
+    const collect = (element: DesignerElement) => {
+      if (element.src) sources.add(element.src);
+      for (const override of Object.values(element.symbolOverrides || {})) {
+        if (override.src) sources.add(override.src);
+      }
+    };
+    for (const output of doc.outputs) {
+      if (!('children' in output)) continue;
+      for (const element of output.children || []) collect(element);
+      for (const page of output.pages || []) {
+        for (const element of page.children || []) collect(element);
+      }
+    }
+    for (const symbol of doc.symbols || []) {
+      for (const element of symbol.children || []) collect(element);
+    }
+    return sources;
+  }
+
+  private async _writeProgress(jobId: string, done: number, total: number): Promise<boolean> {
     try {
+      const job = await this._aiSettings.getMediaJobByIdUnscoped(jobId);
+      if (job?.status !== 'processing') return false;
+      await this._aiSettings.updateMediaJob(job.organizationId, jobId, { status: 'processing' });
       await ioRedis.set(
         progressKey(jobId),
         JSON.stringify({ done, total, updatedAt: Date.now() }),
@@ -155,14 +190,16 @@ export class DesignBulkCreateService extends DesignBulkService {
         PAYLOAD_TTL_SECONDS
       );
     } catch {
-      // Progress is best-effort.
+      // A transient progress failure must not stop the batch itself.
     }
+    return true;
   }
 
   private async _persistRemoteImages(
     orgId: string,
     doc: DesignerDoc,
-    cache: Map<string, { id: string; path: string }>
+    cache: Map<string, { id: string; path: string }>,
+    templateSources: Set<string>
   ): Promise<void> {
     const importUrl = async (url: string) => {
       if (!cache.has(url)) {
@@ -171,13 +208,13 @@ export class DesignBulkCreateService extends DesignBulkService {
       return cache.get(url)!;
     };
     const persist = async (element: DesignerElement) => {
-      if (element.src && /^https?:\/\//i.test(element.src)) {
+      if (element.src && !templateSources.has(element.src) && /^https?:\/\//i.test(element.src)) {
         const file = await importUrl(element.src);
         element.src = file.path;
         element.fileId = file.id;
       }
       for (const override of Object.values(element.symbolOverrides || {})) {
-        if (!override.src || !/^https?:\/\//i.test(override.src)) continue;
+        if (!override.src || templateSources.has(override.src) || !/^https?:\/\//i.test(override.src)) continue;
         const file = await importUrl(override.src);
         override.src = file.path;
         override.fileId = file.id;
@@ -231,6 +268,7 @@ export class DesignBulkCreateService extends DesignBulkService {
     try {
       const payload = JSON.parse(raw) as DesignBulkCreatePayload;
       const rows = payload.rows.slice(0, MAX_BULK_ROWS);
+      const templateSources = this._templateSources(payload.doc);
       const zipEntries: BulkZipEntry[] = [];
       const remoteImageCache = new Map<string, { id: string; path: string }>();
       let zipBytes = 0;
@@ -240,7 +278,7 @@ export class DesignBulkCreateService extends DesignBulkService {
         const result: DesignBulkCreateRowResult = { row: index + 1, fileIds: [] };
         try {
           const doc = applyBulkRow(payload.doc, rows[index]);
-          await this._persistRemoteImages(orgId, doc, remoteImageCache);
+          await this._persistRemoteImages(orgId, doc, remoteImageCache, templateSources);
           const name = `${payload.nameBase} ${index + 1}`;
           const design = await this._designService.createDesign(orgId, payload.userId, { name, doc });
           result.designId = design.id;
@@ -252,8 +290,8 @@ export class DesignBulkCreateService extends DesignBulkService {
             for (let page = 0; page < pages; page++) {
               const bytes = await this._renderService.renderPage(doc, outputIndex, { orgId }, page);
               zipBytes += bytes.length;
-              if (zipBytes > 512 * 1024 * 1024) {
-                throw new Error('Bulk Create PNG output exceeds the 512 MB batch limit.');
+              if (zipBytes > 128 * 1024 * 1024) {
+                throw new Error('Bulk Create PNG output exceeds the 128 MB batch limit.');
               }
               const filename = `row-${String(index + 1).padStart(3, '0')}-output-${outputIndex + 1}-page-${page + 1}.png`;
               const file = await this._saveBuffer(orgId, {
@@ -272,7 +310,7 @@ export class DesignBulkCreateService extends DesignBulkService {
           this._logger.warn(`Bulk Create ${jobId}: row ${index + 1} failed: ${result.error}`);
         }
         results.push(result);
-        await this._writeProgress(jobId, index + 1, rows.length);
+        if (!(await this._writeProgress(jobId, index + 1, rows.length))) return;
       }
 
       if (!succeeded) throw new Error(results[0]?.error || 'Every Bulk Create row failed.');
@@ -294,6 +332,8 @@ export class DesignBulkCreateService extends DesignBulkService {
         fileSize: bytes.length,
         metadata: { source: DESIGN_BULK_CREATE_OPERATION, jobId, mime: 'application/zip' },
       });
+      const current = await this._aiSettings.getMediaJobByIdUnscoped(jobId);
+      if (current?.status !== 'processing') return;
       await this._aiSettings.updateMediaJob(orgId, jobId, {
         status: 'completed',
         artifactUrl: artifactPath,

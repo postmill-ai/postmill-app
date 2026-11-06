@@ -4803,5 +4803,6 @@
   "designer_bulk_preview_failed": "Kan het voorbeeld niet maken.",
   "designer_bulk_start_failed": "Kan bulkgewijs maken niet starten.",
   "designer_bulk_status_failed": "Kan de status van bulkgewijs maken niet lezen.",
-  "designer_action_bulk_create_bulk_create": "Bulkgewijs maken…"
+  "designer_action_bulk_create_bulk_create": "Bulkgewijs maken…",
+  "designer_bulk_no_variables": "Voeg minstens één {{variable}} of sjabloonveld toe voordat je varianten maakt."
 }

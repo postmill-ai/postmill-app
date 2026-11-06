@@ -4804,5 +4804,6 @@
   "designer_bulk_preview_failed": "Impossibile generare l’anteprima.",
   "designer_bulk_start_failed": "Impossibile avviare la creazione multipla.",
   "designer_bulk_status_failed": "Impossibile leggere lo stato della creazione multipla.",
-  "designer_action_bulk_create_bulk_create": "Creazione multipla…"
+  "designer_action_bulk_create_bulk_create": "Creazione multipla…",
+  "designer_bulk_no_variables": "Aggiungi almeno una {{variable}} o un campo modello prima di creare varianti."
 }

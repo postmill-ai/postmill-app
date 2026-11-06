@@ -4804,5 +4804,6 @@
   "designer_bulk_preview_failed": "No se pudo generar la previsualización.",
   "designer_bulk_start_failed": "No se pudo iniciar la creación masiva.",
   "designer_bulk_status_failed": "No se pudo consultar el estado de la creación masiva.",
-  "designer_action_bulk_create_bulk_create": "Creación masiva…"
+  "designer_action_bulk_create_bulk_create": "Creación masiva…",
+  "designer_bulk_no_variables": "Añade al menos una {{variable}} o un campo de plantilla antes de crear variaciones."
 }

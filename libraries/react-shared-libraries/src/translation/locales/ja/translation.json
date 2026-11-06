@@ -4804,5 +4804,6 @@
   "designer_bulk_preview_failed": "プレビューを生成できませんでした。",
   "designer_bulk_start_failed": "一括作成を開始できませんでした。",
   "designer_bulk_status_failed": "一括作成の状態を読み込めませんでした。",
-  "designer_action_bulk_create_bulk_create": "一括作成…"
+  "designer_action_bulk_create_bulk_create": "一括作成…",
+  "designer_bulk_no_variables": "バリエーションを作成する前に、少なくとも 1 つの {{variable}} またはテンプレートスロットを追加してください。"
 }

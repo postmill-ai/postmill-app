@@ -227,12 +227,17 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
               ))}
             </div>
           )}
+          {!!rows.length && !variables.length && (
+            <p className="text-[11px] text-dangerText">
+              {t('designer_bulk_no_variables', 'Add at least one {{variable}} or template slot before creating variations.')}
+            </p>
+          )}
           {!!rows.length && (
             <div className="flex gap-2">
               <Button secondary loading={previewLoading} onClick={generatePreview}>
                 {t('designer_bulk_preview', 'Preview first row')}
               </Button>
-              <Button loading={starting} onClick={start}>
+              <Button loading={starting} disabled={!variables.length} onClick={start}>
                 {t('designer_bulk_start', 'Create {{count}} variations', { count: rows.length })}
               </Button>
             </div>

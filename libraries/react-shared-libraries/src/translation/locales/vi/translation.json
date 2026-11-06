@@ -4804,5 +4804,6 @@
   "designer_bulk_preview_failed": "Không thể tạo bản xem trước.",
   "designer_bulk_start_failed": "Không thể bắt đầu tạo hàng loạt.",
   "designer_bulk_status_failed": "Không thể đọc trạng thái tạo hàng loạt.",
-  "designer_action_bulk_create_bulk_create": "Tạo hàng loạt…"
+  "designer_action_bulk_create_bulk_create": "Tạo hàng loạt…",
+  "designer_bulk_no_variables": "Thêm ít nhất một {{variable}} hoặc trường mẫu trước khi tạo các biến thể."
 }

@@ -4804,5 +4804,6 @@
   "designer_bulk_preview_failed": "Não foi possível gerar a visualização.",
   "designer_bulk_start_failed": "Não foi possível iniciar a criação em massa.",
   "designer_bulk_status_failed": "Não foi possível ler o status da criação em massa.",
-  "designer_action_bulk_create_bulk_create": "Criação em massa…"
+  "designer_action_bulk_create_bulk_create": "Criação em massa…",
+  "designer_bulk_no_variables": "Adicione pelo menos uma {{variable}} ou um campo de modelo antes de criar variações."
 }

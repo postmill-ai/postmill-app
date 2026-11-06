@@ -4803,5 +4803,6 @@
   "designer_bulk_preview_failed": "Tidak dapat membuat pratinjau.",
   "designer_bulk_start_failed": "Tidak dapat memulai Buat Massal.",
   "designer_bulk_status_failed": "Tidak dapat membaca status Buat Massal.",
-  "designer_action_bulk_create_bulk_create": "Buat Massal…"
+  "designer_action_bulk_create_bulk_create": "Buat Massal…",
+  "designer_bulk_no_variables": "Tambahkan setidaknya satu {{variable}} atau bidang template sebelum membuat variasi."
 }

@@ -75,6 +75,14 @@ describe('BulkCreateDialog', () => {
     expect(screen.getByText('Invalid image')).toBeTruthy();
   });
 
+  it('disables creation when the design has no variables', async () => {
+    render(<BulkCreateDialog store={createDesignerStore()} onClose={vi.fn()} />);
+    await upload('name\nAda\nGrace');
+
+    expect(screen.getByRole('button', { name: 'Create 2 variations' })).toHaveProperty('disabled', true);
+    expect(screen.getByText('Add at least one {{variable}} or template slot before creating variations.')).toBeTruthy();
+  });
+
   it('rejects duplicate headers and malformed quoted input before any API call', async () => {
     render(<BulkCreateDialog store={makeStore()} onClose={vi.fn()} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;

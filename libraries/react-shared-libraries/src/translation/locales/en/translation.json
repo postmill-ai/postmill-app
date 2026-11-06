@@ -4803,5 +4803,6 @@
   "designer_bulk_preview_failed": "Could not render the preview.",
   "designer_bulk_start_failed": "Could not start Bulk Create.",
   "designer_bulk_status_failed": "Could not read the Bulk Create status.",
-  "designer_action_bulk_create_bulk_create": "Bulk Create…"
+  "designer_action_bulk_create_bulk_create": "Bulk Create…",
+  "designer_bulk_no_variables": "Add at least one {{variable}} or template slot before creating variations."
 }
