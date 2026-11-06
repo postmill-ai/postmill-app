@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { MAX_VIDEO_DURATION_MS } from './designer-doc.limits';
+import {
+  MAX_COLOR_LEN,
+  MAX_FONT_FAMILY_LEN,
+  MAX_RICH_TEXT_RUNS,
+  MAX_VIDEO_DURATION_MS,
+} from './designer-doc.limits';
 
 const FORBIDDEN_CONTRACT_INTERFACES = [
   'DesignerDoc',
@@ -50,5 +55,22 @@ describe('DesignerDoc drift guard', () => {
     const storeSrc = read('../../../../../apps/frontend/src/components/media-tools/designer/designer.store.ts');
     expect(storeSrc).toContain('MAX_VIDEO_DURATION_MS');
     expect(storeSrc).not.toMatch(/\b60000\b/);
+  });
+
+  it('uses shared font, color and rich-text run bounds across schema and paste', () => {
+    const schemaSrc = read('designer-doc.schema.ts');
+    expect(schemaSrc).toContain('z.string().max(MAX_COLOR_LEN)');
+    expect(schemaSrc).toContain('max(MAX_FONT_FAMILY_LEN)');
+    expect(schemaSrc).toContain('max(MAX_RICH_TEXT_RUNS)');
+    expect(schemaSrc).not.toMatch(/fontFamily:\s*z\.string\(\)\.max\(200\)/);
+
+    const editorSrc = read('../../../../../apps/frontend/src/components/media-tools/designer/text-editing.tsx');
+    expect(editorSrc).toContain('MAX_COLOR_LEN');
+    expect(editorSrc).toContain('MAX_FONT_FAMILY_LEN');
+    expect(editorSrc).toContain('MAX_RICH_TEXT_RUNS');
+    expect(editorSrc).not.toMatch(/MAX_FONT_FAMILY_LENGTH|MAX_COLOR_LENGTH/);
+    expect(MAX_COLOR_LEN).toBe(64);
+    expect(MAX_FONT_FAMILY_LEN).toBe(200);
+    expect(MAX_RICH_TEXT_RUNS).toBe(1000);
   });
 });

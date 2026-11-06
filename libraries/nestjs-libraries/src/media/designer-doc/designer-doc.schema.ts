@@ -18,7 +18,10 @@ import {
   MAX_DIMENSION,
   MAX_ELEMENTS_PER_OUTPUT,
   MAX_FILTERS_PER_ELEMENT,
+  MAX_COLOR_LEN,
+  MAX_FONT_FAMILY_LEN,
   MAX_FONT_SIZE,
+  MAX_RICH_TEXT_RUNS,
   MAX_INLINE_SRC_LEN,
   MAX_LAYER_STYLES,
   MAX_SMART_FILTERS,
@@ -68,7 +71,7 @@ export const MAX_OPS_PER_REQUEST_SCHEMA = z
   .array(z.any())
   .max(MAX_OPS_PER_REQUEST);
 
-export const ColorSchema = z.string().max(64);
+export const ColorSchema = z.string().max(MAX_COLOR_LEN);
 
 export const SrcSchema = z
   .string()
@@ -1006,7 +1009,7 @@ export type DesignerPageBackground = DesignerBackground;
 // ---------------------------------------------------------------------------
 const textRunCommon = {
   text: z.string().max(MAX_TEXT_LEN),
-  fontFamily: z.string().max(200).optional(),
+  fontFamily: z.string().max(MAX_FONT_FAMILY_LEN).optional(),
   fontStyle: z.enum(['normal', 'italic']).optional(),
   fill: ColorSchema.optional(),
   underline: z.boolean().optional(),
@@ -1092,7 +1095,7 @@ const maskCommon = {
     .enum(['ellipse', 'rounded-rect', 'triangle', 'star', 'hexagon', 'heart'])
     .optional(),
   text: z.string().max(MAX_TEXT_LEN).optional(),
-  fontFamily: z.string().max(200).optional(),
+  fontFamily: z.string().max(MAX_FONT_FAMILY_LEN).optional(),
 };
 const { strict: StrictDesignerMaskSchema, lenient: LenientDesignerMaskSchema } =
   dualObject(
@@ -1347,7 +1350,7 @@ const elementCommon = {
 
   // text
   text: z.string().max(MAX_TEXT_LEN).optional(),
-  fontFamily: z.string().max(200).optional(),
+  fontFamily: z.string().max(MAX_FONT_FAMILY_LEN).optional(),
   fontStyle: z.enum(['normal', 'italic']).optional(),
   fill: ColorSchema.optional(),
   align: z.enum(['left', 'center', 'right', 'justify']).optional(),
@@ -1487,7 +1490,7 @@ const elementLenientNumeric = {
 };
 
 const elementStrictNested = {
-  richText: z.array(StrictTextRunSchema).max(1000).optional(),
+  richText: z.array(StrictTextRunSchema).max(MAX_RICH_TEXT_RUNS).optional(),
   textShadow: StrictDesignerTextShadowSchema.optional(),
   textStroke: StrictDesignerTextStrokeSchema.optional(),
   crop: StrictDesignerCropSchema.optional(),
@@ -1514,7 +1517,7 @@ const elementStrictNested = {
 };
 
 const elementLenientNested = {
-  richText: z.array(LenientTextRunSchema).max(1000).optional(),
+  richText: z.array(LenientTextRunSchema).max(MAX_RICH_TEXT_RUNS).optional(),
   textShadow: LenientDesignerTextShadowSchema.optional(),
   textStroke: LenientDesignerTextStrokeSchema.optional(),
   crop: LenientDesignerCropSchema.optional(),
@@ -1739,7 +1742,7 @@ const clipCommon = {
       provider: z.string().max(100).optional(),
     })
     .optional(),
-  fontFamily: z.string().max(200).optional(),
+  fontFamily: z.string().max(MAX_FONT_FAMILY_LEN).optional(),
   fontStyle: z.enum(['normal', 'italic']).optional(),
   textExtrusion: VideoTextExtrusionSchema.optional(),
   fill: ColorSchema.optional(),

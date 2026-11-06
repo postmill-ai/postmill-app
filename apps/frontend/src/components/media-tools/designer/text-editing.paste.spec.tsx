@@ -123,4 +123,21 @@ describe('TextEditingOverlay pasted styles', () => {
       'warning'
     );
   });
+
+  it('coalesces runs beyond the 1,000-run limit without losing text', () => {
+    const update = commitRuns(
+      Array.from({ length: 1001 }, (_, i) => ({
+        style: i % 2 === 0 ? { fontWeight: '700' } : { fontStyle: 'italic' },
+        text: 'x',
+      }))
+    );
+
+    expect(update.text).toHaveLength(1001);
+    expect(update.richText).toHaveLength(1000);
+    expect(update.richText?.[999].text).toBe('xx');
+    expect(toasterShow).toHaveBeenCalledWith(
+      'Pasted rich text was simplified to the 1,000-run limit.',
+      'warning'
+    );
+  });
 });

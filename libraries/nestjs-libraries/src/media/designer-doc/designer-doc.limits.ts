@@ -75,6 +75,15 @@ export const MAX_PAGES_PER_OUTPUT = 20;
 /** Maximum text length on a text element. */
 export const MAX_TEXT_LEN = 20000;
 
+/** Maximum font family length on an element, clip, mask, or rich-text run. */
+export const MAX_FONT_FAMILY_LEN = 200;
+
+/** Maximum solid-color string length on an element or rich-text run. */
+export const MAX_COLOR_LEN = 64;
+
+/** Maximum styled runs on one text element. */
+export const MAX_RICH_TEXT_RUNS = 1000;
+
 /**
  * Maximum length of an element/clip `src` holding a remote http(s) URL.
  */

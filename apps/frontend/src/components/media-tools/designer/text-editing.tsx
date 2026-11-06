@@ -3,7 +3,13 @@
 import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
 import type { DesignerElement, DesignerOutput, TextRun, VideoOutput } from './designer.store';
 import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
-import { MAX_FONT_SIZE, MAX_TEXT_LEN } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import {
+  MAX_COLOR_LEN,
+  MAX_FONT_FAMILY_LEN,
+  MAX_FONT_SIZE,
+  MAX_RICH_TEXT_RUNS,
+  MAX_TEXT_LEN,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { resolveTextEditTarget } from './symbol-edit';
@@ -24,9 +30,6 @@ const RUN_STYLE_PROPS = new Set([
   'color',
   'text-decoration',
 ]);
-
-const MAX_FONT_FAMILY_LENGTH = 200;
-const MAX_COLOR_LENGTH = 64;
 
 const primaryCssFontFamily = (value: string): string => {
   let quote = '';
@@ -59,16 +62,28 @@ const primaryCssFontFamily = (value: string): string => {
 const normalizeRunFontFamily = (value: string | undefined): string | undefined => {
   if (!value) return undefined;
   const family = primaryCssFontFamily(value);
-  return family && family !== 'inherit' && family.length <= MAX_FONT_FAMILY_LENGTH
+  return family && family !== 'inherit' && family.length <= MAX_FONT_FAMILY_LEN
     ? family
     : undefined;
 };
 
-const capTextRuns = (runs: TextRun[]): { runs: TextRun[]; truncated: boolean } => {
+const capTextRuns = (
+  runs: TextRun[]
+): { runs: TextRun[]; truncated: boolean; coalesced: boolean } => {
+  const bounded = runs.slice(0, MAX_RICH_TEXT_RUNS);
+  const coalesced = runs.length > MAX_RICH_TEXT_RUNS;
+  if (coalesced) {
+    const last = bounded[bounded.length - 1];
+    bounded[bounded.length - 1] = {
+      ...last,
+      text: runs.slice(MAX_RICH_TEXT_RUNS - 1).map((run) => run.text).join(''),
+    };
+  }
+
   let remaining = MAX_TEXT_LEN;
   let truncated = false;
   const capped: TextRun[] = [];
-  for (const run of runs) {
+  for (const run of bounded) {
     if (remaining <= 0) {
       truncated = true;
       break;
@@ -78,7 +93,7 @@ const capTextRuns = (runs: TextRun[]): { runs: TextRun[]; truncated: boolean } =
     if (text) capped.push({ ...run, text });
     remaining -= text.length;
   }
-  return { runs: capped, truncated };
+  return { runs: capped, truncated, coalesced };
 };
 
 export const styleStringToRun = (
@@ -103,7 +118,7 @@ export const styleStringToRun = (
   const styleVal = style.fontStyle;
   if (styleVal === 'italic') run.fontStyle = 'italic';
   const color = style.color;
-  if (color && color.length <= MAX_COLOR_LENGTH) run.fill = color;
+  if (color && color.length <= MAX_COLOR_LEN) run.fill = color;
   const decoration = style.textDecoration;
   if (decoration?.includes('underline')) run.underline = true;
   if (decoration?.includes('line-through')) run.lineThrough = true;
@@ -349,10 +364,16 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
     const currentHtml =
       editorRef.current?.innerHTML ?? editorNodeRef.current?.innerHTML ?? '';
     const serializedRuns = serializeHtml(currentHtml, element);
-    const { runs, truncated } = capTextRuns(serializedRuns);
+    const { runs, truncated, coalesced } = capTextRuns(serializedRuns);
     if (truncated) {
       toaster.show(
         t('designer_text_paste_limit', 'Pasted text was shortened to the 20,000-character limit.'),
+        'warning'
+      );
+    }
+    if (coalesced) {
+      toaster.show(
+        t('designer_run_paste_limit', 'Pasted rich text was simplified to the 1,000-run limit.'),
         'warning'
       );
     }
