@@ -359,7 +359,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   or still-image clip. Optional-additive doc v13 `qr` preserves value, six-digit colors, L/M/Q/H error
   correction and a 0–8 quiet zone for the shared Inspector editor. `qrCodePatch` clears `fileId` and
   derived media when regenerating pixels, and every media-replacement path clears `qr`; never retain
-  settings from a different image. Do not add a QR element type or renderer — Konva, node-canvas, the
+  settings from a different image. Smart-filter rebakes produce derived pixels of the same QR code,
+  so both static and clip rebake paths preserve `qr` while replacing the underlying media clears it.
+  Do not add a QR element type or renderer — Konva, node-canvas, the
   frame renderer, SVG, previews, Files and `.pdesign` all use the existing raster source and document fields.
 - **node-canvas is not a browser canvas.** `ctx.filter = 'blur(…)'` is accepted and ignored, and
   `ctx.scale()` does not condense glyphs — text is rasterised at the font size with only the origin

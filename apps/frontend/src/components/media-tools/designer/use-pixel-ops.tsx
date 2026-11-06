@@ -427,6 +427,7 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
         store.getState().updateElement(elementId, {
           src: result.src,
           fileId: result.fileId,
+          qr: el.qr,
         });
         store.getState().pushHistory();
       } finally {
@@ -474,6 +475,7 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
           .updateClipSilent(sel.outputIndex, sel.trackId, sel.clipId, {
             src: result.src,
             fileId: result.fileId,
+            qr: clip.qr,
           });
         store.getState().pushHistory();
       } finally {
