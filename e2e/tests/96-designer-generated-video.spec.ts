@@ -75,6 +75,14 @@ interface VideoClipSnapshot {
 interface DesignerElementSnapshot extends Omit<VideoClipSnapshot, 'startMs' | 'endMs'> {
   type?: string;
   parentId?: string;
+  richText?: Array<{
+    text: string;
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: number;
+    fontStyle?: string;
+    fill?: string;
+  }>;
 }
 
 interface DesignerDocSnapshot {
@@ -143,6 +151,37 @@ const staticCropDoc = (): DesignerDocSnapshot => ({
       naturalHeight: 2,
       fitMode: 'cover',
       focalPoint: { x: 0.75, y: 0.5 },
+    }],
+  }],
+});
+
+const richTextDoc = (): DesignerDocSnapshot => ({
+  version: 13,
+  mode: 'image',
+  outputs: [{
+    id: 'rich-text-output',
+    formatId: 'rich-text',
+    name: 'Rich text',
+    width: 400,
+    height: 300,
+    background: '#ffffff',
+    tracks: [],
+    children: [{
+      id: 'rich-text-element',
+      type: 'text',
+      text: 'Original headline',
+      x: 40,
+      y: 40,
+      width: 300,
+      height: 60,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      fontFamily: 'Inter',
+      fontSize: 32,
+      fontWeight: 400,
+      fill: '#000000',
     }],
   }],
 });
@@ -2666,6 +2705,68 @@ test.describe('Designer mobile workspace', () => {
     await expect(select).toBeVisible();
     await select.selectOption('soft-light');
     await expect.poll(() => mocks.doc.outputs[0].children![0].blendMode).toBe('soft-light');
+    mocks.expectClean();
+  });
+});
+
+test.describe('Designer rich text editing (real browser)', () => {
+  test('Enter preserves text and pasted styles survive autosave and reload', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const mocks = new DesignerMocks();
+    mocks.doc = richTextDoc();
+    mocks.name = 'Rich text browser E2E';
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await page.keyboard.press('Control+k');
+    await page.getByRole('button', { name: 'Layers View', exact: true }).click();
+
+    await page.getByRole('option', { name: /Original headline/ }).click();
+    await page.getByRole('application', { name: 'Design canvas' }).focus();
+    await page.keyboard.press('Enter');
+    const editor = page.locator('[data-text-editor-id]');
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveText('Original headline');
+
+    const fallbacks = Array.from({ length: 30 }, (_, i) => `'Fallback ${i}'`).join(', ');
+    const html = `<span style="font-family: 'Helvetica Neue', ${fallbacks}; font-size: 0.875em; font-weight: 700">Rich text persisted</span>`;
+    await editor.evaluate((el, value) => {
+      document.execCommand('insertHTML', false, value);
+    }, html);
+    await editor.evaluate((el) => el.blur());
+    await expect.poll(() => mocks.designWrites, { timeout: 15_000 }).toBeGreaterThan(0);
+
+    let child = mocks.doc.outputs[0].children![0];
+    expect(child).toMatchObject({
+      text: 'Rich text persisted',
+      richText: [{ text: 'Rich text persisted', fontFamily: 'Helvetica Neue', fontWeight: 700 }],
+    });
+    expect(child.richText?.[0].fontSize).toBeUndefined();
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await page.getByRole('option', { name: /Rich text persisted/ }).click();
+    await page.getByRole('application', { name: 'Design canvas' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(editor).toHaveText('Rich text persisted');
+
+    await editor.evaluate((el) => {
+      const html = `<span style="font-weight:700">${'a'.repeat(12000)}</span><span style="font-style:italic">${'b'.repeat(8500)}</span>`;
+      document.execCommand('insertHTML', false, html);
+    });
+    await editor.evaluate((el) => el.blur());
+    await expect.poll(() => mocks.designWrites, { timeout: 15_000 }).toBeGreaterThan(1);
+    await expect(page.getByText('Pasted text was shortened to the 20,000-character limit.')).toBeVisible();
+
+    child = mocks.doc.outputs[0].children![0];
+    expect(child.text).toHaveLength(20000);
+    expect(child.richText).toHaveLength(2);
+    expect(child.richText?.[0].text).toHaveLength(12000);
+    expect(child.richText?.[1].text).toHaveLength(8000);
+    expect(child.richText?.[1].fontStyle).toBe('italic');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    expect(mocks.doc.outputs[0].children![0].text).toHaveLength(20000);
     mocks.expectClean();
   });
 });

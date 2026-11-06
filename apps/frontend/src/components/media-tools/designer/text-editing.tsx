@@ -3,6 +3,9 @@
 import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
 import type { DesignerElement, DesignerOutput, TextRun, VideoOutput } from './designer.store';
 import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
+import { MAX_FONT_SIZE, MAX_TEXT_LEN } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { resolveTextEditTarget } from './symbol-edit';
 import { fittedFontSize } from './measure-text';
 
@@ -23,6 +26,7 @@ const RUN_STYLE_PROPS = new Set([
 ]);
 
 const MAX_FONT_FAMILY_LENGTH = 200;
+const MAX_COLOR_LENGTH = 64;
 
 const primaryCssFontFamily = (value: string): string => {
   let quote = '';
@@ -53,16 +57,31 @@ const primaryCssFontFamily = (value: string): string => {
 };
 
 const normalizeRunFontFamily = (value: string | undefined): string | undefined => {
-  const family = value?.replace(/^["']|["']$/g, '');
-  if (!family || family === 'inherit') return undefined;
-  if (family.length <= MAX_FONT_FAMILY_LENGTH) return family;
-  const primary = primaryCssFontFamily(value || family);
-  return primary && primary !== 'inherit' && primary.length <= MAX_FONT_FAMILY_LENGTH
-    ? primary
+  if (!value) return undefined;
+  const family = primaryCssFontFamily(value);
+  return family && family !== 'inherit' && family.length <= MAX_FONT_FAMILY_LENGTH
+    ? family
     : undefined;
 };
 
-const styleStringToRun = (
+const capTextRuns = (runs: TextRun[]): { runs: TextRun[]; truncated: boolean } => {
+  let remaining = MAX_TEXT_LEN;
+  let truncated = false;
+  const capped: TextRun[] = [];
+  for (const run of runs) {
+    if (remaining <= 0) {
+      truncated = true;
+      break;
+    }
+    const text = run.text.slice(0, remaining);
+    if (text.length < run.text.length) truncated = true;
+    if (text) capped.push({ ...run, text });
+    remaining -= text.length;
+  }
+  return { runs: capped, truncated };
+};
+
+export const styleStringToRun = (
   style: CSSStyleDeclaration | undefined,
   base: Partial<TextRun>
 ): Partial<TextRun> => {
@@ -72,8 +91,8 @@ const styleStringToRun = (
   if (family) run.fontFamily = family;
   const size = style.fontSize;
   if (size) {
-    const px = parseFloat(size);
-    if (!Number.isNaN(px)) run.fontSize = px;
+    const px = size.trim().endsWith('px') ? Number.parseFloat(size) : Number.NaN;
+    if (Number.isFinite(px) && px >= 1 && px <= MAX_FONT_SIZE) run.fontSize = px;
   }
   const weight = style.fontWeight;
   if (weight) {
@@ -84,7 +103,7 @@ const styleStringToRun = (
   const styleVal = style.fontStyle;
   if (styleVal === 'italic') run.fontStyle = 'italic';
   const color = style.color;
-  if (color) run.fill = color;
+  if (color && color.length <= MAX_COLOR_LENGTH) run.fill = color;
   const decoration = style.textDecoration;
   if (decoration?.includes('underline')) run.underline = true;
   if (decoration?.includes('line-through')) run.lineThrough = true;
@@ -301,6 +320,8 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
     return escapeHtml(element.text || '').replace(/\n/g, '<br>');
   });
   const scale = stageRect.scale || 1;
+  const toaster = useToaster();
+  const t = useT();
 
   useEffect(() => {
     const el = editorRef.current;
@@ -327,7 +348,14 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
     settledRef.current = true;
     const currentHtml =
       editorRef.current?.innerHTML ?? editorNodeRef.current?.innerHTML ?? '';
-    const runs = serializeHtml(currentHtml, element);
+    const serializedRuns = serializeHtml(currentHtml, element);
+    const { runs, truncated } = capTextRuns(serializedRuns);
+    if (truncated) {
+      toaster.show(
+        t('designer_text_paste_limit', 'Pasted text was shortened to the 20,000-character limit.'),
+        'warning'
+      );
+    }
     const next = buildTextEditCommit(runs, element);
     if (
       next.text !== (element.text ?? '') ||
@@ -336,7 +364,7 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
       onUpdate(element.id, next);
     }
     onComplete();
-  }, [element, onUpdate, onComplete]);
+  }, [element, onUpdate, onComplete, toaster, t]);
 
   // Read through a ref so the unmount cleanup (mounted once) always runs the
   // CURRENT commit closure rather than the first render's.

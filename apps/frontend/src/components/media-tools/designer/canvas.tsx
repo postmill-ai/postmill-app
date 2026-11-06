@@ -1706,6 +1706,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       } else if (e.key === 'Enter') {
         if (selectedIds.length === 1) {
           if (resolveTextEditTarget(pageOutput as DesignerOutput | undefined, doc.symbols, selectedIds[0])) {
+            e.preventDefault();
             setEditingTextId(selectedIds[0]);
           }
         }
