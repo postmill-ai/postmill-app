@@ -202,6 +202,12 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
 
 ## Sentry / logs — no secrets or PII
 
+- Optional Epure mirroring uses the Sentry multiplexed transport, never a second SDK init. The primary
+  Sentry DSN receives every envelope; only exception `event` envelopes also go to Epure, after the same
+  `beforeSend`/breadcrumb scrubbing. Replay, traces, profiles and logs stay Sentry-only. Epure failures
+  or a 3-second secondary timeout cannot fail the primary Sentry result. `EPURE_DSN` and
+  `NEXT_PUBLIC_EPURE_DSN` are public ingest keys, never PATs; unset/invalid means Sentry-only. Roll back
+  by unsetting both and redeploying. The Epure origin is separately allowlisted in frontend CSP.
 - Capture is disabled at source where possible; the scrubber is the backstop:
   `initializeSentry` (`libraries/nestjs-libraries/src/sentry/initialize.sentry.ts`).
   Enforcement points: `SENSITIVE_FIELDS` set (:8-13) redacting headers/cookies/body

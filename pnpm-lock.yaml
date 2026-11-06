@@ -1528,6 +1528,9 @@ importers:
       '@sendgrid/mail':
         specifier: 8.0.0
         version: 8.0.0
+      '@sentry/core':
+        specifier: 10.56.0
+        version: 10.56.0
       '@sentry/nestjs':
         specifier: ^10.56.0
         version: 10.56.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@opentelemetry/exporter-trace-otlp-http@0.219.0(@opentelemetry/api@1.10.0))
@@ -2921,6 +2924,12 @@ importers:
 
   libraries/react-shared-libraries:
     dependencies:
+      '@sentry/browser':
+        specifier: 10.76.2
+        version: 10.76.2
+      '@sentry/core':
+        specifier: 10.76.2
+        version: 10.76.2
       '@sentry/react':
         specifier: ^10.56.0
         version: 10.76.2(react@19.2.7)
@@ -29345,6 +29354,7 @@ snapshots:
       '@reaatech/structured-repair-core': 1.1.0(zod@4.6.7)
       '@sendgrid/eventwebhook': 8.0.0
       '@sendgrid/mail': 8.0.0
+      '@sentry/core': 10.56.0
       '@sentry/nestjs': 10.56.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@opentelemetry/exporter-trace-otlp-http@0.219.0(@opentelemetry/api@1.10.0))
       '@sentry/profiling-node': 10.56.0(@opentelemetry/exporter-trace-otlp-http@0.219.0(@opentelemetry/api@1.10.0))
       '@swc/helpers': 0.5.23
@@ -29692,6 +29702,7 @@ snapshots:
       '@reaatech/structured-repair-core': 1.1.0(zod@4.6.7)
       '@sendgrid/eventwebhook': 8.0.0
       '@sendgrid/mail': 8.0.0
+      '@sentry/core': 10.56.0
       '@sentry/nestjs': 10.56.0(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(@opentelemetry/exporter-trace-otlp-http@0.219.0(@opentelemetry/api@1.10.0))
       '@sentry/profiling-node': 10.56.0(@opentelemetry/exporter-trace-otlp-http@0.219.0(@opentelemetry/api@1.10.0))
       '@swc/helpers': 0.5.23
@@ -33281,6 +33292,8 @@ snapshots:
 
   '@postmill-ai/react-shared-libraries@file:libraries/react-shared-libraries(@types/react@19.1.8)(@uppy/core@4.5.3)':
     dependencies:
+      '@sentry/browser': 10.76.2
+      '@sentry/core': 10.76.2
       '@sentry/react': 10.76.2(react@19.2.7)
       '@uppy/transloadit': 4.3.3(@uppy/core@4.5.3)
       '@uppy/xhr-upload': 4.4.2(@uppy/core@4.5.3)

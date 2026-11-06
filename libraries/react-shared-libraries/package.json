@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@sentry/browser": "10.76.2",
+    "@sentry/core": "10.76.2",
     "@uppy/transloadit": "^4.2.2",
     "@uppy/xhr-upload": "^4.3.3",
     "react-colorful": "^5.7.0",

@@ -318,6 +318,8 @@ Three opt-in flags add the platform channel apps as **login providers** (the log
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `NEXT_PUBLIC_SENTRY_DSN` | — | Sentry DSN for error tracking (frontend browser/server **and** backend — one variable). Unset = Sentry off. The frontend value is baked in at build time |
+| `EPURE_DSN` | — | Optional Epure DSN for the NestJS exception mirror. Unset or invalid = Sentry only |
+| `NEXT_PUBLIC_EPURE_DSN` | — | Optional Epure DSN for Next.js client/server/edge exception mirroring. Rebuild after changing it |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0.2` (production) | Backend trace sample rate, `0`–`1`. Development always samples at `1.0`; an unset, non-numeric or out-of-range value falls back to the default |
 | `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | `0.25` (production) | Frontend trace sample rate, `0`–`1`. Same rules as above; baked into the frontend bundle at build time, so a change needs a frontend rebuild |
 | `SENTRY_PROFILING` | — | Set to `1` to enable backend (`@sentry/profiling-node`) profiling in development; production always profiles |
