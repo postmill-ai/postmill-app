@@ -36,6 +36,7 @@
     "@postmill-ai/provider-deepgram": "workspace:*",
     "@postmill-ai/provider-deepinfra": "workspace:*",
     "@postmill-ai/provider-deepseek": "workspace:*",
+    "@postmill-ai/provider-demonroute": "workspace:*",
     "@postmill-ai/provider-devto": "workspace:*",
     "@postmill-ai/provider-did": "workspace:*",
     "@postmill-ai/provider-digitalocean-spaces": "workspace:*",

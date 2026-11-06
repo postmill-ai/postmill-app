@@ -193,6 +193,12 @@
       "@postmill-ai/provider-deepseek/*": [
         "libraries/providers/deepseek/src/*"
       ],
+      "@postmill-ai/provider-demonroute": [
+        "libraries/providers/demonroute/src"
+      ],
+      "@postmill-ai/provider-demonroute/*": [
+        "libraries/providers/demonroute/src/*"
+      ],
       "@postmill-ai/provider-devto": [
         "libraries/providers/devto/src"
       ],
