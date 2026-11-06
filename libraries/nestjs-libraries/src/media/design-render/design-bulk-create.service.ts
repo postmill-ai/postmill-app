@@ -19,6 +19,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
 import { applyBulkRow } from '../designer-doc/bulk-variables';
 import { pageCount } from '../designer-doc/designer-doc.pages';
+import { MAX_OUTPUTS, MAX_PAGES_PER_OUTPUT } from '../designer-doc/designer-doc.limits';
 import { sanitizeDownloadName } from '../designer-doc/postmill-file';
 import { zipBulkEntries, type BulkZipEntry } from './design-bulk-zip';
 import type { DesignerDoc, DesignerElement } from './design-render.types';
@@ -234,7 +235,8 @@ export class DesignBulkCreateService extends DesignBulkService {
       const remoteImageCache = new Map<string, { id: string; path: string }>();
       let zipBytes = 0;
       let succeeded = 0;
-      for (let index = 0; index < rows.length; index++) {
+      const rowCount = Math.min(rows.length, MAX_BULK_ROWS);
+      for (let index = 0; index < rowCount; index++) {
         const result: DesignBulkCreateRowResult = { row: index + 1, fileIds: [] };
         try {
           const doc = applyBulkRow(payload.doc, rows[index]);
@@ -242,10 +244,12 @@ export class DesignBulkCreateService extends DesignBulkService {
           const name = `${payload.nameBase} ${index + 1}`;
           const design = await this._designService.createDesign(orgId, payload.userId, { name, doc });
           result.designId = design.id;
-          for (let outputIndex = 0; outputIndex < doc.outputs.length; outputIndex++) {
+          const outputCount = Math.min(doc.outputs.length, MAX_OUTPUTS);
+          for (let outputIndex = 0; outputIndex < outputCount; outputIndex++) {
             const output = doc.outputs[outputIndex];
             if (!('children' in output)) continue;
-            for (let page = 0; page < pageCount(output); page++) {
+            const pages = Math.min(pageCount(output), MAX_PAGES_PER_OUTPUT);
+            for (let page = 0; page < pages; page++) {
               const bytes = await this._renderService.renderPage(doc, outputIndex, { orgId }, page);
               zipBytes += bytes.length;
               if (zipBytes > 512 * 1024 * 1024) {
