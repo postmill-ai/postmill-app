@@ -260,7 +260,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   the canvas owns its gesture with `touchAction: none`, and a short touch tap places a default shape
   through `rectFromTap` while a drag uses the authored box. Text and caption hit surfaces cover the
   full box (`fullBoxHitProps` or a transparent hit Rect), never just the painted glyphs; coarse
-  pointers enlarge the Transformer anchors. Do not add mouse-only Stage handlers or reintroduce a
+  pointers enlarge the Transformer anchors. Two-finger pinch-zoom is anchored at its centroid through
+  `canvas-pinch.ts`; pinch start explicitly stops the active Konva node drag and flushes any active
+  paint/marquee through its normal end handler, then the container capture phase suspends new tool
+  commits until every finger lifts. Do not add mouse-only Stage handlers or reintroduce a
   synthetic-mouse duplicate commit after a touch gesture.
 - **Mobile workspace uses the same store and tool registry.** `mobile-designer-tools.tsx` provides
   prominent quick actions and inline, non-modal Tools/Brand sheets; it never forks editing behavior.
@@ -276,8 +279,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `clip-timing.ts` shares the drag's move/trim rules with the Inspector's Start/End/Duration steppers
   and the expanded mobile timeline's compact selected-clip editor. These are clip-local and separate
   from the output-duration stepper. Each changed stepper edit commits one history entry (unchanged
-  blur is a no-op), and `clip-source-duration.ts` supplies a reactive, retryable source bound.
-  Auto-scroll adds viewport displacement to drag deltas and only runs after actual pointer movement.
+  blur is a no-op), and `clip-source-duration.ts` supplies a reactive source bound only after a
+  successful probe. Failed probes never cache the 10-second insertion fallback as the real duration;
+  they back off for 30 seconds and accept late metadata. Auto-scroll adds viewport displacement to
+  drag deltas and only runs after actual pointer movement.
 - **Timeline transport and Inspector essentials.** `timeline-split.ts` is the single split guard for
   the transport, S shortcut, context menu, and store: an unlocked selected clip, a strictly interior
   playhead, and at least 100 ms on both sides. Invalid cuts are no-ops; valid splits select the right
@@ -291,6 +296,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   (contain/cover/crop all included), uploads that box-space bitmap as `maskSrc` through
   `background-removal-mask.ts`, and commits once after the before/after dialog. If mask preparation
   fails, Apply falls back to the old flattened cutout rather than discarding the provider result.
+  A later aspect-changing resize remaps the box-space mask through the old and new media geometry and
+  uploads it in the same history commit; no provider call is made. It first samples the old box rect
+  into the old source rect (box → source), then renders the new source rect into the new box rect.
+  Pixels outside the old cover crop have no alpha information and remain transparent if a resize
+  reveals them. Live mask buffers are seeded only after the gesture's stale check. Broken image/mask
+  elements are not paintable and must not reach `drawImage`; a broken mask degrades to the plain source image.
   Magic Grab (`magic-grab.ts`) uses the same cutout plus a source-space inpaint mask and a review
   dialog, then splits the image into a reconstructed background and separately movable subject.
   Static Apply replaces/inserts adjacent layers; still-video Apply uses adjacent tracks. Both commit
@@ -313,9 +324,15 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   create a second hidden video for canvas drawing, and never let one consumer's teardown destroy the
   other's element. Same-id `src` changes must reload the shared element.
 
+- **Autosave adopts materialized assets.** Create/update responses carry the validated document with
+  large inline rasters replaced by stored URLs. `designer-autosave.ts` adopts that document only when
+  the sent document reference and name are still current, without a history entry; an in-flight edit
+  always wins and is materialized by the next save. This prevents repeated base64 uploads and hashing.
+
 - **Stock vectors and icons.** Pixabay vector searches omit blank `q`, cache for 24 hours, and
-  prefer `vectorURL` with the documented raster fallback. Vector picks are rasterized into an
-  owned PNG File before insertion. Icon wrappers set both `fill` and inherited `color`, so outline
+  prefer `vectorURL` with the documented raster fallback. Only actual SVG URLs are rasterized into an
+  owned PNG File before insertion; raster fallbacks use ordinary URL import without upscaling.
+  Icon wrappers set both `fill` and inherited `color`, so outline
   artwork using `stroke="currentColor"` follows the selected fill in Konva, server PNG/PDF and SVG export.
 
 - **Effects, warp and text metrics are SHARED code, not two implementations.** `designer-doc/`

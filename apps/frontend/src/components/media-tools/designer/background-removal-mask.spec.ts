@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { uploadBackgroundRemovalMask } from './background-removal-mask';
+import { maskFrameAspectChanged, remapBackgroundRemovalMask, uploadBackgroundRemovalMask } from './background-removal-mask';
 import { commitCanvas, seedBufferFromCanvas } from './raster-layers';
 
 vi.mock('./raster-layers', () => ({
@@ -67,5 +67,55 @@ describe('uploadBackgroundRemovalMask', () => {
     expect(args[0]).toBeCloseTo(8 / 3);
     expect(args.slice(1, 4)).toEqual([0, 8 / 3, 2]);
     expect(args.slice(4)).toEqual([0, 0, 400, 300]);
+  });
+});
+
+describe('remapBackgroundRemovalMask', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('recovers source alpha and re-letterboxes it for the new frame', async () => {
+    const sourceContext = { drawImage: vi.fn() };
+    const nextContext = {
+      fillStyle: '',
+      globalCompositeOperation: '',
+      fillRect: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    const canvases = [
+      { width: 0, height: 0, getContext: vi.fn(() => sourceContext) },
+      { width: 0, height: 0, getContext: vi.fn(() => nextContext) },
+    ] as unknown as HTMLCanvasElement[];
+    vi.spyOn(document, 'createElement').mockImplementation(() => canvases.shift()!);
+    vi.stubGlobal('Image', class {
+      crossOrigin = '';
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    });
+
+    const result = await remapBackgroundRemovalMask({
+      fetch: vi.fn(),
+      maskSrc: '/old-mask.png',
+      source: { naturalWidth: 8, naturalHeight: 2 },
+      previousFrame: { width: 400, height: 300, fitMode: 'contain' },
+      nextFrame: { width: 200, height: 200, fitMode: 'contain' },
+      id: 'image-1',
+    });
+
+    expect(sourceContext.drawImage.mock.calls[0].slice(1)).toEqual([0, 100, 400, 100, 0, 0, 8, 2]);
+    expect(nextContext.drawImage.mock.calls[0][0]).toBeDefined();
+    expect(nextContext.drawImage.mock.calls[0].slice(1)).toEqual([0, 0, 8, 2, 0, 75, 200, 50]);
+    expect(result.canvas).toMatchObject({ width: 200, height: 200 });
+    expect(seedBufferFromCanvas).not.toHaveBeenCalled();
+    expect(maskFrameAspectChanged({ width: 400, height: 300 }, { width: 200, height: 200 })).toBe(true);
+    expect(maskFrameAspectChanged({ width: 400, height: 300 }, { width: 200, height: 150 })).toBe(false);
   });
 });

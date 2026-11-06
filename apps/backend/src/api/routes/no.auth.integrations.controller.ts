@@ -225,7 +225,7 @@ export class NoAuthIntegrationsController {
         let providerMessage: string | undefined;
         const providerJson = (err as { json?: unknown })?.json;
         if (
-          integration === 'instagram-standalone' &&
+          (integration === 'instagram-standalone' || integration === 'instagram') &&
           typeof providerJson === 'string'
         ) {
           providerMessage = instagramOAuthErrorDetail(providerJson);

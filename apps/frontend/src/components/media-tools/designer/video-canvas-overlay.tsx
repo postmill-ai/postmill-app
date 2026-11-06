@@ -38,6 +38,13 @@ import { fullBoxHitProps, gradientFillProps } from './elements';
 import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 import { groupRefsForClip, toggleClipRefs } from './video-selection';
 import { extrusionOffsets } from '@postmill-ai/nestjs-libraries/media/designer-doc/text-extrusion';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import {
+  discardBackgroundRemovalMask,
+  maskFrameAspectChanged,
+  remapBackgroundRemovalMask,
+} from './background-removal-mask';
+import { seedBufferFromCanvas } from './raster-layers';
 
 interface VideoCanvasOverlayProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -59,6 +66,7 @@ interface VideoCanvasOverlayProps {
   /** Active Transformer anchor, read when a resize commits. */
   getTransformAnchor?: () => string | null | undefined;
   onClipContextMenu?: (clipId: string, clientX: number, clientY: number) => void;
+  fetchFn?: ReturnType<typeof useFetch>;
 }
 
 const imageElements = new Map<string, HTMLImageElement>();
@@ -200,6 +208,14 @@ interface FilteredClipImageProps {
   blurPx?: number;
 }
 
+export const hasPaintableFrame = (source: unknown): boolean => {
+  if (!source || typeof source !== 'object') return false;
+  const media = source as { naturalWidth?: number; videoWidth?: number; width?: number };
+  if (media.videoWidth !== undefined) return media.videoWidth > 0;
+  if (media.naturalWidth !== undefined) return media.naturalWidth > 0;
+  return (media.width ?? 0) > 0;
+};
+
 const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, tick, playheadMs, blurPx }) => {
   const [canvasId] = useState(() => getNextCanvasId());
   const canvas = filterCanvasCache.get(canvasId) ?? null;
@@ -223,14 +239,16 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
   // An errored clip draws the placeholder below, not the dead element — skip
   // the element lookup so nothing tries to paint from it.
   const clipErrored = isVideoClip && videoSrcErrored(clip);
-  const source = liveBuffer
+  const loadedSource = liveBuffer
     ? (liveBuffer as unknown as HTMLImageElement)
     : isVideoClip
       ? (clipErrored ? null : sharedVideoElement(clip.id) ?? null)
       : getOrCreateImage(stickerFrameUrl ?? clip.src);
-  const maskSource = !isVideoClip && clip.maskEnabled !== false
+  const source = hasPaintableFrame(loadedSource) ? loadedSource : null;
+  const loadedMaskSource = !isVideoClip && clip.maskEnabled !== false
     ? getBuffer(`${clip.id}:mask`) ?? getOrCreateImage(clip.maskSrc)
     : null;
+  const maskSource = hasPaintableFrame(loadedMaskSource) ? loadedMaskSource : null;
   const filterString = useMemo(
     () => {
       const base = mapFiltersToCss(clip.filters);
@@ -470,6 +488,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   editingTextId,
   getTransformAnchor,
   onClipContextMenu,
+  fetchFn,
 }) => {
   const doc = store((s) => s.doc);
   const currentOutput = store((s) => s.currentOutput);
@@ -679,7 +698,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   };
 
   const gestureCommitPending = useRef(false);
-  const commitGesture = (target: Konva.Node) => {
+  const commitGesture = async (target: Konva.Node) => {
     // Konva broadcasts transformend/dragend for every attached node. Commit the
     // gesture once; a second event would restore the stale pre-gesture sizes.
     if (gestureCommitPending.current) return;
@@ -698,7 +717,15 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     const output = state.doc.outputs[currentOutput] as VideoOutput | undefined;
     if (!output) return;
     const anchor = getTransformAnchor?.();
-    let changed = false;
+    const history = state.history;
+    const updates: {
+      clip: VideoClip;
+      trackId: string;
+      trackType: string;
+      before: ClipBox;
+      after: ClipBox;
+      update: ReturnType<typeof clipGeometryUpdate>;
+    }[] = [];
 
     for (const node of nodes) {
       const composed = clipsAtPlayhead.find(({ clip }) => clip.id === node.id());
@@ -728,10 +755,54 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
         fontSize: props.fontSize,
       });
       if (update && state.updateClipSilent(currentOutput, trackId, clip.id, update)) {
-        changed = true;
+        updates.push({ clip, trackId, trackType, before, after, update });
       }
     }
-    if (changed) state.pushHistory('Edit clip geometry');
+    if (!updates.length) return;
+
+    const remapped: { trackId: string; clipId: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
+    if (fetchFn) {
+      for (const { clip, trackId, trackType, before, after } of updates) {
+        if (
+          trackType !== 'image' || !clip.maskSrc || clip.maskEnabled === false ||
+          !clip.naturalWidth || !clip.naturalHeight ||
+          clip.fitMode === 'fill' || !maskFrameAspectChanged(before, after)
+        ) continue;
+        try {
+          const uploaded = await remapBackgroundRemovalMask({
+            fetch: fetchFn,
+            maskSrc: clip.maskSrc,
+            source: { naturalWidth: clip.naturalWidth, naturalHeight: clip.naturalHeight },
+            previousFrame: { ...before, crop: clip.crop, fitMode: clip.fitMode, focalPoint: clip.focalPoint },
+            nextFrame: { ...after, crop: clip.crop, fitMode: clip.fitMode, focalPoint: clip.focalPoint },
+            id: clip.id,
+          });
+          remapped.push({ trackId, clipId: clip.id, src: uploaded.src, fileId: uploaded.fileId, canvas: uploaded.canvas });
+        } catch {
+          // Keep the existing mask if its pixels cannot be read or saved.
+        }
+      }
+    }
+
+    const latest = store.getState();
+    const stale = latest.history !== history || remapped.some(({ trackId, clipId }) => {
+      const current = (latest.doc.outputs[currentOutput] as VideoOutput).tracks
+        .find((track) => track.id === trackId)?.clips.find((clip) => clip.id === clipId);
+      return !current?.maskSrc;
+    });
+    if (stale) {
+      if (fetchFn) await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetchFn, mask)));
+      return;
+    }
+    remapped.forEach(({ trackId, clipId, src, fileId, canvas }) => {
+      seedBufferFromCanvas(`${clipId}:mask`, canvas);
+      store.getState().updateClipSilent(currentOutput, trackId, clipId, {
+        maskSrc: src,
+        maskFileId: fileId,
+        maskEnabled: true,
+      });
+    });
+    store.getState().pushHistory('Edit clip geometry');
   };
 
   if (!isVideo) return null;

@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import Konva from 'konva';
 import { Stage, Layer, Transformer } from 'react-konva';
-import { VideoCanvasOverlay } from './video-canvas-overlay';
+import { hasPaintableFrame, VideoCanvasOverlay } from './video-canvas-overlay';
 import { VideoPreviewEngine } from './video-preview';
 import { resetVideoElementRegistry } from './video-element-registry';
 import { videoSrcErrored, resetVideoSrcErrors } from './video-src';
@@ -538,5 +538,16 @@ describe('video overlay selection and gesture commits', () => {
     expect(clips[0].y).toBe(30);
     expect(store.getState().history.length).toBe(lockedDepth);
     expect(first.draggable()).toBe(false);
+  });
+});
+
+describe('paintable media frames', () => {
+  it('rejects unloaded and broken images, videos, and masks', () => {
+    expect(hasPaintableFrame(null)).toBe(false);
+    expect(hasPaintableFrame({ naturalWidth: 0 })).toBe(false);
+    expect(hasPaintableFrame({ videoWidth: 0, width: 300 })).toBe(false);
+    expect(hasPaintableFrame({ naturalWidth: 640 })).toBe(true);
+    expect(hasPaintableFrame({ videoWidth: 640 })).toBe(true);
+    expect(hasPaintableFrame({ width: 640 })).toBe(true);
   });
 });

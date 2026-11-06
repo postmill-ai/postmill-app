@@ -68,6 +68,13 @@ import { maskOutline, fullMask, invertMask } from './selection-mask';
 import { clipGeometryUpdate, type ClipBox } from './clip-geometry';
 import { clipsInMarquee, expandClipRefs } from './video-selection';
 import { armCutoutRefinement, findCutoutTarget } from './cutout-refinement';
+import {
+  discardBackgroundRemovalMask,
+  maskFrameAspectChanged,
+  remapBackgroundRemovalMask,
+} from './background-removal-mask';
+import { canvasZoomAtPoint, measureCanvasPinch } from './canvas-pinch';
+import { seedBufferFromCanvas } from './raster-layers';
 
 /**
  * How much of the viewport a fitted artboard fills, leaving the rest as margin.
@@ -190,6 +197,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [uploadingFile, setUploadingFile] = useState(false);
   const rafIdRef = useRef<number | null>(null);
+  const transformOriginalsRef = useRef(new Map<string, DesignerElement>());
+  const pinchRef = useRef<{
+    startDistance: number;
+    startScale: number;
+    startViewport: { x: number; y: number };
+    documentCenter: { x: number; y: number };
+  } | null>(null);
+  const suppressTouchRef = useRef(false);
   const reduceMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const toaster = useToaster();
@@ -206,7 +221,6 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const setSelectedIds = store((s) => s.setSelectedIds);
   const updateElement = store((s) => s.updateElement);
   const updateElementEphemeral = store((s) => s.updateElementEphemeral);
-  const duplicateElement = store((s) => s.duplicateElement);
   const addElement = store((s) => s.addElement);
   const setZoom = store((s) => s.setZoom);
   const setViewport = store((s) => s.setViewport);
@@ -1242,6 +1256,13 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           | undefined)?.children || [];
 
       const patches: { id: string; patch: ReturnType<typeof buildResizePatch> }[] = [];
+      if (transformOriginalsRef.current.size === 0) {
+        nodes.forEach((node) => {
+          const id = node.id();
+          const el = id ? children.find((c) => c.id === id) : undefined;
+          if (id && el) transformOriginalsRef.current.set(id, el);
+        });
+      }
       nodes.forEach((node) => {
         const id = node.id();
         if (!id) return;
@@ -1310,7 +1331,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   );
 
   const handleTransformEnd = useCallback(
-    (e: Konva.KonvaEventObject<Event>) => {
+    async (e: Konva.KonvaEventObject<Event>) => {
       if (isVideo) return;
       noteGestureEnd();
       setHud(null);
@@ -1320,12 +1341,65 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       }
       const patches = bakeTransform(e);
       if (!patches.length) return;
+      const originals = new Map(transformOriginalsRef.current);
+      transformOriginalsRef.current.clear();
+      const history = store.getState().history;
       patches.forEach(({ id, patch }) => updateElement(id, patch));
+
+      const remapped: { id: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
+      for (const { id, patch } of patches) {
+        const original = originals.get(id);
+        if (
+          original?.type !== 'image' || !original.maskSrc || original.maskEnabled === false ||
+          !original.naturalWidth || !original.naturalHeight ||
+          original.fitMode === 'fill' ||
+          !maskFrameAspectChanged(original, patch)
+        ) continue;
+        try {
+          const uploaded = await remapBackgroundRemovalMask({
+            fetch,
+            maskSrc: original.maskSrc,
+            source: { naturalWidth: original.naturalWidth, naturalHeight: original.naturalHeight },
+            previousFrame: original,
+            nextFrame: {
+              width: patch.width,
+              height: patch.height,
+              crop: original.crop,
+              fitMode: original.fitMode,
+              focalPoint: original.focalPoint,
+            },
+            id,
+          });
+          remapped.push({ id, src: uploaded.src, fileId: uploaded.fileId, canvas: uploaded.canvas });
+        } catch {
+          // Keep the existing mask if its pixels cannot be read or saved.
+        }
+      }
+
+      const children = (store.getState().doc.outputs[store.getState().currentOutput] as DesignerOutput | undefined)?.children || [];
+      const stale = store.getState().history !== history || patches.some(({ id, patch }) => {
+        const current = children.find((child) => child.id === id);
+        return !current || current.x !== patch.x || current.y !== patch.y ||
+          current.width !== patch.width || current.height !== patch.height ||
+          current.rotation !== patch.rotation;
+      });
+      if (stale) {
+        await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetch, mask)));
+        return;
+      }
+      remapped.forEach(({ id, src, fileId, canvas }) => {
+        seedBufferFromCanvas(`${id}:mask`, canvas);
+        updateElement(id, {
+          maskSrc: src,
+          maskFileId: fileId,
+          maskEnabled: true,
+        });
+      });
       pushHistory();
       // Same commit-time cache rebuild as dragEnd (see useGeometryNonce).
       bumpGeometryNow();
     },
-    [bakeTransform, pushHistory, updateElement, isVideo, noteGestureEnd, bumpGeometryNow]
+    [bakeTransform, pushHistory, updateElement, isVideo, noteGestureEnd, bumpGeometryNow, fetch, store]
   );
 
   const handleWheel = useCallback(
@@ -1354,6 +1428,86 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     },
     [setZoom, setViewport]
   );
+
+  const handlePinchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length < 2) {
+      if (suppressTouchRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    suppressTouchRef.current = true;
+    stageRef.current?.stopDrag();
+    drawStart.current = null;
+    marqueeStart.current = null;
+    freeformTrail.current = null;
+    gradientStart.current = null;
+    penDragging.current = false;
+    setMarquee(null);
+    setPenDraft(null);
+    setIsPanning(false);
+    const stagePos = stageRef.current?.getRelativePointerPosition();
+    if (isPaintTool(effectiveTool)) void paint.endPaint();
+    if (isSelectionTool(effectiveTool) && stagePos) {
+      paint.endSelection(effectiveTool, stagePos, e.nativeEvent as unknown as MouseEvent);
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const points = [0, 1].map((index) => ({
+      x: e.touches[index].clientX - rect.left,
+      y: e.touches[index].clientY - rect.top,
+    })) as [{ x: number; y: number }, { x: number; y: number }];
+    const { center, distance } = measureCanvasPinch(points);
+    const current = store.getState();
+    pinchRef.current = {
+      startDistance: Math.max(1, distance),
+      startScale: current.zoom,
+      startViewport: { x: current.viewportX, y: current.viewportY },
+      documentCenter: {
+        x: (center.x - current.viewportX) / current.zoom,
+        y: (center.y - current.viewportY) / current.zoom,
+      },
+    };
+  }, [effectiveTool, paint, store]);
+
+  const handlePinchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!suppressTouchRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const gesture = pinchRef.current;
+    if (!gesture || e.touches.length < 2) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const points = [0, 1].map((index) => ({
+      x: e.touches[index].clientX - rect.left,
+      y: e.touches[index].clientY - rect.top,
+    })) as [{ x: number; y: number }, { x: number; y: number }];
+    const { center, distance } = measureCanvasPinch(points);
+    const next = canvasZoomAtPoint({
+      scale: gesture.startScale,
+      viewport: gesture.startViewport,
+      point: center,
+      nextScale: gesture.startScale * distance / gesture.startDistance,
+    });
+    setZoom(next.scale);
+    setViewport(next.viewport.x, next.viewport.y);
+  }, [setViewport, setZoom]);
+
+  const handlePinchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!suppressTouchRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.touches.length === 0) {
+      pinchRef.current = null;
+      suppressTouchRef.current = false;
+    } else {
+      pinchRef.current = null;
+    }
+  }, []);
 
   const fitToScreen = useCallback(() => {
     if (!stageSize.width || !stageSize.height) return;
@@ -1482,7 +1636,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             }
           }
         } else {
-          selectedIds.forEach((id) => st.duplicateElement(id));
+          st.duplicateElements(selectedIds);
         }
       } else if (mod && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
@@ -1557,7 +1711,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         }
       }
     },
-    [editingTextId, selectedIds, setSelectedIds, updateElement, output, pageOutput, doc, duplicateElement, store, pushHistory, isVideo]
+    [editingTextId, selectedIds, setSelectedIds, updateElement, output, pageOutput, doc, store, pushHistory, isVideo]
   );
 
   const handleStageDblClick = useCallback(
@@ -1750,6 +1904,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       role="application"
       aria-label={t('design_canvas', 'Design canvas')}
       onKeyDown={handleKeyDown}
+      onTouchStartCapture={handlePinchStart}
+      onTouchMoveCapture={handlePinchMove}
+      onTouchEndCapture={handlePinchEnd}
+      onTouchCancelCapture={handlePinchEnd}
       onMouseMove={(e) => {
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
@@ -1935,6 +2093,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               onClipContextMenu={(clipId, clientX, clientY) =>
                 setContextMenu({ x: clientX, y: clientY, targetType: 'clip', elementId: clipId })
               }
+              fetchFn={fetch}
             />
           )}
           {/* Artboard edge. Overflow is unclipped, so paint past the edge
