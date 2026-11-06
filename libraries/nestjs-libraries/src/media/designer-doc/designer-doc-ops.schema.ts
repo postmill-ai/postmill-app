@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   MAX_DIMENSION,
+  MAX_FONT_FAMILY_LEN,
   MAX_FONT_SIZE,
   MAX_OPS_PER_REQUEST,
   MAX_TEXT_LEN,
@@ -207,7 +208,7 @@ const UpdateClipPatchSchema = z
     fill: ColorSchema.optional(),
     fillGradient: StrictDesignerGradientSchema.optional(),
     align: z.enum(['left', 'center', 'right', 'justify']).optional(),
-    fontFamily: z.string().max(200).optional(),
+    fontFamily: z.string().max(MAX_FONT_FAMILY_LEN).optional(),
     fontSize: strictNum(1, MAX_FONT_SIZE).optional(),
     fontWeight: strictNum(1, 1000).optional(),
     fontStyle: z.enum(['normal', 'italic']).optional(),

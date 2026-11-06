@@ -265,10 +265,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   paint/marquee through its normal end handler, then the container capture phase suspends new tool
   commits until every finger lifts. Do not add mouse-only Stage handlers or reintroduce a
   synthetic-mouse duplicate commit after a touch gesture.
-- **Rich-text paste normalizes CSS font families.** The content-editable commit path preserves text and
-  supported run styles, but an oversized external `font-family` fallback list is reduced to its usable
-  primary family (or omitted to inherit the element font). Never store a blind 200-character truncation;
-  the DesignerDoc schema remains the final validation boundary.
+- **Rich-text paste normalizes CSS into the save contract.** The content-editable commit path stores
+  only the primary font family from every quoted or unquoted stack (or inherits the element font),
+  accepts only bounded pixel font sizes, and drops oversized run colors. Bounds come from
+  `designer-doc.limits.ts` (`MAX_FONT_FAMILY_LEN`, `MAX_COLOR_LEN`, `MAX_RICH_TEXT_RUNS`), never local literals.
+  Combined text is capped at `MAX_TEXT_LEN` with a visible toaster warning; runs beyond `MAX_RICH_TEXT_RUNS`
+  are coalesced into the final run with a formatting-simplification warning so text is not lost.
+  Enter-to-edit prevents the key's default action so selection/focus cannot replace the text with a newline.
 - **Mobile workspace uses the same store and tool registry.** `mobile-designer-tools.tsx` provides
   prominent quick actions and inline, non-modal Tools/Brand sheets; it never forks editing behavior.
   The Inspector participates in layout at half or expanded height instead of covering the canvas,
