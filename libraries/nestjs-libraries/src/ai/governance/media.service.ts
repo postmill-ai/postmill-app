@@ -1702,6 +1702,44 @@ export class AiMediaService {
     );
   }
 
+  async magicGrab(
+    imageUrl: string,
+    cutoutUrl: string,
+    maskUrl: string,
+    options: { orgId: string },
+  ): Promise<{
+    background: { url: string; fileId: string };
+  }> {
+    try {
+      const backgroundUrl = await this.inpaintImage(
+        imageUrl,
+        maskUrl,
+        'Remove the main subject and reconstruct the surrounding background naturally. Preserve the original style, lighting, colors, and framing.',
+        options,
+      );
+      const backgroundFile = await this.saveUrlToFile(
+        options.orgId,
+        backgroundUrl,
+        'magic-grab-background'
+      );
+      return {
+        background: { url: backgroundFile.path, fileId: backgroundFile.id },
+      };
+    } finally {
+      const maskFile = await this._fileService?.getFileByPath(options.orgId, maskUrl).catch(() => null);
+      if (maskFile) {
+        await this._fileService?.deleteFile(options.orgId, maskFile.id).catch(() => undefined);
+      }
+    }
+  }
+
+  async cleanupMagicGrab(fileId: string, orgId: string): Promise<void> {
+    if (!this._fileService) return;
+    const file = await this._fileService.getFileById(orgId, fileId).catch(() => null);
+    if (!file?.name.startsWith('magic-grab-background-')) return;
+    await this._fileService.deleteFile(orgId, file.id).catch(() => undefined);
+  }
+
   async outpaintImage(
     imageUrl: string,
     mode: OutpaintMode,

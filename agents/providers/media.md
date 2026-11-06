@@ -120,6 +120,15 @@ Reel.Farm slideshow polls return typed `slideshow: { slides: string[] }` instead
 
 Generated video ingestion uses `media/video-artifact.ts`: best-effort ffprobe writes canonical `metadata.dimensions` + `durationMs`, and MP4/M4V/MOV are stream-copied with `+faststart` (never transcoded; original bytes win on any failure). Studio/Replicate job responses expose only sanitized `dimensions`/`durationMs`/`mime`, which the Designer uses before browser probing. The frontend `/uploads` route supports single byte ranges for reliable timeline seeking; preserve its 206/416 behavior when changing media serving.
 
+**Magic Grab persistence.** `POST /media/magic-grab` accepts the original image, provider cutout,
+and source-space subject mask. `AiMediaService.magicGrab` performs the existing inpaint operation,
+persists only the reconstructed background, and deletes the temporary source-mask File server-side
+in `finally` (so create-only members do not need `media:delete`). The provider cutout URL remains a
+preview/mask input, not another library File. `POST /media/magic-grab/cleanup` accepts a `fileId` and
+uses the same `media:create` gate to delete only org-owned files named `magic-grab-background-*`.
+The shared review modal invokes it on every unapplied close; successful Apply retains the referenced
+background, and rejected static/video inserts return false and clean up rather than reporting success.
+
 **Designer genAI modal picker endpoints** (`media.controller.ts`, read-level, no admin gate): `GET /media/generation-providers?operation=image|video|audio|avatar|tts` (400 otherwise) → `{ providers: [{ identifier, name }], default: { providerId, model } | null }` — `providers` is exactly the candidate list generation would consider (`AiMediaService.listGenerationProviders` reuses `_resolveForOperation`); generation for a non-default pick goes through the studio endpoints above. `POST /media/text-to-speech` also accepts an optional `provider` pin: unknown / not-enabled / unconfigured / non-`tts` provider → 400, and a pinned call makes exactly one attempt (no fallback to other candidates).
 
 ### CI gate (do not skip)

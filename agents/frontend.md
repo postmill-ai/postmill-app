@@ -291,6 +291,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   (contain/cover/crop all included), uploads that box-space bitmap as `maskSrc` through
   `background-removal-mask.ts`, and commits once after the before/after dialog. If mask preparation
   fails, Apply falls back to the old flattened cutout rather than discarding the provider result.
+  Magic Grab (`magic-grab.ts`) uses the same cutout plus a source-space inpaint mask and a review
+  dialog, then splits the image into a reconstructed background and separately movable subject.
+  Static Apply replaces/inserts adjacent layers; still-video Apply uses adjacent tracks. Both commit
+  once, select only the subject, and delete the temporary inpaint-mask File. It does not claim
+  moving-subject extraction from video footage.
   `cutout-refine-controls.tsx` arms the same mask for Restore
   (white brush) and Erase (alpha removal); still-image clip masks use optional-additive doc v11
   fields and mirror through `video-canvas-overlay.tsx` and the isolated frame-render buffer. Legacy

@@ -33,7 +33,7 @@ function build(
     imageSlide: vi.fn().mockResolvedValue('https://cdn/slide.mp4'),
     ...defaultsOverride,
   };
-  const aiMediaService = {
+  const aiMediaService: any = {
     urlToBase64Image: vi.fn().mockResolvedValue('data:image/png;base64,abc'),
     outpaintImage: vi.fn().mockResolvedValue('https://cdn/expanded.png'),
     saveUrlToFile: vi.fn().mockResolvedValue({
@@ -42,6 +42,8 @@ function build(
       name: 'generated-123.png',
     }),
     getJob: vi.fn(),
+    magicGrab: vi.fn(),
+    cleanupMagicGrab: vi.fn(),
     ...serviceOverride,
   };
   const fileService = {
@@ -254,6 +256,36 @@ describe('MediaController — Designer AI-media routes', () => {
         { orgId: 'org-1' }
       );
       expect(res).toEqual({ url: 'https://cdn/expanded.png' });
+    });
+
+    it('magic-grab returns the reconstructed background without persisting a subject copy', async () => {
+      const { controller, aiMediaService } = build({}, {
+        magicGrab: vi.fn().mockResolvedValue({
+          background: { url: '/uploads/org/background.png', fileId: 'background-file' },
+        }),
+      });
+      const res = await controller.magicGrab(org, {
+        imageUrl: 'https://x/original.png',
+        cutoutUrl: 'https://x/cutout.png',
+        maskUrl: '/uploads/org/mask.png',
+      });
+      expect(aiMediaService.magicGrab).toHaveBeenCalledWith(
+        'https://x/original.png',
+        'https://x/cutout.png',
+        '/uploads/org/mask.png',
+        { orgId: 'org-1' }
+      );
+      expect(res).toEqual({
+        background: { url: '/uploads/org/background.png', fileId: 'background-file' },
+      });
+    });
+
+    it('magic-grab cleanup delegates an org-scoped temporary background deletion', async () => {
+      const { controller, aiMediaService } = build();
+
+      await expect(controller.cleanupMagicGrab(org, { fileId: 'background-file' }))
+        .resolves.toEqual({ success: true });
+      expect(aiMediaService.cleanupMagicGrab).toHaveBeenCalledWith('background-file', 'org-1');
     });
 
     it('generate-image returns { output: <base64 dataUrl> }', async () => {

@@ -1030,6 +1030,49 @@ describe('AiMediaService', () => {
     });
   });
 
+  describe('magicGrab', () => {
+    it('persists only the background and removes the temporary source mask', async () => {
+      const service = bareService();
+      const inpaint = vi.spyOn(service, 'inpaintImage').mockResolvedValue('https://x/background.png');
+      const save = vi.spyOn(service, 'saveUrlToFile')
+        .mockResolvedValue({ id: 'background-file', path: '/uploads/org/background.png', name: 'magic-grab-background-1.png' });
+      const fileService = {
+        getFileByPath: vi.fn().mockResolvedValue({ id: 'mask-file', path: '/mask.png' }),
+        deleteFile: vi.fn().mockResolvedValue(undefined),
+      };
+      (service as any)._fileService = fileService;
+
+      const result = await service.magicGrab('/original.png', '/cutout.png', '/mask.png', { orgId: 'org-1' });
+
+      expect(inpaint).toHaveBeenCalledWith('/original.png', '/mask.png', expect.any(String), { orgId: 'org-1' });
+      expect(save).toHaveBeenCalledOnce();
+      expect(save).toHaveBeenCalledWith('org-1', 'https://x/background.png', 'magic-grab-background');
+      expect(result).toEqual({
+        background: { url: '/uploads/org/background.png', fileId: 'background-file' },
+      });
+      expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'mask-file');
+    });
+
+    it('cleans up only Magic Grab background files owned by the org', async () => {
+      const service = bareService();
+      const fileService = {
+        getFileById: vi.fn()
+          .mockResolvedValueOnce({ id: 'background-file', name: 'magic-grab-background-1.png' })
+          .mockResolvedValueOnce({ id: 'other-file', name: 'user-photo.png' })
+          .mockResolvedValueOnce(null),
+        deleteFile: vi.fn().mockResolvedValue(undefined),
+      };
+      (service as any)._fileService = fileService;
+
+      await service.cleanupMagicGrab('background-file', 'org-1');
+      await service.cleanupMagicGrab('other-file', 'org-1');
+      await service.cleanupMagicGrab('missing-file', 'org-1');
+
+      expect(fileService.deleteFile).toHaveBeenCalledOnce();
+      expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'background-file');
+    });
+  });
+
   describe('outpaintImage', () => {
     it('throws CapabilityNotAvailable when no provider configured', async () => {
       const service = bareService();

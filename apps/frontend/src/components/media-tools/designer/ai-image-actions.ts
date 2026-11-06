@@ -75,7 +75,7 @@ export interface StaticBackgroundRemovalCandidate {
   history: unknown;
 }
 
-const staticMediaMatches = (before: DesignerElement, current?: DesignerElement) => !!current &&
+export const staticMediaMatches = (before: DesignerElement, current?: DesignerElement) => !!current &&
   current.src === before.src &&
   current.originalSrc === before.originalSrc &&
   current.originalFileId === before.originalFileId &&
