@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { parseCsv, BulkImport } from './bulk.import';
+import { parseSpreadsheetText } from '@postmill-ai/frontend/components/shared/csv';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (key: string, fallback?: string) => fallback || key,
@@ -46,6 +47,18 @@ describe('parseCsv (RFC-4180 quoted fields)', () => {
 
   it('drops blank rows', () => {
     expect(parseCsv('a,b\n\n1,2\n')).toHaveLength(2);
+  });
+
+  it('detects TSV, preserves quoted multiline cells and strips a BOM', () => {
+    expect(parseSpreadsheetText('\ufeffname\tcopy\nAda\t"first line\nsecond line"')).toEqual([
+      ['name', 'copy'],
+      ['Ada', 'first line\nsecond line'],
+    ]);
+  });
+
+  it('rejects unclosed quotes and text after a closing quote', () => {
+    expect(() => parseCsv('name\n"unclosed')).toThrow(/unclosed/);
+    expect(() => parseCsv('name\n"Ada"oops')).toThrow(/closing quote/);
   });
 });
 

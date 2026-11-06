@@ -94,6 +94,7 @@ export interface DesignerActionCtx {
   onInsertMedia: (kind: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio') => void;
   onInsertQrCode: () => void;
   onExport: () => void;
+  onBulkCreate: () => void;
   /** Download the saved design as a `.pdesign` interchange file (async bundle job). */
   onExportPostmill: () => void;
   /** True while a .pdesign export job is running — drives the menu action's in-progress label. */
@@ -390,6 +391,7 @@ export const useDesignerActions = (
       { id: 'save-as-template', label: 'Save as Template', menu: 'file', group: 'save', keywords: ['template', 'save as'], run: ctx.onSaveAsTemplate },
       { id: 'import-media', label: 'Import Media…', menu: 'file', group: 'io', keywords: ['import', 'media', 'upload'], run: ctx.onOpenMedia },
       { id: 'export', label: 'Export…', menu: 'file', group: 'io', shortcut: '⌘E', keywords: ['export', 'download'], run: ctx.onExport },
+      { id: 'bulk-create', label: 'Bulk Create…', menu: 'file', group: 'io', keywords: ['bulk', 'csv', 'tsv', 'spreadsheet', 'variations'], enabled: () => !isVideoDoc(), run: ctx.onBulkCreate },
       { id: 'export-postmill', label: () => (ctx.pdesignExporting ? 'Exporting .pdesign…' : 'Export .pdesign…'), menu: 'file', group: 'io', keywords: ['export', 'pdesign', 'design file', 'download'], enabled: () => !ctx.pdesignExporting, run: ctx.onExportPostmill },
       { id: 'import-design', label: 'Import Design File…', menu: 'file', group: 'io', keywords: ['import', 'pdesign', 'json', 'design file', 'open'], run: ctx.onImportDesign },
       ...(ctx.onUseInPost ? [{ id: 'use-in-post', label: 'Use in Post', menu: 'file' as const, group: 'io', keywords: ['post', 'use'], run: ctx.onUseInPost }] : []),

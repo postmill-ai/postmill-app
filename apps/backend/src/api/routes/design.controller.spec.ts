@@ -28,6 +28,10 @@ vi.mock('@postmill-ai/nestjs-libraries/media/design-export/design-export.service
   DesignExportService: class {},
 }));
 
+vi.mock('@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service', () => ({
+  DesignBulkCreateService: class {},
+}));
+
 vi.mock('@postmill-ai/nestjs-libraries/media/design-render/render-progress', () => ({
   reportRenderProgress: vi.fn(),
   renderPayloadKey: (jobId: string) => `video-render:payload:${jobId}`,
@@ -83,6 +87,10 @@ describe('DesignController', () => {
     getJob: ReturnType<typeof vi.fn>;
     getProgress: ReturnType<typeof vi.fn>;
   };
+  let designBulkCreateService: {
+    enqueueBulkCreate: ReturnType<typeof vi.fn>;
+    getJob: ReturnType<typeof vi.fn>;
+  };
   let fileService: {
     getFileById: ReturnType<typeof vi.fn>;
   };
@@ -119,6 +127,10 @@ describe('DesignController', () => {
       getJob: vi.fn(),
       getProgress: vi.fn(),
     };
+    designBulkCreateService = {
+      enqueueBulkCreate: vi.fn(),
+      getJob: vi.fn(),
+    };
     fileService = {
       getFileById: vi.fn(),
     };
@@ -135,7 +147,8 @@ describe('DesignController', () => {
       {} as any,
       designerDocService as any,
       {} as any,
-      designExportService as any
+      designExportService as any,
+      designBulkCreateService as any
     );
     templateController = new DesignTemplateController(designService as any, {} as any, designExportService as any);
   });
@@ -553,6 +566,39 @@ describe('DesignController', () => {
         [],
         { orgId: 'org-1' },
       );
+    });
+  });
+
+  describe('Bulk Create enqueue and status', () => {
+    it('delegates the org/user batch and returns the job', async () => {
+      const body = {
+        doc: { mode: 'image', outputs: [] },
+        rows: [{ headline: 'Hello' }],
+        nameBase: 'Campaign',
+        folderId: 'folder-1',
+      };
+      designBulkCreateService.enqueueBulkCreate.mockResolvedValue({ id: 'job-1', status: 'pending' });
+
+      await expect(controller.bulkCreate(org, user, body)).resolves.toEqual({ id: 'job-1', status: 'pending' });
+      expect(designBulkCreateService.enqueueBulkCreate).toHaveBeenCalledWith('org-1', 'user-1', body);
+      expect(Reflect.getMetadata(
+        REQUIRE_PERMISSION_KEY,
+        DesignController.prototype.bulkCreate
+      )).toEqual({ resource: 'media', action: 'create' });
+    });
+
+    it('returns an owned status and 404s a job outside the org', async () => {
+      designBulkCreateService.getJob.mockResolvedValueOnce(null);
+      await expect(controller.bulkCreateStatus(org, 'foreign-job')).rejects.toBeInstanceOf(NotFoundException);
+
+      const job = { id: 'job-1', status: 'completed', results: [] };
+      designBulkCreateService.getJob.mockResolvedValueOnce(job);
+      await expect(controller.bulkCreateStatus(org, 'job-1')).resolves.toBe(job);
+      expect(designBulkCreateService.getJob).toHaveBeenLastCalledWith('org-1', 'job-1');
+      expect(Reflect.getMetadata(
+        REQUIRE_PERMISSION_KEY,
+        DesignController.prototype.bulkCreateStatus
+      )).toEqual({ resource: 'media', action: 'read' });
     });
   });
 

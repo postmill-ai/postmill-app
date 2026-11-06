@@ -61,7 +61,7 @@ function canonicalTerminalMessage(error: string): string {
 // 'stt' jobs are created already-complete (transcript stored inline via
 // completeJobWithBuffer), so they never enter the async poll path — but the type must
 // admit them so the Deepgram studio can record transcript history as media jobs.
-type AsyncOperation = 'video' | 'audio' | 'avatar' | 'image' | 'stt' | 'slide' | 'caption' | 'video-bg' | 'video-upscale' | 'design-export';
+type AsyncOperation = 'video' | 'audio' | 'avatar' | 'image' | 'stt' | 'slide' | 'caption' | 'video-bg' | 'video-upscale' | 'design-export' | 'design-bulk-create';
 
 const OPERATION_FOLDER: Record<string, string> = {
   image: 'images',

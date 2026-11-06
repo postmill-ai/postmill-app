@@ -54,6 +54,7 @@ import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiDetectSubject
 import { OutpaintDialog } from './outpaint-dialog';
 import { BackgroundRemovalDialog } from './background-removal-dialog';
 import { QrCodeDialog } from './qr-code-dialog';
+import { BulkCreateDialog } from './bulk-create-dialog';
 import { MobileQuickActions, MobileSheetHeader, MobileToolsDialog, MobileWorkspaceSheet, type MobileSheetSnap } from './mobile-designer-tools';
 import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
@@ -1313,6 +1314,12 @@ export const Designer: FC<DesignerProps> = ({
           children: (close: () => void) => <QrCodeDialog store={store} onClose={close} />,
         }),
       onExport: handleSaveToFiles,
+      onBulkCreate: () =>
+        modals.openModal({
+          title: translate('designer_bulk_title', 'Bulk Create'),
+          size: 800,
+          children: (close: () => void) => <BulkCreateDialog store={store} onClose={close} />,
+        }),
       onExportPostmill: handleExportPostmill,
       pdesignExporting,
       onImportDesign: () => importInputRef.current?.click(),

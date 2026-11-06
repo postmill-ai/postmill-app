@@ -7734,6 +7734,35 @@ paths:
         `FontLoaderService`.
       tags:
         - Design
+  /media/designs/bulk-create:
+    post:
+      operationId: DesignController_bulkCreate
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkCreateDesignDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Design
+  /media/designs/bulk-create/{jobId}:
+    get:
+      operationId: DesignController_bulkCreateStatus
+      parameters:
+        - name: jobId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design
   /media/designs/bulk-generate:
     post:
       operationId: DesignController_bulkGenerate
@@ -12478,6 +12507,26 @@ components:
           description: One path per glyph (the default) rather than one per line.
       required:
         - element
+    BulkCreateDesignDto:
+      type: object
+      properties:
+        doc:
+          type: object
+        rows:
+          minItems: 1
+          maxItems: 200
+          type: array
+          items:
+            type: object
+        nameBase:
+          type: string
+          maxLength: 200
+        folderId:
+          type: string
+          maxLength: 200
+      required:
+        - doc
+        - rows
     BulkGenerateDesignDto:
       type: object
       properties:

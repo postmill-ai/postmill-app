@@ -2,11 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import { DesignExportService } from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
+import { DesignBulkCreateService, DESIGN_BULK_CREATE_OPERATION } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service';
 
 /**
- * Drives one `.pdesign` export job (invoked by the concurrency-limited
- * `media/design-export` Inngest function, or inline by the media-jobs sweep
- * when Inngest is off). Mirrors MediaJobsActivity.processRenderJob's contract:
+ * Drives one `.pdesign` export or Designer Bulk Create job (invoked by the
+ * concurrency-limited `media/design-export` Inngest function, or inline by the
+ * media-jobs sweep when Inngest is off). Mirrors MediaJobsActivity.processRenderJob's contract:
  * the pending guard makes re-dispatches/retries no-ops, and an export that
  * recorded its own failure returns cleanly instead of burning Inngest retries
  * on a job whose retry no-ops at the same guard. Exports are NO_CREDIT — there
@@ -20,6 +21,7 @@ export class DesignExportActivity {
     private _aiSettings: AiSettingsService,
     private _organizationService: OrganizationService,
     private _designExportService: DesignExportService,
+    private _designBulkCreateService: DesignBulkCreateService,
   ) {}
 
   async processExportJob(jobId: string): Promise<void> {
@@ -34,7 +36,11 @@ export class DesignExportActivity {
       return;
     }
 
-    await this._designExportService.processExport(jobId);
+    if (job.operation === DESIGN_BULK_CREATE_OPERATION) {
+      await this._designBulkCreateService.processBulkCreate(jobId);
+    } else {
+      await this._designExportService.processExport(jobId);
+    }
 
     const after = await this._aiSettings.getMediaJobByIdUnscoped(jobId);
     if (after?.status === 'failed') {

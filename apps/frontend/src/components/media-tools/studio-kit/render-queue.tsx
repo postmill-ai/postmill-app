@@ -37,6 +37,7 @@ const OPERATION_LABEL: Record<string, { labelKey: string; label: string }> = {
   image: { labelKey: 'render_op_image', label: 'Image' },
   audio: { labelKey: 'render_op_audio', label: 'Audio' },
   stt: { labelKey: 'render_op_transcript', label: 'Transcript' },
+  'design-bulk-create': { labelKey: 'designer_bulk_title', label: 'Bulk Create' },
 };
 
 interface RenderQueueProps {

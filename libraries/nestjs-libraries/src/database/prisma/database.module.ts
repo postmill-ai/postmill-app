@@ -124,6 +124,7 @@ import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-
 import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
 import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 import { DesignBulkService } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk.service';
+import { DesignBulkCreateService } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service';
 import { FontLoaderService } from '@postmill-ai/nestjs-libraries/media/design-render/font-loader.service';
 import { VideoRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
 import { VideoRenderModule } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.module';
@@ -261,6 +262,7 @@ import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/a
     DesignPreviewService,
     VideoThumbnailService,
     DesignBulkService,
+    DesignBulkCreateService,
     FontLoaderService,
     AuthContextResolver,
     DashboardService,
