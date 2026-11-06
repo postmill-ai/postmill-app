@@ -180,6 +180,8 @@ const sentryConfig = {
       '**/*.test.js',
       '**/*.spec.js',
     ],
+    // With Epure enabled, maps remain on disk for the secondary upload. Client maps
+    // are also served under /_next/static; this is expected for the open-source UI.
     deleteSourcemapsAfterUpload: !process.env.NEXT_PUBLIC_EPURE_DSN,
   },
 

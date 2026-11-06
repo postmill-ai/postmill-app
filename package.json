@@ -41,6 +41,7 @@
     "prisma-migrate-resolve": "pnpm dlx prisma@6.5.0 migrate resolve --schema ./libraries/nestjs-libraries/src/database/prisma/schema.prisma",
     "prisma-migrate-deploy-safe": "node tools/db/migrate-deploy-safe.mjs",
     "openapi:generate": "node tools/codegen/generate-openapi.mjs",
+    "sourcemaps:upload-epure": "node tools/codegen/upload-epure-sourcemaps.mjs",
     "prisma-reset": "cd ./libraries/nestjs-libraries/src/database/prisma && pnpm dlx prisma@6.5.0 db push --force-reset && pnpm dlx prisma@6.5.0 db push",
     "docker-build": "./docker/docker-build.sh",
     "docker-create": "./docker/docker-create.sh",
@@ -115,6 +116,7 @@
   },
   "pnpm": {
     "overrides": {
+      "@sentry/core": "10.76.2",
       "axios": "^1.20.0",
       "follow-redirects": "^1.16.2",
       "node-forge": "^1.4.2",

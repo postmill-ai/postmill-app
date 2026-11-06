@@ -2,7 +2,12 @@ import * as Sentry from '@sentry/nextjs';
 import { makeFetchTransport } from '@sentry/browser';
 import { makeEpureTransport } from './epure-transport';
 
-export const initializeSentryBasic = (environment: string, dsn: string, extension: any) => {
+export const initializeSentryBasic = (
+  environment: string,
+  dsn: string,
+  extension: any,
+  createTransport = makeFetchTransport
+) => {
   if (!dsn) {
     return;
   }
@@ -32,7 +37,7 @@ export const initializeSentryBasic = (environment: string, dsn: string, extensio
   const transport = makeEpureTransport({
     sentryDsn: dsn,
     epureDsn,
-    createTransport: (options) => makeFetchTransport(options),
+    createTransport,
   });
   if (epureDsn && !transport) {
     console.warn('Epure DSN is invalid; using Sentry only.');

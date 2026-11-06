@@ -15,7 +15,8 @@ const sourcemapFiles = async (root) => {
 };
 
 const main = async () => {
-  const release = process.argv[2] || process.env.GITHUB_SHA || process.env.VERCEL_GIT_COMMIT_SHA;
+  const releaseArg = process.argv[2] === '--' ? process.argv[3] : process.argv[2];
+  const release = releaseArg || process.env.GITHUB_SHA || process.env.VERCEL_GIT_COMMIT_SHA;
   const dsn = process.env.NEXT_PUBLIC_EPURE_DSN;
   if (!release || !dsn) {
     console.log('Epure sourcemaps skipped: release or DSN is not configured.');
@@ -51,7 +52,7 @@ const main = async () => {
     }
 
     const form = new FormData();
-    form.append('name', `~/${relative}`);
+    form.append('name', `~/_next/${relative}`);
     form.append('file', new Blob([await fs.readFile(filePath)], { type: 'application/json' }), path.basename(filePath));
     try {
       const response = await fetch(
