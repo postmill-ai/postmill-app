@@ -226,17 +226,18 @@ export class DesignBulkCreateService extends DesignBulkService {
     if (!claimed) return;
     await this._aiSettings.updateMediaJob(orgId, jobId, { status: 'processing' });
 
+    const results: DesignBulkCreateRowResult[] = [];
     try {
       const payload = JSON.parse(raw) as DesignBulkCreatePayload;
-      const results: DesignBulkCreateRowResult[] = [];
+      const rows = payload.rows.slice(0, MAX_BULK_ROWS);
       const zipEntries: BulkZipEntry[] = [];
       const remoteImageCache = new Map<string, { id: string; path: string }>();
       let zipBytes = 0;
       let succeeded = 0;
-      for (let index = 0; index < payload.rows.length; index++) {
+      for (let index = 0; index < rows.length; index++) {
         const result: DesignBulkCreateRowResult = { row: index + 1, fileIds: [] };
         try {
-          const doc = applyBulkRow(payload.doc, payload.rows[index]);
+          const doc = applyBulkRow(payload.doc, rows[index]);
           await this._persistRemoteImages(orgId, doc, remoteImageCache);
           const name = `${payload.nameBase} ${index + 1}`;
           const design = await this._designService.createDesign(orgId, payload.userId, { name, doc });
@@ -267,7 +268,7 @@ export class DesignBulkCreateService extends DesignBulkService {
           this._logger.warn(`Bulk Create ${jobId}: row ${index + 1} failed: ${result.error}`);
         }
         results.push(result);
-        await this._writeProgress(jobId, index + 1, payload.rows.length);
+        await this._writeProgress(jobId, index + 1, rows.length);
       }
 
       if (!succeeded) throw new Error(results[0]?.error || 'Every Bulk Create row failed.');
@@ -298,7 +299,11 @@ export class DesignBulkCreateService extends DesignBulkService {
     } catch (error) {
       const message = ((error as Error)?.message || 'Bulk Create failed').slice(0, 1000);
       this._logger.warn(`Bulk Create ${jobId} failed: ${message}`);
-      await this._aiSettings.updateMediaJob(orgId, jobId, { status: 'failed', error: message });
+      await this._aiSettings.updateMediaJob(orgId, jobId, {
+        status: 'failed',
+        error: message,
+        inputJson: results.length ? JSON.stringify(results) : undefined,
+      });
     } finally {
       await Promise.all([
         ioRedis.del(payloadKey(jobId)),

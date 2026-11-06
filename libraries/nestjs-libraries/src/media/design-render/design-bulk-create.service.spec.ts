@@ -217,6 +217,7 @@ describe('DesignBulkCreateService processing', () => {
 
     expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith('org-1', 'job-1', expect.objectContaining({
       status: 'failed', error: 'Invalid row',
+      inputJson: JSON.stringify([{ row: 1, fileIds: [], error: 'Invalid row' }]),
     }));
     expect(writes.some((write) => write.mime === 'application/zip')).toBe(false);
   });
