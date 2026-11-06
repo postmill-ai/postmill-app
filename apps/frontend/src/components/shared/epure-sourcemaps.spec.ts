@@ -22,7 +22,7 @@ describe('Epure production sourcemap upload', () => {
     cleanup.push(() => fs.rm(temporary, { recursive: true, force: true }));
     const nextDir = path.join(temporary, 'apps/frontend/.next');
     const fixtures = [
-      'static/chunks/client.js.map',
+      'static/chunks/renamed.js.map',
       'server/app.js.map',
       'serverless/lambda.js.map',
       'dev/static/chunks/stale.js.map',
@@ -31,17 +31,40 @@ describe('Epure production sourcemap upload', () => {
     await Promise.all(fixtures.map(async (relative) => {
       const file = path.join(nextDir, relative);
       await fs.mkdir(path.dirname(file), { recursive: true });
-      await fs.writeFile(file, '{"version":3}');
+      const contents = relative === 'static/chunks/renamed.js.map'
+        ? JSON.stringify({
+            version: 3,
+            sections: [{
+              offset: { line: 0, column: 0 },
+              map: {
+                version: 3,
+                sources: ['src/app.ts'],
+                sourcesContent: ['function throwError() {}'],
+                names: ['throwError'],
+                mappings: 'AAAA,SAASA',
+              },
+            }],
+          })
+        : '{"version":3,"mappings":""}';
+      await fs.writeFile(file, contents);
     }));
+    await fs.writeFile(
+      path.join(nextDir, 'static/chunks/served.js'),
+      '//# sourceMappingURL=renamed.js.map\n'
+    );
 
-    const artifacts: string[] = [];
+    const uploads: Array<{ name: string; sourcemap: any }> = [];
     const server = http.createServer((request, response) => {
       let body = '';
       request.setEncoding('utf8');
       request.on('data', (chunk) => { body += chunk; });
       request.on('end', () => {
         const name = body.match(/name="name"\r\n\r\n([^\r]+)/)?.[1];
-        if (name) artifacts.push(name);
+        const start = body.indexOf('{"version"');
+        const end = body.indexOf('\r\n', start);
+        if (name && start >= 0 && end > start) {
+          uploads.push({ name, sourcemap: JSON.parse(body.slice(start, end)) });
+        }
         response.writeHead(201, { 'Content-Type': 'application/json' });
         response.end('{}');
       });
@@ -63,11 +86,15 @@ describe('Epure production sourcemap upload', () => {
       }
     );
 
-    expect(artifacts.sort()).toEqual([
+    expect(uploads.map((upload) => upload.name).sort()).toEqual([
       '~/_next/server/app.js.map',
       '~/_next/serverless/lambda.js.map',
-      '~/_next/static/chunks/client.js.map',
+      '~/_next/static/chunks/served.js.map',
     ]);
+    const flattened = uploads.find((upload) => upload.name.endsWith('/served.js.map'));
+    expect(flattened?.sourcemap.sections).toBeUndefined();
+    expect(flattened?.sourcemap.sources).toContain('src/app.ts');
+    expect(flattened?.sourcemap.mappings).toBeTypeOf('string');
     expect(stdout).toContain('3 uploaded, 0 oversized, 1 unsupported, 0 failed');
     expect(stdout).not.toContain('dev/static');
   }, 15000);
