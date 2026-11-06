@@ -122,6 +122,9 @@ const clipToElement = (
         ...(fontSize ? { fontSize } : {}),
         ...(clip.fontWeight ? { fontWeight: clip.fontWeight } : {}),
         ...(clip.fontStyle ? { fontStyle: clip.fontStyle } : {}),
+        ...(clip.textExtrusion ? {
+          styles: [{ type: 'extrusion' as const, ...clip.textExtrusion }],
+        } : {}),
         ...(clip.fill ? { fill: clip.fill } : {}),
         ...(clip.align ? { align: clip.align } : {}),
       } as DesignerElement;

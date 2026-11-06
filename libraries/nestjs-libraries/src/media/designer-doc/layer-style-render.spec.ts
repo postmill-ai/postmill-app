@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createCanvas } from 'canvas';
-import { blurCanvas, buildStyleGradient, drawOverStyle } from './layer-style-render';
+import { blurCanvas, buildStyleGradient, drawOverStyle, drawUnderStyle } from './layer-style-render';
 
 /**
  * `ctx.filter = 'blur(Npx)'` is accepted and silently ignored by node-canvas,
@@ -152,5 +152,25 @@ describe("the 'noise' layer style", () => {
     const a = renderNoise().getContext('2d').getImageData(0, 0, 40, 40).data;
     const b = renderNoise().getContext('2d').getImageData(0, 0, 40, 40).data;
     expect(Array.from(a)).toEqual(Array.from(b));
+  });
+});
+
+describe('the 3D extrusion layer style', () => {
+  it('paints a tinted silhouette behind the original layer', () => {
+    const layer = opaqueSquare(80, '#ffffff');
+    const canvas = createCanvas(80, 80);
+    const ctx = canvas.getContext('2d');
+    drawUnderStyle(
+      ctx,
+      layer,
+      { type: 'extrusion', depth: 8, angle: 0, color: '#ff0000', opacity: 1 },
+      1,
+      { x: 0, y: 0, width: 80, height: 80 },
+      { createCanvas, patternTile: () => null }
+    );
+    ctx.drawImage(layer, 0, 0);
+
+    expect(px(canvas, 14, 40)).toEqual([255, 0, 0, 255]);
+    expect(px(canvas, 40, 40)).toEqual([255, 255, 255, 255]);
   });
 });

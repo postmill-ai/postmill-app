@@ -195,6 +195,12 @@ export const reflowVideoClip = (
   const ff =
     clip.fontSize && next.fontSize ? next.fontSize / clip.fontSize : 1;
   next.keyframes = scaleClipKeyframes(clip, fx, fy, ff);
+  if (next.textExtrusion) {
+    next.textExtrusion = {
+      ...next.textExtrusion,
+      depth: Math.round(next.textExtrusion.depth * ff),
+    };
+  }
   return next;
 };
 

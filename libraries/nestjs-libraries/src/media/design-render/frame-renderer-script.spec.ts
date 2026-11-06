@@ -484,6 +484,52 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     // Fully revealed by the window end.
     expect(fillCalls[fillCalls.length - 1]).toBe('0123456789');
   });
+
+  it('draws text extrusion through the injected shared offset math', async () => {
+    const fillCalls: string[] = [];
+    const recordingContext = () => {
+      const ctx: Record<string, unknown> = {
+        canvas: { width: 10, height: 10 },
+        measureText: (s: string) => ({ width: (s || '').length * 10 }),
+        fillText: (s: string) => {
+          fillCalls.push(s);
+        },
+      };
+      return new Proxy(ctx, {
+        get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+        set: (target, prop, value) => {
+          target[prop as string] = value;
+          return true;
+        },
+      });
+    };
+    const canvas = { width: 0, height: 0, getContext: () => recordingContext() };
+    const win: Record<string, unknown> = {
+      __DATA: {
+        output: {
+          id: 'o', width: 100, height: 100, fps: 30, durationMs: 1000, background: '#000000',
+          tracks: [{
+            id: 'tt', type: 'text',
+            clips: [{
+              id: 'c', startMs: 0, endMs: 1000, text: '3D', x: 0, y: 0, width: 100, height: 40,
+              textExtrusion: { depth: 2, angle: 0, color: '#123456', opacity: 1 },
+            }],
+          }],
+        },
+        baseUrl: 'https://example.test',
+      },
+    };
+    const doc = {
+      getElementById: () => canvas,
+      createElement: () => ({ width: 0, height: 0, getContext: () => recordingContext() }),
+    };
+    const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
+    fn(win, doc, class {});
+    const api = win.__FRAME_API as { renderFrame: (ms: number) => Promise<void> };
+
+    await api.renderFrame(0);
+    expect(fillCalls).toEqual(['3D', '3D', '3D']);
+  });
 });
 
 describe('FRAME_RENDERER_SCRIPT — transitions and hidden tracks', () => {

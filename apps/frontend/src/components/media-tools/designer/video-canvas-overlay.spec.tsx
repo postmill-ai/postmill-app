@@ -276,6 +276,48 @@ describe('video overlay styles and keyframed text', () => {
     expect(text.fontSize()).toBe(48);
     expect(text.lineHeight()).toBe(1);
   });
+
+  it('renders text extrusion behind the original text clip', async () => {
+    const store = createDesignerStore(500, 500);
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'text');
+    const output = store.getState().doc.outputs[0] as VideoOutput;
+    const track = output.tracks.find((item) => item.type === 'text')!;
+    store.getState().addClip(0, track.id, {
+      id: '3d-text',
+      startMs: 0,
+      endMs: 1000,
+      text: '3D',
+      width: 200,
+      height: 60,
+      fill: '#ffffff',
+      textExtrusion: { depth: 2, angle: 0, color: '#123456', opacity: 1 },
+    } as never);
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={500} height={500}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={500} height={500} />
+          </Layer>
+        </Stage>
+      );
+    });
+
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const group = stage.findOne('#3d-text')!;
+    const texts = group.find('Text') as Konva.Text[];
+    expect(texts).toHaveLength(3);
+    expect(texts.slice(0, 2).map((text) => text.fill())).toEqual(['#123456', '#123456']);
+    expect(texts[0].x()).toBeLessThan(texts[1].x());
+    expect(texts[2].fill()).toBe('#ffffff');
+  });
 });
 
 describe('video overlay draw geometry', () => {

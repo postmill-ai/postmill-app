@@ -126,6 +126,26 @@ describe('buildPostmillFile / parsePostmillFile round-trip', () => {
     expect(parsed.manifest.docVersion).toBe(11);
     expect(parsed.doc).toEqual(doc);
   });
+
+  it('round-trips v12 extrusion styles and text-clip extrusion verbatim', () => {
+    const doc = {
+      version: 12,
+      mode: 'video',
+      outputs: [{
+        id: 'video-out', width: 1080, height: 1080, fps: 30, durationMs: 1000,
+        tracks: [{
+          id: 'text-track', type: 'text',
+          clips: [{
+            id: 'text-clip', startMs: 0, endMs: 1000, text: '3D',
+            textExtrusion: { depth: 24, angle: 45, color: '#123456', opacity: 0.85 },
+          }],
+        }],
+      }],
+    } as unknown as DesignerDoc;
+    const parsed = parsePostmillFile(buildPostmillFile(doc, 'Extrusion'));
+    expect(parsed.manifest.docVersion).toBe(12);
+    expect(parsed.doc).toEqual(doc);
+  });
 });
 
 describe('format v2 (bundled assets + fonts)', () => {

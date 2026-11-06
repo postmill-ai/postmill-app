@@ -69,6 +69,7 @@ export const combineElements = (
 
 const STYLES: { type: DesignerLayerStyle['type']; label: string }[] = [
   { type: 'bevel-emboss', label: 'Bevel and Emboss' },
+  { type: 'extrusion', label: '3D Extrusion' },
   { type: 'stroke', label: 'Stroke' },
   { type: 'inner-shadow', label: 'Inner Shadow' },
   { type: 'inner-glow', label: 'Inner Glow' },
@@ -97,6 +98,8 @@ export const defaultStyle = (type: DesignerLayerStyle['type']): DesignerLayerSty
       return { ...base, color: '#000000', size: 3, position: 'outside', opacity: 1 };
     case 'bevel-emboss':
       return { ...base, style: 'inner-bevel', depth: 100, size: 6, soften: 0, angle: 120, useGlobalLight: true, highlightColor: '#ffffff', shadowColor: '#000000' };
+    case 'extrusion':
+      return { ...base, color: '#000000', angle: 45, depth: 24, opacity: 0.85 };
     case 'satin':
       return { ...base, color: '#000000', angle: 19, distance: 11, size: 14, opacity: 0.5 };
     case 'color-overlay':

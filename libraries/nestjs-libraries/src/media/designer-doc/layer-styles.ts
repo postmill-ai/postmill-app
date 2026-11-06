@@ -18,6 +18,7 @@ export const STYLE_ORDER: DesignerLayerStyle['type'][] = [
   // Beneath the layer:
   'drop-shadow',
   'outer-glow',
+  'extrusion',
   // The layer itself is painted here.
   'color-overlay',
   'gradient-overlay',
@@ -32,7 +33,7 @@ export const STYLE_ORDER: DesignerLayerStyle['type'][] = [
 ];
 
 /** Effects painted BEFORE the layer's own pixels. */
-export const UNDER_STYLES: ReadonlySet<string> = new Set(['drop-shadow', 'outer-glow']);
+export const UNDER_STYLES: ReadonlySet<string> = new Set(['drop-shadow', 'outer-glow', 'extrusion']);
 
 /** The document-wide light angle a style follows when `useGlobalLight`. */
 export const DEFAULT_GLOBAL_LIGHT = 120;
@@ -97,7 +98,8 @@ export const stylePadding = (styles: DesignerLayerStyle[] | undefined): number =
   for (const s of orderedStyles(styles)) {
     const offset = styleOffset(s);
     const reach =
-      Math.max(Math.abs(offset.x), Math.abs(offset.y)) + (s.size ?? 0) + (s.depth ?? 0) / 10;
+      Math.max(Math.abs(offset.x), Math.abs(offset.y)) + (s.size ?? 0) +
+      (s.type === 'extrusion' ? (s.depth ?? 0) : (s.depth ?? 0) / 10);
     if (reach > pad) pad = reach;
   }
   return Math.ceil(pad);

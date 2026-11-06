@@ -27,6 +27,7 @@ import {
 import { smartReflow, computeGroupBoxes } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
 import { canSplitClipAt } from './timeline-split';
+import { TEXT_ANIMATION_PRESETS, buildTextAnimationUpdate, matchTextAnimationPreset } from './text-animation-presets';
 import { applyLinked, applyElementPatch, applyLinkedVideoClip, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
 import {
   seedVideoOutput,
@@ -1806,6 +1807,36 @@ export const createDesignerStore = (
           // whose other end was left out of bounds (duration shrink) heals it
           // instead of failing on the stale value forever.
           patched = { ...updates, startMs: nextStart, endMs: nextEnd };
+          const previousDuration = clip.endMs - clip.startMs;
+          const nextDuration = nextEnd - nextStart;
+          if (previousDuration !== nextDuration && clip.keyframes?.length) {
+            const textClip = track.type === 'text' || track.type === 'caption';
+            const presetName = matchTextAnimationPreset(
+              clip.keyframes,
+              clip.x ?? 0,
+              clip.y ?? 0,
+              clip.rotation ?? 0,
+              clip.textReveal,
+              clip.width ?? 1,
+              clip.height ?? 1,
+              previousDuration,
+              clip.fontSize ?? 16,
+              textClip
+            );
+            const preset = TEXT_ANIMATION_PRESETS.find(
+              (candidate) => candidate.name === presetName && candidate.category === 'exit'
+            );
+            if (preset) {
+              patched = {
+                ...patched,
+                keyframes: buildTextAnimationUpdate(
+                  preset,
+                  { ...clip, startMs: nextStart, endMs: nextEnd },
+                  textClip
+                ).keyframes,
+              };
+            }
+          }
         }
         // Linked-by-default across video variants: content/style updates
         // propagate to same-originId clips on the other outputs; geometry and

@@ -723,15 +723,23 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     if (preset.textReveal && clipTrackType !== 'text') return;
     // One animation at a time: the builder clears the other channel (reveal ⇄
     // keyframes) as part of the patch.
-    const update = buildTextAnimationUpdate(preset, clip);
+    const update = buildTextAnimationUpdate(
+      preset,
+      clip,
+      clipTrackType === 'text' || clipTrackType === 'caption'
+    );
     updateClip(update);
-    // Every preset animates only the first few hundred ms of the clip — with
-    // the playhead anywhere later, clicking a preset visibly did nothing.
-    // Seek to the clip start and play the animation window once.
-    store.getState().setPlayhead(clip.startMs);
-    const animWindowMs = update.keyframes?.length
-      ? Math.max(...update.keyframes.map((kf) => kf.tMs))
-      : (update.textReveal?.durationMs ?? clip.endMs - clip.startMs);
+    const clipDuration = clip.endMs - clip.startMs;
+    const animWindowMs = preset.category === 'exit'
+      ? Math.min(1200, clipDuration)
+      : update.keyframes?.length
+        ? Math.max(...update.keyframes.map((kf) => kf.tMs))
+        : (update.textReveal?.durationMs ?? clipDuration);
+    store.getState().setPlayhead(
+      preset.category === 'exit'
+        ? Math.max(clip.startMs, clip.endMs - animWindowMs)
+        : clip.startMs
+    );
     window.dispatchEvent(
       new CustomEvent('designer:preview-clip-animation', {
         detail: { durationMs: Math.min(animWindowMs + 600, 3000) },
@@ -743,7 +751,18 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   const activeTextAnimation = useMemo(
     () =>
       clip && clipTrackType && ANIMATION_TRACK_TYPES.has(clipTrackType)
-        ? matchTextAnimationPreset(clip.keyframes, clip.x ?? 0, clip.y ?? 0, clip.rotation ?? 0, clip.textReveal)
+        ? matchTextAnimationPreset(
+            clip.keyframes,
+            clip.x ?? 0,
+            clip.y ?? 0,
+            clip.rotation ?? 0,
+            clip.textReveal,
+            clip.width ?? 1,
+            clip.height ?? 1,
+            clip.endMs - clip.startMs,
+            clip.fontSize ?? 16,
+            clipTrackType === 'text' || clipTrackType === 'caption'
+          )
         : null,
     [clip, clipTrackType]
   );
@@ -1491,6 +1510,44 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             value={clip.fill || '#000000'}
             onChange={(hex) => updateClip({ fill: hex })}
           />
+          <div className="pt-2 border-t border-studioBorder space-y-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!!clip.textExtrusion}
+              onClick={() => updateClip({
+                textExtrusion: clip.textExtrusion
+                  ? undefined
+                  : { depth: 24, angle: 45, color: '#000000', opacity: 0.85 },
+              })}
+              className={`w-full px-3 py-2 rounded-sm text-[12px] border text-left ${clip.textExtrusion ? 'border-designerAccent bg-designerAccent/10 text-btnPrimaryAccent' : 'border-studioBorder text-textColor hover:bg-boxHover'}`}
+            >
+              {translate('designer_style_extrusion', '3D Extrusion')}
+            </button>
+            {clip.textExtrusion && (
+              <>
+                <ColorSwatch
+                  label={translate('designer_extrusion_color', 'Extrusion color')}
+                  value={clip.textExtrusion.color || '#000000'}
+                  onChange={(hex) => updateClip({ textExtrusion: { ...clip.textExtrusion!, color: hex } })}
+                />
+                <Slider
+                  label={translate('designer_extrusion_depth', 'Depth')}
+                  min={0}
+                  max={200}
+                  value={clip.textExtrusion.depth}
+                  onChange={(depth) => updateClip({ textExtrusion: { ...clip.textExtrusion!, depth } })}
+                />
+                <Slider
+                  label={translate('designer_extrusion_angle', 'Angle')}
+                  min={0}
+                  max={360}
+                  value={clip.textExtrusion.angle ?? 45}
+                  onChange={(angle) => updateClip({ textExtrusion: { ...clip.textExtrusion!, angle } })}
+                />
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -1517,27 +1574,43 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
               ? translate('designer_text_animations', 'Text Animations')
               : translate('designer_animations', 'Animations')}
           </div>
-          <div className="flex flex-wrap gap-1">
-            {TEXT_ANIMATION_PRESETS.filter(
-              (preset) => !preset.textReveal || clipTrackType === 'text'
-            ).map((preset) => {
-              const active = activeTextAnimation === preset.name;
-              return (
-                <button
-                  key={preset.name}
-                  onClick={() => handleApplyTextAnimation(preset.name)}
-                  aria-pressed={active}
-                  className={`px-2 py-1 rounded-sm text-[10px] border transition-all ${
-                    active
-                      ? 'border-designerAccent bg-designerAccent/20 text-textColor'
-                      : 'border-studioBorder text-textColor hover:border-designerAccent hover:bg-boxHover'
-                  }`}
-                >
-                  {translate(preset.nameKey, preset.name)}
-                </button>
-              );
-            })}
-          </div>
+          {(['entrance', 'emphasis', 'exit'] as const).map((category) => (
+            <div key={category} className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wider text-textColor/40">
+                {translate(`designer_animation_${category}`, category)}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {TEXT_ANIMATION_PRESETS.filter(
+                  (preset) => preset.category === category &&
+                    (!preset.textReveal || clipTrackType === 'text')
+                ).map((preset) => {
+                  const active = activeTextAnimation === preset.name;
+                  return (
+                    <button
+                      key={preset.name}
+                      onClick={() => handleApplyTextAnimation(preset.name)}
+                      aria-pressed={active}
+                      className={`px-2 py-1 rounded-sm text-[10px] border transition-all ${
+                        active
+                          ? 'border-designerAccent bg-designerAccent/20 text-textColor'
+                          : 'border-studioBorder text-textColor hover:border-designerAccent hover:bg-boxHover'
+                      }`}
+                    >
+                      {translate(preset.nameKey, preset.name)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            disabled={!keyframes.length && !clip.textReveal}
+            onClick={() => updateClip({ keyframes: undefined, textReveal: undefined })}
+            className="px-2 py-1 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40"
+          >
+            {translate('designer_clear_animation', 'Clear animation')}
+          </button>
         </div>
       )}
 

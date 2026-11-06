@@ -251,6 +251,7 @@ export type { SpeedCurvePoint } from './speed-curve';
 export type { TextReveal, TextRevealMode } from './text-reveal';
 export type { MotionBlur } from './motion-blur';
 export type { StrokeStyle, ArrowHead, LineCap, LineJoin } from './stroke-style';
+export type { VideoTextExtrusion } from './text-extrusion';
 export type { CaptionStyle, CaptionPreset } from './caption-styles';
 export type { SymbolDefinition, SymbolOverrides, SlotDefinition } from './symbols';
 import type { SymbolDefinition, SymbolOverrides, SlotDefinition } from './symbols';
@@ -261,6 +262,7 @@ import type { KeyframeEase } from './keyframes';
 import type { TextReveal } from './text-reveal';
 import type { DesignerPathNode } from './path-geometry';
 import type { SpeedCurvePoint } from './speed-curve';
+import type { VideoTextExtrusion } from './text-extrusion';
 
 export interface DesignerCrop {
   x: number;
@@ -373,7 +375,7 @@ export type DesignerBlendMode =
 export interface DesignerLayerStyle {
   type:
     | 'drop-shadow' | 'inner-shadow' | 'outer-glow' | 'inner-glow'
-    | 'stroke' | 'bevel-emboss' | 'satin'
+    | 'stroke' | 'bevel-emboss' | 'satin' | 'extrusion'
     | 'color-overlay' | 'gradient-overlay' | 'pattern-overlay'
     | 'noise';
   enabled?: boolean;
@@ -741,6 +743,8 @@ export interface VideoClip {
   fontWeight?: number;
   /** Optional-additive doc v10: upright or italic text. */
   fontStyle?: 'normal' | 'italic';
+  /** Optional-additive doc v12: non-destructive 3D text extrusion. */
+  textExtrusion?: VideoTextExtrusion;
   fill?: string;
   /** Optional-additive doc v9: solid/gradient shape fills and text alignment. */
   fillGradient?: DesignerGradient;
@@ -1243,7 +1247,7 @@ const layerStyleShape = (gradient: z.ZodTypeAny) =>
   z.object({
     type: z.enum([
       'drop-shadow', 'inner-shadow', 'outer-glow', 'inner-glow',
-      'stroke', 'bevel-emboss', 'satin',
+      'stroke', 'bevel-emboss', 'satin', 'extrusion',
       'color-overlay', 'gradient-overlay', 'pattern-overlay',
       'noise',
     ]),
@@ -1668,6 +1672,13 @@ const { strict: StrictSpeedCurvePointSchema, lenient: LenientSpeedCurvePointSche
 // ---------------------------------------------------------------------------
 // VideoClip
 // ---------------------------------------------------------------------------
+const VideoTextExtrusionSchema = z.object({
+  depth: z.number().finite().min(0).max(200),
+  angle: z.number().finite().min(0).max(360).optional(),
+  color: ColorSchema.optional(),
+  opacity: z.number().finite().min(0).max(1).optional(),
+});
+
 const clipCommon = {
   id: z.string().max(200),
   // Format-local grouping (doc v10) — unlike originId, never propagates.
@@ -1710,6 +1721,7 @@ const clipCommon = {
     .optional(),
   fontFamily: z.string().max(200).optional(),
   fontStyle: z.enum(['normal', 'italic']).optional(),
+  textExtrusion: VideoTextExtrusionSchema.optional(),
   fill: ColorSchema.optional(),
   // Optional-additive doc v9: text clips accept the same four alignments as
   // image text. Shape gradients live in the strict/lenient nested maps below.
@@ -2113,6 +2125,7 @@ export { StrictDesignerBackgroundSchema, LenientDesignerBackgroundSchema };
 export { StrictDesignerElementSchema, LenientDesignerElementSchema };
 export { StrictStickerFrameSchema, LenientStickerFrameSchema };
 export { StrictCaptionWordSchema, LenientCaptionWordSchema };
+export { VideoTextExtrusionSchema };
 export { StrictTransitionSchema, LenientTransitionSchema };
 export { StrictVideoMarkerSchema, LenientVideoMarkerSchema };
 export { StrictKeyframeSchema, LenientKeyframeSchema };
