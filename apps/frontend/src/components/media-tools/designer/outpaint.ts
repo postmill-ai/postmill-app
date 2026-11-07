@@ -2,6 +2,7 @@
 
 import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 import { MAX_DIMENSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/dtos/ai/image-source.validator';
 import type { DesignerElement, DesignerOutput } from './designer.store';
 import { probeImageNaturalSize } from './elements';
 import { loadMaskImage } from './background-removal-mask';
@@ -275,9 +276,16 @@ export const prepareWholePageOutpaint = async ({
   } catch {
     throw new Error('The expanded page is too large for this browser. Choose smaller page dimensions.');
   }
-  if (!imageData.startsWith('data:image/png') || !maskData.startsWith('data:image/png') ||
-    imageData.length > 45 * 1024 * 1024 || maskData.length > 45 * 1024 * 1024) {
-    throw new Error('The expanded page exceeds the 45 MB upload limit. Choose smaller page dimensions.');
+  if (!imageData.startsWith('data:image/png') || !maskData.startsWith('data:image/png')) {
+    throw new Error('The expanded page could not be encoded for upload. Choose smaller page dimensions.');
+  }
+  const encodedLength = (value: string) => value.slice(value.indexOf(',') + 1).length;
+  const maxEncodedLength = Math.floor((IMAGE_SOURCE_MAX_BYTES / 3) * 4);
+  if (encodedLength(imageData) > maxEncodedLength || encodedLength(maskData) > maxEncodedLength) {
+    throw new Error('The expanded page exceeds the 20 MB image upload limit. Choose smaller page dimensions.');
+  }
+  if (imageData.length + maskData.length > 45 * 1024 * 1024) {
+    throw new Error('The expanded page exceeds the 45 MB combined upload limit. Choose smaller page dimensions.');
   }
   const response = await fetch('/media/inpaint', {
     method: 'POST',

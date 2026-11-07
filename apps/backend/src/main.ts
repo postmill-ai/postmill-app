@@ -127,6 +127,9 @@ async function start() {
       '/media/designer/{*splat}',
       '/media/remove-background',
       '/media/inpaint',
+      '/media/outpaint',
+      '/media/magic-grab',
+      '/media/upscale',
     ],
     (req: any, res: any, next: any) => {
       json({ limit: '50mb' })(req, res, next);

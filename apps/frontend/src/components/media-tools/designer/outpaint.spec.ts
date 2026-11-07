@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/dtos/ai/image-source.validator';
 import { createDesignerStore } from './designer.store';
 import {
   applyAiOutpaint,
@@ -142,6 +143,42 @@ describe('whole-page expansion', () => {
     await expect(prepareWholePageOutpaint({
       fetch, store, elementId: 'image-1', targetWidth: 5001, targetHeight: 5000,
     })).rejects.toThrow('25 million pixels');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects an inline image over the server decoded-size cap', async () => {
+    const store = createDesignerStore(1000, 500);
+    store.getState().addElement(imageElement());
+    const fetch = vi.fn(async () => response('/expanded-page.png'));
+    const data = `data:image/png;base64,${'A'.repeat(Math.floor((IMAGE_SOURCE_MAX_BYTES / 3) * 4) + 1)}`;
+    vi.mocked(document.createElement).mockImplementation(() => ({
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ fillStyle: '', fillRect: vi.fn(), drawImage: vi.fn() })),
+      toDataURL: vi.fn(() => data),
+    }) as any);
+
+    await expect(prepareWholePageOutpaint({
+      fetch, store, elementId: 'image-1', targetWidth: 1500, targetHeight: 750,
+    })).rejects.toThrow('20 MB image upload limit');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a combined request over 45 MB even when each image fits its own cap', async () => {
+    const store = createDesignerStore(1000, 500);
+    store.getState().addElement(imageElement());
+    const fetch = vi.fn(async () => response('/expanded-page.png'));
+    const data = `data:image/png;base64,${'A'.repeat(24 * 1024 * 1024)}`;
+    vi.mocked(document.createElement).mockImplementation(() => ({
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ fillStyle: '', fillRect: vi.fn(), drawImage: vi.fn() })),
+      toDataURL: vi.fn(() => data),
+    }) as any);
+
+    await expect(prepareWholePageOutpaint({
+      fetch, store, elementId: 'image-1', targetWidth: 1500, targetHeight: 750,
+    })).rejects.toThrow('45 MB combined upload limit');
     expect(fetch).not.toHaveBeenCalled();
   });
 });
