@@ -50,8 +50,9 @@ import { NewDesignDialog } from './new-design-dialog';
 import { CanvasInspector } from './panels/canvas-inspector';
 import { useMediaPicker } from '../use-media-picker';
 import { StartDialog } from './start-dialog';
-import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiDetectSubject, aiOutpaint } from './ai-image-actions';
+import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiDetectSubject } from './ai-image-actions';
 import { OutpaintDialog } from './outpaint-dialog';
+import { applyAiOutpaint, applyWholePageOutpaint, prepareAiOutpaint, prepareWholePageOutpaint } from './outpaint';
 import { BackgroundRemovalDialog } from './background-removal-dialog';
 import { QrCodeDialog } from './qr-code-dialog';
 import { BulkCreateDialog } from './bulk-create-dialog';
@@ -1455,14 +1456,28 @@ export const Designer: FC<DesignerProps> = ({
           title: translate('designer_expand_image_ai', 'Expand Image (AI)'),
           children: (close: () => void) => (
             <OutpaintDialog
+              pageWidth={store.getState().doc.outputs[store.getState().currentOutput].width}
+              pageHeight={store.getState().doc.outputs[store.getState().currentOutput].height}
               onCancel={close}
-              onApply={(mode, prompt) => {
-                close();
-                runAi(
-                  (elId) => aiOutpaint({ fetch, store, elementId: elId }, mode, prompt),
-                  translate('image_expansion_failed', 'Image expansion failed')
-                );
-              }}
+              onPrepare={(request) => request.scope === 'page'
+                ? prepareWholePageOutpaint({
+                    fetch,
+                    store,
+                    elementId: id,
+                    targetWidth: request.targetWidth!,
+                    targetHeight: request.targetHeight!,
+                    prompt: request.prompt,
+                  })
+                : prepareAiOutpaint({
+                    fetch,
+                    store,
+                    elementId: id,
+                    mode: request.mode!,
+                    prompt: request.prompt,
+                  })}
+              onApply={async (candidate) => candidate.kind === 'page'
+                ? applyWholePageOutpaint({ store, candidate })
+                : applyAiOutpaint({ store, candidate })}
             />
           ),
         });

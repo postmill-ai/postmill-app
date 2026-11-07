@@ -314,6 +314,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   Static Apply replaces/inserts adjacent layers; still-video Apply uses adjacent tracks. Both commit
   once, select only the subject, and delete the temporary inpaint-mask File. It does not claim
   moving-subject extraction from video footage.
+  Outpainting (`outpaint.ts`) uses one prepare/review/Apply candidate flow for selected images and
+  whole pages. The dialog owns pending/error state and blocks duplicate requests. Directional Apply
+  scales and offsets the element frame to expose the new area; whole-page Apply resizes the output
+  and selected image in one history entry without reflowing other layers.
   `cutout-refine-controls.tsx` arms the same mask for Restore
   (white brush) and Erase (alpha removal); still-image clip masks use optional-additive doc v11
   fields and mirror through `video-canvas-overlay.tsx` and the isolated frame-render buffer. Legacy
