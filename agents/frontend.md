@@ -244,7 +244,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   carousel content edits stay local. The store and headless `addOutput` op both accept
   `linkContent: false`; omitting it preserves linked behavior, and Undo adds/removes the whole format.
 - **Pathfinder is multi-shape and atomic.** Two or more unlocked shapes/paths/icons compute fully
-  before one document commit. Unite merges every region, Minus Front subtracts every later shape
+  before one document commit on the current output/page only; linked copies in other formats stay
+  untouched. Unite merges every region, Minus Front subtracts every later shape
   from the first, Intersect is successive, Exclude keeps odd-coverage regions, Divide emits unique
   regions, and Outline removes fills. Disjoint results survive and are all selected; unsupported
   holes make no edit. One Undo restores every input. Axis-aligned rectangles sharing a horizontal

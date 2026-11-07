@@ -144,7 +144,9 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
         ])));
         setAssignments(Object.fromEntries(orderedTargets.map((target) => [
           target.id,
-          nextHeaders.find((header) => inferredKind(header) === target.kind) || '',
+          selected.has(target.elementId)
+            ? nextHeaders.find((header) => inferredKind(header) === target.kind) || ''
+            : '',
         ])));
       } catch (cause) {
         setError((cause as Error).message || t('designer_bulk_parse_failed', 'Could not parse the spreadsheet.'));

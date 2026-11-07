@@ -150,4 +150,45 @@ describe('Bulk Create variables', () => {
     expect(template.outputs[0].children[0].text).toBe('Hello {{name}}');
     expect(template.outputs[0].children[2].slot).toEqual({ name: 'brandColor', kind: 'color' });
   });
+
+  it('assigns independent text and color variables to a plain text element', () => {
+    const template = makeDoc();
+    template.outputs[0].children = [element('plain-text', { text: 'Headline', fill: '#000000' })];
+    const targets = collectBulkAssignmentTargets(template);
+    const textTarget = targets.find((target) => target.elementId === 'plain-text' && target.kind === 'text')!;
+    const colorTarget = targets.find((target) => target.elementId === 'plain-text' && target.kind === 'color')!;
+
+    const assigned = applyBulkAssignments(template, {
+      [textTarget.id]: 'headline',
+      [colorTarget.id]: 'accent',
+    });
+    const text = assigned.outputs[0].children[0];
+    expect(text.slot).toEqual({ name: 'headline', kind: 'text' });
+    expect(text.fill).toBe('{{accent}}');
+    expect(collectBulkVariables(assigned)).toEqual(expect.arrayContaining([
+      { name: 'headline', kind: 'text' },
+      { name: 'accent', kind: 'color' },
+    ]));
+
+    const row = applyBulkRow(assigned, { headline: 'Winter Sale', accent: '#ff0000' });
+    expect(row.outputs[0].children[0].text).toBe('Winter Sale');
+    expect(row.outputs[0].children[0].fill).toBe('#ff0000');
+  });
+
+  it('rejects incompatible kinds assigned to the same column in one apply', () => {
+    const template = makeDoc();
+    template.outputs[0].children = [
+      element('plain-text', { text: 'Headline' }),
+      element('plain-image', { type: 'image', src: 'https://cdn.example.test/original.png' }),
+    ];
+    const targets = collectBulkAssignmentTargets(template);
+    const textTarget = targets.find((target) => target.kind === 'text')!;
+    const imageTarget = targets.find((target) => target.kind === 'image')!;
+
+    expect(() => applyBulkAssignments(template, {
+      [textTarget.id]: 'shared',
+      [imageTarget.id]: 'shared',
+    })).toThrow('Column "shared" cannot be assigned to both text and image data.');
+    expect(template.outputs[0].children.every((child: any) => !child.slot)).toBe(true);
+  });
 });
