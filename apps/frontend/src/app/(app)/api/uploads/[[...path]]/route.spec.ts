@@ -14,11 +14,26 @@ import { join } from 'path';
 // collapses dot segments (literal and %2e-encoded) before routing (F8 [H3]).
 import { GET } from './route';
 
-const ORIGINAL_UPLOAD_DIRECTORY = process.env.UPLOAD_DIRECTORY;
+const STORAGE_ENV_KEYS = [
+  'UPLOAD_DIRECTORY',
+  'STORAGE_PROVIDER',
+  'S3_ACCESS_KEY_ID',
+  'S3_SECRET_ACCESS_KEY',
+  'S3_BUCKET',
+  'S3_REGION',
+  'S3_ENDPOINT',
+  'S3_PUBLIC_URL',
+];
+const ORIGINAL_STORAGE_ENV = Object.fromEntries(
+  STORAGE_ENV_KEYS.map((key) => [key, process.env[key]]),
+);
 
-const callGet = (path?: string[], range?: string) =>
+const callGet = (path?: string[], range?: string, search = '') =>
   GET(
-    { headers: new Headers(range ? { Range: range } : {}) } as any,
+    {
+      headers: new Headers(range ? { Range: range } : {}),
+      nextUrl: { search },
+    } as any,
     { params: Promise.resolve({ path }) },
   );
 
@@ -30,13 +45,14 @@ describe('/api/uploads serve route containment (F8)', () => {
     root = mkdtempSync(join(tmpdir(), 'uploads-root-'));
     outside = mkdtempSync(join(tmpdir(), 'uploads-outside-'));
     process.env.UPLOAD_DIRECTORY = root;
+    process.env.STORAGE_PROVIDER = 'local';
   });
 
   afterEach(() => {
-    if (ORIGINAL_UPLOAD_DIRECTORY === undefined) {
-      delete process.env.UPLOAD_DIRECTORY;
-    } else {
-      process.env.UPLOAD_DIRECTORY = ORIGINAL_UPLOAD_DIRECTORY;
+    for (const key of STORAGE_ENV_KEYS) {
+      const value = ORIGINAL_STORAGE_ENV[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
     rmSync(root, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
@@ -182,5 +198,56 @@ describe('/api/uploads serve route containment (F8)', () => {
     const res = await callGet(['link.txt']);
 
     expect(res.status).toBe(404);
+  });
+
+  describe('S3 platform mode', () => {
+    beforeEach(() => {
+      Object.assign(process.env, {
+        STORAGE_PROVIDER: 's3',
+        S3_ACCESS_KEY_ID: 'access',
+        S3_SECRET_ACCESS_KEY: 'secret',
+        S3_BUCKET: 'postmill',
+        S3_REGION: 'fsn1',
+        S3_ENDPOINT: 'https://fsn1.your-objectstorage.com',
+        S3_PUBLIC_URL: 'https://postmill.fsn1.your-objectstorage.com/',
+      });
+    });
+
+    it('redirects the unchanged legacy key to the bucket without reading disk', async () => {
+      const res = await callGet(
+        ['org-1', '2026', '11', '07', 'my file.png'],
+        undefined,
+        '?version=2',
+      );
+
+      expect(res.status).toBe(307);
+      expect(res.headers.get('Location')).toBe(
+        'https://postmill.fsn1.your-objectstorage.com/org-1/2026/11/07/my%20file.png?version=2',
+      );
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    });
+
+    it('rejects traversal rather than redirecting it', async () => {
+      const res = await callGet(['org-1', '..', 'org-2', 'secret.png']);
+      expect(res.status).toBe(404);
+      expect(res.headers.get('Location')).toBeNull();
+    });
+
+    it('fails closed when the S3 configuration is incomplete', async () => {
+      delete process.env.S3_BUCKET;
+      const res = await callGet(['org-1', 'image.png']);
+      expect(res.status).toBe(404);
+    });
+
+    it('returns to local serving when the operator rolls back', async () => {
+      writeFileSync(join(root, 'rollback.txt'), 'local copy');
+      process.env.STORAGE_PROVIDER = 'local';
+
+      const res = await callGet(['rollback.txt']);
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe('local copy');
+    });
   });
 });

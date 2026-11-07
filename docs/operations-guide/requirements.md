@@ -42,9 +42,7 @@ The heavy pieces:
 
 ### Object storage
 
-All media is stored locally by default (`UPLOAD_DIRECTORY`). Cloud providers (S3, R2, B2, IDrive e2,
-and other S3-compatible services — see [Storage Setup](./storage.md)) are configured per-organization via Settings → Storage. Avatars and app-internal writes always use
-local storage.
+Media is stored locally by default (`UPLOAD_DIRECTORY`). Operators can instead set `STORAGE_PROVIDER=s3` with the `S3_*` variables to keep the platform base, including avatars and generated media, in S3-compatible object storage. Per-organization BYO providers remain available via Settings → Storage and take precedence for their mounted folders. See [Storage Setup](./storage.md).
 
 | Provider            | Notes |
 |---------------------|-------|
@@ -55,8 +53,7 @@ local storage.
 | IDrive e2           | S3-compatible (per-tenant, Settings → Storage) |
 | Others              | Wasabi, DigitalOcean Spaces, Hetzner, Storj, Scaleway, Vultr, Linode, generic S3-compatible, MediaLocker (per-tenant, Settings → Storage) |
 
-Storage providers are configured **per-organization** via the Settings UI, not environment
-variables. See [Storage Setup](./storage.md) and [Configuration](./configuration.md).
+The platform base can be local or operator-managed S3 via environment variables. BYO storage providers are configured **per-organization** via the Settings UI. See [Storage Setup](./storage.md) and [Configuration](./configuration.md).
 
 ## Network and URL requirements
 

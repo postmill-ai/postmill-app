@@ -5,6 +5,11 @@ import os from 'os';
 import dns from 'node:dns/promises';
 import { loadVisionImageBytes, resolveVisionImageUrl } from './vision-image-url';
 
+const { safeFetchMock } = vi.hoisted(() => ({ safeFetchMock: vi.fn() }));
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
+  safeFetch: safeFetchMock,
+}));
+
 vi.mock('node:dns/promises', () => ({
   default: { lookup: vi.fn() },
 }));
@@ -45,7 +50,8 @@ describe('resolveVisionImageUrl data URIs', () => {
 /**
  * The raw-bytes loader behind the vision critic's downscale recovery: an
  * image the resolver refuses FOR SIZE can still be read and shrunk instead of
- * skipping the review. Only in-hand sources are readable — never a fetch.
+ * skipping the review. Unrelated remote URLs stay unreadable; S3-backed legacy
+ * upload URLs use the safeFetch compatibility path.
  */
 describe('loadVisionImageBytes', () => {
   let tmpDir: string;
@@ -55,6 +61,8 @@ describe('loadVisionImageBytes', () => {
     mkdirSync(tmpDir, { recursive: true });
     vi.stubEnv('FRONTEND_URL', 'http://localhost:4200');
     vi.stubEnv('UPLOAD_DIRECTORY', tmpDir);
+    vi.stubEnv('STORAGE_PROVIDER', 'local');
+    safeFetchMock.mockReset();
   });
 
   afterEach(() => {
@@ -78,6 +86,18 @@ describe('loadVisionImageBytes', () => {
     await expect(
       loadVisionImageBytes('http://localhost:4200/uploads/sheet.png')
     ).resolves.toEqual(payload);
+  });
+
+  it('reads the legacy URL through safeFetch in S3 mode', async () => {
+    vi.stubEnv('STORAGE_PROVIDER', 's3');
+    safeFetchMock.mockResolvedValue(new Response('bucket-bytes'));
+
+    await expect(
+      loadVisionImageBytes('/uploads/org-1/my file.png?version=2')
+    ).resolves.toEqual(Buffer.from('bucket-bytes'));
+    expect(safeFetchMock).toHaveBeenCalledWith(
+      'http://localhost:4200/uploads/org-1/my%20file.png'
+    );
   });
 
   it('returns null (and warns) for a missing local file', async () => {

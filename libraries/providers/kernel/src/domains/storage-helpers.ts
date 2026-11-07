@@ -73,15 +73,10 @@ export function parseDataUrl(
   return { buffer, mime };
 }
 
-function stripQueryStringAndExtractKey(filePath: string): string | undefined {
-  let pathname: string;
-  try {
-    pathname = new URL(filePath).pathname;
-  } catch {
-    pathname = filePath.split('?')[0];
-  }
-  return pathname.includes('/') ? pathname.split('/').pop() : pathname;
-}
+const withoutTrailingSlash = (value: string) => value.replace(/\/+$/, '');
+
+const encodeStorageKey = (key: string) =>
+  key.split('/').map((segment) => encodeURIComponent(segment)).join('/');
 
 const ALLOWED_MIME_TYPES = new Set<string>([
   'image/jpeg',
@@ -163,8 +158,17 @@ export class S3StorageBase implements StorageCapability {
     protected bucket: string,
     protected endpoint?: string,
     protected publicUrl?: string,
+    protected tenantId?: string,
+    protected legacyPublicUrl?: string,
   ) {
+    if (tenantId && !/^[a-zA-Z0-9_-]+$/.test(tenantId)) {
+      throw new Error('Invalid tenant storage prefix');
+    }
     this.type = type;
+    this.publicUrl = publicUrl ? withoutTrailingSlash(publicUrl) : undefined;
+    this.legacyPublicUrl = legacyPublicUrl
+      ? withoutTrailingSlash(legacyPublicUrl)
+      : undefined;
     this.client = new S3Client({
       region,
       credentials: {
@@ -180,6 +184,95 @@ export class S3StorageBase implements StorageCapability {
       forcePathStyle: !!endpoint,
       requestChecksumCalculation: 'WHEN_REQUIRED',
     });
+  }
+
+  private newKey(extension: string): string {
+    const id = randomBytes(8).toString('hex');
+    if (!this.tenantId) return `${id}.${extension}`;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${this.tenantId}/${year}/${month}/${day}/${id}.${extension}`;
+  }
+
+  private objectKey(pathOrKey: string): string {
+    const value = pathOrKey.trim();
+    if (!value) throw new Error('Invalid object key');
+
+    let raw = value.split('?')[0].split('#')[0];
+    if (/^https?:\/\//i.test(value)) {
+      let url: URL;
+      try {
+        url = new URL(value);
+      } catch {
+        throw new Error('Invalid storage URL');
+      }
+      const candidates = [
+        this.publicUrl,
+        this.legacyPublicUrl,
+        this.publicUrl
+          ? undefined
+          : `https://${this.bucket}.s3.${this.region}.amazonaws.com`,
+      ].filter((base): base is string => !!base);
+      const base = candidates.find((candidate) => {
+        const baseUrl = new URL(candidate);
+        const basePath = withoutTrailingSlash(baseUrl.pathname);
+        return (
+          url.origin === baseUrl.origin &&
+          (url.pathname === basePath || url.pathname.startsWith(`${basePath}/`))
+        );
+      });
+      if (!base) throw new Error('Storage URL does not belong to this provider');
+      const basePath = withoutTrailingSlash(new URL(base).pathname);
+      raw = url.pathname.slice(basePath.length);
+    } else if (this.legacyPublicUrl) {
+      const legacyPath = withoutTrailingSlash(new URL(this.legacyPublicUrl).pathname);
+      const pathValue = raw.startsWith('/') ? raw : `/${raw}`;
+      if (pathValue.startsWith(`${legacyPath}/`)) {
+        raw = pathValue.slice(legacyPath.length);
+      }
+    }
+
+    let segments: string[];
+    try {
+      segments = raw
+        .replace(/^\/+/, '')
+        .split('/')
+        .map((segment) => decodeURIComponent(segment));
+    } catch {
+      throw new Error('Invalid object key');
+    }
+    if (
+      segments.some(
+        (segment) =>
+          !segment ||
+          segment === '.' ||
+          segment === '..' ||
+          segment.includes('/') ||
+          segment.includes('\\') ||
+          segment.includes('\0'),
+      )
+    ) {
+      throw new Error('Invalid object key');
+    }
+
+    const key = segments.join('/');
+    if (this.tenantId && !key.startsWith(`${this.tenantId}/`)) {
+      throw new Error('Storage object does not belong to this organization');
+    }
+    return key;
+  }
+
+  private listPrefix(prefix?: string): string | undefined {
+    const tenantPrefix = this.tenantId ? `${this.tenantId}/` : '';
+    if (!prefix) return tenantPrefix || undefined;
+    const clean = prefix.replace(/^\/+/, '');
+    if (clean.split('/').some((segment) => segment === '..')) {
+      throw new Error('Invalid object prefix');
+    }
+    if (!tenantPrefix || clean.startsWith(tenantPrefix)) return clean;
+    return `${tenantPrefix}${clean}`;
   }
 
   async testConnection(): Promise<{ ok: boolean; error?: string }> {
@@ -199,7 +292,7 @@ export class S3StorageBase implements StorageCapability {
       const response = await this.client.send(
         new ListObjectsV2Command({
           Bucket: this.bucket,
-          Prefix: prefix,
+          Prefix: this.listPrefix(prefix),
           ContinuationToken: continuationToken,
         }),
       );
@@ -225,17 +318,18 @@ export class S3StorageBase implements StorageCapability {
   }
 
   getFileUrl(key: string): string {
+    const encoded = encodeStorageKey(this.objectKey(key));
     if (this.publicUrl) {
-      return `${this.publicUrl}/${key}`;
+      return `${this.publicUrl}/${encoded}`;
     }
-    return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
+    return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${encoded}`;
   }
 
   async deleteFile(key: string): Promise<void> {
     await this.client.send(
       new DeleteObjectCommand({
         Bucket: this.bucket,
-        Key: key,
+        Key: this.objectKey(key),
       }),
     );
   }
@@ -249,6 +343,7 @@ export class S3StorageBase implements StorageCapability {
         const response = await this.client.send(
           new ListObjectsV2Command({
             Bucket: this.bucket,
+            Prefix: this.listPrefix(),
             ContinuationToken: continuationToken,
           }),
         );
@@ -287,9 +382,7 @@ export class S3StorageBase implements StorageCapability {
     }
     const extension = detected.ext;
     const safeContentType = detected.mime;
-    const id = randomBytes(8).toString('hex');
-
-    const key = `${id}.${extension}`;
+    const key = this.newKey(extension);
 
     await this.client.send(
       new PutObjectCommand({
@@ -325,7 +418,7 @@ export class S3StorageBase implements StorageCapability {
       const id = randomBytes(8).toString('hex');
       const extension = detected.ext;
       const safeContentType = detected.mime;
-      const key = `${id}.${extension}`;
+      const key = this.newKey(extension);
 
       // PutObjectCommand cannot compute the length of a stream, so pass it
       // explicitly when streaming from disk.
@@ -362,16 +455,12 @@ export class S3StorageBase implements StorageCapability {
   }
 
   async removeFile(filePath: string): Promise<void> {
-    const key = stripQueryStringAndExtractKey(filePath);
-    if (!key) return;
-    await this.deleteFile(key);
+    await this.deleteFile(filePath);
   }
 
   async readFile(pathOrKey: string): Promise<Buffer> {
-    const key = stripQueryStringAndExtractKey(pathOrKey);
-    if (!key) throw new Error('Invalid object key');
     const response = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      new GetObjectCommand({ Bucket: this.bucket, Key: this.objectKey(pathOrKey) }),
     );
     const byteArray = await response.Body!.transformToByteArray();
     return Buffer.from(byteArray);
@@ -389,8 +478,7 @@ export class S3StorageBase implements StorageCapability {
     const ext =
       detected?.ext ||
       (mime === 'application/json' ? 'json' : mime === 'text/plain' ? 'txt' : 'bin');
-    const id = randomBytes(8).toString('hex');
-    const key = `${id}.${ext}`;
+    const key = this.newKey(ext);
 
     await this.client.send(
       new PutObjectCommand({
@@ -463,6 +551,8 @@ export function makeS3StorageModule(
           extras.bucket,
           endpoint,
           extras.publicUrl,
+          extras.tenantId,
+          extras.legacyPublicUrl,
         );
       }
       return this.adapter;

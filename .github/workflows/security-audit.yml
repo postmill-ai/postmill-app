@@ -168,9 +168,9 @@ jobs:
 
       - name: Check for removed legacy storage env vars
         run: |
-          for VAR in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_ACCESS_KEY CLOUDFLARE_SECRET_ACCESS_KEY CLOUDFLARE_BUCKETNAME CLOUDFLARE_BUCKET_URL CLOUDFLARE_REGION STORAGE_PROVIDER; do
+          for VAR in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_ACCESS_KEY CLOUDFLARE_SECRET_ACCESS_KEY CLOUDFLARE_BUCKETNAME CLOUDFLARE_BUCKET_URL CLOUDFLARE_REGION; do
             if grep -rn "process\.env\.$VAR" --include='*.ts' --include='*.js' libraries/ apps/ 2>/dev/null | grep -v 'node_modules' | grep -v '\.spec\.' | grep -v 'security-audit\.yml' | grep -v 'configuration\.checker\.ts' | grep -v 'CHANGELOG\.md' | grep -v 'changes-from-upstream'; then
-              echo "ERROR: Removed legacy storage env var $VAR must not be read. Use per-tenant StorageService instead."
+              echo "ERROR: Removed legacy Cloudflare env var $VAR must not be read. Use STORAGE_PROVIDER=s3 or per-tenant StorageService instead."
               exit 1
             fi
           done

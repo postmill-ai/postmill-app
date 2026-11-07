@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
+import { getPlatformStorageConfig } from '../storage/platform-storage';
 
 export class ConfigurationChecker {
   cfg: dotenv.DotenvParseOutput;
@@ -38,7 +39,16 @@ export class ConfigurationChecker {
     this.checkInngest();
     this.checkInngestUrl();
     this.checkEncryptionKey();
+    this.checkStorage();
     this.checkFatal();
+  }
+
+  checkStorage() {
+    try {
+      getPlatformStorageConfig(this.cfg);
+    } catch (error) {
+      this.pushFatal((error as Error).message);
+    }
   }
 
   // The boot-blocking subset. A missing/invalid value here should stop a production

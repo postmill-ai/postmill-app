@@ -271,15 +271,22 @@ export class LocalStorage implements StorageCapability {
     }
   }
 
-  async removeFile(filePath: string): Promise<void> {
-    let targetPath = filePath;
+  private _localKey(pathOrKey: string): string {
+    let targetPath = pathOrKey;
     const frontendUrl = process.env.FRONTEND_URL || '';
-    if (targetPath.startsWith(frontendUrl + '/uploads/')) {
+    const platformPublicUrl = (process.env.S3_PUBLIC_URL || '').replace(/\/+$/, '');
+    if (platformPublicUrl && targetPath.startsWith(platformPublicUrl + '/')) {
+      targetPath = targetPath.slice((platformPublicUrl + '/').length);
+    } else if (targetPath.startsWith(frontendUrl + '/uploads/')) {
       targetPath = targetPath.slice((frontendUrl + '/uploads/').length);
     } else if (targetPath.startsWith('/uploads/')) {
       targetPath = targetPath.slice('/uploads/'.length);
     }
-    targetPath = this._safeJoin(targetPath);
+    return decodeURIComponent(targetPath.split('?')[0].split('#')[0]);
+  }
+
+  async removeFile(filePath: string): Promise<void> {
+    const targetPath = this._safeJoin(this._localKey(filePath));
     return new Promise((resolve, reject) => {
       unlink(targetPath, (err) => {
         if (err) reject(err);
@@ -289,15 +296,7 @@ export class LocalStorage implements StorageCapability {
   }
 
   async readFile(pathOrKey: string): Promise<Buffer> {
-    let targetPath = pathOrKey;
-    const frontendUrl = process.env.FRONTEND_URL || '';
-    if (targetPath.startsWith(frontendUrl + '/uploads/')) {
-      targetPath = targetPath.slice((frontendUrl + '/uploads/').length);
-    } else if (targetPath.startsWith('/uploads/')) {
-      targetPath = targetPath.slice('/uploads/'.length);
-    }
-    targetPath = this._safeJoin(targetPath);
-    return readFileSync(targetPath);
+    return readFileSync(this._safeJoin(this._localKey(pathOrKey)));
   }
 
   async writeBuffer(buffer: Buffer, contentType?: string): Promise<string> {

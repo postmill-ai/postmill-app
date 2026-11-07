@@ -54,8 +54,21 @@ describe('S3StorageBase', () => {
     bucket = 'bucket',
     endpoint?: string,
     publicUrl?: string,
+    tenantId?: string,
+    legacyPublicUrl?: string,
   ) =>
-    new S3StorageBase(logger, fetchStub, 'S3', region, creds, bucket, endpoint, publicUrl);
+    new S3StorageBase(
+      logger,
+      fetchStub,
+      'S3',
+      region,
+      creds,
+      bucket,
+      endpoint,
+      publicUrl,
+      tenantId,
+      legacyPublicUrl,
+    );
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -77,7 +90,7 @@ describe('S3StorageBase', () => {
       expect(result).toEqual(buffer);
     });
 
-    it('extracts the object key from a full path', async () => {
+    it('preserves every segment of a nested object key', async () => {
       s3ClientMock.send.mockResolvedValue({
         Body: { transformToByteArray: async () => Buffer.from('') },
       });
@@ -86,7 +99,7 @@ describe('S3StorageBase', () => {
       await adapter.readFile('uploads/2026/01/15/abc.png');
 
       const cmd = s3ClientMock.send.mock.calls[0][0];
-      expect(cmd.config.Key).toBe('abc.png');
+      expect(cmd.config.Key).toBe('uploads/2026/01/15/abc.png');
     });
 
     it('throws on invalid key extraction', async () => {
@@ -328,14 +341,91 @@ describe('S3StorageBase', () => {
   });
 
   describe('removeFile', () => {
-    it('extracts the key and deletes the file', async () => {
+    it('preserves the nested key from a configured public URL', async () => {
       s3ClientMock.send.mockResolvedValue({});
-      const adapter = make();
+      const adapter = make('us-east-1', 'bucket', undefined, 'https://cdn.example.com');
 
       await adapter.removeFile('https://cdn.example.com/path/to/file.png');
 
       const cmd = s3ClientMock.send.mock.calls[0][0];
-      expect(cmd.config.Key).toBe('file.png');
+      expect(cmd.config.Key).toBe('path/to/file.png');
+    });
+  });
+
+  describe('platform tenant scope', () => {
+    const makeTenant = () =>
+      make(
+        'fsn1',
+        'postmill',
+        'https://fsn1.your-objectstorage.com',
+        'https://postmill.fsn1.your-objectstorage.com',
+        'org-1',
+        'https://app.postmill.ai/uploads',
+      );
+
+    it('writes date-partitioned objects beneath the organization prefix', async () => {
+      s3ClientMock.send.mockResolvedValue({});
+      const adapter = makeTenant();
+
+      const url = await adapter.writeBuffer(Buffer.from('transcript'), 'text/plain');
+
+      const cmd = s3ClientMock.send.mock.calls[0][0];
+      expect(cmd.config.Key).toMatch(
+        /^org-1\/\d{4}\/\d{2}\/\d{2}\/[a-f0-9]{16}\.txt$/,
+      );
+      expect(url).toBe(
+        `https://postmill.fsn1.your-objectstorage.com/${cmd.config.Key}`,
+      );
+    });
+
+    it('reads migrated objects through their legacy app URL', async () => {
+      s3ClientMock.send.mockResolvedValue({
+        Body: { transformToByteArray: async () => Buffer.from('image') },
+      });
+      const adapter = makeTenant();
+
+      await adapter.readFile(
+        'https://app.postmill.ai/uploads/org-1/2026/11/07/image.png?version=2',
+      );
+
+      expect(s3ClientMock.send.mock.calls[0][0].config.Key).toBe(
+        'org-1/2026/11/07/image.png',
+      );
+    });
+
+    it('deletes a nested object through the direct public URL', async () => {
+      s3ClientMock.send.mockResolvedValue({});
+      const adapter = makeTenant();
+
+      await adapter.removeFile(
+        'https://postmill.fsn1.your-objectstorage.com/org-1/2026/11/07/image.png',
+      );
+
+      expect(s3ClientMock.send.mock.calls[0][0].config.Key).toBe(
+        'org-1/2026/11/07/image.png',
+      );
+    });
+
+    it.each([
+      'org-2/2026/11/07/other.png',
+      'org-1/../org-2/secret.png',
+      'org-1%2F..%2Forg-2%2Fsecret.png',
+      'https://attacker.example/org-1/2026/11/07/image.png',
+    ])('rejects an out-of-scope object: %s', async (path) => {
+      const adapter = makeTenant();
+      await expect(adapter.readFile(path)).rejects.toThrow();
+      expect(s3ClientMock.send).not.toHaveBeenCalled();
+    });
+
+    it('scopes listing and usage to the organization prefix', async () => {
+      s3ClientMock.send.mockResolvedValue({ Contents: [] });
+      const adapter = makeTenant();
+
+      await adapter.listFiles();
+      await adapter.getUsageBytes();
+
+      expect(s3ClientMock.send.mock.calls[0][0].config.Prefix).toBe('org-1/');
+      expect(s3ClientMock.send.mock.calls[1][0].config.Prefix).toBe('org-1/');
     });
   });
 });

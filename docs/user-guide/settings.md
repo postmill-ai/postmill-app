@@ -465,11 +465,7 @@ Provider cards with real brand icons, configured/mounted badges, and quota/usage
   - **Delete** — remove the provider configuration. Blocked while the provider is mounted
     (unmount first); LOCAL can never be deleted.
   - **Migrate** — move files from this provider to another.
-- **LOCAL is the always-on base storage** — it cannot be deleted or unmounted. All app-internal
-  writes (avatars, AI-generated media, uploads) go to LOCAL. Additional providers (S3, R2, B2,
-  and the other cloud buckets) mount onto LOCAL and appear as root folders in the media library;
-  there is no "default" provider concept. Local files are stored in a per-organisation partition
-  with a soft quota (5 GB by default; see [Storage Setup](../operations-guide/storage.md)).
+- **Postmill Storage is the read-only platform base** — the operator chooses local disk or S3-compatible object storage. Avatars, AI-generated media, and root/unmounted uploads use this base. Additional providers (S3, R2, B2, and the other cloud buckets) appear as root folders in the media library and take precedence for files inside those folders. Base objects are partitioned per organisation with a soft quota (5 GB by default; see [Storage Setup](../operations-guide/storage.md)).
 
 ### Quota display
 

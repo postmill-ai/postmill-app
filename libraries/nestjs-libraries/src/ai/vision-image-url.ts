@@ -8,6 +8,8 @@ import {
   isBlockedIPv6,
 } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { getPlatformStorageProvider } from '@postmill-ai/helpers/storage/platform-storage';
 
 /**
  * Inline cap for a locally-stored image handed to a vision model. A `data:`
@@ -146,9 +148,9 @@ export async function resolveVisionImageUrl(
 /**
  * The raw bytes behind an inline-able image URL, for a caller that wants to
  * DOWNSCALE an image `resolveVisionImageUrl` refused for size instead of
- * skipping its vision pass. Only sources this process already holds are
- * readable — a `data:` URI or a local upload (same traversal guard) — a
- * remote URL returns null; nothing here fetches.
+ * skipping its vision pass. Data URIs and platform upload URLs are readable;
+ * unrelated remote URLs return null. S3-backed legacy uploads are fetched
+ * through safeFetch so cross-origin redirect targets receive the same SSRF checks.
  */
 export async function loadVisionImageBytes(
   url: string,
@@ -291,6 +293,20 @@ export async function readLocalUpload(url: string): Promise<Buffer> {
   const key = uploadKeyFromUrl(url);
   if (key === null) {
     throw new Error(`upload path escapes storage root: ${url}`);
+  }
+  if (getPlatformStorageProvider() === 's3') {
+    const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+    if (!frontendUrl) throw new Error('FRONTEND_URL is required to read S3 uploads');
+    const cleanKey = key.split('?')[0].split('#')[0];
+    const encodedKey = cleanKey
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+    const response = await safeFetch(`${frontendUrl}/uploads/${encodedKey}`);
+    if (!response.ok) {
+      throw new Error(`upload read failed with HTTP ${response.status}`);
+    }
+    return Buffer.from(await response.arrayBuffer());
   }
   const resolved = path.resolve(root, key);
   if (resolved !== root && !resolved.startsWith(root + path.sep)) {

@@ -34,6 +34,7 @@ describe('LocalStorage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.FRONTEND_URL = 'http://localhost:4200';
+    delete process.env.S3_PUBLIC_URL;
   });
 
   describe('readFile', () => {
@@ -72,6 +73,22 @@ describe('LocalStorage', () => {
       const result = await adapter.readFile('abc.png');
 
       expect(readFileSync).toHaveBeenCalled();
+      expect(result).toBe(buffer);
+    });
+
+    it('maps a direct platform S3 URL to its copied-back local key after rollback', async () => {
+      process.env.S3_PUBLIC_URL = 'https://postmill.fsn1.your-objectstorage.com/';
+      const buffer = Buffer.from('content');
+      (readFileSync as any).mockReturnValue(buffer);
+      const adapter = new LocalStorage(logger, uploadDir);
+
+      const result = await adapter.readFile(
+        'https://postmill.fsn1.your-objectstorage.com/org-1/2026/11/07/my%20file.png?version=2',
+      );
+
+      expect(readFileSync).toHaveBeenCalledWith(
+        '/uploads/org-1/2026/11/07/my file.png',
+      );
       expect(result).toBe(buffer);
     });
   });
@@ -203,6 +220,20 @@ describe('LocalStorage', () => {
         adapter.removeFile('/uploads/../../etc/passwd'),
       ).rejects.toThrow(/path traversal/i);
       expect(fs.unlink).not.toHaveBeenCalled();
+    });
+
+    it('deletes the copied-back local key for a direct platform S3 URL', async () => {
+      process.env.S3_PUBLIC_URL = 'https://postmill.fsn1.your-objectstorage.com';
+      const adapter = new LocalStorage(logger, uploadDir);
+
+      await adapter.removeFile(
+        'https://postmill.fsn1.your-objectstorage.com/org-1/2026/11/07/image.png',
+      );
+
+      expect(fs.unlink).toHaveBeenCalledWith(
+        '/uploads/org-1/2026/11/07/image.png',
+        expect.any(Function),
+      );
     });
   });
 });

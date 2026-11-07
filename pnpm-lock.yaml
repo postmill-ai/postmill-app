@@ -799,6 +799,9 @@ importers:
 
   apps/commands:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1062.0
+        version: 3.1062.0
       '@postmill-ai/helpers':
         specifier: workspace:*
         version: link:../../libraries/helpers

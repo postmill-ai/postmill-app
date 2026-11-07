@@ -957,7 +957,7 @@ describe('AiDesignerAssetService intrinsic size analysis (round 7 workstream D)'
 
     expect(result.subjectPoint).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Blocked upload path traversal')
+      expect.stringContaining('upload path escapes storage root')
     );
   });
 

@@ -89,8 +89,10 @@ describe('TelegramProvider.post media resolution', () => {
   it('maps local frontend-URL uploads to the file on disk (Bot API needs a real upload)', async () => {
     const savedFrontend = process.env.FRONTEND_URL;
     const savedUpload = process.env.UPLOAD_DIRECTORY;
+    const savedProvider = process.env.STORAGE_PROVIDER;
     process.env.FRONTEND_URL = 'https://app.postmill.ai';
     process.env.UPLOAD_DIRECTORY = '/srv/uploads';
+    process.env.STORAGE_PROVIDER = 'local';
     try {
       const sendPhoto = vi.fn(async () => ({ message_id: 11 }));
       const provider = new TelegramProvider();
@@ -122,6 +124,30 @@ describe('TelegramProvider.post media resolution', () => {
     } finally {
       process.env.FRONTEND_URL = savedFrontend;
       process.env.UPLOAD_DIRECTORY = savedUpload;
+      process.env.STORAGE_PROVIDER = savedProvider;
+    }
+  });
+
+  it('keeps legacy upload URLs remote in S3 mode so Telegram follows the bucket redirect', async () => {
+    const savedProvider = process.env.STORAGE_PROVIDER;
+    process.env.STORAGE_PROVIDER = 's3';
+    try {
+      const sendPhoto = vi.fn(async () => ({ message_id: 13 }));
+      const provider = new TelegramProvider();
+      (provider as any).createBot = vi.fn(() => ({ sendPhoto }));
+      const path = 'https://app.postmill.ai/uploads/org/2026/09/04/pic.jpg';
+
+      await provider.post(
+        'chan',
+        '-1001',
+        [{ id: 'p1', message: 'hello', media: [{ id: 'm1', path }] } as any],
+        {} as any,
+        { client_id: 'bot-token' } as any
+      );
+
+      expect(sendPhoto.mock.calls[0][1]).toBe(path);
+    } finally {
+      process.env.STORAGE_PROVIDER = savedProvider;
     }
   });
 
