@@ -89,8 +89,8 @@ export const outpaintGeometry = (
   const addedY = height - before.height;
   const center = mode === 'make-square' || mode.startsWith('zoom-');
   return {
-    x: center || mode === 'left' ? before.x - addedX : before.x,
-    y: center || mode === 'top' ? before.y - addedY : before.y,
+    x: mode === 'left' ? before.x - addedX : center ? before.x - addedX / 2 : before.x,
+    y: mode === 'top' ? before.y - addedY : center ? before.y - addedY / 2 : before.y,
     width,
     height,
   };
@@ -212,6 +212,9 @@ export const prepareWholePageOutpaint = async ({
     targetWidth > MAX_DIMENSION || targetHeight > MAX_DIMENSION) {
     throw new Error(`Choose larger page dimensions up to ${MAX_DIMENSION} pixels.`);
   }
+  if (targetWidth * targetHeight > 25_000_000) {
+    throw new Error('Whole-page expansion is limited to 25 million pixels. Choose smaller page dimensions.');
+  }
 
   const history = state.history;
   const image = await loadMaskImage(before.src);
@@ -242,6 +245,7 @@ export const prepareWholePageOutpaint = async ({
     width: geometry.destination.width,
     height: geometry.destination.height,
   };
+  // Other layers are repositioned over the result on Apply, never baked into the inpaint source.
   context.drawImage(
     image,
     geometry.source.x,
@@ -263,12 +267,24 @@ export const prepareWholePageOutpaint = async ({
   maskContext.fillStyle = '#000000';
   maskContext.fillRect(destination.x, destination.y, destination.width, destination.height);
 
+  let imageData: string;
+  let maskData: string;
+  try {
+    imageData = canvas.toDataURL('image/png');
+    maskData = mask.toDataURL('image/png');
+  } catch {
+    throw new Error('The expanded page is too large for this browser. Choose smaller page dimensions.');
+  }
+  if (!imageData.startsWith('data:image/png') || !maskData.startsWith('data:image/png') ||
+    imageData.length > 45 * 1024 * 1024 || maskData.length > 45 * 1024 * 1024) {
+    throw new Error('The expanded page exceeds the 45 MB upload limit. Choose smaller page dimensions.');
+  }
   const response = await fetch('/media/inpaint', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      imageUrl: canvas.toDataURL('image/png'),
-      maskUrl: mask.toDataURL('image/png'),
+      imageUrl: imageData,
+      maskUrl: maskData,
       prompt: prompt?.trim() || 'Extend the image naturally beyond its borders, seamlessly matching the existing style, lighting, colors, and content.',
     }),
   });
@@ -307,6 +323,8 @@ export const applyWholePageOutpaint = ({
   const output = state.doc.outputs[candidate.outputIndex] as DesignerOutput;
   const width = candidate.targetWidth;
   const height = candidate.targetHeight;
+  const offsetX = (width - output.width) / 2;
+  const offsetY = (height - output.height) / 2;
   const children = output.children.map((element) => element.id === candidate.before.id
     ? {
         ...element,
@@ -327,7 +345,7 @@ export const applyWholePageOutpaint = ({
         naturalWidth: width,
         naturalHeight: height,
       }
-    : element);
+    : { ...element, x: element.x + offsetX, y: element.y + offsetY });
   const outputs = [...state.doc.outputs];
   outputs[candidate.outputIndex] = {
     ...output,

@@ -51,7 +51,7 @@ describe('outpaintGeometry', () => {
       'zoom-2x',
       { width: 800, height: 450 },
       { width: 1600, height: 900 }
-    )).toEqual({ x: -300, y: -175, width: 800, height: 450 });
+    )).toEqual({ x: -100, y: -62.5, width: 800, height: 450 });
   });
 });
 
@@ -107,7 +107,7 @@ describe('whole-page expansion', () => {
     vi.restoreAllMocks();
   });
 
-  it('composes the original page and mask, then resizes only the page and selected image', async () => {
+  it('composes the original page and mask, then translates every other layer with it', async () => {
     const store = createDesignerStore(1000, 500);
     store.getState().addElement(imageElement());
     store.getState().addElement(otherElement());
@@ -130,7 +130,18 @@ describe('whole-page expansion', () => {
     const output = store.getState().doc.outputs[0] as any;
     expect(output).toMatchObject({ width: 1500, height: 750, name: '1500×750' });
     expect(output.children[0]).toMatchObject({ x: 0, y: 0, width: 1500, height: 750, src: '/expanded-page.png' });
-    expect(output.children[1]).toMatchObject({ x: 5, y: 6, text: 'Keep me' });
+    expect(output.children[1]).toMatchObject({ x: 255, y: 131, text: 'Keep me' });
     expect(store.getState().history).toHaveLength(history.length + 1);
+  });
+
+  it('rejects oversized whole-page compositions before reading or uploading the image', async () => {
+    const store = createDesignerStore(1000, 500);
+    store.getState().addElement(imageElement());
+    const fetch = vi.fn(async () => response('/expanded-page.png'));
+
+    await expect(prepareWholePageOutpaint({
+      fetch, store, elementId: 'image-1', targetWidth: 5001, targetHeight: 5000,
+    })).rejects.toThrow('25 million pixels');
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
