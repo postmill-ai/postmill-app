@@ -1031,9 +1031,12 @@ describe('AiMediaService', () => {
   });
 
   describe('magicGrab', () => {
-    it('persists only the background and removes the temporary source mask', async () => {
+    it('uses image-to-image reconstruction and persists only the background plus removes the source mask', async () => {
       const service = bareService();
-      const inpaint = vi.spyOn(service, 'inpaintImage').mockResolvedValue('https://x/background.png');
+      const generate = vi.spyOn(service, 'generateImage').mockResolvedValue('https://x/background.png');
+      const inpaint = vi.spyOn(service, 'inpaintImage');
+      const composite = vi.spyOn(service as any, '_compositeMagicGrab')
+        .mockResolvedValue('data:image/png;base64,Y29tcG9zaXRlZA==');
       const save = vi.spyOn(service, 'saveUrlToFile')
         .mockResolvedValue({ id: 'background-file', path: '/uploads/org/background.png', name: 'magic-grab-background-1.png' });
       const fileService = {
@@ -1044,13 +1047,28 @@ describe('AiMediaService', () => {
 
       const result = await service.magicGrab('/original.png', '/cutout.png', '/mask.png', { orgId: 'org-1' });
 
-      expect(inpaint).toHaveBeenCalledWith('/original.png', '/mask.png', expect.any(String), { orgId: 'org-1' });
+      expect(generate).toHaveBeenCalledWith(expect.any(String), { orgId: 'org-1', sourceUrl: '/original.png' });
+      expect(inpaint).not.toHaveBeenCalled();
+      expect(composite).toHaveBeenCalledWith('/original.png', 'https://x/background.png', '/mask.png', 'org-1');
       expect(save).toHaveBeenCalledOnce();
-      expect(save).toHaveBeenCalledWith('org-1', 'https://x/background.png', 'magic-grab-background');
+      expect(save).toHaveBeenCalledWith('org-1', 'data:image/png;base64,Y29tcG9zaXRlZA==', 'magic-grab-background');
       expect(result).toEqual({
         background: { url: '/uploads/org/background.png', fileId: 'background-file' },
       });
       expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'mask-file');
+    });
+
+    it('falls back to masked inpainting when image-to-image is unavailable', async () => {
+      const service = bareService();
+      vi.spyOn(service, 'generateImage').mockRejectedValue(new Error('not configured'));
+      const inpaint = vi.spyOn(service, 'inpaintImage').mockResolvedValue('https://x/background.png');
+      vi.spyOn(service as any, '_compositeMagicGrab').mockResolvedValue('data:image/png;base64,Y29tcG9zaXRlZA==');
+      vi.spyOn(service, 'saveUrlToFile')
+        .mockResolvedValue({ id: 'background-file', path: '/uploads/org/background.png', name: 'magic-grab-background-1.png' });
+
+      await service.magicGrab('/original.png', '/cutout.png', '/mask.png', { orgId: 'org-1' });
+
+      expect(inpaint).toHaveBeenCalledWith('/original.png', '/mask.png', expect.any(String), { orgId: 'org-1' });
     });
 
     it('cleans up only Magic Grab background files owned by the org', async () => {

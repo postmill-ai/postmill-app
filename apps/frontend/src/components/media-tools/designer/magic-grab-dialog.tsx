@@ -36,7 +36,7 @@ export const MagicGrabDialog: FC<{
   return (
     <div className="flex flex-col gap-4">
       <p className="text-[12px] text-newTextColor/65">
-        {t('designer_magic_grab_hint', 'Magic Grab uses background removal and generative inpainting. Apply to move the subject independently from the reconstructed background.')}
+        {t('designer_magic_grab_hint', 'Magic Grab uses background removal and AI background reconstruction. Apply to move the subject independently from the reconstructed background.')}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {previews.map((preview) => (

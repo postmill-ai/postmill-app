@@ -67,6 +67,9 @@ export const uploadMagicGrabSourceMask = async ({
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.globalCompositeOperation = 'destination-in';
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  context.globalCompositeOperation = 'destination-over';
+  context.fillStyle = '#000000';
+  context.fillRect(0, 0, canvas.width, canvas.height);
   context.globalCompositeOperation = 'source-over';
   const uploaded = await commitCanvas(canvas, `${id}:magic-grab-mask`, fetch);
   if (!uploaded) throw new Error('Could not save the Magic Grab mask.');

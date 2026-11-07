@@ -966,7 +966,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               {aiLoading === 'remove-bg' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_remove_background', 'Remove Background')}
             </button>
           )}
-          {operationAvailable('bg-remove') && operationAvailable('inpaint') && (
+          {operationAvailable('bg-remove') && (operationAvailable('image') || operationAvailable('inpaint')) && (
             <button
               className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
               onClick={handleMagicGrab}

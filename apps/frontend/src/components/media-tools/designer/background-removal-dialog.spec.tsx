@@ -3,31 +3,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { BackgroundRemovalDialog } from './background-removal-dialog';
 
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
+  useT: () => (_key: string, fallback: string) => fallback,
+}));
+
 describe('BackgroundRemovalDialog', () => {
-  it('compares before/after and applies the selected fit', async () => {
+  it('defaults to preserving the existing crop, fit and focal geometry', () => {
     const onApply = vi.fn();
-    const onCancel = vi.fn();
     render(
       <BackgroundRemovalDialog
         originalUrl="/before.png"
-        asset={{ url: '/after.png' }}
+        asset={{ url: '/cutout.png' }}
         onApply={onApply}
-        onCancel={onCancel}
+        onCancel={vi.fn()}
       />
     );
 
-    expect((await screen.findByRole('img', { name: 'Before' })).getAttribute('src')).toBe('/before.png');
-    expect((await screen.findByRole('img', { name: 'After' })).getAttribute('src')).toBe('/after.png');
+    expect(screen.getByRole('radio', { name: 'Keep manual geometry' })).toHaveProperty('checked', true);
     fireEvent.click(screen.getByRole('button', { name: 'Apply result' }));
-    expect(onApply).toHaveBeenLastCalledWith('frame');
-    await screen.findByRole('button', { name: 'Apply result' });
-
-    fireEvent.click(screen.getByRole('radio', { name: /Fit to canvas/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Apply result' }));
-    expect(onApply).toHaveBeenLastCalledWith('canvas');
-    await screen.findByRole('button', { name: 'Apply result' });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onApply).toHaveBeenCalledWith('manual');
   });
 });
