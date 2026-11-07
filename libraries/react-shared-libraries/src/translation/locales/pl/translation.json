@@ -4846,5 +4846,13 @@
   "designer_bulk_start_failed": "Nie można rozpocząć tworzenia zbiorczego.",
   "designer_bulk_status_failed": "Nie można odczytać stanu tworzenia zbiorczego.",
   "designer_action_bulk_create_bulk_create": "Tworzenie zbiorcze…",
-  "designer_bulk_no_variables": "Dodaj co najmniej jedną {{variable}} lub pole szablonu przed utworzeniem wariantów."
+  "designer_bulk_assign_elements": "Przypisz elementy projektu",
+  "designer_bulk_assign_description": "Wybierz kolumnę arkusza dla każdego tekstu, obrazu lub koloru, który ma się zmieniać. Jedna kolumna może zasilać wiele elementów.",
+  "designer_bulk_assignment_for": "Kolumna dla {{name}} ({{kind}})",
+  "designer_bulk_not_assigned": "Nie przypisuj",
+  "designer_bulk_apply_assignments": "Zastosuj przypisania zmiennych",
+  "designer_output_content_mode": "Zawartość",
+  "designer_output_linked": "Połączone formaty (wspólne edycje)",
+  "designer_output_independent": "Niezależne kopie (karuzela / strony)",
+  "designer_bulk_no_variables": "Przed utworzeniem wariantów dodaj edytowalny element tekstu, obrazu lub koloru."
 }

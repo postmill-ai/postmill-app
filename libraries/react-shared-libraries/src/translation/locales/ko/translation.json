@@ -4805,5 +4805,13 @@
   "designer_bulk_start_failed": "일괄 만들기를 시작할 수 없습니다.",
   "designer_bulk_status_failed": "일괄 만들기 상태를 읽을 수 없습니다.",
   "designer_action_bulk_create_bulk_create": "일괄 만들기…",
-  "designer_bulk_no_variables": "변형을 만들기 전에 하나 이상의 {{variable}} 또는 템플릿 슬롯을 추가하세요."
+  "designer_bulk_assign_elements": "디자인 요소 할당",
+  "designer_bulk_assign_description": "변경할 텍스트, 이미지, 색상별로 스프레드시트 열을 선택하세요. 하나의 열을 여러 요소에 사용할 수 있습니다.",
+  "designer_bulk_assignment_for": "{{name}} 열 ({{kind}})",
+  "designer_bulk_not_assigned": "할당하지 않음",
+  "designer_bulk_apply_assignments": "변수 할당 적용",
+  "designer_output_content_mode": "콘텐츠",
+  "designer_output_linked": "연결된 형식 (편집 공유)",
+  "designer_output_independent": "독립 사본 (캐러셀 / 페이지)",
+  "designer_bulk_no_variables": "변형을 만들기 전에 편집 가능한 텍스트, 이미지 또는 색상 요소를 추가하세요."
 }

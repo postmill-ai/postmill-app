@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { elementOutline, offsetElement, pathfinder, roundElementCorners } from './pathfinder';
+import { elementOutline, offsetElement, pathfinder, pathfinderMany, roundElementCorners } from './pathfinder';
 import type { DesignerElement } from './designer.store';
 
 /**
@@ -97,6 +97,57 @@ describe('pathfinder', () => {
   it('returns null when the operation leaves nothing', () => {
     const inner = shape({ id: 'a', x: 10, y: 10, width: 20, height: 20 });
     expect(pathfinder(inner, a, 'subtract')).toBeNull();
+  });
+});
+
+describe('pathfinderMany', () => {
+  const at = (id: string, x: number, width = 100) => shape({ id, x, width });
+
+  it('unites three overlapping shapes into one outline', () => {
+    const result = pathfinderMany([at('a', 0), at('b', 50), at('c', 100)], 'unite')!;
+    expect(result.extra).toHaveLength(0);
+    expect(result.element.width).toBeCloseTo(200, 3);
+  });
+
+  it('keeps all five disjoint shapes as independent regions', () => {
+    const elements = Array.from({ length: 5 }, (_, index) => at(`shape-${index}`, index * 200));
+    const result = pathfinderMany(elements, 'unite')!;
+    expect(result.extra).toHaveLength(4);
+  });
+
+  it('subtracts every front shape from the first in selection order', () => {
+    const result = pathfinderMany([
+      at('subject', 0, 200),
+      at('left-cut', 0, 50),
+      at('right-cut', 150, 50),
+    ], 'subtract')!;
+    expect(result.element.x).toBeCloseTo(50, 3);
+    expect(result.element.width).toBeCloseTo(100, 3);
+    expect(pathfinderMany([at('small', 0, 50), at('large', 0, 200)], 'subtract')).toBeNull();
+  });
+
+  it('intersects successively across three shapes', () => {
+    const result = pathfinderMany([at('a', 0), at('b', 50), at('c', 75)], 'intersect')!;
+    expect(result.element.x).toBeCloseTo(75, 3);
+    expect(result.element.width).toBeCloseTo(25, 3);
+  });
+
+  it('excludes regions covered an even number of times across three shapes', () => {
+    const result = pathfinderMany([at('a', 0), at('b', 50), at('c', 75)], 'exclude')!;
+    expect(1 + result.extra.length).toBe(3);
+    expect(result.element.x).toBeCloseTo(0, 3);
+  });
+
+  it('divides three shapes into unique non-duplicated regions', () => {
+    const result = pathfinderMany([at('a', 0), at('b', 50), at('c', 100)], 'divide')!;
+    expect(1 + result.extra.length).toBe(4);
+  });
+
+  it('outlines every selected shape without fills', () => {
+    const result = pathfinderMany([at('a', 0), at('b', 50), at('c', 100)], 'outline')!;
+    expect(result.extra).toHaveLength(2);
+    expect(result.element.fill).toBe('transparent');
+    expect(result.element.stroke).toBe('#ff0000');
   });
 });
 

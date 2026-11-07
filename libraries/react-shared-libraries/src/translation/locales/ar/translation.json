@@ -4805,5 +4805,13 @@
   "designer_bulk_start_failed": "تعذر بدء الإنشاء الجماعي.",
   "designer_bulk_status_failed": "تعذرت قراءة حالة الإنشاء الجماعي.",
   "designer_action_bulk_create_bulk_create": "الإنشاء الجماعي…",
-  "designer_bulk_no_variables": "أضف {{variable}} واحدًا أو حقل قالب قبل إنشاء النسخ."
+  "designer_bulk_assign_elements": "تعيين عناصر التصميم",
+  "designer_bulk_assign_description": "اختر عمودًا من جدول البيانات لكل نص أو صورة أو لون تريد تغييره. يمكن لعمود واحد تغذية عدة عناصر.",
+  "designer_bulk_assignment_for": "العمود الخاص بـ {{name}} ({{kind}})",
+  "designer_bulk_not_assigned": "عدم التعيين",
+  "designer_bulk_apply_assignments": "تطبيق تعيينات المتغيرات",
+  "designer_output_content_mode": "المحتوى",
+  "designer_output_linked": "تنسيقات مرتبطة (تعديلات مشتركة)",
+  "designer_output_independent": "نسخ مستقلة (عرض شرائح / صفحات)",
+  "designer_bulk_no_variables": "أضف نصًا أو صورة أو عنصر لون قابلًا للتعديل قبل إنشاء النسخ."
 }

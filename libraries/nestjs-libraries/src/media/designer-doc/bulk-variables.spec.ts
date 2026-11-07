@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBulkRow, collectBulkVariables } from './bulk-variables';
+import { applyBulkAssignments, applyBulkRow, collectBulkAssignmentTargets, collectBulkVariables } from './bulk-variables';
 
 const element = (id: string, extra: Record<string, unknown>) => ({
   id,
@@ -103,5 +103,51 @@ describe('Bulk Create variables', () => {
     const result = applyBulkRow(makeDoc(), { name: '' });
     expect(result.outputs[0].children[0].text).toBe('Hello ');
     expect(result.outputs[0].children[1].src).toBe('{{hero}}');
+  });
+
+  it('assigns text, image and color columns across outputs and extra pages without mutating the design', () => {
+    const template = makeDoc();
+    template.outputs[0].children = [
+      element('plain-text', { text: 'Headline' }),
+      element('plain-image', { type: 'image', src: 'https://cdn.example.test/original.png' }),
+      element('plain-shape', { type: 'shape', shape: 'rect', fill: '#000000' }),
+    ];
+    template.outputs[0].pages[0].children = [element('page-text', { text: 'Page copy' })];
+    const targets = collectBulkAssignmentTargets(template);
+    const targetId = (elementId: string, kind: string) =>
+      targets.find((target) => target.elementId === elementId && target.kind === kind)!.id;
+
+    const result = applyBulkAssignments(template, {
+      [targetId('plain-text', 'text')]: 'headline',
+      [targetId('page-text', 'text')]: 'headline',
+      [targetId('plain-image', 'image')]: 'hero',
+      [targetId('plain-shape', 'color')]: 'accent',
+    });
+
+    expect(result.outputs[0].children.map((child: any) => child.slot)).toEqual([
+      { name: 'headline', kind: 'text' },
+      { name: 'hero', kind: 'image' },
+      { name: 'accent', kind: 'color' },
+    ]);
+    expect(result.outputs[0].pages[0].children[0].slot).toEqual({ name: 'headline', kind: 'text' });
+    expect(template.outputs[0].children[0].slot).toBeUndefined();
+    expect(collectBulkVariables(result)).toEqual([
+      { name: 'accent', kind: 'color' },
+      { name: 'footer', kind: 'text' },
+      { name: 'headline', kind: 'text' },
+      { name: 'hero', kind: 'image' },
+    ]);
+  });
+
+  it('preserves existing variables and rejects a column already used by an incompatible kind', () => {
+    const template = makeDoc();
+    template.outputs[0].children.push(element('plain-text', { text: 'Headline' }));
+    const target = collectBulkAssignmentTargets(template).find((item) => item.elementId === 'plain-text' && item.kind === 'text')!;
+
+    expect(() => applyBulkAssignments(template, { [target.id]: 'hero' })).toThrow(
+      'Column "hero" is already assigned to image data.'
+    );
+    expect(template.outputs[0].children[0].text).toBe('Hello {{name}}');
+    expect(template.outputs[0].children[2].slot).toEqual({ name: 'brandColor', kind: 'color' });
   });
 });

@@ -199,10 +199,11 @@ export class DesignerDocService {
       }
 
       case 'addOutput': {
+        const linkContent = op.linkContent !== false;
         // Video documents get a video variant: the primary output's tracks and
-        // clips clone with fresh ids (originId shared, backfilled on the
-        // primary) and smart-reflow onto the new canvas; timing/fps/durationMs
-        // copy unchanged. `seed: false` opts out (empty timeline).
+        // clips clone with fresh ids and smart-reflow onto the new canvas;
+        // timing/fps/durationMs copy unchanged. `seed: false` opts out (empty
+        // timeline); `linkContent: false` removes shared originIds.
         if (doc.mode === 'video') {
           const primary = doc.outputs[0];
           const source =
@@ -228,11 +229,19 @@ export class DesignerDocService {
             op.preset,
             () => randomUUID()
           );
+          if (!linkContent) {
+            output.tracks = output.tracks.map((track) => ({
+              ...track,
+              clips: track.clips.map((clip) => ({ ...clip, originId: undefined })),
+            }));
+          }
           // The output id follows the `out-…` convention — let the normalize
           // pass mint it (track/clip ids are already fresh from the seed).
           output.id = '';
           const outputs = doc.outputs.map((out, i) =>
-            i === 0 && isVideoOutput(out) ? { ...out, tracks: sourceTracks } : out
+            i === 0 && isVideoOutput(out)
+              ? { ...out, tracks: linkContent ? sourceTracks : source.tracks }
+              : out
           ) as DesignerDoc['outputs'];
           outputs.push(output);
           return { ...doc, outputs } as DesignerDoc;
@@ -270,9 +279,9 @@ export class DesignerDocService {
 
         if (source) {
           const sourceChildren = source.children.map((el) =>
-            el.originId
-              ? el
-              : { ...el, originId: `origin-${randomUUID()}` }
+            linkContent && !el.originId
+              ? { ...el, originId: `origin-${randomUUID()}` }
+              : el
           );
           // Copy stacks (headline/subhead columns, plus any grouped CTA that
           // sits in the same column rhythm) seed through one synthetic shared
@@ -293,7 +302,7 @@ export class DesignerDocService {
               el,
               source,
               newOutput,
-              el.originId as string,
+              linkContent ? el.originId : undefined,
               stackBoxes.get(el) ??
                 (el.groupId ? groupBoxes.get(el.groupId) : undefined),
               containerBoxes.get(el)

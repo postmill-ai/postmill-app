@@ -3,7 +3,12 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import { collectBulkVariables, type BulkVariable } from '@postmill-ai/nestjs-libraries/media/designer-doc/bulk-variables';
+import {
+  applyBulkAssignments,
+  collectBulkAssignmentTargets,
+  collectBulkVariables,
+  type BulkVariable,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/bulk-variables';
 import { parseSpreadsheetText } from '@postmill-ai/frontend/components/shared/csv';
 import { Button } from '@postmill-ai/react/form/button';
 
@@ -41,6 +46,7 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
   const [headers, setHeaders] = useState<string[]>([]);
   const [sourceRows, setSourceRows] = useState<Row[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState('');
@@ -48,7 +54,9 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
   const [job, setJob] = useState<BulkJob | null>(null);
   const doc = store((state) => state.doc);
   const designName = store((state) => state.designName);
+  const selectedIds = store((state) => state.selectedIds);
   const variables = useMemo(() => collectBulkVariables(doc), [doc]);
+  const assignmentTargets = useMemo(() => collectBulkAssignmentTargets(doc), [doc]);
 
   const rows = useMemo(() => sourceRows.map((source) => {
     if (!variables.length) return source;
@@ -84,6 +92,10 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
     setPreviewUrl('');
     setJob(null);
     if (!file) return;
+    setHeaders([]);
+    setSourceRows([]);
+    setMapping({});
+    setAssignments({});
     if (file.size > MAX_FILE_BYTES) {
       setError(t('designer_bulk_file_too_large', 'The spreadsheet is too large (maximum 5 MB).'));
       return;
@@ -113,17 +125,49 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
         const nextRows = parsed.slice(1).map((cells) => Object.fromEntries(
           nextHeaders.map((header, index) => [header, cells[index] ?? ''])
         ));
+        const inferredKind = (header: string) => {
+          if (/(?:image|photo|logo|hero|src|url)/i.test(header)) return 'image';
+          if (/(?:colou?r|hex|fill)/i.test(header)) return 'color';
+          return 'text';
+        };
+        const selected = new Set(selectedIds);
+        const orderedTargets = [...assignmentTargets].sort((a, b) =>
+          Number(selected.has(b.elementId)) - Number(selected.has(a.elementId))
+        );
         setHeaders(nextHeaders);
         setSourceRows(nextRows);
-        setMapping(Object.fromEntries(variables.map((variable, index) => [
+        setMapping(Object.fromEntries(variables.map((variable) => [
           variable.name,
-          nextHeaders.includes(variable.name) ? variable.name : nextHeaders[Math.min(index, nextHeaders.length - 1)],
+          nextHeaders.includes(variable.name)
+            ? variable.name
+            : nextHeaders.find((header) => inferredKind(header) === variable.kind) || nextHeaders[0],
+        ])));
+        setAssignments(Object.fromEntries(orderedTargets.map((target) => [
+          target.id,
+          nextHeaders.find((header) => inferredKind(header) === target.kind) || '',
         ])));
       } catch (cause) {
         setError((cause as Error).message || t('designer_bulk_parse_failed', 'Could not parse the spreadsheet.'));
       }
     };
     reader.readAsText(file);
+  };
+
+  const applyAssignments = () => {
+    setError('');
+    setPreviewUrl('');
+    try {
+      const nextDoc = applyBulkAssignments(doc, assignments);
+      const nextVariables = collectBulkVariables(nextDoc);
+      setMapping((current) => Object.fromEntries(nextVariables.map((variable) => [
+        variable.name,
+        current[variable.name] || (headers.includes(variable.name) ? variable.name : headers[0]),
+      ])));
+      store.getState().setDoc(nextDoc);
+      store.getState().pushHistory('Assign Bulk Create variables');
+    } catch (cause) {
+      setError((cause as Error).message);
+    }
   };
 
   const generatePreview = async () => {
@@ -227,14 +271,55 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
               ))}
             </div>
           )}
-          {!!rows.length && !variables.length && (
+          {!!rows.length && !!assignmentTargets.length && (
+            <div className="space-y-2 rounded-md border border-studioBorder p-3">
+              <div className="text-[12px] font-medium text-textColor/70">
+                {t('designer_bulk_assign_elements', 'Assign design elements')}
+              </div>
+              <p className="text-[11px] text-textColor/55">
+                {t('designer_bulk_assign_description', 'Choose a spreadsheet column for each text, image, or color you want to vary. One column can feed multiple elements.')}
+              </p>
+              <div className="max-h-[260px] space-y-2 overflow-y-auto">
+                {assignmentTargets.map((target) => (
+                  <label key={target.id} className="grid grid-cols-[1fr_1.4fr] items-center gap-3 text-[12px]">
+                    <span className="text-textColor/70">
+                      {target.label} · {t(`designer_bulk_kind_${target.kind}`, target.kind)}
+                    </span>
+                    <select
+                      aria-label={t('designer_bulk_assignment_for', 'Column for {{name}} ({{kind}})', {
+                        name: target.label,
+                        kind: target.kind,
+                      })}
+                      value={assignments[target.id] || ''}
+                      onChange={(event) => {
+                        setAssignments((current) => ({ ...current, [target.id]: event.target.value }));
+                        setPreviewUrl('');
+                      }}
+                      className="h-[30px] px-2 rounded-md bg-newBgColor border border-studioBorder text-textColor"
+                    >
+                      <option value="">{t('designer_bulk_not_assigned', 'Do not assign')}</option>
+                      {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <Button
+                secondary
+                disabled={!Object.values(assignments).some((column) => !!column)}
+                onClick={applyAssignments}
+              >
+                {t('designer_bulk_apply_assignments', 'Apply variable assignments')}
+              </Button>
+            </div>
+          )}
+          {!!rows.length && !variables.length && !assignmentTargets.length && (
             <p className="text-[11px] text-dangerText">
-              {t('designer_bulk_no_variables', 'Add at least one {{variable}} or template slot before creating variations.')}
+              {t('designer_bulk_no_variables', 'Add an editable text, image, or color element before creating variations.')}
             </p>
           )}
           {!!rows.length && (
             <div className="flex gap-2">
-              <Button secondary loading={previewLoading} onClick={generatePreview}>
+              <Button secondary loading={previewLoading} disabled={!variables.length} onClick={generatePreview}>
                 {t('designer_bulk_preview', 'Preview first row')}
               </Button>
               <Button loading={starting} disabled={!variables.length} onClick={start}>

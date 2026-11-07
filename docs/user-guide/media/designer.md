@@ -24,7 +24,12 @@ saved.
 ## Formats, pages and versions
 
 - **Output tabs** — a design can carry several formats (sizes) at once. **Add format** adds another
-  size; linked elements stay in sync across formats unless you choose **Edit Format Only**.
+  size; linked elements stay in sync across formats unless you choose **Edit Format Only**. Choose
+  **Independent copies** when adding repeated dimensions for carousel or multi-page content that
+  should be edited separately. Linked formats remain the default.
+- **Pathfinder** — select two or more unlocked shapes, paths, or icons to Unite, Minus Front,
+  Intersect, Exclude, Divide, or Outline them in selection order. The whole operation is one undo
+  step; disjoint regions are preserved, and invalid hole results leave the design unchanged.
 - **Pages** — image outputs can hold multiple pages (up to 20 per output), managed in the **Pages**
   panel (add, duplicate, rename, delete). PDF export combines an output's pages into one file.
 - **Versions** — **File ▸ Save Version…** snapshots the design; the **Versions** panel lists manual
@@ -214,7 +219,10 @@ can save a copy to your computer.
 For a static design, choose **File ▸ Bulk Create…** and upload a CSV or TSV file (maximum 5 MB and
 200 data rows). Add `{{variable}}` placeholders to text or image sources, or use template text,
 image and color slots. The dialog discovers those variables across all outputs, pages and symbols;
-map each one to a spreadsheet column, then preview the first row before starting the batch.
+map each one to a spreadsheet column, then preview the first row before starting the batch. If the
+design has no variables yet, use **Assign design elements** to map columns directly to text, images,
+or colors on any page and choose **Apply variable assignments**. One column can feed multiple
+elements. Applying is one undoable edit and keeps the resulting design fully editable.
 
 Each successful row creates a separate editable design and saves every output and page as a PNG in
 a dedicated batch folder in Files. The completed batch provides links to those designs and a ZIP

@@ -1,7 +1,9 @@
 import type { DesignerAction } from './actions';
 import type { DesignerElement, DesignerLayerStyle, VideoTrack } from './designer.store';
 import type { BooleanOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-boolean';
-import { offsetElement, pathfinder, roundElementCorners } from './pathfinder';
+import { offsetElement, pathfinderMany, roundElementCorners } from './pathfinder';
+import { pageChildren, withPageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import {
   expandSymbolInstance,
   type SlotDefinition,
@@ -27,7 +29,7 @@ type StoreApi = ReturnType<typeof import('./designer.store').createDesignerStore
 /** Copy buffer for Copy/Paste Layer Style. Editor state, not document state. */
 let styleClipboard: DesignerLayerStyle[] | null = null;
 
-/** Pathfinder needs exactly two combinable outlines, in selection order. */
+/** Pathfinder combines two or more unlocked outlines in selection order. */
 export const combinableElements = (els: DesignerElement[]): DesignerElement[] =>
   els.filter(
     (e) => (e.type === 'shape' || e.type === 'path' || e.type === 'icon') && !e.locked
@@ -42,29 +44,47 @@ export const PATHFINDER_OPS: { op: BooleanOp; label: string }[] = [
   { op: 'outline', label: 'Outline' },
 ];
 
-/**
- * Combine the two combinable elements in `els` (selection order). The subject
- * becomes the result and the clip is consumed — Illustrator's own behaviour,
- * and the reason selection ORDER matters for Minus Front. Shared by the Layer
- * menu and the canvas context menu so the two can never drift.
- */
+/** Compute the whole operation before committing one atomic document edit. */
 export const combineElements = (
   store: StoreApi,
   els: DesignerElement[],
   op: BooleanOp
 ): void => {
-  const [subject, clip] = combinableElements(els);
-  if (!subject || !clip) return;
-  const result = pathfinder(subject, clip, op);
+  const elements = combinableElements(els);
+  const [subject] = elements;
+  if (!subject || elements.length < 2) return;
+  const result = pathfinderMany(elements, op);
   if (!result) return;
   const st = store.getState();
-  st.updateElement(subject.id, result.element);
-  for (const extra of result.extra) {
-    st.addElement({ ...(extra as DesignerElement), id: '' });
-  }
-  st.removeElement(clip.id);
-  st.setSelectedIds([subject.id]);
-  st.pushHistory();
+  if (st.doc.mode === 'video') return;
+  const output = st.doc.outputs[st.currentOutput];
+  if (!output || !('children' in output)) return;
+  const children = pageChildren(output, st.currentPage);
+  const subjectIndex = children.findIndex((element) => element.id === subject.id);
+  if (subjectIndex < 0) return;
+
+  const consumed = new Set(elements.map((element) => element.id));
+  const extras = result.extra.map((element) => ({
+    ...element,
+    id: genId(),
+    originId: genId(),
+  } as DesignerElement));
+  const nextChildren = children.filter((element) => !consumed.has(element.id));
+  nextChildren.splice(Math.min(subjectIndex, nextChildren.length), 0,
+    { ...subject, ...result.element } as DesignerElement,
+    ...extras
+  );
+  const outputs = st.doc.outputs.map((out, index) =>
+    index === st.currentOutput && 'children' in out
+      ? withPageChildren(out, st.currentPage, nextChildren)
+      : out
+  );
+  store.setState({
+    doc: { ...st.doc, outputs },
+    selectedIds: [subject.id, ...extras.map((element) => element.id)],
+    isDirty: true,
+  });
+  st.pushHistory('Pathfinder');
 };
 
 const STYLES: { type: DesignerLayerStyle['type']; label: string }[] = [
@@ -133,7 +153,7 @@ export const layerActions = (
     st.pushHistory();
   };
 
-  const canCombine = () => combinableElements(live().selectedEls).length === 2;
+  const canCombine = () => combinableElements(live().selectedEls).length >= 2;
   const isVideoDoc = () => store.getState().doc.mode === 'video';
 
   /**

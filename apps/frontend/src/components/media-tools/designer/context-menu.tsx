@@ -49,7 +49,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
   const selectedEls = ((s.selectedIds || [])
     .map((id: string) => imageOut?.children.find((c: { id: string }) => c.id === id))
     .filter(Boolean) || []) as DesignerElement[];
-  const pathfinderReady = combinableElements(selectedEls).length === 2;
+  const pathfinderReady = combinableElements(selectedEls).length >= 2;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -154,7 +154,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
           { label: t('group', 'Group'), action: () => s.groupSelection(effIds) },
           { label: t('designer_action_ungroup_ungroup', 'Ungroup'), action: () => s.ungroupSelection(effIds) },
           // The same six ops the Layer ▸ Pathfinder submenu runs, surfaced
-          // where a two-shape selection actually right-clicks.
+          // where a multi-shape selection actually right-clicks.
           ...(pathfinderReady
             ? [{
                 label: t('designer_context_pathfinder', 'Pathfinder'),
