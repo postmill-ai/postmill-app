@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/dtos/ai/image-source.validator';
+import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/media/image-source.limits';
 import { createDesignerStore } from './designer.store';
 import {
   applyAiOutpaint,

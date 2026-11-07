@@ -5,14 +5,8 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
-
-/**
- * Largest image an edit endpoint accepts inline. Mirrors
- * `AiMediaService.MEDIA_EDIT_MAX_INLINE_BYTES` (20 MB): uploads cap images at
- * 10 MB and base64 inflates ~4/3, so a payload string longer than the checked
- * bound cannot decode under the cap — reject before decoding.
- */
-export const IMAGE_SOURCE_MAX_BYTES = 20 * 1024 * 1024;
+import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/media/image-source.limits';
+export { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/media/image-source.limits';
 
 const DATA_IMAGE_URI = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/i;
 

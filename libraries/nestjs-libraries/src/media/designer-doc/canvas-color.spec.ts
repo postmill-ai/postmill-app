@@ -4,8 +4,8 @@ import { canvasColor } from './canvas-color';
 /**
  * 8-digit hex is CSS Color 4: browsers parse it, but it is not part of the
  * colour grammar every canvas implementation accepts. These pin the
- * normalisation to `rgba()` both renderers apply at the context boundary, and
- * the byte-identical passthrough every other colour keeps.
+ * normalisation to `rgba()` both renderers apply at the context boundary, the
+ * byte-identical passthrough valid colours keep, and transparent bulk placeholders.
  */
 describe('canvasColor', () => {
   it('converts an 8-digit hex to rgba()', () => {
@@ -29,6 +29,12 @@ describe('canvasColor', () => {
 
   it('tolerates surrounding whitespace and lowercase', () => {
     expect(canvasColor('  #ff000080 ')).toBe('rgba(255, 0, 0, 0.5019607843137255)');
+  });
+
+  it('renders unresolved bulk colour placeholders as transparent', () => {
+    expect(canvasColor('{{accent}}')).toBe('rgba(0, 0, 0, 0)');
+    expect(canvasColor('{{ accent_color }}')).toBe('rgba(0, 0, 0, 0)');
+    expect(canvasColor('#ff0000')).toBe('#ff0000');
   });
 
   it('passes nullish through as undefined', () => {

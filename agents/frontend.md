@@ -486,9 +486,12 @@ before enqueue. `designer-doc/bulk-variables.ts` is the one substitution/discove
 preview, saved variation and renderer: it covers all outputs/pages, rich text, mustache variables,
 text/image/color slots and symbol overrides. With no preexisting variables, the dialog's guided
 assignment table maps CSV columns directly to text/image/color targets on every output/page;
-applying adds their slots as ONE undoable edit, then reuses the same preview/batch pipeline. One
-column may feed multiple targets, incompatible existing variable kinds are rejected, and existing
-mustache/slot bindings remain intact. The batch runs through `DesignBulkCreateService` and
+applying adds their slots as ONE undoable edit, then reuses the same preview/batch pipeline. Text
+and colour may be assigned in separate passes without replacing either binding. One column may feed
+multiple targets, incompatible existing variable kinds are rejected, and existing mustache/slot
+bindings remain intact. Before substitution, a colour mustache renders transparent through the shared
+`canvasColor` boundary rather than inheriting the canvas's previous fill; a real row replaces it with
+the supplied colour. The batch runs through `DesignBulkCreateService` and
 creates editable Designs plus per-page PNG Files and a ZIP; never substitute a client-only flattened
 image for the editable result.
 

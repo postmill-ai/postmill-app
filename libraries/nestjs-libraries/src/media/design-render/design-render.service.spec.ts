@@ -108,6 +108,28 @@ describe('DesignRenderService', () => {
     }
   });
 
+  it('does not reuse the previous layer colour for an unresolved bulk fill', async () => {
+    const service = makeService();
+    const doc = makeDoc();
+    doc.outputs[0].background = '#ffffff';
+    doc.outputs[0].children = [
+      {
+        id: 'painted', type: 'shape', shape: 'rect', x: 0, y: 0, width: 50, height: 50,
+        rotation: 0, opacity: 1, locked: false, hidden: false, fill: '#ff0000',
+      },
+      {
+        id: 'placeholder', type: 'shape', shape: 'rect', x: 50, y: 0, width: 50, height: 50,
+        rotation: 0, opacity: 1, locked: false, hidden: false, fill: '{{accent}}',
+      },
+    ];
+
+    const png = await service.renderPage(doc, 0, { pixelRatio: 1 });
+    const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const pixel = (x: number) => [...data.slice((25 * info.width + x) * info.channels, (25 * info.width + x) * info.channels + 4)];
+    expect(pixel(25)).toEqual([255, 0, 0, 255]);
+    expect(pixel(75)).toEqual([255, 255, 255, 255]);
+  });
+
   it('survives pathologically deep group nesting', async () => {
     // One page-size buffer per nesting level, and nesting is unbounded in the
     // document: each Group Layers wraps the previous group, so a deep chain is

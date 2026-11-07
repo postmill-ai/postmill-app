@@ -175,6 +175,48 @@ describe('Bulk Create variables', () => {
     expect(row.outputs[0].children[0].fill).toBe('#ff0000');
   });
 
+  it('supports text and color assignments in separate passes without replacing either binding', () => {
+    const makeTemplate = () => {
+      const template = makeDoc();
+      template.outputs[0].children = [element('plain-text', { text: 'Headline', fill: '#000000' })];
+      return template;
+    };
+    const target = (template: any, kind: string) =>
+      collectBulkAssignmentTargets(template).find((item) => item.elementId === 'plain-text' && item.kind === kind);
+
+    const textFirstTemplate = makeTemplate();
+    const textFirst = applyBulkAssignments(textFirstTemplate, {
+      [target(textFirstTemplate, 'text')!.id]: 'headline',
+    });
+    expect(target(textFirst, 'text')).toBeUndefined();
+    const textThenColor = applyBulkAssignments(textFirst, {
+      [target(textFirst, 'color')!.id]: 'accent',
+    });
+
+    const colorFirstTemplate = makeTemplate();
+    const colorFirst = applyBulkAssignments(colorFirstTemplate, {
+      [target(colorFirstTemplate, 'color')!.id]: 'accent',
+    });
+    expect(target(colorFirst, 'color')).toBeUndefined();
+    const colorThenText = applyBulkAssignments(colorFirst, {
+      [target(colorFirst, 'text')!.id]: 'headline',
+    });
+
+    for (const assigned of [textThenColor, colorThenText]) {
+      const text = assigned.outputs[0].children[0];
+      expect(text.slot).toEqual({ name: 'headline', kind: 'text' });
+      expect(text.fill).toBe('{{accent}}');
+      const row = applyBulkRow(assigned, { headline: 'Winter Sale', accent: '#ff0000' });
+      expect(row.outputs[0].children[0].text).toBe('Winter Sale');
+      expect(row.outputs[0].children[0].fill).toBe('#ff0000');
+    }
+
+    expect(() => applyBulkAssignments(textFirst, {
+      [target(textFirst, 'color')!.id]: 'footer',
+    })).toThrow('Column "footer" is already assigned to text data.');
+    expect(textFirst.outputs[0].children[0].fill).toBe('#000000');
+  });
+
   it('rejects incompatible kinds assigned to the same column in one apply', () => {
     const template = makeDoc();
     template.outputs[0].children = [
