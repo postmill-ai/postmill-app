@@ -6,6 +6,7 @@ const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts');
 afterEach(() => {
   document.head.innerHTML = '';
   if (originalFonts) Object.defineProperty(document, 'fonts', originalFonts);
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -63,5 +64,25 @@ describe('Designer font loading', () => {
     document.head.querySelector('link')!.dispatchEvent(new Event('load'));
     await pending;
     expect(load).toHaveBeenCalledWith('700 16px "Sofia Sans Extra Condensed"');
+  });
+
+  it('times out a stalled stylesheet and allows a later retry', async () => {
+    vi.useFakeTimers();
+    const load = vi.fn().mockResolvedValue([]);
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { load, ready: Promise.resolve() },
+    });
+
+    const pending = ensureFontLoaded('Be Vietnam Pro', [700]);
+    await vi.advanceTimersByTimeAsync(5000);
+    await pending;
+    expect(document.head.querySelector('link')).toBeNull();
+    expect(load).toHaveBeenCalled();
+
+    const retry = ensureFontLoaded('Be Vietnam Pro', [700]);
+    document.head.querySelector('link')!.dispatchEvent(new Event('load'));
+    await retry;
+    expect(document.head.querySelector('link')).not.toBeNull();
   });
 });

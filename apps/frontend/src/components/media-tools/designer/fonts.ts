@@ -144,13 +144,21 @@ const injectStylesheet = async (family: string, weights: number[], italic = fals
   link.href = googleFontsUrl(family, missing, italic);
   link.dataset.designerFont = key;
   const loaded = new Promise<void>((resolve) => {
-    link.onload = () => resolve();
-    link.onerror = () => {
-      missing.forEach((weight) => have.delete(weight));
-      stylesheetLoads.delete(key);
-      link.remove();
+    let settled = false;
+    const finish = (retry: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (retry) {
+        missing.forEach((weight) => have.delete(weight));
+        stylesheetLoads.delete(key);
+        link.remove();
+      }
       resolve();
     };
+    const timeout = setTimeout(() => finish(true), 5000);
+    link.onload = () => finish(false);
+    link.onerror = () => finish(true);
   });
   stylesheetLoads.set(key, loaded);
   document.head.appendChild(link);

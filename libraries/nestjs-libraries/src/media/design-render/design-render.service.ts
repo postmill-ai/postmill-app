@@ -787,18 +787,16 @@ export class DesignRenderService {
   async assertVisualAssets(
     doc: DesignerDoc,
     outputIndex: number,
-    optsOrPageNumber: RenderOptions | number = 0,
+    opts?: RenderOptions,
     pageNumber = 0
   ): Promise<void> {
-    const opts = typeof optsOrPageNumber === 'number' ? undefined : optsOrPageNumber;
-    const resolvedPageNumber = typeof optsOrPageNumber === 'number' ? optsOrPageNumber : pageNumber;
     const base = doc.outputs?.[outputIndex] as DesignerOutput | undefined;
     if (!base || !('children' in base)) {
       throw new Error(`Output ${outputIndex} is not an image output`);
     }
-    const page = resolvedPageNumber > 0 ? base.pages?.[resolvedPageNumber - 1] : undefined;
-    if (resolvedPageNumber > 0 && !page) {
-      throw new Error(`Page ${resolvedPageNumber + 1} out of range for output ${outputIndex}`);
+    const page = pageNumber > 0 ? base.pages?.[pageNumber - 1] : undefined;
+    if (pageNumber > 0 && !page) {
+      throw new Error(`Page ${pageNumber + 1} out of range for output ${outputIndex}`);
     }
     const output: DesignerOutput = page
       ? { ...base, bg: page.background ?? base.bg, children: page.children ?? [] }
@@ -3381,15 +3379,12 @@ export class DesignRenderService {
     return this.loadImageSafe(bg.src);
   }
 
-  /**
-   * Load and decode a bitmap by URL, memoised across linked outputs. Failed
-   * loads are evicted so a later save can recover from a transient outage.
-   */
+  /** Load and decode a bitmap, sharing transient failures within one export. */
   private async loadImageSafe(src?: string): Promise<any | null> {
     if (!src) return null;
-    const image = await this._imageCache.get(src, () => this._loadImageUncached(src));
-    if (!image) this._imageCache.delete(src);
-    return image;
+    return this._imageCache.get(src, () => this._loadImageUncached(src), {
+      failureTtlMs: 60_000,
+    });
   }
 
   private async _loadImageUncached(src: string): Promise<any | null> {

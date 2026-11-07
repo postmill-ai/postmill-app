@@ -92,11 +92,20 @@ describe('DesignRenderService', () => {
     const doc = makeDoc();
     doc.outputs[0].bg = { type: 'image', src: 'https://cdn.example.test/bg.png' };
 
-    await expect(service.assertVisualAssets(doc, 0, { orgId: 'org-1' }))
-      .rejects.toThrow('Required background image');
-    await expect(service.assertVisualAssets(doc, 0, { orgId: 'org-1' }))
-      .resolves.toBeUndefined();
-    expect(safeFetch).toHaveBeenCalledTimes(2);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      await expect(service.assertVisualAssets(doc, 0, { orgId: 'org-1' }))
+        .rejects.toThrow('Required background image');
+      await expect(service.assertVisualAssets(doc, 0, { orgId: 'org-1' }))
+        .rejects.toThrow('Required background image');
+      expect(safeFetch).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(60_001);
+      await expect(service.assertVisualAssets(doc, 0, { orgId: 'org-1' }))
+        .resolves.toBeUndefined();
+      expect(safeFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('survives pathologically deep group nesting', async () => {
