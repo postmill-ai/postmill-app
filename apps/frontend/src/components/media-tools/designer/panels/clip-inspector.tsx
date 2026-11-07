@@ -955,7 +955,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
                 : translate('designer_remove_background', 'Remove Background')}
             </button>
           )}
-          {operationAvailable('bg-remove') && (operationAvailable('image') || operationAvailable('inpaint')) && (
+          {operationAvailable('bg-remove') && operationAvailable('inpaint') && (
             <button
               type="button"
               onClick={runMagicGrab}
