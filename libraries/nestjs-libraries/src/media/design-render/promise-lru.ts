@@ -1,14 +1,12 @@
 /**
- * A bounded memoiser for async loads.
- *
- * The PROMISE is cached, not the awaited value, so N concurrent callers for
- * the same key share one in-flight load; failures settle as a cached value
- * too (callers that want retries must not swallow rejections into the cache).
- * Eviction is insertion-order (Map order), which for this use — "same handful
- * of bitmaps across a render's outputs" — is indistinguishable from true LRU.
+ * A bounded memoiser for async loads. Concurrent callers share one promise.
+ * Null and rejected results can expire after a caller-supplied failure TTL.
  */
 export class PromiseLruCache<V> {
-  private readonly map = new Map<string, Promise<V>>();
+  private readonly map = new Map<string, {
+    promise: Promise<V>;
+    failedAt?: number;
+  }>();
 
   constructor(private readonly max: number) {}
 
@@ -16,16 +14,40 @@ export class PromiseLruCache<V> {
     return this.map.size;
   }
 
-  get(key: string, load: () => Promise<V>): Promise<V> {
+  delete(key: string): void {
+    this.map.delete(key);
+  }
+
+  get(
+    key: string,
+    load: () => Promise<V>,
+    opts?: { failureTtlMs?: number }
+  ): Promise<V> {
     const cached = this.map.get(key);
-    if (cached) return cached;
-    const promise = load();
-    this.map.set(key, promise);
+    if (cached) {
+      const expired = opts?.failureTtlMs !== undefined &&
+        cached.failedAt !== undefined &&
+        Date.now() - cached.failedAt >= opts.failureTtlMs;
+      if (!expired) return cached.promise;
+      this.map.delete(key);
+    }
+    const entry: { promise: Promise<V>; failedAt?: number } = {
+      promise: load(),
+    };
+    this.map.set(key, entry);
+    void entry.promise.then(
+      (value) => {
+        if (value === null) entry.failedAt = Date.now();
+      },
+      () => {
+        entry.failedAt = Date.now();
+      }
+    );
     while (this.map.size > this.max) {
       const oldest = this.map.keys().next().value;
       if (oldest === undefined) break;
       this.map.delete(oldest);
     }
-    return promise;
+    return entry.promise;
   }
 }

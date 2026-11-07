@@ -22,6 +22,24 @@ describe('PromiseLruCache', () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
+  it('retries a null result only after the failure TTL', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const cache = new PromiseLruCache<string | null>(4);
+      const load = vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('recovered');
+      await cache.get('asset', load, { failureTtlMs: 60_000 });
+      await cache.get('asset', load, { failureTtlMs: 60_000 });
+      expect(load).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(60_001);
+      await expect(cache.get('asset', load, { failureTtlMs: 60_000 })).resolves.toBe('recovered');
+      expect(load).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('evicts the oldest entry beyond the cap', async () => {
     const cache = new PromiseLruCache<number>(2);
     const load = vi.fn(async () => 1);

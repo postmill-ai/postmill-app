@@ -234,14 +234,18 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   render the t=0 POSTER projection `designer-doc/video-poster.ts` — a render-only synthetic image
   output (clips→elements; `video`-track clips draw from their File row's stored thumbnail poster
   when one is resolved by the caller — `DesignPreviewService` self-heals missing ones through the
-  File row's local or cloud storage adapter via `media/video-frame.ts`). Preview rendering fails
-  when a visible required time-zero poster or other visual asset cannot be loaded; intentional
+  File row's local or cloud storage adapter via `media/video-frame.ts`). A fileId-less remote video
+  uses bounded `safeFetch` + the same frame extractor, with no File row required. Preview rendering
+  fails when a visible required time-zero poster or other visual asset cannot be loaded; intentional
   black pixels remain valid.
   `renderPage` still rejects video outputs.
 - **Design/template previews are best-effort, never save blockers.** Video saves render through
   `DesignPreviewService`; image saves use that server renderer when no client thumbnail arrives.
-  `.pdesign` export also renders when its source has no resolvable preview. A render failure keeps
-  the previous preview, and preview replacement cleans up only the old File row it actually replaced.
+  Org-owned background `fileId`s resolve through the folder storage adapter before the remote URL,
+  and failed remote image loads are evicted so a later save can recover. `.pdesign` export also renders
+  when its source has no resolvable preview and then triggers targeted healing of the latest source.
+  A render failure keeps the previous preview, and preview replacement cleans up only the old File
+  row it actually replaced.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
   carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame
@@ -387,8 +391,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   shared definition close it.
 - **Konva measures a Text node once and caches the arrangement.** A redraw does not re-measure, so
   text first laid out before its webfont arrives keeps the fallback's line breaks — and with a fixed
-  box height the overflow line is dropped, truncating the string. `canvas.tsx` forces a re-measure
-  after `ensureFontsLoaded`; anything that changes the font stylesheet depends on it.
+  box height the overflow line is dropped, truncating the string. `fonts.ts` awaits each injected
+  stylesheet before calling `document.fonts.load`, and `canvas.tsx` then forces a re-measure. Calling
+  `document.fonts.load` immediately after appending the link races the stylesheet and preserves the
+  fallback layout. Anything that changes the font stylesheet depends on this ordering.
 - **The font catalog is written down three times** — `designer/fonts.ts`, the `@import` in
   `app/global.scss`, and `CURATED_FONTS` in `font-loader.service.ts`. A family missing from the
   second renders as Arial; missing from the third exports as sans-serif. `font-catalog.drift.spec.ts`
