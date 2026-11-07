@@ -274,7 +274,10 @@ export interface DesignerActions {
   toggleGroupCollapsed: (id: string) => void;
   // outputs (replaces multi-page)
   setCurrentOutput: (index: number) => void;
-  addOutput: (preset: { formatId: string; name: string; width: number; height: number }) => void;
+  addOutput: (
+    preset: { formatId: string; name: string; width: number; height: number },
+    opts?: { linkContent?: boolean }
+  ) => void;
   removeOutput: (index: number) => void;
   resizeOutput: (index: number, width: number, height: number, formatId?: string, name?: string) => void;
   // pages within an image output (doc v8). pageNumber is 0-based; 0 = page 1.
@@ -1311,24 +1314,29 @@ export const createDesignerStore = (
         get().pushHistory('Reorder pages');
       },
 
-      addOutput: (preset) => {
+      addOutput: (preset, opts) => {
         const { doc, currentOutput } = get();
         if (doc.outputs.length >= MAX_OUTPUTS) return;
+        const linkContent = opts?.linkContent ?? true;
         let name = preset.name;
         for (let suffix = 2; doc.outputs.some((out) => out.name === name); suffix++) {
           name = `${preset.name} ${suffix}`;
         }
         const namedPreset = { ...preset, name };
         if (isVideoMode()) {
-          // Video variant: clone the CURRENT output's tracks/clips with fresh
-          // ids (originId shared, backfilled on the source) and smart-reflow
-          // the geometry onto the new canvas. Timing/fps/durationMs copy
-          // unchanged — see designer-doc/video-reflow.
           const source = doc.outputs[currentOutput] as VideoOutput;
           if (!source || !('tracks' in source)) return;
           const { output, sourceTracks } = seedVideoOutput(source, namedPreset);
+          if (!linkContent) {
+            output.tracks = output.tracks.map((track) => ({
+              ...track,
+              clips: track.clips.map((clip) => ({ ...clip, originId: undefined })),
+            }));
+          }
           const outs = doc.outputs.map((o, i) =>
-            i === currentOutput ? { ...(o as VideoOutput), tracks: sourceTracks } : o
+            i === currentOutput
+              ? { ...(o as VideoOutput), tracks: linkContent ? sourceTracks : source.tracks }
+              : o
           );
           outs.push(output);
           set({
@@ -1344,22 +1352,21 @@ export const createDesignerStore = (
           return;
         }
         const source = doc.outputs[currentOutput] as DesignerOutput;
-        const sourceChildren = source.children.map((el) => (el.originId ? el : { ...el, originId: genId() }));
+        const sourceChildren = source.children.map((el) =>
+          linkContent && !el.originId ? { ...el, originId: genId() } : el
+        );
         const targetBasis = { ...namedPreset, id: '', background: '#fff', children: [] } as DesignerOutput;
         const groupBoxes = computeGroupBoxes(sourceChildren, source);
         const children = sourceChildren.map((el) =>
-          seedCopy(el, source, targetBasis, el.originId as string, el.groupId ? groupBoxes.get(el.groupId) : undefined),
+          seedCopy(el, source, targetBasis, linkContent ? el.originId : undefined, el.groupId ? groupBoxes.get(el.groupId) : undefined),
         );
-        // Pages 2+ come along too: fresh element ids AND fresh originIds —
-        // per-page edits are deliberately local (duplicatePageAt semantics,
-        // designer-doc.pages.ts) — each child reflowed onto the new canvas.
         const pages = source.pages?.map((page) => {
           const pageBoxes = computeGroupBoxes(page.children, source);
           return {
             ...page,
             id: genId(),
             children: page.children.map((el) =>
-              seedCopy(el, source, targetBasis, genId(), el.groupId ? pageBoxes.get(el.groupId) : undefined)),
+              seedCopy(el, source, targetBasis, linkContent ? genId() : undefined, el.groupId ? pageBoxes.get(el.groupId) : undefined)),
           };
         });
         const newOutput: DesignerOutput = {

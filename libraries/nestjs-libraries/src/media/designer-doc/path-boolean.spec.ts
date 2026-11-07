@@ -150,6 +150,17 @@ describe('outline', () => {
   });
 });
 
+describe('aligned rectangles', () => {
+  it('computes exact operations when both rectangles share the same horizontal strip', () => {
+    const overlapping = square(5, 0, 10);
+    expect(area(booleanPolygons(A, overlapping, 'unite').polygons)).toBe(150);
+    expect(area(booleanPolygons(A, overlapping, 'intersect').polygons)).toBe(50);
+    expect(area(booleanPolygons(A, overlapping, 'subtract').polygons)).toBe(50);
+    expect(area(booleanPolygons(A, overlapping, 'exclude').polygons)).toBe(100);
+    expect(booleanPolygons(A, overlapping, 'divide').polygons).toHaveLength(3);
+  });
+});
+
 describe('degenerate input', () => {
   it('returns the subject when the clip is not a closed area', () => {
     const line: Point[] = [{ x: 0, y: 0 }, { x: 10, y: 10 }];

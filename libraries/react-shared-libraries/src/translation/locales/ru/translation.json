@@ -4822,5 +4822,13 @@
   "designer_bulk_start_failed": "Не удалось запустить массовое создание.",
   "designer_bulk_status_failed": "Не удалось прочитать статус массового создания.",
   "designer_action_bulk_create_bulk_create": "Массовое создание…",
-  "designer_bulk_no_variables": "Добавьте хотя бы одну {{variable}} или поле шаблона перед созданием вариантов."
+  "designer_bulk_assign_elements": "Назначить элементы дизайна",
+  "designer_bulk_assign_description": "Выберите столбец таблицы для каждого текста, изображения или цвета, который нужно изменять. Один столбец может использоваться несколькими элементами.",
+  "designer_bulk_assignment_for": "Столбец для {{name}} ({{kind}})",
+  "designer_bulk_not_assigned": "Не назначать",
+  "designer_bulk_apply_assignments": "Применить назначения переменных",
+  "designer_output_content_mode": "Содержимое",
+  "designer_output_linked": "Связанные форматы (общие изменения)",
+  "designer_output_independent": "Независимые копии (карусель / страницы)",
+  "designer_bulk_no_variables": "Перед созданием вариантов добавьте редактируемый текст, изображение или элемент цвета."
 }

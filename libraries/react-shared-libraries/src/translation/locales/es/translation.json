@@ -4822,5 +4822,13 @@
   "designer_bulk_start_failed": "No se pudo iniciar la creación masiva.",
   "designer_bulk_status_failed": "No se pudo consultar el estado de la creación masiva.",
   "designer_action_bulk_create_bulk_create": "Creación masiva…",
-  "designer_bulk_no_variables": "Añade al menos una {{variable}} o un campo de plantilla antes de crear variaciones."
+  "designer_bulk_assign_elements": "Asignar elementos del diseño",
+  "designer_bulk_assign_description": "Elige una columna de la hoja de cálculo para cada texto, imagen o color que quieras variar. Una columna puede alimentar varios elementos.",
+  "designer_bulk_assignment_for": "Columna para {{name}} ({{kind}})",
+  "designer_bulk_not_assigned": "No asignar",
+  "designer_bulk_apply_assignments": "Aplicar asignaciones de variables",
+  "designer_output_content_mode": "Contenido",
+  "designer_output_linked": "Formatos vinculados (ediciones compartidas)",
+  "designer_output_independent": "Copias independientes (carrusel / páginas)",
+  "designer_bulk_no_variables": "Añade un elemento editable de texto, imagen o color antes de crear variaciones."
 }

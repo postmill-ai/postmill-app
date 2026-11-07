@@ -4821,5 +4821,13 @@
   "designer_bulk_start_failed": "Kan bulkgewijs maken niet starten.",
   "designer_bulk_status_failed": "Kan de status van bulkgewijs maken niet lezen.",
   "designer_action_bulk_create_bulk_create": "Bulkgewijs maken…",
-  "designer_bulk_no_variables": "Voeg minstens één {{variable}} of sjabloonveld toe voordat je varianten maakt."
+  "designer_bulk_assign_elements": "Ontwerpelementen toewijzen",
+  "designer_bulk_assign_description": "Kies een spreadsheetkolom voor elke tekst, afbeelding of kleur die je wilt variëren. Eén kolom kan meerdere elementen voeden.",
+  "designer_bulk_assignment_for": "Kolom voor {{name}} ({{kind}})",
+  "designer_bulk_not_assigned": "Niet toewijzen",
+  "designer_bulk_apply_assignments": "Variabeletoewijzingen toepassen",
+  "designer_output_content_mode": "Inhoud",
+  "designer_output_linked": "Gekoppelde formaten (gedeelde bewerkingen)",
+  "designer_output_independent": "Onafhankelijke kopieën (carrousel / pagina's)",
+  "designer_bulk_no_variables": "Voeg een bewerkbaar tekst-, afbeeldings- of kleurelement toe voordat je varianten maakt."
 }

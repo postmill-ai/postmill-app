@@ -4821,5 +4821,13 @@
   "designer_bulk_start_failed": "Tidak dapat memulai Buat Massal.",
   "designer_bulk_status_failed": "Tidak dapat membaca status Buat Massal.",
   "designer_action_bulk_create_bulk_create": "Buat Massal…",
-  "designer_bulk_no_variables": "Tambahkan setidaknya satu {{variable}} atau bidang template sebelum membuat variasi."
+  "designer_bulk_assign_elements": "Tetapkan elemen desain",
+  "designer_bulk_assign_description": "Pilih kolom spreadsheet untuk setiap teks, gambar, atau warna yang ingin divariasikan. Satu kolom dapat mengisi beberapa elemen.",
+  "designer_bulk_assignment_for": "Kolom untuk {{name}} ({{kind}})",
+  "designer_bulk_not_assigned": "Jangan tetapkan",
+  "designer_bulk_apply_assignments": "Terapkan penetapan variabel",
+  "designer_output_content_mode": "Konten",
+  "designer_output_linked": "Format tertaut (edit bersama)",
+  "designer_output_independent": "Salinan independen (karusel / halaman)",
+  "designer_bulk_no_variables": "Tambahkan elemen teks, gambar, atau warna yang dapat diedit sebelum membuat variasi."
 }

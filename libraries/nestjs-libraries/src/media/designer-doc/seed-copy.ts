@@ -9,8 +9,8 @@ import { genId } from './designer-doc.migrate';
 
 /**
  * Clone a source element into a target output, scaling/centering it with
- * `smartReflow` and wiring it to the same `originId` so it participates in
- * linked-by-default updates. `groupBox` (the element's group combined bbox on
+ * `smartReflow`. A supplied `originId` links it for shared updates; omitting
+ * it removes the source link for an independent copy. `groupBox` (the element's group combined bbox on
  * the SOURCE canvas) lets grouped pairs — CTA label + pill/underline, badge +
  * label — reflow through one shared anchor instead of splitting apart.
  * `containerBox` (the layout panel the element sits inside, source-space) makes
@@ -20,7 +20,7 @@ export const seedCopy = (
   el: DesignerElement,
   sourceOutput: TypeBasisCanvas,
   targetOutput: TypeBasisCanvas & { formatId?: string },
-  originId: string,
+  originId: string | undefined,
   groupBox?: GroupBox,
   containerBox?: GroupBox
 ): DesignerElement => {
@@ -37,8 +37,9 @@ export const seedCopy = (
   const copy: DesignerElement = {
     ...base,
     id: genId(),
-    originId,
   };
+  if (originId) copy.originId = originId;
+  else delete copy.originId;
   Object.assign(copy, smart);
   if (copy.x === undefined) copy.x = (targetOutput.width - newW) / 2;
   if (copy.y === undefined) copy.y = (targetOutput.height - newH) / 2;

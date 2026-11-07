@@ -1111,6 +1111,39 @@ describe('DesignerDocService', () => {
     expect(clip.y).not.toBe(900); // geometry reflowed
   });
 
+  it('addOutput can clone static and video content without shared origins', () => {
+    const service = makeService();
+    const staticDoc = service.applyOps(createBlankDoc(), [
+      { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+    ]);
+    const staticResult = service.applyOps(staticDoc, [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 },
+        linkContent: false,
+      },
+    ]);
+    const sourceElement = (staticResult.outputs[0] as any).children[0];
+    const copiedElement = (staticResult.outputs[1] as any).children[0];
+    expect(copiedElement.id).not.toBe(sourceElement.id);
+    expect(copiedElement.originId).toBe(copiedElement.id);
+    expect(copiedElement.originId).not.toBe(sourceElement.originId);
+
+    const videoResult = service.applyOps(videoDoc(), [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 },
+        linkContent: false,
+      },
+    ]);
+    const sourceClip = videoResult.outputs[0].tracks[0].clips[0];
+    const copiedClip = videoResult.outputs[1].tracks[0].clips[0];
+    expect(copiedClip.id).not.toBe(sourceClip.id);
+    expect(copiedClip.originId).toBe(copiedClip.id);
+    expect(copiedClip.originId).not.toBe(sourceClip.originId);
+    expect(copiedClip.startMs).toBe(sourceClip.startMs);
+  });
+
   it('addOutput with seed:false on a video doc appends an empty timeline', () => {
     const doc = videoDoc();
     const result = makeService().applyOps(doc, [

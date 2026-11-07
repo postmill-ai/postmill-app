@@ -239,6 +239,16 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   fails when a visible required time-zero poster or other visual asset cannot be loaded; intentional
   black pixels remain valid.
   `renderPage` still rejects video outputs.
+- **Formats can be linked or independent.** Add Formats defaults to linked content; independent
+  copies use fresh ids without shared `originId`s for static pages/elements and video clips, so
+  carousel content edits stay local. The store and headless `addOutput` op both accept
+  `linkContent: false`; omitting it preserves linked behavior, and Undo adds/removes the whole format.
+- **Pathfinder is multi-shape and atomic.** Two or more unlocked shapes/paths/icons compute fully
+  before one document commit. Unite merges every region, Minus Front subtracts every later shape
+  from the first, Intersect is successive, Exclude keeps odd-coverage regions, Divide emits unique
+  regions, and Outline removes fills. Disjoint results survive and are all selected; unsupported
+  holes make no edit. One Undo restores every input. Axis-aligned rectangles sharing a horizontal
+  strip use the exact interval path in `path-boolean.ts`.
 - **Design/template previews are best-effort, never save blockers.** Video saves render through
   `DesignPreviewService`; image saves use that server renderer when no client thumbnail arrives.
   Org-owned background `fileId`s resolve through the folder storage adapter before the remote URL,
@@ -473,7 +483,11 @@ supports RFC-4180 quoting, escaped quotes, multiline cells, TSV detection, CRLF 
 duplicate/blank headers, malformed quoting, files over 5 MB and batches over 200 rows are rejected
 before enqueue. `designer-doc/bulk-variables.ts` is the one substitution/discovery engine for the
 preview, saved variation and renderer: it covers all outputs/pages, rich text, mustache variables,
-text/image/color slots and symbol overrides. The batch runs through `DesignBulkCreateService` and
+text/image/color slots and symbol overrides. With no preexisting variables, the dialog's guided
+assignment table maps CSV columns directly to text/image/color targets on every output/page;
+applying adds their slots as ONE undoable edit, then reuses the same preview/batch pipeline. One
+column may feed multiple targets, incompatible existing variable kinds are rejected, and existing
+mustache/slot bindings remain intact. The batch runs through `DesignBulkCreateService` and
 creates editable Designs plus per-page PNG Files and a ZIP; never substitute a client-only flattened
 image for the editable result.
 

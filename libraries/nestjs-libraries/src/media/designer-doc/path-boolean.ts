@@ -285,6 +285,72 @@ export interface BooleanResult {
   polygons: Point[][];
 }
 
+const axisAlignedBox = (polygon: Point[]) => {
+  if (polygon.length !== 4) return null;
+  for (let index = 0; index < 4; index++) {
+    const a = polygon[index];
+    const b = polygon[(index + 1) % 4];
+    if (a.x !== b.x && a.y !== b.y) return null;
+  }
+  const xs = polygon.map((point) => point.x);
+  const ys = polygon.map((point) => point.y);
+  const box = {
+    left: Math.min(...xs),
+    right: Math.max(...xs),
+    top: Math.min(...ys),
+    bottom: Math.max(...ys),
+  };
+  return box.left < box.right && box.top < box.bottom ? box : null;
+};
+
+const horizontalStripBoolean = (
+  subject: Point[],
+  clip: Point[],
+  op: BooleanOp
+): BooleanResult | null => {
+  if (op === 'outline') return null;
+  const a = axisAlignedBox(subject);
+  const b = axisAlignedBox(clip);
+  if (!a || !b || a.top !== b.top || a.bottom !== b.bottom) return null;
+  const boundaries = [...new Set([a.left, a.right, b.left, b.right])].sort((x, y) => x - y);
+  const rectangles = (merge: boolean) => {
+    const polygons: Point[][] = [];
+    for (let index = 0; index < boundaries.length - 1; index++) {
+      const left = boundaries[index];
+      const right = boundaries[index + 1];
+      if (left === right) continue;
+      const x = (left + right) / 2;
+      const inA = x > a.left && x < a.right;
+      const inB = x > b.left && x < b.right;
+      const keep = op === 'unite' || op === 'divide'
+        ? inA || inB
+        : op === 'intersect'
+          ? inA && inB
+          : op === 'subtract'
+            ? inA && !inB
+            : inA !== inB;
+      if (!keep) continue;
+      const polygon = [
+        { x: left, y: a.top },
+        { x: right, y: a.top },
+        { x: right, y: a.bottom },
+        { x: left, y: a.bottom },
+      ];
+      if (merge && polygons.length) {
+        const previous = polygons[polygons.length - 1];
+        if (previous[1].x === left) {
+          previous[1] = { x: right, y: a.top };
+          previous[2] = { x: right, y: a.bottom };
+          continue;
+        }
+      }
+      polygons.push(polygon);
+    }
+    return polygons;
+  };
+  return { polygons: rectangles(op !== 'divide') };
+};
+
 /**
  * Run a pathfinder operation on two closed polygons.
  *
@@ -315,6 +381,9 @@ export const booleanPolygons = (
     // Outline keeps the boundaries and discards the fills — every ring survives.
     return { polygons: [subject, clip] };
   }
+
+  const horizontalStrip = horizontalStripBoolean(subject, clip, op);
+  if (horizontalStrip) return horizontalStrip;
 
   const subjectInClip = pointInPolygon(subject[0], clip);
   const clipInSubject = pointInPolygon(clip[0], subject);

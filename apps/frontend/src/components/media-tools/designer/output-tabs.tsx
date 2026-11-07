@@ -207,6 +207,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
   );
   const [cW, setCW] = useState('1080');
   const [cH, setCH] = useState('1080');
+  const [linkContent, setLinkContent] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
@@ -258,7 +259,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           name: preset.name,
           width: preset.width,
           height: preset.height,
-        });
+        }, { linkContent });
     }
     setPendingFormats(new Set());
     closePopover();
@@ -273,7 +274,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
         name: `${w}×${h}`,
         width: w,
         height: h,
-      });
+      }, { linkContent });
       closePopover();
       setCW('1080');
       setCH('1080');
@@ -493,6 +494,30 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
               ? t('designer_add_video_format_heading', 'Add Video Format')
               : t('designer_add_formats_heading', 'Add Formats')}
           </div>
+
+          <fieldset className="mb-2 rounded-md border border-studioBorder p-2">
+            <legend className="px-1 text-[10px] text-textColor/60">{t('designer_output_content_mode', 'Content')}</legend>
+            <label className="flex items-center gap-2 px-1 py-1 text-[11px] text-textColor">
+              <input
+                type="radio"
+                name="output-content-mode"
+                checked={linkContent}
+                onChange={() => setLinkContent(true)}
+                className="accent-designerAccent"
+              />
+              {t('designer_output_linked', 'Linked formats (shared edits)')}
+            </label>
+            <label className="flex items-center gap-2 px-1 py-1 text-[11px] text-textColor">
+              <input
+                type="radio"
+                name="output-content-mode"
+                checked={!linkContent}
+                onChange={() => setLinkContent(false)}
+                className="accent-designerAccent"
+              />
+              {t('designer_output_independent', 'Independent copies (carousel / pages)')}
+            </label>
+          </fieldset>
 
           {mode === 'image' && (
           <button

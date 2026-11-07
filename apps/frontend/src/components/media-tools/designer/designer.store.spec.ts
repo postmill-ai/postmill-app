@@ -417,6 +417,58 @@ describe('repeated output dimensions', () => {
     expect(store.getState().doc.outputs[2].width).toBe(1600);
   });
 
+  it('creates independent repeated formats and pages without propagating text edits, with one undo', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addPage();
+    store.getState().addElement({
+      id: 'page-two', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Second page',
+    });
+    const historyBefore = store.getState().history.length;
+
+    store.getState().addOutput(
+      { formatId: 'ig-post', name: 'Instagram Post', width: 1080, height: 1080 },
+      { linkContent: false }
+    );
+
+    const outputs = store.getState().doc.outputs as any[];
+    expect(outputs).toHaveLength(2);
+    expect(outputs[1].children[0].id).not.toBe('headline');
+    expect(outputs[1].children[0].originId).toBeUndefined();
+    expect(outputs[1].pages[0].children[0].id).not.toBe('page-two');
+    expect(outputs[1].pages[0].children[0].originId).toBeUndefined();
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+
+    store.getState().setCurrentOutput(0);
+    store.getState().setCurrentPage(0);
+    store.getState().updateElement('headline', { text: 'Only the source' });
+    expect(store.getState().doc.outputs[1].children[0].text).toBe('Original');
+
+    store.getState().undo();
+    store.getState().undo();
+    expect(store.getState().doc.outputs).toHaveLength(1);
+    expect(store.getState().doc.outputs[0].children[0].text).toBe('Original');
+  });
+
+  it('keeps the default repeated format linked', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput({ formatId: 'ig-post', name: 'Instagram Post', width: 1080, height: 1080 });
+
+    const outputs = store.getState().doc.outputs;
+    expect(outputs[1].children[0].originId).toBe(outputs[0].children[0].originId);
+    store.getState().setCurrentOutput(0);
+    store.getState().updateElement('headline', { text: 'Shared' });
+    expect(store.getState().doc.outputs[1].children[0].text).toBe('Shared');
+  });
+
   it('enforces MAX_OUTPUTS without changing the existing document', () => {
     const store = createDesignerStore();
     const doc = store.getState().doc;
@@ -1758,6 +1810,29 @@ describe('video output variants (add-format for video mode)', () => {
     expect(copyTitle.y).not.toBe(srcTitle.y);
 
     // Undo removes the variant and restores the pointer.
+    store.getState().undo();
+    expect(store.getState().doc.outputs).toHaveLength(1);
+  });
+
+  it('can clone an independent video variant without propagating content edits', () => {
+    const store = videoStoreWithContent();
+    store.getState().addOutput(
+      { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 },
+      { linkContent: false }
+    );
+    const v1 = out(store, 1);
+    const sourceTitle = out(store, 0).tracks.find((track) => track.type === 'text')!.clips[0];
+    const copiedTitle = v1.tracks.find((track) => track.type === 'text')!.clips[0];
+    expect(copiedTitle.id).not.toBe(sourceTitle.id);
+    expect(copiedTitle.originId).toBeUndefined();
+
+    store.getState().updateClip(1, v1.tracks.find((track) => track.type === 'text')!.id, copiedTitle.id, {
+      text: 'Independent',
+    });
+    expect(out(store, 0).tracks.find((track) => track.type === 'text')!.clips[0].text).toBe('Headline');
+    expect(out(store, 1).tracks.find((track) => track.type === 'text')!.clips[0].text).toBe('Independent');
+
+    store.getState().undo();
     store.getState().undo();
     expect(store.getState().doc.outputs).toHaveLength(1);
   });

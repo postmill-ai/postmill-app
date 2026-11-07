@@ -4822,5 +4822,13 @@
   "designer_bulk_start_failed": "Không thể bắt đầu tạo hàng loạt.",
   "designer_bulk_status_failed": "Không thể đọc trạng thái tạo hàng loạt.",
   "designer_action_bulk_create_bulk_create": "Tạo hàng loạt…",
-  "designer_bulk_no_variables": "Thêm ít nhất một {{variable}} hoặc trường mẫu trước khi tạo các biến thể."
+  "designer_bulk_assign_elements": "Gán phần tử thiết kế",
+  "designer_bulk_assign_description": "Chọn một cột trong bảng tính cho mỗi văn bản, hình ảnh hoặc màu sắc bạn muốn thay đổi. Một cột có thể cung cấp cho nhiều phần tử.",
+  "designer_bulk_assignment_for": "Cột cho {{name}} ({{kind}})",
+  "designer_bulk_not_assigned": "Không gán",
+  "designer_bulk_apply_assignments": "Áp dụng gán biến",
+  "designer_output_content_mode": "Nội dung",
+  "designer_output_linked": "Định dạng liên kết (chỉnh sửa dùng chung)",
+  "designer_output_independent": "Bản sao độc lập (băng chuyền / trang)",
+  "designer_bulk_no_variables": "Thêm phần tử văn bản, hình ảnh hoặc màu sắc có thể chỉnh sửa trước khi tạo biến thể."
 }

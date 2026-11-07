@@ -4822,5 +4822,13 @@
   "designer_bulk_start_failed": "一括作成を開始できませんでした。",
   "designer_bulk_status_failed": "一括作成の状態を読み込めませんでした。",
   "designer_action_bulk_create_bulk_create": "一括作成…",
-  "designer_bulk_no_variables": "バリエーションを作成する前に、少なくとも 1 つの {{variable}} またはテンプレートスロットを追加してください。"
+  "designer_bulk_assign_elements": "デザイン要素を割り当て",
+  "designer_bulk_assign_description": "変更するテキスト、画像、色ごとにスプレッドシートの列を選択してください。1 つの列を複数の要素に使用できます。",
+  "designer_bulk_assignment_for": "{{name}} の列 ({{kind}})",
+  "designer_bulk_not_assigned": "割り当てない",
+  "designer_bulk_apply_assignments": "変数の割り当てを適用",
+  "designer_output_content_mode": "コンテンツ",
+  "designer_output_linked": "リンクしたフォーマット (編集を共有)",
+  "designer_output_independent": "独立したコピー (カルーセル / ページ)",
+  "designer_bulk_no_variables": "バリエーションを作成する前に、編集可能なテキスト、画像、または色要素を追加してください。"
 }

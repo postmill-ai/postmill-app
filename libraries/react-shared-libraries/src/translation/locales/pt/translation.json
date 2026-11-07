@@ -4822,5 +4822,13 @@
   "designer_bulk_start_failed": "Não foi possível iniciar a criação em massa.",
   "designer_bulk_status_failed": "Não foi possível ler o status da criação em massa.",
   "designer_action_bulk_create_bulk_create": "Criação em massa…",
-  "designer_bulk_no_variables": "Adicione pelo menos uma {{variable}} ou um campo de modelo antes de criar variações."
+  "designer_bulk_assign_elements": "Atribuir elementos do design",
+  "designer_bulk_assign_description": "Escolha uma coluna da planilha para cada texto, imagem ou cor que deseja variar. Uma coluna pode alimentar vários elementos.",
+  "designer_bulk_assignment_for": "Coluna para {{name}} ({{kind}})",
+  "designer_bulk_not_assigned": "Não atribuir",
+  "designer_bulk_apply_assignments": "Aplicar atribuições de variáveis",
+  "designer_output_content_mode": "Conteúdo",
+  "designer_output_linked": "Formatos vinculados (edições compartilhadas)",
+  "designer_output_independent": "Cópias independentes (carrossel / páginas)",
+  "designer_bulk_no_variables": "Adicione um elemento editável de texto, imagem ou cor antes de criar variações."
 }

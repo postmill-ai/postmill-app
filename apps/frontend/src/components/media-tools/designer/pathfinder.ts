@@ -77,29 +77,101 @@ export interface PathfinderResult {
   extra: Partial<DesignerElement>[];
 }
 
-/**
- * Combine two elements.
- *
- * The result is always a `path`, because only a path can express an arbitrary
- * outline — a united pair of stars is not a star. Style is inherited from the
- * subject, which is the element the user selected first.
- */
-export const pathfinder = (
-  subject: DesignerElement,
-  clip: DesignerElement,
+const uniteRegions = (input: Point[][]): Point[][] => {
+  const regions = [...input];
+  let index = 0;
+  while (index < regions.length) {
+    let merged = false;
+    for (let other = index + 1; other < regions.length; other++) {
+      const united = booleanPolygons(regions[index], regions[other], 'unite').polygons;
+      if (united.length !== 1) continue;
+      regions[index] = united[0];
+      regions.splice(other, 1);
+      merged = true;
+      break;
+    }
+    index = merged ? 0 : index + 1;
+  }
+  return regions;
+};
+
+const divideRegions = (regions: Point[][], clip: Point[]): Point[][] => {
+  const pieces = regions.flatMap((region) => [
+    ...booleanPolygons(region, clip, 'subtract').polygons,
+    ...booleanPolygons(region, clip, 'intersect').polygons,
+  ]);
+  let remainder = [clip];
+  for (const region of regions) {
+    remainder = remainder.flatMap((part) =>
+      booleanPolygons(part, region, 'subtract').polygons
+    );
+  }
+  return [...pieces, ...remainder];
+};
+
+const representativePoint = (polygon: Point[]): Point => {
+  const box = bounds([polygon])!;
+  const candidates = [
+    { x: polygon.reduce((sum, point) => sum + point.x, 0) / polygon.length, y: polygon.reduce((sum, point) => sum + point.y, 0) / polygon.length },
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+  ];
+  for (let y = 1; y < 20; y++) {
+    for (let x = 1; x < 20; x++) {
+      candidates.push({ x: box.x + (box.width * x) / 20, y: box.y + (box.height * y) / 20 });
+    }
+  }
+  return candidates.find((point) => pointInPolygon(point, polygon)) || polygon[0];
+};
+
+export const pathfinderMany = (
+  elements: DesignerElement[],
   op: BooleanOp
 ): PathfinderResult | null => {
-  const result = booleanPolygons(elementOutline(subject), elementOutline(clip), op);
-  if (!result.polygons.length) return null;
+  const [subject, ...clips] = elements;
+  if (!subject || !clips.length) return null;
+  let regions = [elementOutline(subject)];
 
-  const toElement = (polys: Point[][]): Partial<DesignerElement> | null => {
-    const box = bounds(polys);
+  if (op === 'outline') {
+    regions.push(...clips.map(elementOutline));
+  } else {
+    for (const clip of clips.map(elementOutline)) {
+      if (op === 'unite') regions = uniteRegions([...regions, clip]);
+      if (op === 'subtract') {
+        regions = regions.flatMap((region) => booleanPolygons(region, clip, 'subtract').polygons);
+      }
+      if (op === 'intersect') {
+        regions = regions.flatMap((region) => booleanPolygons(region, clip, 'intersect').polygons);
+      }
+      if (op === 'divide') regions = divideRegions(regions, clip);
+      if (op === 'exclude') regions = divideRegions(regions, clip);
+      if (!regions.length) return null;
+    }
+    if (op === 'exclude') {
+      const outlines = elements.map(elementOutline);
+      regions = regions.filter((region) => {
+        const point = representativePoint(region);
+        return outlines.filter((outline) => pointInPolygon(point, outline)).length % 2 === 1;
+      });
+    }
+  }
+  if (!regions.length) return null;
+  if (op !== 'outline') {
+    for (let outer = 0; outer < regions.length; outer++) {
+      for (let inner = 0; inner < regions.length; inner++) {
+        if (
+          outer !== inner &&
+          regions[inner].length > 0 &&
+          regions[inner].every((point) => pointInPolygon(point, regions[outer]))
+        ) {
+          return null;
+        }
+      }
+    }
+  }
+
+  const toElement = (polygon: Point[]): Partial<DesignerElement> | null => {
+    const box = bounds([polygon]);
     if (!box) return null;
-    // A path's nodes are element-LOCAL, so the combined outline is re-based
-    // onto its own bounding box.
-    const nodes = polygonToNodes(
-      polys[0].map((p) => ({ x: p.x - box.x, y: p.y - box.y }))
-    );
     return {
       type: 'path',
       x: box.x,
@@ -110,43 +182,27 @@ export const pathfinder = (
       opacity: subject.opacity,
       locked: false,
       hidden: false,
-      nodes,
+      nodes: polygonToNodes(polygon.map((point) => ({ x: point.x - box.x, y: point.y - box.y }))),
       closed: true,
-      fill: subject.fill,
-      fillGradient: subject.fillGradient,
-      stroke: subject.stroke,
-      strokeWidth: subject.strokeWidth,
+      fill: op === 'outline' ? 'transparent' : subject.fill,
+      fillGradient: op === 'outline' ? undefined : subject.fillGradient,
+      stroke: op === 'outline' ? subject.stroke || subject.fill : subject.stroke,
+      strokeWidth: op === 'outline' ? subject.strokeWidth ?? 1 : subject.strokeWidth,
       strokeStyle: subject.strokeStyle,
       name: subject.name,
     };
   };
-
-  // `divide` returns each region as its own element. Every other op yields one
-  // outline — but a disjoint unite/exclude still produces several STANDALONE
-  // regions, which must become their own elements or the shapes are silently
-  // lost (the clip element is consumed by the caller either way).
-  const separate = op === 'divide';
-  const rings = result.polygons;
-  if (!separate && rings.length > 1) {
-    // A ring fully inside the first is a HOLE (subtract/exclude with the clip
-    // contained in the subject). The single-ring path model cannot express
-    // holes, so reject rather than render the hole solid — wrong pixels are
-    // worse than no-op.
-    const hole = rings
-      .slice(1)
-      .some((ring) => ring.length > 0 && pointInPolygon(ring[0], rings[0]));
-    if (hole) return null;
-  }
-  const first = toElement([rings[0]]);
-  if (!first) return null;
-
-  const extra = rings
-    .slice(1)
-    .map((poly) => toElement([poly]))
-    .filter((e): e is Partial<DesignerElement> => !!e);
-
-  return { element: first, extra };
+  const converted = regions.map(toElement);
+  if (converted.some((element) => !element)) return null;
+  const [element, ...extra] = converted as Partial<DesignerElement>[];
+  return { element, extra };
 };
+
+export const pathfinder = (
+  subject: DesignerElement,
+  clip: DesignerElement,
+  op: BooleanOp
+): PathfinderResult | null => pathfinderMany([subject, clip], op);
 
 /** Offset Path, as an in-place edit of one element's own outline. */
 export const offsetElement = (

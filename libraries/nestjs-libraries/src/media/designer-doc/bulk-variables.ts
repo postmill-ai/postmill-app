@@ -109,3 +109,91 @@ export const collectBulkVariables = (doc: DesignerDoc): BulkVariable[] => {
   }
   return [...variables.values()].sort((a, b) => a.name.localeCompare(b.name));
 };
+
+export interface BulkAssignmentTarget {
+  id: string;
+  elementId: string;
+  outputIndex: number;
+  pageNumber: number;
+  kind: BulkVariableKind;
+  label: string;
+}
+
+const hasMustache = (value: unknown): boolean =>
+  typeof value === 'string' && value.match(VARIABLE_PATTERN) !== null;
+
+export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTarget[] => {
+  if (doc.mode !== 'image') return [];
+  const targets: BulkAssignmentTarget[] = [];
+  for (const [outputIndex, output] of (doc.outputs || []).entries()) {
+    if (!('children' in output)) continue;
+    const imageOutput = output as DesignerOutput;
+    const pages = [
+      { children: imageOutput.children, pageNumber: 0 },
+      ...(imageOutput.pages || []).map((page, index) => ({
+        children: page.children,
+        pageNumber: index + 1,
+      })),
+    ];
+    for (const page of pages) {
+      for (const element of page.children || []) {
+        if (element.slot) continue;
+        const elementLabel = element.name || element.text?.trim().slice(0, 40) || element.id;
+        const add = (kind: BulkVariableKind) => {
+          targets.push({
+            id: `${outputIndex}:${page.pageNumber}:${element.id}:${kind}`,
+            elementId: element.id,
+            outputIndex,
+            pageNumber: page.pageNumber,
+            kind,
+            label: `${imageOutput.name} / Page ${page.pageNumber + 1}: ${elementLabel}`,
+          });
+        };
+        const canAssignText = element.type === 'text' &&
+          !hasMustache(element.text) &&
+          !(element.richText || []).some((run) => hasMustache(run.text));
+        if (canAssignText) add('text');
+        if (
+          (element.type === 'image' || element.type === 'raster') &&
+          element.src &&
+          !hasMustache(element.src)
+        ) {
+          add('image');
+        }
+        if (!canAssignText && ['text', 'shape', 'path', 'icon'].includes(element.type)) add('color');
+      }
+    }
+  }
+  return targets;
+};
+
+export const applyBulkAssignments = (
+  templateDoc: DesignerDoc,
+  assignments: Record<string, string>
+): DesignerDoc => {
+  const targets = new Map(collectBulkAssignmentTargets(templateDoc).map((target) => [target.id, target]));
+  const existing = new Map(collectBulkVariables(templateDoc).map((variable) => [variable.name, variable]));
+  const selected = Object.entries(assignments).filter((entry): entry is [string, string] => {
+    const [targetId, column] = entry;
+    return !!targets.get(targetId) && !!column.trim();
+  });
+  for (const [targetId, column] of selected) {
+    const target = targets.get(targetId)!;
+    const variable = existing.get(column);
+    if (variable && variable.kind !== target.kind) {
+      throw new Error(`Column "${column}" is already assigned to ${variable.kind} data.`);
+    }
+  }
+
+  const doc = structuredClone(templateDoc);
+  for (const [targetId, column] of selected) {
+    const target = targets.get(targetId)!;
+    const output = doc.outputs[target.outputIndex] as DesignerOutput;
+    const children = target.pageNumber === 0
+      ? output.children
+      : output.pages?.[target.pageNumber - 1]?.children;
+    const element = children?.find((item) => item.id === target.elementId);
+    if (element) element.slot = { name: column, kind: target.kind };
+  }
+  return doc;
+};

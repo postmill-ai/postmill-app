@@ -114,6 +114,9 @@ const AddOutputOpSchema = z.object({
   // children; `false` opts out and appends an empty white canvas (the
   // pre-seeding behavior).
   seed: z.boolean().optional(),
+  // Default true preserves linked variants. False clones content without
+  // sharing originId, for independent carousels and multi-page layouts.
+  linkContent: z.boolean().optional(),
 });
 
 const ResizeOutputOpSchema = z

@@ -4822,5 +4822,13 @@
   "designer_bulk_start_failed": "Die Massenerstellung konnte nicht gestartet werden.",
   "designer_bulk_status_failed": "Der Status der Massenerstellung konnte nicht gelesen werden.",
   "designer_action_bulk_create_bulk_create": "Massenerstellung…",
-  "designer_bulk_no_variables": "Füge mindestens eine {{variable}} oder ein Vorlagenfeld hinzu, bevor du Varianten erstellst."
+  "designer_bulk_assign_elements": "Designelemente zuweisen",
+  "designer_bulk_assign_description": "Wähle für jeden Text, jedes Bild und jede Farbe eine Tabellenspalte aus. Eine Spalte kann mehrere Elemente versorgen.",
+  "designer_bulk_assignment_for": "Spalte für {{name}} ({{kind}})",
+  "designer_bulk_not_assigned": "Nicht zuweisen",
+  "designer_bulk_apply_assignments": "Variablenzuweisungen anwenden",
+  "designer_output_content_mode": "Inhalt",
+  "designer_output_linked": "Verknüpfte Formate (gemeinsame Bearbeitungen)",
+  "designer_output_independent": "Unabhängige Kopien (Karussell / Seiten)",
+  "designer_bulk_no_variables": "Füge ein bearbeitbares Text-, Bild- oder Farbelement hinzu, bevor du Varianten erstellst."
 }

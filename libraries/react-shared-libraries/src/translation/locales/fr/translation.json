@@ -4822,5 +4822,13 @@
   "designer_bulk_start_failed": "Impossible de démarrer la création en masse.",
   "designer_bulk_status_failed": "Impossible de lire l’état de la création en masse.",
   "designer_action_bulk_create_bulk_create": "Création en masse…",
-  "designer_bulk_no_variables": "Ajoutez au moins une {{variable}} ou un champ de modèle avant de créer des variations."
+  "designer_bulk_assign_elements": "Attribuer les éléments du design",
+  "designer_bulk_assign_description": "Choisissez une colonne de la feuille de calcul pour chaque texte, image ou couleur à faire varier. Une colonne peut alimenter plusieurs éléments.",
+  "designer_bulk_assignment_for": "Colonne pour {{name}} ({{kind}})",
+  "designer_bulk_not_assigned": "Ne pas attribuer",
+  "designer_bulk_apply_assignments": "Appliquer les attributions de variables",
+  "designer_output_content_mode": "Contenu",
+  "designer_output_linked": "Formats liés (modifications partagées)",
+  "designer_output_independent": "Copies indépendantes (carrousel / pages)",
+  "designer_bulk_no_variables": "Ajoutez un élément modifiable de texte, d’image ou de couleur avant de créer des variations."
 }
