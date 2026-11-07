@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useRef } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { defaultTextBox } from './measure-text';
 import {
   combinableElements,
@@ -30,6 +31,7 @@ interface MenuItem {
 
 export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elementId, store, onClose, onAddImage }) => {
   const t = useT();
+  const toaster = useToaster();
   const menuRef = useRef<HTMLDivElement>(null);
   const s = store.getState();
   const out = s.doc.outputs[s.currentOutput];
@@ -161,7 +163,11 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
                 action: null,
                 children: PATHFINDER_OPS.map((p) => ({
                   label: t(`designer_pathfinder_${p.op}`, p.label),
-                  action: () => combineElements(store, selectedEls, p.op),
+                  action: () => {
+                    if (!combineElements(store, selectedEls, p.op)) {
+                      toaster.show(t('designer_pathfinder_failed', 'Pathfinder could not combine the selected shapes. Try a different selection or operation.'), 'warning');
+                    }
+                  },
                 })),
               }]
             : []),

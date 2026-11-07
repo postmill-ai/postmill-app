@@ -2564,6 +2564,71 @@ test.describe('Designer non-destructive cutout refinement', () => {
   });
 });
 
+const pathfinderDoc = (count = 3): DesignerDocSnapshot => {
+  const doc = staticCropDoc();
+  doc.outputs[0].children = Array.from({ length: count }, (_, index) => ({
+    id: `shape-${index + 1}`,
+    name: `Shape ${index + 1}`,
+    type: 'shape',
+    shape: 'rect',
+    x: index * 50,
+    y: 0,
+    width: 100,
+    height: 100,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    fill: '#ff0000',
+  }));
+  return doc;
+};
+
+async function selectPathfinderShapes(page: Page, count: number) {
+  if (count < 2) throw new Error('Pathfinder tests require at least two shapes');
+  await page.getByRole('menuitem', { name: 'Select', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'All Layers', exact: false }).click();
+}
+
+async function runPathfinder(page: Page, operation: string) {
+  await page.getByRole('menuitem', { name: 'Layer', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Pathfinder', exact: false }).hover();
+  await page.getByRole('menuitem', { name: operation, exact: true }).click();
+}
+
+test.describe('Designer multi-shape Pathfinder', () => {
+  test('unites three selected shapes and restores them with one undo', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = pathfinderDoc();
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+
+    await selectPathfinderShapes(page, 3);
+    await runPathfinder(page, 'Unite');
+
+    await expect.poll(() => mocks.doc.outputs[0].children).toHaveLength(1);
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({ type: 'path' });
+    await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children).toHaveLength(3);
+    mocks.expectClean();
+  });
+
+  test('keeps inputs unchanged and explains an unsupported hole', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = pathfinderDoc(2);
+    mocks.doc.outputs[0].children![0].width = 200;
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+
+    await selectPathfinderShapes(page, 2);
+    await runPathfinder(page, 'Minus Front');
+
+    expect(mocks.doc.outputs[0].children).toHaveLength(2);
+    await expect(page.getByText('Pathfinder could not combine the selected shapes. Try a different selection or operation.', { exact: true })).toBeVisible();
+    mocks.expectClean();
+  });
+});
+
 const staticBlendDoc = (): DesignerDocSnapshot => ({
   version: 9,
   mode: 'image',

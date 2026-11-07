@@ -3,6 +3,7 @@
 import React, { FC, useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import type { DesignerElement, DesignerOutput } from '../designer.store';
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { layerActions } from '../layer-actions';
@@ -139,6 +140,7 @@ const ActionButton: FC<{
 
 export const LayersFooter: FC<LayersFooterProps> = ({ store }) => {
   const t = useT();
+  const toaster = useToaster();
   const output = store((s) => s.doc.outputs[s.currentOutput] as DesignerOutput | undefined);
   const selectedIds = store((s) => s.selectedIds);
   const isVideo = store((s) => s.doc.mode === 'video');
@@ -155,7 +157,7 @@ export const LayersFooter: FC<LayersFooterProps> = ({ store }) => {
     selectedEls,
     hasSelection,
     children: elements,
-  }));
+  }), () => toaster.show(t('designer_pathfinder_failed', 'Pathfinder could not combine the selected shapes. Try a different selection or operation.'), 'warning'));
   const byPath = (name: string) =>
     actions.filter((a) => a.submenuPath?.[0] === name);
   const byId = (id: string) => actions.find((a) => a.id === id);

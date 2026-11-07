@@ -49,19 +49,19 @@ export const combineElements = (
   store: StoreApi,
   els: DesignerElement[],
   op: BooleanOp
-): void => {
+): boolean => {
   const elements = combinableElements(els);
   const [subject] = elements;
-  if (!subject || elements.length < 2) return;
+  if (!subject || elements.length < 2) return false;
   const result = pathfinderMany(elements, op);
-  if (!result) return;
+  if (!result) return false;
   const st = store.getState();
-  if (st.doc.mode === 'video') return;
+  if (st.doc.mode === 'video') return false;
   const output = st.doc.outputs[st.currentOutput];
-  if (!output || !('children' in output)) return;
+  if (!output || !('children' in output)) return false;
   const children = pageChildren(output, st.currentPage);
   const subjectIndex = children.findIndex((element) => element.id === subject.id);
-  if (subjectIndex < 0) return;
+  if (subjectIndex < 0) return false;
 
   const consumed = new Set(elements.map((element) => element.id));
   const extras = result.extra.map((element) => ({
@@ -85,6 +85,7 @@ export const combineElements = (
     isDirty: true,
   });
   st.pushHistory('Pathfinder');
+  return true;
 };
 
 const STYLES: { type: DesignerLayerStyle['type']; label: string }[] = [
@@ -138,7 +139,8 @@ export const defaultStyle = (type: DesignerLayerStyle['type']): DesignerLayerSty
 
 export const layerActions = (
   store: StoreApi,
-  live: () => { selectedEls: DesignerElement[]; hasSelection: boolean; children: DesignerElement[] }
+  live: () => { selectedEls: DesignerElement[]; hasSelection: boolean; children: DesignerElement[] },
+  onPathfinderFailure?: () => void
 ): DesignerAction[] => {
   const selected = () => store.getState().selectedIds;
   const firstSelected = (): DesignerElement | undefined => live().selectedEls[0];
@@ -267,7 +269,9 @@ export const layerActions = (
       group: 'pathfinder',
       keywords: ['pathfinder', 'boolean', p.op],
       enabled: () => canCombine(),
-      run: () => combineElements(store, live().selectedEls, p.op),
+      run: () => {
+        if (!combineElements(store, live().selectedEls, p.op)) onPathfinderFailure?.();
+      },
     })),
     { id: 'layer-offset-path', label: 'Offset Path…', menu: 'layer', submenuPath: ['Path'], group: 'path', keywords: ['offset', 'path', 'outline'], enabled: () => !!firstSelected() && combinableElements(live().selectedEls).length === 1, run: () => { const el = firstSelected(); if (!el) return; const patch = offsetElement(el, 8); if (!patch) return; store.getState().updateElement(el.id, patch); store.getState().pushHistory(); } },
     { id: 'layer-round-corners', label: 'Round Corners', menu: 'layer', submenuPath: ['Path'], group: 'path', keywords: ['round', 'corners', 'live corners'], enabled: () => !!firstSelected() && combinableElements(live().selectedEls).length === 1, run: () => { const el = firstSelected(); if (!el) return; const patch = roundElementCorners(el, 12); if (!patch) return; store.getState().updateElement(el.id, patch); store.getState().pushHistory(); } },
