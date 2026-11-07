@@ -110,7 +110,7 @@ Deep tour of the libraries: `agents/libraries.md`.
    — unknown DTO fields are rejected; declare new optional fields on the DTO.
 10. `json({ limit: '50mb' })` only on `/copilot/{*splat}`, `/posts`, the design save
     routes (`/media/designs`, `/media/design-templates`, `/media/designer/{*splat}`), and
-    `/media/remove-background` for inline image input (Express 5 wildcard
+    `/media/remove-background` + `/media/inpaint` for inline image input (Express 5 wildcard
     syntax — a bare `*` throws under path-to-regexp v8).
 11. `cookieParser()`, `compression()`.
 12. `helmet(...)` — applied **unless** `isDev()` or (`NOT_SECURED` + `NODE_ENV==='development'`).
