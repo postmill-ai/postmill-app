@@ -29,6 +29,9 @@ const substituteElement = (
   if (typeof element.src === 'string') {
     element.src = substituteBulkValue(element.src, row);
   }
+  if (typeof element.fill === 'string') {
+    element.fill = substituteBulkValue(element.fill, row);
+  }
 
   const slotName = element.slot?.name;
   if (!slotName || row[slotName] === undefined) return;
@@ -95,6 +98,7 @@ export const collectBulkVariables = (doc: DesignerDoc): BulkVariable[] => {
     collectText(element.text);
     for (const run of element.richText || []) collectText(run.text);
     collectText(element.src, 'image');
+    collectText(element.fill, 'color');
   };
   for (const output of doc.outputs || []) {
     if (!('children' in output) || doc.mode !== 'image') continue;
@@ -160,7 +164,9 @@ export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTa
         ) {
           add('image');
         }
-        if (!canAssignText && ['text', 'shape', 'path', 'icon'].includes(element.type)) add('color');
+        if (['text', 'shape', 'path', 'icon'].includes(element.type) && !hasMustache(element.fill)) {
+          add('color');
+        }
       }
     }
   }
@@ -177,12 +183,18 @@ export const applyBulkAssignments = (
     const [targetId, column] = entry;
     return !!targets.get(targetId) && !!column.trim();
   });
+  const assignedKinds = new Map<string, BulkVariableKind>();
   for (const [targetId, column] of selected) {
     const target = targets.get(targetId)!;
     const variable = existing.get(column);
     if (variable && variable.kind !== target.kind) {
       throw new Error(`Column "${column}" is already assigned to ${variable.kind} data.`);
     }
+    const assignedKind = assignedKinds.get(column);
+    if (assignedKind && assignedKind !== target.kind) {
+      throw new Error(`Column "${column}" cannot be assigned to both ${assignedKind} and ${target.kind} data.`);
+    }
+    assignedKinds.set(column, target.kind);
   }
 
   const doc = structuredClone(templateDoc);
@@ -193,7 +205,12 @@ export const applyBulkAssignments = (
       ? output.children
       : output.pages?.[target.pageNumber - 1]?.children;
     const element = children?.find((item) => item.id === target.elementId);
-    if (element) element.slot = { name: column, kind: target.kind };
+    if (!element) continue;
+    if (target.kind === 'color' && element.type === 'text') {
+      element.fill = `{{${column}}}`;
+    } else {
+      element.slot = { name: column, kind: target.kind };
+    }
   }
   return doc;
 };

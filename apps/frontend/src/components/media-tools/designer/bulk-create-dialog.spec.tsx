@@ -94,6 +94,7 @@ describe('BulkCreateDialog', () => {
       id: 'second-title', type: 'text', text: 'Second page', x: 0, y: 0, width: 300, height: 100,
       rotation: 0, opacity: 1, locked: false, hidden: false,
     });
+    store.getState().setSelectedIds(['title', 'photo', 'background', 'second-title']);
     const historyBefore = store.getState().history.length;
     fetchMock
       .mockResolvedValueOnce(response({ images: ['data:image/png;base64,preview'] }))
@@ -128,6 +129,32 @@ describe('BulkCreateDialog', () => {
       headline: 'Grace', hero_image: 'https://cdn.example.test/grace.png', accent_color: '#00ff00',
     });
     expect(batch.doc.outputs[0].pages[0].children[0].slot.name).toBe('headline');
+  });
+
+  it('leaves unselected targets unassigned and applies only explicit choices', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'first', name: 'First', type: 'text', text: 'First', x: 0, y: 0, width: 300, height: 100,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addElement({
+      id: 'second', name: 'Second', type: 'text', text: 'Second', x: 0, y: 100, width: 300, height: 100,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().setSelectedIds([]);
+    render(<BulkCreateDialog store={store} onClose={vi.fn()} />);
+    await upload('headline\nAda\nGrace');
+
+    const selects = screen.getAllByRole('combobox');
+    expect(selects).toHaveLength(4);
+    expect(selects.map((select) => (select as HTMLSelectElement).value)).toEqual(['', '', '', '']);
+    expect(screen.getByRole('button', { name: 'Apply variable assignments' })).toHaveProperty('disabled', true);
+
+    fireEvent.change(selects[0], { target: { value: 'headline' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply variable assignments' }));
+    const children = store.getState().doc.outputs[0].children;
+    expect(children.find((child) => child.id === 'first')?.slot).toEqual({ name: 'headline', kind: 'text' });
+    expect(children.find((child) => child.id === 'second')?.slot).toBeUndefined();
   });
 
   it('disables creation when there are no editable targets', async () => {
