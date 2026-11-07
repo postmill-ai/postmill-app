@@ -83,6 +83,15 @@ function stripQueryStringAndExtractKey(filePath: string): string | undefined {
   return pathname.includes('/') ? pathname.split('/').pop() : pathname;
 }
 
+const withoutTrailingSlash = (value: string) => {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end--;
+  return value.slice(0, end);
+};
+
+const encodeStorageKey = (key: string) =>
+  key.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+
 const ALLOWED_MIME_TYPES = new Set<string>([
   'image/jpeg',
   'image/png',
@@ -182,6 +191,21 @@ export class S3StorageBase implements StorageCapability {
     });
   }
 
+  protected newKey(
+    extension: string,
+    id = randomBytes(8).toString('hex'),
+  ): string {
+    return `${id}.${extension}`;
+  }
+
+  protected objectKey(pathOrKey: string): string | undefined {
+    return stripQueryStringAndExtractKey(pathOrKey);
+  }
+
+  protected listPrefix(prefix?: string): string | undefined {
+    return prefix;
+  }
+
   async testConnection(): Promise<{ ok: boolean; error?: string }> {
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
@@ -199,7 +223,7 @@ export class S3StorageBase implements StorageCapability {
       const response = await this.client.send(
         new ListObjectsV2Command({
           Bucket: this.bucket,
-          Prefix: prefix,
+          Prefix: this.listPrefix(prefix),
           ContinuationToken: continuationToken,
         }),
       );
@@ -249,6 +273,7 @@ export class S3StorageBase implements StorageCapability {
         const response = await this.client.send(
           new ListObjectsV2Command({
             Bucket: this.bucket,
+            Prefix: this.listPrefix(),
             ContinuationToken: continuationToken,
           }),
         );
@@ -287,9 +312,7 @@ export class S3StorageBase implements StorageCapability {
     }
     const extension = detected.ext;
     const safeContentType = detected.mime;
-    const id = randomBytes(8).toString('hex');
-
-    const key = `${id}.${extension}`;
+    const key = this.newKey(extension);
 
     await this.client.send(
       new PutObjectCommand({
@@ -325,7 +348,7 @@ export class S3StorageBase implements StorageCapability {
       const id = randomBytes(8).toString('hex');
       const extension = detected.ext;
       const safeContentType = detected.mime;
-      const key = `${id}.${extension}`;
+      const key = this.newKey(extension, id);
 
       // PutObjectCommand cannot compute the length of a stream, so pass it
       // explicitly when streaming from disk.
@@ -362,13 +385,13 @@ export class S3StorageBase implements StorageCapability {
   }
 
   async removeFile(filePath: string): Promise<void> {
-    const key = stripQueryStringAndExtractKey(filePath);
+    const key = this.objectKey(filePath);
     if (!key) return;
     await this.deleteFile(key);
   }
 
   async readFile(pathOrKey: string): Promise<Buffer> {
-    const key = stripQueryStringAndExtractKey(pathOrKey);
+    const key = this.objectKey(pathOrKey);
     if (!key) throw new Error('Invalid object key');
     const response = await this.client.send(
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
@@ -389,8 +412,7 @@ export class S3StorageBase implements StorageCapability {
     const ext =
       detected?.ext ||
       (mime === 'application/json' ? 'json' : mime === 'text/plain' ? 'txt' : 'bin');
-    const id = randomBytes(8).toString('hex');
-    const key = `${id}.${ext}`;
+    const key = this.newKey(ext);
 
     await this.client.send(
       new PutObjectCommand({
@@ -402,6 +424,143 @@ export class S3StorageBase implements StorageCapability {
     );
 
     return this.getFileUrl(key);
+  }
+}
+
+export class PlatformS3StorageBase extends S3StorageBase {
+  private readonly tenantId: string;
+  private readonly legacyPublicUrl?: string;
+
+  constructor(
+    logger: LoggerPort,
+    fetch: SafeFetchPort,
+    type: string,
+    region: string,
+    credentials: { accessKeyId: string; secretAccessKey: string },
+    bucket: string,
+    endpoint: string | undefined,
+    publicUrl: string | undefined,
+    tenantId: string,
+    legacyPublicUrl?: string,
+  ) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(tenantId)) {
+      throw new Error('Invalid tenant storage prefix');
+    }
+    super(
+      logger,
+      fetch,
+      type,
+      region,
+      credentials,
+      bucket,
+      endpoint,
+      publicUrl ? withoutTrailingSlash(publicUrl) : undefined,
+    );
+    this.tenantId = tenantId;
+    this.legacyPublicUrl = legacyPublicUrl
+      ? withoutTrailingSlash(legacyPublicUrl)
+      : undefined;
+  }
+
+  protected newKey(
+    extension: string,
+    id = randomBytes(8).toString('hex'),
+  ): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${this.tenantId}/${year}/${month}/${day}/${id}.${extension}`;
+  }
+
+  protected objectKey(pathOrKey: string): string {
+    const value = pathOrKey.trim();
+    if (!value) throw new Error('Invalid object key');
+
+    let raw = value.split('?')[0].split('#')[0];
+    if (/^https?:\/\//i.test(value)) {
+      let url: URL;
+      try {
+        url = new URL(value);
+      } catch {
+        throw new Error('Invalid storage URL');
+      }
+      const candidates = [
+        this.publicUrl,
+        this.legacyPublicUrl,
+        this.publicUrl
+          ? undefined
+          : `https://${this.bucket}.s3.${this.region}.amazonaws.com`,
+      ].filter((base): base is string => !!base);
+      const base = candidates.find((candidate) => {
+        const baseUrl = new URL(candidate);
+        const basePath = withoutTrailingSlash(baseUrl.pathname);
+        return (
+          url.origin === baseUrl.origin &&
+          (url.pathname === basePath || url.pathname.startsWith(`${basePath}/`))
+        );
+      });
+      if (!base) throw new Error('Storage URL does not belong to this provider');
+      const basePath = withoutTrailingSlash(new URL(base).pathname);
+      raw = url.pathname.slice(basePath.length);
+    } else if (this.legacyPublicUrl) {
+      const legacyPath = withoutTrailingSlash(new URL(this.legacyPublicUrl).pathname);
+      const pathValue = raw.startsWith('/') ? raw : `/${raw}`;
+      if (pathValue.startsWith(`${legacyPath}/`)) {
+        raw = pathValue.slice(legacyPath.length);
+      }
+    }
+
+    let segments: string[];
+    try {
+      segments = raw
+        .replace(/^\/+/, '')
+        .split('/')
+        .map((segment) => decodeURIComponent(segment));
+    } catch {
+      throw new Error('Invalid object key');
+    }
+    if (
+      segments.some(
+        (segment) =>
+          !segment ||
+          segment === '.' ||
+          segment === '..' ||
+          segment.includes('/') ||
+          segment.includes('\\') ||
+          segment.includes('\0'),
+      )
+    ) {
+      throw new Error('Invalid object key');
+    }
+
+    const key = segments.join('/');
+    if (!key.startsWith(`${this.tenantId}/`)) {
+      throw new Error('Storage object does not belong to this organization');
+    }
+    return key;
+  }
+
+  protected listPrefix(prefix?: string): string | undefined {
+    const tenantPrefix = `${this.tenantId}/`;
+    if (!prefix) return tenantPrefix;
+    const clean = prefix.replace(/^\/+/, '');
+    if (clean.split('/').some((segment) => segment === '..')) {
+      throw new Error('Invalid object prefix');
+    }
+    return clean.startsWith(tenantPrefix) ? clean : `${tenantPrefix}${clean}`;
+  }
+
+  getFileUrl(key: string): string {
+    const encoded = encodeStorageKey(this.objectKey(key));
+    if (this.publicUrl) {
+      return `${this.publicUrl}/${encoded}`;
+    }
+    return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${encoded}`;
+  }
+
+  async deleteFile(key: string): Promise<void> {
+    await super.deleteFile(this.objectKey(key));
   }
 }
 
@@ -454,16 +613,31 @@ export function makeS3StorageModule(
         const endpoint = cfg.resolveEndpoint
           ? cfg.resolveEndpoint(region, extras.endpoint)
           : extras.endpoint;
-        this.adapter = new S3StorageBase(
-          this.ctx.logger,
-          this.ctx.fetch,
-          cfg.type,
-          region,
-          this.ctx.credentials as any,
-          extras.bucket,
-          endpoint,
-          extras.publicUrl,
-        );
+        if (extras.tenantId) {
+          this.adapter = new PlatformS3StorageBase(
+            this.ctx.logger,
+            this.ctx.fetch,
+            cfg.type,
+            region,
+            this.ctx.credentials as any,
+            extras.bucket,
+            endpoint,
+            extras.publicUrl,
+            extras.tenantId,
+            extras.legacyPublicUrl,
+          );
+        } else {
+          this.adapter = new S3StorageBase(
+            this.ctx.logger,
+            this.ctx.fetch,
+            cfg.type,
+            region,
+            this.ctx.credentials as any,
+            extras.bucket,
+            endpoint,
+            extras.publicUrl,
+          );
+        }
       }
       return this.adapter;
     }

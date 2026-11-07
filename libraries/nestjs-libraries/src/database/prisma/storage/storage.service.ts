@@ -11,6 +11,7 @@ import { FileRepository } from '@postmill-ai/nestjs-libraries/database/prisma/fi
 import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { mergeEffectiveLimits } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/effective.limits';
 import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
+import { getPlatformStorageConfig } from '@postmill-ai/helpers/storage/platform-storage';
 
 type StorageConfigRow = {
   id: string;
@@ -418,8 +419,40 @@ export class StorageService {
     return this.#buildAdapter(config);
   }
 
-  // Force the org's LOCAL adapter — used for avatars and app-internal writes (v3.8.2).
+  async getBaseAdapterForOrg(orgId: string, createIfMissing = false): Promise<IStorageAdapter> {
+    const platform = getPlatformStorageConfig();
+    if (platform.provider === 's3') {
+      const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+      return this._resolution.resolveStorage('s3', {
+        version: 'v1',
+        credentials: {
+          accessKeyId: platform.accessKeyId,
+          secretAccessKey: platform.secretAccessKey,
+        },
+        orgId,
+        extras: {
+          bucket: platform.bucket,
+          region: platform.region,
+          endpoint: platform.endpoint,
+          publicUrl: platform.publicUrl,
+          tenantId: orgId,
+          legacyPublicUrl: frontendUrl ? `${frontendUrl}/uploads` : undefined,
+        },
+      });
+    }
+
+    return this.getLocalDiskAdapterForOrg(orgId, createIfMissing);
+  }
+
+  // Backward-compatible name for callers writing org-owned base-storage objects.
   async getLocalAdapterForOrg(orgId: string, createIfMissing = false): Promise<IStorageAdapter> {
+    return this.getBaseAdapterForOrg(orgId, createIfMissing);
+  }
+
+  private async getLocalDiskAdapterForOrg(
+    orgId: string,
+    createIfMissing = false,
+  ): Promise<IStorageAdapter> {
     const configs = await this._storageRepository.findByOrg(orgId);
     const local = configs.find(
       (c) => c.type === StorageProviderType.LOCAL
@@ -438,8 +471,6 @@ export class StorageService {
       return this.#buildAdapter(created);
     }
 
-    // No persisted LOCAL row: resolve a virtual LOCAL adapter straight from the
-    // kernel (replaces the removed StorageAdapterFactory.createLocal helper).
     return this.#buildAdapter({
       id: '__virtual_local__',
       organizationId: orgId,
@@ -498,29 +529,22 @@ export class StorageService {
     }
   }
 
-  // Destination-aware quota check. For LOCAL, uses the existing local quota.
-  // For cloud adapters: if config.quotaBytes is set, compare usage against it;
-  // otherwise skip (cloud billing is provider-side).
+  // Platform-hosted storage has no config id and keeps the hosted quota in both
+  // local and S3 modes. BYO providers use their own optional quota instead.
   async assertWithinProviderQuota(
     adapter: IStorageAdapter,
     orgId: string,
     incomingBytes: number,
     configId?: string | null
   ) {
-    if (adapter.type === StorageProviderType.LOCAL) {
+    if (!configId || adapter.type === StorageProviderType.LOCAL) {
       return this.assertWithinQuota(orgId, incomingBytes);
     }
 
-    let config: StorageConfigRow | undefined;
-    if (configId) {
-      const byId = await this._storageRepository.findById(orgId, configId);
-      if (byId) {
-        config = byId as StorageConfigRow;
-      }
-    }
-
-    // Quota is always resolved by the stable config id. Callers that do not
-    // have a config id (e.g. legacy paths) skip the per-provider quota check.
+    const config = (await this._storageRepository.findById(
+      orgId,
+      configId,
+    )) as StorageConfigRow | undefined;
 
     if (!config || !config.quotaBytes) return;
 
@@ -686,7 +710,25 @@ export class StorageService {
       usageBytes: bigint | null;
     }> = [];
 
+    const platformS3 = getPlatformStorageConfig().provider === 's3';
+    if (platformS3) {
+      const localCard = configs.find((c) => c.type === StorageProviderType.LOCAL);
+      let usage: bigint | null = null;
+      try {
+        usage = await (await this.getBaseAdapterForOrg(orgId)).getUsageBytes();
+      } catch {
+        usage = null;
+      }
+      providerUsage.push({
+        id: localCard?.id || '__virtual_local__',
+        name: 'Postmill Storage',
+        usageBytes: usage,
+      });
+      if (usage !== null) totalBytes += usage;
+    }
+
     for (const config of configs) {
+      if (platformS3 && config.type === StorageProviderType.LOCAL) continue;
       let usage: bigint | null = null;
       try {
         usage = await this.#buildAdapter(config as StorageConfigRow).getUsageBytes();
@@ -790,6 +832,13 @@ export class StorageService {
       prefixes.push(`${frontendUrl}/uploads/`);
     }
 
+    const platform = getPlatformStorageConfig();
+    if (platform.provider === 's3') {
+      prefixes.push(`${platform.publicUrl}/`);
+    } else if (process.env.S3_PUBLIC_URL) {
+      prefixes.push(`${process.env.S3_PUBLIC_URL.replace(/\/+$/, '')}/`);
+    }
+
     const configs = await this._storageRepository.findByOrg(orgId);
     for (const config of configs) {
       if (config.publicUrl) {
@@ -814,7 +863,7 @@ export class StorageService {
 
   // Resolve the storage adapter for a given folder by walking the parentId
   // chain up to a mount-root folder carrying storageProviderId. No folder
-  // or null folder → org LOCAL fallback. Never returns null.
+  // or null folder → the operator-selected platform base. Never returns null.
   async resolveAdapterForFolder(
     folderId: string | null | undefined,
     orgId: string
@@ -833,7 +882,7 @@ export class StorageService {
     orgId: string
   ): Promise<{ adapter: IStorageAdapter; configId: string | null }> {
     if (!folderId) {
-      return { adapter: await this.getLocalAdapterForOrg(orgId, true), configId: null };
+      return { adapter: await this.getBaseAdapterForOrg(orgId, true), configId: null };
     }
 
     const seen = new Set<string>();
@@ -868,7 +917,7 @@ export class StorageService {
       currentId = folder.parentId;
     }
 
-    return { adapter: await this.getLocalAdapterForOrg(orgId, true), configId: null };
+    return { adapter: await this.getBaseAdapterForOrg(orgId, true), configId: null };
   }
 
   // Legacy — delegates to the ancestor-aware resolver. Kept for backward compat

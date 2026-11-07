@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createReadStream, realpathSync, statSync } from 'fs';
 import { resolve, sep } from 'path';
+import {
+  getPlatformS3PublicUrl,
+  getPlatformStorageProvider,
+} from '@postmill-ai/helpers/storage/platform-storage';
 // @ts-ignore
 import mime from 'mime';
 async function* nodeStreamToIterator(stream: any) {
@@ -54,7 +58,44 @@ export const GET = async (
 ) => {
   const { path } = await context.params;
   // No-auth is intentional: /uploads/* is a public bucket with unguessable
-  // stored filenames served with immutable cache headers — do not gate it.
+  // stored filenames served with cache headers — do not gate it.
+  let platform: { provider: 'local' | 's3'; publicUrl?: string };
+  try {
+    const provider = getPlatformStorageProvider();
+    platform = {
+      provider,
+      publicUrl: provider === 's3' ? getPlatformS3PublicUrl() : undefined,
+    };
+  } catch {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (platform.provider === 's3') {
+    const segments = path ?? [];
+    if (
+      !segments.length ||
+      segments.some(
+        (segment) =>
+          !segment ||
+          segment === '.' ||
+          segment === '..' ||
+          segment.includes('\\') ||
+          segment.includes('\0'),
+      )
+    ) {
+      return new NextResponse('Not found', { status: 404 });
+    }
+    const key = segments.map((segment) => encodeURIComponent(segment)).join('/');
+    const search = request.nextUrl?.search || '';
+    return NextResponse.redirect(`${platform.publicUrl}/${key}${search}`, {
+      status: 307,
+      headers: {
+        'Cache-Control': 'public, max-age=300',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  }
+
   const dir = process.env.UPLOAD_DIRECTORY;
   if (!dir) {
     // Fail closed: an unset upload root must not become a 500 (or a relative

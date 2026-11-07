@@ -1,6 +1,6 @@
 # Configuration
 
-Every environment variable Postmill recognises, sourced from `.env.example`. All variables are read at boot time. Most feature-specific provider credentials (channel OAuth apps, AI providers, storage, short links) are configured per-organization in-app; this page covers the deployment-level variables.
+Every environment variable Postmill recognises, sourced from `.env.example`. All variables are read at boot time. Most feature-specific provider credentials (channel OAuth apps, AI providers, short links) are configured per-organization in-app; this page covers deployment-level variables, including the platform base-storage backend.
 
 ## Required
 
@@ -19,10 +19,18 @@ Every environment variable Postmill recognises, sourced from `.env.example`. All
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `UPLOAD_DIRECTORY` | — | Local path for file uploads (e.g. `/uploads`). Avatars and app-internal images always use LOCAL |
+| `STORAGE_PROVIDER` | `local` | Platform base backend: `local` or `s3`. Explicit per-org folder mounts take precedence |
+| `S3_ACCESS_KEY_ID` | — | S3 access key; required in `s3` mode |
+| `S3_SECRET_ACCESS_KEY` | — | S3 secret key; required in `s3` mode |
+| `S3_BUCKET` | — | Platform bucket; required in `s3` mode |
+| `S3_REGION` | — | Bucket region (for example `fsn1`); required in `s3` mode |
+| `S3_ENDPOINT` | AWS endpoint | S3-compatible API endpoint; set this for Hetzner and other non-AWS services |
+| `S3_PUBLIC_URL` | — | Public bucket/CDN base URL; required in `s3` mode and used for direct objects and legacy redirects |
+| `UPLOAD_DIRECTORY` | — | Local upload root; required in `local` mode and retained as migration/rollback source in `s3` mode |
+| `STORAGE_MIGRATION_DIRECTORY` | System temp | Manifest directory for storage migration; production should use a persistent path outside the upload root and repo |
 | `NEXT_PUBLIC_UPLOAD_STATIC_DIRECTORY` | — | Public URL path serving uploads (e.g. `/uploads`) |
 | `MEDIA_UPLOAD_MAX_BYTES` | `1073741824` | Maximum upload file size for `/files/upload-server` (default 1 GB) |
-| `LOCAL_STORAGE_QUOTA_GB` | `5` | Default soft quota for each org's local storage, in GB |
+| `LOCAL_STORAGE_QUOTA_GB` | `5` | Default soft quota for each org's hosted storage in either platform mode |
 
 ## Email
 

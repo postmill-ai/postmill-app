@@ -1,9 +1,12 @@
 /// <reference types="./pdfkit" />
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
-import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import {
+  isLocalStorageUrl,
+  readLocalUpload,
+} from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import {
@@ -3401,12 +3404,8 @@ export class DesignRenderService {
         if (buffer.byteLength > MAX_IMAGE_BYTES) return null;
         return await this._decodeImage(buffer, loadImage);
       }
-      // Local-storage uploads (dev/local disk) resolve to a localhost URL that
-      // safeFetch rightly refuses (private host). Read them from disk instead —
-      // same pattern as the vision critic — with a traversal guard.
-      const localPath = this._localUploadPath(src);
-      if (localPath) {
-        const buffer = await readFile(localPath);
+      if (isLocalStorageUrl(src)) {
+        const buffer = await readLocalUpload(src);
         if (buffer.byteLength > MAX_IMAGE_BYTES) return null;
         return await this._decodeImage(buffer, loadImage);
       }
@@ -3432,25 +3431,5 @@ export class DesignRenderService {
       const png = await sharp(buffer).png().toBuffer();
       return await loadImage(png);
     }
-  }
-
-  /** Map a local-storage upload URL to its on-disk path, or null when the src
-   *  is not local storage. Resolved path must stay inside UPLOAD_DIRECTORY. */
-  private _localUploadPath(src: string): string | null {
-    const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
-    let key: string | null = null;
-    if (frontendUrl && src.startsWith(`${frontendUrl}/uploads/`)) {
-      key = src.slice(`${frontendUrl}/uploads/`.length);
-    } else if (src.startsWith('/uploads/')) {
-      key = src.slice('/uploads/'.length);
-    }
-    if (!key) return null;
-    const uploadDirectory = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
-    const resolved = path.resolve(uploadDirectory, decodeURIComponent(key));
-    if (resolved !== uploadDirectory && !resolved.startsWith(uploadDirectory + path.sep)) {
-      this._logger.warn(`Blocked upload path traversal in render: ${src}`);
-      return null;
-    }
-    return resolved;
   }
 }

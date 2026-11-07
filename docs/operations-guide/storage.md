@@ -5,15 +5,11 @@ Backblaze B2, IDrive e2, Wasabi, DigitalOcean Spaces, Hetzner, Storj, Scaleway, 
 other S3-compatible service, and MediaLocker. Each organization can mount its own storage provider independently,
 configured from the in-app Settings -> Storage page.
 
-**LOCAL** is the always-on base storage that every org has. Other providers
-(S3, R2, B2, IDrive e2, and the other cloud providers) mount onto this base — there is no default provider. New uploads always land
-on LOCAL first. Cloud providers are configured per-organization in-app; the old global-env
-`STORAGE_PROVIDER`/`CLOUDFLARE_*` path has been removed.
+The platform base is selected by the operator with `STORAGE_PROVIDER=local|s3` (default `local`). It stores root/unmounted org files, avatars, and generated media. Local objects live under `<UPLOAD_DIRECTORY>/<tenantId>/`; platform S3 objects use `<tenantId>/YYYY/MM/DD/` in the configured bucket. Platform credentials stay in the environment and are never exposed to tenant admins.
 
-Local storage is **partitioned per tenant** (`<UPLOAD_DIRECTORY>/<tenantId>/`), the
-default local quota is driven by the `LOCAL_STORAGE_QUOTA_GB` env var (default 5), each provider
-config must be a **unique account** (credential fingerprint), and the Settings → Storage UI was
-rebuilt to mirror the AI page (including a fix for the first-load render inconsistency).
+Other providers (S3, R2, B2, IDrive e2, and the other cloud providers) can still be mounted per organization in Settings → Storage. An explicit provider-bound folder always takes precedence over the platform base, so changing the platform backend does not move or reconfigure BYO mounts.
+
+The hosted-storage quota is driven by `LOCAL_STORAGE_QUOTA_GB` (default 5) in either platform mode. Each per-org provider config must be a **unique account** (credential fingerprint). The read-only **Postmill Storage** card represents the operator-selected base and reports tenant-scoped usage.
 
 ## Storage model
 
@@ -35,31 +31,38 @@ Each storage provider mount is a row in the `StorageProviderConfig` table:
 | `defaultFolderId` | Folder-level routing: uploads to this folder use this provider |
 | `accountFingerprint` | SHA-256 of the distinguishing credentials (provider type + access-key ID). Unique per org — the same account cannot be added twice. |
 
-> There is no default provider — LOCAL is the always-on base that every org has.
+> `StorageProviderConfig` rows represent BYO mounts. The operator-selected platform base is env-driven and does not create tenant credential rows.
 
 ### Per-org quota
 
-Each organization's local storage has a **soft quota**: the default is driven by
+Each organization's hosted storage has a **soft quota**: the default is driven by
 `LOCAL_STORAGE_QUOTA_GB` (default `5`), and each org can carry an explicit override in
 `localStorageQuotaBytes` (explicit value wins, else the env default). At 80% usage, a warning
 banner appears in the storage settings. At 100%, new uploads are blocked until space is freed or
-quota is raised.
+quota is raised. The same quota applies in local and platform-S3 mode.
 
 ## Storage backends
 
-### Local storage (always-on base)
+### Local platform storage (default)
 
 Files are written to `UPLOAD_DIRECTORY` (e.g. `/uploads/`) on the container's filesystem, served
 at `/uploads`. Simple but not redundant — a single container's disk, not shared across replicas.
 Each tenant's files are written under its own partition,
 `<UPLOAD_DIRECTORY>/<tenantId>/`.
 
-Avatars and all app-internal image writes always target LOCAL storage.
-
 ```yaml
+STORAGE_PROVIDER: 'local'
 UPLOAD_DIRECTORY: '/uploads'
 MEDIA_UPLOAD_MAX_BYTES: '1073741824'
 ```
+
+### S3-compatible platform storage
+
+Set `STORAGE_PROVIDER=s3` plus `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_REGION`, and `S3_PUBLIC_URL`. Set `S3_ENDPOINT` for Hetzner and other non-AWS services. Avatars, generated media, and root/unmounted org uploads all use the same tenant-partitioned bucket. Existing `/uploads/...` URLs return a 307 redirect to the identical key under `S3_PUBLIC_URL`, cacheable for five minutes; no database or Designer-document URL rewrite is required.
+
+The backend and migration command require the complete S3 configuration. The frontend needs only `STORAGE_PROVIDER=s3` and `S3_PUBLIC_URL` to issue legacy redirects; it does not need the bucket credentials. Cached redirects remain safe during rollback because `copy-back` never deletes bucket objects.
+
+For Hetzner, use an endpoint such as `https://fsn1.your-objectstorage.com` and the bucket's public URL. The bucket/CDN must support public object reads, CORS, and byte-range requests. Production backend startup fails closed with a variable-specific error when S3 configuration is incomplete.
 
 ### Cloudflare R2 (per-tenant)
 
@@ -190,6 +193,35 @@ the source provider, checked against the destination's quota, written to the des
 the file record is repointed to the new path, and the source object is removed (best-effort). A bulk
 move skips files that fail without blocking the rest. Moving within the same provider only updates
 the folder assignment.
+
+## Platform local-to-S3 migration
+
+Use a dedicated bucket and keep the original local tree until the S3 deployment has passed a soak period. Set all `S3_*` variables while leaving `STORAGE_PROVIDER=local`, set `UPLOAD_DIRECTORY` to the existing local root, and set `STORAGE_MIGRATION_DIRECTORY` to a persistent directory outside that root and outside the repository.
+
+Before migrating an older installation, confirm that every top-level upload directory is a tenant partition. Pre-partition objects at `<UPLOAD_DIRECTORY>/YYYY/MM/DD/...` would be copied and remain viewable through redirects, but a tenant-scoped adapter cannot safely read or delete them after cutover because the key has no owner. Assign and re-home those objects beneath their tenant prefixes before cutting over; do not bypass tenant isolation with an unscoped fallback.
+
+Build the commands app, then run:
+
+```bash
+cd apps/commands
+pnpm exec dotenv -e ../../.env -- node -r ./register-paths.cjs \
+  ./dist/apps/commands/src/main.js storage:local-to-s3 inventory
+pnpm exec dotenv -e ../../.env -- node -r ./register-paths.cjs \
+  ./dist/apps/commands/src/main.js storage:local-to-s3 copy
+pnpm exec dotenv -e ../../.env -- node -r ./register-paths.cjs \
+  ./dist/apps/commands/src/main.js storage:local-to-s3 verify
+```
+
+- `inventory` counts regular files and reports symlinks/non-regular files without writing objects.
+- `copy` streams identical relative keys with bounded concurrency, retries, and a resumable SHA-256 manifest. It never deletes or overwrites an unrelated destination object.
+- `verify` hashes both source and streamed destination bytes. Do not cut over unless it reports zero missing/mismatched files. Unexpected destination objects are reported separately.
+- Repeat `copy` and `verify` immediately before cutover to catch files written during the first pass.
+
+Set `STORAGE_PROVIDER=s3` and restart both backend and frontend. Verify old `/uploads` redirects, new tenant-prefixed uploads, video range requests, Designer exports, deletion, and any existing BYO mounts. Run the delta `copy`/`verify` once more.
+
+For rollback, run `storage:local-to-s3 copy-back` to copy post-cutover objects into the local tree, then set `STORAGE_PROVIDER=local` and restart both services. The command refuses to overwrite a divergent local file and never deletes bucket objects.
+
+Local cleanup is deliberately not automated. After explicit operator confirmation, remove only files whose current local hashes still match the verified manifest and bucket copies, and retain the manifest plus bucket versioning/backups.
 
 ## Health tracking
 

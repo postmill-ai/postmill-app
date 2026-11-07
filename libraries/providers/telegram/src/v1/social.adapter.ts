@@ -223,7 +223,10 @@ export class TelegramProvider extends SocialAbstract implements SocialProvider {
       // URL specified: URL host is empty", observed live), and a FRONTEND_URL
       // fetch only works when the deployment is publicly reachable. Remote
       // storage (S3/R2) URLs pass through untouched.
-      if (uploadDir) {
+      if (
+        uploadDir &&
+        (process.env.STORAGE_PROVIDER || 'local').trim().toLowerCase() !== 's3'
+      ) {
         const localPrefix = `${frontendUrl}/${staticDir}/`;
         const relPrefix = `/${staticDir}/`;
         if (mediaUrl.startsWith(localPrefix)) {

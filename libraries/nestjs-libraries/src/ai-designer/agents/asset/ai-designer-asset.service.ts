@@ -6,7 +6,6 @@ import {
 } from '@reaatech/agent-mesh-router';
 import type { AgentResponse } from '@reaatech/agent-mesh';
 import sharp from 'sharp';
-import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults.errors';
@@ -866,9 +865,8 @@ export class AiDesignerAssetService implements OnModuleInit {
     naturalHeight?: number;
   }> {
     try {
-      const localPath = this._localUploadPath(filePath);
-      if (!localPath) return {};
-      const buffer = await readFile(localPath);
+      if (!isLocalStorageUrl(filePath)) return {};
+      const buffer = await readLocalUpload(filePath);
       const meta = await sharp(buffer).metadata();
       const width = meta.width ?? 0;
       const height = meta.height ?? 0;
@@ -880,26 +878,5 @@ export class AiDesignerAssetService implements OnModuleInit {
       );
       return {};
     }
-  }
-
-  /** Map a local-storage upload URL to its on-disk path (null when the file
-   *  is not local storage). Resolved path must stay inside UPLOAD_DIRECTORY —
-   *  same traversal guard as the render service and the vision critic. */
-  private _localUploadPath(src: string): string | null {
-    const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
-    let key: string | null = null;
-    if (frontendUrl && src.startsWith(`${frontendUrl}/uploads/`)) {
-      key = src.slice(`${frontendUrl}/uploads/`.length);
-    } else if (src.startsWith('/uploads/')) {
-      key = src.slice('/uploads/'.length);
-    }
-    if (!key) return null;
-    const uploadDirectory = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
-    const resolved = path.resolve(uploadDirectory, decodeURIComponent(key));
-    if (resolved !== uploadDirectory && !resolved.startsWith(uploadDirectory + path.sep)) {
-      this._logger.warn(`Blocked upload path traversal in asset analysis: ${src}`);
-      return null;
-    }
-    return resolved;
   }
 }

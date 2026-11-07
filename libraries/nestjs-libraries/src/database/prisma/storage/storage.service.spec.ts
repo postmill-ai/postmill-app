@@ -910,3 +910,136 @@ describe('StorageService — getLocalAdapterForOrg', () => {
     );
   });
 });
+
+describe('StorageService — operator-selected S3 base', () => {
+  const envKeys = [
+    'STORAGE_PROVIDER',
+    'S3_ACCESS_KEY_ID',
+    'S3_SECRET_ACCESS_KEY',
+    'S3_BUCKET',
+    'S3_REGION',
+    'S3_ENDPOINT',
+    'S3_PUBLIC_URL',
+    'FRONTEND_URL',
+  ];
+  const originalEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+
+  beforeEach(() => {
+    Object.assign(process.env, {
+      STORAGE_PROVIDER: 's3',
+      S3_ACCESS_KEY_ID: 'access',
+      S3_SECRET_ACCESS_KEY: 'secret',
+      S3_BUCKET: 'postmill',
+      S3_REGION: 'fsn1',
+      S3_ENDPOINT: 'https://fsn1.your-objectstorage.com',
+      S3_PUBLIC_URL: 'https://postmill.fsn1.your-objectstorage.com',
+      FRONTEND_URL: 'https://app.postmill.ai',
+    });
+  });
+
+  afterEach(() => {
+    for (const key of envKeys) {
+      const value = originalEnv[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it('resolves a tenant-scoped S3 base even when a LOCAL row exists', async () => {
+    const repo = makeRepo({ findByOrg: vi.fn().mockResolvedValue([localConfig]) });
+    const resolution = makeResolution();
+    const service = makeStorageService(repo, undefined, resolution);
+
+    await service.getBaseAdapterForOrg('org-1', true);
+
+    expect(repo.findByOrg).not.toHaveBeenCalled();
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(resolution.resolveStorage).toHaveBeenCalledWith('s3', {
+      version: 'v1',
+      credentials: { accessKeyId: 'access', secretAccessKey: 'secret' },
+      orgId: 'org-1',
+      extras: {
+        bucket: 'postmill',
+        region: 'fsn1',
+        endpoint: 'https://fsn1.your-objectstorage.com',
+        publicUrl: 'https://postmill.fsn1.your-objectstorage.com',
+        tenantId: 'org-1',
+        legacyPublicUrl: 'https://app.postmill.ai/uploads',
+      },
+    });
+  });
+
+  it('keeps an explicit BYO folder ahead of the platform base', async () => {
+    const cloud = {
+      ...localConfig,
+      id: 'r2-1',
+      type: StorageProviderType.CLOUDFLARE_R2,
+      bucket: 'byo-bucket',
+    };
+    const repo = makeRepo({
+      findFolderWithProvider: vi.fn().mockResolvedValue({
+        id: 'folder-1',
+        organizationId: 'org-1',
+        storageProviderId: 'r2-1',
+      }),
+      findById: vi.fn().mockResolvedValue(cloud),
+    });
+    const resolution = makeResolution();
+    const service = makeStorageService(repo, undefined, resolution);
+
+    const result = await service.resolveAdapterForFolderWithConfigId('folder-1', 'org-1');
+
+    expect(result.configId).toBe('r2-1');
+    expect(resolution.resolveStorage).toHaveBeenCalledWith(
+      'cloudflare_r2',
+      expect.objectContaining({ orgId: 'org-1' }),
+    );
+  });
+
+  it('accepts both legacy upload URLs and the platform public URL', async () => {
+    const service = makeStorageService(makeRepo());
+    await expect(service.getOrgStoragePublicPrefixes('org-1')).resolves.toEqual([
+      'https://app.postmill.ai/uploads/',
+      'https://postmill.fsn1.your-objectstorage.com/',
+    ]);
+  });
+
+  it('continues accepting direct bucket URLs after rollback to local', async () => {
+    process.env.STORAGE_PROVIDER = 'local';
+    const service = makeStorageService(makeRepo());
+    await expect(service.getOrgStoragePublicPrefixes('org-1')).resolves.toEqual([
+      'https://app.postmill.ai/uploads/',
+      'https://postmill.fsn1.your-objectstorage.com/',
+    ]);
+  });
+
+  it('reports only tenant-scoped platform usage for the base card', async () => {
+    adapterMock.getUsageBytes.mockResolvedValue(BigInt(42));
+    const repo = makeRepo({
+      findByOrg: vi.fn().mockResolvedValue([localConfig]),
+      getOrgQuota: vi.fn().mockResolvedValue(BigInt(100)),
+    });
+    const service = makeStorageService(repo);
+
+    const usage = await service.getUsage('org-1');
+
+    expect(usage.totalBytes).toBe(BigInt(42));
+    expect(usage.providers).toEqual([
+      { id: 'local-1', name: 'Postmill Storage', usageBytes: BigInt(42) },
+    ]);
+  });
+
+  it('applies the hosted quota to platform S3 writes', async () => {
+    const service = makeStorageService(makeRepo());
+    const quota = vi.spyOn(service, 'assertWithinQuota').mockResolvedValue(undefined);
+
+    await service.assertWithinProviderQuota(
+      { type: StorageProviderType.S3 } as any,
+      'org-1',
+      100,
+      null,
+    );
+
+    expect(quota).toHaveBeenCalledWith('org-1', 100);
+  });
+});

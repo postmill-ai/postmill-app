@@ -286,6 +286,8 @@ studio UI → MediaStudioController (/media/studio; apps/backend/src/api/routes/
   → StorageService (resolved storage provider) → media library
 ```
 
+Storage routing has two levels. `STORAGE_PROVIDER=local|s3` selects the operator-managed base for root/unmounted files and generated media; platform S3 objects are tenant/date partitioned and legacy `/uploads` URLs redirect to the same bucket key. A folder's explicit BYO `storageProviderId` takes precedence and keeps its own credentials and key layout. Platform base writes retain the hosted quota in either mode.
+
 ### (d) Notifications
 
 ```

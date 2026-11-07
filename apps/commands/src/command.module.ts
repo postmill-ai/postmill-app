@@ -18,6 +18,7 @@ import { MediaStudioModule } from '@postmill-ai/nestjs-libraries/media/studio/st
 import { ProvidersBootstrap } from '@postmill-ai/backend/providers.bootstrap';
 import { OwnerAnnouncement } from './tasks/owner-announcement';
 import { OwnerEmailCampaignService } from '@postmill-ai/nestjs-libraries/services/owner-email-campaign.service';
+import { StorageMigration } from './tasks/storage-migration';
 
 @Module({
   // UploadModule/AiModule/ProvidersModule/FeatureFlagsModule/VpnModule and
@@ -54,6 +55,7 @@ import { OwnerEmailCampaignService } from '@postmill-ai/nestjs-libraries/service
     ProvidersBootstrap,
     OwnerAnnouncement,
     OwnerEmailCampaignService,
+    StorageMigration,
   ],
   get exports() {
     return [...this.imports, ...this.providers];
