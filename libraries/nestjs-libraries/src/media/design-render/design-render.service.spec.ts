@@ -24,8 +24,8 @@ class FakeFontLoaderService {
   }
 }
 
-const makeService = () =>
-  new DesignRenderService(new FakeFontLoaderService() as any);
+const makeService = (fileService?: any, storageService?: any) =>
+  new DesignRenderService(new FakeFontLoaderService() as any, fileService, storageService);
 
 const makeDoc = (): any => ({
   version: 2,
@@ -53,6 +53,52 @@ const makeDoc = (): any => ({
 });
 
 describe('DesignRenderService', () => {
+  it('loads an org-owned background through its storage adapter when the URL fails', async () => {
+    const png = await sharp({
+      create: { width: 2, height: 2, channels: 4, background: '#ff0000' },
+    }).png().toBuffer();
+    const fileService = {
+      getFileById: vi.fn(async () => ({ id: 'bg-1', folderId: 'folder-1', path: '/uploads/bg.png' })),
+    };
+    const storageService = {
+      resolveAdapterForFolder: vi.fn(async () => ({ readFile: async () => png })),
+    };
+    const service = makeService(fileService, storageService);
+    const doc = makeDoc();
+    doc.outputs[0].bg = { type: 'image', fileId: 'bg-1', src: 'https://unreachable.invalid/bg.png' };
+    vi.mocked(safeFetch).mockClear();
+
+    await service.assertVisualAssets(doc, 0, { orgId: 'org-1' });
+    const rendered = await service.renderPage(doc, 0, { orgId: 'org-1' });
+
+    const { data } = await sharp(rendered).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    expect([...data.slice(0, 3)]).toEqual([255, 0, 0]);
+    expect(storageService.resolveAdapterForFolder).toHaveBeenCalledWith('folder-1', 'org-1');
+    expect(safeFetch).not.toHaveBeenCalled();
+  });
+
+  it('retries a remote background after a transient load failure', async () => {
+    const png = await sharp({
+      create: { width: 1, height: 1, channels: 4, background: '#00ff00' },
+    }).png().toBuffer();
+    vi.mocked(safeFetch)
+      .mockRejectedValueOnce(new Error('temporary outage'))
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => null },
+        arrayBuffer: async () => png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
+      } as Response);
+    const service = makeService();
+    const doc = makeDoc();
+    doc.outputs[0].bg = { type: 'image', src: 'https://cdn.example.test/bg.png' };
+
+    await expect(service.assertVisualAssets(doc, 0, { orgId: 'org-1' }))
+      .rejects.toThrow('Required background image');
+    await expect(service.assertVisualAssets(doc, 0, { orgId: 'org-1' }))
+      .resolves.toBeUndefined();
+    expect(safeFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('survives pathologically deep group nesting', async () => {
     // One page-size buffer per nesting level, and nesting is unbounded in the
     // document: each Group Layers wraps the previous group, so a deep chain is

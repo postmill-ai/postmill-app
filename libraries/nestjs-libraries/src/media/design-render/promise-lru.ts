@@ -16,6 +16,10 @@ export class PromiseLruCache<V> {
     return this.map.size;
   }
 
+  delete(key: string): void {
+    this.map.delete(key);
+  }
+
   get(key: string, load: () => Promise<V>): Promise<V> {
     const cached = this.map.get(key);
     if (cached) return cached;

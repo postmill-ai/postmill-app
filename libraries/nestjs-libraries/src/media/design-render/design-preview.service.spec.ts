@@ -1,5 +1,18 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const remote = vi.hoisted(() => ({
+  fetch: vi.fn(),
+  extract: vi.fn(),
+}));
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
+  safeFetch: remote.fetch,
+}));
+vi.mock('../video-frame', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../video-frame')>()),
+  extractVideoFrameInfo: remote.extract,
+}));
+
 import { DesignPreviewService } from './design-preview.service';
 
 const imageDoc: any = {
@@ -120,6 +133,8 @@ describe('DesignPreviewService', () => {
   let service: DesignPreviewService;
 
   beforeEach(() => {
+    remote.fetch.mockReset();
+    remote.extract.mockReset().mockResolvedValue({ frame: null, hasVideoStream: true, hasAudioStream: false });
     renderService = {
       renderPage: vi.fn().mockResolvedValue(Buffer.from('png')),
       assertVisualAssets: vi.fn().mockResolvedValue(undefined),
@@ -323,6 +338,48 @@ describe('DesignPreviewService', () => {
         type: 'image',
         src: '/uploads/org-1/thumb-new.jpg',
       });
+    });
+
+    it('extracts a poster from a remote video with no File row', async () => {
+      const doc = structuredClone(videoClipSrcOnlyDoc);
+      doc.outputs[0].tracks[0].clips[0].src = 'https://cdn.example.test/clip.mp4';
+      remote.fetch.mockResolvedValue({
+        ok: true,
+        headers: { get: () => null },
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      });
+      remote.extract.mockResolvedValue({
+        frame: Buffer.from('jpeg'), hasVideoStream: true, hasAudioStream: false,
+      });
+
+      await service.renderPreviewBuffer(doc, { orgId: 'org-1' });
+
+      expect(remote.fetch).toHaveBeenCalledWith('https://cdn.example.test/clip.mp4');
+      const [renderDoc] = renderService.renderPage.mock.calls[0];
+      expect(renderDoc.outputs[0].children[0].src).toBe(
+        `data:image/jpeg;base64,${Buffer.from('jpeg').toString('base64')}`
+      );
+    });
+
+    it('retries a remote poster extraction that previously failed', async () => {
+      const doc = structuredClone(videoClipSrcOnlyDoc);
+      doc.outputs[0].tracks[0].clips[0].src = 'https://cdn.example.test/clip.mp4';
+      remote.fetch.mockResolvedValue({
+        ok: true,
+        headers: { get: () => null },
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      });
+
+      await expect(service.renderPreviewBuffer(doc, { orgId: 'org-1' }))
+        .rejects.toThrow('Required time-zero poster');
+
+      remote.extract.mockResolvedValue({
+        frame: Buffer.from('jpeg'), hasVideoStream: true, hasAudioStream: false,
+      });
+      await service.renderPreviewBuffer(doc, { orgId: 'org-1' });
+
+      expect(remote.fetch).toHaveBeenCalledTimes(2);
+      expect(renderService.renderPage).toHaveBeenCalledTimes(1);
     });
 
     it('fails a fileId-less clip whose src matches no File row', async () => {

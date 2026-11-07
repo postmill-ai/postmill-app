@@ -336,6 +336,16 @@ export class DesignExportService {
         artifactUrl: path,
         error: null,
       });
+      if (previewBuffer) {
+        void this._designService.regenPreviews(orgId, {
+          designIds: payload.kind === 'design' ? [payload.sourceId] : [],
+          templateIds: payload.kind === 'template' ? [payload.sourceId] : [],
+        }).catch((err) =>
+          this._logger.warn(
+            `Design export ${jobId}: source preview healing failed: ${(err as Error)?.message}`
+          )
+        );
+      }
       this._logger.log(`Design export job ${jobId} completed (${bytes.length} bytes)`);
     } catch (err) {
       const message = (err as Error)?.message || 'Export failed';
