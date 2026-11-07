@@ -139,6 +139,38 @@ describe('Bulk Create variables', () => {
     ]);
   });
 
+  it('assigns text, image and color variables inside reusable symbol definitions', () => {
+    const template = makeDoc();
+    template.symbols[0].children = [
+      element('symbol-plain-text', { text: 'Footer' }),
+      element('symbol-plain-image', { type: 'image', src: 'https://cdn.example.test/original.png' }),
+      element('symbol-plain-shape', { type: 'shape', shape: 'rect', fill: '#000000' }),
+    ];
+    const targets = collectBulkAssignmentTargets(template);
+    const targetId = (elementId: string, kind: string) =>
+      targets.find((target) => target.symbolId === 'symbol-1' && target.elementId === elementId && target.kind === kind)!.id;
+
+    const result = applyBulkAssignments(template, {
+      [targetId('symbol-plain-text', 'text')]: 'headline',
+      [targetId('symbol-plain-image', 'image')]: 'hero',
+      [targetId('symbol-plain-shape', 'color')]: 'accent',
+    });
+
+    expect(result.symbols[0].children.map((child: any) => child.slot)).toEqual([
+      { name: 'headline', kind: 'text' },
+      { name: 'hero', kind: 'image' },
+      { name: 'accent', kind: 'color' },
+    ]);
+    expect(template.symbols[0].children.every((child: any) => !child.slot)).toBe(true);
+    expect(applyBulkRow(result, {
+      headline: 'New footer', hero: 'https://cdn.example.test/new.png', accent: '#ff0000',
+    }).symbols[0].children).toMatchObject([
+      { text: 'New footer' },
+      { src: 'https://cdn.example.test/new.png' },
+      { fill: '#ff0000' },
+    ]);
+  });
+
   it('preserves existing variables and rejects a column already used by an incompatible kind', () => {
     const template = makeDoc();
     template.outputs[0].children.push(element('plain-text', { text: 'Headline' }));

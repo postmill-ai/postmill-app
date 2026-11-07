@@ -196,6 +196,39 @@ describe('DesignBulkCreateService processing', () => {
     expect(redis.has('design-bulk:payload:job-1')).toBe(false);
   });
 
+  it('creates editable symbol variations and persists their row-owned images', async () => {
+    const { service, designService } = makeService();
+    const doc = makeDoc();
+    doc.symbols = [{
+      id: 'symbol-1', name: 'Footer', width: 100, height: 100,
+      children: [{
+        id: 'symbol-text', type: 'text', text: 'Old', slot: { name: 'headline', kind: 'text' },
+        x: 0, y: 0, width: 50, height: 20, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }, {
+        id: 'symbol-image', type: 'image', src: '{{symbolImage}}', slot: { name: 'symbolImage', kind: 'image' },
+        x: 0, y: 20, width: 50, height: 50, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }, {
+        id: 'symbol-shape', type: 'shape', shape: 'rect', fill: '#000000', slot: { name: 'accent', kind: 'color' },
+        x: 0, y: 70, width: 50, height: 20, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }],
+    }];
+    redis.set('design-bulk:payload:job-1', JSON.stringify({
+      organizationId: 'org-1', userId: 'user-1', nameBase: 'Campaign', doc,
+      rows: [{
+        name: 'Ada', image: 'https://cdn.example.test/page.png', headline: 'New footer',
+        symbolImage: 'https://cdn.example.test/symbol.png', accent: '#ff0000',
+      }],
+    }));
+
+    await service.processBulkCreate('job-1');
+
+    expect(designService.createDesign.mock.calls[0][2].doc.symbols[0].children).toMatchObject([
+      { text: 'New footer' },
+      { src: '/uploads/org/remote-symbol.png', fileId: 'remote-symbol' },
+      { fill: '#ff0000' },
+    ]);
+  });
+
   it('imports a repeated remote image only once for the whole batch', async () => {
     const { service, aiMediaService, designService } = makeService();
     seedPayload([
