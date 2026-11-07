@@ -121,10 +121,12 @@ Reel.Farm slideshow polls return typed `slideshow: { slides: string[] }` instead
 Generated video ingestion uses `media/video-artifact.ts`: best-effort ffprobe writes canonical `metadata.dimensions` + `durationMs`, and MP4/M4V/MOV are stream-copied with `+faststart` (never transcoded; original bytes win on any failure). Studio/Replicate job responses expose only sanitized `dimensions`/`durationMs`/`mime`, which the Designer uses before browser probing. The frontend `/uploads` route supports single byte ranges for reliable timeline seeking; preserve its 206/416 behavior when changing media serving.
 
 **Magic Grab persistence.** `POST /media/magic-grab` accepts the original image, provider cutout,
-and source-space subject mask. `AiMediaService.magicGrab` performs the existing inpaint operation,
-persists only the reconstructed background, and deletes the temporary source-mask File server-side
-in `finally` (so create-only members do not need `media:delete`). The provider cutout URL remains a
-preview/mask input, not another library File. `POST /media/magic-grab/cleanup` accepts a `fileId` and
+and source-space subject mask. `AiMediaService.magicGrab` first uses image-to-image reconstruction,
+falls back to the existing inpaint operation, and composites the result only inside the opaque
+white-subject-on-black mask so unrelated pixels remain unchanged. It persists only the reconstructed
+background and deletes the temporary source-mask File server-side in `finally` (so create-only members
+do not need `media:delete`). The provider cutout URL remains a preview/mask input, not another library
+File. `POST /media/magic-grab/cleanup` accepts a `fileId` and
 uses the same `media:create` gate to delete only org-owned files named `magic-grab-background-*`.
 The shared review modal invokes it on every unapplied close; successful Apply retains the referenced
 background, and rejected static/video inserts return false and clean up rather than reporting success.

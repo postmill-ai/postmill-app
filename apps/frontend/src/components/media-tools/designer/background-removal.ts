@@ -1,3 +1,5 @@
+import type { DesignerCrop } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+
 export type BackgroundRemovalFit = 'frame' | 'canvas' | 'manual';
 
 export interface BackgroundRemovalAsset {
@@ -17,8 +19,8 @@ export interface BackgroundRemovalPatch {
   width?: number;
   height?: number;
   fitMode?: 'contain';
-  crop: undefined;
-  focalPoint: undefined;
+  crop?: DesignerCrop | undefined;
+  focalPoint?: { x: number; y: number } | undefined;
   originalSrc?: string;
   originalFileId?: string;
   smartFilters: undefined;
@@ -84,8 +86,6 @@ export const backgroundRemovalPatch = ({
     fileId: source.fileId,
     naturalWidth: source.naturalWidth,
     naturalHeight: source.naturalHeight,
-    crop: undefined,
-    focalPoint: undefined,
     originalSrc: source.url,
     originalFileId: source.fileId,
     smartFilters: undefined,
@@ -94,6 +94,8 @@ export const backgroundRemovalPatch = ({
     maskEnabled: true,
   };
   if (fit === 'manual') return patch;
+  patch.crop = undefined;
+  patch.focalPoint = undefined;
   patch.fitMode = 'contain';
   if (fit === 'frame' || !source.naturalWidth || !source.naturalHeight) return patch;
   return { ...patch, ...fitMediaToCanvas(source.naturalWidth, source.naturalHeight, output) };

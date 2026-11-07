@@ -45,6 +45,8 @@ describe('backgroundRemovalPatch', () => {
   it('leaves the existing fitting mode and geometry alone in manual mode', () => {
     const patch = backgroundRemovalPatch({ source, mask, output: { width: 1080, height: 1080 }, fit: 'manual' });
     expect(patch).not.toHaveProperty('fitMode');
+    expect(patch).not.toHaveProperty('crop');
+    expect(patch).not.toHaveProperty('focalPoint');
     expect(patch).not.toHaveProperty('width');
     expect(patch).not.toHaveProperty('x');
   });

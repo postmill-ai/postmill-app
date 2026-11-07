@@ -130,7 +130,7 @@ export const applyAiRemoveBackground = async ({
   store,
   candidate,
   output,
-  fit = 'frame',
+  fit = 'manual',
   fetch,
   createMask = uploadBackgroundRemovalMask,
 }: {
@@ -158,9 +158,9 @@ export const applyAiRemoveBackground = async ({
       frame: {
         width: reviewedPatch.width ?? candidate.before.width,
         height: reviewedPatch.height ?? candidate.before.height,
-        crop: reviewedPatch.crop,
+        crop: 'crop' in reviewedPatch ? reviewedPatch.crop : candidate.before.crop,
         fitMode: reviewedPatch.fitMode ?? candidate.before.fitMode,
-        focalPoint: reviewedPatch.focalPoint,
+        focalPoint: 'focalPoint' in reviewedPatch ? reviewedPatch.focalPoint : candidate.before.focalPoint,
       },
       id: candidate.before.id,
     });

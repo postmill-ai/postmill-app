@@ -17,6 +17,8 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { parseDataUrl } from '@postmill-ai/nestjs-libraries/upload/data.url';
+import { compositeMagicGrabBackground } from '@postmill-ai/nestjs-libraries/media/magic-grab-composite';
 import { resolveVisionImageUrl } from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
 import {
   MediaProviderAdapter,
@@ -875,6 +877,7 @@ export class AiMediaService {
     if (defaultProvider) {
       resolved.push(defaultProvider);
     }
+    if (operation === 'image' && sourceUrl) return resolved;
 
     for (const cfg of [...enabled].sort((a, b) => a.identifier.localeCompare(b.identifier))) {
       if (defaultProvider && cfg.identifier === defaultProvider.adapter.identifier) continue;
@@ -1198,6 +1201,12 @@ export class AiMediaService {
       }
     }
 
+    if (sourceUrl) {
+      throw new CapabilityNotAvailable(
+        'Image-to-image generation is not available on the current media provider',
+        'image'
+      );
+    }
     // Fallback: the AI provider facade (today's behaviour when no media provider is set).
     const model = await this._aiModelProvider.imageModel('utility', options?.orgId);
     if (!model) {
@@ -1702,6 +1711,54 @@ export class AiMediaService {
     );
   }
 
+  private async _readMagicGrabBuffer(url: string, orgId: string): Promise<Buffer> {
+    const cap = 25 * 1024 * 1024;
+    if (url.startsWith('data:')) {
+      const parsed = parseDataUrl(url);
+      if (!parsed || parsed.buffer.length > cap) {
+        throw new BadRequestException('A Magic Grab image is invalid or too large.');
+      }
+      return parsed.buffer;
+    }
+    const file = await this._fileService?.getFileByPath(orgId, url).catch(() => null);
+    if (file && this._storageService) {
+      const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, orgId);
+      const buffer = await adapter.readFile(file.path);
+      if (buffer.length > cap) throw new BadRequestException('A Magic Grab image is too large.');
+      return buffer;
+    }
+    const resolvedUrl = await this._resolveEditImageUrl(url, 'Magic Grab image', orgId);
+    if (resolvedUrl?.startsWith('data:')) {
+      const parsed = parseDataUrl(resolvedUrl);
+      if (!parsed || parsed.buffer.length > cap) {
+        throw new BadRequestException('A Magic Grab image is invalid or too large.');
+      }
+      return parsed.buffer;
+    }
+    const response = await safeFetch(resolvedUrl || url);
+    if (!response.ok) throw new BadRequestException('A Magic Grab image could not be downloaded.');
+    const declared = Number(response.headers.get('content-length'));
+    if (declared > cap) throw new BadRequestException('A Magic Grab image is too large.');
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > cap) throw new BadRequestException('A Magic Grab image is too large.');
+    return buffer;
+  }
+
+  private async _compositeMagicGrab(
+    imageUrl: string,
+    generatedUrl: string,
+    maskUrl: string,
+    orgId: string
+  ): Promise<string> {
+    const [original, generated, mask] = await Promise.all([
+      this._readMagicGrabBuffer(imageUrl, orgId),
+      this._readMagicGrabBuffer(generatedUrl, orgId),
+      this._readMagicGrabBuffer(maskUrl, orgId),
+    ]);
+    const composited = await compositeMagicGrabBackground({ original, generated, mask });
+    return `data:image/png;base64,${composited.toString('base64')}`;
+  }
+
   async magicGrab(
     imageUrl: string,
     cutoutUrl: string,
@@ -1711,12 +1768,23 @@ export class AiMediaService {
     background: { url: string; fileId: string };
   }> {
     try {
-      const backgroundUrl = await this.inpaintImage(
-        imageUrl,
-        maskUrl,
-        'Remove the main subject and reconstruct the surrounding background naturally. Preserve the original style, lighting, colors, and framing.',
-        options,
-      );
+      let generatedUrl: string;
+      try {
+        generatedUrl = await this.generateImage(
+          'Remove the main subject completely. Reconstruct the background where the subject was, preserving the original scene, lighting, colors, framing, and all other details. Return only the empty background with no subject.',
+          { orgId: options.orgId, sourceUrl: imageUrl }
+        );
+        if (!generatedUrl) throw new Error('Image generation returned no background');
+      } catch (cause) {
+        this._logger.warn(`Magic Grab reconstruction failed; using inpaint: ${(cause as Error).message}`);
+        generatedUrl = await this.inpaintImage(
+          imageUrl,
+          maskUrl,
+          'Remove the main subject and reconstruct the surrounding background naturally. Preserve the original style, lighting, colors, and framing.',
+          options,
+        );
+      }
+      const backgroundUrl = await this._compositeMagicGrab(imageUrl, generatedUrl, maskUrl, options.orgId);
       const backgroundFile = await this.saveUrlToFile(
         options.orgId,
         backgroundUrl,
