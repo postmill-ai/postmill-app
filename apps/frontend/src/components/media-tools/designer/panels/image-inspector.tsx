@@ -16,8 +16,9 @@ import type {
 import { useMediaPicker } from '../../use-media-picker';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
-import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiOutpaint, readErrorMessage } from '../ai-image-actions';
-import { OutpaintDialog } from '../outpaint-dialog';
+import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, readErrorMessage } from '../ai-image-actions';
+import { OutpaintDialog, type OutpaintRequest } from '../outpaint-dialog';
+import { applyAiOutpaint, applyWholePageOutpaint, prepareAiOutpaint, prepareWholePageOutpaint } from '../outpaint';
 import { BackgroundRemovalDialog } from '../background-removal-dialog';
 import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
 import { cropFromSourceRect } from '../crop-geometry';
@@ -312,19 +313,28 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       title: t('designer_expand_image_ai', 'Expand Image (AI)'),
       children: (close: () => void) => (
         <OutpaintDialog
-          busy={aiLoading === 'outpaint'}
+          pageWidth={store.getState().doc.outputs[store.getState().currentOutput].width}
+          pageHeight={store.getState().doc.outputs[store.getState().currentOutput].height}
           onCancel={close}
-          onApply={async (mode, prompt) => {
-            setAiLoading('outpaint');
-            try {
-              await aiOutpaint({ fetch, store, elementId: element.id }, mode, prompt);
-              close();
-            } catch (err) {
-              toaster.show((err as Error)?.message || t('designer_outpaint_failed', 'Image expansion failed'), 'warning');
-            } finally {
-              setAiLoading(false);
-            }
-          }}
+          onPrepare={(request: OutpaintRequest) => request.scope === 'page'
+            ? prepareWholePageOutpaint({
+                fetch,
+                store,
+                elementId: element.id,
+                targetWidth: request.targetWidth!,
+                targetHeight: request.targetHeight!,
+                prompt: request.prompt,
+              })
+            : prepareAiOutpaint({
+                fetch,
+                store,
+                elementId: element.id,
+                mode: request.mode!,
+                prompt: request.prompt,
+              })}
+          onApply={async (candidate) => candidate.kind === 'page'
+            ? applyWholePageOutpaint({ store, candidate })
+            : applyAiOutpaint({ store, candidate })}
         />
       ),
     });

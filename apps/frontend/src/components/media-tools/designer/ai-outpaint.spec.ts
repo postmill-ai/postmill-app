@@ -21,6 +21,10 @@ interface FakeElement {
   originalSrc?: string;
   naturalWidth?: number;
   naturalHeight?: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 const makeStore = (element: FakeElement) => {
@@ -35,6 +39,7 @@ const makeStore = (element: FakeElement) => {
         Object.assign(element, u);
         updates.push(u);
       },
+      pushHistory: vi.fn(),
     }),
   };
   return store as never as ReturnType<typeof import('./designer.store').createDesignerStore> & {
@@ -51,7 +56,7 @@ describe('aiOutpaint', () => {
   });
 
   it('posts the image url, mode, and trimmed prompt to /media/outpaint', async () => {
-    const store = makeStore({ id: 'el-1', type: 'image', src: 'https://x/chicken.png' });
+    const store = makeStore({ id: 'el-1', type: 'image', src: 'https://x/chicken.png', x: 10, y: 20, width: 800, height: 450 });
     const fetchMock = vi.fn().mockResolvedValue(okResponse('https://cdn/expanded.png'));
 
     await aiOutpaint({ fetch: fetchMock, store, elementId: 'el-1' }, 'zoom-2x', '  more grass  ');
@@ -66,7 +71,7 @@ describe('aiOutpaint', () => {
   });
 
   it('omits the prompt when it is empty', async () => {
-    const store = makeStore({ id: 'el-1', type: 'image', src: 'https://x/chicken.png' });
+    const store = makeStore({ id: 'el-1', type: 'image', src: 'https://x/chicken.png', x: 10, y: 20, width: 800, height: 450 });
     const fetchMock = vi.fn().mockResolvedValue(okResponse('https://cdn/expanded.png'));
 
     await aiOutpaint({ fetch: fetchMock, store, elementId: 'el-1' }, 'make-square');
@@ -83,6 +88,10 @@ describe('aiOutpaint', () => {
       id: 'el-1',
       type: 'image',
       src: 'https://x/chicken.png',
+      x: 10,
+      y: 20,
+      width: 800,
+      height: 450,
       fileId: 'file-1',
       crop: { x: 10, y: 10, width: 100, height: 100 },
       originalSrc: 'https://x/original.png',
@@ -99,10 +108,19 @@ describe('aiOutpaint', () => {
     // clears them.
     expect(store.updates).toEqual([
       {
+        x: -790,
+        y: 20,
+        width: 1600,
+        height: 900,
         src: 'https://cdn/expanded.png',
         fileId: undefined,
         crop: undefined,
         originalSrc: undefined,
+        originalFileId: undefined,
+        smartFilters: undefined,
+        maskSrc: undefined,
+        maskFileId: undefined,
+        maskEnabled: undefined,
         naturalWidth: 1600,
         naturalHeight: 900,
       },
@@ -111,7 +129,7 @@ describe('aiOutpaint', () => {
   });
 
   it('surfaces the server error message (502/409 envelope) instead of a bare failure', async () => {
-    const store = makeStore({ id: 'el-1', type: 'image', src: 'https://x/chicken.png' });
+    const store = makeStore({ id: 'el-1', type: 'image', src: 'https://x/chicken.png', x: 10, y: 20, width: 800, height: 450 });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       json: () => Promise.resolve({ message: 'Replicate is rate-limited' }),

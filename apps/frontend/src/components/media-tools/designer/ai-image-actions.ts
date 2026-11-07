@@ -17,26 +17,7 @@ import {
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 type StoreApi = ReturnType<typeof import('./designer.store').createDesignerStore>;
 
-// Canonical outpainting modes — kept in sync with the kernel `OutpaintMode`
-// union (the frontend has no dependency on the provider kernel package).
-export type OutpaintMode =
-  | 'zoom-1.5x'
-  | 'zoom-2x'
-  | 'make-square'
-  | 'left'
-  | 'right'
-  | 'top'
-  | 'bottom';
-
-export const OUTPAINT_MODES: OutpaintMode[] = [
-  'zoom-1.5x',
-  'zoom-2x',
-  'make-square',
-  'left',
-  'right',
-  'top',
-  'bottom',
-];
+export { aiOutpaint, OUTPAINT_MODES } from './outpaint';
 
 interface AiActionArgs {
   fetch: FetchLike;
@@ -206,35 +187,4 @@ export const aiDetectSubject = async ({ fetch, store, elementId }: AiActionArgs)
   if (!src) throw new Error('No image');
   const fp = await detectFocalPoint(src, fetch);
   store.getState().updateElement(elementId, { focalPoint: fp });
-};
-
-export const aiOutpaint = async (
-  { fetch, store, elementId }: AiActionArgs,
-  mode: OutpaintMode,
-  prompt?: string,
-): Promise<void> => {
-  const src = getSrc(store, elementId);
-  if (!src) throw new Error('No image');
-  const res = await fetch('/media/outpaint', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageUrl: src, mode, ...(prompt?.trim() ? { prompt: prompt.trim() } : {}) }),
-  });
-  if (!res.ok) throw new Error(await readErrorMessage(res, 'Image expansion failed'));
-  const data = await res.json();
-  // The result is a NEW, larger image: stale crop, original-source and mask
-  // state would cut into it or restore the wrong pixels, so all three clear.
-  // The result lives at a provider/job artifact URL, so fileId clears too.
-  const natural = await probeImageNaturalSize(data.url);
-  store.getState().updateElement(elementId, {
-    src: data.url,
-    fileId: undefined,
-    crop: undefined,
-    originalSrc: undefined,
-    maskSrc: undefined,
-    maskFileId: undefined,
-    maskEnabled: undefined,
-    naturalWidth: natural?.width,
-    naturalHeight: natural?.height,
-  });
 };
