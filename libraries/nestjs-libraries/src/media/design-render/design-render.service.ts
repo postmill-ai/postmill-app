@@ -1,11 +1,14 @@
 /// <reference types="./pdfkit" />
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import {
   DesignerDoc,
+  DesignerBackground,
   DesignerElement,
   DesignerGradient,
   DesignerOutput,
@@ -706,7 +709,11 @@ const sampleSvgPath = (d: string): PathPoint[] => {
 export class DesignRenderService {
   private readonly _logger = new Logger(DesignRenderService.name);
 
-  constructor(private _fontLoaderService: FontLoaderService) {}
+  constructor(
+    private _fontLoaderService: FontLoaderService,
+    @Optional() private _fileService?: FileService,
+    @Optional() private _storageService?: StorageService
+  ) {}
 
   /**
    * Render one page of one output. `pageNumber` is 0-based within the output:
@@ -762,7 +769,7 @@ export class DesignRenderService {
     ctx.scale(ratio, ratio);
 
     if (!opts?.transparent) {
-      await this.drawBackground(ctx, output);
+      await this.drawBackground(ctx, output, opts?.orgId);
     }
 
     await this.drawLayerTree(
@@ -780,6 +787,7 @@ export class DesignRenderService {
   async assertVisualAssets(
     doc: DesignerDoc,
     outputIndex: number,
+    opts?: RenderOptions,
     pageNumber = 0
   ): Promise<void> {
     const base = doc.outputs?.[outputIndex] as DesignerOutput | undefined;
@@ -795,7 +803,7 @@ export class DesignRenderService {
       : base;
     const bg = output.bg;
     if (bg?.type === 'image' && (bg.src || bg.fileId)) {
-      const image = await this.loadImageSafe(bg.src);
+      const image = await this._loadBackgroundImage(bg, opts?.orgId);
       if (!image) throw new Error('Required background image could not be loaded');
     }
 
@@ -1735,7 +1743,8 @@ export class DesignRenderService {
 
   private async drawBackground(
     ctx: any,
-    output: DesignerOutput
+    output: DesignerOutput,
+    orgId?: string
   ): Promise<void> {
     const w = output.width;
     const h = output.height;
@@ -1749,7 +1758,7 @@ export class DesignRenderService {
       ctx.restore();
       basePainted = true;
     } else if (bg?.type === 'image' && (bg.src || bg.fileId)) {
-      const img = await this.loadImageSafe(bg.src);
+      const img = await this._loadBackgroundImage(bg, orgId);
       if (img) {
         ctx.save();
         // Cover-crop (uniform scale, focal-point crop) — never a non-uniform
@@ -3343,15 +3352,39 @@ export class DesignRenderService {
   }
 
   private readonly _imageCache = new PromiseLruCache<any | null>(IMAGE_CACHE_MAX);
+  private readonly _backgroundCache = new PromiseLruCache<any | null>(16);
 
-  /**
-   * Load and decode a bitmap by URL, memoised: 30 linked outputs drawing the
-   * same photo fetch and decode it exactly once, and a failed URL settles as
-   * a cached null instead of being retried per output.
-   */
-  private loadImageSafe(src?: string): Promise<any | null> {
-    if (!src) return Promise.resolve(null);
-    return this._imageCache.get(src, () => this._loadImageUncached(src));
+  private async _loadBackgroundImage(
+    bg: DesignerBackground,
+    orgId?: string
+  ): Promise<any | null> {
+    if (orgId && bg.fileId && this._fileService && this._storageService) {
+      const key = `${orgId}:${bg.fileId}`;
+      const owned = await this._backgroundCache.get(key, async () => {
+        try {
+          const file = await this._fileService!.getFileById(orgId, bg.fileId!);
+          if (!file) return null;
+          const adapter = await this._storageService!.resolveAdapterForFolder(file.folderId, orgId);
+          const buffer = await adapter.readFile(file.path);
+          if (buffer.byteLength > MAX_IMAGE_BYTES) return null;
+          const { loadImage } = await loadCanvasModule();
+          return await this._decodeImage(buffer, loadImage);
+        } catch {
+          return null;
+        }
+      });
+      if (owned) return owned;
+      this._backgroundCache.delete(key);
+    }
+    return this.loadImageSafe(bg.src);
+  }
+
+  /** Load and decode a bitmap, sharing transient failures within one export. */
+  private async loadImageSafe(src?: string): Promise<any | null> {
+    if (!src) return null;
+    return this._imageCache.get(src, () => this._loadImageUncached(src), {
+      failureTtlMs: 60_000,
+    });
   }
 
   private async _loadImageUncached(src: string): Promise<any | null> {

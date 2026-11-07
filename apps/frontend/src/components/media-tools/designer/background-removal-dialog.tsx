@@ -11,7 +11,7 @@ export const BackgroundRemovalDialog: FC<{
   onCancel: () => void;
 }> = ({ originalUrl, asset, onApply, onCancel }) => {
   const t = useT();
-  const [fit, setFit] = useState<BackgroundRemovalFit>('frame');
+  const [fit, setFit] = useState<BackgroundRemovalFit>('manual');
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const options: { value: BackgroundRemovalFit; label: string; description: string }[] = [

@@ -108,6 +108,7 @@ const SYSTEM_FAMILIES = new Set<string>([SYSTEM_FONT_FAMILY, 'Helvetica', 'Helve
  * uses from ever loading.
  */
 const injected = new Map<string, Set<number>>();
+const stylesheetLoads = new Map<string, Promise<void>>();
 
 /**
  * Weights Konva itself can paint.
@@ -126,11 +127,12 @@ const RENDERED_WEIGHTS = [400, 700];
  * blocked render on every page and could not grow past its URL length, and a
  * user picking one display face had no reason to download forty others.
  */
-const injectStylesheet = (family: string, weights: number[], italic = false): void => {
-  if (typeof document === 'undefined') return;
-  if (!isCatalogFamily(family)) return;
+const injectStylesheet = async (family: string, weights: number[], italic = false): Promise<void> => {
+  if (typeof document === 'undefined' || !isCatalogFamily(family)) return;
 
   const key = italic ? `${family}|italic` : family;
+  const pending = stylesheetLoads.get(key);
+  if (pending) await pending;
   const have = injected.get(key) ?? new Set<number>();
   const missing = weights.filter((w) => !have.has(w));
   if (!missing.length) return;
@@ -141,7 +143,26 @@ const injectStylesheet = (family: string, weights: number[], italic = false): vo
   link.rel = 'stylesheet';
   link.href = googleFontsUrl(family, missing, italic);
   link.dataset.designerFont = key;
+  const loaded = new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = (retry: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (retry) {
+        missing.forEach((weight) => have.delete(weight));
+        stylesheetLoads.delete(key);
+        link.remove();
+      }
+      resolve();
+    };
+    const timeout = setTimeout(() => finish(true), 5000);
+    link.onload = () => finish(false);
+    link.onerror = () => finish(true);
+  });
+  stylesheetLoads.set(key, loaded);
   document.head.appendChild(link);
+  await loaded;
 };
 
 export async function ensureFontLoaded(
@@ -162,8 +183,10 @@ export async function ensureFontLoaded(
     ...(weights?.length ? weights : []),
     ...RENDERED_WEIGHTS,
   ]);
-  injectStylesheet(family, wanted);
-  if (italic) injectStylesheet(family, wanted, true);
+  await Promise.all([
+    injectStylesheet(family, wanted),
+    ...(italic ? [injectStylesheet(family, wanted, true)] : []),
+  ]);
   try {
     // `document.fonts` resolves per face, so loading one weight would leave a
     // 700 headline measuring against the 400 cut.

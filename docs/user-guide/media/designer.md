@@ -40,7 +40,9 @@ saved.
 - **Design files** — **File ▸ Export .pdesign…** bundles the *saved* design and all its assets into
   a portable `.pdesign` file (an async job; save the design first) and downloads it. **File ▸ Import
   Design File…** — or **Import .pdesign** in the Start a design dialog — opens a `.pdesign` or raw
-  `.json` design file as a **new** design.
+  `.json` design file as a **new** design. Reopening preserves editable layers and effects and waits
+  for the document's fonts before laying out text. Preview thumbnails are generated for image and
+  video designs, including designs that use remote stock videos.
 
 ## Video timeline
 

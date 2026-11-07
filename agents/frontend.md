@@ -234,8 +234,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   render the t=0 POSTER projection `designer-doc/video-poster.ts` — a render-only synthetic image
   output (clips→elements; `video`-track clips draw from their File row's stored thumbnail poster
   when one is resolved by the caller — `DesignPreviewService` self-heals missing ones through the
-  File row's local or cloud storage adapter via `media/video-frame.ts`). Preview rendering fails
-  when a visible required time-zero poster or other visual asset cannot be loaded; intentional
+  File row's local or cloud storage adapter via `media/video-frame.ts`). A fileId-less remote video
+  uses bounded `safeFetch` + the same frame extractor, with no File row required. Preview rendering
+  fails when a visible required time-zero poster or other visual asset cannot be loaded; intentional
   black pixels remain valid.
   `renderPage` still rejects video outputs.
 - **Formats can be linked or independent.** Add Formats defaults to linked content; independent
@@ -250,8 +251,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   strip use the exact interval path in `path-boolean.ts`.
 - **Design/template previews are best-effort, never save blockers.** Video saves render through
   `DesignPreviewService`; image saves use that server renderer when no client thumbnail arrives.
-  `.pdesign` export also renders when its source has no resolvable preview. A render failure keeps
-  the previous preview, and preview replacement cleans up only the old File row it actually replaced.
+  Org-owned background `fileId`s resolve through the folder storage adapter before the remote URL,
+  and failed remote image loads are evicted so a later save can recover. `.pdesign` export also renders
+  when its source has no resolvable preview and then triggers targeted healing of the latest source.
+  A render failure keeps the previous preview, and preview replacement cleans up only the old File
+  row it actually replaced.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
   carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame
@@ -307,9 +311,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   replacement/background removal lives in `clip-media.ts`: preserve editing semantics, update media
   identity/intrinsics, and clear crop/original/smart-filter state. Generation returns a review
   candidate and does not edit the doc; Apply commits once after the before/after dialog. Static
-  (`ai-image-actions.ts`) and clip paths share `background-removal.ts` geometry: preserve-frame
-  contain by default, aspect-correct canvas fitting as an option. Apply keeps original pixels as
-  `src`, rasterizes the reviewed alpha into the final element box through `computeMediaDraw`
+  (`ai-image-actions.ts`) and clip paths share `background-removal.ts` geometry: preserve the existing
+  crop/fit/focal geometry by default, with preserve-frame contain and aspect-correct canvas fitting
+  as options. Apply keeps original pixels as `src`, rasterizes the reviewed alpha into the final
+  element box through `computeMediaDraw`
   (contain/cover/crop all included), uploads that box-space bitmap as `maskSrc` through
   `background-removal-mask.ts`, and commits once after the before/after dialog. If mask preparation
   fails, Apply falls back to the old flattened cutout rather than discarding the provider result.
@@ -319,11 +324,14 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   Pixels outside the old cover crop have no alpha information and remain transparent if a resize
   reveals them. Live mask buffers are seeded only after the gesture's stale check. Broken image/mask
   elements are not paintable and must not reach `drawImage`; a broken mask degrades to the plain source image.
-  Magic Grab (`magic-grab.ts`) uses the same cutout plus a source-space inpaint mask and a review
-  dialog, then splits the image into a reconstructed background and separately movable subject.
-  Static Apply replaces/inserts adjacent layers; still-video Apply uses adjacent tracks. Both commit
-  once, select only the subject, and delete the temporary inpaint-mask File. It does not claim
-  moving-subject extraction from video footage.
+  Magic Grab (`magic-grab.ts`) uses the same cutout plus an opaque white-subject-on-black source
+  mask and a review dialog. The server prefers reconstruction only through the resolved
+  image-to-image default (never a generic text-to-image fallback), falls back to inpainting, and
+  composites by mask luminance so unrelated pixels remain original. The Inspector requires both
+  background-removal and inpaint availability. Static Apply
+  replaces/inserts adjacent layers; still-video Apply uses adjacent tracks. Both commit once, select
+  only the subject, and delete the temporary inpaint-mask File. It does not claim moving-subject
+  extraction from video footage.
   `cutout-refine-controls.tsx` arms the same mask for Restore
   (white brush) and Erase (alpha removal); still-image clip masks use optional-additive doc v11
   fields and mirror through `video-canvas-overlay.tsx` and the isolated frame-render buffer. Legacy
@@ -397,8 +405,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   shared definition close it.
 - **Konva measures a Text node once and caches the arrangement.** A redraw does not re-measure, so
   text first laid out before its webfont arrives keeps the fallback's line breaks — and with a fixed
-  box height the overflow line is dropped, truncating the string. `canvas.tsx` forces a re-measure
-  after `ensureFontsLoaded`; anything that changes the font stylesheet depends on it.
+  box height the overflow line is dropped, truncating the string. `fonts.ts` awaits each injected
+  stylesheet before calling `document.fonts.load`, and `canvas.tsx` then forces a re-measure. Calling
+  `document.fonts.load` immediately after appending the link races the stylesheet and preserves the
+  fallback layout. Anything that changes the font stylesheet depends on this ordering.
 - **The font catalog is written down three times** — `designer/fonts.ts`, the `@import` in
   `app/global.scss`, and `CURATED_FONTS` in `font-loader.service.ts`. A family missing from the
   second renders as Arial; missing from the third exports as sans-serif. `font-catalog.drift.spec.ts`

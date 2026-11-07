@@ -169,9 +169,9 @@ describe('removeClipImageBackground', () => {
       mediaType: 'image',
       naturalWidth: 40,
       naturalHeight: 20,
-      fitMode: 'contain',
     });
-    expect(after.crop).toBeUndefined();
+    expect(after.fitMode).toBeUndefined();
+    expect(after.crop).toEqual(before.crop);
     expect(after.smartFilters).toBeUndefined();
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ imageUrl: '/old.png' });
   });
