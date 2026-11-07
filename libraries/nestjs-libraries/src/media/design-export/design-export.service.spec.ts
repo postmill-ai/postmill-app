@@ -93,6 +93,7 @@ const makeService = (over: {
   const designService = {
     getDesign: vi.fn(async () => over.design ?? null),
     getTemplate: vi.fn(async () => over.template ?? null),
+    regenPreviews: vi.fn(async () => ({})),
   };
   const fileService = {
     getFileById: vi.fn(async (_org: string, id: string) => over.files?.[id] ?? null),
@@ -448,7 +449,7 @@ describe('DesignExportService.processExport', () => {
   });
 
   it('renders an export thumbnail when the source has no preview file', async () => {
-    const { service, localAdapter, fileService, designPreviewService } = makeService({
+    const { service, localAdapter, fileService, designPreviewService, designService } = makeService({
       job: pendingExportJob,
       design: { id: 'd1', name: 'Hero', doc: docWithMedia() },
       files: {},
@@ -470,6 +471,9 @@ describe('DesignExportService.processExport', () => {
       'org-1',
       expect.objectContaining({ id: 'artifact-file-1', thumbnail: expect.any(String) })
     );
+    expect(designService.regenPreviews).toHaveBeenCalledWith('org-1', {
+      designIds: ['d1'], templateIds: [],
+    });
   });
 
   it('completes without a thumbnail when the source has no preview file and rendering fails', async () => {

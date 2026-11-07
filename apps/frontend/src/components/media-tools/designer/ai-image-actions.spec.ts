@@ -18,6 +18,9 @@ const setup = () => {
     src: '/before.png',
     fileId: 'before-file',
     originalSrc: '/original.png',
+    crop: { x: 40, y: 50, width: 700, height: 500 },
+    fitMode: 'cover',
+    focalPoint: { x: 0.3, y: 0.7 },
     smartFilters: [{ id: 'blur', params: { radius: 2 }, enabled: true }],
   } as DesignerElement);
   return store;
@@ -66,7 +69,7 @@ describe('AI background removal review', () => {
       y: 20,
       width: 300,
       height: 200,
-      fitMode: 'contain',
+      fitMode: 'cover',
     });
     expect(element(store).smartFilters).toBeUndefined();
     expect(store.getState().history).toHaveLength(historyLength + 1);
@@ -146,9 +149,9 @@ describe('AI background removal review', () => {
       frame: {
         width: 300,
         height: 200,
-        crop: undefined,
-        fitMode: 'contain',
-        focalPoint: undefined,
+        crop: { x: 40, y: 50, width: 700, height: 500 },
+        fitMode: 'cover',
+        focalPoint: { x: 0.3, y: 0.7 },
       },
     }));
   });
@@ -173,7 +176,7 @@ describe('AI background removal review', () => {
       maskSrc: undefined,
       maskFileId: undefined,
       maskEnabled: undefined,
-      fitMode: 'contain',
+      fitMode: 'cover',
     });
   });
 });

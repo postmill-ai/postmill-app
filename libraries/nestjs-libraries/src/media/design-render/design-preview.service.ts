@@ -8,6 +8,12 @@ import {
   VideoPosterMap,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-poster';
 import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import {
+  extractVideoFrameInfo,
+  VIDEO_FRAME_MAX_BYTES,
+} from '@postmill-ai/nestjs-libraries/media/video-frame';
+import { PromiseLruCache } from './promise-lru';
 
 const isImageFile = (type?: string | null) =>
   type === 'image' || !!type?.startsWith('image/');
@@ -31,6 +37,30 @@ export class DesignPreviewService {
     private readonly _fileService: FileService,
     private readonly _videoThumbnailService: VideoThumbnailService,
   ) {}
+
+  private readonly _remotePosterCache = new PromiseLruCache<string | null>(8);
+
+  private async _remoteVideoPoster(src: string): Promise<string | null> {
+    const poster = await this._remotePosterCache.get(src, async () => {
+      if (!/^https?:\/\//i.test(src)) return null;
+      try {
+        const response = await safeFetch(src);
+        if (!response.ok) return null;
+        const declared = Number(response.headers.get('content-length'));
+        if (declared > VIDEO_FRAME_MAX_BYTES) return null;
+        const bytes = await response.arrayBuffer();
+        if (bytes.byteLength > VIDEO_FRAME_MAX_BYTES) return null;
+        const pathname = new URL(src).pathname;
+        const ext = pathname.split('.').pop()?.replace(/[^a-z0-9]/gi, '') || 'mp4';
+        const info = await extractVideoFrameInfo(Buffer.from(bytes), ext);
+        return info.frame ? `data:image/jpeg;base64,${info.frame.toString('base64')}` : null;
+      } catch {
+        return null;
+      }
+    });
+    if (!poster) this._remotePosterCache.delete(src);
+    return poster;
+  }
 
   /**
    * Resolve every poster required by output 0's visible t=0 video clips. A
@@ -72,11 +102,13 @@ export class DesignPreviewService {
 
     for (const clip of clipsBySrc) {
       const file = await this._fileService.getFileByPath(orgId, clip.src);
-      if (!file) continue;
-      const thumb = isImageFile(file.type)
-        ? file.path
-        : file.thumbnail ??
-          (await this._videoThumbnailService.generateForFile(orgId, file.id));
+      let thumb = file
+        ? isImageFile(file.type)
+          ? file.path
+          : file.thumbnail ??
+            (await this._videoThumbnailService.generateForFile(orgId, file.id))
+        : null;
+      if (!thumb) thumb = await this._remoteVideoPoster(clip.src);
       if (thumb) posters.set(clip.id, thumb);
     }
     return posters.size ? posters : undefined;
@@ -156,7 +188,7 @@ export class DesignPreviewService {
       doc.mode === 'video' ||
       (doc.outputs ?? []).some((out) => 'tracks' in (out as object));
     if (!isVideo) {
-      await this._designRenderService.assertVisualAssets(doc, 0);
+      await this._designRenderService.assertVisualAssets(doc, 0, opts);
       return this._designRenderService.renderPage(doc, 0, opts);
     }
     const videoPosters = opts?.orgId
@@ -167,7 +199,7 @@ export class DesignPreviewService {
       docWithVideoPosters(doc, videoPosters),
       doc
     );
-    await this._designRenderService.assertVisualAssets(renderDoc, 0);
+    await this._designRenderService.assertVisualAssets(renderDoc, 0, opts);
     return this._designRenderService.renderPage(renderDoc, 0, opts);
   }
 

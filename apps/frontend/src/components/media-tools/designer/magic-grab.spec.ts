@@ -36,12 +36,14 @@ describe('Magic Grab', () => {
     vi.unstubAllGlobals();
   });
 
-  it('creates a full-source white-subject inpaint mask', async () => {
+  it('creates an opaque white-subject-on-black inpaint mask', async () => {
     const operations: string[] = [];
     const context = {
       fillStyle: '',
       globalCompositeOperation: '',
-      fillRect: vi.fn(),
+      fillRect: vi.fn(() => {
+        operations.push(context.globalCompositeOperation);
+      }),
       drawImage: vi.fn(() => {
         operations.push(context.globalCompositeOperation);
       }),
@@ -60,6 +62,8 @@ describe('Magic Grab', () => {
     expect(canvas.height).toBe(2);
     expect(context.fillRect).toHaveBeenCalledWith(0, 0, 8, 2);
     expect(operations).toContain('destination-in');
+    expect(operations).toContain('destination-over');
+    expect(context.fillStyle).toBe('#000000');
     expect(context.drawImage.mock.calls[0].slice(1)).toEqual([0, 0, 8, 2]);
     expect(commitCanvas).toHaveBeenCalledWith(canvas, 'image-1:magic-grab-mask', expect.any(Function));
   });
