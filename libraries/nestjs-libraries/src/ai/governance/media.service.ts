@@ -877,6 +877,7 @@ export class AiMediaService {
     if (defaultProvider) {
       resolved.push(defaultProvider);
     }
+    if (operation === 'image' && sourceUrl) return resolved;
 
     for (const cfg of [...enabled].sort((a, b) => a.identifier.localeCompare(b.identifier))) {
       if (defaultProvider && cfg.identifier === defaultProvider.adapter.identifier) continue;
@@ -1200,6 +1201,12 @@ export class AiMediaService {
       }
     }
 
+    if (sourceUrl) {
+      throw new CapabilityNotAvailable(
+        'Image-to-image generation is not available on the current media provider',
+        'image'
+      );
+    }
     // Fallback: the AI provider facade (today's behaviour when no media provider is set).
     const model = await this._aiModelProvider.imageModel('utility', options?.orgId);
     if (!model) {
@@ -1720,7 +1727,15 @@ export class AiMediaService {
       if (buffer.length > cap) throw new BadRequestException('A Magic Grab image is too large.');
       return buffer;
     }
-    const response = await safeFetch(url);
+    const resolvedUrl = await this._resolveEditImageUrl(url, 'Magic Grab image', orgId);
+    if (resolvedUrl?.startsWith('data:')) {
+      const parsed = parseDataUrl(resolvedUrl);
+      if (!parsed || parsed.buffer.length > cap) {
+        throw new BadRequestException('A Magic Grab image is invalid or too large.');
+      }
+      return parsed.buffer;
+    }
+    const response = await safeFetch(resolvedUrl || url);
     if (!response.ok) throw new BadRequestException('A Magic Grab image could not be downloaded.');
     const declared = Number(response.headers.get('content-length'));
     if (declared > cap) throw new BadRequestException('A Magic Grab image is too large.');
@@ -1760,7 +1775,8 @@ export class AiMediaService {
           { orgId: options.orgId, sourceUrl: imageUrl }
         );
         if (!generatedUrl) throw new Error('Image generation returned no background');
-      } catch {
+      } catch (cause) {
+        this._logger.warn(`Magic Grab reconstruction failed; using inpaint: ${(cause as Error).message}`);
         generatedUrl = await this.inpaintImage(
           imageUrl,
           maskUrl,

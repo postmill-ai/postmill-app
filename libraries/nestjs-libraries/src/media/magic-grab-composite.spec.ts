@@ -11,13 +11,12 @@ describe('compositeMagicGrabBackground', () => {
   it('changes only the white-mask subject area', async () => {
     const original = await rgba(2, 1, [255, 0, 0, 255]);
     const generated = await rgba(2, 1, [0, 255, 0, 255]);
-    const mask = await sharp({
-      create: { width: 2, height: 1, channels: 4, background: '#ffffff' },
-    }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    mask.data[7] = 0;
-    const maskPng = await sharp(mask.data, { raw: { width: 2, height: 1, channels: 4 } }).png().toBuffer();
+    const mask = await sharp(Buffer.from([
+      255, 255, 255, 255,
+      0, 0, 0, 255,
+    ]), { raw: { width: 2, height: 1, channels: 4 } }).png().toBuffer();
 
-    const result = await compositeMagicGrabBackground({ original, generated, mask: maskPng });
+    const result = await compositeMagicGrabBackground({ original, generated, mask });
     const pixels = await sharp(result).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
 
     expect([...pixels.data.slice(0, 4)]).toEqual([0, 255, 0, 255]);

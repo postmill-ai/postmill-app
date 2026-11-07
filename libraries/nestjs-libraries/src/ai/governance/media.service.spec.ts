@@ -961,14 +961,31 @@ describe('AiMediaService', () => {
     it('persists a data-URI sourceUrl for image-to-image generation', async () => {
       const writeBuffer = vi.fn().mockResolvedValue(mintedUrl);
       const adapter = makeAdapter('replicate', { image: true });
-      const { service } = setup([adapter], undefined, undefined, undefined, storageWith(writeBuffer));
+      const defaultsResolution = {
+        resolve: vi.fn().mockResolvedValue({ providerId: 'replicate', version: 'v1', model: 'flux' }),
+      };
+      const { service } = setup([adapter], undefined, defaultsResolution, undefined, storageWith(writeBuffer));
 
       await service.generateImage('make it pop', { orgId: 'org-1', sourceUrl: tinyPngDataUri });
+      expect(defaultsResolution.resolve).toHaveBeenCalledWith('media', 'image-to-image', 'org-1');
       expect(writeBuffer).toHaveBeenCalledWith(expect.any(Buffer), 'image/png');
       expect(adapter.generateImage).toHaveBeenCalledWith(
         'make it pop',
         expect.objectContaining({ sourceUrl: mintedUrl }),
       );
+    });
+
+    it('never degrades image-to-image to a generic adapter or the text-only facade', async () => {
+      const adapter = makeAdapter('openai', { image: true });
+      const defaultsResolution = { resolve: vi.fn().mockResolvedValue(null) };
+      const { service } = setup([adapter], undefined, defaultsResolution);
+
+      await expect(service.generateImage('make it pop', {
+        orgId: 'org-1',
+        sourceUrl: 'https://cdn.example.test/source.png',
+      })).rejects.toThrow(CapabilityNotAvailable);
+      expect(adapter.generateImage).not.toHaveBeenCalled();
+      expect(mockImageModel).not.toHaveBeenCalled();
     });
 
     it('falls back to passing the data URI through when persistence fails', async () => {

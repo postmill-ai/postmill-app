@@ -311,8 +311,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   reveals them. Live mask buffers are seeded only after the gesture's stale check. Broken image/mask
   elements are not paintable and must not reach `drawImage`; a broken mask degrades to the plain source image.
   Magic Grab (`magic-grab.ts`) uses the same cutout plus an opaque white-subject-on-black source
-  mask and a review dialog. The server prefers image-to-image reconstruction, falls back to
-  inpainting, and composites only the masked area so unrelated pixels remain original. Static Apply
+  mask and a review dialog. The server prefers reconstruction only through the resolved
+  image-to-image default (never a generic text-to-image fallback), falls back to inpainting, and
+  composites by mask luminance so unrelated pixels remain original. The Inspector requires both
+  background-removal and inpaint availability. Static Apply
   replaces/inserts adjacent layers; still-video Apply uses adjacent tracks. Both commit once, select
   only the subject, and delete the temporary inpaint-mask File. It does not claim moving-subject
   extraction from video footage.

@@ -14,19 +14,29 @@ export const compositeMagicGrabBackground = async ({
   const height = metadata.height;
   if (!width || !height) throw new Error('The original image dimensions could not be read');
 
-  const [base, fill, alpha] = await Promise.all([
-    sharp(original).ensureAlpha().raw().toBuffer({ resolveWithObject: true }),
-    sharp(generated).resize(width, height, { fit: 'fill' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true }),
-    sharp(mask).resize(width, height, { fit: 'fill' }).ensureAlpha().extractChannel(3).raw().toBuffer(),
-  ]);
-  const output = Buffer.from(base.data);
-  for (let i = 0; i < output.length; i += 4) {
-    const a = alpha[i / 4] / 255;
-    if (a <= 0) continue;
-    output[i] = Math.round(fill.data[i] * a + output[i] * (1 - a));
-    output[i + 1] = Math.round(fill.data[i + 1] * a + output[i + 1] * (1 - a));
-    output[i + 2] = Math.round(fill.data[i + 2] * a + output[i + 2] * (1 - a));
-    output[i + 3] = Math.round(fill.data[i + 3] * a + output[i + 3] * (1 - a));
+  const maskPixels = await sharp(mask)
+    .resize(width, height, { fit: 'fill' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  for (let i = 0; i < maskPixels.data.length; i += 4) {
+    const luminance = Math.max(maskPixels.data[i], maskPixels.data[i + 1], maskPixels.data[i + 2]);
+    maskPixels.data[i] = 255;
+    maskPixels.data[i + 1] = 255;
+    maskPixels.data[i + 2] = 255;
+    maskPixels.data[i + 3] = Math.round(luminance * (maskPixels.data[i + 3] / 255));
   }
-  return sharp(output, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  const alphaMask = await sharp(maskPixels.data, {
+    raw: { width, height, channels: 4 },
+  }).png().toBuffer();
+  const maskedGenerated = await sharp(generated)
+    .resize(width, height, { fit: 'fill' })
+    .ensureAlpha()
+    .composite([{ input: alphaMask, blend: 'dest-in' }])
+    .png()
+    .toBuffer();
+  return sharp(original)
+    .composite([{ input: maskedGenerated, blend: 'over' }])
+    .png()
+    .toBuffer();
 };
