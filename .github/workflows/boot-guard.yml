@@ -228,7 +228,7 @@ jobs:
           # Valid inline images above Nest's default 100kb limit must reach the
           # auth boundary instead of 413ing in the body parser. No credentials are
           # sent, so this can never invoke a paid media provider.
-          for large_body_path in remove-background inpaint; do
+          for large_body_path in remove-background inpaint outpaint magic-grab upscale; do
             large_body_status=$(node -e "process.stdout.write(JSON.stringify({ imageUrl: 'data:image/png;base64,' + 'A'.repeat(150000) }))" | curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' --data-binary @- "http://localhost:3000/media/$large_body_path" || true)
             echo "Large $large_body_path request responded with HTTP $large_body_status"
             if [ "$large_body_status" != "401" ]; then
