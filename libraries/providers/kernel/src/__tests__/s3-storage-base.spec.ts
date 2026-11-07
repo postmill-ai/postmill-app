@@ -35,7 +35,10 @@ vi.mock('@aws-sdk/client-s3', () => ({
   },
 }));
 
-import { S3StorageBase } from '../domains/storage-helpers';
+import {
+  PlatformS3StorageBase,
+  S3StorageBase,
+} from '../domains/storage-helpers';
 import type { SafeFetchPort, LoggerPort } from '../ports';
 
 const fetchStub: SafeFetchPort = async () => new Response();
@@ -54,21 +57,8 @@ describe('S3StorageBase', () => {
     bucket = 'bucket',
     endpoint?: string,
     publicUrl?: string,
-    tenantId?: string,
-    legacyPublicUrl?: string,
   ) =>
-    new S3StorageBase(
-      logger,
-      fetchStub,
-      'S3',
-      region,
-      creds,
-      bucket,
-      endpoint,
-      publicUrl,
-      tenantId,
-      legacyPublicUrl,
-    );
+    new S3StorageBase(logger, fetchStub, 'S3', region, creds, bucket, endpoint, publicUrl);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -90,7 +80,7 @@ describe('S3StorageBase', () => {
       expect(result).toEqual(buffer);
     });
 
-    it('preserves every segment of a nested object key', async () => {
+    it('extracts the object key from a full path', async () => {
       s3ClientMock.send.mockResolvedValue({
         Body: { transformToByteArray: async () => Buffer.from('') },
       });
@@ -99,7 +89,7 @@ describe('S3StorageBase', () => {
       await adapter.readFile('uploads/2026/01/15/abc.png');
 
       const cmd = s3ClientMock.send.mock.calls[0][0];
-      expect(cmd.config.Key).toBe('uploads/2026/01/15/abc.png');
+      expect(cmd.config.Key).toBe('abc.png');
     });
 
     it('throws on invalid key extraction', async () => {
@@ -341,21 +331,25 @@ describe('S3StorageBase', () => {
   });
 
   describe('removeFile', () => {
-    it('preserves the nested key from a configured public URL', async () => {
+    it('extracts the key and deletes the file', async () => {
       s3ClientMock.send.mockResolvedValue({});
-      const adapter = make('us-east-1', 'bucket', undefined, 'https://cdn.example.com');
+      const adapter = make();
 
       await adapter.removeFile('https://cdn.example.com/path/to/file.png');
 
       const cmd = s3ClientMock.send.mock.calls[0][0];
-      expect(cmd.config.Key).toBe('path/to/file.png');
+      expect(cmd.config.Key).toBe('file.png');
     });
   });
 
   describe('platform tenant scope', () => {
     const makeTenant = () =>
-      make(
+      new PlatformS3StorageBase(
+        logger,
+        fetchStub,
+        'S3',
         'fsn1',
+        creds,
         'postmill',
         'https://fsn1.your-objectstorage.com',
         'https://postmill.fsn1.your-objectstorage.com',

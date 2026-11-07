@@ -137,6 +137,8 @@ Mount semantics: `StorageService.createAndTestConfig` **auto-mounts** a non-LOCA
 
 The operator-selected platform base is separate from these rows: `STORAGE_PROVIDER=local|s3` (default `local`) controls root/unmounted files and generated media. `StorageService.getBaseAdapterForOrg` resolves that base through the kernel; the backward-compatible `getLocalAdapterForOrg` delegates to it. Explicit provider-bound folders still win. Platform S3 resolution adds `tenantId` and `legacyPublicUrl` extras so objects are tenant/date partitioned, usage is tenant-scoped, and old `/uploads` URLs remain readable. Platform writes with `configId: null` always retain the hosted-storage quota; BYO provider quotas remain config-scoped.
 
+Org-mounted S3-family adapters retain their original behavior: flat keys, last-segment key extraction from stored URLs, and unscoped listing/usage. `PlatformS3StorageBase` is selected only when `StorageService.getBaseAdapterForOrg` supplies a platform `tenantId`; it adds tenant/date partitioning, strict tenant URL/key validation, and tenant-scoped listing/usage without changing org-mounted providers. The frontend `/api/uploads` redirect reads only `STORAGE_PROVIDER` and `S3_PUBLIC_URL`; backend storage operations and the migration command require the complete `S3_*` configuration.
+
 `StorageService.#buildAdapter` (`storage.service.ts:101`) decrypts `credentials` and calls `ProviderResolutionService.resolveStorage(providerId, { version, credentials, orgId, extras: { bucket, region, endpoint, publicUrl } })` — so the factory's `ctx.credentials` / `ctx.extras` map 1:1 to these columns. The kernel (`ProviderResolutionService`) is the sole resolution path.
 
 ## Registration (backend)

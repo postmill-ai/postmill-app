@@ -129,7 +129,11 @@ describe('TelegramProvider.post media resolution', () => {
   });
 
   it('keeps legacy upload URLs remote in S3 mode so Telegram follows the bucket redirect', async () => {
+    const savedFrontend = process.env.FRONTEND_URL;
+    const savedUpload = process.env.UPLOAD_DIRECTORY;
     const savedProvider = process.env.STORAGE_PROVIDER;
+    process.env.FRONTEND_URL = 'https://app.postmill.ai';
+    process.env.UPLOAD_DIRECTORY = '/srv/uploads';
     process.env.STORAGE_PROVIDER = 's3';
     try {
       const sendPhoto = vi.fn(async () => ({ message_id: 13 }));
@@ -147,6 +151,8 @@ describe('TelegramProvider.post media resolution', () => {
 
       expect(sendPhoto.mock.calls[0][1]).toBe(path);
     } finally {
+      process.env.FRONTEND_URL = savedFrontend;
+      process.env.UPLOAD_DIRECTORY = savedUpload;
       process.env.STORAGE_PROVIDER = savedProvider;
     }
   });

@@ -57,6 +57,9 @@ export const getPlatformStorageProvider = (
   return value;
 };
 
+export const getPlatformS3PublicUrl = (env: StorageEnv = process.env) =>
+  httpUrl(requiredValue(env, 'S3_PUBLIC_URL'), 'S3_PUBLIC_URL');
+
 export const getPlatformS3Config = (
   env: StorageEnv = process.env,
 ): PlatformS3StorageConfig => {
@@ -72,7 +75,7 @@ export const getPlatformS3Config = (
     endpoint: endpoint
       ? httpUrl(endpoint, 'S3_ENDPOINT')
       : undefined,
-    publicUrl: httpUrl(requiredValue(env, 'S3_PUBLIC_URL'), 'S3_PUBLIC_URL'),
+    publicUrl: getPlatformS3PublicUrl(env),
   };
 };
 

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createReadStream, realpathSync, statSync } from 'fs';
 import { resolve, sep } from 'path';
-import { getPlatformStorageConfig } from '@postmill-ai/helpers/storage/platform-storage';
+import {
+  getPlatformS3PublicUrl,
+  getPlatformStorageProvider,
+} from '@postmill-ai/helpers/storage/platform-storage';
 // @ts-ignore
 import mime from 'mime';
 async function* nodeStreamToIterator(stream: any) {
@@ -55,10 +58,14 @@ export const GET = async (
 ) => {
   const { path } = await context.params;
   // No-auth is intentional: /uploads/* is a public bucket with unguessable
-  // stored filenames served with immutable cache headers — do not gate it.
-  let platform;
+  // stored filenames served with cache headers — do not gate it.
+  let platform: { provider: 'local' | 's3'; publicUrl?: string };
   try {
-    platform = getPlatformStorageConfig();
+    const provider = getPlatformStorageProvider();
+    platform = {
+      provider,
+      publicUrl: provider === 's3' ? getPlatformS3PublicUrl() : undefined,
+    };
   } catch {
     return new NextResponse('Not found', { status: 404 });
   }
@@ -83,7 +90,7 @@ export const GET = async (
     return NextResponse.redirect(`${platform.publicUrl}/${key}${search}`, {
       status: 307,
       headers: {
-        'Cache-Control': 'private, no-store',
+        'Cache-Control': 'public, max-age=300',
         'Access-Control-Allow-Origin': '*',
       },
     });

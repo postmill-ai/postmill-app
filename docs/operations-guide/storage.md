@@ -58,9 +58,11 @@ MEDIA_UPLOAD_MAX_BYTES: '1073741824'
 
 ### S3-compatible platform storage
 
-Set `STORAGE_PROVIDER=s3` plus `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_REGION`, and `S3_PUBLIC_URL`. Set `S3_ENDPOINT` for Hetzner and other non-AWS services. Avatars, generated media, and root/unmounted org uploads all use the same tenant-partitioned bucket. Existing `/uploads/...` URLs temporarily redirect to the identical key under `S3_PUBLIC_URL`; no database or Designer-document URL rewrite is required.
+Set `STORAGE_PROVIDER=s3` plus `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_REGION`, and `S3_PUBLIC_URL`. Set `S3_ENDPOINT` for Hetzner and other non-AWS services. Avatars, generated media, and root/unmounted org uploads all use the same tenant-partitioned bucket. Existing `/uploads/...` URLs return a 307 redirect to the identical key under `S3_PUBLIC_URL`, cacheable for five minutes; no database or Designer-document URL rewrite is required.
 
-For Hetzner, use an endpoint such as `https://fsn1.your-objectstorage.com` and the bucket's public URL. The bucket/CDN must support public object reads, CORS, and byte-range requests. Production startup fails closed with a variable-specific error when S3 configuration is incomplete.
+The backend and migration command require the complete S3 configuration. The frontend needs only `STORAGE_PROVIDER=s3` and `S3_PUBLIC_URL` to issue legacy redirects; it does not need the bucket credentials. Cached redirects remain safe during rollback because `copy-back` never deletes bucket objects.
+
+For Hetzner, use an endpoint such as `https://fsn1.your-objectstorage.com` and the bucket's public URL. The bucket/CDN must support public object reads, CORS, and byte-range requests. Production backend startup fails closed with a variable-specific error when S3 configuration is incomplete.
 
 ### Cloudflare R2 (per-tenant)
 
@@ -194,7 +196,11 @@ the folder assignment.
 
 ## Platform local-to-S3 migration
 
-Use a dedicated bucket and keep the original local tree until the S3 deployment has passed a soak period. Set all `S3_*` variables while leaving `STORAGE_PROVIDER=local`, set `UPLOAD_DIRECTORY` to the existing local root, and set `STORAGE_MIGRATION_DIRECTORY` to a persistent directory outside that root and outside the repository. Build the commands app, then run:
+Use a dedicated bucket and keep the original local tree until the S3 deployment has passed a soak period. Set all `S3_*` variables while leaving `STORAGE_PROVIDER=local`, set `UPLOAD_DIRECTORY` to the existing local root, and set `STORAGE_MIGRATION_DIRECTORY` to a persistent directory outside that root and outside the repository.
+
+Before migrating an older installation, confirm that every top-level upload directory is a tenant partition. Pre-partition objects at `<UPLOAD_DIRECTORY>/YYYY/MM/DD/...` would be copied and remain viewable through redirects, but a tenant-scoped adapter cannot safely read or delete them after cutover because the key has no owner. Assign and re-home those objects beneath their tenant prefixes before cutting over; do not bypass tenant isolation with an unscoped fallback.
+
+Build the commands app, then run:
 
 ```bash
 cd apps/commands

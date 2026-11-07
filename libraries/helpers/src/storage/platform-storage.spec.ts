@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getPlatformS3Config,
+  getPlatformS3PublicUrl,
   getPlatformStorageConfig,
   getPlatformStorageProvider,
 } from './platform-storage';
@@ -43,6 +44,14 @@ describe('platform storage configuration', () => {
       endpoint: 'https://fsn1.your-objectstorage.com',
       publicUrl: 'https://postmill-test.fsn1.your-objectstorage.com',
     });
+  });
+
+  it('loads the frontend redirect URL without bucket credentials', () => {
+    expect(
+      getPlatformS3PublicUrl({
+        S3_PUBLIC_URL: 'https://postmill-test.fsn1.your-objectstorage.com/',
+      }),
+    ).toBe('https://postmill-test.fsn1.your-objectstorage.com');
   });
 
   it.each([

@@ -202,18 +202,16 @@ describe('/api/uploads serve route containment (F8)', () => {
 
   describe('S3 platform mode', () => {
     beforeEach(() => {
+      for (const key of STORAGE_ENV_KEYS) {
+        if (key !== 'UPLOAD_DIRECTORY') delete process.env[key];
+      }
       Object.assign(process.env, {
         STORAGE_PROVIDER: 's3',
-        S3_ACCESS_KEY_ID: 'access',
-        S3_SECRET_ACCESS_KEY: 'secret',
-        S3_BUCKET: 'postmill',
-        S3_REGION: 'fsn1',
-        S3_ENDPOINT: 'https://fsn1.your-objectstorage.com',
         S3_PUBLIC_URL: 'https://postmill.fsn1.your-objectstorage.com/',
       });
     });
 
-    it('redirects the unchanged legacy key to the bucket without reading disk', async () => {
+    it('redirects the unchanged legacy key without requiring S3 credentials or reading disk', async () => {
       const res = await callGet(
         ['org-1', '2026', '11', '07', 'my file.png'],
         undefined,
@@ -224,7 +222,7 @@ describe('/api/uploads serve route containment (F8)', () => {
       expect(res.headers.get('Location')).toBe(
         'https://postmill.fsn1.your-objectstorage.com/org-1/2026/11/07/my%20file.png?version=2',
       );
-      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Cache-Control')).toBe('public, max-age=300');
       expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
     });
 
@@ -234,8 +232,14 @@ describe('/api/uploads serve route containment (F8)', () => {
       expect(res.headers.get('Location')).toBeNull();
     });
 
-    it('fails closed when the S3 configuration is incomplete', async () => {
-      delete process.env.S3_BUCKET;
+    it('fails closed when the public URL is missing', async () => {
+      delete process.env.S3_PUBLIC_URL;
+      const res = await callGet(['org-1', 'image.png']);
+      expect(res.status).toBe(404);
+    });
+
+    it('fails closed when the public URL is invalid', async () => {
+      process.env.S3_PUBLIC_URL = 'file:///tmp/bucket';
       const res = await callGet(['org-1', 'image.png']);
       expect(res.status).toBe(404);
     });
