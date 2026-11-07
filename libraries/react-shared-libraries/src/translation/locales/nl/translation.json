@@ -3721,6 +3721,7 @@
   "designer_path_arc": "Boog",
   "designer_path_wave": "Golf",
   "designer_path_custom": "Aangepast",
+  "designer_pathfinder_failed": "Pathfinder kon de geselecteerde vormen niet combineren. Probeer een andere selectie of bewerking.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "Booghoek",
   "designer_label_drop_shadow": "Slagschaduw",

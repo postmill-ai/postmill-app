@@ -3708,6 +3708,7 @@
   "designer_path_arc": "Bogen",
   "designer_path_wave": "Welle",
   "designer_path_custom": "Benutzerdefiniert",
+  "designer_pathfinder_failed": "Pathfinder konnte die ausgewählten Formen nicht kombinieren. Versuchen Sie eine andere Auswahl oder Operation.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "Bogenwinkel",
   "designer_label_drop_shadow": "Schlagschatten",

@@ -3708,6 +3708,7 @@
   "designer_path_arc": "弧形",
   "designer_path_wave": "波浪形",
   "designer_path_custom": "自定义",
+  "designer_pathfinder_failed": "Pathfinder 无法组合所选形状。请尝试其他选择或操作。",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "弧形角度",
   "designer_label_drop_shadow": "投影",

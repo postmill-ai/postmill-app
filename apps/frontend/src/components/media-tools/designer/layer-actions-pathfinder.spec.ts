@@ -51,7 +51,7 @@ describe('multi-shape Pathfinder document edits', () => {
   });
 
   it('makes no partial edit when the result requires an unsupported hole', () => {
-    const store = storeWith(shape('a', 0), { ...shape('inner', 20, 20), y: 20, height: 20 });
+    const store = storeWith(shape('a', 0, 200), { ...shape('inner', 50, 100), y: 20, height: 60 });
     const before = store.getState().doc.outputs[0].children;
     const historyBefore = store.getState().history.length;
 

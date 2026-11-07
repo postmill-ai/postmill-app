@@ -3708,6 +3708,7 @@
   "designer_path_arc": "Arc",
   "designer_path_wave": "Vague",
   "designer_path_custom": "Personnalisé",
+  "designer_pathfinder_failed": "Pathfinder n’a pas pu combiner les formes sélectionnées. Essayez une autre sélection ou une autre opération.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "Angle de l'arc",
   "designer_label_drop_shadow": "Ombre portée",

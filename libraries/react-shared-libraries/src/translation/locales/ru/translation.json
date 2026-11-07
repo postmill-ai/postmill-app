@@ -3708,6 +3708,7 @@
   "designer_path_arc": "Дуга",
   "designer_path_wave": "Волна",
   "designer_path_custom": "Свой",
+  "designer_pathfinder_failed": "Pathfinder не удалось объединить выбранные фигуры. Попробуйте другое выделение или операцию.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "Угол дуги",
   "designer_label_drop_shadow": "Тень",

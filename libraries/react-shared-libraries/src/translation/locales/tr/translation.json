@@ -3708,6 +3708,7 @@
   "designer_path_arc": "Yay",
   "designer_path_wave": "Dalga",
   "designer_path_custom": "Özel",
+  "designer_pathfinder_failed": "Pathfinder seçilen şekilleri birleştiremedi. Farklı bir seçim veya işlem deneyin.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "Yay Açısı",
   "designer_label_drop_shadow": "Gölge düşür",
