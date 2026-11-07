@@ -19,6 +19,7 @@ import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { parseDataUrl } from '@postmill-ai/nestjs-libraries/upload/data.url';
 import { compositeMagicGrabBackground } from '@postmill-ai/nestjs-libraries/media/magic-grab-composite';
+import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/media/image-source.limits';
 import { resolveVisionImageUrl } from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
 import {
   MediaProviderAdapter,
@@ -1531,7 +1532,7 @@ export class AiMediaService {
   // data URI. Uploads cap images at 10 MB (base64 inflates ~4/3), and the
   // upstream 50 MB prediction-body limit accommodates that comfortably — much
   // larger than the vision critic's 2 MB prompt bound.
-  private static readonly MEDIA_EDIT_MAX_INLINE_BYTES = 20 * 1024 * 1024;
+  private static readonly MEDIA_EDIT_MAX_INLINE_BYTES = IMAGE_SOURCE_MAX_BYTES;
 
   // The provider downloads image/mask URLs from ITS infrastructure, so a
   // relative /uploads/... path or a private host is unfetchable — route every

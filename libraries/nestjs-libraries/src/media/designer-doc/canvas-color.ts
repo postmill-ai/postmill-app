@@ -9,9 +9,9 @@
  * the point a colour hits a context keeps the Konva canvas, the PNG export and
  * the node-canvas PDF painting the same pixels.
  *
- * Anything that is not an 8-digit hex passes through byte-identical — a
- * 6-digit hex stays a 6-digit hex — so opaque colours render exactly as they
- * always have.
+ * Other valid colour strings pass through byte-identical. Unresolved Bulk
+ * Create placeholders become transparent instead of reaching the canvas as an
+ * invalid colour and silently reusing its previous fill.
  */
 export const canvasColor = (
   color: string | undefined | null
@@ -19,6 +19,7 @@ export const canvasColor = (
   if (color === undefined || color === null || color === '') return undefined;
   // A CanvasGradient reaching a fillStyle site passes through untouched.
   if (typeof color !== 'string') return color;
+  if (/\{\{\s*[\w.-]+\s*\}\}/.test(color)) return 'rgba(0, 0, 0, 0)';
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(
     color.trim()
   );

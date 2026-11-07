@@ -131,6 +131,41 @@ describe('BulkCreateDialog', () => {
     expect(batch.doc.outputs[0].pages[0].children[0].slot.name).toBe('headline');
   });
 
+  it('applies text and colour assignments in separate passes before previewing both', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'title', name: 'Headline', type: 'text', text: 'Sale', fill: '#000000',
+      x: 0, y: 0, width: 300, height: 100, rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().setSelectedIds([]);
+    const historyBefore = store.getState().history.length;
+    fetchMock.mockResolvedValueOnce(response({ images: ['data:image/png;base64,preview'] }));
+    render(<BulkCreateDialog store={store} onClose={vi.fn()} />);
+    await upload('headline,accent\nWinter Sale,#d62828\nSpring Sale,#007700');
+
+    let selects = screen.getAllByRole('combobox');
+    expect(selects).toHaveLength(2);
+    fireEvent.change(selects[0], { target: { value: 'headline' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply variable assignments' }));
+    const title = () => store.getState().doc.outputs[0].children.find((child) => child.id === 'title');
+    await waitFor(() => expect(title()?.slot).toEqual({ name: 'headline', kind: 'text' }));
+    expect(title()?.fill).toBe('#000000');
+
+    selects = screen.getAllByRole('combobox');
+    fireEvent.change(selects[selects.length - 1], { target: { value: 'accent' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply variable assignments' }));
+    await waitFor(() => expect(title()?.fill).toBe('{{accent}}'));
+    expect(title()?.slot).toEqual({ name: 'headline', kind: 'text' });
+    expect(store.getState().history).toHaveLength(historyBefore + 2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview first row' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/media/designs/bulk-generate', expect.any(Object)));
+    const preview = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(preview.rows).toEqual([{ headline: 'Winter Sale', accent: '#d62828' }]);
+    expect(preview.doc.outputs[0].children[0].slot).toEqual({ name: 'headline', kind: 'text' });
+    expect(preview.doc.outputs[0].children[0].fill).toBe('{{accent}}');
+  });
+
   it('leaves unselected targets unassigned and applies only explicit choices', async () => {
     const store = createDesignerStore();
     store.getState().addElement({

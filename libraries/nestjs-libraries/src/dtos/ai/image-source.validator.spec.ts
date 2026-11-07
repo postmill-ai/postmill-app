@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { IMAGE_SOURCE_MAX_BYTES, isImageSource } from './image-source.validator';
+import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/media/image-source.limits';
+import { isImageSource } from './image-source.validator';
 
 const tinyPng = `data:image/png;base64,${Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64')}`;
 

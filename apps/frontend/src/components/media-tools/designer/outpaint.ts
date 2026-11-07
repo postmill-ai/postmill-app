@@ -2,7 +2,7 @@
 
 import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 import { MAX_DIMENSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
-import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/dtos/ai/image-source.validator';
+import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/media/image-source.limits';
 import type { DesignerElement, DesignerOutput } from './designer.store';
 import { probeImageNaturalSize } from './elements';
 import { loadMaskImage } from './background-removal-mask';

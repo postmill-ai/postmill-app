@@ -141,7 +141,6 @@ export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTa
     ];
     for (const page of pages) {
       for (const element of page.children || []) {
-        if (element.slot) continue;
         const elementLabel = element.name || element.text?.trim().slice(0, 40) || element.id;
         const add = (kind: BulkVariableKind) => {
           targets.push({
@@ -154,17 +153,24 @@ export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTa
           });
         };
         const canAssignText = element.type === 'text' &&
+          !element.slot &&
           !hasMustache(element.text) &&
           !(element.richText || []).some((run) => hasMustache(run.text));
         if (canAssignText) add('text');
         if (
           (element.type === 'image' || element.type === 'raster') &&
+          !element.slot &&
           element.src &&
           !hasMustache(element.src)
         ) {
           add('image');
         }
-        if (['text', 'shape', 'path', 'icon'].includes(element.type) && !hasMustache(element.fill)) {
+        if (
+          ['text', 'shape', 'path', 'icon'].includes(element.type) &&
+          element.slot?.kind !== 'color' &&
+          (element.type === 'text' || !element.slot) &&
+          !hasMustache(element.fill)
+        ) {
           add('color');
         }
       }
