@@ -33,7 +33,9 @@ saved.
 - **Pages** — image outputs can hold multiple pages (up to 20 per output), managed in the **Pages**
   panel (add, duplicate, rename, delete). PDF export combines an output's pages into one file.
 - **Versions** — **File ▸ Save Version…** snapshots the design; the **Versions** panel lists manual
-  and automatic snapshots and can restore or delete them.
+  and automatic snapshots. **Preview** compares the current design with a saved version before you
+  restore it; missing thumbnails are rendered on demand for both image and video designs. Restoring
+  first saves an automatic safety snapshot, and previewing alone never changes the design.
 - **Templates** — **Save as Template** stores the current design (image or video) as a template;
   **Browse Templates…** filters templates by category and organises them into folders. Applying a
   video template switches the design to video mode (and vice versa).

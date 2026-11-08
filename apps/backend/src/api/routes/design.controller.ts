@@ -284,6 +284,22 @@ export class DesignController {
     return this._designService.createVersion(org.id, user.id, id, body);
   }
 
+  @Get('/:id/versions/:vid/preview')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  @ApiOkResponse({ content: { 'image/png': { schema: { type: 'string', format: 'binary' } } } })
+  async getVersionPreview(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Param('vid') vid: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const png = await this._designService.getVersionPreview(org.id, id, vid);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.end(png);
+  }
+
   @Get('/:id/versions/:vid')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
@@ -320,6 +336,21 @@ export class DesignController {
     @Param('vid') vid: string,
   ) {
     return this._designService.deleteVersion(org.id, id, vid);
+  }
+
+  @Post('/preview')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  @ApiOkResponse({ content: { 'image/png': { schema: { type: 'string', format: 'binary' } } } })
+  async preview(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: ValidateDocDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const png = await this._designService.renderPreview(org.id, body.doc);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.end(png);
   }
 
   @Post('/render')

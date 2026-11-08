@@ -219,6 +219,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `renderPdf` flattens all pages of all outputs sequentially. Server-persisted snapshots of the
   whole doc live in the `DesignVersion` table (`/media/designs/:id/versions*`) — the versions panel,
   not the in-memory History panel; restore takes an `auto` safety snapshot server-side first.
+  Preview opens a current-versus-saved comparison without loading the saved doc into the store.
+  `POST /media/designs/preview` renders the captured current doc and the org-scoped
+  `GET /media/designs/:id/versions/:vid/preview` validates and renders a saved version. Both use
+  output 0/page 1 or the video time-zero poster through `DesignPreviewService`, returning PNG with
+  `private, no-store` and no File row. Stored version thumbnails avoid only the version fetch;
+  preview loads are request-scoped by design/version id and are not restarted by changing
+  translation identities.
 - **Video outputs have variants too.** The `+` add-format flow works in video mode: a new output
   CLONES the current output's tracks/clips with fresh ids and smart-reflows the geometry onto the
   new canvas via `designer-doc/video-reflow.ts` (clips map onto pseudo-elements and go through

@@ -965,6 +965,54 @@ describe('DesignService', () => {
       expect(repository.createVersion).not.toHaveBeenCalled();
     });
 
+    it('renderPreview validates the supplied current document and renders without repository writes', async () => {
+      const doc = makeDoc();
+      previewService.renderPreviewBuffer.mockResolvedValue(Buffer.from('current-png'));
+
+      const result = await service.renderPreview('org-1', doc);
+
+      expect(result).toEqual(Buffer.from('current-png'));
+      expect(previewService.renderPreviewBuffer).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: 'image', outputs: doc.outputs }),
+        { orgId: 'org-1' }
+      );
+      expect(repository.create).not.toHaveBeenCalled();
+      expect(repository.update).not.toHaveBeenCalled();
+      expect(previewService.uploadPreview).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['image', makeDoc()],
+      ['video', {
+        mode: 'video',
+        outputs: [{
+          id: 'out-video', formatId: 'custom', name: 'Video', width: 1080, height: 1080,
+          fps: 30, durationMs: 1000, tracks: [],
+        }],
+      }],
+    ])('getVersionPreview validates and renders a %s document without persisting', async (mode, doc) => {
+      repository.findVersion.mockResolvedValue({ id: 'v1', designId: 'd1', doc });
+      previewService.renderPreviewBuffer.mockResolvedValue(Buffer.from(`png-${mode}`));
+
+      const result = await service.getVersionPreview('org-1', 'd1', 'v1');
+
+      expect(result).toEqual(Buffer.from(`png-${mode}`));
+      expect(repository.findVersion).toHaveBeenCalledWith('org-1', 'd1', 'v1');
+      expect(previewService.renderPreviewBuffer).toHaveBeenCalledWith(
+        expect.objectContaining({ mode }),
+        { orgId: 'org-1' }
+      );
+      expect(previewService.uploadPreview).not.toHaveBeenCalled();
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('getVersionPreview 404s before rendering a foreign or unknown version', async () => {
+      repository.findVersion.mockResolvedValue(null);
+
+      await expect(service.getVersionPreview('org-1', 'd1', 'missing')).rejects.toThrow(NotFoundException);
+      expect(previewService.renderPreviewBuffer).not.toHaveBeenCalled();
+    });
+
     it('restoreVersion snapshots the live doc (auto) BEFORE overwriting', async () => {
       const versionDoc = makeDoc({ output: { name: 'Old layout' } });
       repository.findById.mockResolvedValue(designRow());

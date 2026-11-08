@@ -3,10 +3,11 @@
 import React, { FC, useCallback, useState } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
-import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useDecisionModal, useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
+import { VersionCompareDialog, type DesignVersionMeta } from './version-compare-dialog';
 
 /**
  * Version history (server-persisted, unlike the in-memory History panel).
@@ -19,16 +20,6 @@ import { PanelSkeletonGrid, PanelError } from './panel-states';
  * through the normal store → Yjs sync.
  */
 
-interface DesignVersionMeta {
-  id: string;
-  name?: string | null;
-  auto: boolean;
-  width: number;
-  height: number;
-  previewDataUrl?: string | null;
-  createdAt: string;
-}
-
 interface VersionsPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;
 }
@@ -38,6 +29,7 @@ export const VersionsPanel: FC<VersionsPanelProps> = ({ store }) => {
   const t = useT();
   const toaster = useToaster();
   const decision = useDecisionModal();
+  const modals = useModals();
   const designId = store((s) => s.designId);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -62,7 +54,7 @@ export const VersionsPanel: FC<VersionsPanelProps> = ({ store }) => {
         approveLabel: t('designer_restore_version', 'Restore'),
         cancelLabel: t('cancel', 'Cancel'),
       });
-      if (!approved || !designId) return;
+      if (!approved || !designId) return false;
       setBusyId(version.id);
       try {
         // The server takes the safety snapshot and overwrites the design doc;
@@ -79,14 +71,35 @@ export const VersionsPanel: FC<VersionsPanelProps> = ({ store }) => {
         store.getState().pushHistory('Restore version');
         toaster.show(t('designer_version_restored', 'Version restored'), 'success');
         mutate();
+        return true;
       } catch {
         toaster.show(t('designer_restore_failed', 'Failed to restore version'), 'warning');
+        return false;
       } finally {
         setBusyId(null);
       }
     },
     [decision, designId, fetch, store, toaster, t, mutate]
   );
+
+  const handlePreview = useCallback((version: DesignVersionMeta) => {
+    if (!designId) return;
+    const currentDoc = store.getState().doc;
+    modals.openModal({
+      title: t('designer_compare_version', 'Compare version'),
+      size: 960,
+      children: (close: () => void) => (
+        <VersionCompareDialog
+          designId={designId}
+          version={version}
+          currentDoc={currentDoc}
+          fetch={fetch}
+          onRestore={() => handleRestore(version)}
+          onClose={close}
+        />
+      ),
+    });
+  }, [designId, fetch, handleRestore, modals, store, t]);
 
   const handleDelete = useCallback(
     async (version: DesignVersionMeta) => {
@@ -169,6 +182,14 @@ export const VersionsPanel: FC<VersionsPanelProps> = ({ store }) => {
               )}
             </div>
           </div>
+          <button
+            type="button"
+            disabled={busyId === v.id}
+            onClick={() => handlePreview(v)}
+            className="px-2 py-1 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-boxHover disabled:opacity-50 shrink-0"
+          >
+            {t('designer_preview_version', 'Preview')}
+          </button>
           <button
             type="button"
             disabled={busyId === v.id}
