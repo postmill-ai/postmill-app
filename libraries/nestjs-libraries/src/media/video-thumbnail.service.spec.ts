@@ -1,14 +1,34 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Readable } from 'stream';
 
 const mockExtractVideoFrame = vi.fn();
+const mockExtractVideoFrameStream = vi.fn();
 vi.mock('@postmill-ai/nestjs-libraries/media/video-frame', () => ({
   extractVideoFrameInfo: (...args: any[]) => mockExtractVideoFrame(...args),
+  extractVideoFrameInfoFromStream: (...args: any[]) => mockExtractVideoFrameStream(...args),
   VIDEO_FRAME_MAX_BYTES: 256 * 1024 * 1024,
+  VIDEO_FRAME_STREAM_MAX_BYTES: 2 * 1024 * 1024 * 1024 - 1,
 }));
 
 const mockFromBuffer = vi.fn();
 vi.mock('@postmill-ai/nestjs-libraries/upload/file-type.compat', () => ({
   fromBuffer: (...args: any[]) => mockFromBuffer(...args),
+}));
+
+const redis = new Map<string, string>();
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
+  ioRedis: {
+    set: vi.fn(async (key: string, value: string, ...args: unknown[]) => {
+      if (args.includes('NX') && redis.has(key)) return null;
+      redis.set(key, value);
+      return 'OK';
+    }),
+    eval: vi.fn(async (_script: string, _keys: number, key: string, expected: string) => {
+      if (redis.get(key) !== expected) return 0;
+      redis.delete(key);
+      return 1;
+    }),
+  },
 }));
 
 let inngestEnabled = false;
@@ -29,6 +49,7 @@ function makeService(over: {
   const adapter = {
     type: over.adapterType ?? 'LOCAL',
     readFile: vi.fn().mockResolvedValue(Buffer.from('video-bytes')),
+    readFileStream: vi.fn().mockImplementation(async () => Readable.from([Buffer.from('video-bytes')])),
     writeBuffer: vi.fn().mockResolvedValue('/uploads/org-1/thumb-1.jpg'),
     removeFile: vi.fn().mockResolvedValue(undefined),
   };
@@ -63,12 +84,19 @@ function makeService(over: {
 describe('VideoThumbnailService.generateForFile', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    redis.clear();
     inngestEnabled = false;
     mockFromBuffer.mockResolvedValue(undefined);
     mockExtractVideoFrame.mockResolvedValue({
       frame: fakeFrame,
       hasVideoStream: true,
       hasAudioStream: false,
+    });
+    mockExtractVideoFrameStream.mockResolvedValue({
+      frame: fakeFrame,
+      hasVideoStream: true,
+      hasAudioStream: false,
+      detectedMime: 'video/mp4',
     });
   });
 
@@ -155,6 +183,29 @@ describe('VideoThumbnailService.generateForFile', () => {
     expect(adapter.removeFile).not.toHaveBeenCalled();
   });
 
+  it('serializes concurrent generation and writes only one thumbnail', async () => {
+    const { service, adapter, fileService } = makeService();
+    let finishFirst!: () => void;
+    mockExtractVideoFrame.mockImplementationOnce(() => new Promise((resolve) => {
+      finishFirst = () => resolve({
+        frame: fakeFrame,
+        hasVideoStream: true,
+        hasAudioStream: false,
+      });
+    }));
+
+    const first = service.generateForFile('org-1', 'file-1');
+    await vi.waitFor(() => expect(mockExtractVideoFrame).toHaveBeenCalledTimes(1));
+    expect(await service.generateForFile('org-1', 'file-1')).toBeNull();
+    finishFirst();
+
+    await expect(first).resolves.toBe('/uploads/org-1/thumb-1.jpg');
+    expect(adapter.writeBuffer).toHaveBeenCalledTimes(1);
+    expect(fileService.saveMediaInformation).toHaveBeenCalledTimes(1);
+    expect(mockExtractVideoFrame).toHaveBeenCalledTimes(1);
+    expect(redis.size).toBe(0);
+  });
+
   it('returns null for a missing or non-video file', async () => {
     expect(await makeService({ file: null }).service.generateForFile('org-1', 'nope')).toBeNull();
     const imageFile = {
@@ -206,8 +257,9 @@ describe('VideoThumbnailService.generateForFile', () => {
     expect(adapter.readFile).toHaveBeenCalled();
   });
 
-  it('skips oversized videos without reading them', async () => {
+  it.each(['LOCAL', 'S3'])('streams a large video through its %s adapter without buffering it', async (adapterType) => {
     const { service, adapter } = makeService({
+      adapterType,
       file: {
         id: 'file-4',
         type: 'video',
@@ -219,8 +271,29 @@ describe('VideoThumbnailService.generateForFile', () => {
       },
     });
 
+    expect(await service.generateForFile('org-1', 'file-4')).toBe('/uploads/org-1/thumb-1.jpg');
+    expect(adapter.readFileStream).toHaveBeenCalledWith('/uploads/org-1/huge.mp4');
+    expect(adapter.readFile).not.toHaveBeenCalled();
+    expect(mockExtractVideoFrameStream).toHaveBeenCalledWith(expect.any(Readable), 'mp4');
+    expect(mockExtractVideoFrame).not.toHaveBeenCalled();
+  });
+
+  it('skips sources beyond the hard streaming cap without reading them', async () => {
+    const { service, adapter } = makeService({
+      file: {
+        id: 'file-4',
+        type: 'video',
+        path: '/uploads/org-1/huge.mp4',
+        thumbnail: null,
+        alt: '',
+        fileSize: 2 * 1024 * 1024 * 1024,
+        folderId: null,
+      },
+    });
+
     expect(await service.generateForFile('org-1', 'file-4')).toBeNull();
     expect(adapter.readFile).not.toHaveBeenCalled();
+    expect(adapter.readFileStream).not.toHaveBeenCalled();
   });
 
   it('never throws: a storage or ffmpeg failure returns null', async () => {
@@ -262,6 +335,34 @@ describe('VideoThumbnailService.generateForFile', () => {
       file.metadata,
     );
     expect(mockExtractVideoFrame).not.toHaveBeenCalled();
+    expect(adapter.writeBuffer).not.toHaveBeenCalled();
+  });
+
+  it('preserves still-image reclassification on the large streaming path', async () => {
+    const file = {
+      id: 'file-large-image',
+      type: 'video',
+      path: '/uploads/org-1/slide.png',
+      thumbnail: null,
+      alt: '',
+      fileSize: 512 * 1024 * 1024,
+      folderId: null,
+      metadata: { provider: 'reel-farm' },
+    };
+    const { service, adapter, fileService } = makeService({ file });
+    mockExtractVideoFrameStream.mockResolvedValue({
+      frame: fakeFrame,
+      hasVideoStream: true,
+      hasAudioStream: false,
+      detectedMime: 'image/png',
+    });
+
+    const out = await service.generateOutcomeForFile('org-1', file.id);
+
+    expect(out).toEqual({ thumbnail: null, reclassified: { type: 'image', mime: 'image/png' } });
+    expect(fileService.reclassifyFile).toHaveBeenCalledWith(
+      'org-1', file.id, 'image', 'image/png', file.metadata,
+    );
     expect(adapter.writeBuffer).not.toHaveBeenCalled();
   });
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync, ReadStream } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { Readable } from 'stream';
 
 const s3ClientMock = {
   send: vi.fn(),
@@ -95,6 +96,17 @@ describe('S3StorageBase', () => {
     it('throws on invalid key extraction', async () => {
       const adapter = make();
       await expect(adapter.readFile('/')).rejects.toThrow('Invalid object key');
+    });
+
+    it('returns the S3 body stream without transforming it to a buffer', async () => {
+      const body = Readable.from([Buffer.from('video-data')]);
+      s3ClientMock.send.mockResolvedValue({ Body: body });
+      const adapter = make();
+
+      const result = await adapter.readFileStream('uploads/2026/01/15/abc.mp4');
+
+      expect(result).toBe(body);
+      expect(s3ClientMock.send.mock.calls[0][0].config.Key).toBe('abc.mp4');
     });
   });
 

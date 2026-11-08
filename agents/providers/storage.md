@@ -22,10 +22,11 @@ export interface StorageCapability extends StorageUploadProvider {
   getUsageBytes(): Promise<bigint | null>;           // null = unknown
   writeBuffer(buffer: Buffer, contentType?: string): Promise<string>;
   readFile(pathOrKey: string): Promise<Buffer>;
+  readFileStream(pathOrKey: string): Promise<Readable>;
 }
 ```
 
-`StorageFileEntry` = `{ key, name, size, mimeType, lastModified }`. The conformance harness (`runDomainConformance('storage', …)`) requires all ten methods — see Tests below.
+`StorageFileEntry` = `{ key, name, size, mimeType, lastModified }`. The conformance harness (`runDomainConformance('storage', …)`) requires all eleven methods — see Tests below. `readFileStream` must use the same key mapping and tenant confinement as `readFile`; large video thumbnails depend on it to avoid whole-object buffering.
 
 ## Fast path: `makeS3StorageModule`
 
@@ -181,6 +182,6 @@ Icon (optional): `apps/frontend/src/components/shared/provider-icon.tsx`. Withou
 4. [ ] Register the package: import + spread in `apps/backend/src/providers.generated.ts`, dependency in `apps/backend/package.json`, two paths in `tsconfig.base.json`; run `pnpm install`.
 5. [ ] Refresh `libraries/providers/PROVIDERS_INVENTORY.md` (module row + per-domain count).
 6. [ ] Frontend: add the type to `allProviderTypes` in `provider-form.modal.tsx`, `PROVIDER_TYPE_LABELS` and `CLOUD_TYPES` in `storage.tab.tsx`; add `TYPE_FIELD_SPECS` only for non-default fields; optionally add icon entries in `provider-icon.tsx`.
-7. [ ] Add `src/v1/__tests__/conformance.spec.ts` with `runDomainConformance('storage', …)` and all ten required methods.
+7. [ ] Add `src/v1/__tests__/conformance.spec.ts` with `runDomainConformance('storage', …)` and all eleven required methods.
 8. [ ] Run `pnpm --filter @postmill-ai/provider-<id> test` and `vitest run --root libraries/providers`; fix any conformance or metadata failures.
 9. [ ] Smoke-test in the UI: Settings → Storage → Add Provider, pick the new type, save, and run Test Connection on the created config.

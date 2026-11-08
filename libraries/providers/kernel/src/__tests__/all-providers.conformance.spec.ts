@@ -25,6 +25,7 @@ const REQUIRED_METHODS: Record<string, string[]> = {
     'uploadSimple',
     'removeFile',
     'readFile',
+    'readFileStream',
     'writeBuffer',
     'testConnection',
     'listFiles',

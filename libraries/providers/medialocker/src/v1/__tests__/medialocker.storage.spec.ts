@@ -67,6 +67,7 @@ describe('medialocker provider conformance', () => {
         'getUsageBytes',
         'writeBuffer',
         'readFile',
+        'readFileStream',
       ],
     });
   });
@@ -274,6 +275,23 @@ describe('MediaLockerStorage', () => {
       expect(String(fetchMock.mock.calls[0][0])).toBe(
         'https://cdn.example.com/abc.png',
       );
+    });
+
+    it('streams public-url bytes through the same key mapping', async () => {
+      const payload = Buffer.from('public-video');
+      const fetchMock = vi.fn<SafeFetchPort>(
+        async () => new Response(payload, { status: 200 }),
+      );
+      const cap = medialockerStorageModule.create(
+        makeCtx(fetchMock as any, CREDS, { publicUrl: 'https://cdn.example.com' }),
+      );
+
+      const stream = await cap.readFileStream('abc.mp4');
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+
+      expect(Buffer.concat(chunks).equals(payload)).toBe(true);
+      expect(String(fetchMock.mock.calls[0][0])).toBe('https://cdn.example.com/abc.mp4');
     });
   });
 

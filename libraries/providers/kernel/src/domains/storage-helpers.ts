@@ -8,6 +8,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { randomBytes } from 'crypto';
 import { createReadStream, statSync } from 'fs';
+import type { Readable } from 'stream';
 import * as fileType from 'file-type';
 import { CredentialField } from '../manifest';
 import { ProviderModule, ProviderRuntimeContext } from '../module';
@@ -400,6 +401,16 @@ export class S3StorageBase implements StorageCapability {
     return Buffer.from(byteArray);
   }
 
+  async readFileStream(pathOrKey: string): Promise<Readable> {
+    const key = this.objectKey(pathOrKey);
+    if (!key) throw new Error('Invalid object key');
+    const response = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    if (!response.Body) throw new Error('Storage object has no response body');
+    return response.Body as unknown as Readable;
+  }
+
   async writeBuffer(buffer: Buffer, contentType?: string): Promise<string> {
     const detected = await fromBuffer(buffer);
     // §6.2: prefer the sniffed type (magic bytes are trustworthy); text/JSON have no
@@ -671,6 +682,9 @@ export function makeS3StorageModule(
     }
     readFile(pathOrKey: string) {
       return this.a.readFile(pathOrKey);
+    }
+    readFileStream(pathOrKey: string) {
+      return this.a.readFileStream(pathOrKey);
     }
   }
 

@@ -1,4 +1,5 @@
 import { StorageProviderType } from '@prisma/client';
+import type { Readable } from 'stream';
 
 export interface StorageFileEntry {
   key: string;
@@ -26,4 +27,5 @@ export interface IStorageAdapter extends IUploadProvider {
   // cross-provider migration so source bytes are read through the owning adapter
   // (disk read for local, GetObject for S3-family) rather than via safeFetch.
   readFile(pathOrKey: string): Promise<Buffer>;
+  readFileStream(pathOrKey: string): Promise<Readable>;
 }
