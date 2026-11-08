@@ -1,4 +1,6 @@
-export const ORG_EXPORT_SCHEMA = 'postmill.org-export.v1';
+export const ORG_EXPORT_SCHEMA_V1 = 'postmill.org-export.v1';
+export const ORG_EXPORT_SCHEMA = 'postmill.org-export.v1.1';
+export const ORG_EXPORT_SCHEMAS = new Set<string>([ORG_EXPORT_SCHEMA_V1, ORG_EXPORT_SCHEMA]);
 export const ORG_PORTABILITY_EXPORT_EVENT = 'org/portability.export';
 export const ORG_PORTABILITY_IMPORT_EVENT = 'org/portability.import';
 export const ORG_PORTABILITY_JOB_TTL_HOURS = 24;
@@ -76,11 +78,13 @@ export interface OrgPortabilityAssetManifest {
   sha256: string;
   size: string;
   mime: string;
+  kind?: 'file' | 'font';
+  sourcePath?: string;
   missing?: boolean;
 }
 
 export interface OrgPortabilityManifest {
-  schema: typeof ORG_EXPORT_SCHEMA;
+  schema: typeof ORG_EXPORT_SCHEMA_V1 | typeof ORG_EXPORT_SCHEMA;
   appVersion: string;
   createdAt: string;
   source: { organizationId: string; name: string };

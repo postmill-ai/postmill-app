@@ -238,4 +238,12 @@ export class OrgPortabilityRepository {
       orderBy: { id: 'asc' },
     });
   }
+
+  brandFonts(orgId: string) {
+    return this._prisma.aIBrandProfile.findMany({
+      where: { organizationId: orgId },
+      select: { id: true, customFonts: true },
+      orderBy: { id: 'asc' },
+    });
+  }
 }

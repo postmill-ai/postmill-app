@@ -50,10 +50,11 @@ export function StepImport() {
   const [summary, setSummary] = useState<ArchiveSummary | null>(null);
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'validating' | 'ready' | 'starting' | 'processing' | 'completed' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [pollAttempt, setPollAttempt] = useState(0);
 
   const loadJob = useCallback(async (url: string) => (await fetch(url)).json(), [fetch]);
   const { data: polled } = useSWR<ImportJob>(
-    ['validating', 'processing'].includes(phase) && job?.id ? `/org-portability/import-uploads/${job.id}` : null,
+    ['validating', 'processing'].includes(phase) && job?.id ? `/org-portability/import-uploads/${job.id}?pollAttempt=${pollAttempt}` : null,
     loadJob,
     { refreshInterval: 2000, revalidateOnFocus: false },
   );
@@ -68,6 +69,11 @@ export function StepImport() {
     }
     if (polled.status === 'completed') {
       setPhase('completed');
+      return;
+    }
+    if (polled.status === 'uploading') {
+      setPhase('error');
+      setError(polled.error || t('setup_import_validation_retry', 'Verification could not finish. Retry verification; you do not need to upload the archive again.'));
       return;
     }
     if (polled.status === 'failed' || polled.status === 'expired') {
@@ -87,38 +93,44 @@ export function StepImport() {
 
   const uploadAndValidate = useCallback(async () => {
     if (!file || passphrase.length < 12) return;
-    setPhase('uploading');
+    const retryValidation = job?.status === 'uploading' && job.progress?.uploadedBytes === file.size;
+    setPhase(retryValidation ? 'validating' : 'uploading');
     setError(null);
     setSummary(null);
     try {
-      const createdResponse = await fetch('/org-portability/import-uploads', { method: 'POST' });
-      if (!createdResponse.ok) throw new Error(await responseError(createdResponse, t('setup_import_start_failed', 'Could not start the import.')));
-      const created = await createdResponse.json() as ImportJob;
-      setJob(created);
-      for (let offset = 0; offset < file.size;) {
-        const chunk = file.slice(offset, Math.min(offset + CHUNK_BYTES, file.size));
-        const data = await blobBase64(chunk);
-        const response = await fetch(`/org-portability/import-uploads/${created.id}/chunks`, {
-          method: 'PUT',
-          body: JSON.stringify({ offset, data }),
-        });
-        if (!response.ok) throw new Error(await responseError(response, t('setup_import_upload_failed', 'The archive upload failed. Retry the same chunk.')));
-        const uploaded = await response.json();
-        offset = uploaded.uploadedBytes;
-        setJob({ ...created, progress: { uploadedBytes: offset } });
+      let created = job;
+      if (!retryValidation) {
+        const createdResponse = await fetch('/org-portability/import-uploads', { method: 'POST' });
+        if (!createdResponse.ok) throw new Error(await responseError(createdResponse, t('setup_import_start_failed', 'Could not start the import.')));
+        created = await createdResponse.json() as ImportJob;
+        setJob(created);
+        for (let offset = 0; offset < file.size;) {
+          const chunk = file.slice(offset, Math.min(offset + CHUNK_BYTES, file.size));
+          const data = await blobBase64(chunk);
+          const response = await fetch(`/org-portability/import-uploads/${created.id}/chunks`, {
+            method: 'PUT',
+            body: JSON.stringify({ offset, data }),
+          });
+          if (!response.ok) throw new Error(await responseError(response, t('setup_import_upload_failed', 'The archive upload failed. Retry the same chunk.')));
+          const uploaded = await response.json();
+          offset = uploaded.uploadedBytes;
+          setJob({ ...created, progress: { uploadedBytes: offset } });
+        }
       }
+      if (!created) throw new Error(t('setup_import_start_failed', 'Could not start the import.'));
       const validatedResponse = await fetch(`/org-portability/import-uploads/${created.id}/validate`, {
         method: 'POST',
         body: JSON.stringify({ passphrase }),
       });
       if (!validatedResponse.ok) throw new Error(await responseError(validatedResponse, t('setup_import_validation_failed', 'The archive could not be validated. Check the file and passphrase.')));
       setJob(await validatedResponse.json());
+      setPollAttempt((attempt) => attempt + 1);
       setPhase('validating');
     } catch (caught) {
       setPhase('error');
       setError(caught instanceof Error ? caught.message : t('setup_import_failed', 'The organization import failed.'));
     }
-  }, [file, passphrase, fetch, t]);
+  }, [file, job, passphrase, fetch, t]);
 
   const commit = useCallback(async () => {
     if (!job) return;
@@ -131,6 +143,7 @@ export function StepImport() {
       });
       if (!response.ok) throw new Error(await responseError(response, t('setup_import_start_failed', 'Could not start the background import.')));
       setJob(await response.json());
+      setPollAttempt((attempt) => attempt + 1);
       setPhase('processing');
     } catch (caught) {
       setPhase('error');
@@ -139,6 +152,7 @@ export function StepImport() {
   }, [job, passphrase, fetch, t]);
 
   const busy = ['uploading', 'validating', 'starting', 'processing', 'completed'].includes(phase);
+  const retryValidation = Boolean(file && job?.status === 'uploading' && job.progress?.uploadedBytes === file.size);
   const isOwner = !permissions.isResolved || permissions.isOwner || permissions.isSuperAdmin;
 
   return (
@@ -233,7 +247,9 @@ export function StepImport() {
               loading={phase === 'uploading'}
               className="bg-btnPrimary text-white"
             >
-              {t('setup_import_validate_button', 'Upload and verify archive')}
+              {retryValidation
+                ? t('setup_import_retry_button', 'Retry verification')
+                : t('setup_import_validate_button', 'Upload and verify archive')}
             </Button>
           )}
           {phase === 'ready' && (

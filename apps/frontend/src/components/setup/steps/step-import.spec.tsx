@@ -98,6 +98,44 @@ describe('StepImport', () => {
     expect(screen.queryByRole('button', { name: 'Import organization' })).toBeNull();
   });
 
+  it('retries transient validation without uploading the archive again', async () => {
+    let validationAttempts = 0;
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url === '/org-portability/import-uploads') {
+        return jsonResponse({ id: 'job-1', status: 'uploading' });
+      }
+      if (url.endsWith('/chunks')) return jsonResponse({ uploadedBytes: 3 });
+      if (url.endsWith('/validate')) {
+        validationAttempts++;
+        polledJob = validationAttempts === 1 ? {
+          id: 'job-1',
+          status: 'uploading',
+          progress: { uploadedBytes: 3 },
+          error: 'Temporary validation failure',
+        } : {
+          id: 'job-1',
+          status: 'ready',
+          progress: { source: { name: 'Source Org' }, createdAt: new Date().toISOString(), missingAssets: 0 },
+        };
+        return jsonResponse({ id: 'job-1', status: 'validating' });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    render(<StepImport />);
+    fireEvent.change(screen.getByLabelText('Organization export (.zip)'), {
+      target: { files: [new File(['zip'], 'organization.zip')] },
+    });
+    fireEvent.change(screen.getByPlaceholderText('At least 12 characters'), { target: { value: 'correct horse battery' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Upload and verify archive' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry verification' }));
+    await screen.findByText('Archive verified: Source Org');
+
+    expect(mockFetch.mock.calls.filter(([url]) => url === '/org-portability/import-uploads')).toHaveLength(1);
+    expect(mockFetch.mock.calls.filter(([url]) => String(url).endsWith('/chunks'))).toHaveLength(1);
+    expect(mockFetch.mock.calls.filter(([url]) => String(url).endsWith('/validate'))).toHaveLength(2);
+  });
+
   it('redirects after the background job completes', async () => {
     render(<StepImport />);
     fireEvent.change(screen.getByLabelText('Organization export (.zip)'), {
