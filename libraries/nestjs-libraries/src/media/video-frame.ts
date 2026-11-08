@@ -177,6 +177,7 @@ export async function extractVideoFrameInfoFromStream(
       },
     });
     await pipeline(stream, limiter, fs.createWriteStream(inPath, { flags: 'wx' }));
+    clearTimeout(timeout);
     if (!bytes) return emptyFrame();
     const detected = await fromFile(inPath).catch(() => undefined);
     const info = await extractAtPath(inPath, path.join(dir, 'frame.jpg'));
