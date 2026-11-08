@@ -323,6 +323,78 @@ export class OrgPortabilityService {
     }
   }
 
+  private async _writeAsset(
+    writer: OrgArchiveWriter,
+    assets: Record<string, OrgPortabilityAssetManifest>,
+    counts: Record<string, number>,
+    writtenAssets: Set<string>,
+    existingAssetBytes: bigint,
+    assetTemp: string,
+    input: {
+      id: string;
+      sourcePath: string;
+      declaredSize?: bigint;
+      mime: string;
+      kind: 'file' | 'font';
+      adapter: { readFileStream(filePath: string): Promise<NodeJS.ReadableStream> };
+    },
+  ): Promise<bigint> {
+    if (input.declaredSize !== undefined && input.declaredSize > orgPortabilityMaxAssetBytes()) {
+      throw new Error(`Asset ${input.id} exceeds the per-asset export limit`);
+    }
+    const hash = createHash('sha256');
+    let size = 0n;
+    try {
+      try {
+        const source = await input.adapter.readFileStream(input.sourcePath);
+        rmSync(assetTemp, { force: true });
+        const limiter = new Transform({
+          transform(chunk: Buffer, _encoding, callback) {
+            size += BigInt(chunk.length);
+            if (size > orgPortabilityMaxAssetBytes()) {
+              callback(new Error(`Asset ${input.id} exceeds the per-asset export limit`));
+              return;
+            }
+            hash.update(chunk);
+            callback(null, chunk);
+          },
+        });
+        await pipeline(source, limiter, createWriteStream(assetTemp, { flags: 'wx', mode: 0o600 }));
+      } catch (error) {
+        if (!isMissingObjectError(error)) throw error;
+        assets[input.id] = {
+          fileId: input.id,
+          sha256: '',
+          size: (input.declaredSize || 0n).toString(),
+          mime: input.mime,
+          kind: input.kind,
+          ...(input.kind === 'font' ? { sourcePath: this._stripUrlQuery(input.sourcePath) } : {}),
+          missing: true,
+        };
+        counts.missingAssets = (counts.missingAssets || 0) + 1;
+        return 0n;
+      }
+      const sha256 = hash.digest('hex');
+      assets[input.id] = {
+        fileId: input.id,
+        sha256,
+        size: size.toString(),
+        mime: input.mime,
+        kind: input.kind,
+        ...(input.kind === 'font' ? { sourcePath: this._stripUrlQuery(input.sourcePath) } : {}),
+      };
+      if (writtenAssets.has(sha256)) return 0n;
+      if (existingAssetBytes + size > orgPortabilityMaxArchiveBytes()) {
+        throw new Error('Organization export exceeds the archive size limit');
+      }
+      await writer.addAsset(`assets/${sha256}`, createReadStream(assetTemp), () => undefined);
+      writtenAssets.add(sha256);
+      return size;
+    } finally {
+      rmSync(assetTemp, { force: true });
+    }
+  }
+
   async processExport(jobId: string): Promise<void> {
     const claimed = await this._repository.claimExportJob(jobId);
     if (claimed.count !== 1) return;
@@ -362,61 +434,35 @@ export class OrgPortabilityService {
       const writtenAssets = new Set<string>();
       let uniqueAssetBytes = 0n;
       for (const file of await this._repository.files(job.organizationId)) {
-        if (BigInt(file.fileSize) > orgPortabilityMaxAssetBytes()) {
-          throw new Error(`File ${file.id} exceeds the per-asset export limit`);
-        }
         const metadata = file.metadata && typeof file.metadata === 'object' && !Array.isArray(file.metadata)
           ? file.metadata as Record<string, unknown>
           : {};
-        const mime = String(metadata.mime || metadata.mimeType || file.type || 'application/octet-stream');
-        const hash = createHash('sha256');
-        let size = 0n;
-        try {
-          try {
-            const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, job.organizationId);
-            const source = await adapter.readFileStream(file.path);
-            rmSync(assetTemp, { force: true });
-            const limiter = new Transform({
-              transform(chunk: Buffer, _encoding, callback) {
-                size += BigInt(chunk.length);
-                if (size > orgPortabilityMaxAssetBytes()) {
-                  callback(new Error(`File ${file.id} exceeds the per-asset export limit`));
-                  return;
-                }
-                hash.update(chunk);
-                callback(null, chunk);
-              },
-            });
-            await pipeline(source, limiter, createWriteStream(assetTemp, { flags: 'wx', mode: 0o600 }));
-          } catch (error) {
-            if (!isMissingObjectError(error)) throw error;
-            assets[file.id] = {
-              fileId: file.id,
-              sha256: '',
-              size: String(file.fileSize),
-              mime,
-              missing: true,
-            };
-            counts.missingAssets = (counts.missingAssets || 0) + 1;
-            continue;
+        uniqueAssetBytes += await this._writeAsset(writer, assets, counts, writtenAssets, uniqueAssetBytes, assetTemp, {
+          id: file.id,
+          sourcePath: file.path,
+          declaredSize: BigInt(file.fileSize),
+          mime: String(metadata.mime || metadata.mimeType || file.type || 'application/octet-stream'),
+          kind: 'file',
+          adapter: await this._storageService.resolveAdapterForFolder(file.folderId, job.organizationId),
+        });
+      }
+      const fontAdapter = await this._storageService.getLocalAdapterForOrg(job.organizationId, true);
+      for (const brand of await this._repository.brandFonts(job.organizationId)) {
+        const fonts = Array.isArray(brand.customFonts) ? brand.customFonts : [];
+        for (const [index, value] of fonts.entries()) {
+          if (!value || typeof value !== 'object' || Array.isArray(value) || typeof (value as any).path !== 'string' || !(value as any).path) {
+            throw new Error(`Brand ${brand.id} has an invalid custom font entry`);
           }
-          const sha256 = hash.digest('hex');
-          assets[file.id] = {
-            fileId: file.id,
-            sha256,
-            size: size.toString(),
-            mime,
-          };
-          if (!writtenAssets.has(sha256)) {
-            if (uniqueAssetBytes + size > orgPortabilityMaxArchiveBytes()) {
-              throw new Error('Organization export exceeds the archive size limit');
-            }
-            uniqueAssetBytes += size;
-            await writer.addAsset(`assets/${sha256}`, createReadStream(assetTemp), () => undefined);
-            writtenAssets.add(sha256);
-          }
-        } finally {
-          rmSync(assetTemp, { force: true });
+          const sourcePath = (value as any).path as string;
+          const extension = this._stripUrlQuery(sourcePath).toLowerCase().match(/\.(ttf|otf|woff2)$/)?.[1];
+          if (!extension) throw new Error(`Brand ${brand.id} has an unsupported custom font path`);
+          uniqueAssetBytes += await this._writeAsset(writer, assets, counts, writtenAssets, uniqueAssetBytes, assetTemp, {
+            id: `font:${brand.id}:${index}`,
+            sourcePath,
+            mime: `font/${extension}`,
+            kind: 'font',
+            adapter: fontAdapter,
+          });
         }
       }
       counts.assets = writtenAssets.size;

@@ -26,9 +26,10 @@ vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
 }));
 
 const passphrase = 'cross deployment passphrase';
-const localAdapter = (root: string, missingPath?: string) => ({
+const localAdapter = (root: string, missingPath?: string | string[]) => ({
   readFileStream: async (filePath: string) => {
-    if (filePath === missingPath) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    const missing = Array.isArray(missingPath) ? missingPath : [missingPath];
+    if (missing.includes(filePath)) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
     return createReadStream(filePath);
   },
   writeFileStream: async (sourcePath: string) => {
@@ -119,6 +120,7 @@ describe('organization portability across two deployments', () => {
         data: [
           { userId: sourceOwner.id, organizationId: sourceOrg.id, roleId: sourceIdentity.ownerRole.id },
           { userId: sourceMember.id, organizationId: sourceOrg.id, roleId: customRole.id },
+          { userId: formerMember.id, organizationId: sourceOrg.id, roleId: sourceIdentity.memberRole.id, disabled: true },
         ],
       });
       await destination.userOrganization.create({
@@ -187,6 +189,19 @@ describe('organization portability across two deployments', () => {
           metadata: { mime: 'image/png' },
         },
       });
+      const sourceFont = path.join(sourceStorage, 'brand-font.ttf');
+      const missingFont = path.join(sourceStorage, 'missing-font.ttf');
+      writeFileSync(sourceFont, 'portable font bytes', { mode: 0o600 });
+      await source.aIBrandProfile.create({
+        data: {
+          organizationId: sourceOrg.id,
+          name: 'Portable Brand',
+          customFonts: [
+            { fileId: 'font-1', family: 'Portable Font', path: sourceFont, weights: [400, 700], italic: true, serverRender: true },
+            { fileId: 'font-2', family: 'Missing Font', path: missingFont, weights: [400], serverRender: true },
+          ],
+        },
+      });
       await source.design.create({
         data: {
           organizationId: sourceOrg.id,
@@ -210,10 +225,13 @@ describe('organization portability across two deployments', () => {
       });
 
       const sourceRepository = new OrgPortabilityRepository(source as unknown as PrismaService);
-      const sourceAdapter = localAdapter(sourceStorage, missingAsset);
+      const sourceAdapter = localAdapter(sourceStorage, [missingAsset, missingFont]);
       const exporter = new OrgPortabilityService(
         sourceRepository,
-        { resolveAdapterForFolder: async () => sourceAdapter } as any,
+        {
+          resolveAdapterForFolder: async () => sourceAdapter,
+          getLocalAdapterForOrg: async () => sourceAdapter,
+        } as any,
         encryption,
         audit as any,
       );
@@ -251,11 +269,31 @@ describe('organization portability across two deployments', () => {
       await expect(importer.validateUpload(destinationOrg.id, destinationOwner.id, upload.id, 'wrong passphrase'))
         .rejects.toThrow('passphrase is incorrect');
       expect((await destinationRepository.getJob(upload.id)).status).toBe('uploading');
+      const completeValidation = vi.spyOn(destinationRepository, 'completeValidation')
+        .mockImplementationOnce(async () => {
+          throw new Error('forced transient validation failure');
+        });
       await importer.validateUpload(destinationOrg.id, destinationOwner.id, upload.id, passphrase);
       await importer.processImport(upload.id);
+      const retryJob = await destinationRepository.getJob(upload.id);
+      expect(retryJob.status).toBe('uploading');
+      expect(retryJob.error).toBe('forced transient validation failure');
+      expect(retryJob.archiveKeyCiphertext).toBeNull();
+      expect(retryJob.progress.uploadedBytes).toBe(archive.length);
+      expect(readFileSync(retryJob.spoolPath)).toEqual(archive);
+
+      await importer.validateUpload(destinationOrg.id, destinationOwner.id, upload.id, passphrase);
+      await importer.processImport(upload.id);
+      completeValidation.mockRestore();
       const validated = await importer.getJob(destinationOrg.id, destinationOwner.id, upload.id);
       expect(validated.status).toBe('ready');
-      expect(validated.progress.missingAssets).toBe(1);
+      expect(validated.progress.missingAssets).toBe(2);
+      const validationEventIds = inngest.send.mock.calls
+        .map(([event]) => event)
+        .filter((event) => event.name === 'org/portability.import')
+        .map((event) => event.id);
+      expect(validationEventIds).toHaveLength(2);
+      expect(new Set(validationEventIds).size).toBe(2);
       await importer.commitImport(destinationOrg.id, destinationOwner.id, upload.id, passphrase);
       const pendingJob = await destinationRepository.getJob(upload.id);
       expect(pendingJob.status).toBe('pending');
@@ -302,6 +340,20 @@ describe('organization portability across two deployments', () => {
         name: 'media/video-thumbnail.generate',
         data: { organizationId: destinationOrg.id, fileId: importedFile.id },
       }));
+      const importedBrand = await destination.aIBrandProfile.findFirst({ where: { organizationId: destinationOrg.id } });
+      const importedFonts = importedBrand.customFonts as any[];
+      expect(importedFonts).toHaveLength(1);
+      expect(importedFonts[0]).toMatchObject({
+        fileId: 'font-1',
+        family: 'Portable Font',
+        weights: [400, 700],
+        italic: true,
+        serverRender: true,
+      });
+      expect(importedFonts[0].path.startsWith(destinationStorage)).toBe(true);
+      expect(readFileSync(importedFonts[0].path, 'utf8')).toBe('portable font bytes');
+      expect(JSON.stringify(importedBrand.customFonts)).not.toContain(sourceFont);
+      expect(JSON.stringify(importedBrand.customFonts)).not.toContain(missingFont);
       const importedDesign = await destination.design.findFirst({ where: { organizationId: destinationOrg.id } });
       expect(importedDesign.previewFileId).toBeNull();
       expect(importedDesign.createdById).toBe(destinationOwner.id);

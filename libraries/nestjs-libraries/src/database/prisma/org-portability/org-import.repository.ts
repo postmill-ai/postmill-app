@@ -89,6 +89,19 @@ export class OrgImportRepository {
     });
   }
 
+  retryValidationJob(id: string, error: string, progress: Prisma.InputJsonValue) {
+    return this._prisma.orgPortabilityJob.updateMany({
+      where: { id, kind: 'import', status: 'validating' },
+      data: {
+        status: 'uploading',
+        error,
+        archiveKeyCiphertext: null,
+        archiveSha256: null,
+        progress,
+      },
+    });
+  }
+
   resetPendingJob(id: string) {
     return this._prisma.orgPortabilityJob.updateMany({
       where: { id, kind: 'import', status: 'pending' },

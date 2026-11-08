@@ -276,11 +276,11 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
 - `/org-portability/*` management routes require the actual `owner` role and are in
   `authenticatedController` (session + CSRF). The separate `/org-portability/download/:token`
   controller is public only for a CSPRNG, five-minute, one-time token issued by that owner.
-- `postmill.org-export.v1` stores NDJSON domain payloads and content-addressed assets. Provider
-  credentials are removed from domain payloads and encrypted with a CSPRNG archive key using
-  AES-256-GCM. The passphrase wraps only that key with scrypt (N=32768, r=8, p=1); no passphrase
-  or plaintext secret is stored in jobs, logs, Sentry, or archive metadata. HMAC-SHA256 protects
-  the manifest and asset inventory.
+- New exports use `postmill.org-export.v1.1`; import accepts v1 and v1.1. They store NDJSON domain
+  payloads and content-addressed file and custom-brand-font assets. Provider credentials are removed
+  from domain payloads and encrypted with a CSPRNG archive key using AES-256-GCM. The passphrase
+  wraps only that key with scrypt (N=32768, r=8, p=1); no passphrase or plaintext secret is stored
+  in jobs, logs, Sentry, or archive metadata. HMAC-SHA256 protects the manifest and asset inventory.
 - In-flight archive keys exist only as `EncryptionService` ciphertext and are cleared on
   completion, failure, or expiry. Archives are mode-0600 files in `ORG_PORTABILITY_SPOOL_DIR`
   (default `${TMPDIR}/postmill-org-archives`), never public `/uploads` or public buckets; hourly
@@ -294,12 +294,14 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   incomplete. Uploads use sequential chunks into the same private spool. HTTP reads only the
   central-directory manifest; full domain/asset authentication runs in Inngest. The passphrase is
   used only to unwrap the key, which is stored as deployment-encrypted ciphertext and cleared on
-  completion, failure and expiry. The worker verifies the archive SHA-256 before staging. All
-  database changes and job completion share one transaction; staged paths are recorded for retry
-  cleanup. Imported integrations/providers/automation are disabled, missing File rows are skipped
-  with their references nulled, thumbnails regenerate, and source bucket paths are never retained.
-  Existing destination users are never auto-joined: other members receive the standard team invite
-  flow, and historical authorship falls back to the importing owner.
+  completion, failure and expiry. A transient validation failure also clears the key but preserves
+  the spool for a fresh validation event without another upload; invalid archives are deleted. The
+  worker verifies the archive SHA-256 before staging. All database changes and job completion share
+  one transaction; staged paths are recorded for retry cleanup. Imported integrations/providers/
+  automation are disabled, missing File rows are skipped with their references nulled, missing font
+  entries are removed, thumbnails regenerate, and source bucket paths are never retained. Existing
+  destination users are never auto-joined: active members receive the standard team invite flow,
+  disabled memberships are skipped, and historical authorship falls back to the importing owner.
 
 ## Checklist
 

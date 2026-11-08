@@ -124,8 +124,8 @@ const ALLOWED_MIME_TYPES = new Set<string>([
 // broader set than user uploads: adds video/webm + audio/webm and the text/plain &
 // application/json transcript/provenance sidecars). This blocks a provider from landing
 // `text/html` (or any other active type) in the org bucket, where it could be served
-// and executed. Text/JSON have no magic bytes, so they are trusted only from the caller's
-// declared content-type — never sniffed.
+// and executed. Types without dependable magic bytes use the caller's declared content-type only
+// after passing this allowlist.
 export const STORED_ARTIFACT_ALLOWED_MIME = new Set<string>([
   'image/jpeg',
   'image/png',
@@ -148,10 +148,21 @@ export const STORED_ARTIFACT_ALLOWED_MIME = new Set<string>([
   'audio/webm',
   'text/plain',
   'application/json',
+  'font/ttf',
+  'font/otf',
+  'font/woff2',
   // Inert archive type (never rendered/executed in place) — the Designer
   // `.pdesign` export artifact is a zip and lands through writeBuffer.
   'application/zip',
 ]);
+
+const STORED_ARTIFACT_EXTENSIONS: Record<string, string> = {
+  'application/json': 'json',
+  'text/plain': 'txt',
+  'font/ttf': 'ttf',
+  'font/otf': 'otf',
+  'font/woff2': 'woff2',
+};
 
 export async function storedArtifactFile(filePath: string, contentType?: string) {
   const detected = await fromFile(filePath);
@@ -161,7 +172,7 @@ export async function storedArtifactFile(filePath: string, contentType?: string)
   }
   return {
     mime,
-    ext: detected?.ext || (mime === 'application/json' ? 'json' : mime === 'text/plain' ? 'txt' : 'bin'),
+    ext: detected?.ext || STORED_ARTIFACT_EXTENSIONS[mime] || 'bin',
     size: statSync(filePath).size,
   };
 }

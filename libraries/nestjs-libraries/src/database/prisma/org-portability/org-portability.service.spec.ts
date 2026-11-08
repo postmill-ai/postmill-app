@@ -100,11 +100,15 @@ const makeService = () => {
     relatedBatch: vi.fn(async () => []),
     integrationWebhookPairs: vi.fn(async () => [{ integrationId: 'integration-1', webhookId: 'webhook-1' }]),
     files: vi.fn(async () => fileRows),
+    brandFonts: vi.fn(async () => []),
   };
   const adapter = {
     readFileStream: vi.fn(async () => Readable.from([Buffer.from('hello '), Buffer.from('world')])),
   };
-  const storageService = { resolveAdapterForFolder: vi.fn(async () => adapter) };
+  const storageService = {
+    resolveAdapterForFolder: vi.fn(async () => adapter),
+    getLocalAdapterForOrg: vi.fn(async () => adapter),
+  };
   const encryption = {
     encrypt: vi.fn((value: string) => value),
     decrypt: vi.fn((value: string) => value === 'v2:encrypted-provider-token' ? 'plain-provider-token' : value),
@@ -141,7 +145,7 @@ describe('OrgPortabilityService export', () => {
     expect(repository.completeExportJob).toHaveBeenCalled();
     const entries = unzipSync(readFileSync(job.spoolPath));
     const manifest = JSON.parse(strFromU8(entries['manifest.json']));
-    expect(manifest.schema).toBe('postmill.org-export.v1');
+    expect(manifest.schema).toBe('postmill.org-export.v1.1');
     expect(manifest.counts.Integration).toBe(1);
     expect(manifest.counts.integrationWebhooks).toBe(1);
     expect(manifest.counts.File).toBe(2);
@@ -173,6 +177,33 @@ describe('OrgPortabilityService export', () => {
     expect((await service.consumeDownload(token)).id).toBe(job.id);
     await expect(service.consumeDownload(token)).rejects.toThrow('expired or already used');
     expect(adapter.readFileStream).toHaveBeenCalledTimes(2);
+  });
+
+  it('inventories custom brand fonts through base storage with path sanitization and deduplication', async () => {
+    const { service, repository, adapter, job } = makeService();
+    repository.brandFonts.mockResolvedValue([{
+      id: 'brand-1',
+      customFonts: [{
+        fileId: 'font-upload-1',
+        family: 'Custom Font',
+        path: 'https://cdn.example.test/custom.ttf?signature=secret',
+      }],
+    }]);
+
+    await service.processExport(job.id);
+
+    const entries = unzipSync(readFileSync(job.spoolPath));
+    const manifest = JSON.parse(strFromU8(entries['manifest.json']));
+    expect(manifest.assets['font:brand-1:0']).toMatchObject({
+      fileId: 'font:brand-1:0',
+      kind: 'font',
+      sourcePath: 'https://cdn.example.test/custom.ttf',
+      sha256: manifest.assets['file-1'].sha256,
+      mime: 'font/ttf',
+    });
+    expect(manifest.counts.assets).toBe(1);
+    expect(adapter.readFileStream).toHaveBeenCalledTimes(3);
+    expect(adapter.readFileStream).toHaveBeenLastCalledWith('https://cdn.example.test/custom.ttf?signature=secret');
   });
 
   it('creates a job with wrapped-key metadata and no plaintext passphrase', async () => {

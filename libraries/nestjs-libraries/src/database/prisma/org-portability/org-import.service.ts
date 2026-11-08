@@ -254,7 +254,11 @@ export class OrgImportService {
       const claimed = await this._repository.startValidation(
         jobId,
         this._encryption.encrypt(archiveKey.toString('base64')),
-        { keyWrap },
+        {
+          ...(job.progress as any),
+          keyWrap,
+          uploadedBytes: statSync(job.spoolPath).size,
+        },
       );
       if (claimed.count !== 1) return this._publicJob(await this._repository.getJob(jobId));
     } finally {
@@ -264,7 +268,7 @@ export class OrgImportService {
       await inngest.send({
         name: ORG_PORTABILITY_IMPORT_EVENT,
         data: { jobId, organizationId: orgId },
-        id: `org-portability-validation-${jobId}`,
+        id: `org-portability-validation-${jobId}-${randomUUID()}`,
       });
     } catch (error) {
       await this._repository.resetValidationJob(jobId);
@@ -425,10 +429,14 @@ export class OrgImportService {
         missingAssets: validation.manifest.counts.missingAssets || 0,
       });
     } catch (error) {
-      rmSync(job.spoolPath, { force: true });
       const message = safeError(error);
       this._logger.warn(`Organization import validation ${jobId} failed: ${message}`);
-      await this._repository.failJob(jobId, message, { archiveSha256: job.archiveSha256 });
+      if (error instanceof BadRequestException || (error as any)?.code === 'ENOENT') {
+        rmSync(job.spoolPath, { force: true });
+        await this._repository.failJob(jobId, message, { archiveSha256: job.archiveSha256 });
+      } else {
+        await this._repository.retryValidationJob(jobId, message, job.progress || {});
+      }
     } finally {
       archiveKey?.fill(0);
     }
@@ -538,6 +546,16 @@ export class OrgImportService {
           if (source.type === 'video' || stage.mime.startsWith('video/')) maps.videoFileIds.push(id);
         }
       }
+    }
+    for (const asset of Object.values(extraction.manifest.assets)) {
+      if (asset.kind !== 'font') continue;
+      if (asset.missing) {
+        maps.paths.set(asset.sourcePath!, null);
+        continue;
+      }
+      const stage = assets[asset.fileId];
+      if (!stage) throw new BadRequestException('Archive font bytes are missing.');
+      maps.paths.set(asset.sourcePath!, stage.path);
     }
     return maps;
   }
@@ -698,6 +716,9 @@ export class OrgImportService {
     }
     if (model === 'FileFolder') row.storageProviderId = null;
     if (model === 'AIPromptTemplate') row.globalKey = null;
+    if (model === 'AIBrandProfile' && Array.isArray(row.customFonts)) {
+      row.customFonts = row.customFonts.filter((font: any) => typeof font?.path === 'string' && font.path);
+    }
     if (model === 'File') {
       row.thumbnail = null;
       row.thumbnailTimestamp = null;
@@ -793,7 +814,7 @@ export class OrgImportService {
       const email = String(membership.user?.email || '').toLowerCase();
       if (!email) throw new BadRequestException('Archive member has no email.');
       maps.users.set(membership.userId, maps.ownerId);
-      if (email === maps.ownerEmail) continue;
+      if (membership.disabled || email === maps.ownerEmail) continue;
       const customRole = maps.roles.get(membership.roleId);
       const roleKey = membership.roleRef?.key === 'owner' ? 'admin' : membership.roleRef?.key;
       const roleId = customRole || maps.systemRoles.get(roleKey || 'member');

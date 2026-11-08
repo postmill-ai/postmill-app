@@ -13,6 +13,7 @@ import {
 } from './org-portability.crypto';
 import {
   ORG_EXPORT_SCHEMA,
+  ORG_EXPORT_SCHEMA_V1,
   type OrgPortabilityManifest,
 } from './org-portability.types';
 import { extractOrgArchive, readOrgArchiveManifest, readOrgDomainRows, validateOrgArchive } from './org-import-archive';
@@ -32,6 +33,7 @@ const makeArchive = async (options: {
   duplicateEntry?: boolean;
   missingAsset?: boolean;
   unexpectedAsset?: boolean;
+  fontWithoutSource?: boolean;
 } = {}) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'org-import-validation-'));
   dirs.push(dir);
@@ -59,6 +61,11 @@ const makeArchive = async (options: {
       } : {
         fileId: 'file-1', sha256, size: String(body.length), mime: 'application/octet-stream',
       },
+      ...(options.fontWithoutSource ? {
+        'font:brand-1:0': {
+          fileId: 'font:brand-1:0', sha256, size: String(body.length), mime: 'font/ttf', kind: 'font' as const,
+        },
+      } : {}),
     },
     crypto: { ...keyWrap, secrets: encryptOrgSecretRefs([], key) },
   };
@@ -94,6 +101,12 @@ describe('validateOrgArchive', () => {
     expect(readFileSync(file).length).toBeGreaterThan(0);
   });
 
+  it('continues to accept v1 archives', async () => {
+    const file = await makeArchive({ schema: ORG_EXPORT_SCHEMA_V1 });
+    const result = await validateOrgArchive(file, passphrase);
+    expect(result.manifest.schema).toBe(ORG_EXPORT_SCHEMA_V1);
+  });
+
   it('rejects a wrong passphrase, asset tampering and domain tampering', async () => {
     expect(await validateOrgArchive(await makeArchive(), 'wrong passphrase').catch((error) => error.message))
       .toContain('passphrase is incorrect');
@@ -117,6 +130,8 @@ describe('validateOrgArchive', () => {
       .toContain('count does not match');
     expect(await validateOrgArchive(await makeArchive({ unexpectedAsset: true }), passphrase).catch((error) => error.message))
       .toContain('unexpected asset');
+    expect(await validateOrgArchive(await makeArchive({ fontWithoutSource: true }), passphrase).catch((error) => error.message))
+      .toContain('font asset metadata');
   });
 
   it('accepts explicitly missing source objects and extracts an archive only once', async () => {

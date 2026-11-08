@@ -29,6 +29,20 @@ describe('LocalStorage.writeFileStream', () => {
     expect(jsonUrl).toMatch(/\.json$/);
   });
 
+  it('stores font artifacts with their original extension', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'local-storage-stream-'));
+    dirs.push(root);
+    const source = path.join(root, 'brand-font.ttf');
+    const bytes = Buffer.from('portable font bytes');
+    writeFileSync(source, bytes);
+    const adapter = new LocalStorage(logger, root, 'org-1');
+
+    const stored = await adapter.writeFileStream(source, 'font/ttf');
+
+    expect(stored).toMatch(/\.ttf$/);
+    expect(readFileSync(stored.replace(/^.*\/uploads\//, root + '/'))).toEqual(bytes);
+  });
+
   it('rejects active HTML artifacts', async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'local-storage-stream-'));
     dirs.push(root);

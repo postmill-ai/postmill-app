@@ -9,6 +9,7 @@ import { inflateRawSync } from 'zlib';
 import { UnzipInflate, Unzip } from 'fflate';
 import {
   ORG_EXPORT_SCHEMA,
+  ORG_EXPORT_SCHEMAS,
   ORG_PORTABILITY_MAX_DOMAIN_BYTES,
   orgPortabilityMaxArchiveBytes,
   orgPortabilityMaxAssetBytes,
@@ -132,7 +133,7 @@ export async function validateOrgArchiveWithKey(
   } catch {
     return invalid('Archive manifest is not valid JSON.');
   }
-  if (manifest.schema !== ORG_EXPORT_SCHEMA) invalid('Archive format is not supported.');
+  if (!ORG_EXPORT_SCHEMAS.has(manifest.schema)) invalid('Archive format is not supported.');
   if (!manifest.crypto || !manifest.integrity || !manifest.assets || !manifest.counts || !manifest.domains) {
     invalid('Archive manifest is incomplete.');
   }
@@ -163,6 +164,17 @@ export async function validateOrgArchiveWithKey(
     let missingAssets = 0;
     for (const [fileId, asset] of Object.entries(manifest.assets)) {
       if (!asset || asset.fileId !== fileId) invalid('Archive asset metadata is inconsistent.');
+      const kind = asset.kind || 'file';
+      if (kind !== 'file' && kind !== 'font') invalid('Archive asset kind is not supported.');
+      if (kind === 'file' && asset.sourcePath !== undefined) invalid('Archive file asset metadata is inconsistent.');
+      if (kind === 'font' && (
+        manifest.schema !== ORG_EXPORT_SCHEMA
+        || typeof asset.sourcePath !== 'string'
+        || !asset.sourcePath
+        || !['font/ttf', 'font/otf', 'font/woff2'].includes(asset.mime)
+      )) {
+        invalid('Archive font asset metadata is invalid.');
+      }
       if (asset.missing) {
         if (asset.sha256 !== '') invalid('A missing archive asset cannot reference asset bytes.');
         missingAssets++;
@@ -259,7 +271,7 @@ export function readOrgArchiveManifest(archivePath: string): OrgPortabilityManif
           : method === 0 ? compressed.toString('utf8') : invalid('Archive manifest compression is unsupported.');
         if (Buffer.byteLength(text) > MAX_MANIFEST_BYTES) invalid('Archive manifest is too large.');
         const manifest = JSON.parse(text) as OrgPortabilityManifest;
-        if (manifest.schema !== ORG_EXPORT_SCHEMA) invalid('Archive format is not supported.');
+        if (!ORG_EXPORT_SCHEMAS.has(manifest.schema)) invalid('Archive format is not supported.');
         if (!manifest.crypto || !manifest.integrity) invalid('Archive manifest is incomplete.');
         return manifest;
       }
