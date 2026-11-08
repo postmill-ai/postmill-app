@@ -1769,22 +1769,12 @@ export class AiMediaService {
     background: { url: string; fileId: string };
   }> {
     try {
-      let generatedUrl: string;
-      try {
-        generatedUrl = await this.generateImage(
-          'Remove the main subject completely. Reconstruct the background where the subject was, preserving the original scene, lighting, colors, framing, and all other details. Return only the empty background with no subject.',
-          { orgId: options.orgId, sourceUrl: imageUrl }
-        );
-        if (!generatedUrl) throw new Error('Image generation returned no background');
-      } catch (cause) {
-        this._logger.warn(`Magic Grab reconstruction failed; using inpaint: ${(cause as Error).message}`);
-        generatedUrl = await this.inpaintImage(
-          imageUrl,
-          maskUrl,
-          'Remove the main subject and reconstruct the surrounding background naturally. Preserve the original style, lighting, colors, and framing.',
-          options,
-        );
-      }
+      const generatedUrl = await this.inpaintImage(
+        imageUrl,
+        maskUrl,
+        'Remove the main subject completely and reconstruct the surrounding background naturally. Preserve the original scene, lighting, colors, framing, and all other details. Return only the empty background with no subject or invented objects.',
+        options,
+      );
       const backgroundUrl = await this._compositeMagicGrab(imageUrl, generatedUrl, maskUrl, options.orgId);
       const backgroundFile = await this.saveUrlToFile(
         options.orgId,

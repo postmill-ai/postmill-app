@@ -175,6 +175,12 @@ Older flattened cutouts can gain a refinement mask, but an original background i
 when its pixels are still stored; the Inspector says when they are unavailable. Restore/Erase is
 for still images and still-image clips, not per-frame moving-video background removal.
 
+### Magic Grab / Select Subject
+
+**Magic Grab / Select Subject** separates the subject into a movable layer and reconstructs the
+background through masked inpainting. Only the subject-mask area is regenerated; unrelated pixels
+stay unchanged. Review the result before Apply, then use Restore/Erase for any remaining edge cleanup.
+
 ## Opening the Designer
 
 The Designer accepts a few different entry points, all via the `/media/designer` route:

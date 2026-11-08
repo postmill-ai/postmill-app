@@ -29,9 +29,10 @@ const PREFER_WAIT_SECONDS = 25;
 // flux-schnell was retired upstream ("No adapter found" 500s in prod); flux-1.1-pro is
 // allowlisted, cost-tabled, and verified live.
 const DEFAULT_IMAGE_MODEL = 'black-forest-labs/flux-1.1-pro';
-// cjwbw/rembg was deleted upstream (every call 404'd in prod). 851-labs/background-remover
-// is allowlisted, takes the same `{ image }` input, and returns a single image URL.
-const DEFAULT_BG_REMOVE_MODEL = '851-labs/background-remover';
+// Bria preserved substantially more subject detail than 851-labs in the live QA comparison,
+// but requires an HTTP(S) source. Inline uploads fall back to the byte-compatible model.
+const DEFAULT_BG_REMOVE_MODEL = 'bria/remove-background';
+const DEFAULT_DATA_URI_BG_REMOVE_MODEL = '851-labs/background-remover';
 const DEFAULT_UPSCALE_MODEL = 'nightmareai/real-esrgan';
 const DEFAULT_INPAINT_MODEL = 'stability-ai/stable-diffusion-inpainting';
 // flux-fill-pro carries the dedicated `outpaint` input (zoom-out / make-square /
@@ -665,7 +666,8 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   }
 
   async removeBackground(imageUrl: string, options?: MediaGenerateOptions): Promise<string> {
-    const model = options?.version || options?.model || DEFAULT_BG_REMOVE_MODEL;
+    const model = options?.version || options?.model
+      || (imageUrl.startsWith('data:') ? DEFAULT_DATA_URI_BG_REMOVE_MODEL : DEFAULT_BG_REMOVE_MODEL);
     return this._createAndResolveUrl(
       { ...options, version: model },
       { [ReplicateMediaAdapter._bgRemoveInputField(model)]: imageUrl },
