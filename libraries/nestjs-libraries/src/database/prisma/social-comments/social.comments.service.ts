@@ -500,7 +500,7 @@ export class SocialCommentsService {
       post.integration.providerIdentifier,
       post.integration.providerVersion ?? undefined
     );
-    if (!provider?.fetchComments) return;
+    if (!provider?.fetchComments || provider.commentsCapabilities?.read === false) return;
 
     let token = post.integration.token;
     if (
@@ -594,8 +594,21 @@ export class SocialCommentsService {
       } catch (err: unknown) {
         fullySynced = false;
         if (err instanceof RefreshToken) {
+          await this._integrationService.refreshNeeded(orgId, post.integration.id);
+          this._logger.warn('Comment sync paused until the channel is reconnected', {
+            organizationId: orgId,
+            integrationId: post.integration.id,
+            providerIdentifier: post.integration.providerIdentifier,
+          });
           break;
         }
+        this._logger.warn('Comment fetch failed; stored comments were not reconciled', {
+          organizationId: orgId,
+          integrationId: post.integration.id,
+          providerIdentifier: post.integration.providerIdentifier,
+          postId: post.id,
+          errorName: err instanceof Error ? err.name : 'UnknownError',
+        });
         hasMore = false;
       }
     }

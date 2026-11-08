@@ -142,7 +142,7 @@ export class HashnodeProvider extends SocialAbstract implements SocialProvider {
 
       return { comments, nextCursor };
     } catch (err) {
-      return { comments: [] };
+      throw err;
     }
   }
 

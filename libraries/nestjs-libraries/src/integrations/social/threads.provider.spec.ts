@@ -91,10 +91,11 @@ describe('Threads - comment capabilities', () => {
       expect(result.comments).toEqual([]);
     });
 
-    it('handles API error gracefully', async () => {
+    it('propagates API errors instead of returning an authoritative empty result', async () => {
       globalThis.fetch = vi.fn().mockRejectedValue(new Error('API error'));
-      const result = await provider.fetchComments('user-1', 'tok', 'thread-1', undefined, mockIntegration);
-      expect(result.comments).toEqual([]);
+      await expect(
+        provider.fetchComments('user-1', 'tok', 'thread-1', undefined, mockIntegration),
+      ).rejects.toThrow('API error');
     });
   });
 

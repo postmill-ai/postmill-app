@@ -12,6 +12,7 @@ vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
 
 import { SocialCommentsService } from './social.comments.service';
 import { GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
 
 describe('SocialCommentsService — controller-moved logic', () => {
   let service: SocialCommentsService;
@@ -342,6 +343,114 @@ describe('SocialCommentsService — controller-moved logic', () => {
 
       expect(aiModelProvider.generateObjectWithModel).not.toHaveBeenCalled();
       expect(classifyRepo.updateSentimentForIds).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('syncComments reconciliation', () => {
+    let provider: any;
+    let syncRepository: any;
+    let syncPostsService: any;
+    let integrationService: any;
+    let syncService: SocialCommentsService;
+    const post = {
+      id: 'post-1',
+      organizationId: 'org-1',
+      integrationId: 'integration-1',
+      releaseId: 'release-1',
+      integration: {
+        id: 'integration-1',
+        organizationId: 'org-1',
+        providerIdentifier: 'linkedin',
+        providerVersion: 'v1',
+        providerConfigId: null,
+        internalId: 'internal-1',
+        token: 'token',
+        tokenExpiration: null,
+        refreshNeeded: false,
+      },
+    } as any;
+
+    beforeEach(() => {
+      provider = {
+        commentsCapabilities: { read: true, reply: true, like: true },
+        fetchComments: vi.fn(),
+      };
+      syncRepository = {
+        getActiveCommentIds: vi.fn().mockResolvedValue([
+          { id: 'stored-comment', platformCommentId: 'platform-old' },
+        ]),
+        softDeleteCommentsByIds: vi.fn().mockResolvedValue({ count: 1 }),
+        countComments: vi.fn().mockResolvedValue(0),
+        upsertComment: vi.fn(),
+      };
+      syncPostsService = { updateCommentCount: vi.fn().mockResolvedValue(undefined) };
+      integrationService = {
+        refreshNeeded: vi.fn().mockResolvedValue(undefined),
+        disconnectChannel: vi.fn().mockResolvedValue(undefined),
+      };
+      const integrationManager = {
+        getSocialIntegrationUnchecked: vi.fn().mockReturnValue(provider),
+        requireClientInformation: vi.fn().mockResolvedValue(undefined),
+      };
+      syncService = new SocialCommentsService(
+        syncRepository,
+        syncPostsService,
+        integrationManager,
+        { refresh: vi.fn() },
+        integrationService,
+        { dispatchEvent: vi.fn().mockResolvedValue(undefined) },
+        {},
+        guardrails as any,
+      );
+    });
+
+    it('does not reconcile deletions after a transient fetch failure', async () => {
+      provider.fetchComments.mockRejectedValue(new Error('provider unavailable'));
+
+      await syncService.syncComments('org-1', post);
+
+      expect(syncRepository.getActiveCommentIds).not.toHaveBeenCalled();
+      expect(syncRepository.softDeleteCommentsByIds).not.toHaveBeenCalled();
+      expect(integrationService.refreshNeeded).not.toHaveBeenCalled();
+    });
+
+    it('does not reconcile deletions after a malformed provider response', async () => {
+      provider.fetchComments.mockRejectedValue(new SyntaxError('malformed response'));
+
+      await syncService.syncComments('org-1', post);
+
+      expect(syncRepository.softDeleteCommentsByIds).not.toHaveBeenCalled();
+    });
+
+    it('pauses the affected channel without reconciling after a refresh-token failure', async () => {
+      provider.fetchComments.mockRejectedValue(
+        new RefreshToken('integration-1', '{}', '{}', 'refresh required'),
+      );
+
+      await syncService.syncComments('org-1', post);
+
+      expect(integrationService.refreshNeeded).toHaveBeenCalledWith('org-1', 'integration-1');
+      expect(syncRepository.softDeleteCommentsByIds).not.toHaveBeenCalled();
+    });
+
+    it('reconciles deletions after a successful authoritative empty response', async () => {
+      provider.fetchComments.mockResolvedValue({ comments: [] });
+
+      await syncService.syncComments('org-1', post);
+
+      expect(syncRepository.softDeleteCommentsByIds).toHaveBeenCalledWith(
+        ['stored-comment'],
+        'org-1',
+      );
+    });
+
+    it('skips providers without comment read support', async () => {
+      provider.commentsCapabilities.read = false;
+
+      await syncService.syncComments('org-1', post);
+
+      expect(provider.fetchComments).not.toHaveBeenCalled();
+      expect(syncRepository.softDeleteCommentsByIds).not.toHaveBeenCalled();
     });
   });
 });

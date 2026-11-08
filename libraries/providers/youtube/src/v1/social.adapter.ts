@@ -782,10 +782,7 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
 
       return { comments, nextCursor };
     } catch (err) {
-      this.logger.error(
-        `YouTube fetchComments error: ${(err as Error)?.message || 'unknown'}`
-      );
-      return { comments: [] };
+      throw err;
     }
   }
 

@@ -138,10 +138,11 @@ describe('Bluesky - comment capabilities', () => {
       expect(result.comments).toEqual([]);
     });
 
-    it('handles API error gracefully', async () => {
+    it('propagates API errors instead of returning an authoritative empty result', async () => {
       mockAgent.getPostThread.mockRejectedValueOnce(new Error('API error'));
-      const result = await provider.fetchComments('did:plc:123', 'tok', 'at://post/1', undefined, mockIntegration);
-      expect(result.comments).toEqual([]);
+      await expect(
+        provider.fetchComments('did:plc:123', 'tok', 'at://post/1', undefined, mockIntegration),
+      ).rejects.toThrow('API error');
     });
   });
 

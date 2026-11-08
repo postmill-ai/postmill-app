@@ -81,10 +81,11 @@ describe('LinkedIn - comment capabilities', () => {
       expect(result.comments).toEqual([]);
     });
 
-    it('handles API error gracefully', async () => {
+    it('propagates API errors instead of returning an authoritative empty result', async () => {
       globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
-      const result = await provider.fetchComments('user-123', 'tok', 'post-123', undefined, mockIntegration);
-      expect(result.comments).toEqual([]);
+      await expect(
+        provider.fetchComments('user-123', 'tok', 'post-123', undefined, mockIntegration),
+      ).rejects.toThrow('Network error');
     });
 
     it('uses correct auth headers and endpoint URL', async () => {

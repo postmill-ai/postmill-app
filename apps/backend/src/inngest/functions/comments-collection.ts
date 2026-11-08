@@ -12,20 +12,20 @@ import { trackRun } from './track-run';
 export const createCommentsCollection = (
   commentsActivity: CommentsActivity,
   runRepo: InngestRunService
-) =>
-  inngest.createFunction(
+) => {
+  const intervalMinutes = commentsActivity.getSweepIntervalMinutes();
+  return inngest.createFunction(
     {
       id: 'comments-collection',
       concurrency: 1,
+      rateLimit: { limit: 1, period: `${intervalMinutes}m` },
       triggers: [{ cron: 'TZ=UTC * * * * *' }],
     },
     async ({ step }) => {
       // Pure env-parse reads (no I/O, deterministic across replays) — intentionally NOT
       // wrapped in step.run; a durable step would only bloat memoization for nothing.
       const daysBack = await commentsActivity.getDaysBack();
-      const intervalMinutes = await commentsActivity.getSweepIntervalMinutes();
 
-      // Track only the fan-out work; the trailing sleep is excluded from the recorded duration.
       await trackRun(step, runRepo, 'comments-collection', async () => {
         const orgIds = await step.run('get-org-ids', () =>
           commentsActivity.getAllOrganizationIds()
@@ -33,8 +33,7 @@ export const createCommentsCollection = (
 
         // Fan out one event per org. No event `id` (idempotency key) — each sweep must
         // produce a fresh sync, and a stable id would dedupe all later sweeps into the first.
-        // The cron's concurrency:1 + the trailing sleep already throttle this to one fan-out
-        // per interval despite the minutely cron trigger.
+        // The function rate limit discards redundant minutely cron runs between sweeps.
         if (orgIds.length > 0) {
           await step.sendEvent(
             'fan-out-org-sync',
@@ -45,11 +44,9 @@ export const createCommentsCollection = (
           );
         }
       });
-
-      // Wait for the configured interval before the next sweep.
-      await step.sleep('wait-interval', `${intervalMinutes}m`);
     }
   );
+};
 
 // Per-org comment sync, triggered by the cron's fan-out. `concurrency` bounds how many
 // orgs sync at once (provider rate limits). Each operation is its OWN step.run, so on a

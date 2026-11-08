@@ -413,7 +413,7 @@ export class SlackProvider extends SocialAbstract implements SocialProvider {
       const nextCursor = json?.response_metadata?.next_cursor;
       return { comments, nextCursor };
     } catch (err) {
-      return { comments: [] };
+      throw err;
     }
   }
 

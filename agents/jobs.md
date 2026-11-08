@@ -44,7 +44,7 @@ All ids below are copied verbatim from `inngest.createFunction({ id: ... })` cal
 |---|---|---|---|
 | `analytics-collection` | `TZ=UTC 0 2 * * *` | 1 | Daily sweep: fans out `analytics/sync-org` per org, then prunes email logs. |
 | `analytics-sync-org`* | event | 5 | *(event-triggered, listed below)* |
-| `comments-collection` | `TZ=UTC * * * * *` (minutely) | 1 | Fans out `comments/sync-org` per org; `concurrency:1` + trailing `step.sleep('wait-interval', '${intervalMinutes}m')` throttles to one sweep per configured interval. |
+| `comments-collection` | `TZ=UTC * * * * *` (minutely) | 1 | Fans out `comments/sync-org` per org; function-wide `rateLimit: { limit: 1, period: '${intervalMinutes}m' }` discards redundant cron runs. Sleeping does not hold a concurrency slot and must not be used as a sweep throttle. |
 | `missing-post-finder` | `TZ=UTC 0 * * * *` (hourly) | 1 | Finds posts stuck in QUEUE and re-emits publish events. |
 | `media-jobs-poll` | `TZ=UTC * * * * *` (minutely) | 1 | Polls pending media-generation jobs; fans out `media/poll-job` per job. |
 | `digest-email-daily` | `TZ=America/New_York 0 9 * * *` | — | Fans out `digest/send-one` per opted-in user (id `digest:daily:{userId}:{orgId}:{today}`). |
@@ -103,7 +103,8 @@ sweep. Canonical example: `analytics-collection.ts` (mirrored by `comments-colle
 - `step.sleep` between steps is durable (autopost 1h loop, streak 22h/2h, post-publish
   wait-until-publish-date).
 - Pure env parses are intentionally **not** wrapped in `step.run` (see `comments-collection`
-  `getDaysBack`/`getSweepIntervalMinutes` comment).
+  `getDaysBack`). The sweep interval is read synchronously at function registration to configure
+  `rateLimit`; it is not a handler step.
 
 ### 3.3 Activity pattern
 

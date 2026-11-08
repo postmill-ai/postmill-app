@@ -1085,7 +1085,7 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 
       return { comments, nextCursor: data.cursor };
     } catch (err) {
-      return { comments: [] };
+      throw err;
     }
   }
 

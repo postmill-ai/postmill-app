@@ -308,7 +308,7 @@ export class WordpressProvider
 
       return { comments, nextCursor };
     } catch (err) {
-      return { comments: [] };
+      throw err;
     }
   }
 

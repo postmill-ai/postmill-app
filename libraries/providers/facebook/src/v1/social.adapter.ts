@@ -911,10 +911,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
 
       return { comments, nextCursor };
     } catch (err) {
-      this.logger.error(
-        `Facebook fetchComments error: ${(err as Error)?.message || 'unknown'}`
-      );
-      return { comments: [] };
+      throw err;
     }
   }
 

@@ -619,14 +619,21 @@ describe('SocialCommentsRepository', () => {
   });
 
   describe('getPublishedPostsForSync', () => {
-    it('excludes posts on disabled or deleted channels', async () => {
+    it('excludes posts on disabled, deleted, or credential-blocked channels', async () => {
       await repository.getPublishedPostsForSync('org1', new Date('2024-01-01'));
 
       expect(mockPost.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
             organizationId: 'org1',
-            integration: { is: { disabled: false, deletedAt: null } },
+            integration: {
+              is: {
+                disabled: false,
+                deletedAt: null,
+                refreshNeeded: false,
+                inBetweenSteps: false,
+              },
+            },
           }),
         })
       );

@@ -47,7 +47,7 @@ Without this, the analytics dashboard, comment inbox, media render queue, and wa
 | Function | Trigger | Purpose |
 |----------|---------|---------|
 | `analytics-collection` | Daily at 02:00 UTC | Fans out one `analytics/sync-org` event per org |
-| `comments-collection` | Every minute (sleeps `COMMENTS_SWEEP_INTERVAL_MINUTES` between sweeps) | Fans out one `comments/sync-org` event per org |
+| `comments-collection` | Every minute (function rate limit admits one run per `COMMENTS_SWEEP_INTERVAL_MINUTES`) | Fans out one `comments/sync-org` event per org |
 | `missing-post-finder` | Hourly | Detect posts that should have published but are stuck |
 | `media-jobs-poll` | Every minute | Poll pending external media-generation jobs, re-enqueue stale pending renders, and fail renders stuck in processing past their time budget |
 | `campaign-tag-purge` | Daily at 03:00 UTC | Delete `CampaignItem` tags for campaigns whose `endDate` is older than `CAMPAIGN_PURGE_DAYS` |
@@ -105,6 +105,8 @@ Rollup behaviour:
 | `POST_DAYS_BACK` | 30 days | Comments fetched for posts published within this window |
 | `SOCIAL_COMMENT_RETENTION_DAYS` | 90 days | Comments soft-deleted after this age |
 | `COMMENTS_SWEEP_INTERVAL_MINUTES` | 30 minutes | Interval between comment collection sweeps |
+
+A successful empty provider response is authoritative and can reconcile on-platform deletions. Fetch, authentication, parsing, and malformed-response failures do not delete stored comments. Channels whose tokens need repair are marked `refreshNeeded` and skipped until reconnected.
 
 ### Retention purge
 
