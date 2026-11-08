@@ -61,6 +61,10 @@ export function StepImport() {
   useEffect(() => {
     if (!polled) return;
     setJob(polled);
+    if (polled.status === 'completed') {
+      setPhase('completed');
+      return;
+    }
     if (polled.status === 'failed' || polled.status === 'expired') {
       setPhase('error');
       setError(polled.error || t('setup_import_failed', 'The organization import failed. Upload the archive and try again.'));

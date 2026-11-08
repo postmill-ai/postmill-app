@@ -5,6 +5,7 @@ import React from 'react';
 const mockFetch = vi.fn();
 const mockReplace = vi.fn();
 const mockMutate = vi.fn(async () => undefined);
+let polledJob: any = null;
 
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => mockFetch,
@@ -19,7 +20,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: mockReplace }),
 }));
 vi.mock('swr', () => ({
-  default: () => ({ data: undefined }),
+  default: () => ({ data: polledJob }),
   useSWRConfig: () => ({ mutate: mockMutate }),
 }));
 
@@ -30,6 +31,7 @@ const jsonResponse = (body: any, ok = true) => ({ ok, json: async () => body }) 
 describe('StepImport', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    polledJob = null;
     mockFetch.mockImplementation(async (url: string, options?: any) => {
       if (url === '/org-portability/import-uploads') {
         return jsonResponse({ id: 'job-1', status: 'uploading' });
@@ -89,5 +91,21 @@ describe('StepImport', () => {
     await screen.findByRole('alert');
     expect(screen.getByRole('alert').textContent).toContain('passphrase is incorrect');
     expect(screen.queryByRole('button', { name: 'Import organization' })).toBeNull();
+  });
+
+  it('redirects after the background job completes', async () => {
+    render(<StepImport />);
+    fireEvent.change(screen.getByLabelText('Organization export (.zip)'), {
+      target: { files: [new File(['zip'], 'organization.zip')] },
+    });
+    fireEvent.change(screen.getByPlaceholderText('At least 12 characters'), { target: { value: 'correct horse battery' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Upload and verify archive' }));
+    await screen.findByText('Archive verified: Source Org');
+
+    polledJob = { id: 'job-1', status: 'completed' };
+    fireEvent.click(screen.getByRole('button', { name: 'Import organization' }));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/dashboard'));
+    expect(mockMutate).toHaveBeenCalledWith('/user/self', expect.any(Function), { revalidate: true });
   });
 });
