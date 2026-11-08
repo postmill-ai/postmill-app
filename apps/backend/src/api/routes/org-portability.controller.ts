@@ -17,8 +17,10 @@ import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { OrgPortabilityService } from '@postmill-ai/nestjs-libraries/database/prisma/org-portability/org-portability.service';
 import { CreateOrgExportDto } from '@postmill-ai/nestjs-libraries/dtos/org-portability/create-org-export.dto';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 
 @ApiTags('Organization portability')
+@RequirePermission('organization', 'manage')
 @Controller('/org-portability')
 export class OrgPortabilityController {
   constructor(private readonly _portability: OrgPortabilityService) {}
