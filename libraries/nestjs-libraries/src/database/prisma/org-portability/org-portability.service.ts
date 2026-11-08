@@ -18,6 +18,7 @@ import {
 import { pipeline } from 'stream/promises';
 import { Transform } from 'stream';
 import path from 'path';
+import { tmpdir } from 'os';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
 import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
@@ -55,6 +56,22 @@ const sha256File = async (filePath: string): Promise<string> => {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(filePath)) hash.update(chunk);
   return hash.digest('hex');
+};
+const isMissingObjectError = (error: unknown): boolean => {
+  const cause = error as {
+    code?: string;
+    name?: string;
+    statusCode?: number | string;
+    $metadata?: { httpStatusCode?: number };
+    message?: string;
+  };
+  return cause?.code === 'ENOENT'
+    || cause?.code === 'NoSuchKey'
+    || cause?.code === 'NotFound'
+    || cause?.name === 'NoSuchKey'
+    || cause?.name === 'NotFound'
+    || Number(cause?.statusCode ?? cause?.$metadata?.httpStatusCode) === 404
+    || /\bHTTP 404\b/.test(cause?.message || '');
 };
 const sanitizedError = (error: unknown): string =>
   ((error as Error)?.message || 'Organization export failed')
@@ -271,17 +288,20 @@ export class OrgPortabilityService {
   private async _writeDomain(
     writer: OrgArchiveWriter,
     counts: Record<string, number>,
+    domainHashes: Record<string, string>,
     name: string,
     rows: AsyncIterable<unknown>,
   ): Promise<void> {
     let count = 0;
+    const hash = createHash('sha256');
     await writer.addNdjson(`domains/${name}.ndjson`, (async function* () {
       for await (const row of rows) {
         count++;
         yield row;
       }
-    })());
+    })(), (chunk) => hash.update(chunk));
     counts[name] = count;
+    domainHashes[name] = hash.digest('hex');
   }
 
   private _appVersion(): string {
@@ -297,7 +317,7 @@ export class OrgPortabilityService {
     if (claimed.count !== 1) return;
     const job = await this._repository.getJob(jobId);
     if (!job?.archiveKeyCiphertext) return;
-    const spoolRoot = path.resolve(process.env.ORG_PORTABILITY_SPOOL_DIR || './postmill-org-archives');
+    const spoolRoot = path.resolve(process.env.ORG_PORTABILITY_SPOOL_DIR || path.join(tmpdir(), 'postmill-org-archives'));
     const spoolPath = path.join(spoolRoot, `${job.id}.zip`);
     const assetTemp = path.join(spoolRoot, `${job.id}.asset`);
     let archiveKey: Buffer | undefined;
@@ -309,12 +329,13 @@ export class OrgPortabilityService {
       rmSync(assetTemp, { force: true });
       writer = await OrgArchiveWriter.create(spoolPath);
       const counts: Record<string, number> = {};
+      const domainHashes: Record<string, string> = {};
       const secrets: OrgPortabilitySecretRef[] = [];
       const organization = await this._repository.organization(job.organizationId);
       if (!organization) throw new Error('Organization not found during export');
-      await this._writeDomain(writer, counts, 'organization', asArray([this._cleanValue(organization)]));
-      await this._writeDomain(writer, counts, 'members', asArray(await this._repository.members(job.organizationId)));
-      await this._writeDomain(writer, counts, 'customRoles', asArray(await this._repository.customRoles(job.organizationId)));
+      await this._writeDomain(writer, counts, domainHashes, 'organization', asArray([this._cleanValue(organization)]));
+      await this._writeDomain(writer, counts, domainHashes, 'members', asArray(await this._repository.members(job.organizationId)));
+      await this._writeDomain(writer, counts, domainHashes, 'customRoles', asArray(await this._repository.customRoles(job.organizationId)));
 
       const models = Prisma.dmmf.datamodel.models
         .filter((model) => !ORG_PORTABILITY_EXCLUDED_MODELS.has(model.name))
@@ -322,10 +343,10 @@ export class OrgPortabilityService {
         .map((model) => model.name)
         .sort();
       for (const model of models) {
-        await this._writeDomain(writer, counts, model, this._modelRows(model, job.organizationId, secrets));
+        await this._writeDomain(writer, counts, domainHashes, model, this._modelRows(model, job.organizationId, secrets));
       }
       for (const relation of ['tagsPosts', 'postCommentRead', 'notificationRead', 'appRolePermission']) {
-        await this._writeDomain(writer, counts, relation, this._relatedRows(relation, job.organizationId));
+        await this._writeDomain(writer, counts, domainHashes, relation, this._relatedRows(relation, job.organizationId));
       }
 
       const assets: Record<string, OrgPortabilityAssetManifest> = {};
@@ -335,42 +356,59 @@ export class OrgPortabilityService {
         if (BigInt(file.fileSize) > orgPortabilityMaxAssetBytes()) {
           throw new Error(`File ${file.id} exceeds the per-asset export limit`);
         }
-        const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, job.organizationId);
-        const source = await adapter.readFileStream(file.path);
-        const hash = createHash('sha256');
-        let size = 0n;
-        rmSync(assetTemp, { force: true });
-        const limiter = new Transform({
-          transform(chunk: Buffer, _encoding, callback) {
-            size += BigInt(chunk.length);
-            if (size > orgPortabilityMaxAssetBytes()) {
-              callback(new Error(`File ${file.id} exceeds the per-asset export limit`));
-              return;
-            }
-            hash.update(chunk);
-            callback(null, chunk);
-          },
-        });
-        await pipeline(source, limiter, createWriteStream(assetTemp, { flags: 'wx', mode: 0o600 }));
-        const sha256 = hash.digest('hex');
         const metadata = file.metadata && typeof file.metadata === 'object' && !Array.isArray(file.metadata)
           ? file.metadata as Record<string, unknown>
           : {};
-        assets[file.id] = {
-          fileId: file.id,
-          sha256,
-          size: size.toString(),
-          mime: String(metadata.mime || metadata.mimeType || file.type || 'application/octet-stream'),
-        };
-        if (!writtenAssets.has(sha256)) {
-          if (uniqueAssetBytes + size > orgPortabilityMaxArchiveBytes()) {
-            throw new Error('Organization export exceeds the archive size limit');
+        const mime = String(metadata.mime || metadata.mimeType || file.type || 'application/octet-stream');
+        const hash = createHash('sha256');
+        let size = 0n;
+        try {
+          try {
+            const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, job.organizationId);
+            const source = await adapter.readFileStream(file.path);
+            rmSync(assetTemp, { force: true });
+            const limiter = new Transform({
+              transform(chunk: Buffer, _encoding, callback) {
+                size += BigInt(chunk.length);
+                if (size > orgPortabilityMaxAssetBytes()) {
+                  callback(new Error(`File ${file.id} exceeds the per-asset export limit`));
+                  return;
+                }
+                hash.update(chunk);
+                callback(null, chunk);
+              },
+            });
+            await pipeline(source, limiter, createWriteStream(assetTemp, { flags: 'wx', mode: 0o600 }));
+          } catch (error) {
+            if (!isMissingObjectError(error)) throw error;
+            assets[file.id] = {
+              fileId: file.id,
+              sha256: '',
+              size: String(file.fileSize),
+              mime,
+              missing: true,
+            };
+            counts.missingAssets = (counts.missingAssets || 0) + 1;
+            continue;
           }
-          uniqueAssetBytes += size;
-          await writer.addAsset(`assets/${sha256}`, createReadStream(assetTemp), () => undefined);
-          writtenAssets.add(sha256);
+          const sha256 = hash.digest('hex');
+          assets[file.id] = {
+            fileId: file.id,
+            sha256,
+            size: size.toString(),
+            mime,
+          };
+          if (!writtenAssets.has(sha256)) {
+            if (uniqueAssetBytes + size > orgPortabilityMaxArchiveBytes()) {
+              throw new Error('Organization export exceeds the archive size limit');
+            }
+            uniqueAssetBytes += size;
+            await writer.addAsset(`assets/${sha256}`, createReadStream(assetTemp), () => undefined);
+            writtenAssets.add(sha256);
+          }
+        } finally {
+          rmSync(assetTemp, { force: true });
         }
-        rmSync(assetTemp, { force: true });
       }
       counts.assets = writtenAssets.size;
 
@@ -382,6 +420,7 @@ export class OrgPortabilityService {
         createdAt: new Date().toISOString(),
         source: { organizationId: organization.id, name: organization.name },
         counts,
+        domains: domainHashes,
         assets,
         crypto: {
           ...keyWrap,

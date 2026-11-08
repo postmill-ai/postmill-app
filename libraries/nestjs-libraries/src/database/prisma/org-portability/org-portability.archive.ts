@@ -52,11 +52,17 @@ export class OrgArchiveWriter {
     await this._checkpoint();
   }
 
-  async addNdjson(name: string, rows: AsyncIterable<unknown>): Promise<void> {
+  async addNdjson(
+    name: string,
+    rows: AsyncIterable<unknown>,
+    onBytes: (chunk: Uint8Array) => void = () => undefined,
+  ): Promise<void> {
     const entry = new ZipDeflate(name, { level: 6 });
     this._zip.add(entry);
     for await (const row of rows) {
-      entry.push(strToU8(`${JSON.stringify(row)}\n`), false);
+      const chunk = strToU8(`${JSON.stringify(row)}\n`);
+      onBytes(chunk);
+      entry.push(chunk, false);
       await this._checkpoint();
     }
     entry.push(new Uint8Array(), true);

@@ -11,6 +11,7 @@ import { PageHeader } from '@postmill-ai/frontend/components/ui/page-header';
 import { DataTable, StatusPill } from '@postmill-ai/frontend/components/ui/data-table';
 import { EmptyState } from '@postmill-ai/frontend/components/ui/empty-state';
 import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 
 interface ExportJob {
   id: string;
@@ -26,6 +27,7 @@ export const DataExportTab: React.FC = () => {
   const t = useT();
   const fetch = useFetch();
   const permissions = usePermissions();
+  const { backendUrl } = useVariables();
   const [passphrase, setPassphrase] = useState('');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
@@ -35,9 +37,13 @@ export const DataExportTab: React.FC = () => {
     if (!response.ok) throw new Error(t('org_export_load_failed', 'Could not load organization exports.'));
     return response.json() as Promise<ExportJob[]>;
   }, [fetch, t]);
-  const { data: jobs = [], mutate, isLoading } = useSWR<ExportJob[]>('/org-portability/jobs', load, {
-    refreshInterval: (latest) => latest?.some((job) => ['pending', 'processing'].includes(job.status)) ? 2000 : 0,
-  });
+  const { data: jobs = [], mutate, isLoading } = useSWR<ExportJob[]>(
+    permissions.isResolved && permissions.role === 'owner' ? '/org-portability/jobs' : null,
+    load,
+    {
+      refreshInterval: (latest) => latest?.some((job) => ['pending', 'processing'].includes(job.status)) ? 2000 : 0,
+    },
+  );
 
   const createExport = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -66,7 +72,10 @@ export const DataExportTab: React.FC = () => {
       const response = await fetch(`/org-portability/jobs/${jobId}/download`, { method: 'POST' });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.message || t('org_export_download_failed', 'Could not create a download link.'));
-      setDownloadLinks((current) => ({ ...current, [jobId]: body.url }));
+      setDownloadLinks((current) => ({
+        ...current,
+        [jobId]: `${backendUrl.replace(/\/+$/, '')}${body.url}`,
+      }));
     } catch (cause) {
       setError((cause as Error).message);
     }

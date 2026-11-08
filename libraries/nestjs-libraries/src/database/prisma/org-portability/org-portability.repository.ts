@@ -60,7 +60,14 @@ export class OrgPortabilityRepository {
 
   claimExportJob(id: string) {
     return this._prisma.orgPortabilityJob.updateMany({
-      where: { id, kind: 'export', status: 'pending' },
+      where: {
+        id,
+        kind: 'export',
+        OR: [
+          { status: 'pending' },
+          { status: 'processing', updatedAt: { lt: new Date(Date.now() - 3_600_000) } },
+        ],
+      },
       data: { status: 'processing', error: null },
     });
   }

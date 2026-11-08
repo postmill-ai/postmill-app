@@ -32,6 +32,14 @@ Every environment variable Postmill recognises, sourced from `.env.example`. All
 | `MEDIA_UPLOAD_MAX_BYTES` | `1073741824` | Maximum upload file size for `/files/upload-server` (default 1 GB) |
 | `LOCAL_STORAGE_QUOTA_GB` | `5` | Default soft quota for each org's hosted storage in either platform mode |
 
+### Organization export
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ORG_PORTABILITY_SPOOL_DIR` | `${TMPDIR}/postmill-org-archives` | Private, mode-0600 archive spool. Keep it outside the upload root, public buckets, and repository; archives expire after 24 hours |
+| `ORG_PORTABILITY_MAX_ARCHIVE_BYTES` | `4293918720` | Maximum archive size: 4 GiB minus 1 MiB. Larger overrides are capped because the streaming writer does not emit ZIP64 |
+| `ORG_PORTABILITY_MAX_ASSET_BYTES` | `2147483647` | Maximum source size for each exported file |
+
 ## Email
 
 Pluggable provider system with 6 adapters: Resend, SendGrid, Mailgun, Postmark, Amazon SES, and SMTP. The active provider is selected globally via `EMAIL_PROVIDER`; unset/unknown → email is off (users activate automatically).

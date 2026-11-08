@@ -3,7 +3,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { Readable } from 'stream';
+import { createHash } from 'crypto';
 import { strFromU8, unzipSync } from 'fflate';
+import {
+  ORG_PORTABILITY_MAX_ARCHIVE_BYTES,
+  orgPortabilityMaxArchiveBytes,
+} from './org-portability.types';
 import {
   createOrgArchiveKey,
   decryptOrgSecretRefs,
@@ -143,6 +148,7 @@ describe('OrgPortabilityService export', () => {
     expect(statSync(job.spoolPath).mode & 0o777).toBe(0o600);
 
     const integration = strFromU8(entries['domains/Integration.ndjson']);
+    expect(manifest.domains.Integration).toBe(createHash('sha256').update(integration).digest('hex'));
     expect(integration).toContain('"token":null');
     expect(integration).not.toContain('plain-provider-token');
     expect(strFromU8(entries['domains/File.ndjson'])).not.toContain('signature=secret');
@@ -202,5 +208,40 @@ describe('OrgPortabilityService export', () => {
     expect(repository.failExportJob).toHaveBeenCalledWith(job.id, expect.not.stringContaining('signature=secret'));
     expect(repository.completeExportJob).not.toHaveBeenCalled();
     expect(existsSync(path.join(process.env.ORG_PORTABILITY_SPOOL_DIR!, `${job.id}.zip`))).toBe(false);
+  });
+
+  it('marks missing source objects and completes the remaining archive', async () => {
+    const { service, repository, adapter, job } = makeService();
+    adapter.readFileStream
+      .mockResolvedValueOnce(Readable.from([Buffer.from('hello world')]))
+      .mockRejectedValueOnce(Object.assign(new Error('No such file'), { code: 'ENOENT' }));
+
+    await service.processExport(job.id);
+
+    expect(repository.failExportJob).not.toHaveBeenCalled();
+    expect(repository.completeExportJob).toHaveBeenCalled();
+    const entries = unzipSync(readFileSync(job.spoolPath));
+    const manifest = JSON.parse(strFromU8(entries['manifest.json']));
+    expect(manifest.counts).toMatchObject({ assets: 1, missingAssets: 1 });
+    expect(manifest.assets['file-2']).toMatchObject({
+      fileId: 'file-2',
+      sha256: '',
+      size: '11',
+      missing: true,
+    });
+    expect(Object.keys(entries).filter((name) => name.startsWith('assets/'))).toHaveLength(1);
+  });
+
+  it('caps archive overrides below the non-ZIP64 boundary', () => {
+    const previous = process.env.ORG_PORTABILITY_MAX_ARCHIVE_BYTES;
+    try {
+      process.env.ORG_PORTABILITY_MAX_ARCHIVE_BYTES = String(ORG_PORTABILITY_MAX_ARCHIVE_BYTES + 1n);
+      expect(orgPortabilityMaxArchiveBytes()).toBe(ORG_PORTABILITY_MAX_ARCHIVE_BYTES);
+      process.env.ORG_PORTABILITY_MAX_ARCHIVE_BYTES = '1024';
+      expect(orgPortabilityMaxArchiveBytes()).toBe(1024n);
+    } finally {
+      if (previous === undefined) delete process.env.ORG_PORTABILITY_MAX_ARCHIVE_BYTES;
+      else process.env.ORG_PORTABILITY_MAX_ARCHIVE_BYTES = previous;
+    }
   });
 });

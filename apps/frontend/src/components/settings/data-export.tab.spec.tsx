@@ -12,6 +12,9 @@ vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
 vi.mock('@postmill-ai/frontend/components/layout/use-permissions', () => ({
   usePermissions: () => ({ isResolved: true, role }),
 }));
+vi.mock('@postmill-ai/react/helpers/variable.context', () => ({
+  useVariables: () => ({ backendUrl: 'https://api.example.test/' }),
+}));
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
 }));
@@ -65,16 +68,16 @@ describe('DataExportTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create download link' }));
     expect(await screen.findByRole('link', { name: 'Download archive' })).toHaveProperty(
       'href',
-      'http://localhost:3000/org-portability/download/one-time-token',
+      'https://api.example.test/org-portability/download/one-time-token',
     );
   });
 
-  it('hides the export workflow from non-owners', async () => {
+  it('hides the export workflow from non-owners without fetching jobs', async () => {
     role = 'admin';
     renderTab();
     expect(await screen.findByText('Only an organization owner can export organization data.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Create organization export' })).toBeNull();
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/org-portability/jobs'));
     await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

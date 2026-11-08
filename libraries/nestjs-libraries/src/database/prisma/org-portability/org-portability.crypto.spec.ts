@@ -35,6 +35,7 @@ describe('organization archive cryptography', () => {
       createdAt: new Date().toISOString(),
       source: { organizationId: 'org-1', name: 'Example' },
       counts: { files: 1 },
+      domains: {},
       assets: {},
       crypto: { ...keyWrap, secrets: encryptOrgSecretRefs([], key) },
     };
