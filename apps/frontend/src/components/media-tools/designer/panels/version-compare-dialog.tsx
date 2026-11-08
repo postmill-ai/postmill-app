@@ -32,10 +32,9 @@ export const VersionCompareDialog: FC<{
   version: DesignVersionMeta;
   currentDoc: DesignerDoc;
   fetch: (url: string, init?: RequestInit) => Promise<Response>;
-  busy: boolean;
-  onRestore: () => Promise<void>;
+  onRestore: () => Promise<boolean>;
   onClose: () => void;
-}> = ({ designId, version, currentDoc, fetch, busy, onRestore, onClose }) => {
+}> = ({ designId, version, currentDoc, fetch, onRestore, onClose }) => {
   const t = useT();
   const [currentSrc, setCurrentSrc] = useState<string | undefined>();
   const [savedSrc, setSavedSrc] = useState(version.previewDataUrl || undefined);
@@ -79,11 +78,10 @@ export const VersionCompareDialog: FC<{
   }, [load]);
 
   const restore = async () => {
-    if (restoring || busy) return;
+    if (restoring) return;
     setRestoring(true);
     try {
-      await onRestore();
-      onClose();
+      if (await onRestore()) onClose();
     } catch {
       // The parent reports restore failures; keep this dialog open for retry.
     } finally {
@@ -143,11 +141,11 @@ export const VersionCompareDialog: FC<{
         </button>
         <button
           type="button"
-          disabled={busy || restoring || loading || !!error}
+          disabled={restoring || loading || !!error}
           onClick={() => void restore()}
           className="px-3 py-1.5 rounded-md text-[12px] bg-designerAccent text-white hover:bg-designerAccent/80 disabled:opacity-50"
         >
-          {busy || restoring ? t('designer_restoring_version', 'Restoring…') : t('designer_restore_version', 'Restore')}
+          {restoring ? t('designer_restoring_version', 'Restoring…') : t('designer_restore_version', 'Restore')}
         </button>
       </div>
     </div>

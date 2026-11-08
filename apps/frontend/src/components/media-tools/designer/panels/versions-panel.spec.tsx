@@ -84,4 +84,30 @@ describe('VersionsPanel', () => {
     expect(store.getState().historyIndex).toBe(before + 1);
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/versions/v1/restore'))).toBe(true);
   });
+
+  it.each([
+    { outcome: 'cancelled', approved: false },
+    { outcome: 'failed', approved: true },
+  ])('keeps comparison open through the real wrapper when restore is $outcome', async ({ approved }) => {
+    setup();
+    fetchMock.mockImplementation((url: string) => Promise.resolve({
+      ok: approved ? !String(url).endsWith('/restore') : true,
+      json: async () => [version],
+      blob: async () => new Blob(['png']),
+    }));
+    decisionOpen.mockResolvedValue(approved);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    const close = vi.fn();
+    const modal = openModal.mock.calls[0][0];
+    const dialog = render(modal.children(close));
+    await waitFor(() => expect((dialog.getAllByRole('button', { name: 'Restore' }).at(-1)! as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(dialog.getAllByRole('button', { name: 'Restore' }).at(-1)!);
+
+    await waitFor(() => expect(decisionOpen).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((dialog.getAllByRole('button', { name: 'Restore' }).at(-1)! as HTMLButtonElement).disabled).toBe(false));
+    expect(close).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/versions/v1/restore'))).toBe(approved);
+  });
 });

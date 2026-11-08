@@ -94,15 +94,12 @@ export const VersionsPanel: FC<VersionsPanelProps> = ({ store }) => {
           version={version}
           currentDoc={currentDoc}
           fetch={fetch}
-          busy={busyId === version.id}
-          onRestore={async () => {
-            if (await handleRestore(version)) close();
-          }}
+          onRestore={() => handleRestore(version)}
           onClose={close}
         />
       ),
     });
-  }, [busyId, designId, fetch, handleRestore, modals, store, t]);
+  }, [designId, fetch, handleRestore, modals, store, t]);
 
   const handleDelete = useCallback(
     async (version: DesignVersionMeta) => {

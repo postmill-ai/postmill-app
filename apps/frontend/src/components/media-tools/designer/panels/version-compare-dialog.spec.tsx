@@ -23,8 +23,7 @@ const setup = (overrides: Partial<React.ComponentProps<typeof VersionCompareDial
     version,
     currentDoc: { mode: 'image' as const, outputs: [] },
     fetch: vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['png']) }),
-    busy: false,
-    onRestore: vi.fn().mockResolvedValue(undefined),
+    onRestore: vi.fn().mockResolvedValue(true),
     onClose: vi.fn(),
     ...overrides,
   };
@@ -63,8 +62,8 @@ describe('VersionCompareDialog', () => {
     await waitFor(() => expect(props.onClose).toHaveBeenCalledTimes(1));
   });
 
-  it('keeps the dialog open and re-enables restore after a failed restore', async () => {
-    const props = setup({ onRestore: vi.fn().mockRejectedValue(new Error('restore failed')) });
+  it('keeps the dialog open and re-enables restore after a cancelled or failed restore', async () => {
+    const props = setup({ onRestore: vi.fn().mockResolvedValue(false) });
     await screen.findByAltText('Current');
 
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
