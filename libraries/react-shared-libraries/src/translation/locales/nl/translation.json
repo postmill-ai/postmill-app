@@ -4028,6 +4028,8 @@
   "subscription": "Abonnement",
   "subscription_settings_description": "Beheer je abonnement, factuurperiode, gebruik en add-ons.",
   "teams_page_description": "Nodig teamgenoten uit, maak accounts aan en beheer wie toegang heeft tot je werkruimte.",
+  "data_export": "Organisatie exporteren",
+  "data_export_description": "Download een herstelbaar archief van uw organisatie, inclusief bestanden en providergegevens die met uw wachtwoordzin zijn beveiligd.",
   "broadcast": "Rondzenden",
   "broadcast_description": "Stuur een bericht of aankondiging naar iedereen in je organisatie.",
   "channels_settings_description": "Koppel je socialemedia-accounts zodat je berichten vanuit Postmill kunt publiceren. Kies een platform, volg de stappen en je bent klaar om te posten.",

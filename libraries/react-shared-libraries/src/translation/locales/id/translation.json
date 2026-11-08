@@ -4028,6 +4028,8 @@
   "subscription": "Langganan",
   "subscription_settings_description": "Kelola paket, siklus penagihan, penggunaan, dan add-on Anda.",
   "teams_page_description": "Undang rekan tim, buat akun, dan kelola siapa yang memiliki akses ke workspace Anda.",
+  "data_export": "Ekspor organisasi",
+  "data_export_description": "Unduh arsip yang dapat dipulihkan untuk organisasi Anda, termasuk file dan kredensial penyedia yang dilindungi frasa sandi.",
   "broadcast": "Siaran",
   "broadcast_description": "Kirim pesan atau pengumuman ke semua orang di organisasi Anda.",
   "channels_settings_description": "Hubungkan akun media sosial Anda agar dapat memublikasikan postingan dari Postmill. Pilih platform, ikuti langkah-langkahnya, dan Anda siap memposting.",

@@ -4030,6 +4030,8 @@
   "subscription": "Subskrypcja",
   "subscription_settings_description": "Zarządzaj planem, cyklem rozliczeniowym, wykorzystaniem i dodatkami.",
   "teams_page_description": "Zapraszaj członków zespołu, twórz konta i zarządzaj dostępem do swojego obszaru roboczego.",
+  "data_export": "Eksport organizacji",
+  "data_export_description": "Pobierz archiwum organizacji z możliwością przywrócenia, zawierające pliki i dane uwierzytelniające dostawców chronione Twoim hasłem.",
   "broadcast": "Komunikat",
   "broadcast_description": "Wyślij wiadomość lub ogłoszenie do wszystkich w organizacji.",
   "channels_settings_description": "Połącz swoje konta w mediach społecznościowych, aby publikować posty z Postmill. Wybierz platformę, wykonaj kroki i gotowe.",

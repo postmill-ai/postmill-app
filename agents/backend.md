@@ -104,6 +104,18 @@ export class BrandsController {
 
 ---
 
+## Organization portability
+
+`OrgPortabilityController` handles owner-only export creation/history/download issuance;
+`OrgPortabilityDownloadController` is deliberately public only for its five-minute one-time token.
+Both delegate to `OrgPortabilityService`; all Prisma access stays in `OrgPortabilityRepository`.
+The archive implementation is split into `org-portability.crypto.ts` (scrypt/AES-GCM/HMAC),
+`org-portability.archive.ts` (fflate-to-file streaming), and `org-portability.types.ts`
+(format version, exclusions and configurable byte limits). Do not change the unrelated GDPR
+`DataExportService`. Import/remapping belongs to the later setup-import stage.
+
+---
+
 ## 3. Recipe: add a DTO
 
 1. File in `libraries/nestjs-libraries/src/dtos/<domain>/<name>.dto.ts` (31 domain dirs exist:

@@ -928,6 +928,20 @@ paths:
           description: ""
       tags:
         - Comms OAuth
+  /org-portability/download/{token}:
+    get:
+      operationId: OrgPortabilityDownloadController_download
+      parameters:
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Organization portability
   /media/designs/render-progress/{jobId}:
     post:
       operationId: DesignRenderFrameController_renderProgress
@@ -8689,6 +8703,58 @@ paths:
                   type: object
       tags:
         - Providers
+  /org-portability/exports:
+    post:
+      operationId: OrgPortabilityController_createExport
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrgExportDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Organization portability
+  /org-portability/jobs:
+    get:
+      operationId: OrgPortabilityController_listJobs
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Organization portability
+  /org-portability/jobs/{id}:
+    get:
+      operationId: OrgPortabilityController_getJob
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Organization portability
+  /org-portability/jobs/{id}/download:
+    post:
+      operationId: OrgPortabilityController_issueDownload
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Organization portability
   /public/v1/upload:
     post:
       operationId: PublicIntegrationsController_uploadSimple
@@ -13054,6 +13120,15 @@ components:
           $ref: "#/components/schemas/LimitOverridesMapDto"
       required:
         - overrides
+    CreateOrgExportDto:
+      type: object
+      properties:
+        passphrase:
+          type: string
+          minLength: 12
+          maxLength: 256
+      required:
+        - passphrase
     UploadDto:
       type: object
       properties:

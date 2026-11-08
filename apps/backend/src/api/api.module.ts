@@ -107,6 +107,10 @@ import { CommsWebhooksController } from './routes/comms-webhooks.controller';
 import { MetaCallbacksController } from './routes/meta-callbacks.controller';
 import { PublicCatalogController } from './routes/public-catalog.controller';
 import { CommsOauthController } from './routes/comms-oauth.controller';
+import {
+  OrgPortabilityController,
+  OrgPortabilityDownloadController,
+} from './routes/org-portability.controller';
 
 // Exported so tests can prove a controller is registered for
 // AuthMiddleware/CsrfMiddleware (an unregistered controller serves unauthenticated).
@@ -168,6 +172,7 @@ export const authenticatedController = [
   // release + the `verified:false` beta cohort. Moved into the authenticated group so
   // AuthMiddleware/CsrfMiddleware apply (still no org-scoping in the handler).
   ProvidersController,
+  OrgPortabilityController,
 ];
 @Module({
   imports: [UploadModule, InngestModule, ReplicateStudioModule, HeyGenModule, MediaStudioModule, DesignerAssistantModule, DeepgramModule, AiDesignerModule],
@@ -190,6 +195,7 @@ export const authenticatedController = [
     MetaCallbacksController,
     PublicCatalogController,
     CommsOauthController,
+    OrgPortabilityDownloadController,
     DesignRenderFrameController,
     ...authenticatedController,
   ],

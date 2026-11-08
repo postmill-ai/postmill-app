@@ -8,7 +8,10 @@ import React from 'react';
 
 export interface SettingsGateCtx {
   user: any;
-  permissions: { hasPermission: (resource: string, action: string) => boolean };
+  permissions: {
+    role?: string | null;
+    hasPermission: (resource: string, action: string) => boolean;
+  };
   isGeneral: boolean;
   billingEnabled: boolean;
   showLogout: boolean;
@@ -81,6 +84,19 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     ),
     gate: ({ user, isGeneral }) => (user?.tier?.team_members ?? 0) > 1 && isGeneral,
+  },
+  {
+    key: 'data',
+    href: '/settings/data',
+    labelKey: 'data_export',
+    labelDefault: 'Organization export',
+    descKey: 'data_export_description',
+    descDefault: 'Download a restorable archive of your organization, including files and provider credentials protected by your passphrase.',
+    section: 'Workspace',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 17v4h16v-4"/></svg>
+    ),
+    gate: ({ permissions }) => permissions.role === 'owner',
   },
   {
     key: 'broadcast',
