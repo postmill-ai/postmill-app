@@ -36,13 +36,13 @@ Leave `INNGEST_DEV` unset and configure the engine URL plus production keys:
 ```bash
 USE_INNGEST=true
 INNGEST_BASE_URL=http://127.0.0.1:8288
-INNGEST_SERVE_ORIGIN=http://127.0.0.1:3000
+INNGEST_SERVE_ORIGIN=http://127.0.0.1:4300
 INNGEST_SERVE_PATH=/api/inngest
 INNGEST_EVENT_KEY=<generated-event-key>
 INNGEST_SIGNING_KEY=<generated-hex-signing-key>
 ```
 
-Run `inngest start` with external Postgres and Redis persistence, the matching event/signing keys, and the backend SDK URL. Keep credentials in a protected environment file rather than command-line arguments, include the engine database in backups, and do not expose the loopback listener publicly. Production self-hosted mode is durable; `inngest dev` uses development-only in-memory state and must not be used as the production engine. The health endpoint probes `INNGEST_BASE_URL` when set, using direct HTTP only for an explicit loopback URL and SSRF-safe fetch otherwise.
+Run `inngest start` with external Postgres and Redis persistence, the matching event/signing keys, and the backend SDK URL. Keep credentials in a protected environment file rather than command-line arguments, include the engine database in backups, and do not expose the loopback listener publicly. Production self-hosted mode is durable; `inngest dev` uses development-only in-memory state and must not be used as the production engine. The health endpoint probes `INNGEST_BASE_URL` when set, using direct HTTP only for an explicit loopback URL and SSRF-safe fetch otherwise. Reachability therefore supports loopback HTTP or public HTTPS; a private Docker service name or LAN address reports `eventApiReachable: false` unless the SSRF policy explicitly permits it.
 
 ## Enabling background jobs
 
