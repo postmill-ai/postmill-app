@@ -189,10 +189,11 @@ selection and Brand Kit for font, color, layout, and spacing recommendations. Fo
 can be applied directly to static text or video text/caption clips.
 
 For static designs, layout suggestions can also align the selection to the canvas or selection bounds,
-and spacing suggestions can distribute three or more selected elements evenly. Choose **Apply layout**
-or **Apply spacing** to make one undoable edit. If the selection, page, or output changes after the
-suggestion was generated, its action is disabled until you run Smart suggestions again. Layout and
-spacing actions never use AI-authored coordinates.
+and spacing suggestions can distribute three or more selected elements evenly. These layout actions
+are available for text-only selections because the assistant lives in the text Inspector. Choose
+**Apply layout** or **Apply spacing** to make one undoable edit. If the selection, page, or output
+changes after the suggestion was generated, its action is disabled until you run Smart suggestions
+again. Layout and spacing actions never use AI-authored coordinates.
 
 ## Opening the Designer
 

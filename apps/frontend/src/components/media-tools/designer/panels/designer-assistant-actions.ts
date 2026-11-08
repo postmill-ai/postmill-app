@@ -1,5 +1,5 @@
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
-import { distribute, type DistributeMode } from '@postmill-ai/nestjs-libraries/media/designer-doc/align-distribute';
+import { alignBox, alignmentFrame, distribute, type DistributeMode } from '@postmill-ai/nestjs-libraries/media/designer-doc/align-distribute';
 
 export type DesignerSuggestionAction =
   | { type: 'align'; position: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' }
@@ -99,33 +99,9 @@ export const applyDesignerSuggestionAction = (
       if (patch) state.updateElement(element.id, patch);
     }
   } else {
-    const horizontal = ['left', 'center', 'right'].includes(action.position);
-    const multiple = elements.length > 1;
-    const minX = Math.min(...elements.map((element) => element.x));
-    const maxX = Math.max(...elements.map((element) => element.x + element.width));
-    const minY = Math.min(...elements.map((element) => element.y));
-    const maxY = Math.max(...elements.map((element) => element.y + element.height));
-
+    const frame = alignmentFrame(elements, output);
     for (const element of elements) {
-      if (horizontal) {
-        const x = action.position === 'left'
-          ? multiple ? minX : 0
-          : action.position === 'right'
-            ? multiple ? maxX - element.width : output.width - element.width
-            : Math.round(multiple
-              ? minX + (maxX - minX) / 2 - element.width / 2
-              : (output.width - element.width) / 2);
-        state.updateElement(element.id, { x });
-      } else {
-        const y = action.position === 'top'
-          ? multiple ? minY : 0
-          : action.position === 'bottom'
-            ? multiple ? maxY - element.height : output.height - element.height
-            : Math.round(multiple
-              ? minY + (maxY - minY) / 2 - element.height / 2
-              : (output.height - element.height) / 2);
-        state.updateElement(element.id, { y });
-      }
+      state.updateElement(element.id, alignBox(element, action.position, frame));
     }
   }
 
