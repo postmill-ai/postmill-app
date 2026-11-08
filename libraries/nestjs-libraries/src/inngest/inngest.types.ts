@@ -104,6 +104,12 @@ export type InngestEvents = {
       jobId: string;
     };
   };
+  'org/portability.import': {
+    data: {
+      jobId: string;
+      organizationId: string;
+    };
+  };
   'media/video-thumbnail.generate': {
     data: {
       organizationId: string;
@@ -200,6 +206,9 @@ export const mediaVideoThumbnailGenerateEvent = eventType(
 );
 export const mediaPollJobEvent = eventType('media/poll-job', {
   schema: staticSchema<InngestEvents['media/poll-job']['data']>(),
+});
+export const orgPortabilityImportEvent = eventType('org/portability.import', {
+  schema: staticSchema<InngestEvents['org/portability.import']['data']>(),
 });
 export const agentDigestOrgEvent = eventType('agent/digest-org', {
   schema: staticSchema<InngestEvents['agent/digest-org']['data']>(),

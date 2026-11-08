@@ -54,6 +54,7 @@ import { WebhookController } from '../webhooks.controller';
 import { AiDesignerController } from '../ai-designer.controller';
 import { AiModerateController } from '../ai-moderate.controller';
 import { OrgPortabilityController } from '../org-portability.controller';
+import { OrgImportController } from '../org-import.controller';
 
 // ---------------------------------------------------------------------------
 // S-06 — RBAC coverage regression test.
@@ -177,6 +178,7 @@ const ORG_RESOURCE_CONTROLLERS: Array<{ name: string; ctor: any }> = [
   { name: 'AiDesignerController', ctor: AiDesignerController },
   { name: 'AiModerateController', ctor: AiModerateController },
   { name: 'OrgPortabilityController', ctor: OrgPortabilityController },
+  { name: 'OrgImportController', ctor: OrgImportController },
 ];
 
 // Specific handlers that are intentionally NOT RBAC-gated, keyed `Controller.method`.

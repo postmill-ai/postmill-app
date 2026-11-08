@@ -141,6 +141,8 @@ import { AnalyticsLiveFallbackService } from '@postmill-ai/nestjs-libraries/anal
 import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/analytics-share.service';
 import { OrgPortabilityService } from '@postmill-ai/nestjs-libraries/database/prisma/org-portability/org-portability.service';
 import { OrgPortabilityRepository } from '@postmill-ai/nestjs-libraries/database/prisma/org-portability/org-portability.repository';
+import { OrgImportService } from '@postmill-ai/nestjs-libraries/database/prisma/org-portability/org-import.service';
+import { OrgImportRepository } from '@postmill-ai/nestjs-libraries/database/prisma/org-portability/org-import.repository';
 
 @Global()
 @Module({
@@ -265,6 +267,8 @@ import { OrgPortabilityRepository } from '@postmill-ai/nestjs-libraries/database
     VideoThumbnailService,
     OrgPortabilityService,
     OrgPortabilityRepository,
+    OrgImportService,
+    OrgImportRepository,
     DesignBulkService,
     DesignBulkCreateService,
     FontLoaderService,

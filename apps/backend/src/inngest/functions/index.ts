@@ -15,6 +15,8 @@ import { PaymentsService } from '@postmill-ai/nestjs-libraries/payments/payments
 import { InngestRunService } from '@postmill-ai/nestjs-libraries/inngest/inngest-run.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import { OrgPortabilityService } from '@postmill-ai/nestjs-libraries/database/prisma/org-portability/org-portability.service';
+import { OrgImportService } from '@postmill-ai/nestjs-libraries/database/prisma/org-portability/org-import.service';
+import { createOrgPortabilityImport } from './org-portability-import';
 import {
   createOrgPortabilityExpiry,
   createOrgPortabilityExport,
@@ -71,6 +73,7 @@ export interface InngestActivities {
   inngestRunService: InngestRunService;
   organizationService: OrganizationService;
   orgPortabilityService: OrgPortabilityService;
+  orgImportService: OrgImportService;
 }
 
 export const createFunctions = (activities: InngestActivities): InngestFunction.Any[] => [
@@ -86,6 +89,7 @@ export const createFunctions = (activities: InngestActivities): InngestFunction.
   createVideoThumbnail(activities.mediaJobsActivity),
   createDesignExport(activities.designExportActivity),
   createOrgPortabilityExport(activities.orgPortabilityService),
+  createOrgPortabilityImport(activities.orgImportService),
   createOrgPortabilityExpiry(activities.orgPortabilityService),
   createSendEmail(activities.emailActivity),
   createDigestEmailDaily(activities.digestActivity),

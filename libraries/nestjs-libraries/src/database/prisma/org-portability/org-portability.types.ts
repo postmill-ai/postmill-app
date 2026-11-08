@@ -1,5 +1,6 @@
 export const ORG_EXPORT_SCHEMA = 'postmill.org-export.v1';
 export const ORG_PORTABILITY_EXPORT_EVENT = 'org/portability.export';
+export const ORG_PORTABILITY_IMPORT_EVENT = 'org/portability.import';
 export const ORG_PORTABILITY_JOB_TTL_HOURS = 24;
 export const ORG_PORTABILITY_BATCH_SIZE = 250;
 export const ORG_PORTABILITY_MAX_ARCHIVE_BYTES = 4n * 1024n * 1024n * 1024n - 1024n * 1024n;
@@ -45,7 +46,7 @@ export const ORG_PORTABILITY_EXCLUDED_MODELS = new Set([
 
 export const ORG_PORTABILITY_SECRET_FIELDS: Record<string, string[]> = {
   Integration: ['token', 'refreshToken', 'customInstanceDetails'],
-  OrgProviderConfiguration: ['clientSecret', 'additionalConfig'],
+  OrgProviderConfiguration: ['clientId', 'clientSecret', 'additionalConfig'],
   StorageProviderConfig: ['credentials'],
   AIOrgProviderConfig: ['credentials'],
   MediaProviderConfig: ['credentials'],

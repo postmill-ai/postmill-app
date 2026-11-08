@@ -271,7 +271,7 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   mask them to per-field booleans; connect codes are returned only from link
   create/regenerate responses. Never log tokens, secrets, codes, or raw webhook bodies.
 
-## Organization export — owner-only, encrypted, private
+## Organization portability — owner-only, encrypted, private
 
 - `/org-portability/*` management routes require the actual `owner` role and are in
   `authenticatedController` (session + CSRF). The separate `/org-portability/download/:token`
@@ -289,8 +289,15 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
 - Billing entitlements, passwords, sessions, API keys, OAuth grants, and runtime state are excluded.
   Signed URL query strings are stripped. Archive/asset limits are configurable positive byte
   counts. The streaming writer has no ZIP64 support, so the archive ceiling is 4 GiB minus 1 MiB
-  (4,293,918,720 bytes), including when a larger override is supplied. Import is a separate stage
-  and is not enabled by the export routes.
+  (4,293,918,720 bytes) and 65,000 entries, including when a larger override is supplied.
+- Setup import is owner-only, CSRF-protected, and restricted to an empty organization whose setup is
+  incomplete. Uploads use sequential chunks into the same private spool. Validation authenticates
+  every domain's exact bytes and the complete asset inventory. Commit unwraps the archive key with
+  the supplied passphrase and stores only deployment-encrypted ciphertext for the Inngest worker;
+  completion, failure and expiry clear it. The worker verifies the archive SHA-256 before staging.
+  All database changes and job completion share one transaction; staged objects are removed on a
+  pre-commit failure. Imported integrations/providers/automation are disabled, missing File rows
+  are skipped with their references nulled, and source bucket paths are never retained.
 
 ## Checklist
 

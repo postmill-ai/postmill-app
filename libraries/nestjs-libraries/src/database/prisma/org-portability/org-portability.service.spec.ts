@@ -91,13 +91,14 @@ const makeService = () => {
         id: 'integration-1',
         organizationId: 'org-1',
         name: 'Instagram',
-        token: 'encrypted-provider-token',
-        refreshToken: null,
+        token: 'v2:encrypted-provider-token',
+        refreshToken: 'legacy-plaintext-refresh-token',
       }];
       if (model === 'file') return fileRows;
       return [];
     }),
     relatedBatch: vi.fn(async () => []),
+    integrationWebhookPairs: vi.fn(async () => [{ integrationId: 'integration-1', webhookId: 'webhook-1' }]),
     files: vi.fn(async () => fileRows),
   };
   const adapter = {
@@ -106,7 +107,7 @@ const makeService = () => {
   const storageService = { resolveAdapterForFolder: vi.fn(async () => adapter) };
   const encryption = {
     encrypt: vi.fn((value: string) => value),
-    decrypt: vi.fn((value: string) => value === 'encrypted-provider-token' ? 'plain-provider-token' : value),
+    decrypt: vi.fn((value: string) => value === 'v2:encrypted-provider-token' ? 'plain-provider-token' : value),
   };
   const audit = { record: vi.fn(async () => undefined) };
   const service = new OrgPortabilityService(
@@ -142,6 +143,7 @@ describe('OrgPortabilityService export', () => {
     const manifest = JSON.parse(strFromU8(entries['manifest.json']));
     expect(manifest.schema).toBe('postmill.org-export.v1');
     expect(manifest.counts.Integration).toBe(1);
+    expect(manifest.counts.integrationWebhooks).toBe(1);
     expect(manifest.counts.File).toBe(2);
     expect(manifest.counts.assets).toBe(1);
     expect(Object.keys(entries).filter((name) => name.startsWith('assets/'))).toHaveLength(1);
@@ -158,7 +160,13 @@ describe('OrgPortabilityService export', () => {
       id: 'integration-1',
       field: 'token',
       value: 'plain-provider-token',
+    }, {
+      model: 'Integration',
+      id: 'integration-1',
+      field: 'refreshToken',
+      value: 'legacy-plaintext-refresh-token',
     }]);
+    expect(strFromU8(entries['domains/Integration.ndjson'])).not.toContain('legacy-plaintext-refresh-token');
 
     const download = await service.issueDownload('org-1', 'owner-1', job.id);
     const token = download.url.split('/').pop()!;

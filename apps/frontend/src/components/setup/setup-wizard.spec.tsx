@@ -48,6 +48,7 @@ vi.mock('@postmill-ai/react/form/button', () => ({
   ),
 }));
 
+vi.mock('./steps/step-import', () => ({ StepImport: () => <div data-testid="step-import" /> }));
 vi.mock('./steps/step-llm', () => ({ StepLlm: () => <div data-testid="step-llm" /> }));
 vi.mock('./steps/step-ai-media', () => ({ StepAiMedia: () => <div data-testid="step-ai-media" /> }));
 vi.mock('./steps/step-channels', () => ({ StepChannels: () => <div data-testid="step-channels" /> }));
@@ -71,14 +72,16 @@ describe('SetupWizard', () => {
     window.sessionStorage.clear();
   });
 
-  it('disables Next on step 1 when no LLM is active', () => {
+  it('disables Next on the LLM step when no LLM is active', () => {
+    window.sessionStorage.setItem('setup:step', '1');
     render(<SetupWizard />);
     const next = screen.getByRole('button', { name: /next/i }) as HTMLButtonElement;
     expect(next.disabled).toBe(true);
   });
 
-  it('enables Next on step 1 when an LLM is active', () => {
+  it('enables Next on the LLM step when an LLM is active', () => {
     summaryData = { aiProviderActive: true };
+    window.sessionStorage.setItem('setup:step', '1');
     render(<SetupWizard />);
     const next = screen.getByRole('button', { name: /next/i }) as HTMLButtonElement;
     expect(next.disabled).toBe(false);

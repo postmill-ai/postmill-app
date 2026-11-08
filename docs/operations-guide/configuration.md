@@ -32,13 +32,15 @@ Every environment variable Postmill recognises, sourced from `.env.example`. All
 | `MEDIA_UPLOAD_MAX_BYTES` | `1073741824` | Maximum upload file size for `/files/upload-server` (default 1 GB) |
 | `LOCAL_STORAGE_QUOTA_GB` | `5` | Default soft quota for each org's hosted storage in either platform mode |
 
-### Organization export
+### Organization portability
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `ORG_PORTABILITY_SPOOL_DIR` | `${TMPDIR}/postmill-org-archives` | Private, mode-0600 archive spool. Keep it outside the upload root, public buckets, and repository; archives expire after 24 hours |
 | `ORG_PORTABILITY_MAX_ARCHIVE_BYTES` | `4293918720` | Maximum archive size: 4 GiB minus 1 MiB. Larger overrides are capped because the streaming writer does not emit ZIP64 |
 | `ORG_PORTABILITY_MAX_ASSET_BYTES` | `2147483647` | Maximum source size for each exported file |
+
+Setup import requires `USE_INNGEST=true`; commit returns `503` when background processing is unavailable. The spool must have room for the uploaded archive, one extraction, and staged destination assets. Temporary upload and extraction files are removed after completion or failure; successfully imported destination assets are retained. Export archives are capped at 65,000 entries as well as the byte ceiling.
 
 ## Email
 

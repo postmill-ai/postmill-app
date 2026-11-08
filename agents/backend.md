@@ -112,7 +112,10 @@ Both delegate to `OrgPortabilityService`; all Prisma access stays in `OrgPortabi
 The archive implementation is split into `org-portability.crypto.ts` (scrypt/AES-GCM/HMAC),
 `org-portability.archive.ts` (fflate-to-file streaming), and `org-portability.types.ts`
 (format version, exclusions and configurable byte limits). Do not change the unrelated GDPR
-`DataExportService`. Import/remapping belongs to the later setup-import stage.
+`DataExportService`. `OrgImportController` handles owner-only setup imports; `OrgImportService`
+validates and stages archives and processes them through `org/portability.import`, while all Prisma
+writes (including user creation and job completion) stay transaction-scoped in `OrgImportRepository`.
+The archive domain inventory is shared by export and import in `org-portability.domains.ts`.
 
 ---
 

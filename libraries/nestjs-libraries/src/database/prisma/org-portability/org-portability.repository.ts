@@ -97,7 +97,7 @@ export class OrgPortabilityRepository {
     const jobs = await this._prisma.orgPortabilityJob.findMany({
       where: {
         expiresAt: { lt: now },
-        status: { in: ['pending', 'processing', 'completed', 'failed'] },
+        status: { in: ['uploading', 'pending', 'processing', 'completed', 'failed'] },
       },
     });
     if (!jobs.length) return [];
@@ -168,6 +168,7 @@ export class OrgPortabilityRepository {
         id: true,
         key: true,
         name: true,
+        description: true,
         isSystem: true,
         createdAt: true,
         updatedAt: true,
@@ -181,12 +182,29 @@ export class OrgPortabilityRepository {
 
   async modelBatch(model: string, orgId: string, cursor?: string) {
     const delegate = (this._prisma as any)[model];
+    const where = {
+      tags: { orgId },
+      watchedAccountMetric: { watchedAccount: { organizationId: orgId } },
+      campaignNoteReaction: { note: { organizationId: orgId } },
+    }[model] || { organizationId: orgId };
     return delegate.findMany({
-      where: model === 'tags' ? { orgId } : { organizationId: orgId },
+      where,
       orderBy: { id: 'asc' },
       take: ORG_PORTABILITY_BATCH_SIZE,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     });
+  }
+
+  async integrationWebhookPairs(orgId: string) {
+    const webhooks = await this._prisma.webhooks.findMany({
+      where: { organizationId: orgId },
+      select: { id: true, integrations: { select: { id: true }, orderBy: { id: 'asc' } } },
+      orderBy: { id: 'asc' },
+    });
+    return webhooks.flatMap((webhook) => webhook.integrations.map((integration) => ({
+      webhookId: webhook.id,
+      integrationId: integration.id,
+    })));
   }
 
   async relatedBatch(model: string, orgId: string, cursor?: string) {
