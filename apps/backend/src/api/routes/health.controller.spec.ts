@@ -331,6 +331,43 @@ describe('HealthService', () => {
       expect(result.inngest.healthy).toBe(true);
     });
 
+    it('checks a loopback self-hosted base URL in production mode', async () => {
+      process.env.USE_INNGEST = 'true';
+      process.env.INNGEST_EVENT_KEY = 'test-event-key';
+      process.env.INNGEST_SIGNING_KEY = 'test-signing-key';
+      process.env.INNGEST_BASE_URL = 'http://127.0.0.1:8290';
+      vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+
+      const service = createHealthService();
+      const result = await service.getHealth();
+
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        'http://127.0.0.1:8290',
+        expect.objectContaining({ method: 'HEAD', signal: expect.any(AbortSignal) })
+      );
+      expect(safeFetchMock).not.toHaveBeenCalled();
+      expect(result.inngest.eventApiReachable).toBe(true);
+      expect(result.inngest.healthy).toBe(true);
+    });
+
+    it('uses safeFetch for a non-loopback self-hosted production URL', async () => {
+      process.env.USE_INNGEST = 'true';
+      process.env.INNGEST_EVENT_KEY = 'test-event-key';
+      process.env.INNGEST_SIGNING_KEY = 'test-signing-key';
+      process.env.INNGEST_BASE_URL = 'https://jobs.example.com';
+      safeFetchMock.mockResolvedValue({ ok: true } as Response);
+
+      const service = createHealthService();
+      const result = await service.getHealth();
+
+      expect(safeFetchMock).toHaveBeenCalledWith(
+        'https://jobs.example.com',
+        expect.objectContaining({ method: 'HEAD', signal: expect.any(AbortSignal) })
+      );
+      expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+      expect(result.inngest.eventApiReachable).toBe(true);
+    });
+
     it('checks dev server reachability when INNGEST_DEV=1 and reports true when reachable', async () => {
       process.env.INNGEST_DEV = '1';
       process.env.USE_INNGEST = 'true';

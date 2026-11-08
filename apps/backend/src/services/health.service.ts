@@ -10,6 +10,16 @@ const EVENT_API_TIMEOUT_MS = 5_000;
 const INNGEST_CLOUD_EVENT_API = 'https://inn.gs/';
 const INNGEST_DEV_BASE_URL = 'http://localhost:8288';
 
+const isLoopbackHttpUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:'
+      && ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
 @Injectable()
 export class HealthService {
   constructor(
@@ -142,14 +152,13 @@ export class HealthService {
     const startedAt = Date.now();
 
     try {
-      if (devMode) {
-        // Dev-only: targets the operator's local Inngest dev server (INNGEST_BASE_URL,
-        // e.g. http://localhost:8288). Intentionally a bare fetch — safeFetch enforces
-        // isSafePublicHttpsUrl and would reject this private/non-HTTPS localhost URL by
-        // design. Only reachable when devMode (INNGEST_DEV) is set. The production branch
-        // below uses safeFetch.
-        const baseUrl = process.env.INNGEST_BASE_URL || INNGEST_DEV_BASE_URL;
-        const response = await fetch(baseUrl, {
+      const configuredBaseUrl = process.env.INNGEST_BASE_URL;
+      if (devMode || configuredBaseUrl) {
+        const baseUrl = configuredBaseUrl || INNGEST_DEV_BASE_URL;
+        // Development servers and an explicitly configured loopback production engine
+        // require direct HTTP. Every other production URL keeps the SSRF-safe path.
+        const fetcher = devMode || isLoopbackHttpUrl(baseUrl) ? fetch : safeFetch;
+        const response = await fetcher(baseUrl, {
           method: 'HEAD',
           signal: controller.signal,
         });

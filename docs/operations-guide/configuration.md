@@ -115,13 +115,13 @@ Browser and mobile push notifications are sent via Firebase Cloud Messaging (FCM
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `USE_INNGEST` | — | Set to `true` to enable Inngest-driven background jobs |
-| `INNGEST_EVENT_KEY` | — | Inngest Cloud event key (required unless `INNGEST_DEV=1`) |
-| `INNGEST_SIGNING_KEY` | — | Inngest Cloud signing key (required unless `INNGEST_DEV=1`) |
+| `INNGEST_EVENT_KEY` | — | Inngest Cloud or self-hosted event key (required unless `INNGEST_DEV=1`) |
+| `INNGEST_SIGNING_KEY` | — | Inngest Cloud or self-hosted signing key (required unless `INNGEST_DEV=1`) |
 | `INNGEST_SIGNING_KEY_FALLBACK` | — | Optional fallback signing key for rotation |
 | `INNGEST_ENV` | — | Optional branch environment name |
-| `INNGEST_DEV` | — | Set to `1` to use the local Inngest dev server |
-| `INNGEST_BASE_URL` | `http://localhost:8288` | Local dev server URL (only used with `INNGEST_DEV=1`) |
-| `INNGEST_SERVE_ORIGIN` | — | Public backend origin served to Inngest |
+| `INNGEST_DEV` | — | Set to `1` only for the local Inngest dev server; leave unset for Cloud or production self-hosted |
+| `INNGEST_BASE_URL` | `http://localhost:8288` (dev) | Dev-server URL, or production self-hosted engine URL when set with event/signing keys; unset uses Cloud |
+| `INNGEST_SERVE_ORIGIN` | — | Public backend origin served to Inngest, or explicit loopback origin for a local self-hosted engine |
 | `INNGEST_SERVE_PATH` | `/api/inngest` | Path where the backend serves the Inngest handler |
 | `ANALYTICS_DAILY_RETENTION_DAYS` | `548` | Days to keep daily channel snapshots before rolling up to weekly |
 | `ANALYTICS_POST_RETENTION_DAYS` | `90` | Days to keep per-post snapshots before pruning |
