@@ -17,6 +17,7 @@ describe('local provider conformance', () => {
         'deleteFile',
         'getUsageBytes',
         'writeBuffer',
+        'writeFileStream',
         'readFile',
       ],
     });

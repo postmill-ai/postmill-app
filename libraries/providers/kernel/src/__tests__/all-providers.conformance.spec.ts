@@ -27,6 +27,7 @@ const REQUIRED_METHODS: Record<string, string[]> = {
     'readFile',
     'readFileStream',
     'writeBuffer',
+    'writeFileStream',
     'testConnection',
     'listFiles',
     'getFileUrl',

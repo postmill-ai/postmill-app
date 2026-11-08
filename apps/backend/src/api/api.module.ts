@@ -111,6 +111,7 @@ import {
   OrgPortabilityController,
   OrgPortabilityDownloadController,
 } from './routes/org-portability.controller';
+import { OrgImportController } from './routes/org-import.controller';
 
 // Exported so tests can prove a controller is registered for
 // AuthMiddleware/CsrfMiddleware (an unregistered controller serves unauthenticated).
@@ -173,6 +174,7 @@ export const authenticatedController = [
   // AuthMiddleware/CsrfMiddleware apply (still no org-scoping in the handler).
   ProvidersController,
   OrgPortabilityController,
+  OrgImportController,
 ];
 @Module({
   imports: [UploadModule, InngestModule, ReplicateStudioModule, HeyGenModule, MediaStudioModule, DesignerAssistantModule, DeepgramModule, AiDesignerModule],

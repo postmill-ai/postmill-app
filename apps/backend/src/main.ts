@@ -130,6 +130,8 @@ async function start() {
       '/media/outpaint',
       '/media/magic-grab',
       '/media/upscale',
+      '/org-portability/import-uploads',
+      '/org-portability/import-uploads/{*splat}',
     ],
     (req: any, res: any, next: any) => {
       json({ limit: '50mb' })(req, res, next);

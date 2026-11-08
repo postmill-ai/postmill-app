@@ -21,12 +21,13 @@ export interface StorageCapability extends StorageUploadProvider {
   deleteFile(key: string): Promise<void>;
   getUsageBytes(): Promise<bigint | null>;           // null = unknown
   writeBuffer(buffer: Buffer, contentType?: string): Promise<string>;
+  writeFileStream(path: string, contentType?: string): Promise<string>;
   readFile(pathOrKey: string): Promise<Buffer>;
   readFileStream(pathOrKey: string): Promise<Readable>;
 }
 ```
 
-`StorageFileEntry` = `{ key, name, size, mimeType, lastModified }`. The conformance harness (`runDomainConformance('storage', …)`) requires all eleven methods — see Tests below. `readFileStream` must use the same key mapping and tenant confinement as `readFile`; large video thumbnails depend on it to avoid whole-object buffering.
+`StorageFileEntry` = `{ key, name, size, mimeType, lastModified }`. The conformance harness (`runDomainConformance('storage', …)`) requires all twelve methods — see Tests below. `readFileStream` must use the same key mapping and tenant confinement as `readFile`; large video thumbnails depend on it to avoid whole-object buffering. `writeFileStream` applies `STORED_ARTIFACT_ALLOWED_MIME` and streams disk input without the image/video-only `uploadFile` path.
 
 ## Fast path: `makeS3StorageModule`
 
@@ -169,7 +170,7 @@ Icon (optional): `apps/frontend/src/components/shared/provider-icon.tsx`. Withou
 
 ## Tests
 
-- Conformance spec in the new package at `src/v1/__tests__/conformance.spec.ts`, copied from `libraries/providers/cloudflare-r2/src/v1/__tests__/conformance.spec.ts`: find the storage module in the package's default export and call `runDomainConformance('storage', mod, { requiredMethods: ['uploadSimple','uploadFile','removeFile','testConnection','listFiles','getFileUrl','deleteFile','getUsageBytes','writeBuffer','readFile'] })`.
+- Conformance spec in the new package at `src/v1/__tests__/conformance.spec.ts`, copied from `libraries/providers/cloudflare-r2/src/v1/__tests__/conformance.spec.ts`: find the storage module in the package's default export and call `runDomainConformance('storage', mod, { requiredMethods: ['uploadSimple','uploadFile','removeFile','testConnection','listFiles','getFileUrl','deleteFile','getUsageBytes','writeBuffer','writeFileStream','readFile','readFileStream'] })`.
 - Repo-wide conformance: `libraries/providers/kernel/src/__tests__/all-providers.conformance.spec.ts` iterates `providerModules` — it covers the new module automatically once registered.
 - Backend behavior: `apps/backend/src/api/routes/storage.controller.spec.ts` exercises `/settings/storage` CRUD/test flows.
 - Run: `pnpm --filter @postmill-ai/provider-example test`, or the whole providers tree with `vitest run --root libraries/providers`. See `agents/testing.md`.

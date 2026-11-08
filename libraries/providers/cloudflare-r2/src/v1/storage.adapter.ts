@@ -28,6 +28,7 @@ import {
   fromBuffer,
   fromFile,
   DetectedFileType,
+  storedArtifactFile,
   UploadValidationError,
 } from '@postmill-ai/provider-kernel';
 
@@ -463,6 +464,19 @@ export class R2Storage implements StorageCapability {
     return this.getFileUrl(key);
   }
 
+  async writeFileStream(filePath: string, contentType?: string): Promise<string> {
+    const { mime, ext, size } = await storedArtifactFile(filePath, contentType);
+    const key = `${randomBytes(8).toString('hex')}.${ext}`;
+    await this.client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: createReadStream(filePath),
+      ContentType: mime,
+      ContentLength: size,
+    }));
+    return this.getFileUrl(key);
+  }
+
   private getMimeByExtension(filename: string): string | undefined {
     const ext = filename.split('.').pop()?.toLowerCase();
     if (!ext) return undefined;
@@ -531,6 +545,9 @@ class CloudflareR2StorageCapability implements StorageCapability {
   }
   writeBuffer(buffer: Buffer, contentType?: string) {
     return this.a.writeBuffer(buffer, contentType);
+  }
+  writeFileStream(path: string, contentType?: string) {
+    return this.a.writeFileStream(path, contentType);
   }
   readFile(pathOrKey: string) {
     return this.a.readFile(pathOrKey);

@@ -35,12 +35,12 @@ Keep `maxWorkers: 1` when adding specs that touch the DB harness or process-wide
 
 ## DB test harness — `libraries/nestjs-libraries/src/testing/test-db.ts`
 
-- `createTestDatabase()` → `{ url, drop }`. Connects with an admin client
+- `createTestDatabase(suffix?)` → `{ url, drop }`. Connects with an admin client
   (`TEST_DATABASE_ADMIN_URL`, default `postgresql://postmill-local:postmill-local-pwd@localhost:5432/postgres`),
-  `DROP DATABASE IF EXISTS ... WITH (FORCE)` then `CREATE DATABASE postmill_test_${pid}`,
-  and pushes the full schema in with `pnpm exec prisma db push --skip-generate`. First call
-  is slow (full push); runs once per run via `vitest-integration.global.ts`, which exposes
-  the URL as `inject('dbUrl')` and drops the DB on teardown.
+  `DROP DATABASE IF EXISTS ... WITH (FORCE)` then `CREATE DATABASE postmill_test_${pid}${suffix}`,
+  and pushes the full schema in with `pnpm exec prisma db push --skip-generate`. The optional suffix
+  creates independent databases for cross-deployment tests. The default global setup creates one
+  database and exposes its URL as `inject('dbUrl')`; every database is dropped on teardown.
 - `getTestPrisma(url)` → a `PrismaClient` pointed at that test DB.
 - CI provides Postgres via the service container in `.github/workflows/test.yml`
   (`TEST_DATABASE_ADMIN_URL` / `DATABASE_URL` env on the `Run integration tests` step).

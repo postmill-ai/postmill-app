@@ -27,6 +27,11 @@ import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest
 import { OrgPortabilityRepository } from './org-portability.repository';
 import { OrgArchiveWriter } from './org-portability.archive';
 import {
+  lowerFirst,
+  orgPortabilityModelNames,
+  ORG_PORTABILITY_RELATION_DOMAINS,
+} from './org-portability.domains';
+import {
   createOrgArchiveKey,
   encryptOrgSecretRefs,
   orgManifestMac,
@@ -35,7 +40,7 @@ import {
 import {
   ORG_EXPORT_SCHEMA,
   ORG_PORTABILITY_BATCH_SIZE,
-  ORG_PORTABILITY_EXCLUDED_MODELS,
+  ORG_PORTABILITY_MAX_DOMAIN_BYTES,
   ORG_PORTABILITY_EXPORT_EVENT,
   orgPortabilityMaxArchiveBytes,
   orgPortabilityMaxAssetBytes,
@@ -48,7 +53,6 @@ import {
 
 const DOWNLOAD_TTL_SECONDS = 300;
 const downloadKey = (token: string) => `org-portability:download:${token}`;
-const lowerFirst = (value: string) => value.charAt(0).toLowerCase() + value.slice(1);
 const asArray = async function* <T>(rows: T[]): AsyncGenerator<T> {
   for (const row of rows) yield row;
 };
@@ -245,7 +249,7 @@ export class OrgPortabilityService {
       }
       let value: string;
       try {
-        value = this._encryption.decrypt(stored);
+        value = stored.startsWith('v2:') ? this._encryption.decrypt(stored) : stored;
       } catch {
         throw new Error(`Could not decrypt ${model}.${field} for organization export`);
       }
@@ -293,13 +297,20 @@ export class OrgPortabilityService {
     rows: AsyncIterable<unknown>,
   ): Promise<void> {
     let count = 0;
+    let bytes = 0;
     const hash = createHash('sha256');
     await writer.addNdjson(`domains/${name}.ndjson`, (async function* () {
       for await (const row of rows) {
         count++;
         yield row;
       }
-    })(), (chunk) => hash.update(chunk));
+    })(), (chunk) => {
+      bytes += chunk.length;
+      if (bytes > ORG_PORTABILITY_MAX_DOMAIN_BYTES) {
+        throw new Error(`Organization export domain ${name} exceeds the 64 MiB import limit`);
+      }
+      hash.update(chunk);
+    });
     counts[name] = count;
     domainHashes[name] = hash.digest('hex');
   }
@@ -337,16 +348,14 @@ export class OrgPortabilityService {
       await this._writeDomain(writer, counts, domainHashes, 'members', asArray(await this._repository.members(job.organizationId)));
       await this._writeDomain(writer, counts, domainHashes, 'customRoles', asArray(await this._repository.customRoles(job.organizationId)));
 
-      const models = Prisma.dmmf.datamodel.models
-        .filter((model) => !ORG_PORTABILITY_EXCLUDED_MODELS.has(model.name))
-        .filter((model) => model.fields.some((field) => field.name === 'organizationId') || model.name === 'Tags')
-        .map((model) => model.name)
-        .sort();
-      for (const model of models) {
+      for (const model of orgPortabilityModelNames()) {
         await this._writeDomain(writer, counts, domainHashes, model, this._modelRows(model, job.organizationId, secrets));
       }
-      for (const relation of ['tagsPosts', 'postCommentRead', 'notificationRead', 'appRolePermission']) {
-        await this._writeDomain(writer, counts, domainHashes, relation, this._relatedRows(relation, job.organizationId));
+      for (const relation of ORG_PORTABILITY_RELATION_DOMAINS) {
+        const rows = relation === 'integrationWebhooks'
+          ? asArray(await this._repository.integrationWebhookPairs(job.organizationId))
+          : this._relatedRows(relation, job.organizationId);
+        await this._writeDomain(writer, counts, domainHashes, relation, rows);
       }
 
       const assets: Record<string, OrgPortabilityAssetManifest> = {};
@@ -411,6 +420,9 @@ export class OrgPortabilityService {
         }
       }
       counts.assets = writtenAssets.size;
+      if (Object.keys(domainHashes).length + writtenAssets.size + 1 > 65_000) {
+        throw new Error('Organization export exceeds the 65,000-entry archive limit');
+      }
 
       const keyWrap = (job.progress as any)?.keyWrap;
       if (!keyWrap) throw new Error('Organization export key metadata is missing');

@@ -126,7 +126,7 @@ const ALLOWED_MIME_TYPES = new Set<string>([
 // `text/html` (or any other active type) in the org bucket, where it could be served
 // and executed. Text/JSON have no magic bytes, so they are trusted only from the caller's
 // declared content-type — never sniffed.
-const STORED_ARTIFACT_ALLOWED_MIME = new Set<string>([
+export const STORED_ARTIFACT_ALLOWED_MIME = new Set<string>([
   'image/jpeg',
   'image/png',
   'image/gif',
@@ -152,6 +152,19 @@ const STORED_ARTIFACT_ALLOWED_MIME = new Set<string>([
   // `.pdesign` export artifact is a zip and lands through writeBuffer.
   'application/zip',
 ]);
+
+export async function storedArtifactFile(filePath: string, contentType?: string) {
+  const detected = await fromFile(filePath);
+  const mime = detected?.mime || contentType || 'application/octet-stream';
+  if (!STORED_ARTIFACT_ALLOWED_MIME.has(mime)) {
+    throw new UploadValidationError(`Unsupported stored artifact type: ${mime}`);
+  }
+  return {
+    mime,
+    ext: detected?.ext || (mime === 'application/json' ? 'json' : mime === 'text/plain' ? 'txt' : 'bin'),
+    size: statSync(filePath).size,
+  };
+}
 
 /**
  * Shared S3-protocol storage adapter. Used by every S3-compatible storage
@@ -436,6 +449,19 @@ export class S3StorageBase implements StorageCapability {
 
     return this.getFileUrl(key);
   }
+
+  async writeFileStream(filePath: string, contentType?: string): Promise<string> {
+    const { mime, ext, size } = await storedArtifactFile(filePath, contentType);
+    const key = this.newKey(ext);
+    await this.client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: createReadStream(filePath),
+      ContentType: mime,
+      ContentLength: size,
+    }));
+    return this.getFileUrl(key);
+  }
 }
 
 export class PlatformS3StorageBase extends S3StorageBase {
@@ -679,6 +705,9 @@ export function makeS3StorageModule(
     }
     writeBuffer(buffer: Buffer, contentType?: string) {
       return this.a.writeBuffer(buffer, contentType);
+    }
+    writeFileStream(path: string, contentType?: string) {
+      return this.a.writeFileStream(path, contentType);
     }
     readFile(pathOrKey: string) {
       return this.a.readFile(pathOrKey);

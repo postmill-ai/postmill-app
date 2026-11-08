@@ -22,6 +22,7 @@ export interface StorageCapability extends StorageUploadProvider {
   deleteFile(key: string): Promise<void>;
   getUsageBytes(): Promise<bigint | null>;
   writeBuffer(buffer: Buffer, contentType?: string): Promise<string>;
+  writeFileStream(path: string, contentType?: string): Promise<string>;
   readFile(pathOrKey: string): Promise<Buffer>;
   readFileStream(pathOrKey: string): Promise<Readable>;
 }

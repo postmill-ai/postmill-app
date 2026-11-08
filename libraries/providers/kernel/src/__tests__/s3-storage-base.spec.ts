@@ -139,6 +139,30 @@ describe('S3StorageBase', () => {
     });
   });
 
+  describe('writeFileStream', () => {
+    it('streams a JSON artifact with its declared content length', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 's3-artifact-stream-'));
+      try {
+        const source = join(dir, 'results.json');
+        writeFileSync(source, '{"ok":true}');
+        s3ClientMock.send.mockResolvedValue({});
+        const adapter = make('us-east-1', 'my-bucket', undefined, 'https://cdn.example.com');
+
+        const url = await adapter.writeFileStream(source, 'application/json');
+
+        const cmd = s3ClientMock.send.mock.calls[0][0];
+        expect(cmd.config.ContentType).toBe('application/json');
+        expect(cmd.config.ContentLength).toBe(11);
+        expect(cmd.config.Key).toMatch(/\.json$/);
+        expect(cmd.config.Body).toBeInstanceOf(ReadStream);
+        expect(url).toContain('https://cdn.example.com/');
+        for await (const chunk of cmd.config.Body) void chunk;
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('client construction', () => {
     // A custom endpoint means self-hosted S3 (MinIO/Ceph/…) where the SDK's
     // virtual-hosted default would resolve <bucket>.<endpoint-host> — a host

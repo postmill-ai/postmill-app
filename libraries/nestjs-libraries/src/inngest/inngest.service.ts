@@ -17,6 +17,7 @@ import { PaymentsService } from '@postmill-ai/nestjs-libraries/payments/payments
 import { InngestRunService } from './inngest-run.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import { OrgPortabilityService } from '@postmill-ai/nestjs-libraries/database/prisma/org-portability/org-portability.service';
+import { OrgImportService } from '@postmill-ai/nestjs-libraries/database/prisma/org-portability/org-import.service';
 import { createFunctions } from '@postmill-ai/backend/inngest/functions';
 import { InngestFunction } from 'inngest';
 
@@ -44,6 +45,7 @@ export class InngestService {
     inngestRunService: InngestRunService,
     organizationService: OrganizationService,
     orgPortabilityService: OrgPortabilityService,
+    orgImportService: OrgImportService,
   ) {
     // Built in the constructor (not onModuleInit) so consumers that read
     // getFunctions() in their own constructor — e.g. InngestController, which
@@ -67,6 +69,7 @@ export class InngestService {
       inngestRunService,
       organizationService,
       orgPortabilityService,
+      orgImportService,
     });
   }
 

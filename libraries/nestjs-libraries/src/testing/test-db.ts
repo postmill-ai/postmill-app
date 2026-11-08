@@ -32,11 +32,11 @@ async function withAdmin<T>(fn: (admin: PrismaClient) => Promise<T>): Promise<T>
  * push the current Prisma schema into it, and return its URL + a drop() teardown.
  * The first call is slow (a full `db push` of the schema) and runs once per run.
  */
-export async function createTestDatabase(): Promise<{
+export async function createTestDatabase(suffix = ''): Promise<{
   url: string;
   drop: () => Promise<void>;
 }> {
-  const dbName = `postmill_test_${process.pid}`;
+  const dbName = `postmill_test_${process.pid}${suffix.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 
   await withAdmin(async (admin) => {
     // DROP IF EXISTS guards against a stale DB left by a crashed prior run with the

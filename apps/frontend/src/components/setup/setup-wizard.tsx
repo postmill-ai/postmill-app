@@ -8,6 +8,7 @@ import { usePermissions } from '@postmill-ai/frontend/components/layout/use-perm
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { Button } from '@postmill-ai/react/form/button';
 import { SetupStepper } from '@postmill-ai/frontend/components/setup/setup-stepper';
+import { StepImport } from '@postmill-ai/frontend/components/setup/steps/step-import';
 import { StepLlm } from '@postmill-ai/frontend/components/setup/steps/step-llm';
 import { StepAiMedia } from '@postmill-ai/frontend/components/setup/steps/step-ai-media';
 import { StepChannels } from '@postmill-ai/frontend/components/setup/steps/step-channels';
@@ -22,6 +23,7 @@ const STEP_COMPONENTS: React.FC<{
   onProviderChange?: () => void;
   onActiveChange?: (active: boolean) => void;
 }>[] = [
+  StepImport,
   StepLlm,
   StepAiMedia,
   StepChannels,
@@ -75,6 +77,7 @@ export function SetupWizard() {
 
   const steps = useMemo(
     () => [
+      { id: 'import', label: t('setup_step_import', 'Import') },
       { id: 'llm', label: t('setup_step_llm', 'LLM'), required: true },
       { id: 'ai-media', label: t('setup_step_ai_media', 'AI Media') },
       { id: 'channels', label: t('setup_step_channels', 'Channels') },
@@ -117,13 +120,13 @@ export function SetupWizard() {
   const canFinish = aiProviderActive;
 
   const handleNext = useCallback(() => {
-    if (currentStep === 0 && !aiProviderActive) return;
+    if (currentStep === 1 && !aiProviderActive) return;
     setCompletedSteps((prev) => new Set(prev).add(currentStep));
     setCurrentStep((s) => Math.min(s + 1, steps.length - 1));
   }, [currentStep, aiProviderActive, steps.length]);
 
   const handleSkip = useCallback(() => {
-    if (currentStep === 0) return;
+    if (currentStep === 1) return;
     setSkippedSteps((prev) => new Set(prev).add(currentStep));
     setCompletedSteps((prev) => new Set(prev).add(currentStep));
     setCurrentStep((s) => Math.min(s + 1, steps.length - 1));
@@ -240,7 +243,7 @@ export function SetupWizard() {
         </div>
 
         <div className="flex items-center gap-[12px]">
-          {currentStep !== 0 && !isLastStep && (
+          {currentStep !== 1 && !isLastStep && (
             <Button
               type="button"
               onClick={handleSkip}
@@ -267,7 +270,7 @@ export function SetupWizard() {
             <Button
               type="button"
               onClick={handleNext}
-              disabled={currentStep === 0 && !aiProviderActive}
+              disabled={currentStep === 1 && !aiProviderActive}
               className="bg-btnPrimary text-white"
             >
               {t('next', 'Next')}
