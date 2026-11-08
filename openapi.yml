@@ -7652,6 +7652,30 @@ paths:
           description: ""
       tags:
         - Design
+  /media/designs/{id}/versions/{vid}/preview:
+    get:
+      operationId: DesignController_getVersionPreview
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: vid
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+          description: ""
+      tags:
+        - Design
   /media/designs/{id}/versions/{vid}:
     get:
       operationId: DesignController_getVersion
@@ -7709,6 +7733,26 @@ paths:
       summary: |-
         Restore is non-destructive server-side: the live doc is snapshotted as an
         auto version before the overwrite (see DesignService.restoreVersion).
+      tags:
+        - Design
+  /media/designs/preview:
+    post:
+      operationId: DesignController_preview
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateDocDto"
+      responses:
+        "200":
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+          description: ""
       tags:
         - Design
   /media/designs/render:
@@ -12615,6 +12659,13 @@ components:
         previewDataUrl:
           type: string
           description: Small JPEG data URL snapshot for the versions panel; optional.
+    ValidateDocDto:
+      type: object
+      properties:
+        doc:
+          type: object
+      required:
+        - doc
     RenderDesignDto:
       type: object
       properties:
@@ -12693,13 +12744,6 @@ components:
       required:
         - doc
         - rows
-    ValidateDocDto:
-      type: object
-      properties:
-        doc:
-          type: object
-      required:
-        - doc
     ApplyOpsDto:
       type: object
       properties:

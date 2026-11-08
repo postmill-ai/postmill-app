@@ -81,6 +81,8 @@ describe('DesignController', () => {
     regenPreviews: ReturnType<typeof vi.fn>;
     importDesign: ReturnType<typeof vi.fn>;
     importLibraryDesign: ReturnType<typeof vi.fn>;
+    getVersionPreview: ReturnType<typeof vi.fn>;
+    renderPreview: ReturnType<typeof vi.fn>;
   };
   let designExportService: {
     enqueueExport: ReturnType<typeof vi.fn>;
@@ -121,6 +123,8 @@ describe('DesignController', () => {
       regenPreviews: vi.fn(),
       importDesign: vi.fn(),
       importLibraryDesign: vi.fn(),
+      getVersionPreview: vi.fn(),
+      renderPreview: vi.fn(),
     };
     designExportService = {
       enqueueExport: vi.fn(),
@@ -532,6 +536,49 @@ describe('DesignController', () => {
       await expect(controller.applyOps({ doc: {}, ops: [] })).rejects.toThrow(
         BadRequestException
       );
+    });
+  });
+
+  describe('GET /media/designs/:id/versions/:vid/preview', () => {
+    it('uses media-read gates and returns the org-scoped PNG without caching', async () => {
+      const png = Buffer.from('version-png');
+      designService.getVersionPreview.mockResolvedValue(png);
+      const res = { setHeader: vi.fn(), end: vi.fn() } as any;
+
+      await controller.getVersionPreview(org, 'd1', 'v1', res);
+
+      expect(designService.getVersionPreview).toHaveBeenCalledWith('org-1', 'd1', 'v1');
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'image/png');
+      expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+      expect(res.end).toHaveBeenCalledWith(png);
+      expect(Reflect.getMetadata(CHECK_POLICIES_KEY, DesignController.prototype.getVersionPreview)).toEqual([
+        [AuthorizationActions.Read, Sections.MEDIA],
+      ]);
+      expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, DesignController.prototype.getVersionPreview)).toEqual({
+        resource: 'media', action: 'read',
+      });
+    });
+  });
+
+  describe('POST /media/designs/preview', () => {
+    it('uses media-create gates and renders the supplied current document without caching', async () => {
+      const doc = { mode: 'image', outputs: [] } as any;
+      const png = Buffer.from('current-png');
+      designService.renderPreview.mockResolvedValue(png);
+      const res = { setHeader: vi.fn(), end: vi.fn() } as any;
+
+      await controller.preview(org, { doc }, res);
+
+      expect(designService.renderPreview).toHaveBeenCalledWith('org-1', doc);
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'image/png');
+      expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+      expect(res.end).toHaveBeenCalledWith(png);
+      expect(Reflect.getMetadata(CHECK_POLICIES_KEY, DesignController.prototype.preview)).toEqual([
+        [AuthorizationActions.Create, Sections.MEDIA],
+      ]);
+      expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, DesignController.prototype.preview)).toEqual({
+        resource: 'media', action: 'create',
+      });
     });
   });
 

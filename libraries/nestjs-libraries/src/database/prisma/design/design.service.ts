@@ -358,6 +358,16 @@ export class DesignService {
     return version;
   }
 
+  async renderPreview(orgId: string, rawDoc: unknown): Promise<Buffer> {
+    const doc = this._designerDocService.validate(rawDoc);
+    return this._designPreviewService.renderPreviewBuffer(doc, { orgId });
+  }
+
+  async getVersionPreview(orgId: string, designId: string, versionId: string): Promise<Buffer> {
+    const version = await this.getVersion(orgId, designId, versionId);
+    return this.renderPreview(orgId, version.doc);
+  }
+
   /**
    * Restore a version into the live design. NON-destructive on the server
    * side: the current doc is snapshotted as an auto version BEFORE the
