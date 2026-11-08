@@ -8,3 +8,6 @@
 // the browser bundle throws "Reflect.getMetadata is not a function" the moment the module is
 // imported. Loading it here guarantees the global `Reflect` metadata API exists first.
 import 'reflect-metadata';
+import * as Sentry from '@sentry/nextjs';
+
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

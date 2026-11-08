@@ -17,13 +17,14 @@ afterEach(async () => {
 });
 
 describe('Epure production sourcemap upload', () => {
-  it('uploads only current production artifacts and skips unsupported paths', async () => {
+  it('uploads current production, large, and catch-all artifacts', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'epure-sourcemaps-'));
     cleanup.push(() => fs.rm(temporary, { recursive: true, force: true }));
     const nextDir = path.join(temporary, 'apps/frontend/.next');
     const fixtures = [
       'static/chunks/renamed.js.map',
       'server/app.js.map',
+      'server/large.js.map',
       'serverless/lambda.js.map',
       'dev/static/chunks/stale.js.map',
       'server/app/(app)/files/[[...path]]/page.js.map',
@@ -47,7 +48,9 @@ describe('Epure production sourcemap upload', () => {
               },
             }],
           })
-        : '{"version":3,"mappings":""}';
+        : relative === 'server/large.js.map'
+          ? JSON.stringify({ version: 3, mappings: '', sources: ['x'.repeat(2 * 1024 * 1024 + 1)] })
+          : '{"version":3,"mappings":""}';
       await fs.writeFile(file, contents);
     }));
     await fs.writeFile(
@@ -90,6 +93,8 @@ describe('Epure production sourcemap upload', () => {
 
     expect(uploads.map((upload) => upload.name).sort()).toEqual([
       '~/_next/server/app.js.map',
+      '~/_next/server/app/(app)/files/[[...path]]/page.js.map',
+      '~/_next/server/large.js.map',
       '~/_next/serverless/lambda.js.map',
       '~/_next/static/chunks/served.js.map',
     ]);
@@ -99,7 +104,7 @@ describe('Epure production sourcemap upload', () => {
     expect(flattened?.sourcemap.ignoreList).toEqual([0]);
     expect(flattened?.sourcemap.sources).toContain('src/app.ts');
     expect(flattened?.sourcemap.mappings).toBeTypeOf('string');
-    expect(stdout).toContain('3 uploaded, 0 oversized, 1 unsupported, 0 failed');
+    expect(stdout).toContain('5 uploaded, 0 oversized, 0 unsupported, 0 failed');
     expect(stdout).not.toContain('dev/static');
   }, 15000);
 });
