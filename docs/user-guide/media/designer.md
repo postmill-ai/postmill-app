@@ -224,6 +224,7 @@ Konva snapshot can't produce real animation, so those two only exist as video-mo
 text in unsafe areas, missing media sources, and text that still overflows after fitting. Select a
 finding to open the relevant output/page and layer or clip. These findings are warnings, not export
 blockers; Brand Kit enforcement keeps its separate blocking behavior. Hidden layers are skipped.
+Safe-zone checks use measured text lines rather than the full text box when measurement is available.
 Rotated geometry, image/gradient/obscured backgrounds, and unavailable text measurements are marked
 as unassessed rather than guessed.
 

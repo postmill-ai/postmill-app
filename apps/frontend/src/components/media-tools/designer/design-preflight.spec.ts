@@ -124,6 +124,32 @@ describe('analyzeDesignerPreflight', () => {
     const result = analyze(doc([output([text('one')])]));
     expect(result.findings).toEqual([]);
     expect(result.unassessed.text).toBe(1);
+    expect(result.unassessed.geometry).toBe(1);
+  });
+
+  it('uses measured static line extents instead of a full-width centered text box', () => {
+    const result = analyze(doc([output([text('one', {
+      x: 0, y: 0, width: 1000, height: 1000, align: 'center', verticalAlign: 'middle',
+    })])]));
+    expect(result.findings).toEqual([]);
+    expect(result.unassessed.geometry).toBe(0);
+  });
+
+  it('uses measured video line extents instead of a full-width centered text box', () => {
+    const fixture = {
+      mode: 'video' as const,
+      outputs: [{
+        id: 'video-out', formatId: 'custom-video', name: 'Video', width: 1000, height: 1000,
+        fps: 30, durationMs: 5000,
+        tracks: [{ id: 'text-track', type: 'text', clips: [{
+          id: 'text-clip', text: 'Hello', x: 0, y: 100, width: 1000, height: 1000,
+          align: 'center', fontSize: 16, fill: '#ffffff', opacity: 1,
+        }] }],
+      }],
+    };
+    const result = analyzeDesignerPreflight(fixture, [{ outputIndex: 0, pages: [0] }]);
+    expect(result.findings).toEqual([]);
+    expect(result.unassessed.geometry).toBe(0);
   });
 
   it('skips empty text instead of reporting it as unassessed', () => {

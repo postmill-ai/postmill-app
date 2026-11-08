@@ -62,8 +62,8 @@ export const analyzeDesignerPreflight = (
     clip?: DesignerPreflightFinding['clip'],
   ) => findings.push({ rule, key, vars, outputIndex, pageNumber, elementId, clip });
 
-  const safeZone = (output: DesignerOutput | VideoOutput, box: Box, rotation: number | undefined, outputIndex: number, pageNumber: number, elementId?: string, clip?: DesignerPreflightFinding['clip']) => {
-    if (rotation) {
+  const safeZone = (output: DesignerOutput | VideoOutput, box: Box | null, rotation: number | undefined, outputIndex: number, pageNumber: number, elementId?: string, clip?: DesignerPreflightFinding['clip']) => {
+    if (rotation || !box) {
       unassessed.geometry++;
       return;
     }
@@ -117,11 +117,14 @@ export const analyzeDesignerPreflight = (
     }
   };
 
-  const staticTextOverflow = (element: DesignerElement): boolean | null => {
+  type TextLayout = { box: Box; overflow: boolean };
+
+  const staticTextLayout = (element: DesignerElement): TextLayout | null => {
     if (element.richText?.length || element.textPath || (element.curve || 0) !== 0 || !element.text?.trim()) return null;
     const measure = measureForElement(element);
     if (!measure) return null;
     const fontSize = element.fontSize || 16;
+    const scaleX = element.textScaleX || 1;
     const fit = fitTextToBox({
       text: element.text,
       width: element.width,
@@ -134,13 +137,40 @@ export const analyzeDesignerPreflight = (
       paragraphSpacing: element.paragraphSpacing,
       firstLineIndent: element.firstLineIndent,
     }, measure);
-    const height = fit.lines.reduce((sum, _line, index) => sum + fit.lineHeight + fit.lineGaps[index], 0);
-    if (height > element.height + 0.5) return true;
-    return fit.lines.some((line) =>
-      measureLineWidth(line, fit.fontSize, element.letterSpacing || 0, measure, element.textScaleX || 1) > element.width + 0.5);
+    const widths = fit.lines.map((line) =>
+      measureLineWidth(line, fit.fontSize, element.letterSpacing || 0, measure, scaleX));
+    const contentHeight = fit.lines.reduce((sum, _line, index) => sum + fit.lineHeight + fit.lineGaps[index], 0);
+    const top = element.verticalAlign === 'middle'
+      ? Math.max(0, (element.height - contentHeight) / 2)
+      : element.verticalAlign === 'bottom'
+        ? Math.max(0, element.height - contentHeight)
+        : 0;
+    const align = element.align || 'left';
+    let left = Infinity;
+    let right = -Infinity;
+    fit.lines.forEach((_line, index) => {
+      const indent = (fit.lineIndents[index] || 0) * scaleX;
+      const available = element.width - indent;
+      const width = widths[index];
+      const justified = align === 'justify' && index < fit.lines.length - 1 && !fit.paragraphStarts[index + 1] && width <= available;
+      const lineLeft = justified
+        ? indent
+        : align === 'right'
+          ? element.width - width
+          : align === 'center'
+            ? indent + (available - width) / 2
+            : indent;
+      left = Math.min(left, lineLeft);
+      right = Math.max(right, justified ? indent + available : lineLeft + width);
+    });
+    return {
+      box: { x: element.x + left, y: element.y + top, width: right - left, height: contentHeight },
+      overflow: contentHeight > element.height + 0.5 || widths.some((width, index) =>
+        width + (fit.lineIndents[index] || 0) * scaleX > element.width + 0.5),
+    };
   };
 
-  const videoTextOverflow = (clip: VideoClip): boolean | null => {
+  const videoTextLayout = (clip: VideoClip): TextLayout | null => {
     if (!clip.text?.trim()) return null;
     const measure = measureForElement(clip as unknown as DesignerElement);
     if (!measure) return null;
@@ -150,7 +180,18 @@ export const analyzeDesignerPreflight = (
     const align = clip.align || 'left';
     const all = layoutVideoText(clip.text, width, Number.MAX_SAFE_INTEGER, fontSize, (line) => measure(line, fontSize), align);
     const visible = layoutVideoText(clip.text, width, height, fontSize, (line) => measure(line, fontSize), align);
-    return all.length > visible.length || all[visible.length - 1]?.text !== visible[visible.length - 1]?.text;
+    let left = Infinity;
+    let right = -Infinity;
+    all.forEach((line) => {
+      const justified = align === 'justify' && !line.lastInParagraph;
+      const lineLeft = justified ? 0 : align === 'right' ? width - line.width : align === 'center' ? (width - line.width) / 2 : 0;
+      left = Math.min(left, lineLeft);
+      right = Math.max(right, justified ? width : lineLeft + line.width);
+    });
+    return {
+      box: { x: (clip.x || 0) + left, y: clip.y || 0, width: right - left, height: all.length * fontSize },
+      overflow: all.length > visible.length || all[visible.length - 1]?.text !== visible[visible.length - 1]?.text,
+    };
   };
 
   doc.outputs.forEach((output, outputIndex) => {
@@ -171,7 +212,8 @@ export const analyzeDesignerPreflight = (
           }
           if (element.type !== 'text') return;
           if (!element.text?.trim() && !element.richText?.length) return;
-          safeZone(output, element, element.rotation, outputIndex, pageNumber, element.id);
+          const layout = staticTextLayout(element);
+          safeZone(output, layout?.box || null, element.rotation, outputIndex, pageNumber, element.id);
           const center = { x: element.x + element.width / 2, y: element.y + element.height / 2 };
           const backdrop = children.slice(0, index).reverse().find((candidate) =>
             candidate.type !== 'text' && !candidate.hidden && (candidate.opacity ?? 1) > 0 &&
@@ -183,9 +225,8 @@ export const analyzeDesignerPreflight = (
             fill: element.fill,
             fillGradient: element.fillGradient,
           });
-          const overflow = staticTextOverflow(element);
-          if (overflow === null) unassessed.text++;
-          else if (overflow) add('text-overflow', 'designer_preflight_text_overflow', { target: targetName(output, pageNumber) }, outputIndex, pageNumber, element.id);
+          if (!layout) unassessed.text++;
+          else if (layout.overflow) add('text-overflow', 'designer_preflight_text_overflow', { target: targetName(output, pageNumber) }, outputIndex, pageNumber, element.id);
         });
       }
       return;
@@ -207,14 +248,13 @@ export const analyzeDesignerPreflight = (
           });
         }
         if (!['text', 'caption'].includes(track.type) || !clip.text?.trim()) return;
-        const box = { x: clip.x || 0, y: clip.y || 0, width: clip.width || 1, height: clip.height || 1 };
+        const layout = videoTextLayout(clip);
         const clipTarget = { trackId: track.id, clipId: clip.id };
-        safeZone(output, box, clip.rotation, outputIndex, 0, undefined, clipTarget);
+        safeZone(output, layout?.box || null, clip.rotation, outputIndex, 0, undefined, clipTarget);
         if (visualMedia) unassessed.contrast++;
         else contrast(output, 0, outputIndex, { id: clip.id, fill: clip.fill }, clipTarget);
-        const overflow = videoTextOverflow(clip);
-        if (overflow === null) unassessed.text++;
-        else if (overflow) add('text-overflow', 'designer_preflight_text_overflow', { target: output.name }, outputIndex, 0, undefined, clipTarget);
+        if (!layout) unassessed.text++;
+        else if (layout.overflow) add('text-overflow', 'designer_preflight_text_overflow', { target: output.name }, outputIndex, 0, undefined, clipTarget);
       });
     });
   });
