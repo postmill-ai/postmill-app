@@ -11271,6 +11271,34 @@ components:
           type: string
         output:
           type: string
+    DesignerAssistantSelectionDto:
+      type: object
+      properties:
+        type:
+          type: string
+          maxLength: 40
+        x:
+          type: number
+          minimum: -16384
+          maximum: 16384
+        y:
+          type: number
+          minimum: -16384
+          maximum: 16384
+        width:
+          type: number
+          minimum: 0
+          maximum: 16384
+        height:
+          type: number
+          minimum: 0
+          maximum: 16384
+      required:
+        - type
+        - x
+        - y
+        - width
+        - height
     DesignerAssistantContextDto:
       type: object
       properties:
@@ -11310,6 +11338,17 @@ components:
           type: number
           minimum: 1
           maximum: 16384
+        mode:
+          type: string
+          enum:
+            - image
+            - video
+        selection:
+          minItems: 1
+          maxItems: 50
+          type: array
+          items:
+            $ref: "#/components/schemas/DesignerAssistantSelectionDto"
     GenerateDesignerCopyDto:
       type: object
       properties:

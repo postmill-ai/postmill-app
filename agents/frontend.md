@@ -441,8 +441,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   validates one root `variants` array containing exactly three alternatives; `/suggestions` prompts
   for and validates one root `suggestions` array containing 2–6 font/color/layout/spacing entries.
   A schema-invalid parsed response gets one correction retry; thrown provider errors do not. Strict
-  service-side Zod validation remains the security boundary, and the shared Inspector panel applies
-  text and whitelisted font/color styles only, never model-generated doc ops.
+  service-side Zod validation remains the security boundary. Static layout/spacing suggestions may
+  carry only semantic `align` or `distribute` actions from `align-distribute.ts`, never coordinates,
+  element ids, URLs, or arbitrary doc ops. `designer-assistant-actions.ts` captures the originating
+  output/page/selection, rejects stale or video-mode layout actions, and applies all element patches
+  with one history entry. The request context is bounded to 50 geometry-only selected elements;
+  copy and whitelisted font/color styles continue to work for static and video text/caption clips.
 - **Video poster state distinguishes effective and generated images.** The export dialog sends
   only an uploaded File path as `posterUrl` and may send the paused playhead as `posterTimeMs`.
   Polling reads `thumbnailUrl` (effective), `generatedPosterUrl` (rendered alternative), `fileId`,

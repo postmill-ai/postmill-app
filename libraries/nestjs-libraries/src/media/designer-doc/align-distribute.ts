@@ -14,6 +14,37 @@ export interface Box {
   height: number;
 }
 
+export type AlignPosition = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+export type AlignmentFrame = Pick<Box, 'x' | 'y' | 'width' | 'height'>;
+
+export const alignmentFrame = (
+  boxes: Box[],
+  canvas: { width: number; height: number },
+): AlignmentFrame => {
+  if (boxes.length <= 1) return { x: 0, y: 0, ...canvas };
+  const x = Math.min(...boxes.map((box) => box.x));
+  const y = Math.min(...boxes.map((box) => box.y));
+  return {
+    x,
+    y,
+    width: Math.max(...boxes.map((box) => box.x + box.width)) - x,
+    height: Math.max(...boxes.map((box) => box.y + box.height)) - y,
+  };
+};
+
+export const alignBox = (
+  box: Box,
+  position: AlignPosition,
+  frame: AlignmentFrame,
+): { x?: number; y?: number } => {
+  if (position === 'left') return { x: frame.x };
+  if (position === 'center') return { x: frame.x + (frame.width - box.width) / 2 };
+  if (position === 'right') return { x: frame.x + frame.width - box.width };
+  if (position === 'top') return { y: frame.y };
+  if (position === 'middle') return { y: frame.y + (frame.height - box.height) / 2 };
+  return { y: frame.y + frame.height - box.height };
+};
+
 export type DistributeMode =
   | 'horizontal-centers'
   | 'vertical-centers'
