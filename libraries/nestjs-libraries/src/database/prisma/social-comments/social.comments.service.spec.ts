@@ -422,14 +422,14 @@ describe('SocialCommentsService — controller-moved logic', () => {
       expect(syncRepository.softDeleteCommentsByIds).not.toHaveBeenCalled();
     });
 
-    it('pauses the affected channel without reconciling after a refresh-token failure', async () => {
+    it('does not change channel state or reconcile after a refresh-token failure', async () => {
       provider.fetchComments.mockRejectedValue(
         new RefreshToken('integration-1', '{}', '{}', 'refresh required'),
       );
 
       await syncService.syncComments('org-1', post);
 
-      expect(integrationService.refreshNeeded).toHaveBeenCalledWith('org-1', 'integration-1');
+      expect(integrationService.refreshNeeded).not.toHaveBeenCalled();
       expect(syncRepository.softDeleteCommentsByIds).not.toHaveBeenCalled();
     });
 

@@ -106,7 +106,7 @@ Rollup behaviour:
 | `SOCIAL_COMMENT_RETENTION_DAYS` | 90 days | Comments soft-deleted after this age |
 | `COMMENTS_SWEEP_INTERVAL_MINUTES` | 30 minutes | Interval between comment collection sweeps |
 
-A successful empty provider response is authoritative and can reconcile on-platform deletions. Fetch, authentication, parsing, and malformed-response failures do not delete stored comments. Channels whose tokens need repair are marked `refreshNeeded` and skipped until reconnected.
+A successful empty provider response is authoritative and can reconcile on-platform deletions. Fetch, authentication, parsing, malformed-response, and HTTP-200 error-payload failures do not delete stored comments. Channels already marked `refreshNeeded` by the publishing/token-refresh lifecycle are skipped; comment sync does not change channel credential state. `COMMENTS_SWEEP_INTERVAL_MINUTES` is read at function registration, so changing it requires a backend restart and app re-sync.
 
 ### Retention purge
 

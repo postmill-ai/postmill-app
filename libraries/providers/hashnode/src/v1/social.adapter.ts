@@ -120,6 +120,9 @@ export class HashnodeProvider extends SocialAbstract implements SocialProvider {
         }),
       });
       const json = await response.json() as any;
+      if (Array.isArray(json?.errors) && json.errors.length > 0) {
+        throw new Error('Hashnode comment fetch failed');
+      }
       const edges = json?.data?.post?.comments?.edges || [];
 
       const comments: SocialCommentDTO[] = edges.map(({ node }: any) => ({

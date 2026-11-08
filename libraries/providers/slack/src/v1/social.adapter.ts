@@ -393,6 +393,9 @@ export class SlackProvider extends SocialAbstract implements SocialProvider {
         },
       });
       const json = await response.json() as any;
+      if (json?.ok === false) {
+        throw new Error('Slack comment fetch failed');
+      }
       const messages = json?.messages || [];
 
       const comments: SocialCommentDTO[] = messages

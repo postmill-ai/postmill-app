@@ -23,7 +23,7 @@ import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prism
 import { WebhooksService } from '@postmill-ai/nestjs-libraries/database/prisma/webhooks/webhooks.service';
 import dayjs from 'dayjs';
 import { timer } from '@postmill-ai/helpers/utils/timer';
-import { RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
+import { BadBody, RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
 import {
   SocialProvider,
   SocialCommentDTO,
@@ -593,22 +593,20 @@ export class SocialCommentsService {
         if (!cursor) hasMore = false;
       } catch (err: unknown) {
         fullySynced = false;
-        if (err instanceof RefreshToken) {
-          await this._integrationService.refreshNeeded(orgId, post.integration.id);
-          this._logger.warn('Comment sync paused until the channel is reconnected', {
-            organizationId: orgId,
-            integrationId: post.integration.id,
-            providerIdentifier: post.integration.providerIdentifier,
-          });
-          break;
-        }
+        const detail = err instanceof RefreshToken || err instanceof BadBody
+          ? err.message
+          : undefined;
         this._logger.warn('Comment fetch failed; stored comments were not reconciled', {
           organizationId: orgId,
           integrationId: post.integration.id,
           providerIdentifier: post.integration.providerIdentifier,
           postId: post.id,
           errorName: err instanceof Error ? err.name : 'UnknownError',
+          ...(detail ? { detail } : {}),
         });
+        if (err instanceof RefreshToken) {
+          break;
+        }
         hasMore = false;
       }
     }

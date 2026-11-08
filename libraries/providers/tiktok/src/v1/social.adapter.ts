@@ -1065,6 +1065,9 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
         },
       });
       const json = await response.json() as any;
+      if (json?.error) {
+        throw new Error('TikTok comment fetch failed');
+      }
       const data = json?.data || {};
       const commentsList = data.comments || [];
 
