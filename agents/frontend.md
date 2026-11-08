@@ -436,6 +436,14 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   A schema-invalid parsed response gets one correction retry; thrown provider errors do not. Strict
   service-side Zod validation remains the security boundary, and the shared Inspector panel applies
   text and whitelisted font/color styles only, never model-generated doc ops.
+- **Export preflight is scoped, conservative, and non-blocking.** `design-preflight.ts` audits only
+  the selected outputs/pages and returns stable element/clip targets for low solid-background
+  contrast, unsafe-zone text, structurally missing media, and measured text overflow. Static text
+  uses `fit-text.ts`; video text uses `layoutVideoText`. Hidden layers are skipped, rotated geometry
+  and image/gradient/obscured backgrounds or unavailable measurements count as unassessed rather
+  than passing or failing guesses. `export-preflight.tsx` displays warnings and unassessed counts;
+  finding clicks navigate to the target and close export. Brand enforcement and its admin override
+  retain their existing blocking semantics, while these new warnings never block export.
 - **Video poster state distinguishes effective and generated images.** The export dialog sends
   only an uploaded File path as `posterUrl` and may send the paused playhead as `posterTimeMs`.
   Polling reads `thumbnailUrl` (effective), `generatedPosterUrl` (rendered alternative), `fileId`,

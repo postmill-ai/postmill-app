@@ -39,6 +39,9 @@ import { variantProviders, groupFilesByProvider } from './export-channels';
 import { readErrorMessage } from './read-error-message';
 import { ExportBackgroundImage } from './export-background';
 import { mergePosterPoll } from './poster-selection';
+import { analyzeDesignerPreflight } from './design-preflight';
+import { ExportPreflight } from './export-preflight';
+import { openDesignerPreflightFinding } from './preflight-navigation';
 
 const useFocusTrap = (containerRef: React.RefObject<HTMLElement | null>) => {
   useEffect(() => {
@@ -718,6 +721,17 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
       return list.filter((p) => p >= 0 && p < count);
     },
     [pageSelection]
+  );
+
+  const preflight = useMemo(
+    () => analyzeDesignerPreflight(
+      doc,
+      selectedOutputs.map((output) => ({
+        outputIndex: doc.outputs.indexOf(output),
+        pages: 'children' in output ? pagesForOutput(output) : [0],
+      })),
+    ),
+    [doc, selectedOutputs, pagesForOutput],
   );
 
   const togglePageSelection = useCallback(
@@ -1716,6 +1730,11 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
               {t('designer_exporting_current_output', 'Exporting current output')}
             </div>
           )}
+
+          <ExportPreflight
+            result={preflight}
+            onFinding={(finding) => openDesignerPreflightFinding(store, finding, onClose)}
+          />
 
           {brandEnforcement && brandViolations.length > 0 && (
             <div className="rounded-[6px] border border-red-400/30 bg-red-400/10 p-2">

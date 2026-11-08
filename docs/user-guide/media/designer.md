@@ -220,6 +220,13 @@ saved to the rendered file in Files. Video renders run asynchronously; progress 
 GIF and animated WebP are deliberately excluded from the static-canvas format list — a single-frame
 Konva snapshot can't produce real animation, so those two only exist as video-mode exports.
 
+**Preflight** checks the outputs and pages selected for export for low solid-background contrast,
+text in unsafe areas, missing media sources, and text that still overflows after fitting. Select a
+finding to open the relevant output/page and layer or clip. These findings are warnings, not export
+blockers; Brand Kit enforcement keeps its separate blocking behavior. Hidden layers are skipped.
+Rotated geometry, image/gradient/obscured backgrounds, and unavailable text measurements are marked
+as unassessed rather than guessed.
+
 Exports can save back into `/files` (with folder selection) or post directly into the composer.
 After a static-canvas export, the done step also lists each exported file as a download link so you
 can save a copy to your computer.
