@@ -3708,6 +3708,7 @@
   "designer_path_arc": "قوس",
   "designer_path_wave": "موجة",
   "designer_path_custom": "مخصص",
+  "designer_pathfinder_failed": "تعذّر على Pathfinder دمج الأشكال المحددة. جرّب تحديدًا مختلفًا أو عملية أخرى.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "زاوية القوس",
   "designer_label_drop_shadow": "ظل مسقط",

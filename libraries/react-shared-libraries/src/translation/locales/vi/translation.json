@@ -3708,6 +3708,7 @@
   "designer_path_arc": "Cung tròn",
   "designer_path_wave": "Sóng",
   "designer_path_custom": "Tùy chỉnh",
+  "designer_pathfinder_failed": "Pathfinder không thể kết hợp các hình đã chọn. Hãy thử một lựa chọn hoặc thao tác khác.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "Góc cung",
   "designer_label_drop_shadow": "Đổ bóng",

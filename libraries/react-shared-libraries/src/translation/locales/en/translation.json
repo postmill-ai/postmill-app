@@ -3721,6 +3721,7 @@
   "designer_path_arc": "Arc",
   "designer_path_wave": "Wave",
   "designer_path_custom": "Custom",
+  "designer_pathfinder_failed": "Pathfinder could not combine the selected shapes. Try a different selection or operation.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "Arc Angle",
   "designer_label_drop_shadow": "Drop shadow",

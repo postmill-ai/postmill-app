@@ -3708,6 +3708,7 @@
   "designer_path_arc": "円弧",
   "designer_path_wave": "波形",
   "designer_path_custom": "カスタム",
+  "designer_pathfinder_failed": "Pathfinder で選択した図形を結合できませんでした。別の選択または操作をお試しください。",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "円弧の角度",
   "designer_label_drop_shadow": "ドロップシャドウ",

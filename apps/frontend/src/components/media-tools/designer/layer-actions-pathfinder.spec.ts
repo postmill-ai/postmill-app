@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { combineElements } from './layer-actions';
+import { describe, expect, it, vi } from 'vitest';
+import { combineElements, layerActions } from './layer-actions';
 import { createDesignerStore, type DesignerElement } from './designer.store';
 
 const shape = (id: string, x = 0, width = 100): DesignerElement => ({
@@ -51,13 +51,29 @@ describe('multi-shape Pathfinder document edits', () => {
   });
 
   it('makes no partial edit when the result requires an unsupported hole', () => {
-    const store = storeWith(shape('a', 0), { ...shape('inner', 20, 20), y: 20, height: 20 });
+    const store = storeWith(shape('a', 0, 200), { ...shape('inner', 50, 100), y: 20, height: 60 });
     const before = store.getState().doc.outputs[0].children;
     const historyBefore = store.getState().history.length;
 
-    combineElements(store, before, 'subtract');
+    expect(combineElements(store, before, 'subtract')).toBe(false);
 
     expect(store.getState().doc.outputs[0].children).toEqual(before);
     expect(store.getState().history).toHaveLength(historyBefore);
+  });
+
+  it('reports an unsupported operation through the action failure callback', () => {
+    const store = storeWith(shape('a', 0), { ...shape('inner', 20, 20), y: 20, height: 20 });
+    const before = store.getState().doc.outputs[0].children;
+    const onFailure = vi.fn();
+    const actions = layerActions(store, () => ({
+      selectedEls: before,
+      hasSelection: true,
+      children: before,
+    }), onFailure);
+
+    actions.find((action) => action.id === 'pathfinder-subtract')!.run();
+
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(store.getState().doc.outputs[0].children).toEqual(before);
   });
 });

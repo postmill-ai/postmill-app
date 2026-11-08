@@ -3721,6 +3721,7 @@
   "designer_path_arc": "Busur",
   "designer_path_wave": "Gelombang",
   "designer_path_custom": "Kustom",
+  "designer_pathfinder_failed": "Pathfinder tidak dapat menggabungkan bentuk yang dipilih. Coba pilihan atau operasi lain.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "Sudut busur",
   "designer_label_drop_shadow": "Bayangan jatuh",

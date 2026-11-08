@@ -3709,6 +3709,7 @@
   "designer_path_arc": "호",
   "designer_path_wave": "파형",
   "designer_path_custom": "사용자 지정",
+  "designer_pathfinder_failed": "Pathfinder가 선택한 도형을 결합하지 못했습니다. 다른 선택 또는 작업을 시도하세요.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "호 각도",
   "designer_label_drop_shadow": "그림자 효과",

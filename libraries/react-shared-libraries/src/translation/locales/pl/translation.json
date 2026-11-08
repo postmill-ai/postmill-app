@@ -3723,6 +3723,7 @@
   "designer_path_arc": "Łuk",
   "designer_path_wave": "Fala",
   "designer_path_custom": "Niestandardowa",
+  "designer_pathfinder_failed": "Pathfinder nie mógł połączyć wybranych kształtów. Spróbuj innego zaznaczenia lub operacji.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "Kąt łuku",
   "designer_label_drop_shadow": "Cień",

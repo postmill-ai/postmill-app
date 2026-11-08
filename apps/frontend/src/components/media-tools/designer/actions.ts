@@ -142,6 +142,7 @@ export interface DesignerActionCtx {
   /** Open the Expand Image (AI outpaint) mode dialog for the selected image. */
   onAiOutpaint: () => void;
   onAiDetectSubject: () => void;
+  onPathfinderFailure?: () => void;
 }
 
 const resolveLabel = (a: DesignerAction): string =>
@@ -527,7 +528,7 @@ export const useDesignerActions = (
       // Group / Ungroup / Lock live here rather than on Format, matching
       // Photoshop and keeping one home per command (the ⌘K palette flattens
       // submenus, so duplicates there read as ambiguous).
-      ...layerActions(store, live),
+      ...layerActions(store, live, ctx.onPathfinderFailure),
 
       { id: 'bring-front', label: 'Bring to Front', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['front', 'order'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'front'); } },
       { id: 'bring-forward', label: 'Bring Forward', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['forward', 'order'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'forward'); } },

@@ -1484,6 +1484,8 @@ export const Designer: FC<DesignerProps> = ({
       },
       onAiDetectSubject: () =>
         runAi((id) => aiDetectSubject({ fetch, store, elementId: id }), translate('subject_detection_failed', 'Subject detection failed')),
+      onPathfinderFailure: () =>
+        toaster.show(translate('designer_pathfinder_failed', 'Pathfinder could not combine the selected shapes. Try a different selection or operation.'), 'warning'),
     }),
     [
       showSafeZones,

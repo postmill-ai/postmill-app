@@ -3708,6 +3708,7 @@
   "designer_path_arc": "Arco",
   "designer_path_wave": "Onda",
   "designer_path_custom": "Personalizado",
+  "designer_pathfinder_failed": "O Pathfinder não conseguiu combinar as formas selecionadas. Tente uma seleção ou operação diferente.",
   "designer_placeholder_custom_path": "M 0,50 Q 50,0 100,50 ...",
   "designer_label_arc_angle": "Ângulo do Arco",
   "designer_label_drop_shadow": "Sombra projetada",
