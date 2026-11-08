@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync, ReadStream } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { Readable } from 'stream';
 import type { LoggerPort } from '@postmill-ai/provider-kernel';
 
 const mockSend = vi.fn();
@@ -143,5 +144,24 @@ describe('R2Storage.uploadFile — buffer vs disk path', () => {
       'Invalid file upload.'
     );
     expect(mockSend).not.toHaveBeenCalled();
+  });
+});
+
+describe('R2Storage.readFileStream', () => {
+  it('returns the object body stream without buffering it', async () => {
+    const body = Readable.from([Buffer.from('video-data')]);
+    mockSend.mockResolvedValue({ Body: body });
+    const adapter = new R2Storage(
+      logger,
+      vi.fn() as any,
+      { accessKeyId: 'a', secretAccessKey: 's' },
+      'bucket',
+      'https://acc.r2.cloudflarestorage.com',
+    );
+
+    const result = await adapter.readFileStream('https://cdn.example.com/abc.mp4');
+
+    expect(result).toBe(body);
+    expect(mockSend.mock.calls[0][0].Key).toBe('abc.mp4');
   });
 });

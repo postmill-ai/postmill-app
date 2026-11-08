@@ -1,3 +1,5 @@
+import type { Readable } from 'stream';
+
 export interface StorageFileEntry {
   key: string;
   name: string;
@@ -21,4 +23,5 @@ export interface StorageCapability extends StorageUploadProvider {
   getUsageBytes(): Promise<bigint | null>;
   writeBuffer(buffer: Buffer, contentType?: string): Promise<string>;
   readFile(pathOrKey: string): Promise<Buffer>;
+  readFileStream(pathOrKey: string): Promise<Readable>;
 }

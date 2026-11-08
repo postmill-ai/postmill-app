@@ -4,9 +4,13 @@ import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/st
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import {
   extractVideoFrameInfo,
+  extractVideoFrameInfoFromStream,
   VIDEO_FRAME_MAX_BYTES,
+  VIDEO_FRAME_STREAM_MAX_BYTES,
 } from '@postmill-ai/nestjs-libraries/media/video-frame';
 import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { randomUUID } from 'crypto';
 import {
   inngest,
   isInngestEnabled,
@@ -93,11 +97,12 @@ export class VideoThumbnailService {
     fileId: string,
     opts?: { localOnly?: boolean; force?: boolean }
   ): Promise<VideoThumbnailOutcome> {
+    let lock: { key: string; token: string } | undefined;
     try {
       const file = await this._fileService.getFileById(orgId, fileId);
       if (!file || !isVideoType(file.type)) return { thumbnail: null };
       if (file.thumbnail && !opts?.force) return { thumbnail: file.thumbnail };
-      if (file.fileSize > VIDEO_FRAME_MAX_BYTES) return { thumbnail: null };
+      if (file.fileSize > VIDEO_FRAME_STREAM_MAX_BYTES) return { thumbnail: null };
 
       const adapter = await this._storageService.resolveAdapterForFolder(
         file.folderId,
@@ -107,19 +112,41 @@ export class VideoThumbnailService {
         return { thumbnail: null };
       }
 
-      const buffer = await adapter.readFile(file.path);
-      const detected = await fromBuffer(buffer).catch(() => undefined);
-      if (detected?.mime === 'image/jpeg' || detected?.mime === 'image/png') {
-        return this._reclassify(orgId, file, 'image', detected.mime);
+      const key = `video-thumbnail:lock:${orgId}:${file.id}`;
+      const token = randomUUID();
+      const acquired = await ioRedis.set(key, token, 'EX', 300, 'NX');
+      if (!acquired) {
+        const current = await this._fileService.getFileById(orgId, fileId);
+        return { thumbnail: current?.thumbnail || null };
       }
+      lock = { key, token };
 
       const ext = extFromPath(file.path);
-      const info = await extractVideoFrameInfo(buffer, ext);
+      let detectedMime: string | undefined;
+      let info;
+      if (file.fileSize > VIDEO_FRAME_MAX_BYTES) {
+        info = await extractVideoFrameInfoFromStream(
+          await adapter.readFileStream(file.path),
+          ext,
+        );
+        detectedMime = info.detectedMime;
+      } else {
+        const buffer = await adapter.readFile(file.path);
+        const detected = await fromBuffer(buffer).catch(() => undefined);
+        detectedMime = detected?.mime;
+        if (detectedMime === 'image/jpeg' || detectedMime === 'image/png') {
+          return this._reclassify(orgId, file, 'image', detectedMime);
+        }
+        info = await extractVideoFrameInfo(buffer, ext);
+      }
+      if (detectedMime === 'image/jpeg' || detectedMime === 'image/png') {
+        return this._reclassify(orgId, file, 'image', detectedMime);
+      }
       if (info.hasAudioStream && !info.hasVideoStream) {
-        const mime = detected?.mime.startsWith('audio/')
-          ? detected.mime
-          : detected?.mime.startsWith('video/')
-            ? detected.mime.replace(/^video\//, 'audio/')
+        const mime = detectedMime?.startsWith('audio/')
+          ? detectedMime
+          : detectedMime?.startsWith('video/')
+            ? detectedMime.replace(/^video\//, 'audio/')
             : `audio/${ext}`;
         return this._reclassify(orgId, file, 'audio', mime);
       }
@@ -158,6 +185,21 @@ export class VideoThumbnailService {
         `Video thumbnail generation failed for file ${fileId}: ${(err as Error)?.message}`
       );
       return { thumbnail: null };
+    } finally {
+      if (lock) {
+        try {
+          await ioRedis.eval(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+            1,
+            lock.key,
+            lock.token,
+          );
+        } catch (err) {
+          this._logger.warn(
+            `Could not release video thumbnail lock for file ${fileId}: ${(err as Error)?.message}`
+          );
+        }
+      }
     }
   }
 

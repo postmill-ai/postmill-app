@@ -9,6 +9,7 @@ vi.mock('fs', () => ({
   readdirSync: vi.fn(() => []),
   statSync: vi.fn(),
   copyFileSync: vi.fn(),
+  createReadStream: vi.fn(),
 }));
 
 vi.mock('file-type', () => ({
@@ -90,6 +91,20 @@ describe('LocalStorage', () => {
         '/uploads/org-1/2026/11/07/my file.png',
       );
       expect(result).toBe(buffer);
+    });
+
+    it('streams the same contained local key without buffering it', async () => {
+      const stream = {};
+      (fs.createReadStream as any).mockReturnValue(stream);
+      const adapter = new LocalStorage(logger, uploadDir);
+
+      const result = await adapter.readFileStream(
+        'http://localhost:4200/uploads/2026/01/15/abc.mp4',
+      );
+
+      expect(result).toBe(stream);
+      expect(fs.createReadStream).toHaveBeenCalledWith('/uploads/2026/01/15/abc.mp4');
+      expect(readFileSync).not.toHaveBeenCalled();
     });
   });
 

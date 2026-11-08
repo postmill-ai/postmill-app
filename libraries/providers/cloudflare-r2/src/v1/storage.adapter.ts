@@ -14,6 +14,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomBytes } from 'crypto';
 import { createReadStream, statSync } from 'fs';
+import type { Readable } from 'stream';
 import { metadata as providerMetadata } from './metadata';
 import {
   ProviderModule,
@@ -324,6 +325,16 @@ export class R2Storage implements StorageCapability {
     return Buffer.from(byteArray);
   }
 
+  async readFileStream(pathOrKey: string): Promise<Readable> {
+    const key = stripQueryStringAndExtractKey(pathOrKey);
+    if (!key) throw new Error('Invalid object key');
+    const response = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    if (!response.Body) throw new Error('Storage object has no response body');
+    return response.Body as unknown as Readable;
+  }
+
   async createMultipartUpload(
     fileName: string,
     fileHash?: string,
@@ -523,6 +534,9 @@ class CloudflareR2StorageCapability implements StorageCapability {
   }
   readFile(pathOrKey: string) {
     return this.a.readFile(pathOrKey);
+  }
+  readFileStream(pathOrKey: string) {
+    return this.a.readFileStream(pathOrKey);
   }
 }
 

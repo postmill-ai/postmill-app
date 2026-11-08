@@ -42,7 +42,7 @@ settings UI lists.
    (multipart + presigned URLs).
    - Contract (`kernel/src/domains/storage.ts`): `uploadSimple`, `uploadFile`, `removeFile`,
      `testConnection`, `listFiles`, `getFileUrl`, `deleteFile`, `getUsageBytes`, `writeBuffer`,
-     `readFile` + readonly `type`.
+     `readFile`, `readFileStream` + readonly `type`; both reads share the same tenant/key guards.
    - Reuse kernel helpers `parseDataUrl`/`fromBuffer`/`fromFile` and preserve the mime gating (step 7).
 5. **Register — 3 edits + install.**
    - `apps/backend/src/providers.generated.ts` (hand-maintained despite the name): alphabetical

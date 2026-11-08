@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import { readFile } from 'fs/promises';
+import { Readable } from 'stream';
 import { metadata as providerMetadata } from './metadata';
 import {
   ProviderModule,
@@ -395,6 +396,20 @@ export class MediaLockerStorage implements StorageCapability {
     return Buffer.from(await res.arrayBuffer());
   }
 
+  async readFileStream(pathOrKey: string): Promise<Readable> {
+    const key = stripQueryStringAndExtractKey(pathOrKey);
+    if (!key) throw new Error('Invalid object key');
+    const url = this.publicUrl
+      ? `${this.publicUrl}/${key}`
+      : await this.presignDownloadUrl(key);
+    const res = await this._fetch(url);
+    if (!res.ok) {
+      throw new Error(`MediaLocker download failed (HTTP ${res.status})`);
+    }
+    if (!res.body) throw new Error('MediaLocker download has no response body');
+    return Readable.fromWeb(res.body as any);
+  }
+
   async writeBuffer(buffer: Buffer, contentType?: string): Promise<string> {
     const detected = await fromBuffer(buffer);
     const ext = detected?.ext || 'bin';
@@ -471,6 +486,9 @@ class MediaLockerStorageCapability implements StorageCapability {
   }
   readFile(pathOrKey: string) {
     return this.a.readFile(pathOrKey);
+  }
+  readFileStream(pathOrKey: string) {
+    return this.a.readFileStream(pathOrKey);
   }
 }
 

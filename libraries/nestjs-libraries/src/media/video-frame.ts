@@ -2,7 +2,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
+import { Transform, type Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { parseFfmpegDurationSeconds } from '@postmill-ai/nestjs-libraries/media/audio-outro-fade';
+import { fromFile } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
 
 /**
  * Single-frame extraction for video thumbnails/posters. The design preview
@@ -19,9 +22,20 @@ import { parseFfmpegDurationSeconds } from '@postmill-ai/nestjs-libraries/media/
 /** Where in the clip to grab the poster frame — past a fade-from-black head. */
 export const VIDEO_FRAME_SEEK_SECONDS = 0.1;
 
-/** Source videos larger than this are skipped — one frame is never worth
- * buffering gigabytes into the API process. */
+/** Largest source the legacy whole-buffer path may read into memory. */
 export const VIDEO_FRAME_MAX_BYTES = 256 * 1024 * 1024;
+/** Hard disk bound for one streamed source; the memory cap stays at 256 MB. */
+export const VIDEO_FRAME_STREAM_MAX_BYTES = 2 * 1024 * 1024 * 1024 - 1;
+export const VIDEO_FRAME_TIMEOUT_MS = 30_000;
+export const VIDEO_FRAME_STREAM_TIMEOUT_MS = 120_000;
+const VIDEO_FRAME_MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
+const FFMPEG_STDERR_MAX_BYTES = 64 * 1024;
+const emptyFrame = (): VideoFrameInfo => ({
+  frame: null,
+  hasVideoStream: false,
+  hasAudioStream: false,
+});
+const safeExtension = (ext: string) => ext.replace(/[^a-z0-9]/gi, '') || 'mp4';
 
 // Same binary resolution as audio-outro-fade.ts / slide.service.ts: the
 // bundled ffmpeg-static, with a PATH ffmpeg as the fallback.
@@ -43,15 +57,25 @@ function runFfmpeg(args: string[]): Promise<FfmpegRun> {
   return new Promise((resolve, reject) => {
     const proc = spawn(getFfmpegPath(), args, { stdio: 'pipe' });
     let stderr = '';
+    const timeout = setTimeout(() => proc.kill('SIGKILL'), VIDEO_FRAME_TIMEOUT_MS);
+    timeout.unref();
     proc.stderr?.on('data', (d) => {
-      stderr += d.toString();
+      if (stderr.length < FFMPEG_STDERR_MAX_BYTES) {
+        stderr = (stderr + d.toString()).slice(0, FFMPEG_STDERR_MAX_BYTES);
+      }
     });
-    proc.on('error', reject);
-    proc.on('close', (code) => resolve({ code, stderr }));
+    proc.on('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    proc.on('close', (code) => {
+      clearTimeout(timeout);
+      resolve({ code, stderr });
+    });
   });
 }
 
-/** Grab one JPEG frame at `seekSeconds` into `inPath`. False on any failure. */
+/** Grab one bounded JPEG frame at `seekSeconds` into `outPath`. */
 async function grabFrame(
   inPath: string,
   outPath: string,
@@ -70,60 +94,97 @@ async function grabFrame(
     outPath,
   ]);
   if (res.code !== 0 || !fs.existsSync(outPath)) return false;
-  return fs.statSync(outPath).size > 0;
+  const size = fs.statSync(outPath).size;
+  return size > 0 && size <= VIDEO_FRAME_MAX_OUTPUT_BYTES;
 }
 
 export interface VideoFrameInfo {
   frame: Buffer | null;
   hasVideoStream: boolean;
   hasAudioStream: boolean;
+  detectedMime?: string;
 }
 
-/**
- * Extract a poster frame and report streams found by the existing ffmpeg probe.
- * Seeks to ~0.1s (past a fade-from-black head); degenerate files — unparseable
- * header, or a clip shorter than the seek — fall back to the literal first
- * frame. Failures return a null frame; never throws.
- */
+async function extractAtPath(inPath: string, outPath: string): Promise<VideoFrameInfo> {
+  // Duration probe guard: a headerless/degenerate file reports no Duration —
+  // seeking past EOF would yield an empty frame, so drop to frame 0.
+  const probe = await runFfmpeg(['-hide_banner', '-i', inPath]);
+  const hasVideoStream = /^\s*Stream #\d+:\d+.*: Video:/m.test(probe.stderr);
+  const hasAudioStream = /^\s*Stream #\d+:\d+.*: Audio:/m.test(probe.stderr);
+  if (hasAudioStream && !hasVideoStream) {
+    return { frame: null, hasVideoStream, hasAudioStream };
+  }
+  const duration = parseFfmpegDurationSeconds(probe.stderr);
+  const seek =
+    duration != null && duration > VIDEO_FRAME_SEEK_SECONDS * 2
+      ? VIDEO_FRAME_SEEK_SECONDS
+      : 0;
+
+  let frame: Buffer | null = null;
+  if (await grabFrame(inPath, outPath, seek)) {
+    frame = fs.readFileSync(outPath);
+  } else if (seek > 0 && (await grabFrame(inPath, outPath, 0))) {
+    // The seek produced nothing (e.g. a stream whose first packet lands
+    // later) — one last try at the literal first frame before giving up.
+    frame = fs.readFileSync(outPath);
+  }
+  return { frame, hasVideoStream, hasAudioStream };
+}
+
+/** Extract a frame from a bounded in-memory source, preserving the legacy API. */
 export async function extractVideoFrameInfo(
   buffer: Buffer,
   ext = 'mp4'
 ): Promise<VideoFrameInfo> {
-  const empty = { frame: null, hasVideoStream: false, hasAudioStream: false };
-  if (!buffer.length || buffer.length > VIDEO_FRAME_MAX_BYTES) return empty;
+  if (!buffer.length || buffer.length > VIDEO_FRAME_MAX_BYTES) return emptyFrame();
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-vframe-'));
   try {
-    const inPath = path.join(dir, `in.${ext.replace(/[^a-z0-9]/gi, '') || 'mp4'}`);
-    const outPath = path.join(dir, 'frame.jpg');
+    const inPath = path.join(dir, `in.${safeExtension(ext)}`);
     fs.writeFileSync(inPath, buffer);
-
-    // Duration probe guard: a headerless/degenerate file reports no Duration —
-    // seeking past EOF would yield an empty frame, so drop to frame 0.
-    const probe = await runFfmpeg(['-hide_banner', '-i', inPath]);
-    const hasVideoStream = /^\s*Stream #\d+:\d+.*: Video:/m.test(probe.stderr);
-    const hasAudioStream = /^\s*Stream #\d+:\d+.*: Audio:/m.test(probe.stderr);
-    if (hasAudioStream && !hasVideoStream) {
-      return { frame: null, hasVideoStream, hasAudioStream };
-    }
-    const duration = parseFfmpegDurationSeconds(probe.stderr);
-    const seek =
-      duration != null && duration > VIDEO_FRAME_SEEK_SECONDS * 2
-        ? VIDEO_FRAME_SEEK_SECONDS
-        : 0;
-
-    let frame: Buffer | null = null;
-    if (await grabFrame(inPath, outPath, seek)) {
-      frame = fs.readFileSync(outPath);
-    } else if (seek > 0 && (await grabFrame(inPath, outPath, 0))) {
-      // The seek produced nothing (e.g. a stream whose first packet lands
-      // later) — one last try at the literal first frame before giving up.
-      frame = fs.readFileSync(outPath);
-    }
-    return { frame, hasVideoStream, hasAudioStream };
+    return await extractAtPath(inPath, path.join(dir, 'frame.jpg'));
   } catch {
-    return empty;
+    return emptyFrame();
   } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Stream a source through a bounded temporary file instead of buffering it. */
+export async function extractVideoFrameInfoFromStream(
+  stream: Readable,
+  ext = 'mp4',
+  maxBytes = VIDEO_FRAME_STREAM_MAX_BYTES
+): Promise<VideoFrameInfo> {
+  const limit = Math.min(maxBytes, VIDEO_FRAME_STREAM_MAX_BYTES);
+  if (limit <= 0) return emptyFrame();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-vframe-'));
+  const inPath = path.join(dir, `in.${safeExtension(ext)}`);
+  let bytes = 0;
+  const timeout = setTimeout(() => {
+    stream.destroy(new Error('Video thumbnail source download timed out'));
+  }, VIDEO_FRAME_STREAM_TIMEOUT_MS);
+  timeout.unref();
+  try {
+    const limiter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        bytes += chunk.length;
+        if (bytes > limit) {
+          callback(new Error('Video thumbnail source exceeds the streaming size limit'));
+          return;
+        }
+        callback(null, chunk);
+      },
+    });
+    await pipeline(stream, limiter, fs.createWriteStream(inPath, { flags: 'wx' }));
+    if (!bytes) return emptyFrame();
+    const detected = await fromFile(inPath).catch(() => undefined);
+    const info = await extractAtPath(inPath, path.join(dir, 'frame.jpg'));
+    return { ...info, detectedMime: detected?.mime };
+  } catch {
+    return emptyFrame();
+  } finally {
+    clearTimeout(timeout);
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }

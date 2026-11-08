@@ -6,8 +6,10 @@ import {
   statSync,
   readFileSync,
   copyFileSync,
+  createReadStream,
 } from 'fs';
 import { randomBytes } from 'crypto';
+import type { Readable } from 'stream';
 import path from 'path';
 import { metadata as providerMetadata } from './metadata';
 import {
@@ -299,6 +301,10 @@ export class LocalStorage implements StorageCapability {
     return readFileSync(this._safeJoin(this._localKey(pathOrKey)));
   }
 
+  async readFileStream(pathOrKey: string): Promise<Readable> {
+    return createReadStream(this._safeJoin(this._localKey(pathOrKey)));
+  }
+
   async writeBuffer(buffer: Buffer, contentType?: string): Promise<string> {
     const detected = await fromBuffer(buffer);
     const ext = detected?.ext || 'bin';
@@ -370,6 +376,9 @@ class LocalStorageCapability implements StorageCapability {
   }
   readFile(pathOrKey: string) {
     return this.a.readFile(pathOrKey);
+  }
+  readFileStream(pathOrKey: string) {
+    return this.a.readFileStream(pathOrKey);
   }
 }
 

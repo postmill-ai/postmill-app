@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Readable, Writable } from 'stream';
 
 const mockSpawn = vi.fn();
 const mockMkdtempSync = vi.fn();
@@ -7,6 +8,8 @@ const mockReadFileSync = vi.fn();
 const mockExistsSync = vi.fn();
 const mockStatSync = vi.fn();
 const mockRmSync = vi.fn();
+const mockCreateWriteStream = vi.fn();
+const mockFromFile = vi.fn();
 
 vi.mock('fs', () => ({
   mkdtempSync: (...args: any[]) => mockMkdtempSync(...args),
@@ -15,16 +18,24 @@ vi.mock('fs', () => ({
   existsSync: (...args: any[]) => mockExistsSync(...args),
   statSync: (...args: any[]) => mockStatSync(...args),
   rmSync: (...args: any[]) => mockRmSync(...args),
+  createWriteStream: (...args: any[]) => mockCreateWriteStream(...args),
 }));
 
 vi.mock('child_process', () => ({
   spawn: (...args: any[]) => mockSpawn(...args),
 }));
 
+vi.mock('@postmill-ai/nestjs-libraries/upload/file-type.compat', () => ({
+  fromFile: (...args: any[]) => mockFromFile(...args),
+}));
+
 import {
   extractVideoFrame,
   extractVideoFrameInfo,
+  extractVideoFrameInfoFromStream,
   VIDEO_FRAME_MAX_BYTES,
+  VIDEO_FRAME_STREAM_TIMEOUT_MS,
+  VIDEO_FRAME_TIMEOUT_MS,
 } from './video-frame';
 
 const fakeJpeg = Buffer.from('fake-jpeg-bytes');
@@ -46,6 +57,7 @@ function makeFfmpegProcess(exitCode: number, stderrText = '') {
         setTimeout(() => cb(exitCode), 1);
       }
     }),
+    kill: vi.fn(),
   };
 }
 
@@ -62,6 +74,13 @@ describe('extractVideoFrame', () => {
     mockExistsSync.mockReturnValue(true);
     mockStatSync.mockReturnValue({ size: fakeJpeg.length });
     mockReadFileSync.mockReturnValue(fakeJpeg);
+    mockFromFile.mockResolvedValue({ mime: 'video/mp4', ext: 'mp4' });
+    mockCreateWriteStream.mockImplementation(() => new Writable({
+      write(_chunk, _encoding, callback) { callback(); },
+    }));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('seeks to 0.1s for a normal-duration video and returns the JPEG frame', async () => {
@@ -201,5 +220,91 @@ describe('extractVideoFrame', () => {
     const out = await extractVideoFrameInfo(Buffer.from('mp4-bytes'), 'mp4');
 
     expect(out).toEqual({ frame: null, hasVideoStream: true, hasAudioStream: false });
+  });
+
+  it('rejects an oversized JPEG instead of reading it into memory', async () => {
+    queueProcesses(
+      makeFfmpegProcess(1, 'Duration: 00:00:10.00, start: 0.000000'),
+      makeFfmpegProcess(0),
+      makeFfmpegProcess(0),
+    );
+    mockStatSync.mockReturnValue({ size: 16 * 1024 * 1024 + 1 });
+
+    expect(await extractVideoFrame(Buffer.from('mp4-bytes'), 'mp4')).toBeNull();
+    expect(mockReadFileSync).not.toHaveBeenCalled();
+  });
+
+  it('kills a hung ffmpeg process and still cleans up', async () => {
+    vi.useFakeTimers();
+    let close: ((code: number | null) => void) | undefined;
+    const hanging = {
+      stderr: { on: vi.fn() },
+      on: vi.fn((event: string, callback: (code: number | null) => void) => {
+        if (event === 'close') close = callback;
+      }),
+      kill: vi.fn(() => close?.(null)),
+    };
+    queueProcesses(hanging as any, makeFfmpegProcess(1));
+
+    const pending = extractVideoFrame(Buffer.from('mp4-bytes'), 'mp4');
+    await vi.advanceTimersByTimeAsync(VIDEO_FRAME_TIMEOUT_MS + 5);
+
+    await expect(pending).resolves.toBeNull();
+    expect(hanging.kill).toHaveBeenCalledWith('SIGKILL');
+    expect(mockRmSync).toHaveBeenCalled();
+  });
+
+  it('streams a bounded source, detects its type and returns a frame', async () => {
+    queueProcesses(
+      makeFfmpegProcess(1, [
+        'Duration: 00:00:10.00, start: 0.000000',
+        'Stream #0:0: Video: h264, yuv420p, 1920x1080',
+      ].join('\n')),
+      makeFfmpegProcess(0),
+    );
+
+    const out = await extractVideoFrameInfoFromStream(
+      Readable.from([Buffer.alloc(64), Buffer.alloc(64)]),
+      'mp4',
+      1024,
+    );
+
+    expect(out).toEqual({
+      frame: fakeJpeg,
+      hasVideoStream: true,
+      hasAudioStream: false,
+      detectedMime: 'video/mp4',
+    });
+    expect(mockCreateWriteStream).toHaveBeenCalledWith('/tmp/postmill-vframe-test/in.mp4', { flags: 'wx' });
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+    expect(mockRmSync).toHaveBeenCalled();
+  });
+
+  it('stops a source at the byte limit before probing or writing a frame', async () => {
+    const out = await extractVideoFrameInfoFromStream(
+      Readable.from([Buffer.alloc(6), Buffer.alloc(6)]),
+      'mp4',
+      10,
+    );
+
+    expect(out).toEqual({ frame: null, hasVideoStream: false, hasAudioStream: false });
+    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(mockFromFile).not.toHaveBeenCalled();
+    expect(mockRmSync).toHaveBeenCalled();
+  });
+
+  it('aborts a stalled source download and cleans up', async () => {
+    vi.useFakeTimers();
+    const source = new Readable({ read() {} });
+    const pending = extractVideoFrameInfoFromStream(source);
+    await vi.advanceTimersByTimeAsync(VIDEO_FRAME_STREAM_TIMEOUT_MS + 5);
+
+    await expect(pending).resolves.toEqual({
+      frame: null,
+      hasVideoStream: false,
+      hasAudioStream: false,
+    });
+    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(mockRmSync).toHaveBeenCalled();
   });
 });
