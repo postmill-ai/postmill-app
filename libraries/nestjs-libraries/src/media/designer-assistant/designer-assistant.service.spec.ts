@@ -72,12 +72,18 @@ describe('DesignerAssistantService', () => {
     expect(prompt).toContain('Holiday sale');
   });
 
-  it('requests only structured, whitelisted suggestions with no asset inputs', async () => {
+  it('requests structured suggestions with semantic actions and no asset inputs', async () => {
     const { service, ai } = makeService();
     ai.generateObject.mockResolvedValue(validSuggestions);
     await service.getSuggestions('org-1', {
       prompt: 'Improve spacing',
-      context: { type: 'text', text: 'Headline', fill: '#ffffff' },
+      context: {
+        type: 'text',
+        text: 'Headline',
+        fill: '#ffffff',
+        mode: 'image',
+        selection: [{ type: 'text', x: 10, y: 20, width: 300, height: 80 }],
+      },
     });
 
     const [scope, prompt, schema, options] = ai.generateObject.mock.calls[0];
@@ -90,8 +96,58 @@ describe('DesignerAssistantService', () => {
     expect(prompt).toContain('"font", "color", "layout", or "spacing"');
     expect(prompt).toContain('only fontFamily');
     expect(prompt).toContain('or fill');
-    expect(prompt).toContain('never include layout operations or asset URLs');
+    expect(prompt).toContain('"type":"align"');
+    expect(prompt).toContain('at least three elements are selected');
+    expect(prompt).toContain('Never include asset URLs');
+    expect(prompt).toContain('"selection":[{"type":"text","x":10,"y":20,"width":300,"height":80}]');
     expect(prompt).not.toContain('/uploads/');
+  });
+
+  it.each([
+    { type: 'align', position: 'left' },
+    { type: 'align', position: 'center' },
+    { type: 'align', position: 'right' },
+    { type: 'align', position: 'top' },
+    { type: 'align', position: 'middle' },
+    { type: 'align', position: 'bottom' },
+    { type: 'distribute', mode: 'horizontal-centers' },
+    { type: 'distribute', mode: 'vertical-centers' },
+    { type: 'distribute', mode: 'horizontal-gaps' },
+    { type: 'distribute', mode: 'vertical-gaps' },
+  ])('accepts the whitelisted action $type/$position/$mode', async (action) => {
+    const { service, ai } = makeService();
+    ai.generateObject.mockResolvedValue({
+      suggestions: [
+        validSuggestions.suggestions[0],
+        {
+          category: 'layout',
+          title: 'Apply the layout improvement',
+          rationale: 'The semantic action implements this recommendation.',
+          action,
+        },
+      ],
+    });
+
+    const result = await service.getSuggestions('org-1', {});
+    expect(result.suggestions[1].action).toEqual(action);
+  });
+
+  it('rejects free-form action geometry', async () => {
+    const { service, ai } = makeService();
+    ai.generateObject.mockResolvedValue({
+      suggestions: [
+        validSuggestions.suggestions[0],
+        {
+          category: 'layout',
+          title: 'Invalid geometry',
+          rationale: 'Coordinates are not accepted.',
+          action: { type: 'align', position: 'center', x: 500 },
+        },
+      ],
+    });
+
+    await expect(service.getSuggestions('org-1', {})).rejects.toThrow(BadGatewayException);
+    expect(ai.generateObject).toHaveBeenCalledTimes(2);
   });
 
   it('falls back to the first Brand when no default is selected', async () => {

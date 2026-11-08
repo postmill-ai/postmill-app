@@ -4,6 +4,15 @@ import React, { FC, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { ensureFontLoaded } from '../fonts';
+import {
+  applyDesignerSuggestionAction,
+  captureDesignerSuggestionScope,
+  designerSuggestionActionStatus,
+  designerSuggestionSelection,
+  type DesignerSuggestionAction,
+  type DesignerSuggestionActionStatus,
+  type DesignerSuggestionScope,
+} from './designer-assistant-actions';
 
 type Store = ReturnType<typeof import('../designer.store').createDesignerStore>;
 type CopyKind = 'headline' | 'promotion' | 'caption' | 'cta';
@@ -12,6 +21,7 @@ type Suggestion = {
   title: string;
   rationale: string;
   style?: { fontFamily?: string; fill?: string };
+  action?: DesignerSuggestionAction;
 };
 
 export const DesignerAssistantPanel: FC<{
@@ -23,12 +33,17 @@ export const DesignerAssistantPanel: FC<{
 }> = ({ store, selectedElementId, clipTarget, selectedText, context }) => {
   const t = useT();
   const fetch = useFetch();
+  store((state) => state.selectedIds);
+  store((state) => state.currentOutput);
+  store((state) => state.currentPage);
+  store((state) => state.doc.mode);
   const [kind, setKind] = useState<CopyKind>('headline');
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState<'copy' | 'suggestions' | null>(null);
   const [error, setError] = useState('');
   const [variants, setVariants] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestionScope, setSuggestionScope] = useState<DesignerSuggestionScope | null>(null);
 
   const applyText = (text: string) => {
     const state = store.getState();
@@ -49,8 +64,21 @@ export const DesignerAssistantPanel: FC<{
       state.pushHistory('Apply design suggestion');
     }
   };
+  const actionMessage = (status: DesignerSuggestionActionStatus) => {
+    if (status === 'stale') return t('designer_suggestion_stale', 'The selection changed. Run Smart suggestions again.');
+    if (status === 'needs-selection') return t('designer_suggestion_needs_selection', 'Select at least one element to apply this suggestion.');
+    if (status === 'needs-three') return t('designer_suggestion_needs_three', 'Select at least three elements to apply this suggestion.');
+    if (status === 'unsupported') return t('designer_suggestion_static_only', 'Layout actions are available for image designs.');
+    return '';
+  };
+  const applyAction = (action: DesignerSuggestionAction, scope: DesignerSuggestionScope) => {
+    const status = applyDesignerSuggestionAction(store, action, scope);
+    setError(status === 'ready' ? '' : actionMessage(status));
+  };
   const run = async (operation: 'copy' | 'suggestions') => {
     if (loading || (operation === 'copy' && !prompt.trim())) return;
+    const scope = captureDesignerSuggestionScope(store);
+    const selection = designerSuggestionSelection(store);
     setLoading(operation);
     setError('');
     try {
@@ -58,12 +86,22 @@ export const DesignerAssistantPanel: FC<{
         method: 'POST',
         body: JSON.stringify(operation === 'copy'
           ? { kind, prompt: prompt.trim(), selectedText, context }
-          : { prompt: prompt.trim(), context }),
+          : {
+              prompt: prompt.trim(),
+              context: {
+                ...context,
+                mode: scope.mode,
+                ...(selection.length ? { selection } : {}),
+              },
+            }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || data?.error || t('designer_assistant_failed', 'AI assistant request failed'));
       if (operation === 'copy') setVariants(Array.isArray(data.variants) ? data.variants : []);
-      else setSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
+      else {
+        setSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
+        setSuggestionScope(scope);
+      }
     } catch (err) {
       setError((err as Error).message || t('designer_assistant_failed', 'AI assistant request failed'));
     } finally {
@@ -109,18 +147,40 @@ export const DesignerAssistantPanel: FC<{
           </button>
         </div>
       ))}
-      {suggestions.map((suggestion, index) => (
-        <div key={index} className="rounded-md border border-studioBorder p-2 flex flex-col gap-1.5">
-          <div className="text-[10px] uppercase tracking-wide text-textColor/40">{t(`designer_suggestion_${suggestion.category}`, suggestion.category)}</div>
-          <div className="text-[12px] font-medium text-textColor">{suggestion.title}</div>
-          <div className="text-[11px] text-newTextColor/60">{suggestion.rationale}</div>
-          {suggestion.style && (
-            <button type="button" onClick={() => applyStyle(suggestion.style!)} className="self-start px-2 py-1 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
-              {t('designer_apply_style', 'Apply style')}
-            </button>
-          )}
-        </div>
-      ))}
+      {suggestions.map((suggestion, index) => {
+        const status = suggestion.action && suggestionScope
+          ? designerSuggestionActionStatus(store, suggestion.action, suggestionScope)
+          : null;
+        const unavailable = status && status !== 'ready' ? actionMessage(status) : '';
+        return (
+          <div key={index} className="rounded-md border border-studioBorder p-2 flex flex-col gap-1.5">
+            <div className="text-[10px] uppercase tracking-wide text-textColor/40">{t(`designer_suggestion_${suggestion.category}`, suggestion.category)}</div>
+            <div className="text-[12px] font-medium text-textColor">{suggestion.title}</div>
+            <div className="text-[11px] text-newTextColor/60">{suggestion.rationale}</div>
+            {suggestion.style && (
+              <button type="button" onClick={() => applyStyle(suggestion.style!)} className="self-start px-2 py-1 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+                {t('designer_apply_style', 'Apply style')}
+              </button>
+            )}
+            {suggestion.action && suggestionScope && (
+              <>
+                <button
+                  type="button"
+                  disabled={status !== 'ready'}
+                  title={unavailable || undefined}
+                  onClick={() => applyAction(suggestion.action!, suggestionScope)}
+                  className="self-start px-2 py-1 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover disabled:opacity-40"
+                >
+                  {suggestion.action.type === 'align'
+                    ? t('designer_apply_layout', 'Apply layout')
+                    : t('designer_apply_spacing', 'Apply spacing')}
+                </button>
+                {unavailable && <div className="text-[10px] text-newTextColor/60">{unavailable}</div>}
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };

@@ -13,6 +13,7 @@ import { layerActions } from './layer-actions';
 import { buildShapeElement } from './tool-draw';
 import { addShapeClipToTimeline } from './add-media-to-timeline';
 import {
+  alignmentFrame,
   distribute,
   type DistributeMode,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/align-distribute';
@@ -344,19 +345,7 @@ export const useDesignerActions = (
       const selected = st.selectedIds
         .map((id) => pageEls.find((c) => c.id === id))
         .filter((e): e is DesignerElement => !!e);
-      const frame =
-        selected.length > 1
-          ? (() => {
-              const x = Math.min(...selected.map((e) => e.x));
-              const y = Math.min(...selected.map((e) => e.y));
-              return {
-                x,
-                y,
-                width: Math.max(...selected.map((e) => e.x + e.width)) - x,
-                height: Math.max(...selected.map((e) => e.y + e.height)) - y,
-              };
-            })()
-          : { x: 0, y: 0, width: out.width, height: out.height };
+      const frame = alignmentFrame(selected, out);
       st.selectedIds.forEach((id) => {
         const el = pageEls.find((c) => c.id === id);
         if (el) st.updateElement(id, fn(el, frame));

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { createDesignerStore } from '../designer.store';
 
@@ -80,5 +80,54 @@ describe('DesignerAssistantPanel', () => {
     });
     expect(ensureFontLoaded).toHaveBeenCalledWith('Georgia');
     expect(fetchMock.mock.calls[0][0]).toBe('/media/designer-assistant/suggestions');
+  });
+
+  it('sends bounded selection context and applies a semantic layout action', async () => {
+    const store = setup();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        suggestions: [{
+          category: 'layout',
+          title: 'Center the headline',
+          rationale: 'Balance the canvas.',
+          action: { type: 'align', position: 'center' },
+        }],
+      }),
+    });
+    renderPanel(store);
+    fireEvent.click(screen.getByRole('button', { name: 'Smart suggestions' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply layout' }));
+
+    const output = store.getState().doc.outputs[0];
+    expect((output as any).children[0].x).toBe(Math.round((output.width - 400) / 2));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).context).toMatchObject({
+      mode: 'image',
+      selection: [{ type: 'text', x: 0, y: 0, width: 400, height: 100 }],
+    });
+  });
+
+  it('disables an action after its originating selection becomes stale', async () => {
+    const store = setup();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        suggestions: [{
+          category: 'layout',
+          title: 'Center the headline',
+          rationale: 'Balance the canvas.',
+          action: { type: 'align', position: 'center' },
+        }],
+      }),
+    });
+    renderPanel(store);
+    fireEvent.click(screen.getByRole('button', { name: 'Smart suggestions' }));
+    const button = await screen.findByRole('button', { name: 'Apply layout' });
+
+    act(() => store.getState().setSelectedIds([]));
+
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('The selection changed. Run Smart suggestions again.')).toBeTruthy();
+    expect((store.getState().doc.outputs[0] as any).children[0].x).toBe(0);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { distribute, findEqualSpacing, type Box } from './align-distribute';
+import { alignBox, alignmentFrame, distribute, findEqualSpacing, type Box } from './align-distribute';
 
 const box = (id: string, x: number, y: number, w = 10, h = 10): Box => ({
   id,
@@ -55,6 +55,31 @@ describe('distribute', () => {
   it('does not depend on the order it was given', () => {
     const boxes = [box('c', 100, 0), box('a', 0, 0), box('b', 13, 0)];
     expect(distribute(boxes, 'horizontal-centers').b.x).toBeCloseTo(50);
+  });
+});
+
+describe('alignmentFrame and alignBox', () => {
+  it('uses the canvas for one element and selection bounds for multiple elements', () => {
+    const canvas = { width: 1000, height: 800 };
+    expect(alignmentFrame([box('a', 100, 50, 200, 100)], canvas)).toEqual({
+      x: 0, y: 0, width: 1000, height: 800,
+    });
+    expect(alignmentFrame([
+      box('a', 100, 50, 200, 100),
+      box('b', 500, 300, 100, 50),
+    ], canvas)).toEqual({ x: 100, y: 50, width: 500, height: 300 });
+  });
+
+  it.each([
+    ['left', { x: 100 }],
+    ['center', { x: 300 }],
+    ['right', { x: 500 }],
+    ['top', { y: 50 }],
+    ['middle', { y: 150 }],
+    ['bottom', { y: 250 }],
+  ] as const)('aligns %s against the shared frame', (position, expected) => {
+    const frame = { x: 100, y: 50, width: 500, height: 300 };
+    expect(alignBox(box('a', 0, 0, 100, 100), position, frame)).toEqual(expected);
   });
 });
 

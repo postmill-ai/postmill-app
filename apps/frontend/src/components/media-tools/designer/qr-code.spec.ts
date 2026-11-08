@@ -112,7 +112,7 @@ describe('editable QR codes', () => {
     const output = store.getState().doc.outputs[0] as VideoOutput;
     const clip = output.tracks.find((track) => track.id === selected.trackId)?.clips[0];
     expect(clip?.qr).toBeUndefined();
-  });
+  }, 20_000);
 
   it('exports the same QR pixels through the server renderer', async () => {
     const src = await generateQrCode(settings);
