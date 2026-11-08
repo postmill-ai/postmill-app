@@ -182,6 +182,17 @@ describe('ReplicateMediaAdapter.removeBackground model resolution', () => {
     expect(lastRequestBody(fetchMock).input).toEqual({ image_url: 'https://cdn.example.com/in.png' });
   });
 
+  it('uses 851-labs for inline data inputs because Bria requires HTTP(S)', async () => {
+    const input = 'data:image/png;base64,aGVsbG8=';
+    await adapter.removeBackground(input, {
+      credentials: { apiKey: 'k' },
+    });
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/851-labs/background-remover/predictions'
+    );
+    expect(lastRequestBody(fetchMock).input).toEqual({ image: input });
+  });
+
   it('lets an org-configured options.model win over the default', async () => {
     await adapter.removeBackground('https://cdn.example.com/in.png', {
       credentials: { apiKey: 'k' },
