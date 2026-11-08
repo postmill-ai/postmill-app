@@ -181,6 +181,19 @@ for still images and still-image clips, not per-frame moving-video background re
 background through masked inpainting. Only the subject-mask area is regenerated; unrelated pixels
 stay unchanged. Review the result before Apply, then use Restore/Erase for any remaining edge cleanup.
 
+### AI Content Assistant and Smart Suggestions
+
+With a text element selected, the Inspector's **AI Content Assistant** can generate alternative
+headlines, promotional copy, captions, and calls to action. **Smart suggestions** reviews the current
+selection and Brand Kit for font, color, layout, and spacing recommendations. Font and color changes
+can be applied directly to static text or video text/caption clips.
+
+For static designs, layout suggestions can also align the selection to the canvas or selection bounds,
+and spacing suggestions can distribute three or more selected elements evenly. Choose **Apply layout**
+or **Apply spacing** to make one undoable edit. If the selection, page, or output changes after the
+suggestion was generated, its action is disabled until you run Smart suggestions again. Layout and
+spacing actions never use AI-authored coordinates.
+
 ## Opening the Designer
 
 The Designer accepts a few different entry points, all via the `/media/designer` route:
