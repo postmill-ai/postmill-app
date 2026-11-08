@@ -50,10 +50,11 @@ export function StepImport() {
   const [summary, setSummary] = useState<ArchiveSummary | null>(null);
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'validating' | 'ready' | 'starting' | 'processing' | 'completed' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [pollAttempt, setPollAttempt] = useState(0);
 
   const loadJob = useCallback(async (url: string) => (await fetch(url)).json(), [fetch]);
   const { data: polled } = useSWR<ImportJob>(
-    ['validating', 'processing'].includes(phase) && job?.id ? `/org-portability/import-uploads/${job.id}` : null,
+    ['validating', 'processing'].includes(phase) && job?.id ? `/org-portability/import-uploads/${job.id}?pollAttempt=${pollAttempt}` : null,
     loadJob,
     { refreshInterval: 2000, revalidateOnFocus: false },
   );
@@ -123,6 +124,7 @@ export function StepImport() {
       });
       if (!validatedResponse.ok) throw new Error(await responseError(validatedResponse, t('setup_import_validation_failed', 'The archive could not be validated. Check the file and passphrase.')));
       setJob(await validatedResponse.json());
+      setPollAttempt((attempt) => attempt + 1);
       setPhase('validating');
     } catch (caught) {
       setPhase('error');
@@ -141,6 +143,7 @@ export function StepImport() {
       });
       if (!response.ok) throw new Error(await responseError(response, t('setup_import_start_failed', 'Could not start the background import.')));
       setJob(await response.json());
+      setPollAttempt((attempt) => attempt + 1);
       setPhase('processing');
     } catch (caught) {
       setPhase('error');

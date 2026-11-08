@@ -190,6 +190,7 @@ describe('organization portability across two deployments', () => {
         },
       });
       const sourceFont = path.join(sourceStorage, 'brand-font.ttf');
+      const sourceFontUrl = 'https://cdn.example.test/brand-font.ttf?signature=secret';
       const missingFont = path.join(sourceStorage, 'missing-font.ttf');
       writeFileSync(sourceFont, 'portable font bytes', { mode: 0o600 });
       await source.aIBrandProfile.create({
@@ -197,8 +198,10 @@ describe('organization portability across two deployments', () => {
           organizationId: sourceOrg.id,
           name: 'Portable Brand',
           customFonts: [
-            { fileId: 'font-1', family: 'Portable Font', path: sourceFont, weights: [400, 700], italic: true, serverRender: true },
+            { fileId: 'font-1', family: 'Portable Font', path: sourceFontUrl, weights: [400, 700], italic: true, serverRender: true },
             { fileId: 'font-2', family: 'Missing Font', path: missingFont, weights: [400], serverRender: true },
+            { fileId: 'metadata-only', family: 'Metadata Only' },
+            { fileId: 'unsupported', family: 'Unsupported', path: '/fonts/legacy.svg' },
           ],
         },
       });
@@ -225,7 +228,13 @@ describe('organization portability across two deployments', () => {
       });
 
       const sourceRepository = new OrgPortabilityRepository(source as unknown as PrismaService);
-      const sourceAdapter = localAdapter(sourceStorage, [missingAsset, missingFont]);
+      const sourceFileAdapter = localAdapter(sourceStorage, [missingAsset, missingFont]);
+      const sourceAdapter = {
+        ...sourceFileAdapter,
+        readFileStream: async (filePath: string) => filePath === sourceFontUrl
+          ? createReadStream(sourceFont)
+          : sourceFileAdapter.readFileStream(filePath),
+      };
       const exporter = new OrgPortabilityService(
         sourceRepository,
         {
@@ -279,6 +288,7 @@ describe('organization portability across two deployments', () => {
       expect(retryJob.status).toBe('uploading');
       expect(retryJob.error).toBe('forced transient validation failure');
       expect(retryJob.archiveKeyCiphertext).toBeNull();
+      expect(retryJob.progress.keyWrap).toBeUndefined();
       expect(retryJob.progress.uploadedBytes).toBe(archive.length);
       expect(readFileSync(retryJob.spoolPath)).toEqual(archive);
 

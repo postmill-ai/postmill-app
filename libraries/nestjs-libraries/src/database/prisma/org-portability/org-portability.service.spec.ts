@@ -187,6 +187,13 @@ describe('OrgPortabilityService export', () => {
         fileId: 'font-upload-1',
         family: 'Custom Font',
         path: 'https://cdn.example.test/custom.ttf?signature=secret',
+      }, {
+        fileId: 'metadata-only-font',
+        family: 'Metadata Only',
+      }, {
+        fileId: 'unsupported-font',
+        family: 'Unsupported',
+        path: '/fonts/legacy.svg',
       }],
     }]);
 

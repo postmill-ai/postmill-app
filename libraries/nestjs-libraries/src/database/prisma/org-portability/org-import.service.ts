@@ -42,6 +42,7 @@ import {
   verifyOrgManifestMac,
 } from './org-portability.crypto';
 import {
+  ORG_EXPORT_SCHEMA,
   ORG_PORTABILITY_IMPORT_EVENT,
   ORG_PORTABILITY_REGENERATED_TOKEN_FIELDS,
   ORG_PORTABILITY_SECRET_FIELDS,
@@ -80,6 +81,18 @@ const safeError = (error: unknown): string =>
     .replace(/\s+/g, ' ')
     .slice(0, 300);
 
+const stripAssetUrlQuery = (value: string): string => {
+  if (!/^https?:\/\//i.test(value)) return value;
+  try {
+    const url = new URL(value);
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return value.split('?')[0].split('#')[0];
+  }
+};
+
 interface AssetStage {
   sha256: string;
   path: string;
@@ -102,6 +115,7 @@ interface ImportMaps {
   users: Map<string, string>;
   files: Map<string, FileRefRemap>;
   paths: Map<string, string | null>;
+  strictFontMapping: boolean;
   videoFileIds: string[];
   ownerId: string;
   ownerEmail: string;
@@ -435,7 +449,8 @@ export class OrgImportService {
         rmSync(job.spoolPath, { force: true });
         await this._repository.failJob(jobId, message, { archiveSha256: job.archiveSha256 });
       } else {
-        await this._repository.retryValidationJob(jobId, message, job.progress || {});
+        const { keyWrap: _keyWrap, ...progress } = (job.progress || {}) as any;
+        await this._repository.retryValidationJob(jobId, message, progress);
       }
     } finally {
       archiveKey?.fill(0);
@@ -515,6 +530,7 @@ export class OrgImportService {
       users: new Map(),
       files: new Map(),
       paths: new Map(),
+      strictFontMapping: extraction.manifest.schema === ORG_EXPORT_SCHEMA,
       videoFileIds: [],
       ownerId,
       ownerEmail: owner.email.toLowerCase(),
@@ -613,7 +629,10 @@ export class OrgImportService {
   private _mapJson(value: unknown, maps: ImportMaps): any {
     const rewritten = rewriteDocFileRefs(value, maps.files);
     const walk = (node: any, key = ''): any => {
-      if (typeof node === 'string') return maps.paths.has(node) ? maps.paths.get(node) : node;
+      if (typeof node === 'string') {
+        const sourcePath = maps.paths.has(node) ? node : stripAssetUrlQuery(node);
+        return maps.paths.has(sourcePath) ? maps.paths.get(sourcePath) : node;
+      }
       if (!node || typeof node !== 'object') return node;
       if (Array.isArray(node)) {
         if (key === 'integrations') return node.map((id) => maps.ids.Integration.get(id) ?? null);
@@ -717,7 +736,11 @@ export class OrgImportService {
     if (model === 'FileFolder') row.storageProviderId = null;
     if (model === 'AIPromptTemplate') row.globalKey = null;
     if (model === 'AIBrandProfile' && Array.isArray(row.customFonts)) {
-      row.customFonts = row.customFonts.filter((font: any) => typeof font?.path === 'string' && font.path);
+      const stagedPaths = new Set(maps.paths.values());
+      row.customFonts = row.customFonts.filter((font: any) => {
+        if (typeof font?.path !== 'string' || !font.path) return false;
+        return !maps.strictFontMapping || stagedPaths.has(font.path);
+      });
     }
     if (model === 'File') {
       row.thumbnail = null;

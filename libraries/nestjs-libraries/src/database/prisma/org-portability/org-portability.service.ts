@@ -451,11 +451,11 @@ export class OrgPortabilityService {
         const fonts = Array.isArray(brand.customFonts) ? brand.customFonts : [];
         for (const [index, value] of fonts.entries()) {
           if (!value || typeof value !== 'object' || Array.isArray(value) || typeof (value as any).path !== 'string' || !(value as any).path) {
-            throw new Error(`Brand ${brand.id} has an invalid custom font entry`);
+            continue;
           }
           const sourcePath = (value as any).path as string;
           const extension = this._stripUrlQuery(sourcePath).toLowerCase().match(/\.(ttf|otf|woff2)$/)?.[1];
-          if (!extension) throw new Error(`Brand ${brand.id} has an unsupported custom font path`);
+          if (!extension) continue;
           uniqueAssetBytes += await this._writeAsset(writer, assets, counts, writtenAssets, uniqueAssetBytes, assetTemp, {
             id: `font:${brand.id}:${index}`,
             sourcePath,
