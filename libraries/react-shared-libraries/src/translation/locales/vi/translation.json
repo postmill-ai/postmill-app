@@ -4028,6 +4028,8 @@
   "subscription": "Đăng ký",
   "subscription_settings_description": "Quản lý gói, chu kỳ thanh toán, mức sử dụng và tiện ích bổ sung.",
   "teams_page_description": "Mời đồng đội, tạo tài khoản và quản lý ai có quyền truy cập không gian làm việc.",
+  "data_export": "Xuất tổ chức",
+  "data_export_description": "Tải xuống bản lưu trữ có thể khôi phục của tổ chức, bao gồm các tệp và thông tin đăng nhập nhà cung cấp được bảo vệ bằng cụm mật khẩu của bạn.",
   "broadcast": "Phát thông báo",
   "broadcast_description": "Gửi tin nhắn hoặc thông báo đến mọi người trong tổ chức.",
   "channels_settings_description": "Kết nối tài khoản mạng xã hội để đăng bài từ Postmill. Chọn nền tảng, làm theo các bước và bạn đã sẵn sàng đăng.",

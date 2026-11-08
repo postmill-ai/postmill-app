@@ -4028,6 +4028,8 @@
   "subscription": "Assinatura",
   "subscription_settings_description": "Gerencie seu plano, ciclo de faturamento, uso e complementos.",
   "teams_page_description": "Convide colegas, crie contas e gerencie quem tem acesso ao seu espaço de trabalho.",
+  "data_export": "Exportar organização",
+  "data_export_description": "Baixe um arquivo restaurável da sua organização, incluindo arquivos e credenciais de provedores protegidas por sua frase secreta.",
   "broadcast": "Transmissão",
   "broadcast_description": "Envie uma mensagem ou aviso para todos na sua organização.",
   "channels_settings_description": "Conecte suas contas de redes sociais para publicar pelo Postmill. Escolha uma plataforma, siga os passos e pronto.",

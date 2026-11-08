@@ -4028,6 +4028,8 @@
   "subscription": "订阅",
   "subscription_settings_description": "管理您的套餐、账单周期、用量和附加功能。",
   "teams_page_description": "邀请团队成员、创建账户并管理谁可以访问您的工作区。",
+  "data_export": "导出组织",
+  "data_export_description": "下载可恢复的组织存档，其中包括文件和受密码保护的提供商凭据。",
   "broadcast": "群发",
   "broadcast_description": "向组织中的所有人发送消息或公告。",
   "channels_settings_description": "连接您的社交媒体账户，即可从 Postmill 发布内容。选择平台，按步骤操作，就可以发布了。",

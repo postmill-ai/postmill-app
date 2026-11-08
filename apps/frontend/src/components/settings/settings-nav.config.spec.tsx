@@ -121,6 +121,13 @@ describe('settings nav config', () => {
     expect(gate(ctx({ permissions: { hasPermission: () => false } }))).toBe(false);
   });
 
+  it('data export gate requires the actual owner role', () => {
+    const gate = item('data').gate!;
+    expect(gate(ctx({ permissions: { role: 'owner', hasPermission: () => true } }))).toBe(true);
+    expect(gate(ctx({ permissions: { role: 'admin', hasPermission: () => true } }))).toBe(false);
+    expect(gate(ctx({ permissions: { role: null, hasPermission: () => true } }))).toBe(false);
+  });
+
   it('developers gate requires api + isGeneral + showLogout', () => {
     const gate = item('developers').gate!;
     expect(gate(ctx({ user: { tier: { api: true } }, isGeneral: true, showLogout: true }))).toBe(true);

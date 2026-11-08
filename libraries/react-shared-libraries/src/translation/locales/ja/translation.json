@@ -4028,6 +4028,8 @@
   "subscription": "サブスクリプション",
   "subscription_settings_description": "プラン、請求サイクル、使用量、アドオンを管理します。",
   "teams_page_description": "メンバーを招待し、アカウントを作成し、ワークスペースへのアクセスを管理します。",
+  "data_export": "組織をエクスポート",
+  "data_export_description": "ファイルとパスフレーズで保護されたプロバイダーの認証情報を含む、組織の復元可能なアーカイブをダウンロードします。",
   "broadcast": "一斉配信",
   "broadcast_description": "組織の全員にメッセージやお知らせを送信します。",
   "channels_settings_description": "Postmill から投稿できるようにソーシャルアカウントを連携します。プラットフォームを選び、手順に従えば投稿できます。",

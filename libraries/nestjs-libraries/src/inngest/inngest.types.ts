@@ -99,6 +99,11 @@ export type InngestEvents = {
       jobId: string;
     };
   };
+  'org/portability.export': {
+    data: {
+      jobId: string;
+    };
+  };
   'media/video-thumbnail.generate': {
     data: {
       organizationId: string;

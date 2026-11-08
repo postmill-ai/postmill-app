@@ -4028,6 +4028,8 @@
   "subscription": "Abbonamento",
   "subscription_settings_description": "Gestisci piano, ciclo di fatturazione, utilizzo e componenti aggiuntivi.",
   "teams_page_description": "Invita colleghi, crea account e gestisci chi accede al tuo spazio di lavoro.",
+  "data_export": "Esporta organizzazione",
+  "data_export_description": "Scarica un archivio ripristinabile della tua organizzazione, inclusi file e credenziali del provider protette dalla tua passphrase.",
   "broadcast": "Trasmissione",
   "broadcast_description": "Invia un messaggio o un annuncio a tutti nella tua organizzazione.",
   "channels_settings_description": "Collega i tuoi account social per pubblicare da Postmill. Scegli una piattaforma, segui i passaggi e sei pronto a pubblicare.",

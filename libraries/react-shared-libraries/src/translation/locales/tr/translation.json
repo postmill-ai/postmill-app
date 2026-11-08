@@ -4028,6 +4028,8 @@
   "subscription": "Abonelik",
   "subscription_settings_description": "Planınızı, faturalandırma döngünüzü, kullanımınızı ve eklentilerinizi yönetin.",
   "teams_page_description": "Ekip arkadaşlarınızı davet edin, hesap oluşturun ve çalışma alanınıza kimlerin eriştiğini yönetin.",
+  "data_export": "Organizasyonu dışa aktar",
+  "data_export_description": "Dosyalar ve parolanızla korunan sağlayıcı kimlik bilgileri dahil olmak üzere organizasyonunuzun geri yüklenebilir bir arşivini indirin.",
   "broadcast": "Duyuru",
   "broadcast_description": "Kuruluşunuzdaki herkese mesaj veya duyuru gönderin.",
   "channels_settings_description": "Postmill üzerinden paylaşım yapabilmek için sosyal medya hesaplarınızı bağlayın. Bir platform seçin, adımları izleyin ve paylaşmaya başlayın.",

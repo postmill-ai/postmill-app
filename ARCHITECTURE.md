@@ -288,6 +288,8 @@ studio UI → MediaStudioController (/media/studio; apps/backend/src/api/routes/
 
 Storage routing has two levels. `STORAGE_PROVIDER=local|s3` selects the operator-managed base for root/unmounted files and generated media; platform S3 objects are tenant/date partitioned and legacy `/uploads` URLs redirect to the same bucket key. A folder's explicit BYO `storageProviderId` takes precedence and keeps its own credentials and key layout. Platform base writes retain the hosted quota in either mode.
 
+Owner-only organization export uses a separate `postmill.org-export.v1` ZIP: NDJSON domain payloads plus SHA-256-addressed assets streamed through each file's owning adapter. Provider credentials move to an AES-256-GCM secret bundle whose random archive key is wrapped by the owner's scrypt-derived passphrase key; the manifest is HMAC-authenticated. Jobs persist only sanitized progress and a deployment-encrypted temporary key. Archives remain in a private mode-0600 spool with hourly TTL cleanup and are downloaded through five-minute one-time tokens. The existing GDPR metadata export is unchanged and is not restorable.
+
 ### (d) Notifications
 
 ```

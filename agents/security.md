@@ -271,6 +271,23 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   mask them to per-field booleans; connect codes are returned only from link
   create/regenerate responses. Never log tokens, secrets, codes, or raw webhook bodies.
 
+## Organization export — owner-only, encrypted, private
+
+- `/org-portability/*` management routes require the actual `owner` role and are in
+  `authenticatedController` (session + CSRF). The separate `/org-portability/download/:token`
+  controller is public only for a CSPRNG, five-minute, one-time token issued by that owner.
+- `postmill.org-export.v1` stores NDJSON domain payloads and content-addressed assets. Provider
+  credentials are removed from domain payloads and encrypted with a CSPRNG archive key using
+  AES-256-GCM. The passphrase wraps only that key with scrypt (N=32768, r=8, p=1); no passphrase
+  or plaintext secret is stored in jobs, logs, Sentry, or archive metadata. HMAC-SHA256 protects
+  the manifest and asset inventory.
+- In-flight archive keys exist only as `EncryptionService` ciphertext and are cleared on
+  completion, failure, or expiry. Archives are mode-0600 files in `ORG_PORTABILITY_SPOOL_DIR`,
+  never public `/uploads` or public buckets; hourly cleanup removes expired archives.
+- Billing entitlements, passwords, sessions, API keys, OAuth grants, and runtime state are excluded.
+  Signed URL query strings are stripped. Archive/asset limits are configurable positive byte
+  counts. Import is a separate stage and is not enabled by the export routes.
+
 ## Checklist
 
 - [ ] No env AI-key read added anywhere; AI-off path still throws `AI_NOT_CONFIGURED_MESSAGE`.

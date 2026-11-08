@@ -80,6 +80,7 @@ model Organization {
   aiDesignerSessions   AiDesignerSession[]
   commsProviderConfigs CommsProviderConfig[]
   commsUserLinks       CommsUserLink[]
+  orgPortabilityJobs   OrgPortabilityJob[]
 
   @@index([apiKey])
   @@index([streakSince])
@@ -150,6 +151,7 @@ model User {
   pushTokens            PushToken[]
   aiDesignerSessions    AiDesignerSession[]
   commsUserLinks        CommsUserLink[]
+  orgPortabilityJobs    OrgPortabilityJob[]
 
   @@unique([email, providerName])
   @@index([lastReadNotifications])
@@ -2010,4 +2012,27 @@ model InngestFunctionRun {
   updatedAt   DateTime  @updatedAt
 
   @@index([updatedAt])
+}
+
+model OrgPortabilityJob {
+  id                    String       @id @default(uuid())
+  organizationId        String
+  ownerId               String
+  kind                  String       // export | import
+  status                String       @default("pending") // pending | processing | completed | failed | expired
+  progress              Json?
+  spoolPath             String?
+  archiveSha256         String?
+  archiveKeyCiphertext String?
+  expiresAt             DateTime
+  error                 String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner                 User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, archiveSha256])
+  @@index([organizationId, createdAt])
+  @@index([ownerId, createdAt])
+  @@index([status, expiresAt])
 }

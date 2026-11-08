@@ -6,7 +6,7 @@ against the production DB at boot, so every schema change must be backward-compa
 
 | Fact | Value |
 |---|---|
-| Schema | `libraries/nestjs-libraries/src/database/prisma/schema.prisma` (90 models) |
+| Schema | `libraries/nestjs-libraries/src/database/prisma/schema.prisma` (91 models) |
 | Migrations | `libraries/nestjs-libraries/src/database/prisma/migrations/` — committed, from the `0_init` baseline |
 | Client access | `PrismaService` / `PrismaRepository<T>` / `PrismaTransaction` in `libraries/nestjs-libraries/src/database/prisma/prisma.service.ts` |
 | Canonical apply path | `prisma migrate deploy` (CI, backend boot, production) |
@@ -102,12 +102,12 @@ sanctioned exceptions (seeders, cross-domain leaf-reads) are enumerated in
 `agents/backend.md`. Connection-pool tuning via env `DATABASE_CONNECTION_LIMIT` /
 `DATABASE_POOL_TIMEOUT` (appended to `DATABASE_URL` by `PrismaService` when set).
 
-## Data model overview (90 models — read `schema.prisma` for ground truth)
+## Data model overview (91 models — read `schema.prisma` for ground truth)
 
 | Domain | Key models |
 |---|---|
 | Identity / RBAC / sessions | `User`, `UserProfile`, `Session`, `AppRole`, `Permission`, `AppRolePermission` |
-| Org | `Organization`, `UserOrganization` |
+| Org | `Organization`, `UserOrganization`, `OrgPortabilityJob` |
 | Channels | `Integration`, `OrgProviderConfiguration` |
 | Posts / comments | `Post`, `Comments`, `PostCommentRead`, `Media` |
 | Designer | `Design`, `DesignVersion`, `DesignTemplate`, `DesignTemplateFolder`, `AiDesignerSession` |
