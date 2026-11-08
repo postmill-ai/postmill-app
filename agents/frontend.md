@@ -447,6 +447,16 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   output/page/selection, rejects stale or video-mode layout actions, and applies all element patches
   with one history entry. The request context is bounded to 50 geometry-only selected elements;
   copy and whitelisted font/color styles continue to work for static and video text/caption clips.
+- **Export preflight is scoped, conservative, and non-blocking.** `design-preflight.ts` audits only
+  the selected outputs/pages and returns stable element/clip targets for low solid-background
+  contrast, unsafe-zone text, structurally missing media, and measured text overflow. Static text
+  uses `fit-text.ts`; video text uses `layoutVideoText`. Safe-zone checks use the measured line
+  extents, including alignment and static vertical alignment, rather than the full text box. Hidden
+  layers are skipped; rotated geometry, image/gradient/obscured backgrounds, and unavailable
+  measurements count as unassessed rather than passing or failing guesses. `export-preflight.tsx`
+  displays warnings and unassessed counts; finding clicks navigate to the target and close export.
+  Brand enforcement and its admin override retain their existing blocking semantics, while these
+  new warnings never block export.
 - **Video poster state distinguishes effective and generated images.** The export dialog sends
   only an uploaded File path as `posterUrl` and may send the paused playhead as `posterTimeMs`.
   Polling reads `thumbnailUrl` (effective), `generatedPosterUrl` (rendered alternative), `fileId`,

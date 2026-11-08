@@ -9,25 +9,11 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import type { DesignerElement } from '../designer.store';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { TextEffectPresets } from './text-effect-presets';
+import { getContrastRatio } from '../contrast';
 
 interface TextInspectorProps {
   store: any;
 }
-
-const getContrastRatio = (fg: string, bg: string): number => {
-  const getLuminance = (hex: string) => {
-    const r = parseInt(hex.slice(1, 3), 16) / 255;
-    const g = parseInt(hex.slice(3, 5), 16) / 255;
-    const b = parseInt(hex.slice(5, 7), 16) / 255;
-    const toLinear = (c: number) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-    return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
-  };
-  const l1 = getLuminance(fg);
-  const l2 = getLuminance(bg);
-  const lighter = Math.max(l1, l2);
-  const darker = Math.min(l1, l2);
-  return (lighter + 0.05) / (darker + 0.05);
-};
 
 const averageColor = (data: Uint8ClampedArray): string => {
   let r = 0;
@@ -191,7 +177,7 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
     queueMicrotask(() => setSampledBg(sampleTextBackground(primary)));
   }, [sampleKey]);
   const bgColor = sampledBg ?? heuristicBg;
-  const ratio = primary ? getContrastRatio(textFill, bgColor) : 21;
+  const ratio = primary ? getContrastRatio(textFill, bgColor) ?? 21 : 21;
   const isLowContrast = ratio < 4.5;
 
   const categories = ['heading', 'subheading', 'body', 'caption'] as const;
