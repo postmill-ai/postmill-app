@@ -13,6 +13,17 @@ const copySchema = z.object({
   variants: z.array(z.string().trim().min(1).max(1000)).length(3),
 }).strict();
 
+const suggestionActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('align'),
+    position: z.enum(['left', 'center', 'right', 'top', 'middle', 'bottom']),
+  }).strict(),
+  z.object({
+    type: z.literal('distribute'),
+    mode: z.enum(['horizontal-centers', 'vertical-centers', 'horizontal-gaps', 'vertical-gaps']),
+  }).strict(),
+]);
+
 const suggestionsSchema = z.object({
   suggestions: z.array(z.object({
     category: z.enum(['font', 'color', 'layout', 'spacing']),
@@ -22,6 +33,7 @@ const suggestionsSchema = z.object({
       fontFamily: z.string().trim().min(1).max(120).optional(),
       fill: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
     }).strict().optional(),
+    action: suggestionActionSchema.optional(),
   }).strict()).min(2).max(6),
 }).strict();
 
@@ -30,13 +42,15 @@ const copyResponseContract =
   'The root object must contain only "variants", with exactly three distinct, non-empty strings of at most 1000 characters each.';
 
 const suggestionsResponseContract =
-  'Return only one JSON object with exactly this shape: {"suggestions":[{"category":"font","title":"Short title","rationale":"Practical reason","style":{"fontFamily":"Georgia","fill":"#123456"}},{"category":"spacing","title":"Add breathing room","rationale":"Separate the headline from supporting copy."}]}. ' +
+  'Return only one JSON object with exactly this shape: {"suggestions":[{"category":"font","title":"Short title","rationale":"Practical reason","style":{"fontFamily":"Georgia","fill":"#123456"}},{"category":"layout","title":"Center the headline","rationale":"Balance the composition.","action":{"type":"align","position":"center"}}]}. ' +
   'The root object must contain only "suggestions", with 2-6 entries. Every entry requires category, title, and rationale. ' +
   'Category must be one of "font", "color", "layout", or "spacing". Title and rationale must be non-empty strings of at most 160 and 500 characters. ' +
-  'The optional style object may contain only fontFamily (a non-empty string of at most 120 characters) or fill (a #RRGGBB color); omit style when neither applies. Do not add other fields.';
+  'The optional style object may contain only fontFamily (a non-empty string of at most 120 characters) or fill (a #RRGGBB color). ' +
+  'The optional action must be exactly {"type":"align","position":"left|center|right|top|middle|bottom"} or {"type":"distribute","mode":"horizontal-centers|vertical-centers|horizontal-gaps|vertical-gaps"}. ' +
+  'Use align only for an image-design selection and distribute only when at least three elements are selected. Never emit coordinates, element ids, URLs, or any other action fields.';
 
 const contextText = (context?: DesignerAssistantContextDto) =>
-  context ? JSON.stringify(context).slice(0, 4000) : 'No element selected.';
+  context ? JSON.stringify(context).slice(0, 12000) : 'No element selected.';
 
 @Injectable()
 export class DesignerAssistantService {
@@ -116,11 +130,11 @@ export class DesignerAssistantService {
       `Optional user goal: ${JSON.stringify(input.prompt || '')}\n` +
       `Design/selected-element summary: ${contextText(input.context)}\n` +
       `Brand style: ${JSON.stringify(brand)}\n\n` +
-      'Give 2-6 specific, practical recommendations. Include a fontFamily or #RRGGBB fill only when it is a compatible style change that can be applied directly; never include layout operations or asset URLs.\n' +
+      'Give 2-6 specific, practical recommendations. Include a fontFamily or #RRGGBB fill only when it is a compatible style change. Add an align or distribute action only when it directly implements the recommendation for the supplied image-design selection; otherwise omit action. Never include asset URLs.\n' +
       suggestionsResponseContract,
       suggestionsSchema,
       orgId,
-      'You are an art director giving concise, brand-aware design feedback. Return only structured suggestions, not document operations.',
+      'You are an art director giving concise, brand-aware design feedback. Return only structured suggestions and whitelisted semantic actions, not free-form document operations.',
     );
   }
 }

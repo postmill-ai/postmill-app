@@ -1,7 +1,10 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsEnum,
   IsHexColor,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -16,6 +19,32 @@ export enum DesignerCopyKind {
   Promotion = 'promotion',
   Caption = 'caption',
   Cta = 'cta',
+}
+
+export class DesignerAssistantSelectionDto {
+  @IsString()
+  @MaxLength(40)
+  type!: string;
+
+  @IsNumber()
+  @Min(-16384)
+  @Max(16384)
+  x!: number;
+
+  @IsNumber()
+  @Min(-16384)
+  @Max(16384)
+  y!: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(16384)
+  width!: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(16384)
+  height!: number;
 }
 
 export class DesignerAssistantContextDto {
@@ -73,6 +102,17 @@ export class DesignerAssistantContextDto {
   @Min(1)
   @Max(16384)
   canvasHeight?: number;
+
+  @IsOptional()
+  @IsIn(['image', 'video'])
+  mode?: 'image' | 'video';
+
+  @IsOptional()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => DesignerAssistantSelectionDto)
+  selection?: DesignerAssistantSelectionDto[];
 }
 
 export class GenerateDesignerCopyDto {
