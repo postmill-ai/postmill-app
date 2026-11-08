@@ -119,6 +119,7 @@ export interface BulkAssignmentTarget {
   elementId: string;
   outputIndex: number;
   pageNumber: number;
+  symbolId?: string;
   kind: BulkVariableKind;
   label: string;
 }
@@ -129,6 +130,52 @@ const hasMustache = (value: unknown): boolean =>
 export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTarget[] => {
   if (doc.mode !== 'image') return [];
   const targets: BulkAssignmentTarget[] = [];
+  const collectChildren = (
+    children: DesignerElement[] | undefined,
+    location: {
+      idPrefix: string;
+      labelPrefix: string;
+      outputIndex: number;
+      pageNumber: number;
+      symbolId?: string;
+    }
+  ) => {
+    for (const element of children || []) {
+      const elementLabel = element.name || element.text?.trim().slice(0, 40) || element.id;
+      const add = (kind: BulkVariableKind) => {
+        targets.push({
+          id: `${location.idPrefix}:${element.id}:${kind}`,
+          elementId: element.id,
+          outputIndex: location.outputIndex,
+          pageNumber: location.pageNumber,
+          symbolId: location.symbolId,
+          kind,
+          label: `${location.labelPrefix}: ${elementLabel}`,
+        });
+      };
+      const canAssignText = element.type === 'text' &&
+        !element.slot &&
+        !hasMustache(element.text) &&
+        !(element.richText || []).some((run) => hasMustache(run.text));
+      if (canAssignText) add('text');
+      if (
+        (element.type === 'image' || element.type === 'raster') &&
+        !element.slot &&
+        element.src &&
+        !hasMustache(element.src)
+      ) {
+        add('image');
+      }
+      if (
+        ['text', 'shape', 'path', 'icon'].includes(element.type) &&
+        element.slot?.kind !== 'color' &&
+        (element.type === 'text' || !element.slot) &&
+        !hasMustache(element.fill)
+      ) {
+        add('color');
+      }
+    }
+  };
   for (const [outputIndex, output] of (doc.outputs || []).entries()) {
     if (!('children' in output)) continue;
     const imageOutput = output as DesignerOutput;
@@ -140,41 +187,22 @@ export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTa
       })),
     ];
     for (const page of pages) {
-      for (const element of page.children || []) {
-        const elementLabel = element.name || element.text?.trim().slice(0, 40) || element.id;
-        const add = (kind: BulkVariableKind) => {
-          targets.push({
-            id: `${outputIndex}:${page.pageNumber}:${element.id}:${kind}`,
-            elementId: element.id,
-            outputIndex,
-            pageNumber: page.pageNumber,
-            kind,
-            label: `${imageOutput.name} / Page ${page.pageNumber + 1}: ${elementLabel}`,
-          });
-        };
-        const canAssignText = element.type === 'text' &&
-          !element.slot &&
-          !hasMustache(element.text) &&
-          !(element.richText || []).some((run) => hasMustache(run.text));
-        if (canAssignText) add('text');
-        if (
-          (element.type === 'image' || element.type === 'raster') &&
-          !element.slot &&
-          element.src &&
-          !hasMustache(element.src)
-        ) {
-          add('image');
-        }
-        if (
-          ['text', 'shape', 'path', 'icon'].includes(element.type) &&
-          element.slot?.kind !== 'color' &&
-          (element.type === 'text' || !element.slot) &&
-          !hasMustache(element.fill)
-        ) {
-          add('color');
-        }
-      }
+      collectChildren(page.children, {
+        idPrefix: `${outputIndex}:${page.pageNumber}`,
+        labelPrefix: `${imageOutput.name} / Page ${page.pageNumber + 1}`,
+        outputIndex,
+        pageNumber: page.pageNumber,
+      });
     }
+  }
+  for (const symbol of doc.symbols || []) {
+    collectChildren(symbol.children, {
+      idPrefix: `symbol:${symbol.id}`,
+      labelPrefix: `Symbol ${symbol.name}`,
+      outputIndex: -1,
+      pageNumber: 0,
+      symbolId: symbol.id,
+    });
   }
   return targets;
 };
@@ -206,10 +234,12 @@ export const applyBulkAssignments = (
   const doc = structuredClone(templateDoc);
   for (const [targetId, column] of selected) {
     const target = targets.get(targetId)!;
-    const output = doc.outputs[target.outputIndex] as DesignerOutput;
-    const children = target.pageNumber === 0
-      ? output.children
-      : output.pages?.[target.pageNumber - 1]?.children;
+    const output = target.symbolId ? undefined : doc.outputs[target.outputIndex] as DesignerOutput;
+    const children = target.symbolId
+      ? doc.symbols?.find((symbol) => symbol.id === target.symbolId)?.children
+      : target.pageNumber === 0
+        ? output?.children
+        : output?.pages?.[target.pageNumber - 1]?.children;
     const element = children?.find((item) => item.id === target.elementId);
     if (!element) continue;
     if (target.kind === 'color' && element.type === 'text') {

@@ -166,6 +166,33 @@ describe('BulkCreateDialog', () => {
     expect(preview.doc.outputs[0].children[0].fill).toBe('{{accent}}');
   });
 
+  it('discovers a selected symbol definition and previews its newly assigned variable', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'symbol-title', name: 'Symbol headline', type: 'text', text: 'Footer',
+      x: 0, y: 0, width: 300, height: 100, rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().setSelectedIds(['symbol-title']);
+    store.getState().createSymbol('Footer');
+    fetchMock.mockResolvedValueOnce(response({ images: ['data:image/png;base64,preview'] }));
+    render(<BulkCreateDialog store={store} onClose={vi.fn()} />);
+    await upload('headline\nAda\nGrace');
+
+    fireEvent.change(screen.getByRole('combobox', {
+      name: 'Column for Symbol Footer: Symbol headline (text)',
+    }), { target: { value: 'headline' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply variable assignments' }));
+    await waitFor(() => expect(store.getState().doc.symbols?.[0].children[0].slot).toEqual({
+      name: 'headline', kind: 'text',
+    }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview first row' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/media/designs/bulk-generate', expect.any(Object)));
+    const preview = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(preview.rows).toEqual([{ headline: 'Ada' }]);
+    expect(preview.doc.symbols[0].children[0].slot).toEqual({ name: 'headline', kind: 'text' });
+  });
+
   it('leaves unselected targets unassigned and applies only explicit choices', async () => {
     const store = createDesignerStore();
     store.getState().addElement({

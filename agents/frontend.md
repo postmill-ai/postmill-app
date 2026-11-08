@@ -485,8 +485,9 @@ duplicate/blank headers, malformed quoting, files over 5 MB and batches over 200
 before enqueue. `designer-doc/bulk-variables.ts` is the one substitution/discovery engine for the
 preview, saved variation and renderer: it covers all outputs/pages, rich text, mustache variables,
 text/image/color slots and symbol overrides. With no preexisting variables, the dialog's guided
-assignment table maps CSV columns directly to text/image/color targets on every output/page;
-applying adds their slots as ONE undoable edit, then reuses the same preview/batch pipeline. Text
+assignment table maps CSV columns directly to text/image/color targets on every output/page and in
+reusable symbol definitions (an instance's explicit content overrides still win); applying adds their
+slots as ONE undoable edit, then reuses the same preview/batch pipeline. Text
 and colour may be assigned in separate passes without replacing either binding. One column may feed
 multiple targets, incompatible existing variable kinds are rejected, and existing mustache/slot
 bindings remain intact. Before substitution, a colour mustache renders transparent through the shared
