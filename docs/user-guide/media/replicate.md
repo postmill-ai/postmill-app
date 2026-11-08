@@ -29,6 +29,8 @@ speech-to-text mode and two native editors (mask painting, video merge) and a ca
 | Voice Clone | Audio | Async | Clone a voice from a short audio sample. |
 | Speech to Text | Audio → Text | Sync | Transcribe an audio file to text. |
 
+Background removal defaults to **Bria Remove Background** for higher-quality subject masks. An organization's explicit background-removal model default still takes precedence.
+
 Every run uses the org's own Replicate token, configured in **Settings → Content → AI Media**
 (**Test connection** there is free — it lists `GET /v1/models` and never runs a prediction). The
 category and model allowlist is curated server-side — Replicate hosts far more models than are

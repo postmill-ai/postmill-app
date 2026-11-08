@@ -171,15 +171,15 @@ describe('ReplicateMediaAdapter.removeBackground model resolution', () => {
     adapter = new ReplicateMediaAdapter(fetchMock as any);
   });
 
-  it('falls back to the live 851-labs/background-remover default (cjwbw/rembg is deleted upstream)', async () => {
+  it('falls back to the higher-quality Bria default', async () => {
     const url = await adapter.removeBackground('https://cdn.example.com/in.png', {
       credentials: { apiKey: 'k' },
     });
     expect(url).toBe('https://example.com/img.png');
     expect(lastRequestUrl(fetchMock)).toBe(
-      'https://api.replicate.com/v1/models/851-labs/background-remover/predictions'
+      'https://api.replicate.com/v1/models/bria/remove-background/predictions'
     );
-    expect(lastRequestBody(fetchMock).input).toEqual({ image: 'https://cdn.example.com/in.png' });
+    expect(lastRequestBody(fetchMock).input).toEqual({ image_url: 'https://cdn.example.com/in.png' });
   });
 
   it('lets an org-configured options.model win over the default', async () => {
@@ -223,9 +223,10 @@ describe('ReplicateMediaAdapter.removeBackground input field mapping', () => {
     expect(body.input.image).toBeUndefined();
   });
 
-  it('keeps the image field for the 851-labs/background-remover default', async () => {
+  it('keeps the image field when 851-labs is explicitly selected', async () => {
     await adapter.removeBackground('https://cdn.example.com/in.png', {
       credentials: { apiKey: 'k' },
+      model: '851-labs/background-remover',
     });
     expect(lastRequestBody(fetchMock).input).toEqual({ image: 'https://cdn.example.com/in.png' });
   });
