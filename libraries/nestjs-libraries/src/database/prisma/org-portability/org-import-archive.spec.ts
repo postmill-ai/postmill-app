@@ -15,7 +15,7 @@ import {
   ORG_EXPORT_SCHEMA,
   type OrgPortabilityManifest,
 } from './org-portability.types';
-import { extractOrgArchive, readOrgDomainRows, validateOrgArchive } from './org-import-archive';
+import { extractOrgArchive, readOrgArchiveManifest, readOrgDomainRows, validateOrgArchive } from './org-import-archive';
 
 const passphrase = 'import validation passphrase';
 const dirs: string[] = [];
@@ -90,6 +90,7 @@ describe('validateOrgArchive', () => {
     const result = await validateOrgArchive(file, passphrase);
     expect(result.manifest.schema).toBe(ORG_EXPORT_SCHEMA);
     expect(result.domainCounts).toEqual({ organization: 1 });
+    expect(readOrgArchiveManifest(file).source).toEqual({ organizationId: 'org-1', name: 'Example' });
     expect(readFileSync(file).length).toBeGreaterThan(0);
   });
 

@@ -33,17 +33,31 @@ export class OrgImportRepository {
     });
   }
 
-  markValidated(id: string, archiveSha256: string, progress: Prisma.InputJsonValue) {
+  startValidation(id: string, archiveKeyCiphertext: string, progress: Prisma.InputJsonValue) {
     return this._prisma.orgPortabilityJob.updateMany({
       where: { id, kind: 'import', status: 'uploading' },
-      data: { archiveSha256, progress, error: null },
+      data: { status: 'validating', archiveKeyCiphertext, progress, error: null },
     });
   }
 
-  prepareCommit(id: string, archiveKeyCiphertext: string, progress: Prisma.InputJsonValue) {
+  completeValidation(id: string, archiveSha256: string, progress: Prisma.InputJsonValue) {
     return this._prisma.orgPortabilityJob.updateMany({
-      where: { id, kind: 'import', status: 'uploading', archiveSha256: { not: null } },
-      data: { status: 'pending', archiveKeyCiphertext, progress, error: null },
+      where: { id, kind: 'import', status: 'validating' },
+      data: { status: 'ready', archiveSha256, progress, error: null },
+    });
+  }
+
+  prepareCommit(id: string, progress: Prisma.InputJsonValue) {
+    return this._prisma.orgPortabilityJob.updateMany({
+      where: { id, kind: 'import', status: 'ready', archiveSha256: { not: null } },
+      data: { status: 'pending', progress, error: null },
+    });
+  }
+
+  claimValidationJob(id: string) {
+    return this._prisma.orgPortabilityJob.updateMany({
+      where: { id, kind: 'import', status: 'validating', archiveKeyCiphertext: { not: null } },
+      data: { error: null },
     });
   }
 
@@ -68,10 +82,17 @@ export class OrgImportRepository {
     });
   }
 
+  resetValidationJob(id: string) {
+    return this._prisma.orgPortabilityJob.updateMany({
+      where: { id, kind: 'import', status: 'validating' },
+      data: { status: 'uploading', archiveKeyCiphertext: null },
+    });
+  }
+
   resetPendingJob(id: string) {
     return this._prisma.orgPortabilityJob.updateMany({
       where: { id, kind: 'import', status: 'pending' },
-      data: { status: 'uploading', archiveKeyCiphertext: null },
+      data: { status: 'ready' },
     });
   }
 
@@ -84,7 +105,7 @@ export class OrgImportRepository {
 
   failJob(id: string, error: string, progress?: Prisma.InputJsonValue) {
     return this._prisma.orgPortabilityJob.updateMany({
-      where: { id, status: { in: ['uploading', 'pending', 'processing'] } },
+      where: { id, status: { in: ['uploading', 'validating', 'ready', 'pending', 'processing'] } },
       data: {
         status: 'failed',
         error,
@@ -101,8 +122,14 @@ export class OrgImportRepository {
       where: { id: organizationId },
       select: { id: true, setupCompletedAt: true, localStorageQuotaBytes: true },
     });
+    const storageProviders = await this._prisma.storageProviderConfig.findMany({
+      where: { organizationId },
+      select: { id: true, type: true },
+    });
+    const hasOnlySignupStorage = storageProviders.length === 1 && storageProviders[0].type === 'LOCAL';
     const nonEmptyDomains: string[] = [];
     for (const model of orgPortabilityModelNames()) {
+      if (model === 'StorageProviderConfig' && hasOnlySignupStorage) continue;
       const delegate = lowerFirst(model);
       const where = {
         tags: { orgId: organizationId },
@@ -120,18 +147,11 @@ export class OrgImportRepository {
   }
 
   transaction<T>(work: (tx: OrgImportTransaction) => Promise<T>): Promise<T> {
-    return this._prisma.$transaction(work, { timeout: 600_000, maxWait: 15_000 });
+    return this._prisma.$transaction(work, { timeout: 1_800_000, maxWait: 15_000 });
   }
 
   userById(tx: OrgImportTransaction, id: string) {
     return tx.user.findUnique({ where: { id }, select: { id: true, email: true } });
-  }
-
-  userByEmail(tx: OrgImportTransaction, email: string) {
-    return tx.user.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
-      select: { id: true, email: true },
-    });
   }
 
   systemRoles(tx: OrgImportTransaction) {
@@ -145,26 +165,25 @@ export class OrgImportRepository {
     return tx.permission.findMany({ select: { id: true, resource: true, action: true } });
   }
 
-  createUser(tx: OrgImportTransaction, data: Prisma.UserCreateInput) {
-    return tx.user.create({ data, select: { id: true, email: true } });
-  }
-
   updateOrganization(tx: OrgImportTransaction, id: string, data: Prisma.OrganizationUpdateInput) {
     return tx.organization.update({ where: { id }, data });
   }
 
-  createModel(tx: OrgImportTransaction, model: string, data: Record<string, unknown>) {
-    return (tx as any)[model].create({ data });
+  createManyModel(tx: OrgImportTransaction, model: string, data: Record<string, unknown>[]) {
+    return (tx as any)[model].createMany({ data });
   }
 
-  updateProfilePicture(tx: OrgImportTransaction, userId: string, pictureId: string | null) {
-    return tx.userProfile.update({ where: { userId }, data: { pictureId } });
+  defaultLocalProvider(tx: OrgImportTransaction, organizationId: string) {
+    return tx.storageProviderConfig.findFirst({
+      where: { organizationId, type: 'LOCAL' },
+      select: { id: true },
+    });
   }
 
-  connectIntegrationWebhook(tx: OrgImportTransaction, webhookId: string, integrationId: string) {
+  connectIntegrationWebhooks(tx: OrgImportTransaction, webhookId: string, integrationIds: string[]) {
     return tx.webhooks.update({
       where: { id: webhookId },
-      data: { integrations: { connect: { id: integrationId } } },
+      data: { integrations: { connect: integrationIds.map((id) => ({ id })) } },
     });
   }
 }

@@ -23,6 +23,7 @@ import {
   parseDataUrl,
   fromBuffer,
   fromFile,
+  storedArtifactFile,
   UploadValidationError,
 } from '@postmill-ai/provider-kernel';
 
@@ -327,6 +328,21 @@ export class LocalStorage implements StorageCapability {
     const publicPath = `${innerPath}/${randomName}.${ext}`;
     return (process.env.FRONTEND_URL || '') + '/uploads' + publicPath;
   }
+
+  async writeFileStream(sourcePath: string, contentType?: string): Promise<string> {
+    const { ext } = await storedArtifactFile(sourcePath, contentType);
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const tenantPart = this.tenantId ? `/${this.tenantId}` : '';
+    const innerPath = `${tenantPart}/${year}/${month}/${day}`;
+    const dir = `${this.uploadDirectory}${innerPath}`;
+    mkdirSync(dir, { recursive: true });
+    const randomName = randomBytes(16).toString('hex');
+    copyFileSync(sourcePath, `${dir}/${randomName}.${ext}`);
+    return (process.env.FRONTEND_URL || '') + `/uploads${innerPath}/${randomName}.${ext}`;
+  }
 }
 
 class LocalStorageCapability implements StorageCapability {
@@ -373,6 +389,9 @@ class LocalStorageCapability implements StorageCapability {
   }
   writeBuffer(buffer: Buffer, contentType?: string) {
     return this.a.writeBuffer(buffer, contentType);
+  }
+  writeFileStream(path: string, contentType?: string) {
+    return this.a.writeFileStream(path, contentType);
   }
   readFile(pathOrKey: string) {
     return this.a.readFile(pathOrKey);

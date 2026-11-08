@@ -40,7 +40,7 @@ Every environment variable Postmill recognises, sourced from `.env.example`. All
 | `ORG_PORTABILITY_MAX_ARCHIVE_BYTES` | `4293918720` | Maximum archive size: 4 GiB minus 1 MiB. Larger overrides are capped because the streaming writer does not emit ZIP64 |
 | `ORG_PORTABILITY_MAX_ASSET_BYTES` | `2147483647` | Maximum source size for each exported file |
 
-Setup import requires `USE_INNGEST=true`; commit returns `503` when background processing is unavailable. The spool must have room for the uploaded archive, one extraction, and staged destination assets. Temporary upload and extraction files are removed after completion or failure; successfully imported destination assets are retained. Export archives are capped at 65,000 entries as well as the byte ceiling.
+Setup import requires `USE_INNGEST=true`; validation and commit return `503` when background processing is unavailable. HTTP reads only the manifest; full validation runs in the background. The spool must have room for the uploaded archive, one extraction, and staged destination assets. Temporary upload and extraction files are removed after completion or failure; successfully imported destination assets are retained. Export archives are capped at 65,000 entries and 64 MiB per NDJSON domain as well as the byte ceiling.
 
 ## Email
 

@@ -23,6 +23,7 @@ export interface IStorageAdapter extends IUploadProvider {
   deleteFile(key: string): Promise<void>;
   getUsageBytes(): Promise<bigint | null>;
   writeBuffer(buffer: Buffer, contentType?: string): Promise<string>;
+  writeFileStream(path: string, contentType?: string): Promise<string>;
   // Read raw bytes for a stored object by its public path/URL or key. Used by
   // cross-provider migration so source bytes are read through the owning adapter
   // (disk read for local, GetObject for S3-family) rather than via safeFetch.

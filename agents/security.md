@@ -291,13 +291,15 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   counts. The streaming writer has no ZIP64 support, so the archive ceiling is 4 GiB minus 1 MiB
   (4,293,918,720 bytes) and 65,000 entries, including when a larger override is supplied.
 - Setup import is owner-only, CSRF-protected, and restricted to an empty organization whose setup is
-  incomplete. Uploads use sequential chunks into the same private spool. Validation authenticates
-  every domain's exact bytes and the complete asset inventory. Commit unwraps the archive key with
-  the supplied passphrase and stores only deployment-encrypted ciphertext for the Inngest worker;
-  completion, failure and expiry clear it. The worker verifies the archive SHA-256 before staging.
-  All database changes and job completion share one transaction; staged objects are removed on a
-  pre-commit failure. Imported integrations/providers/automation are disabled, missing File rows
-  are skipped with their references nulled, and source bucket paths are never retained.
+  incomplete. Uploads use sequential chunks into the same private spool. HTTP reads only the
+  central-directory manifest; full domain/asset authentication runs in Inngest. The passphrase is
+  used only to unwrap the key, which is stored as deployment-encrypted ciphertext and cleared on
+  completion, failure and expiry. The worker verifies the archive SHA-256 before staging. All
+  database changes and job completion share one transaction; staged paths are recorded for retry
+  cleanup. Imported integrations/providers/automation are disabled, missing File rows are skipped
+  with their references nulled, thumbnails regenerate, and source bucket paths are never retained.
+  Existing destination users are never auto-joined: other members receive the standard team invite
+  flow, and historical authorship falls back to the importing owner.
 
 ## Checklist
 

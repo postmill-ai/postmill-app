@@ -97,7 +97,7 @@ export class OrgPortabilityRepository {
     const jobs = await this._prisma.orgPortabilityJob.findMany({
       where: {
         expiresAt: { lt: now },
-        status: { in: ['uploading', 'pending', 'processing', 'completed', 'failed'] },
+        status: { in: ['uploading', 'validating', 'ready', 'pending', 'processing', 'completed', 'failed'] },
       },
     });
     if (!jobs.length) return [];

@@ -6,7 +6,8 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import type { User } from '@prisma/client';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import {
   appendFileSync,
   chmodSync,
@@ -21,18 +22,18 @@ import { tmpdir } from 'os';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
 import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
-import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import { rewriteDocFileRefs, type FileRefRemap } from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
-import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { OrgPortabilityRepository } from './org-portability.repository';
 import { OrgImportRepository, type OrgImportTransaction } from './org-import.repository';
 import {
   extractOrgArchive,
+  readOrgArchiveManifest,
   readOrgDomainRows,
-  validateOrgArchive,
+  validateOrgArchiveWithKey,
   type OrgArchiveExtraction,
 } from './org-import-archive';
 import {
@@ -53,6 +54,7 @@ import {
 } from './org-portability.domains';
 
 const CHUNK_BYTES = 8 * 1024 * 1024;
+const INSERT_BATCH_SIZE = 500;
 const FILE_ID_KEYS = new Set(['fileId', 'originalFileId', 'maskFileId', 'introFileId', 'outroFileId']);
 const USER_FIELDS = new Set(['userId', 'createdById', 'ownerId', 'approvedById', 'assignedToId', 'resolvedById']);
 const PROVIDER_CONFIGS = new Set([
@@ -77,13 +79,6 @@ const safeError = (error: unknown): string =>
     .replace(/v2:\S+/gi, '[encrypted]')
     .replace(/\s+/g, ' ')
     .slice(0, 300);
-const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (character) => ({
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-}[character]!));
 
 interface AssetStage {
   sha256: string;
@@ -92,8 +87,14 @@ interface AssetStage {
   size: string;
 }
 
+interface MemberInvite {
+  email: string;
+  roleId: string;
+}
+
 interface ImportMaps {
   organizationId: string;
+  defaultLocalProviderId: string | null;
   ids: Record<string, Map<string, string | null>>;
   roles: Map<string, string>;
   systemRoles: Map<string, string>;
@@ -101,6 +102,7 @@ interface ImportMaps {
   users: Map<string, string>;
   files: Map<string, FileRefRemap>;
   paths: Map<string, string | null>;
+  videoFileIds: string[];
   ownerId: string;
   ownerEmail: string;
 }
@@ -115,17 +117,18 @@ export class OrgImportService {
     private readonly _storage: StorageService,
     private readonly _encryption: EncryptionService,
     private readonly _designerDoc: DesignerDocService,
-    private readonly _notifications: NotificationService,
+    private readonly _organizations: OrganizationService,
     private readonly _audit: AuditService,
   ) {}
 
   private _publicJob(job: any) {
     if (!job) return null;
+    const { keyWrap: _keyWrap, stagedAssets: _stagedAssets, ...progress } = job.progress || {};
     return {
       id: job.id,
       kind: job.kind,
       status: job.status,
-      progress: job.progress,
+      progress,
       archiveSha256: job.archiveSha256,
       expiresAt: job.expiresAt,
       error: job.error,
@@ -229,25 +232,52 @@ export class OrgImportService {
   async validateUpload(orgId: string, ownerId: string, jobId: string, passphrase: string) {
     await this._assertOwner(orgId, ownerId);
     await this._assertDestination(orgId);
+    if (!isInngestEnabled()) {
+      throw new ServiceUnavailableException('Organization import requires Inngest background processing.');
+    }
     const job = await this._ownedJob(orgId, ownerId, jobId);
+    if (['validating', 'ready', 'pending', 'processing', 'completed'].includes(job.status)) {
+      return this._publicJob(job);
+    }
     if (job.status !== 'uploading' || !job.spoolPath) {
       throw new NotFoundException('Organization import upload not found.');
     }
-    const archiveSha256 = await sha256File(job.spoolPath);
-    const validation = await validateOrgArchive(job.spoolPath, passphrase);
-    const progress = {
-      uploadedBytes: statSync(job.spoolPath).size,
-      counts: validation.domainCounts,
-      archiveSha256,
-    };
-    const updated = await this._repository.markValidated(jobId, archiveSha256, progress);
-    if (updated.count !== 1) throw new BadRequestException('Import upload state changed. Retry validation.');
-    return {
-      counts: validation.domainCounts,
-      source: validation.manifest.source,
-      createdAt: validation.manifest.createdAt,
-      missingAssets: validation.manifest.counts.missingAssets || 0,
-    };
+    const manifest = readOrgArchiveManifest(job.spoolPath);
+    let archiveKey: Buffer | undefined;
+    try {
+      archiveKey = unwrapOrgArchiveKey(manifest.crypto, passphrase);
+    } catch {
+      throw new BadRequestException('Archive passphrase is incorrect or the archive is damaged.');
+    }
+    try {
+      const keyWrap = { kdf: manifest.crypto.kdf, wrappedKey: manifest.crypto.wrappedKey };
+      const claimed = await this._repository.startValidation(
+        jobId,
+        this._encryption.encrypt(archiveKey.toString('base64')),
+        { keyWrap },
+      );
+      if (claimed.count !== 1) return this._publicJob(await this._repository.getJob(jobId));
+    } finally {
+      archiveKey?.fill(0);
+    }
+    try {
+      await inngest.send({
+        name: ORG_PORTABILITY_IMPORT_EVENT,
+        data: { jobId, organizationId: orgId },
+        id: `org-portability-validation-${jobId}`,
+      });
+    } catch (error) {
+      await this._repository.resetValidationJob(jobId);
+      throw error;
+    }
+    await this._audit.record({
+      orgId,
+      userId: ownerId,
+      action: 'org.import.validation-requested',
+      resource: 'OrgPortabilityJob',
+      resourceId: jobId,
+    });
+    return this._publicJob(await this._repository.getJob(jobId));
   }
 
   async commitImport(orgId: string, ownerId: string, jobId: string, passphrase: string) {
@@ -258,27 +288,28 @@ export class OrgImportService {
     }
     const job = await this._ownedJob(orgId, ownerId, jobId);
     if (['pending', 'processing', 'completed'].includes(job.status)) return this._publicJob(job);
-    if (job.status !== 'uploading' || !job.spoolPath || !job.archiveSha256) {
-      throw new BadRequestException('Validate the uploaded archive before starting import.');
+    if (job.status !== 'ready' || !job.spoolPath || !job.archiveSha256 || !job.archiveKeyCiphertext) {
+      throw new BadRequestException('Wait for background archive validation before starting import.');
     }
-    if ((await sha256File(job.spoolPath)) !== job.archiveSha256) {
-      throw new BadRequestException('Archive checksum changed after validation. Upload it again.');
-    }
-    const validation = await validateOrgArchive(job.spoolPath, passphrase);
-    let archiveKey: Buffer | undefined;
+    const keyWrap = (job.progress as any)?.keyWrap;
+    if (!keyWrap) throw new BadRequestException('Archive key metadata is missing. Validate the upload again.');
+    let suppliedKey: Buffer | undefined;
+    let storedKey: Buffer | undefined;
     try {
-      archiveKey = unwrapOrgArchiveKey(validation.manifest.crypto, passphrase);
-      const ciphertext = this._encryption.encrypt(archiveKey.toString('base64'));
-      const claimed = await this._repository.prepareCommit(jobId, ciphertext, {
-        counts: validation.domainCounts,
-        archiveSha256: job.archiveSha256,
-      });
-      if (claimed.count !== 1) {
-        return this._publicJob(await this._repository.getJob(jobId));
+      suppliedKey = unwrapOrgArchiveKey(keyWrap, passphrase);
+      storedKey = Buffer.from(this._encryption.decrypt(job.archiveKeyCiphertext), 'base64');
+      if (suppliedKey.length !== storedKey.length || !timingSafeEqual(suppliedKey, storedKey)) {
+        throw new BadRequestException('Archive passphrase is incorrect.');
       }
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('Archive passphrase is incorrect.');
     } finally {
-      archiveKey?.fill(0);
+      suppliedKey?.fill(0);
+      storedKey?.fill(0);
     }
+    const claimed = await this._repository.prepareCommit(jobId, job.progress || {});
+    if (claimed.count !== 1) return this._publicJob(await this._repository.getJob(jobId));
     try {
       await inngest.send({
         name: ORG_PORTABILITY_IMPORT_EVENT,
@@ -300,6 +331,11 @@ export class OrgImportService {
   }
 
   async processImport(jobId: string): Promise<void> {
+    const validating = await this._repository.claimValidationJob(jobId);
+    if (validating.count) {
+      await this._processValidation(jobId);
+      return;
+    }
     let claimed = await this._repository.claimPendingJob(jobId);
     if (!claimed.count) claimed = await this._repository.claimProcessingJob(jobId);
     if (!claimed.count) return;
@@ -310,12 +346,12 @@ export class OrgImportService {
     let extraction: OrgArchiveExtraction | undefined;
     const stagedPaths: string[] = [];
     let committed = false;
-    let organizationName = 'your organization';
     try {
       if ((await sha256File(job.spoolPath)) !== job.archiveSha256) {
         throw new BadRequestException('Archive checksum changed before background import.');
       }
       await this._assertDestination(job.organizationId);
+      await this._cleanupStagedPaths(job.organizationId, (job.progress as any)?.stagedAssets || []);
       archiveKey = Buffer.from(this._encryption.decrypt(job.archiveKeyCiphertext), 'base64');
       extraction = await extractOrgArchive(job.spoolPath, path.dirname(job.spoolPath));
       if (!verifyOrgManifestMac(extraction.manifest, archiveKey)) {
@@ -324,27 +360,26 @@ export class OrgImportService {
       const secretRefs = decryptOrgSecretRefs(extraction.manifest.crypto.secrets, archiveKey);
       archiveKey.fill(0);
       archiveKey = undefined;
-      organizationName = extraction.manifest.source.name || organizationName;
-      const stages = await this._stageAssets(extraction, job.organizationId, stagedPaths);
+      const stages = await this._stageAssets(jobId, extraction, job.organizationId, stagedPaths, job.progress || {});
       const secrets = new Map(secretRefs.map((secret) => [`${secret.model}:${secret.id}:${secret.field}`, secret.value]));
-      const invited = await this._repository.transaction(async (tx) => {
+      const result = await this._repository.transaction(async (tx) => {
         const maps = await this._initialMaps(tx, job.organizationId, job.ownerId, extraction!, stages);
         await this._updateOrganization(tx, job.organizationId, extraction!);
         await this._importCustomRoles(tx, extraction!, maps);
-        const invitedUsers = await this._importMembers(tx, job.organizationId, maps, extraction!);
+        const invites = await this._mapMembers(extraction!, maps);
         for (const model of orgPortabilityImportOrder()) {
           await this._importModel(tx, model, extraction!, maps, secrets);
         }
         await this._importRelations(tx, extraction!, maps);
-        await this._restoreProfilePictures(tx, maps, invitedUsers.profilePictures);
         await this._repository.updateOrganization(tx, job.organizationId, { setupCompletedAt: new Date() });
-        const progress = {
-          counts: this._publicJob(job).progress?.counts || {},
+        await this._repository.completeJobInTransaction(tx, jobId, {
+          counts: (job.progress as any)?.counts || {},
+          source: extraction!.manifest.source,
+          createdAt: extraction!.manifest.createdAt,
           missingAssets: extraction!.manifest.counts.missingAssets || 0,
           completedAt: new Date().toISOString(),
-        };
-        await this._repository.completeJobInTransaction(tx, jobId, progress);
-        return invitedUsers.invited;
+        });
+        return { invites, videoFileIds: maps.videoFileIds, ownerEmail: maps.ownerEmail };
       });
       committed = true;
       rmSync(job.spoolPath, { force: true });
@@ -354,23 +389,13 @@ export class OrgImportService {
         action: 'org.import.completed',
         resource: 'OrgPortabilityJob',
         resourceId: jobId,
-        metadata: { counts: this._publicJob(job).progress?.counts || {} },
+        metadata: { counts: (job.progress as any)?.counts || {} },
       }).catch((error) => this._logger.warn(`Import audit failed for ${jobId}: ${safeError(error)}`));
-      await this._sendInvitations(organizationName, invited);
+      await this._sendInvitations(job.organizationId, job.ownerId, result.ownerEmail, result.invites);
+      await this._regenerateThumbnails(jobId, job.organizationId, result.videoFileIds);
     } catch (error) {
       if (!committed) {
-        try {
-          const adapter = await this._storage.getLocalAdapterForOrg(job.organizationId, false);
-          for (const stagedPath of new Set(stagedPaths)) {
-            try {
-              await adapter.removeFile(stagedPath);
-            } catch {
-              // Preserve the original import failure.
-            }
-          }
-        } catch {
-          // Storage setup can be the original failure; job cleanup still runs.
-        }
+        await this._cleanupStagedPaths(job.organizationId, stagedPaths);
         rmSync(job.spoolPath, { force: true });
         const message = safeError(error);
         this._logger.warn(`Organization import ${jobId} failed: ${message}`);
@@ -384,10 +409,52 @@ export class OrgImportService {
     }
   }
 
+  private async _processValidation(jobId: string): Promise<void> {
+    const job = await this._repository.getJob(jobId);
+    if (!job?.archiveKeyCiphertext || !job.spoolPath) return;
+    let archiveKey: Buffer | undefined;
+    try {
+      const archiveSha256 = await sha256File(job.spoolPath);
+      archiveKey = Buffer.from(this._encryption.decrypt(job.archiveKeyCiphertext), 'base64');
+      const validation = await validateOrgArchiveWithKey(job.spoolPath, archiveKey);
+      await this._repository.completeValidation(jobId, archiveSha256, {
+        keyWrap: (job.progress as any)?.keyWrap,
+        counts: validation.domainCounts,
+        source: validation.manifest.source,
+        createdAt: validation.manifest.createdAt,
+        missingAssets: validation.manifest.counts.missingAssets || 0,
+      });
+    } catch (error) {
+      rmSync(job.spoolPath, { force: true });
+      const message = safeError(error);
+      this._logger.warn(`Organization import validation ${jobId} failed: ${message}`);
+      await this._repository.failJob(jobId, message, { archiveSha256: job.archiveSha256 });
+    } finally {
+      archiveKey?.fill(0);
+    }
+  }
+
+  private async _cleanupStagedPaths(orgId: string, stagedPaths: string[]): Promise<void> {
+    try {
+      const adapter = await this._storage.getLocalAdapterForOrg(orgId, false);
+      for (const stagedPath of new Set(stagedPaths)) {
+        try {
+          await adapter.removeFile(stagedPath);
+        } catch {
+          // Preserve the original import failure.
+        }
+      }
+    } catch {
+      // Storage setup can be the original failure; job cleanup still runs.
+    }
+  }
+
   private async _stageAssets(
+    jobId: string,
     extraction: OrgArchiveExtraction,
     orgId: string,
     stagedPaths: string[],
+    progress: Prisma.JsonValue,
   ): Promise<Record<string, AssetStage>> {
     const adapter = await this._storage.getLocalAdapterForOrg(orgId, false);
     const stages: Record<string, AssetStage> = {};
@@ -403,14 +470,13 @@ export class OrgImportService {
       if (!source || BigInt(statSync(source).size) !== BigInt(asset.size)) {
         throw new BadRequestException('Archive asset is missing.');
       }
-      const uploaded = await adapter.uploadFile({
-        path: source,
-        size: Number(asset.size),
-        originalname: asset.sha256,
-        mimetype: asset.mime,
-      } as any);
-      const stage = { sha256: asset.sha256, path: uploaded.path, mime: asset.mime, size: asset.size };
-      stagedPaths.push(uploaded.path);
+      const uploadedPath = await adapter.writeFileStream(source, asset.mime);
+      const stage = { sha256: asset.sha256, path: uploadedPath, mime: asset.mime, size: asset.size };
+      stagedPaths.push(uploadedPath);
+      await this._repository.updateProgress(jobId, {
+        ...(progress as any),
+        stagedAssets: [...stagedPaths],
+      });
       byHash.set(asset.sha256, stage);
       stages[asset.fileId] = stage;
     }
@@ -424,14 +490,16 @@ export class OrgImportService {
     extraction: OrgArchiveExtraction,
     assets: Record<string, AssetStage>,
   ): Promise<ImportMaps> {
-    const [systemRoles, permissions, owner] = await Promise.all([
+    const [systemRoles, permissions, owner, localProvider] = await Promise.all([
       this._repository.systemRoles(tx),
       this._repository.permissions(tx),
       this._repository.userById(tx, ownerId),
+      this._repository.defaultLocalProvider(tx, orgId),
     ]);
     if (!owner) throw new BadRequestException('Importing owner account not found.');
     const maps: ImportMaps = {
       organizationId: orgId,
+      defaultLocalProviderId: localProvider?.id || null,
       ids: Object.fromEntries([...orgPortabilityModelNames(), 'customRoles'].map((model) => [model, new Map<string, string | null>()])),
       roles: new Map(),
       systemRoles: new Map(systemRoles.map((role) => [role.key, role.id])),
@@ -439,6 +507,7 @@ export class OrgImportService {
       users: new Map(),
       files: new Map(),
       paths: new Map(),
+      videoFileIds: [],
       ownerId,
       ownerEmail: owner.email.toLowerCase(),
     };
@@ -450,6 +519,10 @@ export class OrgImportService {
     for (const model of orgPortabilityModelNames()) {
       for (const source of await readOrgDomainRows(extraction, model)) {
         if (!source.id) throw new BadRequestException(`Archive ${model} row has no id.`);
+        if (model === 'StorageProviderConfig' && source.type === 'LOCAL' && maps.defaultLocalProviderId) {
+          maps.ids.StorageProviderConfig.set(source.id, maps.defaultLocalProviderId);
+          continue;
+        }
         if (model === 'File' && extraction.manifest.assets[source.id]?.missing) {
           maps.ids.File.set(source.id, null);
           maps.paths.set(source.path, null);
@@ -462,6 +535,7 @@ export class OrgImportService {
           if (!stage) throw new BadRequestException('Archive file bytes are missing.');
           maps.files.set(source.id, { id, path: stage.path });
           maps.paths.set(source.path, stage.path);
+          if (source.type === 'video' || stage.mime.startsWith('video/')) maps.videoFileIds.push(id);
         }
       }
     }
@@ -492,9 +566,11 @@ export class OrgImportService {
     extraction: OrgArchiveExtraction,
     maps: ImportMaps,
   ): Promise<void> {
+    const roles: Record<string, unknown>[] = [];
+    const assignments: Record<string, unknown>[] = [];
     for (const source of await readOrgDomainRows(extraction, 'customRoles')) {
       const roleId = maps.roles.get(source.id)!;
-      await this._repository.createModel(tx, 'appRole', {
+      roles.push({
         id: roleId,
         organizationId: maps.organizationId,
         key: source.key,
@@ -507,8 +583,12 @@ export class OrgImportService {
       for (const assignment of source.permissions || []) {
         const permissionId = maps.permissions.get(`${assignment.permission.resource}:${assignment.permission.action}`);
         if (!permissionId) throw new BadRequestException('Archive role permission is unavailable on this deployment.');
-        await this._repository.createModel(tx, 'appRolePermission', { roleId, permissionId });
+        assignments.push({ roleId, permissionId });
       }
+    }
+    if (roles.length) await this._repository.createManyModel(tx, 'appRole', roles);
+    for (let offset = 0; offset < assignments.length; offset += INSERT_BATCH_SIZE) {
+      await this._repository.createManyModel(tx, 'appRolePermission', assignments.slice(offset, offset + INSERT_BATCH_SIZE));
     }
   }
 
@@ -519,7 +599,7 @@ export class OrgImportService {
       if (!node || typeof node !== 'object') return node;
       if (Array.isArray(node)) {
         if (key === 'integrations') return node.map((id) => maps.ids.Integration.get(id) ?? null);
-        if (key === 'mentions') return node.map((id) => maps.users.get(id) || null);
+        if (key === 'mentions') return node.map((id) => maps.users.get(id) || maps.ownerId);
         if (key === 'logoFileIds') return node.map((id) => maps.ids.File.get(id) ?? null);
         return node.map((item) => walk(item));
       }
@@ -578,11 +658,7 @@ export class OrgImportService {
             continue;
           }
           if (relation.type === 'User') {
-            const mapped = maps.users.get(old);
-            if (!mapped && definition.fields.find((candidate) => candidate.name === field)?.isRequired) {
-              throw new BadRequestException(`Could not remap ${model}.${field}.`);
-            }
-            row[field] = mapped || null;
+            row[field] = maps.users.get(old) || maps.ownerId;
             continue;
           }
           const mapped = maps.ids[relation.type]?.get(old);
@@ -596,7 +672,7 @@ export class OrgImportService {
     }
     for (const field of USER_FIELDS) {
       if (!relatedFields.has(field) && field in row && row[field]) {
-        row[field] = maps.users.get(row[field]) || null;
+        row[field] = maps.users.get(row[field]) || maps.ownerId;
       }
     }
     if (model === 'ShortLink' && row.postId) row.postId = maps.ids.Post.get(row.postId) ?? null;
@@ -622,6 +698,10 @@ export class OrgImportService {
     }
     if (model === 'FileFolder') row.storageProviderId = null;
     if (model === 'AIPromptTemplate') row.globalKey = null;
+    if (model === 'File') {
+      row.thumbnail = null;
+      row.thumbnailTimestamp = null;
+    }
 
     for (const field of ORG_PORTABILITY_SECRET_FIELDS[model] || []) {
       const value = secrets.get(`${model}:${source.id}:${field}`);
@@ -682,9 +762,10 @@ export class OrgImportService {
     maps: ImportMaps,
     secrets: Map<string, string>,
   ): Promise<void> {
-    const rows = await readOrgDomainRows(extraction, model);
-    for (const source of this._dependencyRows(model, rows)) {
+    const mappedRows: Record<string, unknown>[] = [];
+    for (const source of this._dependencyRows(model, await readOrgDomainRows(extraction, model))) {
       if (model === 'File' && extraction.manifest.assets[source.id]?.missing) continue;
+      if (model === 'StorageProviderConfig' && source.type === 'LOCAL' && maps.defaultLocalProviderId) continue;
       const row = this._mapRow(model, source, maps, secrets);
       if (model === 'File') {
         const stage = maps.files.get(source.id)!;
@@ -696,84 +777,30 @@ export class OrgImportService {
           this._designerDoc.stripIds(this._mapJson(row.doc, maps)),
         );
       }
-      await this._repository.createModel(tx, lowerFirst(model), row);
+      mappedRows.push(row);
+    }
+    for (let offset = 0; offset < mappedRows.length; offset += INSERT_BATCH_SIZE) {
+      await this._repository.createManyModel(tx, lowerFirst(model), mappedRows.slice(offset, offset + INSERT_BATCH_SIZE));
     }
   }
 
-  private async _importMembers(
-    tx: OrgImportTransaction,
-    orgId: string,
-    maps: ImportMaps,
+  private async _mapMembers(
     extraction: OrgArchiveExtraction,
-  ): Promise<{
-    invited: { id: string; email: string }[];
-    profilePictures: Map<string, string>;
-  }> {
-    const invited: { id: string; email: string }[] = [];
-    const profilePictures = new Map<string, string>();
+    maps: ImportMaps,
+  ): Promise<MemberInvite[]> {
+    const invites: MemberInvite[] = [];
     for (const membership of await readOrgDomainRows(extraction, 'members')) {
       const email = String(membership.user?.email || '').toLowerCase();
       if (!email) throw new BadRequestException('Archive member has no email.');
-      let userId = email === maps.ownerEmail ? maps.ownerId : undefined;
-      if (!userId) userId = (await this._repository.userByEmail(tx, email))?.id;
-      if (!userId) {
-        const profile = membership.user.profile || {};
-        const created = await this._repository.createUser(tx, {
-          email,
-          providerName: 'LOCAL',
-          password: null,
-          activated: false,
-          profile: {
-            create: {
-              name: profile.name,
-              lastName: profile.lastName,
-              bio: profile.bio,
-              avatarUrl: maps.paths.has(profile.avatarUrl) ? maps.paths.get(profile.avatarUrl) : profile.avatarUrl,
-              timezone: profile.timezone,
-              preferredLanguage: profile.preferredLanguage,
-            },
-          },
-          ...(membership.user.notificationPreference ? {
-            notificationPreference: {
-              create: {
-                masters: membership.user.notificationPreference.masters,
-                categories: membership.user.notificationPreference.categories,
-                digestFrequency: membership.user.notificationPreference.digestFrequency,
-              },
-            },
-          } : {}),
-        });
-        userId = created.id;
-        invited.push({ id: created.id, email });
-        if (profile.pictureId) profilePictures.set(userId, profile.pictureId);
-      }
-      maps.users.set(membership.userId, userId);
-      if (userId === maps.ownerId) continue;
+      maps.users.set(membership.userId, maps.ownerId);
+      if (email === maps.ownerEmail) continue;
       const customRole = maps.roles.get(membership.roleId);
       const roleKey = membership.roleRef?.key === 'owner' ? 'admin' : membership.roleRef?.key;
       const roleId = customRole || maps.systemRoles.get(roleKey || 'member');
       if (!roleId) throw new BadRequestException('Archive member role is unavailable on this deployment.');
-      await this._repository.createModel(tx, 'userOrganization', {
-        id: randomUUID(),
-        userId,
-        organizationId: orgId,
-        roleId,
-        disabled: membership.disabled,
-        createdAt: membership.createdAt ? new Date(membership.createdAt) : undefined,
-      });
+      invites.push({ email, roleId });
     }
-    return { invited, profilePictures };
-  }
-
-  private async _restoreProfilePictures(
-    tx: OrgImportTransaction,
-    maps: ImportMaps,
-    profilePictures: Map<string, string>,
-  ): Promise<void> {
-    for (const [userId, sourceFileId] of profilePictures) {
-      const pictureId = maps.ids.File.get(sourceFileId) ?? null;
-      await this._repository.updateProfilePicture(tx, userId, pictureId);
-    }
+    return invites;
   }
 
   private async _importRelations(
@@ -781,55 +808,77 @@ export class OrgImportService {
     extraction: OrgArchiveExtraction,
     maps: ImportMaps,
   ): Promise<void> {
-    for (const source of await readOrgDomainRows(extraction, 'tagsPosts')) {
-      await this._repository.createModel(tx, 'tagsPosts', {
-        postId: maps.ids.Post.get(source.postId),
-        tagId: maps.ids.Tags.get(source.tagId),
-        createdAt: source.createdAt ? new Date(source.createdAt) : undefined,
-        updatedAt: source.updatedAt ? new Date(source.updatedAt) : undefined,
-      });
+    const tagRows = (await readOrgDomainRows(extraction, 'tagsPosts')).map((source) => ({
+      postId: maps.ids.Post.get(source.postId),
+      tagId: maps.ids.Tags.get(source.tagId),
+      createdAt: source.createdAt ? new Date(source.createdAt) : undefined,
+      updatedAt: source.updatedAt ? new Date(source.updatedAt) : undefined,
+    }));
+    for (let offset = 0; offset < tagRows.length; offset += INSERT_BATCH_SIZE) {
+      await this._repository.createManyModel(tx, 'tagsPosts', tagRows.slice(offset, offset + INSERT_BATCH_SIZE));
     }
-    for (const source of await readOrgDomainRows(extraction, 'postCommentRead')) {
-      await this._repository.createModel(tx, 'postCommentRead', {
-        id: randomUUID(),
-        postId: maps.ids.Post.get(source.postId),
-        userId: maps.users.get(source.userId),
-        lastReadAt: new Date(source.lastReadAt),
-        lastReadCount: source.lastReadCount,
-        updatedAt: source.updatedAt ? new Date(source.updatedAt) : undefined,
-      });
+    const commentReads = (await readOrgDomainRows(extraction, 'postCommentRead')).map((source) => ({
+      id: randomUUID(),
+      postId: maps.ids.Post.get(source.postId),
+      userId: maps.users.get(source.userId) || maps.ownerId,
+      lastReadAt: new Date(source.lastReadAt),
+      lastReadCount: source.lastReadCount,
+      updatedAt: source.updatedAt ? new Date(source.updatedAt) : undefined,
+    }));
+    for (let offset = 0; offset < commentReads.length; offset += INSERT_BATCH_SIZE) {
+      await this._repository.createManyModel(tx, 'postCommentRead', commentReads.slice(offset, offset + INSERT_BATCH_SIZE));
     }
-    for (const source of await readOrgDomainRows(extraction, 'notificationRead')) {
-      await this._repository.createModel(tx, 'notificationRead', {
-        id: randomUUID(),
-        notificationId: maps.ids.Notifications.get(source.notificationId),
-        userId: maps.users.get(source.userId),
-        readAt: source.readAt ? new Date(source.readAt) : undefined,
-      });
+    const notificationReads = (await readOrgDomainRows(extraction, 'notificationRead')).map((source) => ({
+      id: randomUUID(),
+      notificationId: maps.ids.Notifications.get(source.notificationId),
+      userId: maps.users.get(source.userId) || maps.ownerId,
+      readAt: source.readAt ? new Date(source.readAt) : undefined,
+    }));
+    for (let offset = 0; offset < notificationReads.length; offset += INSERT_BATCH_SIZE) {
+      await this._repository.createManyModel(tx, 'notificationRead', notificationReads.slice(offset, offset + INSERT_BATCH_SIZE));
     }
+    const webhooks = new Map<string, string[]>();
     for (const source of await readOrgDomainRows(extraction, 'integrationWebhooks')) {
       const webhookId = maps.ids.Webhooks.get(source.webhookId);
       const integrationId = maps.ids.Integration.get(source.integrationId);
-      if (webhookId && integrationId) {
-        await this._repository.connectIntegrationWebhook(tx, webhookId, integrationId);
-      }
+      if (!webhookId || !integrationId) continue;
+      webhooks.set(webhookId, [...(webhooks.get(webhookId) || []), integrationId]);
+    }
+    for (const [webhookId, integrationIds] of webhooks) {
+      await this._repository.connectIntegrationWebhooks(tx, webhookId, integrationIds);
     }
   }
 
   private async _sendInvitations(
-    organizationName: string,
-    invited: { id: string; email: string }[],
+    orgId: string,
+    ownerId: string,
+    ownerEmail: string,
+    invites: MemberInvite[],
   ): Promise<void> {
-    for (const invite of invited) {
+    const actor = { id: ownerId, email: ownerEmail, isSuperAdmin: false } as User;
+    for (const invite of invites) {
       try {
-        const token = AuthService.signJWT({ id: invite.id, displayName: invite.email });
-        await this._notifications.sendEmail(
-          invite.email,
-          'You are invited to a Postmill organization',
-          `Click <a href="${process.env.FRONTEND_URL}/auth/activate/${token}">here</a> to activate your account and join ${escapeHtml(organizationName)}.`,
-        );
+        await this._organizations.inviteTeamMember(orgId, actor, {
+          email: invite.email,
+          roleId: invite.roleId,
+          sendEmail: true,
+        });
       } catch (error) {
         this._logger.warn(`Imported member invitation failed: ${safeError(error)}`);
+      }
+    }
+  }
+
+  private async _regenerateThumbnails(jobId: string, orgId: string, fileIds: string[]): Promise<void> {
+    for (const fileId of fileIds) {
+      try {
+        await inngest.send({
+          name: 'media/video-thumbnail.generate',
+          data: { organizationId: orgId, fileId },
+          id: `org-portability-thumbnail-${jobId}-${fileId}`,
+        });
+      } catch (error) {
+        this._logger.warn(`Imported video thumbnail scheduling failed for ${jobId}: ${safeError(error)}`);
       }
     }
   }

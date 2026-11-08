@@ -5,6 +5,7 @@ export const ORG_PORTABILITY_JOB_TTL_HOURS = 24;
 export const ORG_PORTABILITY_BATCH_SIZE = 250;
 export const ORG_PORTABILITY_MAX_ARCHIVE_BYTES = 4n * 1024n * 1024n * 1024n - 1024n * 1024n;
 export const ORG_PORTABILITY_MAX_ASSET_BYTES = 2n * 1024n * 1024n * 1024n - 1n;
+export const ORG_PORTABILITY_MAX_DOMAIN_BYTES = 64 * 1024 * 1024;
 
 const envBytes = (name: string, fallback: bigint): bigint => {
   const raw = process.env[name];

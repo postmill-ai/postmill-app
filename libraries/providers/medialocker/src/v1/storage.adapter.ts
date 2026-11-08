@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import { readFile } from 'fs/promises';
+import { createReadStream } from 'fs';
 import { Readable } from 'stream';
 import { metadata as providerMetadata } from './metadata';
 import {
@@ -13,6 +14,7 @@ import {
   parseDataUrl,
   fromBuffer,
   fromFile,
+  storedArtifactFile,
   DetectedFileType,
   UploadValidationError,
 } from '@postmill-ai/provider-kernel';
@@ -179,8 +181,9 @@ export class MediaLockerStorage implements StorageCapability {
   // objects is out of scope for this adapter.
   private async uploadWithPresign(
     key: string,
-    body: Buffer,
+    body: Buffer | Readable,
     contentType: string,
+    size?: number,
   ): Promise<void> {
     const presign = await this.api<PresignUploadResponse>('/api/presign/upload', {
       method: 'POST',
@@ -188,7 +191,7 @@ export class MediaLockerStorage implements StorageCapability {
         bucketId: this.bucketId,
         key,
         contentType,
-        size: body.length,
+        size: size ?? (body as Buffer).length,
       }),
     });
 
@@ -199,7 +202,8 @@ export class MediaLockerStorage implements StorageCapability {
       method: presign.method || 'PUT',
       headers: presign.headers,
       body,
-    });
+      ...(body instanceof Readable ? { duplex: 'half' } : {}),
+    } as any);
     if (!put.ok) {
       throw new Error(`MediaLocker presigned PUT failed (HTTP ${put.status})`);
     }
@@ -421,6 +425,13 @@ export class MediaLockerStorage implements StorageCapability {
 
     return this.stableRef(key);
   }
+
+  async writeFileStream(filePath: string, contentType?: string): Promise<string> {
+    const { mime, ext, size } = await storedArtifactFile(filePath, contentType);
+    const key = `${randomBytes(8).toString('hex')}.${ext}`;
+    await this.uploadWithPresign(key, createReadStream(filePath), mime, size);
+    return this.stableRef(key);
+  }
 }
 
 class MediaLockerStorageCapability implements StorageCapability {
@@ -483,6 +494,9 @@ class MediaLockerStorageCapability implements StorageCapability {
   }
   writeBuffer(buffer: Buffer, contentType?: string) {
     return this.a.writeBuffer(buffer, contentType);
+  }
+  writeFileStream(path: string, contentType?: string) {
+    return this.a.writeFileStream(path, contentType);
   }
   readFile(pathOrKey: string) {
     return this.a.readFile(pathOrKey);

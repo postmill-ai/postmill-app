@@ -1,13 +1,15 @@
 import { BadRequestException } from '@nestjs/common';
-import { createReadStream, createWriteStream, mkdirSync, mkdtempSync, rmSync, statSync } from 'fs';
+import { closeSync, createReadStream, createWriteStream, mkdirSync, mkdtempSync, openSync, readSync, rmSync, statSync } from 'fs';
 import { createHash } from 'crypto';
 import { once } from 'events';
 import path from 'path';
 import { tmpdir } from 'os';
 import { createInterface } from 'readline';
+import { inflateRawSync } from 'zlib';
 import { UnzipInflate, Unzip } from 'fflate';
 import {
   ORG_EXPORT_SCHEMA,
+  ORG_PORTABILITY_MAX_DOMAIN_BYTES,
   orgPortabilityMaxArchiveBytes,
   orgPortabilityMaxAssetBytes,
   type OrgPortabilityManifest,
@@ -16,7 +18,6 @@ import { orgPortabilityDomainNames } from './org-portability.domains';
 import { unwrapOrgArchiveKey, verifyOrgManifestMac } from './org-portability.crypto';
 
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
-const MAX_DOMAIN_BYTES = 64 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRIES = 65_000;
 const invalid = (message: string): never => {
   throw new BadRequestException(message);
@@ -41,7 +42,7 @@ const assetName = (entry: string): string => entry.slice('assets/'.length);
 const checkEntrySize = (kind: string, size: bigint): void => {
   if (size > orgPortabilityMaxAssetBytes()) invalid('Archive entry exceeds the per-asset limit.');
   if (kind === 'manifest' && size > MAX_MANIFEST_BYTES) invalid('Archive manifest is too large.');
-  if (kind === 'domain' && size > MAX_DOMAIN_BYTES) invalid('Archive domain payload is too large.');
+  if (kind === 'domain' && size > ORG_PORTABILITY_MAX_DOMAIN_BYTES) invalid('Archive domain payload is too large.');
 };
 
 export interface OrgArchiveValidation {
@@ -56,9 +57,9 @@ export interface OrgArchiveExtraction {
   manifest: OrgPortabilityManifest;
 }
 
-export async function validateOrgArchive(
+export async function validateOrgArchiveWithKey(
   archivePath: string,
-  passphrase: string,
+  archiveKey: Buffer,
 ): Promise<OrgArchiveValidation> {
   if (BigInt(statSync(archivePath).size) > orgPortabilityMaxArchiveBytes()) {
     return invalid('Archive exceeds the import size limit.');
@@ -135,12 +136,6 @@ export async function validateOrgArchive(
   if (!manifest.crypto || !manifest.integrity || !manifest.assets || !manifest.counts || !manifest.domains) {
     invalid('Archive manifest is incomplete.');
   }
-  let archiveKey: Buffer;
-  try {
-    archiveKey = unwrapOrgArchiveKey(manifest.crypto, passphrase);
-  } catch {
-    return invalid('Archive passphrase is incorrect or the archive is damaged.');
-  }
   try {
     if (!verifyOrgManifestMac(manifest, archiveKey)) invalid('Archive integrity verification failed.');
 
@@ -189,10 +184,94 @@ export async function validateOrgArchive(
   } catch (error) {
     if (error instanceof BadRequestException) throw error;
     return invalid('Archive metadata is invalid.');
+  }
+  return { manifest, domainCounts };
+}
+
+export async function validateOrgArchive(
+  archivePath: string,
+  passphrase: string,
+): Promise<OrgArchiveValidation> {
+  const manifest = readOrgArchiveManifest(archivePath);
+  let archiveKey: Buffer;
+  try {
+    archiveKey = unwrapOrgArchiveKey(manifest.crypto, passphrase);
+  } catch {
+    return invalid('Archive passphrase is incorrect or the archive is damaged.');
+  }
+  try {
+    return await validateOrgArchiveWithKey(archivePath, archiveKey);
   } finally {
     archiveKey.fill(0);
   }
-  return { manifest, domainCounts };
+}
+
+export function readOrgArchiveManifest(archivePath: string): OrgPortabilityManifest {
+  const fileSize = statSync(archivePath).size;
+  if (fileSize < 22) invalid('Archive is damaged or truncated.');
+  const fd = openSync(archivePath, 'r');
+  const readAt = (offset: number, length: number): Buffer => {
+    const buffer = Buffer.alloc(length);
+    const read = readSync(fd, buffer, 0, length, offset);
+    if (read !== length) invalid('Archive is damaged or truncated.');
+    return buffer;
+  };
+  try {
+    const tailLength = Math.min(fileSize, 65_557);
+    const tail = readAt(fileSize - tailLength, tailLength);
+    let eocd = -1;
+    for (let index = tail.length - 22; index >= 0; index--) {
+      if (tail.readUInt32LE(index) === 0x06054b50) {
+        eocd = index;
+        break;
+      }
+    }
+    if (eocd < 0) invalid('Archive central directory is missing.');
+    const centralSize = tail.readUInt32LE(eocd + 12);
+    const centralOffset = tail.readUInt32LE(eocd + 16);
+    if (centralSize > 64 * 1024 * 1024 || centralOffset + centralSize > fileSize) {
+      invalid('Archive central directory is invalid.');
+    }
+    const central = readAt(centralOffset, centralSize);
+    let cursor = 0;
+    while (cursor + 46 <= central.length) {
+      if (central.readUInt32LE(cursor) !== 0x02014b50) invalid('Archive central directory is damaged.');
+      const method = central.readUInt16LE(cursor + 10);
+      const compressedSize = central.readUInt32LE(cursor + 20);
+      const uncompressedSize = central.readUInt32LE(cursor + 24);
+      const nameLength = central.readUInt16LE(cursor + 28);
+      const extraLength = central.readUInt16LE(cursor + 30);
+      const commentLength = central.readUInt16LE(cursor + 32);
+      const localOffset = central.readUInt32LE(cursor + 42);
+      const name = central.subarray(cursor + 46, cursor + 46 + nameLength).toString('utf8');
+      if (name === 'manifest.json') {
+        if (uncompressedSize > MAX_MANIFEST_BYTES || compressedSize > MAX_MANIFEST_BYTES) {
+          invalid('Archive manifest is too large.');
+        }
+        const local = readAt(localOffset, 30);
+        if (local.readUInt32LE(0) !== 0x04034b50) invalid('Archive manifest header is damaged.');
+        const localNameLength = local.readUInt16LE(26);
+        const localExtraLength = local.readUInt16LE(28);
+        const dataOffset = localOffset + 30 + localNameLength + localExtraLength;
+        const compressed = readAt(dataOffset, compressedSize);
+        const text = method === 8
+          ? Buffer.from(inflateRawSync(compressed)).toString('utf8')
+          : method === 0 ? compressed.toString('utf8') : invalid('Archive manifest compression is unsupported.');
+        if (Buffer.byteLength(text) > MAX_MANIFEST_BYTES) invalid('Archive manifest is too large.');
+        const manifest = JSON.parse(text) as OrgPortabilityManifest;
+        if (manifest.schema !== ORG_EXPORT_SCHEMA) invalid('Archive format is not supported.');
+        if (!manifest.crypto || !manifest.integrity) invalid('Archive manifest is incomplete.');
+        return manifest;
+      }
+      cursor += 46 + nameLength + extraLength + commentLength;
+    }
+    return invalid('Archive manifest is missing.');
+  } catch (error) {
+    if (error instanceof BadRequestException) throw error;
+    return invalid('Archive manifest is not valid JSON.');
+  } finally {
+    closeSync(fd);
+  }
 }
 
 export async function extractOrgArchive(

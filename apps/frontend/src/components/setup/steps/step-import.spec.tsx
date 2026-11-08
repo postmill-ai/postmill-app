@@ -41,7 +41,12 @@ describe('StepImport', () => {
         return jsonResponse({ uploadedBytes: body.offset + Buffer.from(body.data, 'base64').length });
       }
       if (url.endsWith('/validate')) {
-        return jsonResponse({ source: { name: 'Source Org' }, createdAt: new Date().toISOString(), missingAssets: 1 });
+        polledJob = {
+          id: 'job-1',
+          status: 'ready',
+          progress: { source: { name: 'Source Org' }, createdAt: new Date().toISOString(), missingAssets: 1 },
+        };
+        return jsonResponse({ id: 'job-1', status: 'validating' });
       }
       if (url.endsWith('/commit')) return jsonResponse({ id: 'job-1', status: 'pending' });
       throw new Error(`Unexpected request: ${url}`);

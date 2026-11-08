@@ -48,12 +48,12 @@ export function StepImport() {
   const [passphrase, setPassphrase] = useState('');
   const [job, setJob] = useState<ImportJob | null>(null);
   const [summary, setSummary] = useState<ArchiveSummary | null>(null);
-  const [phase, setPhase] = useState<'idle' | 'uploading' | 'ready' | 'starting' | 'processing' | 'completed' | 'error'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'uploading' | 'validating' | 'ready' | 'starting' | 'processing' | 'completed' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
 
   const loadJob = useCallback(async (url: string) => (await fetch(url)).json(), [fetch]);
   const { data: polled } = useSWR<ImportJob>(
-    phase === 'processing' && job?.id ? `/org-portability/import-uploads/${job.id}` : null,
+    ['validating', 'processing'].includes(phase) && job?.id ? `/org-portability/import-uploads/${job.id}` : null,
     loadJob,
     { refreshInterval: 2000, revalidateOnFocus: false },
   );
@@ -61,6 +61,11 @@ export function StepImport() {
   useEffect(() => {
     if (!polled) return;
     setJob(polled);
+    if (polled.status === 'ready') {
+      setSummary(polled.progress as unknown as ArchiveSummary);
+      setPhase('ready');
+      return;
+    }
     if (polled.status === 'completed') {
       setPhase('completed');
       return;
@@ -107,8 +112,8 @@ export function StepImport() {
         body: JSON.stringify({ passphrase }),
       });
       if (!validatedResponse.ok) throw new Error(await responseError(validatedResponse, t('setup_import_validation_failed', 'The archive could not be validated. Check the file and passphrase.')));
-      setSummary(await validatedResponse.json());
-      setPhase('ready');
+      setJob(await validatedResponse.json());
+      setPhase('validating');
     } catch (caught) {
       setPhase('error');
       setError(caught instanceof Error ? caught.message : t('setup_import_failed', 'The organization import failed.'));
@@ -133,7 +138,7 @@ export function StepImport() {
     }
   }, [job, passphrase, fetch, t]);
 
-  const busy = ['uploading', 'starting', 'processing', 'completed'].includes(phase);
+  const busy = ['uploading', 'validating', 'starting', 'processing', 'completed'].includes(phase);
   const isOwner = !permissions.isResolved || permissions.isOwner || permissions.isSuperAdmin;
 
   return (
@@ -208,6 +213,11 @@ export function StepImport() {
           </div>
         )}
 
+        {phase === 'validating' && (
+          <p className="text-[13px] text-newTableText" role="status">
+            {t('setup_import_validating', 'Verifying the archive in the background. You will be able to start the import when verification finishes.')}
+          </p>
+        )}
         {phase === 'processing' && (
           <p className="text-[13px] text-newTableText" role="status">
             {t('setup_import_processing', 'Importing in the background. Keep this page open; you will be redirected when it finishes.')}

@@ -40,6 +40,7 @@ import {
 import {
   ORG_EXPORT_SCHEMA,
   ORG_PORTABILITY_BATCH_SIZE,
+  ORG_PORTABILITY_MAX_DOMAIN_BYTES,
   ORG_PORTABILITY_EXPORT_EVENT,
   orgPortabilityMaxArchiveBytes,
   orgPortabilityMaxAssetBytes,
@@ -296,13 +297,20 @@ export class OrgPortabilityService {
     rows: AsyncIterable<unknown>,
   ): Promise<void> {
     let count = 0;
+    let bytes = 0;
     const hash = createHash('sha256');
     await writer.addNdjson(`domains/${name}.ndjson`, (async function* () {
       for await (const row of rows) {
         count++;
         yield row;
       }
-    })(), (chunk) => hash.update(chunk));
+    })(), (chunk) => {
+      bytes += chunk.length;
+      if (bytes > ORG_PORTABILITY_MAX_DOMAIN_BYTES) {
+        throw new Error(`Organization export domain ${name} exceeds the 64 MiB import limit`);
+      }
+      hash.update(chunk);
+    });
     counts[name] = count;
     domainHashes[name] = hash.digest('hex');
   }

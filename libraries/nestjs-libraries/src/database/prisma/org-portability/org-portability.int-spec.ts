@@ -12,6 +12,7 @@ import { OrgPortabilityService } from './org-portability.service';
 import { OrgImportRepository } from './org-import.repository';
 import { OrgImportService } from './org-import.service';
 import { createOrgArchiveKey, wrapOrgArchiveKey } from './org-portability.crypto';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 
 vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
   inngest: { send: vi.fn(async () => undefined) },
@@ -30,10 +31,10 @@ const localAdapter = (root: string, missingPath?: string) => ({
     if (filePath === missingPath) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
     return createReadStream(filePath);
   },
-  uploadFile: async (file: { path: string }) => {
+  writeFileStream: async (sourcePath: string) => {
     const destination = path.join(root, `${randomUUID()}.asset`);
-    writeFileSync(destination, readFileSync(file.path), { mode: 0o600 });
-    return { path: destination };
+    writeFileSync(destination, readFileSync(sourcePath), { mode: 0o600 });
+    return destination;
   },
   removeFile: async (filePath: string) => rmSync(filePath, { force: true }),
 });
@@ -81,7 +82,7 @@ describe('organization portability across two deployments', () => {
     process.env.JWT_SECRET = 'source-jwt-secret';
     const encryption = new EncryptionService();
     const audit = { record: vi.fn(async () => undefined) };
-    const notifications = { sendEmail: vi.fn(async () => undefined) };
+    const organizations = { inviteTeamMember: vi.fn(async () => ({ url: 'https://example.test/invite' })) };
     const designerDoc = { stripIds: (doc: any) => doc, assignIdsAndNormalize: (doc: any) => doc };
     let sourceAsset = '';
     try {
@@ -89,12 +90,21 @@ describe('organization portability across two deployments', () => {
       await seedIdentity(destination, 'destination');
       const sourceOwner = await createUser(source, 'owner@example.test', 'Source Owner');
       const sourceMember = await createUser(source, 'member@example.test', 'Source Member');
+      const formerMember = await createUser(source, 'former@example.test', 'Former Member');
       const destinationOwner = await createUser(destination, 'destination@example.test', 'Destination Owner');
       const sourceOrg = await source.organization.create({
-        data: { name: 'Source Organization', setupCompletedAt: new Date() },
+        data: {
+          name: 'Source Organization',
+          setupCompletedAt: new Date(),
+          storageProviders: { create: { type: 'LOCAL', name: 'Local Storage' } },
+        },
       });
       const destinationOrg = await destination.organization.create({
-        data: { name: 'Empty Destination', setupCompletedAt: null },
+        data: {
+          name: 'Empty Destination',
+          setupCompletedAt: null,
+          storageProviders: { create: { type: 'LOCAL', name: 'Local Storage' } },
+        },
       });
       const customRole = await source.appRole.create({
         data: {
@@ -161,7 +171,10 @@ describe('organization portability across two deployments', () => {
           name: 'present.png',
           path: sourceAsset,
           fileSize: 20,
-          metadata: { mime: 'image/png' },
+          type: 'video',
+          thumbnail: 'https://source.example.test/thumbnail.jpg',
+          thumbnailTimestamp: 1,
+          metadata: { mime: 'video/mp4' },
         },
       });
       const missingFile = await source.file.create({
@@ -177,7 +190,7 @@ describe('organization portability across two deployments', () => {
       await source.design.create({
         data: {
           organizationId: sourceOrg.id,
-          createdById: sourceOwner.id,
+          createdById: formerMember.id,
           previewFileId: missingFile.id,
           name: 'Portable design',
           doc: {
@@ -230,13 +243,19 @@ describe('organization portability across two deployments', () => {
         { getLocalAdapterForOrg: async () => destinationAdapter } as any,
         encryption,
         designerDoc as any,
-        notifications as any,
+        organizations as any,
         audit as any,
       );
       const upload = await importer.createUpload(destinationOrg.id, destinationOwner.id);
       await importer.appendChunk(destinationOrg.id, destinationOwner.id, upload.id, 0, archive.toString('base64'));
-      const validated = await importer.validateUpload(destinationOrg.id, destinationOwner.id, upload.id, passphrase);
-      expect(validated.missingAssets).toBe(1);
+      await expect(importer.validateUpload(destinationOrg.id, destinationOwner.id, upload.id, 'wrong passphrase'))
+        .rejects.toThrow('passphrase is incorrect');
+      expect((await destinationRepository.getJob(upload.id)).status).toBe('uploading');
+      await importer.validateUpload(destinationOrg.id, destinationOwner.id, upload.id, passphrase);
+      await importer.processImport(upload.id);
+      const validated = await importer.getJob(destinationOrg.id, destinationOwner.id, upload.id);
+      expect(validated.status).toBe('ready');
+      expect(validated.progress.missingAssets).toBe(1);
       await importer.commitImport(destinationOrg.id, destinationOwner.id, upload.id, passphrase);
       const pendingJob = await destinationRepository.getJob(upload.id);
       expect(pendingJob.status).toBe('pending');
@@ -247,19 +266,9 @@ describe('organization portability across two deployments', () => {
       const importedOrg = await destination.organization.findUnique({ where: { id: destinationOrg.id } });
       expect(importedOrg.name).toBe('Source Organization');
       expect(importedOrg.setupCompletedAt).not.toBeNull();
-      expect(await destination.userOrganization.count({ where: { organizationId: destinationOrg.id } })).toBe(3);
-      const importedSourceOwner = await destination.user.findFirst({ where: { email: 'owner@example.test' } });
-      const ownerMembership = await destination.userOrganization.findFirst({
-        where: { organizationId: destinationOrg.id, userId: importedSourceOwner.id },
-        include: { roleRef: true },
-      });
-      expect(ownerMembership.roleRef.key).toBe('admin');
-      const importedMember = await destination.user.findFirst({
-        where: { email: 'member@example.test' },
-        include: { profile: true },
-      });
-      expect(importedMember.profile.pictureId).toBeNull();
-      expect(importedMember.profile.avatarUrl).toBeNull();
+      expect(await destination.userOrganization.count({ where: { organizationId: destinationOrg.id } })).toBe(1);
+      expect(await destination.user.count({ where: { email: { in: ['owner@example.test', 'member@example.test'] } } })).toBe(0);
+      expect(await destination.storageProviderConfig.count({ where: { organizationId: destinationOrg.id, type: 'LOCAL' } })).toBe(1);
       const importedCustomRole = await destination.appRole.findFirst({
         where: { organizationId: destinationOrg.id, key: 'designer' },
         include: { permissions: true },
@@ -286,23 +295,34 @@ describe('organization portability across two deployments', () => {
       expect(await destination.file.count({ where: { organizationId: destinationOrg.id } })).toBe(1);
       const importedFile = await destination.file.findFirst({ where: { organizationId: destinationOrg.id } });
       expect(importedFile.path.startsWith(destinationStorage)).toBe(true);
+      expect(importedFile.thumbnail).toBeNull();
+      expect(importedFile.thumbnailTimestamp).toBeNull();
       expect(readFileSync(importedFile.path, 'utf8')).toBe('portable image bytes');
+      expect(inngest.send).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'media/video-thumbnail.generate',
+        data: { organizationId: destinationOrg.id, fileId: importedFile.id },
+      }));
       const importedDesign = await destination.design.findFirst({ where: { organizationId: destinationOrg.id } });
       expect(importedDesign.previewFileId).toBeNull();
+      expect(importedDesign.createdById).toBe(destinationOwner.id);
       expect(importedDesign.doc.outputs[0].children[0]).toMatchObject({ fileId: importedFile.id, src: importedFile.path });
       expect(importedDesign.doc.outputs[0].children[1]).toMatchObject({ fileId: null, src: null });
       const importedJob = await destinationRepository.getJob(upload.id);
       expect(importedJob.status).toBe('completed');
       expect(importedJob.archiveKeyCiphertext).toBeNull();
       expect(importedJob.spoolPath).toBeNull();
-      expect(notifications.sendEmail).toHaveBeenCalledTimes(2);
+      expect(organizations.inviteTeamMember).toHaveBeenCalledTimes(2);
 
       await importer.processImport(upload.id);
       expect(await destination.integration.count({ where: { organizationId: destinationOrg.id } })).toBe(1);
-      expect(await destination.userOrganization.count({ where: { organizationId: destinationOrg.id } })).toBe(3);
+      expect(await destination.userOrganization.count({ where: { organizationId: destinationOrg.id } })).toBe(1);
 
       const rollbackOrg = await destination.organization.create({
-        data: { name: 'Rollback Destination', setupCompletedAt: null },
+        data: {
+          name: 'Rollback Destination',
+          setupCompletedAt: null,
+          storageProviders: { create: { type: 'LOCAL', name: 'Local Storage' } },
+        },
       });
       await destination.userOrganization.create({
         data: {
@@ -311,17 +331,18 @@ describe('organization portability across two deployments', () => {
           roleId: (await destination.appRole.findFirst({ where: { key: 'owner' } })).id,
         },
       });
-      const originalCreateModel = destinationRepository.createModel.bind(destinationRepository);
-      const createModel = vi.spyOn(destinationRepository, 'createModel').mockImplementation(async (tx, model, data) => {
+      const originalCreateMany = destinationRepository.createManyModel.bind(destinationRepository);
+      const createMany = vi.spyOn(destinationRepository, 'createManyModel').mockImplementation(async (tx, model, data) => {
         if (model === 'integration') throw new Error('forced import rollback');
-        return originalCreateModel(tx, model, data);
+        return originalCreateMany(tx, model, data);
       });
       const rollbackUpload = await importer.createUpload(rollbackOrg.id, destinationOwner.id);
       await importer.appendChunk(rollbackOrg.id, destinationOwner.id, rollbackUpload.id, 0, archive.toString('base64'));
       await importer.validateUpload(rollbackOrg.id, destinationOwner.id, rollbackUpload.id, passphrase);
+      await importer.processImport(rollbackUpload.id);
       await importer.commitImport(rollbackOrg.id, destinationOwner.id, rollbackUpload.id, passphrase);
       await importer.processImport(rollbackUpload.id);
-      createModel.mockRestore();
+      createMany.mockRestore();
 
       expect((await destinationRepository.getJob(rollbackUpload.id)).status).toBe('failed');
       expect((await destination.organization.findUnique({ where: { id: rollbackOrg.id } })).setupCompletedAt).toBeNull();
@@ -330,7 +351,11 @@ describe('organization portability across two deployments', () => {
       expect(await destination.userOrganization.count({ where: { organizationId: rollbackOrg.id } })).toBe(1);
 
       const nonEmptyOrg = await destination.organization.create({
-        data: { name: 'Non-empty Destination', setupCompletedAt: null },
+        data: {
+          name: 'Non-empty Destination',
+          setupCompletedAt: null,
+          storageProviders: { create: { type: 'LOCAL', name: 'Local Storage' } },
+        },
       });
       await destination.userOrganization.create({
         data: {
