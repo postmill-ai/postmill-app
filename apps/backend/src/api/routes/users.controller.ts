@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   HttpException,
   Logger,
   NotFoundException,
@@ -249,15 +250,15 @@ export class UsersController {
   }
 
   @Post('/join-org')
+  @HttpCode(200)
   async joinOrg(
     @GetUserFromRequest() user: User,
-    @Body('org') org: string,
-    @Res({ passthrough: true }) response: Response
+    @Body('org') org: string
   ) {
     const getOrgFromCookie = this._authService.getOrgFromCookie(org);
 
     if (!getOrgFromCookie) {
-      return response.status(200).json({ id: null });
+      return { id: null };
     }
 
     const addedOrg = await this._orgService.addUserToOrg(
@@ -268,9 +269,9 @@ export class UsersController {
       getOrgFromCookie.roleId,
     );
 
-    response.status(200).json({
+    return {
       id: typeof addedOrg !== 'boolean' ? addedOrg.organizationId : null,
-    });
+    };
   }
 
   @Get('/organizations')

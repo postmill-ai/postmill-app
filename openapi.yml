@@ -1165,7 +1165,7 @@ paths:
       operationId: UsersController_joinOrg
       parameters: []
       responses:
-        "201":
+        "200":
           description: ""
       tags:
         - User
