@@ -55,6 +55,8 @@ import { OutpaintDialog } from './outpaint-dialog';
 import { applyAiOutpaint, applyWholePageOutpaint, prepareAiOutpaint, prepareWholePageOutpaint } from './outpaint';
 import { BackgroundRemovalDialog } from './background-removal-dialog';
 import { QrCodeDialog } from './qr-code-dialog';
+import { ShareDialog } from './share-dialog';
+import { fetchDesignForEditor } from './load-design';
 import { BulkCreateDialog } from './bulk-create-dialog';
 import { MobileQuickActions, MobileSheetHeader, MobileToolsDialog, MobileWorkspaceSheet, type MobileSheetSnap } from './mobile-designer-tools';
 import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
@@ -238,6 +240,7 @@ export const Designer: FC<DesignerProps> = ({
       !designId &&
       !(width && height)
   );
+  const [designLoadError, setDesignLoadError] = useState(false);
   const aiActive = useAiActive();
   // Per-operation media-tool availability gates the AI generation actions (remove-bg,
   // upscale, inpaint, generate). `status` is a stable SWR ref so the accessor (and the
@@ -487,6 +490,22 @@ export const Designer: FC<DesignerProps> = ({
     onPeerImage,
   });
   const { sendUpdate } = collabData;
+  const handleShare = useCallback(() => {
+    const id = store.getState().designId;
+    if (!id) return;
+    modals.openModal({
+      title: translate('designer_share_design', 'Share design'),
+      size: 560,
+      children: (
+        <ShareDialog
+          designId={id}
+          initialCollabEnabled={collabEnabled}
+          connectedCount={connectedCount}
+          onToggleCollaboration={setCollabEnabled}
+        />
+      ),
+    });
+  }, [collabEnabled, connectedCount, modals, store, translate]);
 
   useEffect(() => {
     if (!collabEnabled || !currentDesignId) return;
@@ -544,16 +563,21 @@ export const Designer: FC<DesignerProps> = ({
   }, [store]);
 
   useEffect(() => {
-    if (designId) {
-      fetch(`/media/designs/${designId}`)
-        .then((res) => res.json())
-        .then((design) => {
-          if (design) {
-            store.getState().loadDesign(design.doc as DesignerDoc, design.id, design.name);
-          }
-        })
-        .catch(() => {});
-    }
+    if (!designId) return;
+    let cancelled = false;
+    setDesignLoadError(false);
+    setShowStart(false);
+    fetchDesignForEditor(fetch, designId)
+      .then((design) => {
+        if (!design) throw new Error('Design unavailable');
+        if (!cancelled) store.getState().loadDesign(design.doc, design.id, design.name);
+      })
+      .catch(() => {
+        if (!cancelled) setDesignLoadError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [designId, fetch, store]);
 
   // Snapshot the stage canvas to a small JPEG and upload it as a File. Falls
@@ -1399,7 +1423,7 @@ export const Designer: FC<DesignerProps> = ({
             : translate('convert_to_image_mode_confirm', 'Convert to image mode? All video tracks and clips will be lost.');
         if (await decision.open({ description: msg })) st.setMode(target);
       },
-      onToggleShare: () => setCollabEnabled((v) => !v),
+      onToggleShare: handleShare,
       onSelectAll: pixelOps.onSelectAll,
       onSelectInverse: pixelOps.onSelectInverse,
       canEditPixels: pixelOps.canEditPixels,
@@ -1497,6 +1521,7 @@ export const Designer: FC<DesignerProps> = ({
       mediaToolAvailable,
       currentDesignId,
       collabEnabled,
+      handleShare,
       setMedia,
       closeModal,
       store,
@@ -1630,7 +1655,7 @@ export const Designer: FC<DesignerProps> = ({
                   ? 'bg-green-500/20 border-green-500/30 text-green-700 dark:text-green-400'
                   : 'border-studioBorder text-textColor/70 hover:text-textColor'
               }`}
-              onClick={() => setCollabEnabled(!collabEnabled)}
+              onClick={handleShare}
               title={collabEnabled ? translate('peers_connected_count', '{{count}} connected', { count: connectedCount }) : translate('enable_realtime_collaboration', 'Enable real-time collaboration')}
             >
               {collabEnabled ? `👥 ${connectedCount}` : translate('share', 'Share')}
@@ -1890,6 +1915,14 @@ export const Designer: FC<DesignerProps> = ({
         </div>
       </div>
       <CommandPalette actions={actions} />
+      {designLoadError && (
+        <div role="alert" className="absolute inset-x-0 top-0 z-40 border-b border-studioBorder bg-newBgColorInner px-4 py-3 text-center text-[13px] text-textColor">
+          {translate('designer_design_unavailable', 'This design could not be found or is unavailable in this organization.')}
+          <a href="/media/designer" className="ml-2 text-btnPrimaryAccent hover:underline">
+            {translate('designer_open_designer_home', 'Open Designer home')}
+          </a>
+        </div>
+      )}
       {showStart && (
         <StartDialog store={store} fetchFn={fetch} onDone={() => setShowStart(false)} />
       )}
