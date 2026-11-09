@@ -5,7 +5,7 @@ import { Button } from '@postmill-ai/react/form/button';
 import { Textarea } from '@postmill-ai/react/form/textarea';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { ColorSwatch, Stepper } from './controls';
-import { DEFAULT_QR_CODE_SETTINGS, type QrCodeSettings } from './qr-code';
+import { DEFAULT_QR_CODE_SETTINGS, generateQrCode, type QrCodeSettings } from './qr-code';
 
 interface QrCodeEditorProps {
   initialSettings?: QrCodeSettings;
@@ -30,6 +30,26 @@ export const QrCodeEditor: FC<QrCodeEditorProps> = ({
     setSettings(JSON.parse(initialSignature));
     setError('');
   }, [initialSignature]);
+
+  const [previewUrl, setPreviewUrl] = useState('');
+  const settingsSignature = JSON.stringify(settings);
+  useEffect(() => {
+    let current = true;
+    const draft = JSON.parse(settingsSignature) as QrCodeSettings;
+    if (!draft.value.trim()) {
+      setPreviewUrl('');
+      return;
+    }
+    const timer = setTimeout(() => {
+      void generateQrCode(draft)
+        .then((url) => { if (current) setPreviewUrl(url); })
+        .catch(() => { if (current) setPreviewUrl(''); });
+    }, 150);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [settingsSignature]);
 
   const update = <K extends keyof QrCodeSettings>(key: K, value: QrCodeSettings[K]) => {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -99,6 +119,12 @@ export const QrCodeEditor: FC<QrCodeEditorProps> = ({
           onChange={(value) => update('margin', value)}
         />
       </div>
+      {previewUrl && (
+        <div className="flex justify-center rounded-md border border-studioBorder bg-designerCanvas p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- live generated QR preview */}
+          <img src={previewUrl} alt={t('designer_qr_preview', 'QR code preview')} className="h-32 w-32 object-contain" />
+        </div>
+      )}
       <p className="text-[11px] text-textColor/50">
         {t('designer_qr_export_hint', 'The QR code is rendered as a high-resolution PNG and stays editable here.')}
       </p>

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { analyzeDesignerPreflight } from './design-preflight';
+import { analyzeDesignerPreflight, rotatedBox } from './design-preflight';
 import { getContrastRatio } from './contrast';
 
 const measureForElement = vi.hoisted(() => vi.fn());
@@ -68,6 +68,7 @@ describe('analyzeDesignerPreflight', () => {
     const shape = {
       id: 'backdrop', type: 'shape', shape: 'rect', x: 0, y: 0, width: 300, height: 300,
       rotation: 0, opacity: 1, hidden: false, locked: false, fill: '#ffffff',
+      fillGradient: { stops: [{ offset: 0, color: '#ffffff' }, { offset: 1, color: '#000000' }] },
     };
     const result = analyze(doc([output([shape, text('one', { fill: '#777777' })], {
       bg: { type: 'image', src: '/uploads/photo.jpg' },
@@ -94,9 +95,50 @@ describe('analyzeDesignerPreflight', () => {
     ]);
   });
 
-  it('records rotated geometry as unassessed', () => {
+  it('assesses rotated text bounds instead of marking geometry unassessed', () => {
     const result = analyze(doc([output([text('one', { rotation: 20 })])]));
-    expect(result.unassessed.geometry).toBe(1);
+    expect(result.unassessed.geometry).toBe(0);
+    expect(result.findings).toEqual([]);
+  });
+
+  it('rotates line bounds around the element origin', () => {
+    expect(rotatedBox({
+      x: 550, y: 500, width: 100, height: 200, pivotX: 500, pivotY: 500,
+    }, 90)).toEqual({ x: 300, y: 550, width: 200, height: 100 });
+  });
+
+  it('assesses contrast against a solid backdrop and keeps complex backdrops targeted', () => {
+    const solid = {
+      id: 'backdrop', type: 'shape', shape: 'rect', x: 0, y: 0, width: 300, height: 300,
+      rotation: 0, opacity: 1, hidden: false, locked: false, fill: '#ffffff',
+    };
+    const assessed = analyze(doc([output([solid, text('one', { fill: '#777777' })])]));
+    expect(assessed.findings).toEqual([
+      expect.objectContaining({ rule: 'low-contrast', elementId: 'one' }),
+    ]);
+    expect(assessed.unassessed.contrast).toBe(0);
+
+    const complex = { ...solid, fillGradient: { stops: [] } };
+    const unassessed = analyze(doc([output([complex, text('one')])]));
+    expect(unassessed.unassessedItems).toEqual([
+      expect.objectContaining({
+        key: 'designer_preflight_unassessed_contrast_image',
+        elementId: 'one',
+        outputIndex: 0,
+        pageNumber: 0,
+      }),
+    ]);
+  });
+
+  it('keeps partially transparent backdrops unassessed instead of treating them as solid', () => {
+    const translucent = {
+      id: 'backdrop', type: 'shape', shape: 'rect', x: 0, y: 0, width: 300, height: 300,
+      rotation: 0, opacity: 0.5, hidden: false, locked: false, fill: '#ffffff',
+    };
+    const result = analyze(doc([output([translucent, text('one')])]));
+    expect(result.findings).toEqual([]);
+    expect(result.unassessed.contrast).toBe(1);
+    expect(result.unassessedItems?.[0].key).toBe('designer_preflight_unassessed_contrast_image');
   });
 
   it('flags structurally missing static media', () => {

@@ -11,6 +11,14 @@ const FALLBACKS: Record<DesignerPreflightFinding['rule'], string> = {
   'text-overflow': 'Text overflows its box on {{target}}',
 };
 
+const UNASSESSED_FALLBACKS: Record<string, string> = {
+  designer_preflight_unassessed_contrast_image: 'Contrast needs visual review over an image on {{target}}',
+  designer_preflight_unassessed_contrast_gradient: 'Contrast needs visual review over a gradient on {{target}}',
+  designer_preflight_unassessed_contrast_rich_text: 'Contrast needs visual review for rich text on {{target}}',
+  designer_preflight_unassessed_text_measurement: 'Text fit could not be measured on {{target}}',
+  designer_preflight_unassessed_geometry: 'Safe-zone geometry could not be assessed on {{target}}',
+};
+
 export const ExportPreflight: FC<{
   result: DesignerPreflightResult;
   onFinding: (finding: DesignerPreflightFinding) => void;
@@ -41,6 +49,20 @@ export const ExportPreflight: FC<{
               {t('designer_and_n_more', '…and {{count}} more', { count: result.findings.length - 5 })}
             </div>
           )}
+        </div>
+      )}
+      {!!result.unassessedItems?.length && (
+        <div className="mt-1 flex flex-col gap-1">
+          {result.unassessedItems.slice(0, 5).map((item, index) => (
+            <button
+              type="button"
+              key={`${item.key}-${item.outputIndex}-${item.pageNumber}-${item.elementId || item.clip?.clipId || index}`}
+              onClick={() => onFinding(item)}
+              className="text-start text-[10px] text-newTextColor/60 hover:text-textColor rounded-sm px-1 py-0.5 hover:bg-yellow-500/10"
+            >
+              {t(item.key, UNASSESSED_FALLBACKS[item.key] || 'This check needs visual review on {{target}}', item.vars)}
+            </button>
+          ))}
         </div>
       )}
       {unassessed > 0 && (

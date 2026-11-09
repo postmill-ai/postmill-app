@@ -34,9 +34,32 @@ export type DesignerPreflightResult = {
     text: number;
     geometry: number;
   };
+  unassessedItems?: DesignerPreflightFinding[];
 };
 
-type Box = { x: number; y: number; width: number; height: number };
+type Box = { x: number; y: number; width: number; height: number; pivotX?: number; pivotY?: number };
+
+export const rotatedBox = (box: Box, rotation: number): Box => {
+  const radians = rotation * Math.PI / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const pivotX = box.pivotX ?? box.x;
+  const pivotY = box.pivotY ?? box.y;
+  const points = [
+    [0, 0], [box.width, 0], [0, box.height], [box.width, box.height],
+  ].map(([x, y]) => ({
+    x: pivotX + (box.x - pivotX + x) * cos - (box.y - pivotY + y) * sin,
+    y: pivotY + (box.x - pivotX + x) * sin + (box.y - pivotY + y) * cos,
+  }));
+  const left = Math.min(...points.map((point) => point.x));
+  const top = Math.min(...points.map((point) => point.y));
+  return {
+    x: left,
+    y: top,
+    width: Math.max(...points.map((point) => point.x)) - left,
+    height: Math.max(...points.map((point) => point.y)) - top,
+  };
+};
 
 const intersects = (a: Box, b: Box) =>
   a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -50,6 +73,7 @@ export const analyzeDesignerPreflight = (
 ): DesignerPreflightResult => {
   const findings: DesignerPreflightFinding[] = [];
   const unassessed = { contrast: 0, text: 0, geometry: 0 };
+  const unassessedItems: DesignerPreflightFinding[] = [];
   const selected = new Map(selection.map((item) => [item.outputIndex, item.pages]));
 
   const add = (
@@ -61,12 +85,33 @@ export const analyzeDesignerPreflight = (
     elementId?: string,
     clip?: DesignerPreflightFinding['clip'],
   ) => findings.push({ rule, key, vars, outputIndex, pageNumber, elementId, clip });
+  const unassess = (
+    kind: keyof typeof unassessed,
+    key: string,
+    output: DesignerOutput | VideoOutput,
+    outputIndex: number,
+    pageNumber: number,
+    elementId?: string,
+    clip?: DesignerPreflightFinding['clip'],
+  ) => {
+    unassessed[kind]++;
+    unassessedItems.push({
+      rule: kind === 'contrast' ? 'low-contrast' : kind === 'text' ? 'text-overflow' : 'safe-zone',
+      key,
+      vars: { target: targetName(output, pageNumber) },
+      outputIndex,
+      pageNumber,
+      elementId,
+      clip,
+    });
+  };
 
   const safeZone = (output: DesignerOutput | VideoOutput, box: Box | null, rotation: number | undefined, outputIndex: number, pageNumber: number, elementId?: string, clip?: DesignerPreflightFinding['clip']) => {
-    if (rotation || !box) {
-      unassessed.geometry++;
+    if (!box) {
+      unassess('geometry', 'designer_preflight_unassessed_geometry', output, outputIndex, pageNumber, elementId, clip);
       return;
     }
+    if (rotation) box = rotatedBox(box, rotation);
     const preset = CHANNEL_PRESETS.find((item) => item.id === output.formatId);
     const zones = preset?.safeZones?.length
       ? preset.safeZones
@@ -98,16 +143,17 @@ export const analyzeDesignerPreflight = (
     outputIndex: number,
     target: { id: string; fill?: string; fillGradient?: unknown },
     clip?: DesignerPreflightFinding['clip'],
+    backdrop?: string,
   ) => {
     if (target.fillGradient) {
-      unassessed.contrast++;
+      unassess('contrast', 'designer_preflight_unassessed_contrast_gradient', output, outputIndex, pageNumber, target.id, clip);
       return;
     }
-    const background = backgroundColor(output, pageNumber);
+    const background = backdrop || backgroundColor(output, pageNumber);
     const foreground = target.fill || '#000000';
     const ratio = background && foreground ? getContrastRatio(foreground, background) : null;
     if (ratio === null) {
-      unassessed.contrast++;
+      unassess('contrast', 'designer_preflight_unassessed_contrast_image', output, outputIndex, pageNumber, target.id, clip);
       return;
     }
     if (ratio < 4.5) {
@@ -164,7 +210,14 @@ export const analyzeDesignerPreflight = (
       right = Math.max(right, justified ? indent + available : lineLeft + width);
     });
     return {
-      box: { x: element.x + left, y: element.y + top, width: right - left, height: contentHeight },
+      box: {
+        x: element.x + left,
+        y: element.y + top,
+        width: right - left,
+        height: contentHeight,
+        pivotX: element.x,
+        pivotY: element.y,
+      },
       overflow: contentHeight > element.height + 0.5 || widths.some((width, index) =>
         width + (fit.lineIndents[index] || 0) * scaleX > element.width + 0.5),
     };
@@ -189,7 +242,14 @@ export const analyzeDesignerPreflight = (
       right = Math.max(right, justified ? width : lineLeft + line.width);
     });
     return {
-      box: { x: (clip.x || 0) + left, y: clip.y || 0, width: right - left, height: all.length * fontSize },
+      box: {
+        x: (clip.x || 0) + left,
+        y: clip.y || 0,
+        width: right - left,
+        height: all.length * fontSize,
+        pivotX: clip.x,
+        pivotY: clip.y,
+      },
       overflow: all.length > visible.length || all[visible.length - 1]?.text !== visible[visible.length - 1]?.text,
     };
   };
@@ -219,13 +279,26 @@ export const analyzeDesignerPreflight = (
             candidate.type !== 'text' && !candidate.hidden && (candidate.opacity ?? 1) > 0 &&
             center.x >= candidate.x && center.x <= candidate.x + candidate.width &&
             center.y >= candidate.y && center.y <= candidate.y + candidate.height);
-          if (backdrop || element.richText?.length) unassessed.contrast++;
-          else contrast(output, pageNumber, outputIndex, {
-            id: element.id,
-            fill: element.fill,
-            fillGradient: element.fillGradient,
-          });
-          if (!layout) unassessed.text++;
+          if (element.richText?.length) {
+            unassess('contrast', 'designer_preflight_unassessed_contrast_rich_text', output, outputIndex, pageNumber, element.id);
+          } else if (backdrop) {
+            if (backdrop.fill && !backdrop.fillGradient && (backdrop.opacity ?? 1) >= 1) {
+              contrast(output, pageNumber, outputIndex, {
+                id: element.id,
+                fill: element.fill,
+                fillGradient: element.fillGradient,
+              }, undefined, backdrop.fill);
+            } else {
+              unassess('contrast', 'designer_preflight_unassessed_contrast_image', output, outputIndex, pageNumber, element.id);
+            }
+          } else {
+            contrast(output, pageNumber, outputIndex, {
+              id: element.id,
+              fill: element.fill,
+              fillGradient: element.fillGradient,
+            });
+          }
+          if (!layout) unassess('text', 'designer_preflight_unassessed_text_measurement', output, outputIndex, pageNumber, element.id);
           else if (layout.overflow) add('text-overflow', 'designer_preflight_text_overflow', { target: targetName(output, pageNumber) }, outputIndex, pageNumber, element.id);
         });
       }
@@ -251,13 +324,13 @@ export const analyzeDesignerPreflight = (
         const layout = videoTextLayout(clip);
         const clipTarget = { trackId: track.id, clipId: clip.id };
         safeZone(output, layout?.box || null, clip.rotation, outputIndex, 0, undefined, clipTarget);
-        if (visualMedia) unassessed.contrast++;
+        if (visualMedia) unassess('contrast', 'designer_preflight_unassessed_contrast_image', output, outputIndex, 0, undefined, clipTarget);
         else contrast(output, 0, outputIndex, { id: clip.id, fill: clip.fill }, clipTarget);
-        if (!layout) unassessed.text++;
+        if (!layout) unassess('text', 'designer_preflight_unassessed_text_measurement', output, outputIndex, 0, undefined, clipTarget);
         else if (layout.overflow) add('text-overflow', 'designer_preflight_text_overflow', { target: output.name }, outputIndex, 0, undefined, clipTarget);
       });
     });
   });
 
-  return { findings, unassessed };
+  return { findings, unassessed, unassessedItems };
 };
