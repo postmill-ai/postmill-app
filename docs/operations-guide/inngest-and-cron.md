@@ -29,14 +29,29 @@ INNGEST_BASE_URL=http://localhost:8288
 
 No `INNGEST_EVENT_KEY` or `INNGEST_SIGNING_KEY` is required when `INNGEST_DEV=1`.
 
+### For production self-hosted
+
+Leave `INNGEST_DEV` unset and configure the engine URL plus production keys:
+
+```bash
+USE_INNGEST=true
+INNGEST_BASE_URL=http://127.0.0.1:8288
+INNGEST_SERVE_ORIGIN=http://127.0.0.1:4300
+INNGEST_SERVE_PATH=/api/inngest
+INNGEST_EVENT_KEY=<generated-event-key>
+INNGEST_SIGNING_KEY=<generated-hex-signing-key>
+```
+
+Run `inngest start` with external Postgres and Redis persistence, the matching event/signing keys, and the backend SDK URL. Keep credentials in a protected environment file rather than command-line arguments, include the engine database in backups, and do not expose the loopback listener publicly. Production self-hosted mode is durable; `inngest dev` uses development-only in-memory state and must not be used as the production engine. The health endpoint probes `INNGEST_BASE_URL` when set, using direct HTTP only for an explicit loopback URL and SSRF-safe fetch otherwise. Reachability therefore supports loopback HTTP or public HTTPS; a private Docker service name or LAN address reports `eventApiReachable: false` unless the SSRF policy explicitly permits it.
+
 ## Enabling background jobs
 
-Inngest functions are scheduled by Inngest Cloud or the local dev server. Ensure:
+Inngest functions are scheduled by Inngest Cloud or a configured self-hosted engine. Ensure:
 
 1. `USE_INNGEST=true` is set.
-2. Cloud credentials (`INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY`) are set for non-dev deployments.
-3. The backend is reachable on the public origin configured in `INNGEST_SERVE_ORIGIN`.
-4. The Inngest app is registered with Inngest Cloud and pointed at `https://<your-origin>/api/inngest`.
+2. Cloud or self-hosted credentials (`INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY`) are set for non-dev deployments.
+3. The backend is reachable on the origin configured in `INNGEST_SERVE_ORIGIN`.
+4. The Inngest app is registered with Cloud or the self-hosted engine and pointed at `<serve-origin>/api/inngest`.
 
 Without this, the analytics dashboard, comment inbox, media render queue, and watchlist data will remain empty.
 
