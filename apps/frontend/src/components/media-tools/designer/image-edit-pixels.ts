@@ -37,7 +37,7 @@ export const preserveOutpaintSource = async ({
     fitMode?: 'contain' | 'cover' | 'fill';
     focalPoint?: { x: number; y: number };
   };
-}): Promise<string> => {
+}): Promise<HTMLCanvasElement> => {
   const [source, generated] = await Promise.all([loadMaskImage(sourceUrl), loadMaskImage(generatedUrl)]);
   const canvas = document.createElement('canvas');
   canvas.width = resultNatural.width;
@@ -65,5 +65,5 @@ export const preserveOutpaintSource = async ({
     geometry.destination.width,
     geometry.destination.height,
   );
-  return canvas.toDataURL('image/png');
+  return canvas;
 };

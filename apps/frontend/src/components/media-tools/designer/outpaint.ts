@@ -8,6 +8,7 @@ import { probeImageNaturalSize } from './elements';
 import { loadMaskImage } from './background-removal-mask';
 import { readErrorMessage } from './read-error-message';
 import { preserveOutpaintSource } from './image-edit-pixels';
+import { commitCanvas } from './raster-layers';
 
 export type OutpaintMode =
   | 'zoom-1.5x'
@@ -133,25 +134,31 @@ export const prepareAiOutpaint = async ({
   ]);
   if (!resultNatural) throw new Error('Could not determine the expanded image dimensions.');
   const expanded = outpaintGeometry(before, mode, sourceNatural, resultNatural);
-  const assetUrl = await preserveOutpaintSource({
+  const scaleX = resultNatural.width / expanded.width;
+  const scaleY = resultNatural.height / expanded.height;
+  const canvas = await preserveOutpaintSource({
     sourceUrl: before.src,
     generatedUrl: data.url,
     sourceNatural,
     resultNatural,
     frame: {
       ...before,
-      x: before.x - expanded.x,
-      y: before.y - expanded.y,
+      x: (before.x - expanded.x) * scaleX,
+      y: (before.y - expanded.y) * scaleY,
+      width: before.width * scaleX,
+      height: before.height * scaleY,
     },
   });
+  const uploaded = await commitCanvas(canvas, `${before.id}:outpaint`, fetch);
+  if (!uploaded) throw new Error('The expanded image could not be saved.');
   const candidate: OutpaintCandidate = {
     kind: 'image',
     before,
     outputIndex,
     history,
     sourceUrl: before.src,
-    assetUrl,
-    fileId: undefined,
+    assetUrl: uploaded.src,
+    fileId: uploaded.fileId,
     sourceNatural,
     resultNatural,
     mode,
@@ -312,7 +319,7 @@ export const prepareWholePageOutpaint = async ({
   if (!response.ok) throw new Error(await readErrorMessage(response, 'Page expansion failed'));
   const data = await response.json() as { url?: string; fileId?: string };
   if (!data.url) throw new Error('Page expansion returned no result.');
-  const assetUrl = await preserveOutpaintSource({
+  const compositeCanvas = await preserveOutpaintSource({
     sourceUrl: before.src,
     generatedUrl: data.url,
     sourceNatural,
@@ -324,14 +331,16 @@ export const prepareWholePageOutpaint = async ({
       focalPoint: before.focalPoint,
     },
   });
+  const uploaded = await commitCanvas(compositeCanvas, `${before.id}:outpaint-page`, fetch);
+  if (!uploaded) throw new Error('The expanded page could not be saved.');
   const candidate: OutpaintCandidate = {
     kind: 'page',
     before,
     outputIndex,
     history,
     sourceUrl: before.src,
-    assetUrl,
-    fileId: undefined,
+    assetUrl: uploaded.src,
+    fileId: uploaded.fileId,
     sourceNatural,
     resultNatural: { width: targetWidth, height: targetHeight },
     targetWidth,

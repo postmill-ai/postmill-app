@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/media/image-source.limits';
+import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import { createDesignerStore } from './designer.store';
 import {
   applyAiOutpaint,
@@ -17,7 +18,10 @@ vi.mock('./background-removal-mask', () => ({
   loadMaskImage: vi.fn(async () => ({ naturalWidth: 800, naturalHeight: 450 })),
 }));
 vi.mock('./image-edit-pixels', () => ({
-  preserveOutpaintSource: vi.fn(async () => '/preserved.png'),
+  preserveOutpaintSource: vi.fn(async () => ({})),
+}));
+vi.mock('./raster-layers', () => ({
+  commitCanvas: vi.fn(async () => ({ src: '/uploads/org/preserved.png', fileId: 'preserved-file' })),
 }));
 
 const imageElement = () => ({
@@ -133,9 +137,10 @@ describe('whole-page expansion', () => {
     expect(applyWholePageOutpaint({ store, candidate })).toBe(true);
     const output = store.getState().doc.outputs[0] as any;
     expect(output).toMatchObject({ width: 1500, height: 750, name: '1500×750' });
-    expect(output.children[0]).toMatchObject({ x: 0, y: 0, width: 1500, height: 750, src: '/preserved.png' });
+    expect(output.children[0]).toMatchObject({ x: 0, y: 0, width: 1500, height: 750, src: '/uploads/org/preserved.png', fileId: 'preserved-file' });
     expect(output.children[1]).toMatchObject({ x: 255, y: 131, text: 'Keep me' });
     expect(store.getState().history).toHaveLength(history.length + 1);
+    expect(() => new DesignerDocService().validate(store.getState().doc)).not.toThrow();
   });
 
   it('rejects oversized whole-page compositions before reading or uploading the image', async () => {

@@ -57,13 +57,14 @@ describe('image edit pixel preservation', () => {
       }
     });
 
-    await expect(preserveOutpaintSource({
+    const result = await preserveOutpaintSource({
       sourceUrl: '/original.png',
       generatedUrl: '/generated.png',
       sourceNatural: { width: 8, height: 2 },
       resultNatural: { width: 800, height: 200 },
       frame: { x: 400, y: 20, width: 400, height: 100, fitMode: 'fill' },
-    })).resolves.toBe('data:image/png;base64,expanded');
+    });
+    expect(result.toDataURL()).toBe('data:image/png;base64,expanded');
 
     expect(context.drawImage.mock.calls[0].slice(1)).toEqual([0, 0, 800, 200]);
     expect(context.drawImage.mock.calls[1].slice(1)).toEqual([0, 0, 8, 2, 400, 20, 400, 100]);
