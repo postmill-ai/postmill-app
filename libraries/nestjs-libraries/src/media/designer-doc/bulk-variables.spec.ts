@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBulkAssignments, applyBulkRow, collectBulkAssignmentTargets, collectBulkVariables } from './bulk-variables';
+import { applyBulkAssignments, applyBulkRow, collectBulkAssignmentTargets, collectBulkVariables, normalizeBulkImageSource } from './bulk-variables';
 
 const element = (id: string, extra: Record<string, unknown>) => ({
   id,
@@ -97,6 +97,29 @@ describe('Bulk Create variables', () => {
     expect(result.outputs[0].children[3].text).toBe('New headline');
     expect(result.outputs[0].pages[0].children[0].text).toBe('Second page for Ada');
     expect(result.symbols[0].children[0].text).toBe('Thanks');
+  });
+
+  it('normalizes spreadsheet IMAGE formulas and Google Drive share links into valid image sources', () => {
+    expect(normalizeBulkImageSource('=IMAGE("https://cdn.example.test/chair.png", 1)'))
+      .toBe('https://cdn.example.test/chair.png');
+    expect(normalizeBulkImageSource('https://drive.google.com/file/d/product-image-1/view?usp=sharing'))
+      .toBe('https://drive.google.com/uc?export=download&id=product-image-1');
+    expect(normalizeBulkImageSource('https://drive.google.com/open?id=product-image-2'))
+      .toBe('https://drive.google.com/uc?export=download&id=product-image-2');
+    expect(normalizeBulkImageSource('https://cdn.example.test/unchanged.png'))
+      .toBe('https://cdn.example.test/unchanged.png');
+
+    const template = makeDoc();
+    template.outputs[0].children[1].symbolOverrides = {
+      'symbol-text': { src: '{{hero}}' },
+    };
+    const result = applyBulkRow(template, {
+      hero: '=IMAGE("https://drive.google.com/file/d/product-image-3/view?usp=sharing")',
+    });
+    expect(result.outputs[0].children[1].src)
+      .toBe('https://drive.google.com/uc?export=download&id=product-image-3');
+    expect(result.outputs[0].children[1].symbolOverrides['symbol-text'].src)
+      .toBe('https://drive.google.com/uc?export=download&id=product-image-3');
   });
 
   it('leaves unknown variables intact and supports explicit empty values', () => {

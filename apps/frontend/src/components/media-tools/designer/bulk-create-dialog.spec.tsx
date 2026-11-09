@@ -227,6 +227,21 @@ describe('BulkCreateDialog', () => {
     expect(screen.getByText('Add an editable text, image, or color element before creating variations.')).toBeTruthy();
   });
 
+  it('shows the server row and schema path when transformed data is invalid', async () => {
+    fetchMock.mockResolvedValueOnce(response({
+      message: 'Row 1: outputs.0.pages.0.children.0.src: src must be a data: or http(s) URL',
+    }, false));
+    render(<BulkCreateDialog store={makeStore()} onClose={vi.fn()} />);
+    await upload('headline,unused\nAda,x\nGrace,y');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create 2 variations' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Row 1: outputs.0.pages.0.children.0.src: src must be a data: or http(s) URL'
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects duplicate headers and malformed quoted input before any API call', async () => {
     render(<BulkCreateDialog store={makeStore()} onClose={vi.fn()} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;

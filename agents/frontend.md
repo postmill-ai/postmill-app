@@ -512,9 +512,12 @@ and colour may be assigned in separate passes without replacing either binding. 
 multiple targets, incompatible existing variable kinds are rejected, and existing mustache/slot
 bindings remain intact. Before substitution, a colour mustache renders transparent through the shared
 `canvasColor` boundary rather than inheriting the canvas's previous fill; a real row replaces it with
-the supplied colour. The batch runs through `DesignBulkCreateService` and
-creates editable Designs plus per-page PNG Files and a ZIP; never substitute a client-only flattened
-image for the editable result.
+the supplied colour. Spreadsheet `=IMAGE("https://…")` cells and recognized Google Drive share links
+normalize to direct image sources during substitution; other values stay unchanged. Enqueue validates
+every transformed row before creating a job/folder/event and returns its row and schema paths. Image
+ingestion verifies PNG/JPEG/WebP magic bytes, so an HTML Drive response is a clear row error rather
+than a stored blank PNG. The batch runs through `DesignBulkCreateService` and creates editable Designs
+plus per-page PNG Files and a ZIP; never substitute a client-only flattened image for the editable result.
 
 ## Forms
 
