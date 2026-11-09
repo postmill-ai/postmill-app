@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Readable } from 'stream';
 import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
@@ -10,8 +11,8 @@ import {
 import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import {
-  extractVideoFrameInfo,
-  VIDEO_FRAME_MAX_BYTES,
+  extractVideoFrameInfoFromStream,
+  VIDEO_FRAME_STREAM_MAX_BYTES,
 } from '@postmill-ai/nestjs-libraries/media/video-frame';
 import { PromiseLruCache } from './promise-lru';
 
@@ -47,12 +48,13 @@ export class DesignPreviewService {
         const response = await safeFetch(src);
         if (!response.ok) return null;
         const declared = Number(response.headers.get('content-length'));
-        if (declared > VIDEO_FRAME_MAX_BYTES) return null;
-        const bytes = await response.arrayBuffer();
-        if (bytes.byteLength > VIDEO_FRAME_MAX_BYTES) return null;
+        if (declared > VIDEO_FRAME_STREAM_MAX_BYTES || !response.body) return null;
         const pathname = new URL(src).pathname;
         const ext = pathname.split('.').pop()?.replace(/[^a-z0-9]/gi, '') || 'mp4';
-        const info = await extractVideoFrameInfo(Buffer.from(bytes), ext);
+        const info = await extractVideoFrameInfoFromStream(
+          Readable.fromWeb(response.body as never),
+          ext,
+        );
         return info.frame ? `data:image/jpeg;base64,${info.frame.toString('base64')}` : null;
       } catch {
         return null;

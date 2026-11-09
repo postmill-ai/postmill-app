@@ -263,7 +263,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   and failed remote image loads are evicted so a later save can recover. `.pdesign` export also renders
   when its source has no resolvable preview and then triggers targeted healing of the latest source.
   A render failure keeps the previous preview, and preview replacement cleans up only the old File
-  row it actually replaced.
+  row it actually replaced. Legacy remote video clips with no File row use the bounded streaming
+  frame extractor (never the 256 MB whole-buffer path), and only successful posters stay cached.
+  Share opens a dialog whose URL is derived from `currentDesignId` as `/media/designer?designId=<id>`;
+  it never copies the generic current location. Deep-linked loads reject HTTP and error-shaped
+  responses with a visible unavailable state instead of treating an error body as a DesignerDoc.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
   carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame
