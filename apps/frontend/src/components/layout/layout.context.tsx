@@ -90,6 +90,19 @@ function LayoutContextInner(params: { children: ReactNode }) {
         return true;
       }
 
+      if (response.status === 403) {
+        const error = await response
+          .clone()
+          .json()
+          .then((body) => body?.error)
+          .catch(() => null);
+        if (error === 'NO_WORKSPACE') {
+          if (window.location.pathname !== '/no-workspace') {
+            window.location.href = '/no-workspace';
+          }
+          return false;
+        }
+      }
       if (response.status === 401 || response?.headers?.get('logout')) {
         if (!isSecured) {
           setClientCookie('showorg', '', -10);

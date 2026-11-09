@@ -24,12 +24,16 @@ import { HttpForbiddenException } from '@postmill-ai/nestjs-libraries/services/e
 type MockResponse = Response & {
   cookie: ReturnType<typeof vi.fn>;
   header: ReturnType<typeof vi.fn>;
+  status: ReturnType<typeof vi.fn>;
+  json: ReturnType<typeof vi.fn>;
 };
 
 function mockRes() {
   return {
     cookie: vi.fn().mockReturnThis(),
     header: vi.fn().mockReturnThis(),
+    status: vi.fn().mockReturnThis(),
+    json: vi.fn().mockReturnThis(),
   } as unknown as MockResponse;
 }
 
@@ -146,6 +150,43 @@ describe('AuthMiddleware', () => {
       HttpForbiddenException
     );
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it('returns NO_WORKSPACE without clearing a valid session when no org is resolved', async () => {
+    resolver.resolve.mockResolvedValue({
+      ok: false,
+      reason: 'no_org',
+      user: { id: 'user-1' },
+    });
+    const req = mockReq({ headers: { auth: 'valid-jwt' } });
+    const res = mockRes();
+
+    await middleware.use(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      statusCode: 403,
+      error: 'NO_WORKSPACE',
+      message: 'Your account is not a member of an active workspace',
+    });
+    expect(res.cookie).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('allows invite acceptance when no org is resolved', async () => {
+    resolver.resolve.mockResolvedValue({
+      ok: false,
+      reason: 'no_org',
+      user: { id: 'user-1' },
+    });
+    const req = mockReq({ headers: { auth: 'valid-jwt' }, path: '/user/join-org' });
+    const res = mockRes();
+
+    await middleware.use(req, res, next);
+
+    expect((req as any).user).toEqual({ id: 'user-1' });
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
   });
 
   it('does not re-issue a cookie when the token is far from expiry', async () => {

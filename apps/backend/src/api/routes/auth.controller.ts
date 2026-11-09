@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -30,6 +31,12 @@ import { Provider } from '@prisma/client';
 import * as Sentry from '@sentry/nestjs';
 import { issueCsrfToken } from '@postmill-ai/backend/services/auth/csrf.middleware';
 import { AuthProviderManager } from '@postmill-ai/backend/services/auth/providers/auth-provider.manager';
+
+const clearInviteCookie = (response: Response) =>
+  response.clearCookie('org', {
+    domain: getCookieUrlFromDomain(process.env.FRONTEND_URL!),
+    path: '/',
+  });
 
 @ApiTags('Auth')
 @Controller('/auth')
@@ -67,6 +74,7 @@ export class AuthController {
         req?.cookies?.org
       );
       if (req?.cookies?.org && !getOrgFromCookie) {
+        clearInviteCookie(response);
         response.status(400).send('Invitation is invalid or expired');
         return;
       }
@@ -136,7 +144,9 @@ export class AuthController {
       });
     } catch (e: any) {
       Logger.error('Registration failed', e instanceof Error ? e.message : String(e), AuthController.name);
-      response.status(400).send('Registration failed');
+      response.status(400).send(
+        e instanceof BadRequestException ? e.message : 'Registration failed'
+      );
     }
   }
 
@@ -153,9 +163,9 @@ export class AuthController {
       const getOrgFromCookie = this._authService.getOrgFromCookie(
         req?.cookies?.org
       );
+      const invite = req?.cookies?.org && !getOrgFromCookie ? false : getOrgFromCookie;
       if (req?.cookies?.org && !getOrgFromCookie) {
-        response.status(400).send('Invitation is invalid or expired');
-        return;
+        clearInviteCookie(response);
       }
 
       const { jwt, refreshToken, addedOrg } = await this._authService.routeAuth(
@@ -163,7 +173,7 @@ export class AuthController {
         body,
         ip,
         userAgent,
-        getOrgFromCookie
+        invite
       );
 
       response.cookie('auth', jwt, {

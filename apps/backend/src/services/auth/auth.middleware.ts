@@ -24,6 +24,12 @@ export const removeAuth = (res: Response) => {
   res.header('logout', 'true');
 };
 
+const NO_WORKSPACE_ROUTES = new Set([
+  '/user/organizations',
+  '/user/join-org',
+  '/user/logout',
+]);
+
 @Injectable()
 export class AuthMiddleware implements NestMiddleware {
   constructor(private _authContextResolver: AuthContextResolver) {}
@@ -41,7 +47,21 @@ export class AuthMiddleware implements NestMiddleware {
       impersonateOrgUserId: req.cookies.impersonate || req.headers.impersonate,
     });
 
-    if (!result.ok) {
+    if (result.ok === false) {
+      if (result.reason === 'no_org') {
+        if (NO_WORKSPACE_ROUTES.has(req.path)) {
+          // @ts-expect-error
+          req.user = result.user;
+          next();
+          return;
+        }
+        res.status(403).json({
+          statusCode: 403,
+          error: 'NO_WORKSPACE',
+          message: 'Your account is not a member of an active workspace',
+        });
+        return;
+      }
       removeAuth(res);
       throw new HttpForbiddenException();
     }

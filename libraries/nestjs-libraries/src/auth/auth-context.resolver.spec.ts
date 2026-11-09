@@ -186,7 +186,7 @@ describe('AuthContextResolver', () => {
     ]);
 
     const result = await resolver.resolve({ jwt: 'valid-token' });
-    expect(result).toEqual({ ok: false, reason: 'no_org' });
+    expect(result).toMatchObject({ ok: false, reason: 'no_org', user: { id: 'user-1' } });
   });
 
   it('returns no_org when user has no organizations', async () => {
@@ -195,7 +195,7 @@ describe('AuthContextResolver', () => {
     orgs.getOrgsByUserId.mockResolvedValue([]);
 
     const result = await resolver.resolve({ jwt: 'valid-token' });
-    expect(result).toEqual({ ok: false, reason: 'no_org' });
+    expect(result).toMatchObject({ ok: false, reason: 'no_org', user: { id: 'user-1' } });
   });
 
   it('handles super-admin impersonation by swapping user and org', async () => {
