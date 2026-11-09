@@ -104,6 +104,12 @@ export class BrandsController {
 
 ---
 
+## Invited registration
+
+A valid invite creates the user/profile and invited-org membership in one transaction, with the invite marked consumed. LOCAL and OAuth invited registration must never create a personal Organization or a second membership before that transaction succeeds. A present but invalid/expired invite cookie is rejected rather than silently falling back to uninvited registration. Ordinary uninvited signup continues through `createOrgAndUser`.
+
+---
+
 ## Organization portability
 
 `OrgPortabilityController` handles owner-only export creation/history/download issuance;

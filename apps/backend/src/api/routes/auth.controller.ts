@@ -66,6 +66,10 @@ export class AuthController {
       const getOrgFromCookie = this._authService.getOrgFromCookie(
         req?.cookies?.org
       );
+      if (req?.cookies?.org && !getOrgFromCookie) {
+        response.status(400).send('Invitation is invalid or expired');
+        return;
+      }
 
       const { jwt, refreshToken, addedOrg } = await this._authService.routeAuth(
         body.provider,
@@ -149,6 +153,10 @@ export class AuthController {
       const getOrgFromCookie = this._authService.getOrgFromCookie(
         req?.cookies?.org
       );
+      if (req?.cookies?.org && !getOrgFromCookie) {
+        response.status(400).send('Invitation is invalid or expired');
+        return;
+      }
 
       const { jwt, refreshToken, addedOrg } = await this._authService.routeAuth(
         body.provider,

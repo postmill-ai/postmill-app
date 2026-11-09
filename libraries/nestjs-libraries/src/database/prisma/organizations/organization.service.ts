@@ -46,6 +46,21 @@ export class OrganizationService {
     );
   }
 
+  async createInvitedUser(
+    body: Omit<CreateOrgUserDto, 'providerToken'> & { providerId?: string; name?: string; lastName?: string },
+    ip: string,
+    userAgent: string,
+    invite: { orgId: string; role: 'USER' | 'ADMIN'; id: string; roleId?: string },
+  ) {
+    return this._organizationRepository.createInvitedUser(
+      body,
+      this._notificationsService.hasEmailProvider(),
+      ip,
+      userAgent,
+      invite,
+    );
+  }
+
   async getCount() {
     return this._organizationRepository.getCount();
   }

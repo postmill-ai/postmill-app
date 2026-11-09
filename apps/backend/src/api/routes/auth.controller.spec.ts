@@ -132,6 +132,23 @@ describe('AuthController — F1 behavioural tests', () => {
       expect(res.send).toHaveBeenCalledWith('Registration failed');
       expect(res.cookie).not.toHaveBeenCalledWith('auth', expect.anything(), expect.anything());
     });
+
+    it('rejects an invalid invite without attempting registration', async () => {
+      const { controller, authService } = makeController();
+      const res = mockResponse();
+
+      await controller.register(
+        { cookies: { org: 'expired-invite' } } as any,
+        { provider: 'LOCAL', email: 'a@b.com' } as any,
+        res,
+        '1.2.3.4',
+        'agent'
+      );
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.send).toHaveBeenCalledWith('Invitation is invalid or expired');
+      expect(authService.routeAuth).not.toHaveBeenCalled();
+    });
   });
 
   describe('login', () => {
@@ -181,6 +198,23 @@ describe('AuthController — F1 behavioural tests', () => {
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.send).toHaveBeenCalledWith('Invalid credentials');
       expect(res.cookie).not.toHaveBeenCalledWith('auth', expect.anything(), expect.anything());
+    });
+
+    it('rejects an invalid invite without attempting login', async () => {
+      const { controller, authService } = makeController();
+      const res = mockResponse();
+
+      await controller.login(
+        { cookies: { org: 'expired-invite' } } as any,
+        { provider: 'LOCAL', email: 'a@b.com', password: 'pw' } as any,
+        res,
+        '1.2.3.4',
+        'agent'
+      );
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.send).toHaveBeenCalledWith('Invitation is invalid or expired');
+      expect(authService.routeAuth).not.toHaveBeenCalled();
     });
   });
 
