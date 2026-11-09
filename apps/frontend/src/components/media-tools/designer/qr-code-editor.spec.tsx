@@ -1,14 +1,16 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { QrCodeEditor } from './qr-code-editor';
-import { DEFAULT_QR_CODE_SETTINGS } from './qr-code';
+import { DEFAULT_QR_CODE_SETTINGS, generateQrCode } from './qr-code';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
 }));
 vi.mock('./controls', () => ({
-  ColorSwatch: () => <div />,
+  ColorSwatch: ({ label, onChange }: { label: string; onChange: (value: string) => void }) => (
+    <button type="button" onClick={() => onChange(label === 'Code color' ? '#112233' : '#AABBCC')}>{label}</button>
+  ),
   Stepper: () => <div />,
 }));
 
@@ -33,5 +35,17 @@ describe('QrCodeEditor drafts', () => {
     );
     expect((view.getByPlaceholderText('https://example.com or plain text') as HTMLTextAreaElement).value)
       .toBe('https://postmill.ai/changed');
+  });
+
+  it('previews independent foreground and background color changes before Apply', async () => {
+    const view = render(<QrCodeEditor initialSettings={initial} submitLabel="Update" onSubmit={vi.fn()} />);
+
+    fireEvent.click(view.getByRole('button', { name: 'Code color' }));
+    fireEvent.click(view.getByRole('button', { name: 'Background color' }));
+
+    const expected = await generateQrCode({ ...initial, foreground: '#112233', background: '#AABBCC' });
+    await waitFor(() => {
+      expect(view.getByRole('img', { name: 'QR code preview' }).getAttribute('src')).toBe(expected);
+    });
   });
 });

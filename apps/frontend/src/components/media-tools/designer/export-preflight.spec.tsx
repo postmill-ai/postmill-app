@@ -34,6 +34,23 @@ describe('ExportPreflight', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
+  it('makes unassessed reasons actionable when targets are available', () => {
+    const onFinding = vi.fn();
+    const item = {
+      ...finding,
+      key: 'designer_preflight_unassessed_contrast_image',
+      vars: { target: 'Poster / Page 1' },
+    };
+    render(<ExportPreflight result={{
+      findings: [],
+      unassessed: { contrast: 1, text: 0, geometry: 0 },
+      unassessedItems: [item],
+    }} onFinding={onFinding} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Contrast needs visual review over an image on Poster / Page 1' }));
+    expect(onFinding).toHaveBeenCalledWith(item);
+  });
+
   it('returns nothing for a fully assessed clean result', () => {
     const { container } = render(<ExportPreflight result={{ findings: [], unassessed: { contrast: 0, text: 0, geometry: 0 } }} onFinding={vi.fn()} />);
     expect(container.innerHTML).toBe('');

@@ -114,6 +114,31 @@ describe('editable QR codes', () => {
     expect(clip?.qr).toBeUndefined();
   }, 20_000);
 
+  it('applies independent colors through the real store and preserves them on reopen', async () => {
+    const store = createDesignerStore();
+    await insertQrCode(store, settings);
+    const element = (store.getState().doc.outputs[0] as any).children[0];
+    const originalSrc = element.src;
+    const patch = await qrCodePatch({ ...settings, foreground: '#112233', background: '#AABBCC' });
+    store.getState().updateElement(element.id, patch);
+
+    const updated = (store.getState().doc.outputs[0] as any).children[0];
+    expect(updated.src).not.toBe(originalSrc);
+    expect(updated.qr).toMatchObject({ foreground: '#112233', background: '#AABBCC' });
+    const { data } = await sharp(Buffer.from(updated.src.split(',')[1], 'base64')).raw().toBuffer({ resolveWithObject: true });
+    const colors = new Set<number>();
+    for (let index = 0; index < data.length; index += 4) {
+      colors.add((data[index] << 16) | (data[index + 1] << 8) | data[index + 2]);
+    }
+    expect(colors.has(0x112233)).toBe(true);
+    expect(colors.has(0xaabbcc)).toBe(true);
+
+    const reopened = createDesignerStore();
+    reopened.getState().loadDesign(store.getState().doc, 'design-1', 'Campaign');
+    expect((reopened.getState().doc.outputs[0] as any).children[0].qr)
+      .toMatchObject({ foreground: '#112233', background: '#AABBCC' });
+  });
+
   it('exports the same QR pixels through the server renderer', async () => {
     const src = await generateQrCode(settings);
     const doc = {

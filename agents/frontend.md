@@ -394,7 +394,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
 - **QR codes are ordinary raster media plus editable settings.** `qr-code.ts` uses the frontend's
   `qrcode` dependency to make a 1024px PNG data URL, stored in the existing `src` on an image element
   or still-image clip. Optional-additive doc v13 `qr` preserves value, six-digit colors, L/M/Q/H error
-  correction and a 0–8 quiet zone for the shared Inspector editor. `qrCodePatch` clears `fileId` and
+  correction and a 0–8 quiet zone for the shared Inspector editor. The editor generates a debounced
+  live preview for independent foreground/background edits, with one Apply history commit. `qrCodePatch` clears `fileId` and
   derived media when regenerating pixels, and every media-replacement path clears `qr`; never retain
   settings from a different image. Smart-filter rebakes produce derived pixels of the same QR code,
   so both static and clip rebake paths preserve `qr` while replacing the underlying media clears it.
@@ -452,9 +453,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   contrast, unsafe-zone text, structurally missing media, and measured text overflow. Static text
   uses `fit-text.ts`; video text uses `layoutVideoText`. Safe-zone checks use the measured line
   extents, including alignment and static vertical alignment, rather than the full text box. Hidden
-  layers are skipped; rotated geometry, image/gradient/obscured backgrounds, and unavailable
-  measurements count as unassessed rather than passing or failing guesses. `export-preflight.tsx`
-  displays warnings and unassessed counts; finding clicks navigate to the target and close export.
+  layers are skipped; rotated bounds and solid-shape backdrops are assessed directly, while
+  image/gradient/obscured backgrounds and unavailable measurements remain unassessed rather than
+  passing or failing guesses. `export-preflight.tsx` displays warnings and targeted unassessed
+  reasons with counts; finding and reason clicks navigate to the target and close export.
   Brand enforcement and its admin override retain their existing blocking semantics, while these
   new warnings never block export.
 - **Video poster state distinguishes effective and generated images.** The export dialog sends
