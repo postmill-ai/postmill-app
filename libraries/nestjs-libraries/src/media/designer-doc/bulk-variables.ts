@@ -16,6 +16,21 @@ export const substituteBulkValue = (
   row[key] === undefined || row[key] === null ? match : String(row[key])
 );
 
+export const normalizeBulkImageSource = (value: string): string => {
+  const trimmed = value.trim();
+  const formula = /^=IMAGE\(\s*"((?:[^"]|"")+)"(?:\s*,[\s\S]*)?\)$/i.exec(trimmed);
+  const source = formula ? formula[1].replace(/""/g, '"') : trimmed;
+  try {
+    const url = new URL(source);
+    if (url.protocol !== 'https:' || url.hostname !== 'drive.google.com') return source;
+    const pathMatch = /^\/file\/d\/([^/]+)/.exec(url.pathname);
+    const id = pathMatch?.[1] || url.searchParams.get('id');
+    return id ? `https://drive.google.com/uc?export=download&id=${encodeURIComponent(id)}` : source;
+  } catch {
+    return source;
+  }
+};
+
 const substituteElement = (
   element: DesignerElement,
   row: Record<string, string>
@@ -34,17 +49,21 @@ const substituteElement = (
   }
 
   const slotName = element.slot?.name;
-  if (!slotName || row[slotName] === undefined) return;
-  switch (element.slot!.kind) {
-    case 'text':
-      element.text = row[slotName];
-      break;
-    case 'image':
-      element.src = row[slotName];
-      break;
-    case 'color':
-      element.fill = row[slotName];
-      break;
+  if (slotName && row[slotName] !== undefined) {
+    switch (element.slot!.kind) {
+      case 'text':
+        element.text = row[slotName];
+        break;
+      case 'image':
+        element.src = row[slotName];
+        break;
+      case 'color':
+        element.fill = row[slotName];
+        break;
+    }
+  }
+  if ((element.type === 'image' || element.type === 'raster') && element.src) {
+    element.src = normalizeBulkImageSource(element.src);
   }
 };
 
@@ -57,7 +76,7 @@ const substituteChildren = (
     if (element.symbolOverrides) {
       for (const override of Object.values(element.symbolOverrides)) {
         if (override.text) override.text = substituteBulkValue(override.text, row);
-        if (override.src) override.src = substituteBulkValue(override.src, row);
+        if (override.src) override.src = normalizeBulkImageSource(substituteBulkValue(override.src, row));
         if (override.fill) override.fill = substituteBulkValue(override.fill, row);
       }
     }

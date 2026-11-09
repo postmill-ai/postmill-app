@@ -919,6 +919,43 @@ describe('AiMediaService', () => {
     });
   });
 
+  describe('saveUrlToFile image validation', () => {
+    const configureStorage = (service: AiMediaService) => {
+      const writeBuffer = vi.fn().mockResolvedValue('/uploads/org/image.png');
+      const saveFile = vi.fn().mockResolvedValue({ id: 'image-file', path: '/uploads/org/image.png', name: 'image.png' });
+      (service as any)._storageService = {
+        getLocalAdapterForOrg: vi.fn().mockResolvedValue({ writeBuffer }),
+      };
+      (service as any)._fileService = { saveFile };
+      return { writeBuffer, saveFile };
+    };
+
+    it('rejects an HTML response instead of storing it as a PNG', async () => {
+      const service = bareService();
+      const { writeBuffer, saveFile } = configureStorage(service);
+
+      await expect(service.saveUrlToFile(
+        'org-1', 'data:text/html;base64,PGh0bWw+PC9odG1sPg==', 'bulk-create'
+      )).rejects.toThrow(/supported PNG, JPEG, or WebP/);
+
+      expect(writeBuffer).not.toHaveBeenCalled();
+      expect(saveFile).not.toHaveBeenCalled();
+    });
+
+    it('persists detected PNG bytes', async () => {
+      const service = bareService();
+      const { writeBuffer, saveFile } = configureStorage(service);
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+
+      await expect(service.saveUrlToFile(
+        'org-1', `data:image/png;base64,${png.toString('base64')}`, 'bulk-create'
+      )).resolves.toEqual({ id: 'image-file', path: '/uploads/org/image.png', name: 'image.png' });
+
+      expect(writeBuffer).toHaveBeenCalledWith(png, 'image/png');
+      expect(saveFile).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('image-edit inputs arriving as data URIs (persist hop)', () => {
     const tinyPngDataUri = `data:image/png;base64,${Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64')}`;
     const mintedUrl = 'https://uploads.example.com/uploads/org-1/2026/10/21/abc.png';

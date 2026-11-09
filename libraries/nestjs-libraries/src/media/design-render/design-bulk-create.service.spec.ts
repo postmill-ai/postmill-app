@@ -24,13 +24,14 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 
 import { BadRequestException } from '@nestjs/common';
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { DesignerDocService } from '../designer-doc/designer-doc.service';
 import { DesignBulkCreateService, DESIGN_BULK_CREATE_OPERATION } from './design-bulk-create.service';
 
 const makeDoc = (): any => ({
   version: 11,
   mode: 'image',
   outputs: [{
-    id: 'out-1', formatId: 'square', name: 'Square', width: 100, height: 100,
+    id: 'out-1', formatId: 'square', name: 'Square', width: 100, height: 100, background: '#ffffff',
     children: [{
       id: 'text-1', type: 'text', text: 'Hello {{name}}', x: 0, y: 0, width: 50, height: 20,
       rotation: 0, opacity: 1, locked: false, hidden: false,
@@ -42,7 +43,9 @@ const makeDoc = (): any => ({
     pages: [{
       id: 'page-2',
       children: [{
-        id: 'image-1', type: 'image', src: '{{image}}', x: 0, y: 0, width: 50, height: 50,
+        id: 'image-1', type: 'image', src: 'https://cdn.example.test/page-template.png',
+        slot: { name: 'image', kind: 'image' },
+        x: 0, y: 0, width: 50, height: 50,
         rotation: 0, opacity: 1, locked: false, hidden: false,
       }],
     }],
@@ -67,8 +70,12 @@ const makeService = () => {
       Object.assign(job, update);
     }),
   };
-  const designService = { createDesign: vi.fn(async (_org: string, _user: string, data: any) => ({ id: `design-${data.doc.outputs[0].children[0].text}`, ...data })) };
-  const designerDocService = { validate: vi.fn((doc) => doc) };
+  const designService = { createDesign: vi.fn(async (_org: string, _user: string, data: any) => {
+    designerDocService.validate(data.doc);
+    return { id: `design-${data.doc.outputs[0].children[0].text}`, ...data };
+  }) };
+  const designerDocService = new DesignerDocService();
+  vi.spyOn(designerDocService, 'validate');
   const fileService = {
     getFolder: vi.fn(async () => ({ id: 'folder-1' })),
     createFolder: vi.fn(async () => ({ id: 'batch-folder' })),
@@ -150,6 +157,31 @@ describe('DesignBulkCreateService enqueue and status', () => {
     await expect(service.enqueueBulkCreate('org-1', 'user-1', {
       doc: makeDoc(), rows: [{ name: 42 } as any],
     })).rejects.toThrow(/strings/);
+  });
+
+  it('rejects an invalid transformed row before creating any job, folder, payload or event', async () => {
+    const { service, lifecycle, fileService } = makeService();
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(), rows: [{ name: 'Ada', image: '=IMAGE("not a URL")' }],
+    })).rejects.toThrow(/Row 1: outputs\.0\.pages\.0\.children\.0\.src/);
+
+    expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
+    expect(fileService.createFolder).not.toHaveBeenCalled();
+    expect(inngest.send).not.toHaveBeenCalled();
+    expect(redis.size).toBe(0);
+  });
+
+  it('accepts spreadsheet image formulas and Drive links through the real validator', async () => {
+    const { service } = makeService();
+    const rows = [{
+      name: 'Ada',
+      image: '=IMAGE("https://drive.google.com/file/d/product-image-1/view?usp=sharing")',
+    }];
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(), rows, nameBase: 'Launch',
+    })).resolves.toEqual({ id: 'job-1', status: 'pending' });
   });
 
   it('returns only the matching operation and org, and tolerates malformed result state', async () => {
@@ -240,6 +272,26 @@ describe('DesignBulkCreateService processing', () => {
 
     expect(aiMediaService.saveUrlToFile).toHaveBeenCalledTimes(1);
     expect(designService.createDesign).toHaveBeenCalledTimes(2);
+  });
+
+  it('processes a five-row catalog with spreadsheet formulas through real document validation', async () => {
+    const { service, designService, aiMediaService, renderService, aiSettings, writes } = makeService();
+    seedPayload(Array.from({ length: 5 }, (_, index) => ({
+      name: `Product ${index + 1}`,
+      image: `=IMAGE("https://drive.google.com/file/d/product-${index + 1}/view?usp=sharing")`,
+    })));
+
+    await service.processBulkCreate('job-1');
+
+    expect(designService.createDesign).toHaveBeenCalledTimes(5);
+    expect(aiMediaService.saveUrlToFile).toHaveBeenCalledTimes(5);
+    expect(aiMediaService.saveUrlToFile.mock.calls[0][1])
+      .toBe('https://drive.google.com/uc?export=download&id=product-1');
+    expect(renderService.renderPage).toHaveBeenCalledTimes(10);
+    const completed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'completed')?.[2];
+    expect(JSON.parse(completed.inputJson)).toHaveLength(5);
+    expect(JSON.parse(completed.inputJson).every((result: any) => result.designId && !result.error)).toBe(true);
+    expect(writes.some((write) => write.mime === 'application/zip')).toBe(true);
   });
 
   it('isolates a failed row and still completes the successful rows', async () => {

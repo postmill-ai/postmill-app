@@ -47,6 +47,19 @@ export interface DesignBulkCreateRowResult {
   error?: string;
 }
 
+const errorDetail = (error: unknown, fallback: string): string => {
+  const response = (error as BadRequestException)?.getResponse?.();
+  if (response && typeof response === 'object') {
+    const body = response as { message?: string; issues?: { path?: (string | number)[]; message?: string }[] };
+    const issues = (body.issues || []).slice(0, 5).map((issue) =>
+      `${(issue.path || []).join('.')}: ${issue.message || 'invalid value'}`
+    );
+    if (issues.length) return issues.join('; ');
+    if (body.message) return body.message;
+  }
+  return (error as Error)?.message || fallback;
+};
+
 @Injectable()
 export class DesignBulkCreateService extends DesignBulkService {
   private readonly _logger = new Logger(DesignBulkCreateService.name);
@@ -122,6 +135,13 @@ export class DesignBulkCreateService extends DesignBulkService {
         }
       }
       return Object.fromEntries(entries);
+    });
+    rows.forEach((row, index) => {
+      try {
+        this._designerDocService.validate(applyBulkRow(doc, row));
+      } catch (error) {
+        throw new BadRequestException(`Row ${index + 1}: ${errorDetail(error, 'Invalid DesignerDoc')}`.slice(0, 1000));
+      }
     });
     if (input.folderId) await this._fileService.getFolder(orgId, input.folderId);
 
@@ -306,7 +326,7 @@ export class DesignBulkCreateService extends DesignBulkService {
           }
           succeeded++;
         } catch (error) {
-          result.error = ((error as Error)?.message || 'Row failed').slice(0, 500);
+          result.error = errorDetail(error, 'Row failed').slice(0, 500);
           this._logger.warn(`Bulk Create ${jobId}: row ${index + 1} failed: ${result.error}`);
         }
         results.push(result);
