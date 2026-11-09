@@ -8,9 +8,16 @@ vi.mock('./elements', () => ({
 vi.mock('./reflow', () => ({
   detectFocalPoint: vi.fn(),
 }));
+vi.mock('./image-edit-pixels', () => ({
+  preserveOutpaintSource: vi.fn().mockResolvedValue({}),
+}));
+vi.mock('./raster-layers', () => ({
+  commitCanvas: vi.fn().mockResolvedValue({ src: '/uploads/org/preserved.png', fileId: 'preserved-file' }),
+}));
 
 import { aiOutpaint } from './ai-image-actions';
 import { probeImageNaturalSize } from './elements';
+import { preserveOutpaintSource } from './image-edit-pixels';
 
 interface FakeElement {
   id: string;
@@ -112,8 +119,8 @@ describe('aiOutpaint', () => {
         y: 20,
         width: 1600,
         height: 900,
-        src: 'https://cdn/expanded.png',
-        fileId: undefined,
+        src: '/uploads/org/preserved.png',
+        fileId: 'preserved-file',
         crop: undefined,
         originalSrc: undefined,
         originalFileId: undefined,
@@ -126,6 +133,21 @@ describe('aiOutpaint', () => {
       },
     ]);
     expect(probeImageNaturalSize).toHaveBeenCalledWith('https://cdn/expanded.png');
+  });
+
+  it('scales directional restore coordinates into output pixels', async () => {
+    const store = makeStore({
+      id: 'el-1', type: 'image', src: 'https://x/chicken.png', x: 100, y: 50,
+      width: 400, height: 225, naturalWidth: 800, naturalHeight: 450,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(okResponse('https://cdn/expanded.png'));
+
+    await aiOutpaint({ fetch: fetchMock, store, elementId: 'el-1' }, 'right');
+
+    expect(preserveOutpaintSource).toHaveBeenCalledWith(expect.objectContaining({
+      resultNatural: { width: 1600, height: 900 },
+      frame: expect.objectContaining({ x: 0, y: 0, width: 800, height: 450 }),
+    }));
   });
 
   it('surfaces the server error message (502/409 envelope) instead of a bare failure', async () => {

@@ -130,6 +130,9 @@ File. `POST /media/magic-grab/cleanup` accepts a `fileId` and
 uses the same `media:create` gate to delete only org-owned files named `magic-grab-background-*`.
 The shared review modal invokes it on every unapplied close; successful Apply retains the referenced
 background, and rejected static/video inserts return false and clean up rather than reporting success.
+Both review and final subject render original source pixels through the provider alpha, never an RGB
+silhouette. Directional and whole-page expansion likewise paints the provider result first and then
+restores the exact original frame over it, so generated pixels cannot repaint the source subject.
 
 **Designer genAI modal picker endpoints** (`media.controller.ts`, read-level, no admin gate): `GET /media/generation-providers?operation=image|video|audio|avatar|tts` (400 otherwise) → `{ providers: [{ identifier, name }], default: { providerId, model } | null }` — `providers` is exactly the candidate list generation would consider (`AiMediaService.listGenerationProviders` reuses `_resolveForOperation`); generation for a non-default pick goes through the studio endpoints above. `POST /media/text-to-speech` also accepts an optional `provider` pin: unknown / not-enabled / unconfigured / non-`tts` provider → 400, and a pinned call makes exactly one attempt (no fallback to other candidates).
 
