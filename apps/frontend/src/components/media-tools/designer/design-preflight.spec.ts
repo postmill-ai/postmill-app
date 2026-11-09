@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { analyzeDesignerPreflight } from './design-preflight';
+import { analyzeDesignerPreflight, rotatedBox } from './design-preflight';
 import { getContrastRatio } from './contrast';
 
 const measureForElement = vi.hoisted(() => vi.fn());
@@ -101,6 +101,12 @@ describe('analyzeDesignerPreflight', () => {
     expect(result.findings).toEqual([]);
   });
 
+  it('rotates line bounds around the element origin', () => {
+    expect(rotatedBox({
+      x: 550, y: 500, width: 100, height: 200, pivotX: 500, pivotY: 500,
+    }, 90)).toEqual({ x: 300, y: 550, width: 200, height: 100 });
+  });
+
   it('assesses contrast against a solid backdrop and keeps complex backdrops targeted', () => {
     const solid = {
       id: 'backdrop', type: 'shape', shape: 'rect', x: 0, y: 0, width: 300, height: 300,
@@ -122,6 +128,17 @@ describe('analyzeDesignerPreflight', () => {
         pageNumber: 0,
       }),
     ]);
+  });
+
+  it('keeps partially transparent backdrops unassessed instead of treating them as solid', () => {
+    const translucent = {
+      id: 'backdrop', type: 'shape', shape: 'rect', x: 0, y: 0, width: 300, height: 300,
+      rotation: 0, opacity: 0.5, hidden: false, locked: false, fill: '#ffffff',
+    };
+    const result = analyze(doc([output([translucent, text('one')])]));
+    expect(result.findings).toEqual([]);
+    expect(result.unassessed.contrast).toBe(1);
+    expect(result.unassessedItems?.[0].key).toBe('designer_preflight_unassessed_contrast_image');
   });
 
   it('flags structurally missing static media', () => {

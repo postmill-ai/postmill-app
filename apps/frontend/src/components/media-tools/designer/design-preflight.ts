@@ -37,17 +37,19 @@ export type DesignerPreflightResult = {
   unassessedItems?: DesignerPreflightFinding[];
 };
 
-type Box = { x: number; y: number; width: number; height: number };
+type Box = { x: number; y: number; width: number; height: number; pivotX?: number; pivotY?: number };
 
-const rotatedBox = (box: Box, rotation: number): Box => {
+export const rotatedBox = (box: Box, rotation: number): Box => {
   const radians = rotation * Math.PI / 180;
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
+  const pivotX = box.pivotX ?? box.x;
+  const pivotY = box.pivotY ?? box.y;
   const points = [
     [0, 0], [box.width, 0], [0, box.height], [box.width, box.height],
   ].map(([x, y]) => ({
-    x: box.x + x * cos - y * sin,
-    y: box.y + x * sin + y * cos,
+    x: pivotX + (box.x - pivotX + x) * cos - (box.y - pivotY + y) * sin,
+    y: pivotY + (box.x - pivotX + x) * sin + (box.y - pivotY + y) * cos,
   }));
   const left = Math.min(...points.map((point) => point.x));
   const top = Math.min(...points.map((point) => point.y));
@@ -208,7 +210,14 @@ export const analyzeDesignerPreflight = (
       right = Math.max(right, justified ? indent + available : lineLeft + width);
     });
     return {
-      box: { x: element.x + left, y: element.y + top, width: right - left, height: contentHeight },
+      box: {
+        x: element.x + left,
+        y: element.y + top,
+        width: right - left,
+        height: contentHeight,
+        pivotX: element.x,
+        pivotY: element.y,
+      },
       overflow: contentHeight > element.height + 0.5 || widths.some((width, index) =>
         width + (fit.lineIndents[index] || 0) * scaleX > element.width + 0.5),
     };
@@ -233,7 +242,14 @@ export const analyzeDesignerPreflight = (
       right = Math.max(right, justified ? width : lineLeft + line.width);
     });
     return {
-      box: { x: (clip.x || 0) + left, y: clip.y || 0, width: right - left, height: all.length * fontSize },
+      box: {
+        x: (clip.x || 0) + left,
+        y: clip.y || 0,
+        width: right - left,
+        height: all.length * fontSize,
+        pivotX: clip.x,
+        pivotY: clip.y,
+      },
       overflow: all.length > visible.length || all[visible.length - 1]?.text !== visible[visible.length - 1]?.text,
     };
   };
@@ -266,7 +282,7 @@ export const analyzeDesignerPreflight = (
           if (element.richText?.length) {
             unassess('contrast', 'designer_preflight_unassessed_contrast_rich_text', output, outputIndex, pageNumber, element.id);
           } else if (backdrop) {
-            if (backdrop.fill && !backdrop.fillGradient) {
+            if (backdrop.fill && !backdrop.fillGradient && (backdrop.opacity ?? 1) >= 1) {
               contrast(output, pageNumber, outputIndex, {
                 id: element.id,
                 fill: element.fill,
