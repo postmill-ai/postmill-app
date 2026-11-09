@@ -1,3 +1,4 @@
+import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { describe, expect, it, vi } from 'vitest';
 import { UsersController } from './users.controller';
 
@@ -27,6 +28,12 @@ const createController = (cookie: typeof invite | false, addedOrg: unknown = fal
 };
 
 describe('UsersController joinOrg', () => {
+  it('preserves the HTTP 200 response contract', () => {
+    expect(
+      Reflect.getMetadata(HTTP_CODE_METADATA, UsersController.prototype.joinOrg)
+    ).toBe(200);
+  });
+
   it('returns a serializable null id for an invalid or expired invite', async () => {
     const { controller, organizations } = createController(false);
 

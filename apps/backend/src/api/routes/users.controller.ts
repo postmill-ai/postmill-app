@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   HttpException,
   Logger,
   NotFoundException,
@@ -249,6 +250,7 @@ export class UsersController {
   }
 
   @Post('/join-org')
+  @HttpCode(200)
   async joinOrg(
     @GetUserFromRequest() user: User,
     @Body('org') org: string
