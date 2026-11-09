@@ -5,6 +5,12 @@ const mockOrganization = {
   organization: {
     update: vi.fn(),
     findFirst: vi.fn(),
+    create: vi.fn(),
+    $transaction: vi.fn((callback) => callback({
+      user: mockUser.user,
+      organization: mockOrganization.organization,
+      userOrganization: mockUserOrg.userOrganization,
+    })),
   },
 };
 const mockUserOrg = {
@@ -41,12 +47,14 @@ describe('OrganizationRepository', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    userModel.findFirst.mockReset();
     repository = new OrganizationRepository(
       mockPrismaRepository(mockOrganization) as any,
       mockPrismaRepository(mockUserOrg) as any,
       mockPrismaRepository(mockUser) as any,
       mockPrismaRepository({}) as any,
-      mockPrismaRepository(mockAppRole) as any
+      mockPrismaRepository(mockAppRole) as any,
+      mockPrismaRepository({ $transaction: orgModel.$transaction }) as any
     );
   });
 
@@ -133,6 +141,78 @@ describe('OrganizationRepository', () => {
         data: { inviteId: 'invite-1' },
       });
       expect(result).toEqual({ organizationId: 'org-1' });
+    });
+  });
+
+  describe('createInvitedUser', () => {
+    const body = {
+      company: 'Unused personal org',
+      email: 'new@example.com',
+      password: 'secret123',
+      provider: 'LOCAL' as const,
+      preferredLanguage: 'de',
+    };
+    const invite = { orgId: 'org-1', role: 'USER' as const, id: 'invite-1', roleId: 'role-editor' };
+
+    beforeEach(() => {
+      appRoleModel.findFirst.mockResolvedValue({ id: 'role-editor', key: 'editor' });
+      orgModel.findFirst.mockResolvedValue({ subscription: { subscriptionTier: 'TEAM' } });
+      userModel.findFirst.mockResolvedValue(null);
+      userModel.create.mockResolvedValue({ id: 'u-1', email: body.email });
+      userOrgModel.create.mockResolvedValue({ id: 'uo-1', organizationId: 'org-1' });
+    });
+
+    it('creates the user and invited membership without creating an organization', async () => {
+      const result = await repository.createInvitedUser(body, false, 'ip', 'ua', invite);
+
+      expect(orgModel.$transaction).toHaveBeenCalledTimes(1);
+      expect(orgModel.create).not.toHaveBeenCalled();
+      expect(userModel.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          email: 'new@example.com',
+          inviteId: 'invite-1',
+          activated: true,
+        }),
+        include: { profile: true },
+      });
+      expect(userOrgModel.create).toHaveBeenCalledWith({
+        data: { roleId: 'role-editor', userId: 'u-1', organizationId: 'org-1' },
+      });
+      expect(result).toEqual({
+        user: { id: 'u-1', email: 'new@example.com' },
+        membership: { id: 'uo-1', organizationId: 'org-1' },
+      });
+    });
+
+    it('rejects a consumed invite before creating anything', async () => {
+      userModel.findFirst.mockResolvedValueOnce({ id: 'existing-user' });
+
+      await expect(
+        repository.createInvitedUser(body, false, 'ip', 'ua', invite)
+      ).rejects.toThrow('Invitation has already been used');
+      expect(userModel.create).not.toHaveBeenCalled();
+      expect(userOrgModel.create).not.toHaveBeenCalled();
+      expect(orgModel.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a foreign role before opening the transaction', async () => {
+      appRoleModel.findFirst.mockResolvedValue(null);
+
+      await expect(
+        repository.createInvitedUser(body, false, 'ip', 'ua', invite)
+      ).rejects.toThrow('Role not found in organization');
+      expect(orgModel.$transaction).not.toHaveBeenCalled();
+      expect(userModel.create).not.toHaveBeenCalled();
+    });
+
+    it('does not create an org or membership when user creation fails', async () => {
+      userModel.create.mockRejectedValue(new Error('database failure'));
+
+      await expect(
+        repository.createInvitedUser(body, false, 'ip', 'ua', invite)
+      ).rejects.toThrow('database failure');
+      expect(orgModel.create).not.toHaveBeenCalled();
+      expect(userOrgModel.create).not.toHaveBeenCalled();
     });
   });
 

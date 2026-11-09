@@ -104,6 +104,14 @@ export class BrandsController {
 
 ---
 
+## Invited registration
+
+A valid invite creates the user/profile and invited-org membership in one transaction, with the invite marked consumed. LOCAL and OAuth invited registration must never create a personal Organization or a second membership before that transaction succeeds. Registration rejects a present but invalid/expired invite cookie rather than silently creating a personal org; login proceeds without joining and clears that stale cookie. Ordinary uninvited signup continues through `createOrgAndUser`.
+
+A user with no active membership keeps their session and receives `403 NO_WORKSPACE`; the frontend renders `/no-workspace` instead of a logout loop. Only `/user/organizations`, `/user/join-org`, and `/user/logout` bypass that rejection so the user can inspect memberships, accept a new invite, or sign out. No personal org is created automatically when the last membership is removed.
+
+---
+
 ## Organization portability
 
 `OrgPortabilityController` handles owner-only export creation/history/download issuance;

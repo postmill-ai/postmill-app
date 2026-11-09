@@ -127,6 +127,7 @@ describe('AuthService (backend)', () => {
     organizationService = {
       getCount: vi.fn().mockResolvedValue(1),
       createOrgAndUser: vi.fn(),
+      createInvitedUser: vi.fn(),
       addUserToOrg: vi.fn(),
     };
     notificationService = { sendEmail: vi.fn().mockResolvedValue(undefined) };
@@ -516,51 +517,55 @@ describe('AuthService (backend)', () => {
       ).rejects.toThrow('Email with plus sign is not allowed');
     });
 
-    it('adds the new user to an org when an addToOrg payload is given', async () => {
+    it('creates only the invited user and membership when an addToOrg payload is given', async () => {
+      const invite = { orgId: 'org-9', role: 'USER' as const, id: 'invite-1', roleId: 'role-member' };
       usersService.getUserByEmail.mockResolvedValue(null);
-      organizationService.addUserToOrg.mockResolvedValue({ id: 'uo-1' });
+      organizationService.createInvitedUser.mockResolvedValue({
+        user: { id: 'user-1', email: 'new@example.com' },
+        membership: { id: 'uo-1', organizationId: 'org-9' },
+      });
 
       const result = await service.routeAuth(
         Provider.LOCAL,
         makeRegisterBody(),
         'ip',
         'ua',
-        { orgId: 'org-9', role: 'USER', id: 'invite-1', roleId: 'role-member' }
+        invite
       );
 
-      expect(organizationService.addUserToOrg).toHaveBeenCalledWith(
-        'user-1',
-        'invite-1',
-        'org-9',
-        'USER',
-        'role-member'
+      expect(organizationService.createInvitedUser).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'new@example.com' }),
+        'ip',
+        'ua',
+        invite
       );
-      expect(result.addedOrg).toEqual({ id: 'uo-1' });
+      expect(organizationService.createOrgAndUser).not.toHaveBeenCalled();
+      expect(organizationService.addUserToOrg).not.toHaveBeenCalled();
+      expect(result.addedOrg).toEqual({ id: 'uo-1', organizationId: 'org-9' });
       expect(usersService.updateUserAvatar).toHaveBeenCalledWith(
         'user-1',
         expect.stringContaining('https://www.gravatar.com/avatar/')
       );
     });
 
-    it('warns when an invite is present but the join is refused (addedOrg === false)', async () => {
-      const warnSpy = vi.spyOn(Logger, 'warn').mockImplementation(() => {});
+    it('does not create an org, session, or email when the invited join fails', async () => {
       usersService.getUserByEmail.mockResolvedValue(null);
-      organizationService.addUserToOrg.mockResolvedValue(false);
+      organizationService.createInvitedUser.mockRejectedValue(new Error('invite refused'));
 
-      const result = await service.routeAuth(
-        Provider.LOCAL,
-        makeRegisterBody(),
-        'ip',
-        'ua',
-        { orgId: 'org-9', role: 'USER', id: 'invite-1', roleId: 'role-member' }
-      );
+      await expect(
+        service.routeAuth(
+          Provider.LOCAL,
+          makeRegisterBody(),
+          'ip',
+          'ua',
+          { orgId: 'org-9', role: 'USER', id: 'invite-1', roleId: 'role-member' }
+        )
+      ).rejects.toThrow('invite refused');
 
-      expect(result.addedOrg).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('org=org-9'),
-        expect.any(String)
-      );
-      warnSpy.mockRestore();
+      expect(organizationService.createOrgAndUser).not.toHaveBeenCalled();
+      expect(organizationService.addUserToOrg).not.toHaveBeenCalled();
+      expect(usersService.createSession).not.toHaveBeenCalled();
+      expect(notificationService.sendEmail).not.toHaveBeenCalled();
     });
   });
 
@@ -711,6 +716,46 @@ describe('AuthService (backend)', () => {
         'user-2',
         'https://avatars.example.com/gh-1.png'
       );
+      expect(result.jwt).toBe('jwt:user-2');
+    });
+
+    it('registers an invited provider user without creating a personal org', async () => {
+      process.env.ADMIN_NOTIFICATIONS_EMAIL = 'admin@example.com';
+      const invite = { orgId: 'org-9', role: 'USER' as const, id: 'invite-1', roleId: 'role-member' };
+      providerInstance.getUser.mockResolvedValue({
+        id: 'google-1',
+        email: 'gh@example.com',
+        name: 'GH User',
+      });
+      usersService.getUserByProvider.mockResolvedValue(null);
+      organizationService.createInvitedUser.mockResolvedValue({
+        user: { id: 'user-2', email: 'gh@example.com' },
+        membership: { id: 'uo-1', organizationId: 'org-9' },
+      });
+
+      const result = await service.routeAuth(
+        Provider.GOOGLE,
+        makeRegisterBody({ providerToken: 'token-1' }),
+        'ip',
+        'ua',
+        invite
+      );
+
+      expect(organizationService.createInvitedUser).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: Provider.GOOGLE, providerId: 'google-1' }),
+        'ip',
+        'ua',
+        invite
+      );
+      expect(organizationService.createOrgAndUser).not.toHaveBeenCalled();
+      expect(organizationService.addUserToOrg).not.toHaveBeenCalled();
+      expect(providerInstance.postRegistration).toHaveBeenCalledWith('token-1', 'org-9');
+      expect(notificationService.sendEmail).not.toHaveBeenCalledWith(
+        'admin@example.com',
+        expect.any(String),
+        expect.any(String)
+      );
+      expect(result.addedOrg).toEqual({ id: 'uo-1', organizationId: 'org-9' });
       expect(result.jwt).toBe('jwt:user-2');
     });
 

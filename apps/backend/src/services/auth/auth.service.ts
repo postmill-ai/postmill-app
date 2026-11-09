@@ -153,34 +153,23 @@ export class AuthService {
           throw new Error('Registration is disabled');
         }
 
-        const create = await this._organizationService.createOrgAndUser(
-          body,
-          ip,
-          userAgent
-        );
-
-        addedOrg =
-          addToOrg && typeof addToOrg !== 'boolean'
-            ? await this._organizationService.addUserToOrg(
-                create.users[0].user.id,
-                addToOrg.id,
-                addToOrg.orgId,
-                addToOrg.role,
-                addToOrg.roleId,
-              )
-            : false;
-
-        // A false here means the invite existed but the join was refused
-        // (replay / STARTER seat limit) — never let that fail silently; the
-        // invitee otherwise lands in their personal tenant with no trace.
-        if (addToOrg && typeof addToOrg !== 'boolean' && !addedOrg) {
-          Logger.warn(
-            `Invite join skipped at register: user=${create.users[0].user.id} org=${addToOrg.orgId}`,
-            AuthService.name
+        if (addToOrg && typeof addToOrg !== 'boolean') {
+          const created = await this._organizationService.createInvitedUser(
+            body,
+            ip,
+            userAgent,
+            addToOrg,
           );
+          user = created.user;
+          addedOrg = created.membership;
+        } else {
+          const create = await this._organizationService.createOrgAndUser(
+            body,
+            ip,
+            userAgent
+          );
+          user = create.users[0].user;
         }
-
-        user = create.users[0].user;
 
         // Set Gravatar avatar for local email signups.
         await this.handleProviderPicture(user.id, user.email, null);
@@ -206,24 +195,26 @@ export class AuthService {
 
       user = existingUser;
     } else {
-      user = await this.loginOrRegisterProvider(
+      const providerResult = await this.loginOrRegisterProvider(
         provider,
         body as CreateOrgUserDto,
         ip,
-        userAgent
+        userAgent,
+        addToOrg,
       );
+      user = providerResult.user;
+      addedOrg = providerResult.addedOrg;
     }
 
-    addedOrg =
-      addToOrg && typeof addToOrg !== 'boolean'
-        ? await this._organizationService.addUserToOrg(
-            user.id,
-            addToOrg.id,
-            addToOrg.orgId,
-            addToOrg.role,
-            addToOrg.roleId,
-          )
-        : false;
+    if (addToOrg && typeof addToOrg !== 'boolean' && !addedOrg) {
+      addedOrg = await this._organizationService.addUserToOrg(
+        user.id,
+        addToOrg.id,
+        addToOrg.orgId,
+        addToOrg.role,
+        addToOrg.roleId,
+      );
+    }
 
     if (addToOrg && typeof addToOrg !== 'boolean' && !addedOrg) {
       Logger.warn(
@@ -265,8 +256,9 @@ export class AuthService {
     provider: Provider,
     body: CreateOrgUserDto,
     ip: string,
-    userAgent: string
-  ) {
+    userAgent: string,
+    addToOrg?: boolean | { orgId: string; role: 'USER' | 'ADMIN'; id: string; roleId?: string }
+  ): Promise<{ user: User; addedOrg: UserOrganization | false }> {
     const providerInstance = this._providerManager.getProvider(provider);
     const providerUser = await providerInstance.getUser(body.providerToken);
 
@@ -279,7 +271,7 @@ export class AuthService {
       provider
     );
     if (user) {
-      return user;
+      return { user, addedOrg: false as const };
     }
 
     if (!(await this.canRegister(provider))) {
@@ -296,21 +288,41 @@ export class AuthService {
       );
     }
 
-    const create = await this._organizationService.createOrgAndUser(
-      {
-        company: body.company,
-        email,
-        password: '',
-        provider,
-        providerId: providerUser.id,
-        datafast_visitor_id: body.datafast_visitor_id,
-        name: providerUser.name || body.name || undefined,
-        lastName: body.lastName || undefined,
-        preferredLanguage: body.preferredLanguage,
-      },
-      ip,
-      userAgent
-    );
+    const registration = {
+      company: body.company,
+      email,
+      password: '',
+      provider,
+      providerId: providerUser.id,
+      datafast_visitor_id: body.datafast_visitor_id,
+      name: providerUser.name || body.name || undefined,
+      lastName: body.lastName || undefined,
+      preferredLanguage: body.preferredLanguage,
+    };
+    const invited = addToOrg && typeof addToOrg !== 'boolean' ? addToOrg : undefined;
+    let newUser: User;
+    let addedOrg: UserOrganization | false = false;
+    let registrationOrgId: string;
+
+    if (invited) {
+      const created = await this._organizationService.createInvitedUser(
+        registration,
+        ip,
+        userAgent,
+        invited,
+      );
+      newUser = created.user;
+      addedOrg = created.membership;
+      registrationOrgId = invited.orgId;
+    } else {
+      const created = await this._organizationService.createOrgAndUser(
+        registration,
+        ip,
+        userAgent
+      );
+      newUser = created.users[0].user;
+      registrationOrgId = created.id;
+    }
 
     this._track('register', email, body.datafast_visitor_id).catch(
       (err) => {}
@@ -323,27 +335,27 @@ export class AuthService {
       await NewsletterService.register(email);
       await this._sendWelcomeEmail(email);
     }
-    await this._notifyAdminSignup({
-      email,
-      provider: String(provider),
-      company: body.company,
-      context: 'registered',
-    });
+    if (!invited) {
+      await this._notifyAdminSignup({
+        email,
+        provider: String(provider),
+        company: body.company,
+        context: 'registered',
+      });
+    }
 
     try {
       if (providerInstance?.postRegistration) {
-        await providerInstance.postRegistration(body.providerToken, create.id);
+        await providerInstance.postRegistration(body.providerToken, registrationOrgId);
       }
     } catch (err) {
       // Don't fail registration if postRegistration fails
     }
 
-    // Handle provider picture
-    const newUser = create.users[0].user;
     const pictureUrl = providerUser.picture ?? null;
     await this.handleProviderPicture(newUser.id, newUser.email, pictureUrl);
 
-    return newUser;
+    return { user: newUser, addedOrg };
   }
 
   private async _track(

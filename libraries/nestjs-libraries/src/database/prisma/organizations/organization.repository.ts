@@ -1,4 +1,4 @@
-import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository, PrismaTransaction } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { ShortLinkPreference, SubscriptionTier, Provider, StorageProviderType } from '@prisma/client';
 import { BadRequestException, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
@@ -17,7 +17,8 @@ export class OrganizationRepository {
     private _userOrg: PrismaRepository<'userOrganization'>,
     private _user: PrismaRepository<'user'>,
     private _storage: PrismaRepository<'storageProviderConfig'>,
-    private _appRole: PrismaRepository<'appRole'>
+    private _appRole: PrismaRepository<'appRole'>,
+    private _transaction: PrismaTransaction
   ) {}
 
   async createMaxUser(id: string, name: string, saasName: string, email: string) {
@@ -281,6 +282,83 @@ export class OrganizationRepository {
     });
 
     return create;
+  }
+
+  async createInvitedUser(
+    body: Omit<CreateOrgUserDto, 'providerToken'> & { providerId?: string; name?: string; lastName?: string },
+    hasEmail: boolean,
+    ip: string,
+    userAgent: string,
+    invite: { orgId: string; role: 'USER' | 'ADMIN'; id: string; roleId?: string },
+  ) {
+    const appRole = invite.roleId
+      ? await this._resolveOrgRole(invite.orgId, invite.roleId)
+      : await this._appRole.model.appRole.findFirst({
+          where: { organizationId: null, key: invite.role === 'ADMIN' ? 'admin' : 'member', isSystem: true },
+        });
+
+    return this._transaction.model.$transaction(async (tx) => {
+      const inviteConsumed = await tx.user.findFirst({
+        where: { inviteId: invite.id },
+        select: { id: true },
+      });
+      if (inviteConsumed) {
+        throw new BadRequestException('Invitation has already been used');
+      }
+
+      const organization = await tx.organization.findFirst({
+        where: { id: invite.orgId },
+        select: { subscription: true },
+      });
+      if (!organization) {
+        throw new BadRequestException('Organization not found');
+      }
+      if (
+        billingEnabled() &&
+        organization.subscription?.subscriptionTier === SubscriptionTier.STARTER
+      ) {
+        throw new BadRequestException('The organization has no available seats');
+      }
+
+      const existingUser = await tx.user.findFirst({
+        where: { email: body.email, providerName: body.provider },
+        select: { id: true },
+      });
+      if (existingUser) {
+        throw new BadRequestException('Email already exists');
+      }
+
+      const user = await tx.user.create({
+        data: {
+          activated: body.provider !== 'LOCAL' || !hasEmail,
+          email: body.email,
+          password: body.password ? AuthService.hashPassword(body.password) : '',
+          providerName: body.provider,
+          providerId: body.providerId || '',
+          inviteId: invite.id,
+          ip,
+          agent: userAgent,
+          tosAcceptedAt: new Date(),
+          tosVersion: TOS_VERSION,
+          profile: {
+            create: {
+              name: body.name || null,
+              lastName: body.lastName || null,
+              preferredLanguage: body.preferredLanguage || null,
+            },
+          },
+        },
+        include: { profile: true },
+      });
+      const membership = await tx.userOrganization.create({
+        data: {
+          roleId: appRole?.id,
+          userId: user.id,
+          organizationId: invite.orgId,
+        },
+      });
+      return { user, membership };
+    });
   }
 
   async createOrgAndUser(

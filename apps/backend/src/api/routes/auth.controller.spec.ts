@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import jwt from 'jsonwebtoken';
 
@@ -20,6 +21,7 @@ import { AuthService as AuthChecker } from '@postmill-ai/helpers/auth/auth.servi
 function mockResponse() {
   const res: any = {};
   res.cookie = vi.fn().mockReturnValue(res);
+  res.clearCookie = vi.fn().mockReturnValue(res);
   res.header = vi.fn().mockReturnValue(res);
   res.status = vi.fn().mockReturnValue(res);
   res.json = vi.fn().mockReturnValue(res);
@@ -132,6 +134,46 @@ describe('AuthController — F1 behavioural tests', () => {
       expect(res.send).toHaveBeenCalledWith('Registration failed');
       expect(res.cookie).not.toHaveBeenCalledWith('auth', expect.anything(), expect.anything());
     });
+
+    it('rejects an invalid invite without attempting registration', async () => {
+      const { controller, authService } = makeController();
+      const res = mockResponse();
+
+      await controller.register(
+        { cookies: { org: 'expired-invite' } } as any,
+        { provider: 'LOCAL', email: 'a@b.com' } as any,
+        res,
+        '1.2.3.4',
+        'agent'
+      );
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.send).toHaveBeenCalledWith('Invitation is invalid or expired');
+      expect(res.clearCookie).toHaveBeenCalledWith('org', expect.objectContaining({ path: '/' }));
+      expect(authService.routeAuth).not.toHaveBeenCalled();
+    });
+
+    it('returns an actionable invited-registration refusal', async () => {
+      const { controller } = makeController({
+        authService: {
+          routeAuth: vi.fn().mockRejectedValue(
+            new BadRequestException('The organization has no available seats')
+          ),
+        } as any,
+      });
+      const res = mockResponse();
+
+      await controller.register(
+        { cookies: {} } as any,
+        { provider: 'LOCAL', email: 'a@b.com' } as any,
+        res,
+        '1.2.3.4',
+        'agent'
+      );
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.send).toHaveBeenCalledWith('The organization has no available seats');
+    });
   });
 
   describe('login', () => {
@@ -181,6 +223,37 @@ describe('AuthController — F1 behavioural tests', () => {
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.send).toHaveBeenCalledWith('Invalid credentials');
       expect(res.cookie).not.toHaveBeenCalledWith('auth', expect.anything(), expect.anything());
+    });
+
+    it('logs in without joining and clears an invalid invite', async () => {
+      const { controller, authService } = makeController({
+        authService: {
+          routeAuth: vi.fn().mockResolvedValue({
+            jwt: 'jwt-token',
+            refreshToken: 'refresh-token',
+            addedOrg: false,
+          }),
+        } as any,
+      });
+      const res = mockResponse();
+
+      await controller.login(
+        { cookies: { org: 'expired-invite' } } as any,
+        { provider: 'LOCAL', email: 'a@b.com', password: 'pw' } as any,
+        res,
+        '1.2.3.4',
+        'agent'
+      );
+
+      expect(authService.routeAuth).toHaveBeenCalledWith(
+        'LOCAL',
+        expect.objectContaining({ email: 'a@b.com' }),
+        '1.2.3.4',
+        'agent',
+        false
+      );
+      expect(res.clearCookie).toHaveBeenCalledWith('org', expect.objectContaining({ path: '/' }));
+      expect(res.json).toHaveBeenCalledWith({ login: true });
     });
   });
 

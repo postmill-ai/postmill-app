@@ -55,12 +55,19 @@ vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
 
 import LayoutContext from './layout.context';
 
-const makeResponse = (status: number, headers: Record<string, string> = {}) => ({
+const makeResponse = (
+  status: number,
+  headers: Record<string, string> = {},
+  body: Record<string, unknown> = {}
+) => ({
   status,
   headers: {
     get: (key: string) => headers[key.toLowerCase()] ?? null,
   },
-  json: () => Promise.resolve({}),
+  clone() {
+    return this;
+  },
+  json: () => Promise.resolve(body),
 });
 
 // The 429 toast is windowed at module scope, so each test drives Date.now() forward past
@@ -133,6 +140,33 @@ describe('LayoutContext afterRequest 429 handling (C4)', () => {
 
     expect(mockShow).not.toHaveBeenCalled();
     expect(result).toBe(true);
+  });
+});
+
+describe('LayoutContext afterRequest — no workspace', () => {
+  beforeEach(() => {
+    render(
+      <LayoutContext>
+        <div>child</div>
+      </LayoutContext>
+    );
+    window.history.pushState({}, '', '/no-workspace');
+  });
+
+  afterEach(() => {
+    window.history.pushState({}, '', '/');
+    vi.restoreAllMocks();
+  });
+
+  it('keeps the session on the no-workspace screen instead of logging out', async () => {
+    const result = await capturedAfterRequest(
+      '/user/self',
+      {},
+      makeResponse(403, {}, { error: 'NO_WORKSPACE' })
+    );
+
+    expect(result).toBe(false);
+    expect(window.location.pathname).toBe('/no-workspace');
   });
 });
 

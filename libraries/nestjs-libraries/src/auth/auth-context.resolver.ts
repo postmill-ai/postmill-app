@@ -46,9 +46,10 @@ export interface ResolvedAuthContext {
 
 export type AuthContextResult =
   | { ok: true; context: ResolvedAuthContext }
+  | { ok: false; reason: 'no_org'; user: User }
   | {
       ok: false;
-      reason: 'missing_auth' | 'invalid_jwt' | 'user_not_found' | 'no_org';
+      reason: 'missing_auth' | 'invalid_jwt' | 'user_not_found';
     };
 
 /**
@@ -116,7 +117,8 @@ export class AuthContextResolver {
       ).filter((o) => !o.users?.[0]?.disabled) as ResolvedOrg[];
 
       if (orgs.length === 0) {
-        return { ok: false, reason: 'no_org' };
+        delete user.password;
+        return { ok: false, reason: 'no_org', user };
       }
 
       org = orgs.find((o) => o.id === input.showOrgId) ?? orgs[0];
