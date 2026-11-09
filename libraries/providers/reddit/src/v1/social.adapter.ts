@@ -619,7 +619,7 @@ export class RedditProvider extends SocialAbstract implements SocialProvider {
 
       const subreddit = info?.data?.children?.[0]?.data?.subreddit;
       if (!subreddit) {
-        return { comments: [] };
+        throw new Error('Reddit post metadata response is malformed');
       }
 
       const afterParam = cursor ? `&after=${cursor}` : '';
@@ -637,7 +637,7 @@ export class RedditProvider extends SocialAbstract implements SocialProvider {
 
       const commentsListing = commentsResponse?.[1];
       if (!commentsListing?.data?.children) {
-        return { comments: [] };
+        throw new Error('Reddit comments response is malformed');
       }
 
       const after = commentsListing?.data?.after || undefined;
@@ -645,10 +645,7 @@ export class RedditProvider extends SocialAbstract implements SocialProvider {
 
       return { comments, nextCursor: after };
     } catch (err) {
-      this.logger.error(
-        `Reddit fetchComments error: ${(err as Error)?.message || 'unknown'}`
-      );
-      return { comments: [] };
+      throw err;
     }
   }
 

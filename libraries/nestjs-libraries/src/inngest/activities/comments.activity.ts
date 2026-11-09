@@ -6,6 +6,11 @@ import { WebhooksService } from '@postmill-ai/nestjs-libraries/database/prisma/w
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 import dayjs from 'dayjs';
 
+export const getCommentsSweepIntervalMinutes = (): number => {
+  const minutes = parseInt(process.env.COMMENTS_SWEEP_INTERVAL_MINUTES || '30', 10);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 30;
+};
+
 @Injectable()
 export class CommentsActivity {
   private readonly logger = new Logger(CommentsActivity.name);
@@ -76,9 +81,8 @@ export class CommentsActivity {
     } while (cursor);
   }
 
-  async getSweepIntervalMinutes(): Promise<number> {
-    const minutes = parseInt(process.env.COMMENTS_SWEEP_INTERVAL_MINUTES || '30', 10);
-    return Number.isFinite(minutes) && minutes > 0 ? minutes : 30;
+  getSweepIntervalMinutes(): number {
+    return getCommentsSweepIntervalMinutes();
   }
 
   async dispatchWebhookForComments(orgId: string, daysBack: number): Promise<void> {

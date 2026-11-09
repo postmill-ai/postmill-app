@@ -116,7 +116,7 @@ export class DevToProvider extends SocialAbstract implements SocialProvider {
       const nextCursor = data?.length === 100 ? String((parseInt(cursor || '1', 10)) + 1) : undefined;
       return { comments, nextCursor };
     } catch (err) {
-      return { comments: [] };
+      throw err;
     }
   }
 

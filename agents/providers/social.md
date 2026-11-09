@@ -184,6 +184,8 @@ Implement `ISocialMediaComments` (`social-provider.ts:147`) on the same adapter 
 
 The bridge exposes these on the kernel capability only when present (presence-probing consumers do `!!provider.fetchComments`). Also set `comments: true` in `PROVIDER_CAPABILITIES`.
 
+`fetchComments` must return an empty list only for a successful, authoritative response with no comments. Authentication, network, parsing, malformed-response, and HTTP-200 error-payload failures must throw. Returning an empty list on failure makes the sync service treat the failure as proof that every stored comment was deleted; it will not soft-delete anything when the method throws. Providers with `commentsCapabilities.read === false` are skipped entirely. Comment sync never changes channel credential state: publishing and the token-refresh lifecycle own `refreshNeeded`, and already-flagged channels are excluded from comment collection.
+
 ## 8. Outbound HTTP and error semantics
 
 - **All** platform HTTP goes through `this.fetch(url, options, identifier?)` (inherited from `SocialAbstract`, `social-base.ts:189`). It enforces the SSRF dispatcher, per-channel VPN egress, a 30s default timeout (`OUTBOUND_HTTP_TIMEOUT_MS`), and 429/5xx retry (max 2 retries, 5s backoff). **Never bare `fetch()`.**

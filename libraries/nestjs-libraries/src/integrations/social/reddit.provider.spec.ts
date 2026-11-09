@@ -90,24 +90,27 @@ describe('Reddit - comment capabilities', () => {
       expect(result.comments[0].content).toBe('Nice post!');
     });
 
-    it('returns empty comments when subreddit not found', async () => {
+    it('throws when the post metadata response is malformed', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue(resp({ data: { children: [] } }));
-      const result = await provider.fetchComments('user-123', 'tok', 'post-1', undefined, mockIntegration);
-      expect(result.comments).toEqual([]);
+      await expect(
+        provider.fetchComments('user-123', 'tok', 'post-1', undefined, mockIntegration),
+      ).rejects.toThrow('Reddit post metadata response is malformed');
     });
 
-    it('returns empty comments when no comment listing', async () => {
+    it('throws when the comment listing response is malformed', async () => {
       globalThis.fetch = vi.fn()
         .mockResolvedValueOnce(resp({ data: { children: [{ data: { subreddit: 'testsub' } }] } }))
         .mockResolvedValueOnce(resp([{}, {}]));
-      const result = await provider.fetchComments('user-123', 'tok', 'post-1', undefined, mockIntegration);
-      expect(result.comments).toEqual([]);
+      await expect(
+        provider.fetchComments('user-123', 'tok', 'post-1', undefined, mockIntegration),
+      ).rejects.toThrow('Reddit comments response is malformed');
     });
 
-    it('handles API error gracefully', async () => {
+    it('propagates API errors instead of returning an authoritative empty result', async () => {
       globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
-      const result = await provider.fetchComments('user-123', 'tok', 'post-1', undefined, mockIntegration);
-      expect(result.comments).toEqual([]);
+      await expect(
+        provider.fetchComments('user-123', 'tok', 'post-1', undefined, mockIntegration),
+      ).rejects.toThrow('Network error');
     });
 
     it('strips t3_ prefix from postId for API calls', async () => {

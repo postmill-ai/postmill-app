@@ -662,10 +662,7 @@ export class BlueskyProvider extends SocialAbstract implements SocialProvider {
 
       return { comments };
     } catch (err) {
-      this.logger.error(
-        `Bluesky fetchComments error: ${(err as Error)?.message || 'unknown'}`
-      );
-      return { comments: [] };
+      throw err;
     }
   }
 

@@ -1056,8 +1056,7 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
 
       return { comments, nextCursor };
     } catch (err) {
-      this.logger.error(`LinkedIn fetchComments error: ${(err as Error)?.message || String(err)}`);
-      return { comments: [] };
+      throw err;
     }
   }
 

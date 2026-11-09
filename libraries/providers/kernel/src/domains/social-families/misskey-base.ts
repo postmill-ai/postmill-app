@@ -462,10 +462,7 @@ export class MisskeyProvider extends SocialAbstract implements SocialProvider {
 
       return { comments, nextCursor: undefined };
     } catch (err) {
-      this.logger.error(
-        `${this.name} fetchComments error: ${(err as Error)?.message || String(err)}`
-      );
-      return { comments: [] };
+      throw err;
     }
   }
 

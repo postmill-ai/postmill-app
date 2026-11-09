@@ -1156,8 +1156,7 @@ export class InstagramProvider
 
       return { comments, nextCursor };
     } catch (err) {
-      this.logger.error(`Instagram fetchComments error: ${(err as Error)?.message || String(err)}`);
-      return { comments: [] };
+      throw err;
     }
   }
 

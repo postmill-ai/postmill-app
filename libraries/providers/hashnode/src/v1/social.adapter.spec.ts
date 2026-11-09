@@ -78,3 +78,27 @@ describe('HashnodeProvider.authenticate (S-19)', () => {
     expect(result).toBe('Invalid credentials');
   });
 });
+
+describe('HashnodeProvider.fetchComments', () => {
+  it('throws for an HTTP-200 GraphQL error payload', async () => {
+    const provider = new HashnodeProvider();
+    (provider as any).fetch = vi.fn(async () => ({
+      json: async () => ({ errors: [{ message: 'invalid token' }] }),
+    }));
+
+    await expect(
+      provider.fetchComments('id', 'token', 'post-id', undefined, {} as any),
+    ).rejects.toThrow('Hashnode comment fetch failed');
+  });
+
+  it('returns an empty result for a successful response with no comments', async () => {
+    const provider = new HashnodeProvider();
+    (provider as any).fetch = vi.fn(async () => ({
+      json: async () => ({ data: { post: { comments: { edges: [] } } } }),
+    }));
+
+    await expect(
+      provider.fetchComments('id', 'token', 'post-id', undefined, {} as any),
+    ).resolves.toEqual({ comments: [], nextCursor: undefined });
+  });
+});

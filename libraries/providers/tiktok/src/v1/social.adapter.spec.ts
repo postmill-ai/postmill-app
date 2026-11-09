@@ -336,4 +336,28 @@ describe('TiktokProvider', () => {
       );
     });
   });
+
+  describe('fetchComments', () => {
+    it('throws for an HTTP-200 API error payload', async () => {
+      const provider = new TiktokProvider();
+      vi.spyOn(provider as any, 'fetch').mockResolvedValue({
+        json: async () => ({ error: { code: 'invalid_token' } }),
+      } as any);
+
+      await expect(
+        provider.fetchComments('id', 'token', 'post-id', undefined, {} as any),
+      ).rejects.toThrow('TikTok comment fetch failed');
+    });
+
+    it('returns an empty result for a successful response with no comments', async () => {
+      const provider = new TiktokProvider();
+      vi.spyOn(provider as any, 'fetch').mockResolvedValue({
+        json: async () => ({ data: { comments: [] } }),
+      } as any);
+
+      await expect(
+        provider.fetchComments('id', 'token', 'post-id', undefined, {} as any),
+      ).resolves.toEqual({ comments: [], nextCursor: undefined });
+    });
+  });
 });

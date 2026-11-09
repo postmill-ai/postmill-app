@@ -489,7 +489,7 @@ export class DiscordProvider extends SocialAbstract implements SocialProvider {
       const nextCursor = messages?.length > 0 ? messages[messages.length - 1].id : undefined;
       return { comments, nextCursor };
     } catch (err) {
-      return { comments: [] };
+      throw err;
     }
   }
 

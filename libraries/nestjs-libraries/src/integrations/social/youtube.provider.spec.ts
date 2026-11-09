@@ -120,10 +120,11 @@ describe('YouTube - comment capabilities', () => {
       );
     });
 
-    it('handles API error gracefully', async () => {
+    it('propagates API errors instead of returning an authoritative empty result', async () => {
       mockCommentThreadsList.mockRejectedValueOnce(new Error('API error'));
-      const result = await provider.fetchComments('channel-1', 'tok', 'video-1', undefined, mockIntegration);
-      expect(result.comments).toEqual([]);
+      await expect(
+        provider.fetchComments('channel-1', 'tok', 'video-1', undefined, mockIntegration),
+      ).rejects.toThrow('API error');
     });
   });
 

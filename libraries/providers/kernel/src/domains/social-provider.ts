@@ -165,6 +165,9 @@ export interface ISocialMediaComments {
     like: boolean;
   };
 
+  // An empty list is authoritative only after a successful response. Fetch,
+  // authentication, parsing, and malformed-response failures must throw so the
+  // caller never reconciles stored comments against a failed fetch.
   fetchComments?(
     id: string,
     accessToken: string,

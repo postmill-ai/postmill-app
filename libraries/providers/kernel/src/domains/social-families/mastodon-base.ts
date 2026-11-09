@@ -413,8 +413,7 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
 
       return { comments, nextCursor: undefined };
     } catch (err) {
-      this.logger.error(`Mastodon fetchComments error: ${(err as Error)?.message || String(err)}`);
-      return { comments: [] };
+      throw err;
     }
   }
 

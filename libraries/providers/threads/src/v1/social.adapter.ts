@@ -762,10 +762,7 @@ export class ThreadsProvider extends SocialAbstract implements SocialProvider {
 
       return { comments, nextCursor };
     } catch (err) {
-      this.logger.error(
-        `Threads fetchComments error: ${(err as Error)?.message || 'unknown'}`
-      );
-      return { comments: [] };
+      throw err;
     }
   }
 

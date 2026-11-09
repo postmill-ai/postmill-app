@@ -29,7 +29,7 @@ type CommentsActivityMock = {
 const makeActivity = (): CommentsActivityMock => ({
   getAllOrganizationIds: vi.fn().mockResolvedValue(['org-1']),
   getDaysBack: vi.fn().mockResolvedValue(7),
-  getSweepIntervalMinutes: vi.fn().mockResolvedValue(5),
+  getSweepIntervalMinutes: vi.fn().mockReturnValue(5),
   syncPostComments: vi.fn().mockResolvedValue(undefined),
   syncPostCommentsPage: vi.fn().mockResolvedValue({ processed: 0 }),
   dispatchWebhookForComments: vi.fn().mockResolvedValue(undefined),
@@ -57,18 +57,19 @@ describe('createCommentsCollection (cron, fan-out)', () => {
     createCommentsCollection(commentsActivity as any, runRepo as any);
   });
 
-  it('registers a minutely UTC cron handler with concurrency 1', () => {
+  it('registers a minutely cron with one admitted sweep per configured interval', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'comments-collection',
         concurrency: 1,
+        rateLimit: { limit: 1, period: '5m' },
         triggers: [{ cron: 'TZ=UTC * * * * *' }],
       }),
       expect.any(Function)
     );
   });
 
-  it('reads org ids / days-back / interval, fans out one event per org, then sleeps', async () => {
+  it('reads org ids and days-back, then fans out one event per org', async () => {
     const step = createMockStep();
 
     await getHandler()({ step });
@@ -97,7 +98,7 @@ describe('createCommentsCollection (cron, fan-out)', () => {
     expect(commentsActivity.syncPostComments).not.toHaveBeenCalled();
     expect(commentsActivity.dispatchWebhookForComments).not.toHaveBeenCalled();
 
-    expect(step.sleep).toHaveBeenCalledWith('wait-interval', '5m');
+    expect(step.sleep).not.toHaveBeenCalled();
   });
 
   it('does not fan out when there are no orgs', async () => {
@@ -107,7 +108,7 @@ describe('createCommentsCollection (cron, fan-out)', () => {
     await getHandler()({ step });
 
     expect(step.sendEvent).not.toHaveBeenCalled();
-    expect(step.sleep).toHaveBeenCalledWith('wait-interval', '5m');
+    expect(step.sleep).not.toHaveBeenCalled();
   });
 });
 
