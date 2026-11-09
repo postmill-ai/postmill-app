@@ -7,6 +7,7 @@ import type { DesignerElement, DesignerOutput } from './designer.store';
 import { probeImageNaturalSize } from './elements';
 import { loadMaskImage } from './background-removal-mask';
 import { readErrorMessage } from './read-error-message';
+import { preserveOutpaintSource } from './image-edit-pixels';
 
 export type OutpaintMode =
   | 'zoom-1.5x'
@@ -131,14 +132,26 @@ export const prepareAiOutpaint = async ({
     probeImageNaturalSize(data.url),
   ]);
   if (!resultNatural) throw new Error('Could not determine the expanded image dimensions.');
+  const expanded = outpaintGeometry(before, mode, sourceNatural, resultNatural);
+  const assetUrl = await preserveOutpaintSource({
+    sourceUrl: before.src,
+    generatedUrl: data.url,
+    sourceNatural,
+    resultNatural,
+    frame: {
+      ...before,
+      x: before.x - expanded.x,
+      y: before.y - expanded.y,
+    },
+  });
   const candidate: OutpaintCandidate = {
     kind: 'image',
     before,
     outputIndex,
     history,
     sourceUrl: before.src,
-    assetUrl: data.url,
-    fileId: data.fileId,
+    assetUrl,
+    fileId: undefined,
     sourceNatural,
     resultNatural,
     mode,
@@ -299,14 +312,26 @@ export const prepareWholePageOutpaint = async ({
   if (!response.ok) throw new Error(await readErrorMessage(response, 'Page expansion failed'));
   const data = await response.json() as { url?: string; fileId?: string };
   if (!data.url) throw new Error('Page expansion returned no result.');
+  const assetUrl = await preserveOutpaintSource({
+    sourceUrl: before.src,
+    generatedUrl: data.url,
+    sourceNatural,
+    resultNatural: { width: targetWidth, height: targetHeight },
+    frame: {
+      ...destination,
+      crop: before.crop,
+      fitMode: before.fitMode,
+      focalPoint: before.focalPoint,
+    },
+  });
   const candidate: OutpaintCandidate = {
     kind: 'page',
     before,
     outputIndex,
     history,
     sourceUrl: before.src,
-    assetUrl: data.url,
-    fileId: data.fileId,
+    assetUrl,
+    fileId: undefined,
     sourceNatural,
     resultNatural: { width: targetWidth, height: targetHeight },
     targetWidth,

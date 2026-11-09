@@ -22,6 +22,7 @@ import {
 import { backgroundMaskDimensions } from './background-removal';
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { commitCanvas, type CommitResult } from './raster-layers';
+import { originalSubjectWithAlpha } from './image-edit-pixels';
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -105,9 +106,13 @@ const completeMagicGrab = async <T extends {
     if (!data.background?.url || !data.background.fileId) {
       throw new Error('Magic Grab did not return a reconstructed background.');
     }
+    const subject = data.subject || candidate.asset;
     return {
       ...candidate,
-      asset: data.subject || candidate.asset,
+      asset: {
+        ...subject,
+        url: await originalSubjectWithAlpha(candidate.source.url, subject.url),
+      },
       background: data.background,
       sourceMask,
     };

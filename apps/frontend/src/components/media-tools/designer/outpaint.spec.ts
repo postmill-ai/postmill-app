@@ -16,6 +16,9 @@ vi.mock('./elements', () => ({
 vi.mock('./background-removal-mask', () => ({
   loadMaskImage: vi.fn(async () => ({ naturalWidth: 800, naturalHeight: 450 })),
 }));
+vi.mock('./image-edit-pixels', () => ({
+  preserveOutpaintSource: vi.fn(async () => '/preserved.png'),
+}));
 
 const imageElement = () => ({
   id: 'image-1', type: 'image' as const, x: 100, y: 50, width: 400, height: 225,
@@ -130,7 +133,7 @@ describe('whole-page expansion', () => {
     expect(applyWholePageOutpaint({ store, candidate })).toBe(true);
     const output = store.getState().doc.outputs[0] as any;
     expect(output).toMatchObject({ width: 1500, height: 750, name: '1500×750' });
-    expect(output.children[0]).toMatchObject({ x: 0, y: 0, width: 1500, height: 750, src: '/expanded-page.png' });
+    expect(output.children[0]).toMatchObject({ x: 0, y: 0, width: 1500, height: 750, src: '/preserved.png' });
     expect(output.children[1]).toMatchObject({ x: 255, y: 131, text: 'Keep me' });
     expect(store.getState().history).toHaveLength(history.length + 1);
   });

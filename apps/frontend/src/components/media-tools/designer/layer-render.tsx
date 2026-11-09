@@ -448,6 +448,13 @@ export const CustomBlendLayer: FC<{
  * whatever is beneath it in the Konva layer, so without a buffer of its own the
  * mask would erase everything painted under it too.
  */
+export const maskSceneRect = (element: Pick<DesignerElement, 'width' | 'height'>) => ({
+  x: 0,
+  y: 0,
+  width: element.width,
+  height: element.height,
+});
+
 export const MaskedLayer: FC<{
   element: DesignerElement;
   mask: HTMLImageElement | HTMLCanvasElement;
@@ -479,14 +486,13 @@ export const MaskedLayer: FC<{
         sceneFunc={(ctx) => {
           ctx.save();
           ctx.globalCompositeOperation = 'destination-in';
-          // Drawn at the layer's box, so a mask painted at layer resolution
-          // lines up whatever the element's own transform is.
+          const rect = maskSceneRect(element);
           ctx.drawImage(
             mask as CanvasImageSource,
-            element.x,
-            element.y,
-            element.width,
-            element.height
+            rect.x,
+            rect.y,
+            rect.width,
+            rect.height
           );
           ctx.restore();
         }}

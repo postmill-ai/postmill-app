@@ -8,6 +8,9 @@ vi.mock('./elements', () => ({
 vi.mock('./reflow', () => ({
   detectFocalPoint: vi.fn(),
 }));
+vi.mock('./image-edit-pixels', () => ({
+  preserveOutpaintSource: vi.fn().mockResolvedValue('data:image/png;base64,preserved'),
+}));
 
 import { aiOutpaint } from './ai-image-actions';
 import { probeImageNaturalSize } from './elements';
@@ -112,7 +115,7 @@ describe('aiOutpaint', () => {
         y: 20,
         width: 1600,
         height: 900,
-        src: 'https://cdn/expanded.png',
+        src: 'data:image/png;base64,preserved',
         fileId: undefined,
         crop: undefined,
         originalSrc: undefined,
