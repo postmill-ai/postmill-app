@@ -1651,7 +1651,11 @@ export class AiMediaService {
     imageUrl: string,
     maskUrl: string,
     prompt: string,
-    options?: { orgId?: string; input?: MediaGenerateOptions['input'] },
+    options?: {
+      orgId?: string;
+      input?: MediaGenerateOptions['input'];
+      modelByProvider?: Record<string, string>;
+    },
   ): Promise<string> {
     const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'inpaintImage', options?.orgId);
     const resolvedMaskUrl = await this._resolveEditImageUrl(maskUrl, 'inpaintImage mask', options?.orgId);
@@ -1669,7 +1673,7 @@ export class AiMediaService {
       try {
         const result = await candidate.adapter.inpaintImage(resolvedUrl, resolvedMaskUrl, prompt, {
           credentials: candidate.credentials,
-          model: candidate.model,
+          model: options?.modelByProvider?.[candidate.adapter.identifier] || candidate.model,
           input: options?.input
             ? { ...candidate.settings, ...options.input } as MediaGenerateOptions['input']
             : candidate.settings as MediaGenerateOptions['input'],
@@ -1778,6 +1782,7 @@ export class AiMediaService {
         'Remove the masked foreground subject completely and reconstruct the original background in its place. Fill the entire masked area only with the surrounding environment, seamlessly matching its walls, floors, ground, sky, architecture, landscape, lighting, colors, perspective, and textures. Do not create a replacement subject, person, furniture, product, silhouette, text, or a different scene. The masked area must look as if the subject was never there.',
         {
           ...options,
+          modelByProvider: { replicate: 'black-forest-labs/flux-fill-pro' },
           input: {
             negative_prompt: 'foreground subject, person, people, human, animal, pet, product, furniture, chair, sofa, foreground object, silhouette, cutout, duplicated foreground, new scene',
           },

@@ -390,10 +390,16 @@ describe('ReplicateMediaAdapter.upscaleImage / inpaintImage model resolution', (
     await adapter.inpaintImage('https://cdn.example.com/in.png', 'https://cdn.example.com/mask.png', 'fill', {
       credentials: { apiKey: 'k' },
       model: 'black-forest-labs/flux-fill-pro',
+      input: { negative_prompt: 'foreground subject, chair, furniture' },
     });
     expect(lastRequestUrl(fetchMock)).toBe(
       'https://api.replicate.com/v1/models/black-forest-labs/flux-fill-pro/predictions'
     );
+    expect(lastRequestBody(fetchMock).input).toEqual({
+      image: 'https://cdn.example.com/in.png',
+      mask: 'https://cdn.example.com/mask.png',
+      prompt: 'fill',
+    });
 
     await adapter.inpaintImage('https://cdn.example.com/in.png', 'https://cdn.example.com/mask.png', 'fill', {
       credentials: { apiKey: 'k' },
