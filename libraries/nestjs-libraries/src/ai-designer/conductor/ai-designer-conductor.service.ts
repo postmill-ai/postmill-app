@@ -318,6 +318,35 @@ export class AiDesignerConductorService {
     @Optional() private readonly _mediaJobs?: MediaJobLifecycleService
   ) {}
 
+  private async _brandPaletteOverrideNote(
+    ctx: AiDesignerAgentContext,
+    config: AiDesignerConfig,
+    brief: DesignBrief,
+    plans: DesignPlan[]
+  ): Promise<string | undefined> {
+    if (!this._brands || !config.brandProfileId || !brief.styleId) return undefined;
+    try {
+      const brand = await this._brands.getBrand(ctx.orgId, config.brandProfileId);
+      const brandPalette = (Array.isArray(brand?.palette) ? brand.palette as unknown[] : [])
+        .filter((color): color is string => typeof color === 'string' && !!color.trim())
+        .map((color) => color.trim().toLowerCase());
+      if (!brandPalette.length) return undefined;
+      const planned = new Set(
+        plans.flatMap((plan) => plan.palette ?? [])
+          .filter((color): color is string => typeof color === 'string')
+          .map((color) => color.trim().toLowerCase())
+      );
+      if (!planned.size || brandPalette.some((color) => planned.has(color))) return undefined;
+      return `the "${brief.styleId}" style you pinned set the colours, so your brand palette wasn't used — clear the style to design on brand`;
+    } catch (err) {
+      this._logger.warn(
+        `Brand-palette override check skipped: ${(err as Error).message}`,
+        AiDesignerConductorService.name
+      );
+      return undefined;
+    }
+  }
+
   private async _applyPaletteConstraints(
     ctx: AiDesignerAgentContext,
     config: AiDesignerConfig,
@@ -339,6 +368,7 @@ export class AiDesignerConductorService {
     return constrainPlanPalettes(plans, {
       brandPalette: brandPalette as string[] | undefined,
       intent: brief.intent,
+      pinnedStyle: !!brief.styleId,
     });
   }
 
@@ -1486,6 +1516,8 @@ export class AiDesignerConductorService {
     }
 
     plans = await this._applyPaletteConstraints(ctx, config, brief, plans);
+    const brandOverrideNote = await this._brandPaletteOverrideNote(ctx, config, brief, plans);
+    if (brandOverrideNote) notes.push(brandOverrideNote);
 
     const outputs = this._resolveOutputs(config);
     if (outputs.length === 0) {
@@ -1509,11 +1541,13 @@ export class AiDesignerConductorService {
 
     emitter.progress('asset', 'Generating shared assets', undefined, 'Generating imagery');
 
+    const directLogoFileId = await this._directLogoFileId(ctx.orgId, config);
     const assetNeeds = this._collectAssetNeeds(
       plans,
       outputs,
       brief.intent,
-      visualReferenceFileId(config)
+      visualReferenceFileId(config),
+      !!directLogoFileId
     );
     if (assetNeeds.dropped > 0) {
       notes.push(
@@ -2140,7 +2174,8 @@ export class AiDesignerConductorService {
               [planForRebuild],
               outputs,
               brief.intent,
-              visualReferenceFileId(config)
+              visualReferenceFileId(config),
+              !!directLogoFileId
             ).needs;
             // Assets the fresh set displaces: once the rebuilt doc no longer
             // references them their File rows leak, so they are soft-deleted
@@ -3378,7 +3413,8 @@ export class AiDesignerConductorService {
     plans: DesignPlan[],
     outputs: { formatId: string; width: number; height: number }[],
     originalPrompt?: string,
-    sourceFileId?: string
+    sourceFileId?: string,
+    skipLogoSlots = false
   ): { needs: AssetNeedRequest[]; dropped: number } {
     const primaryAspect = outputs[0]
       ? aspectClass(outputs[0].width, outputs[0].height)
@@ -3406,6 +3442,8 @@ export class AiDesignerConductorService {
       const placeable = this._placeableAssetNeeds(plan, outputs[0]);
       unplaceable += placeable.dropped;
       for (const need of placeable.needs) {
+        const slot = plan.slots.find((candidate) => candidate.id === need.slotId);
+        if (skipLogoSlots && (slot?.kind === 'logo' || slot?.role === 'logo')) continue;
         const key = `${plan.variantId}:${need.slotId}`;
         if (seen.has(key)) continue;
         seen.add(key);

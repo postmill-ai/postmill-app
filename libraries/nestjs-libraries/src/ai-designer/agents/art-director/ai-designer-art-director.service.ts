@@ -338,7 +338,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       'Palette fidelity: when the brief names explicit colors or palette words (e.g. warm,',
       "cream, espresso, terracotta), every plan's palette MUST honor them — never substitute a",
       'different temperature family (a warm-toned brief must never get an all-cool palette).',
-      'When brandPalette is present it is a hard constraint: every plan.palette MUST start with those exact brand colors, even when a style preset is pinned. Every explicit #rrggbb color in the brief or intent MUST also appear in plan.palette.',
+      'When brandPalette is present without a pinned style, include those exact brand colors in every plan.palette while preserving the surface/text/accent roles. A pinned style keeps its palette. Every explicit #rrggbb color in the brief or intent MUST also appear in plan.palette.',
       '',
       'Layout: when the concept describes a side-by-side layout with a specific side for text and',
       'imagery (e.g. "photo left, text right"), set "panelSide" to the TEXT panel side ("left" =',

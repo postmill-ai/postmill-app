@@ -5290,15 +5290,29 @@ describe('AiDesignerConductorService palette constraints', () => {
   const CONFIG = { brandProfileId: 'brand-1', variants: 1 } as any;
   const BRIEF = { intent: 'x', styleId: 'editorial-mono' } as any;
 
-  it('makes the brand palette win over the pinned style palette', async () => {
+  it('preserves a pinned style palette and warns instead of overriding it', async () => {
     const conductor = withBrand(['#0A7D5B', '#F3E9DC']);
-    const [plan] = await apply(conductor, CONFIG, BRIEF, [{
+    const source = [{
+      palette: ['#111111', '#ffffff', '#123456'],
+      background: { kind: 'solid', value: '#ffffff' },
+    }];
+    const [plan] = await apply(conductor, CONFIG, BRIEF, source);
+
+    expect(plan.palette).toEqual(source[0].palette);
+    expect(plan.background.value).toBe('#ffffff');
+    expect(await (conductor as any)._brandPaletteOverrideNote(ctx, CONFIG, BRIEF, [plan]))
+      .toContain('"editorial-mono"');
+  });
+
+  it('adds brand accents without changing roles when no style is pinned', async () => {
+    const conductor = withBrand(['#0A7D5B', '#F3E9DC']);
+    const [plan] = await apply(conductor, CONFIG, { intent: 'x' }, [{
       palette: ['#111111', '#ffffff', '#123456'],
       background: { kind: 'solid', value: '#ffffff' },
     }]);
 
-    expect(plan.palette.slice(0, 2)).toEqual(['#0a7d5b', '#f3e9dc']);
-    expect(plan.background.value).toBe('#0a7d5b');
+    expect(plan.palette.slice(0, 4)).toEqual(['#111111', '#ffffff', '#0a7d5b', '#f3e9dc']);
+    expect(plan.background.value).toBe('#ffffff');
   });
 
   it('keeps explicit prompt hexes without requiring a brand profile', async () => {
@@ -7651,6 +7665,29 @@ describe('direct logo assets', () => {
 
     expect(brands.getBrand).toHaveBeenCalledWith(ORG_ID, 'brand-1');
     expect(assets['v1:logo:square'].fileId).toBe('logo-1');
+  });
+
+  it('excludes direct-logo slots from paid asset needs', () => {
+    const { conductor } = makeConductor();
+    const plan = {
+      variantId: 'v1',
+      background: { kind: 'image', ref: 'asset:hero' },
+      slots: [
+        { id: 'hero', role: 'image', kind: 'image' },
+        { id: 'logo', role: 'logo', kind: 'logo' },
+      ],
+      assetNeeds: [
+        { slotId: 'hero', brief: 'scene', prefer: 'generate' },
+        { slotId: 'logo', brief: 'logo', prefer: 'generate' },
+      ],
+    };
+    const outputs = [{ formatId: 'ig-post', width: 1080, height: 1080 }];
+
+    const withoutDirect = (conductor as any)._collectAssetNeeds([plan], outputs);
+    const withDirect = (conductor as any)._collectAssetNeeds([plan], outputs, undefined, undefined, true);
+
+    expect(withoutDirect.needs.map((need: any) => need.slotId)).toEqual(['v1:hero', 'v1:logo']);
+    expect(withDirect.needs.map((need: any) => need.slotId)).toEqual(['v1:hero']);
   });
 });
 

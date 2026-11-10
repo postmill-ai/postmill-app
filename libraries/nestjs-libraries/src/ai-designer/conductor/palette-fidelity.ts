@@ -13,30 +13,24 @@ export const explicitPromptColors = (intent: string): string[] =>
 
 export const applyPaletteConstraints = (
   plans: DesignPlan[],
-  options: { brandPalette?: string[]; intent?: string }
+  options: { brandPalette?: string[]; intent?: string; pinnedStyle?: boolean }
 ): DesignPlan[] => {
   const brand = validPaletteColors(options.brandPalette);
   const explicit = explicitPromptColors(options.intent ?? '');
-  if (!brand.length && !explicit.length) return plans;
+  const required = [...explicit, ...(options.pinnedStyle ? [] : brand)];
+  if (!required.length) return plans;
 
   return plans.map((plan) => {
     const current = validPaletteColors(plan.palette);
-    const base = brand.length ? brand : current.slice(0, 2);
     const palette = [
-      ...base,
-      ...explicit,
-      ...current.slice(brand.length ? 0 : 2),
+      ...current.slice(0, 2),
+      ...required,
+      ...current.slice(2),
     ].filter((color, index, all) => all.indexOf(color) === index);
-    for (const fallback of current) {
+    for (const fallback of [...current, '#ffffff', '#000000']) {
       if (palette.length >= 3) break;
       if (!palette.includes(fallback)) palette.push(fallback);
     }
-    return {
-      ...plan,
-      palette,
-      ...(plan.background?.kind === 'solid' && palette[0]
-        ? { background: { ...plan.background, value: palette[0] } }
-        : {}),
-    };
+    return { ...plan, palette };
   });
 };

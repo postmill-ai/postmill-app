@@ -14,22 +14,31 @@ const makePlan = (): DesignPlan => ({
 } as unknown as DesignPlan);
 
 describe('palette constraints', () => {
-  it('makes the selected brand palette win over a pinned style palette', () => {
+  it('adds brand colors without replacing the style surface, text or accents', () => {
     const [plan] = applyPaletteConstraints([makePlan()], {
       brandPalette: ['#FF0000', '#00ff00', '#0000ff'],
     });
     expect(plan.palette).toEqual([
-      '#ff0000', '#00ff00', '#0000ff', '#ffffff', '#000000', '#123456',
+      '#ffffff', '#000000', '#ff0000', '#00ff00', '#0000ff', '#123456',
     ]);
-    expect(plan.background.value).toBe('#ff0000');
+    expect(plan.background.value).toBe('#ffffff');
   });
 
-  it('keeps explicit prompt hexes and fills short brand palettes readably', () => {
+  it('keeps a pinned style palette intact and only adds explicit prompt colors', () => {
+    const [plan] = applyPaletteConstraints([makePlan()], {
+      brandPalette: ['#ff0000'],
+      intent: 'Use #abcdef for the accent',
+      pinnedStyle: true,
+    });
+    expect(plan.palette).toEqual(['#ffffff', '#000000', '#abcdef', '#123456']);
+  });
+
+  it('keeps explicit prompt hexes and adds unpinned brand accents', () => {
     const [plan] = applyPaletteConstraints([makePlan()], {
       brandPalette: ['#ff0000'],
       intent: 'Use #abcdef for the accent',
     });
-    expect(plan.palette.slice(0, 3)).toEqual(['#ff0000', '#abcdef', '#ffffff']);
+    expect(plan.palette).toEqual(['#ffffff', '#000000', '#abcdef', '#ff0000', '#123456']);
     expect(explicitPromptColors('Use #abcdef and #123456')).toEqual(['#abcdef', '#123456']);
   });
 
