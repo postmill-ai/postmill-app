@@ -219,7 +219,7 @@ export function RegisterAfter({
           });
         } else {
           form.setError('email', {
-            message: await response.text(),
+            message: errorMessageFromBody(await response.text()),
           });
         }
       })

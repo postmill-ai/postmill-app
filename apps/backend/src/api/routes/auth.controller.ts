@@ -75,7 +75,7 @@ export class AuthController {
       );
       if (req?.cookies?.org && !getOrgFromCookie) {
         clearInviteCookie(response);
-        response.status(400).send('Invitation is invalid or expired');
+        response.status(400).json({ message: 'Invitation is invalid or expired' });
         return;
       }
 
@@ -144,9 +144,9 @@ export class AuthController {
       });
     } catch (e: any) {
       Logger.error('Registration failed', e instanceof Error ? e.message : String(e), AuthController.name);
-      response.status(400).send(
-        e instanceof BadRequestException ? e.message : 'Registration failed'
-      );
+      response.status(400).json({
+        message: e instanceof BadRequestException ? e.message : 'Registration failed',
+      });
     }
   }
 

@@ -183,4 +183,27 @@ describe('RegisterAfter email re-prompt (provider returned no email)', () => {
       })
     );
   });
+
+  it('shows a JSON registration error as text instead of raw JSON or HTML', async () => {
+    const message = '<img src=x onerror=alert(1)> The organization has no available seats';
+    mockFetch({
+      status: 400,
+      text: async () => JSON.stringify({ message }),
+    });
+
+    const { container } = renderWithFreshSWR(
+      <RegisterAfter token="provider-token-1" provider="APPLE" emailRequired />
+    );
+    await act(async () => {});
+    fireEvent.change(screen.getByPlaceholderText('Email Address'), {
+      target: { value: 'prompted@example.com' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Company'), {
+      target: { value: 'Acme Inc' },
+    });
+    fireEvent.submit(container.querySelector('form')!);
+
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(screen.queryByText(JSON.stringify({ message }))).toBeNull();
+  });
 });
