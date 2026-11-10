@@ -177,6 +177,54 @@ describe('image expansion', () => {
     });
   });
 
+  it('upscales a small provider source uniformly and preserves the result geometry', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement(imageElement());
+    const originalCanvas = {} as HTMLCanvasElement;
+    const context = { drawImage: vi.fn() };
+    const providerCanvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => context),
+      toDataURL: vi.fn(() => 'data:image/png;base64,AAAA'),
+    };
+    vi.mocked(rasterizeMediaFrame).mockResolvedValueOnce({
+      canvas: originalCanvas,
+      natural: { width: 120, height: 80 },
+    });
+    const createElement = vi.spyOn(document, 'createElement').mockReturnValueOnce(providerCanvas as any);
+    const fetch = vi.fn(async () => response('/expanded.png'));
+
+    try {
+      const candidate = await prepareAiOutpaint({ fetch, store, elementId: 'image-1', mode: 'right' });
+
+      expect(providerCanvas).toMatchObject({ width: 384, height: 256 });
+      expect(context.drawImage).toHaveBeenCalledWith(originalCanvas, 0, 0, 384, 256);
+      expect(candidate.resultNatural).toEqual({ width: 768, height: 256 });
+      expect(preserveOutpaintSource).toHaveBeenLastCalledWith(expect.objectContaining({
+        sourceNatural: { width: 384, height: 256 },
+        resultNatural: { width: 768, height: 256 },
+      }));
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      createElement.mockRestore();
+    }
+  });
+
+  it('rejects an extreme aspect ratio locally before a paid provider request', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement(imageElement());
+    vi.mocked(rasterizeMediaFrame).mockResolvedValueOnce({
+      canvas: {} as HTMLCanvasElement,
+      natural: { width: 1, height: 5000 },
+    });
+    const fetch = vi.fn(async () => response('/expanded.png'));
+
+    await expect(prepareAiOutpaint({ fetch, store, elementId: 'image-1', mode: 'right' }))
+      .rejects.toThrow('too narrow to upscale safely');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('cleans the uploaded candidate when the design changes during preparation', async () => {
     const store = createDesignerStore();
     store.getState().addElement(imageElement());

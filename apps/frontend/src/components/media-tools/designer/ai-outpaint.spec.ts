@@ -141,16 +141,34 @@ describe('aiOutpaint', () => {
       id: 'el-1', type: 'image', src: 'https://x/chicken.png', x: 100, y: 50,
       width: 400, height: 225, naturalWidth: 800, naturalHeight: 450,
     });
+    const originalCanvas = { toDataURL: () => 'data:image/png;base64,AAAA' } as HTMLCanvasElement;
+    vi.mocked((await import('./image-edit-pixels')).rasterizeMediaFrame).mockResolvedValueOnce({
+      canvas: originalCanvas,
+      natural: { width: 400, height: 225 },
+    });
+    const context = { drawImage: vi.fn() };
+    const providerCanvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => context),
+      toDataURL: vi.fn(() => 'data:image/png;base64,AAAA'),
+    };
+    const createElement = vi.spyOn(document, 'createElement').mockReturnValueOnce(providerCanvas as any);
     const fetchMock = vi.fn().mockResolvedValue(okResponse('https://cdn/expanded.png'));
 
-    await aiOutpaint({ fetch: fetchMock, store, elementId: 'el-1' }, 'right');
+    try {
+      await aiOutpaint({ fetch: fetchMock, store, elementId: 'el-1' }, 'right');
 
-    expect(preserveOutpaintSource).toHaveBeenCalledWith(expect.objectContaining({
-      sourceUrl: 'data:image/png;base64,AAAA',
-      sourceNatural: { width: 400, height: 225 },
-      resultNatural: { width: 800, height: 225 },
-      frame: expect.objectContaining({ x: 0, y: 0, width: 400, height: 225, fitMode: 'fill' }),
-    }));
+      expect(context.drawImage).toHaveBeenCalledWith(originalCanvas, 0, 0, 455, 256);
+      expect(preserveOutpaintSource).toHaveBeenCalledWith(expect.objectContaining({
+        sourceUrl: 'data:image/png;base64,AAAA',
+        sourceNatural: { width: 455, height: 256 },
+        resultNatural: { width: 910, height: 256 },
+        frame: expect.objectContaining({ x: 0, y: 0, width: 455, height: 256, fitMode: 'fill' }),
+      }));
+    } finally {
+      createElement.mockRestore();
+    }
   });
 
   it('surfaces the server error message (502/409 envelope) instead of a bare failure', async () => {
