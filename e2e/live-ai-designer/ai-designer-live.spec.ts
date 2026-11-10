@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { PNG } from 'pngjs';
 
 const enabled = process.env.E2E_LIVE_AI_DESIGNER === '1';
 const generationAllowed = process.env.E2E_LIVE_GENERATION === '1';
@@ -60,10 +61,20 @@ test('original logo and palette survive generation, and text-only revision prese
   await expect(instagramPost).toHaveAttribute('aria-pressed', 'true');
   await page.getByLabel('Variants', { exact: true }).fill('1');
   await page.getByRole('button', { name: 'Add reference', exact: true }).click();
+  const logo = new PNG({ width: 32, height: 32 });
+  for (let y = 0; y < 32; y += 1) {
+    for (let x = 0; x < 32; x += 1) {
+      const index = (y * 32 + x) * 4;
+      logo.data[index] = 255;
+      logo.data[index + 1] = 0;
+      logo.data[index + 2] = 0;
+      logo.data[index + 3] = 255;
+    }
+  }
   await page.locator('input[type="file"]').setInputFiles({
     name: 'e2e-logo.png',
     mimeType: 'image/png',
-    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg==', 'base64'),
+    buffer: PNG.sync.write(logo),
   });
   await expect(page.getByText('e2e-logo.png', { exact: true }).last()).toBeVisible({ timeout: 90_000 });
   await page.getByText('e2e-logo.png', { exact: true }).last().click();
@@ -76,11 +87,12 @@ test('original logo and palette survive generation, and text-only revision prese
   await page.getByRole('button', { name: 'Start designing', exact: true }).click();
   await page.getByRole('button', { name: 'Accept plan', exact: true }).click({ timeout: 180_000 });
 
-  const designLinks = page.locator('a[href*="/media/designer?designId="]');
-  await expect(designLinks.first()).toBeVisible({ timeout: 300_000 });
-  const originalHref = await designLinks.first().getAttribute('href');
-  expect(originalHref).toBeTruthy();
-  const original = await readDesign(page, originalHref!);
+  const editDesignButtons = page.getByRole('button', { name: 'Edit in Designer', exact: true });
+  await expect(editDesignButtons.first()).toBeVisible({ timeout: 300_000 });
+  await editDesignButtons.first().click();
+  await expect(page).toHaveURL(/designId=/);
+  const originalHref = page.url();
+  const original = await readDesign(page, originalHref);
   expect(JSON.stringify(original).toLowerCase()).toContain(brandHex);
   expect(JSON.stringify(original)).toContain('"originId":"logo"');
   const originalRefs = mediaRefs(original);
@@ -90,10 +102,11 @@ test('original logo and palette survive generation, and text-only revision prese
   await message.fill('Only improve the small text and keep everything else');
   await message.press('Enter');
 
-  await expect.poll(() => designLinks.count(), { timeout: 300_000 }).toBeGreaterThan(1);
-  const revisedHref = await designLinks.last().getAttribute('href');
-  expect(revisedHref).toBeTruthy();
+  await expect.poll(() => editDesignButtons.count(), { timeout: 300_000 }).toBeGreaterThan(1);
+  await editDesignButtons.last().click();
+  await expect(page).toHaveURL(/designId=/);
+  const revisedHref = page.url();
   expect(revisedHref).not.toBe(originalHref);
-  const revised = await readDesign(page, revisedHref!);
+  const revised = await readDesign(page, revisedHref);
   expect(mediaRefs(revised)).toEqual(originalRefs);
 });
