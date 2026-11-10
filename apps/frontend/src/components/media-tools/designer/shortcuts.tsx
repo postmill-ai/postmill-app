@@ -37,8 +37,17 @@ const VIDEO_SHORTCUTS: { keys: string; label: string; labelKey: string }[] = [
   { keys: 'Drag on ruler', label: 'Scrub the playhead', labelKey: 'designer_video_scrub' },
 ];
 
-export const ShortcutsOverlay: FC<{ onClose: () => void; videoMode?: boolean }> = ({ onClose, videoMode }) => {
+export const ShortcutsOverlay: FC<{ onClose: () => void; videoMode?: boolean; touchpadMode?: boolean }> = ({ onClose, videoMode, touchpadMode = false }) => {
   const t = useT();
+  const shortcuts = SHORTCUTS.flatMap((shortcut) => {
+    if (shortcut.keys !== 'Scroll') return [shortcut];
+    return touchpadMode
+      ? [
+          { keys: 'Two-finger swipe', label: 'Pan canvas', labelKey: 'designer_pan_canvas' },
+          { keys: 'Pinch / ⌘/Ctrl + scroll', label: 'Zoom', labelKey: 'designer_zoom' },
+        ]
+      : [shortcut];
+  });
   return (
     <div className="p-5 w-[420px] max-w-full">
       <div className="flex items-center justify-between mb-4">
@@ -48,7 +57,7 @@ export const ShortcutsOverlay: FC<{ onClose: () => void; videoMode?: boolean }> 
         </button>
       </div>
       <div className="grid grid-cols-1 gap-1.5">
-        {SHORTCUTS.map((s) => (
+        {shortcuts.map((s) => (
           <div key={s.keys} className="flex items-center justify-between text-[12px]">
             <span className="text-textColor/70">{t(s.labelKey, s.label)}</span>
             <kbd className="px-2 py-0.5 rounded-sm bg-studioBorder/40 border border-studioBorder text-textColor/80 text-[11px]">

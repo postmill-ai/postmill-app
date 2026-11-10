@@ -217,6 +217,7 @@ export const Designer: FC<DesignerProps> = ({
   const decision = useDecisionModal();
   const [showSafeZones, setShowSafeZones] = useState(false);
   const [showRulers, setShowRulers] = useState(true);
+  const [touchpadMode, setTouchpadMode] = useState(false);
   // Pages-bar visibility override: null = never toggled (auto — hidden for
   // single-page designs, shown for multi-page), true/false = the user's
   // explicit choice, persisted per org and adopted in the effect below.
@@ -414,6 +415,28 @@ export const Designer: FC<DesignerProps> = ({
     } catch {
       setPagesBarOverride(null);
     }
+  }, [user?.orgId]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`designer-touchpad-mode-${user?.orgId}`);
+      const parsed = raw === null ? false : JSON.parse(raw);
+      setTouchpadMode(parsed === true);
+    } catch {
+      setTouchpadMode(false);
+    }
+  }, [user?.orgId]);
+
+  const onToggleTouchpadMode = useCallback(() => {
+    setTouchpadMode((current) => {
+      const next = !current;
+      try {
+        localStorage.setItem(`designer-touchpad-mode-${user?.orgId}`, JSON.stringify(next));
+      } catch {
+        // Private mode / quota exceeded — the toggle still works this session.
+      }
+      return next;
+    });
   }, [user?.orgId]);
 
   // Effective Pages-bar visibility (image mode only): the explicit override
@@ -1273,6 +1296,7 @@ export const Designer: FC<DesignerProps> = ({
       showSafeZones,
       showRulers,
       showPagesBar,
+      touchpadMode,
       aiActive,
       mediaOperationAvailable,
       mediaToolAvailable,
@@ -1394,6 +1418,7 @@ export const Designer: FC<DesignerProps> = ({
       onToggleSafeZones: () => setShowSafeZones((v) => !v),
       onToggleRulers: () => setShowRulers((v) => !v),
       onTogglePagesBar,
+      onToggleTouchpadMode,
       onToggleSnap: () => {
         const st = store.getState();
         st.setSnapEnabled(!st.snapEnabled);
@@ -1403,7 +1428,11 @@ export const Designer: FC<DesignerProps> = ({
       onShortcuts: () =>
         modals.openModal({
           children: (close: () => void) => (
-            <ShortcutsOverlay onClose={close} videoMode={store.getState().doc.mode === 'video'} />
+            <ShortcutsOverlay
+              onClose={close}
+              videoMode={store.getState().doc.mode === 'video'}
+              touchpadMode={touchpadMode}
+            />
           ),
         }),
       onTextToOutlines,
@@ -1510,7 +1539,9 @@ export const Designer: FC<DesignerProps> = ({
       showSafeZones,
       showRulers,
       showPagesBar,
+      touchpadMode,
       onTogglePagesBar,
+      onToggleTouchpadMode,
       aiActive,
       mediaOperationAvailable,
       mediaToolAvailable,
@@ -1570,14 +1601,18 @@ export const Designer: FC<DesignerProps> = ({
         e.preventDefault();
         modals.openModal({
           children: (close: () => void) => (
-            <ShortcutsOverlay onClose={close} videoMode={store.getState().doc.mode === 'video'} />
+            <ShortcutsOverlay
+              onClose={close}
+              videoMode={store.getState().doc.mode === 'video'}
+              touchpadMode={touchpadMode}
+            />
           ),
         });
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleSaveToFiles, modals, store]);
+  }, [handleSaveToFiles, modals, store, touchpadMode]);
 
   // Full screen fills the browser window, not the display: the root goes immersive
   // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root
@@ -1811,6 +1846,7 @@ export const Designer: FC<DesignerProps> = ({
               showSafeZones={showSafeZones}
               showRulers={showRulers}
               safeZonePreset={safeZonePreset}
+              touchpadMode={touchpadMode}
               onAddImage={onOpenMedia}
               sendImageAwareness={collabEnabled ? collabData.sendImageAwareness : undefined}
             />

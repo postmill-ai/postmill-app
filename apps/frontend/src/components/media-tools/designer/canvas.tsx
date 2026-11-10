@@ -73,7 +73,13 @@ import {
   maskFrameAspectChanged,
   remapBackgroundRemovalMask,
 } from './background-removal-mask';
-import { canvasZoomAtPoint, measureCanvasPinch } from './canvas-pinch';
+import {
+  canvasPanViewport,
+  canvasWheelAction,
+  canvasZoomAtPoint,
+  measureCanvasPinch,
+  normalizeCanvasWheel,
+} from './canvas-pinch';
 import { seedBufferFromCanvas } from './raster-layers';
 
 /**
@@ -96,6 +102,7 @@ interface CanvasProps {
   showSafeZones?: boolean;
   showRulers?: boolean;
   safeZonePreset?: string;
+  touchpadMode?: boolean;
   onAddImage?: () => void;
   sendImageAwareness?: (
     outputIndex: number,
@@ -119,6 +126,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   showSafeZones,
   showRulers = true,
   safeZonePreset,
+  touchpadMode = false,
   onAddImage,
   sendImageAwareness,
 }) => {
@@ -1405,28 +1413,39 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const handleWheel = useCallback(
     (e: Konva.KonvaEventObject<WheelEvent>) => {
       e.evt.preventDefault();
-      const scaleBy = 1.1;
       const stage = stageRef.current;
       if (!stage) return;
+      const action = canvasWheelAction({
+        touchpadMode,
+        ctrlKey: e.evt.ctrlKey,
+        metaKey: e.evt.metaKey,
+      });
+      if (action === 'pan') {
+        const next = canvasPanViewport(
+          { x: stage.x(), y: stage.y() },
+          normalizeCanvasWheel(e.evt)
+        );
+        stage.position(next);
+        setViewport(next.x, next.y);
+        return;
+      }
+
+      const scaleBy = 1.1;
       const oldScale = stage.scaleX();
       const pointer = stage.getPointerPosition();
       if (!pointer) return;
-      const mousePointTo = {
-        x: pointer.x / oldScale - stage.x() / oldScale,
-        y: pointer.y / oldScale - stage.y() / oldScale,
-      };
-      const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
-      const clampedScale = Math.max(0.1, Math.min(5, newScale));
-      stage.scale({ x: clampedScale, y: clampedScale });
-      const newPos = {
-        x: -(mousePointTo.x - pointer.x / clampedScale) * clampedScale,
-        y: -(mousePointTo.y - pointer.y / clampedScale) * clampedScale,
-      };
-      stage.position(newPos);
-      setZoom(clampedScale);
-      setViewport(newPos.x, newPos.y);
+      const next = canvasZoomAtPoint({
+        scale: oldScale,
+        viewport: { x: stage.x(), y: stage.y() },
+        point: pointer,
+        nextScale: e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy,
+      });
+      stage.scale({ x: next.scale, y: next.scale });
+      stage.position(next.viewport);
+      setZoom(next.scale);
+      setViewport(next.viewport.x, next.viewport.y);
     },
-    [setZoom, setViewport]
+    [setZoom, setViewport, touchpadMode]
   );
 
   const handlePinchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {

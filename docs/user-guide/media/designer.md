@@ -130,6 +130,11 @@ tool rail as well as the Window menu.
 
 ## Canvas tools
 
+The mouse wheel zooms by default. Laptop users can enable **View → Touchpad mode** to pan with a
+two-finger swipe and zoom with a pinch (or **Ctrl/Cmd+scroll**). The preference is remembered per
+organization. While editing text, the color control above the text box colors only the selected
+characters, so one text box can contain multiple colors.
+
 Beyond layers, shapes, text, and pen/paint tools, the **Tools** menu carries the AI image
 actions — **Generate Image…**, **Inpaint…**, **Remove Background**, and **Expand Image (AI)…**,
 which extends an image beyond its borders (zoom out 1.5×/2×, make square, or extend left, right, up,
@@ -188,7 +193,9 @@ stay unchanged. Review the result before Apply, then use Restore/Erase for any r
 With a text element selected, the Inspector's **AI Content Assistant** can generate alternative
 headlines, promotional copy, captions, and calls to action. **Smart suggestions** reviews the current
 selection and Brand Kit for font, color, layout, and spacing recommendations. Font and color changes
-can be applied directly to static text or video text/caption clips.
+can be applied directly to static text or video text/caption clips. Suggestions are retained per layer
+when you click elsewhere, so deselecting and reselecting a layer does not require generating them again.
+Opening a different design clears them; generating suggestions again replaces that layer's previous set.
 
 For static designs, layout suggestions can also align the selection to the canvas or selection bounds,
 and spacing suggestions can distribute three or more selected elements evenly. These layout actions

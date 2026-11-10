@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { createDesignerStore } from '../designer.store';
+import { captureDesignerSuggestionScope } from './designer-assistant-actions';
 
 const fetchMock = vi.hoisted(() => vi.fn());
 const ensureFontLoaded = vi.hoisted(() => vi.fn());
@@ -129,5 +130,56 @@ describe('DesignerAssistantPanel', () => {
     expect((button as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('The selection changed. Run Smart suggestions again.')).toBeTruthy();
     expect((store.getState().doc.outputs[0] as any).children[0].x).toBe(0);
+  });
+
+  it('restores suggestions per layer without another request', async () => {
+    const store = setup();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        suggestions: [{
+          category: 'color',
+          title: 'Use the brand accent',
+          rationale: 'Keep the layer on brand.',
+          style: { fill: '#123456' },
+        }],
+      }),
+    });
+
+    const first = renderPanel(store);
+    fireEvent.click(screen.getByRole('button', { name: 'Smart suggestions' }));
+    expect(await screen.findByText('Use the brand accent')).toBeTruthy();
+    first.unmount();
+
+    renderPanel(store);
+    expect(screen.getByText('Use the brand accent')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    act(() => store.getState().reset());
+    expect(store.getState().assistantSuggestions).toEqual({});
+    expect(JSON.stringify(store.getState().doc)).not.toContain('assistantSuggestions');
+  });
+
+  it('replaces only the regenerated layer cache entry', () => {
+    const store = setup();
+    const scope = captureDesignerSuggestionScope(store);
+    act(() => {
+      store.getState().setAssistantSuggestions('text-1', {
+        scope,
+        suggestions: [{ category: 'color', title: 'First', rationale: 'One' }],
+      });
+      store.getState().setAssistantSuggestions('text-2', {
+        scope,
+        suggestions: [{ category: 'color', title: 'Second', rationale: 'Two' }],
+      });
+    });
+
+    act(() => store.getState().setAssistantSuggestions('text-1', {
+      scope,
+      suggestions: [{ category: 'color', title: 'Regenerated', rationale: 'Fresh' }],
+    }));
+
+    expect(store.getState().assistantSuggestions['text-1'].suggestions[0].title).toBe('Regenerated');
+    expect(store.getState().assistantSuggestions['text-2'].suggestions[0].title).toBe('Second');
   });
 });

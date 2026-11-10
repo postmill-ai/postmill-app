@@ -13,16 +13,14 @@ import {
   type DesignerSuggestionActionStatus,
   type DesignerSuggestionScope,
 } from './designer-assistant-actions';
+import {
+  designerAssistantClipKey,
+  type DesignerAssistantSuggestion,
+} from './designer-assistant-cache';
 
 type Store = ReturnType<typeof import('../designer.store').createDesignerStore>;
 type CopyKind = 'headline' | 'promotion' | 'caption' | 'cta';
-type Suggestion = {
-  category: 'font' | 'color' | 'layout' | 'spacing';
-  title: string;
-  rationale: string;
-  style?: { fontFamily?: string; fill?: string };
-  action?: DesignerSuggestionAction;
-};
+type Suggestion = DesignerAssistantSuggestion;
 
 export const DesignerAssistantPanel: FC<{
   store: Store;
@@ -42,8 +40,13 @@ export const DesignerAssistantPanel: FC<{
   const [loading, setLoading] = useState<'copy' | 'suggestions' | null>(null);
   const [error, setError] = useState('');
   const [variants, setVariants] = useState<string[]>([]);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [suggestionScope, setSuggestionScope] = useState<DesignerSuggestionScope | null>(null);
+  const assistantCacheKey =
+    selectedElementId ?? (clipTarget ? designerAssistantClipKey(clipTarget) : 'current-selection');
+  const cachedSuggestions = store(
+    (state) => state.assistantSuggestions[assistantCacheKey]
+  );
+  const suggestions = cachedSuggestions?.suggestions ?? [];
+  const suggestionScope = cachedSuggestions?.scope ?? null;
 
   const applyText = (text: string) => {
     const state = store.getState();
@@ -99,8 +102,10 @@ export const DesignerAssistantPanel: FC<{
       if (!response.ok) throw new Error(data?.message || data?.error || t('designer_assistant_failed', 'AI assistant request failed'));
       if (operation === 'copy') setVariants(Array.isArray(data.variants) ? data.variants : []);
       else {
-        setSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
-        setSuggestionScope(scope);
+        store.getState().setAssistantSuggestions(assistantCacheKey, {
+          suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+          scope,
+        });
       }
     } catch (err) {
       setError((err as Error).message || t('designer_assistant_failed', 'AI assistant request failed'));
