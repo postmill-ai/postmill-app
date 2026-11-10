@@ -1788,6 +1788,14 @@ export class AiMediaService {
     await this._fileService.deleteFile(orgId, file.id).catch(() => undefined);
   }
 
+  async cleanupOutpaint(fileId: string, orgId: string): Promise<void> {
+    if (!this._fileService) return;
+    const file = await this._fileService.getFileById(orgId, fileId).catch(() => null);
+    const metadata = file?.metadata as { internal?: string } | null | undefined;
+    if (!file || metadata?.internal !== 'design-asset') return;
+    await this._fileService.deleteFile(orgId, file.id).catch(() => undefined);
+  }
+
   async outpaintImage(
     imageUrl: string,
     mode: OutpaintMode,

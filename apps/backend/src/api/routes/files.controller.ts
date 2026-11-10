@@ -140,7 +140,8 @@ export class FilesController {
           uploadedFile.path,
           originalName,
           folderId,
-          file?.size
+          file?.size,
+          { internal: body.internal }
         );
         this._enqueueVideoThumbnail(org.id, file, saved.id);
         return saved;

@@ -44,6 +44,7 @@ function build(
     getJob: vi.fn(),
     magicGrab: vi.fn(),
     cleanupMagicGrab: vi.fn(),
+    cleanupOutpaint: vi.fn(),
     ...serviceOverride,
   };
   const fileService = {
@@ -286,6 +287,14 @@ describe('MediaController — Designer AI-media routes', () => {
       await expect(controller.cleanupMagicGrab(org, { fileId: 'background-file' }))
         .resolves.toEqual({ success: true });
       expect(aiMediaService.cleanupMagicGrab).toHaveBeenCalledWith('background-file', 'org-1');
+    });
+
+    it('outpaint cleanup delegates an org-scoped internal asset deletion', async () => {
+      const { controller, aiMediaService } = build();
+
+      await expect(controller.cleanupOutpaint(org, { fileId: 'expansion-file' }))
+        .resolves.toEqual({ success: true });
+      expect(aiMediaService.cleanupOutpaint).toHaveBeenCalledWith('expansion-file', 'org-1');
     });
 
     it('generate-image returns { output: <base64 dataUrl> }', async () => {

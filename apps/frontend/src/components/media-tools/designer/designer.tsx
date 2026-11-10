@@ -52,7 +52,7 @@ import { useMediaPicker } from '../use-media-picker';
 import { StartDialog } from './start-dialog';
 import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiDetectSubject } from './ai-image-actions';
 import { OutpaintDialog } from './outpaint-dialog';
-import { applyAiOutpaint, applyWholePageOutpaint, prepareAiOutpaint, prepareWholePageOutpaint } from './outpaint';
+import { applyAiOutpaint, applyWholePageOutpaint, cleanupOutpaintCandidate, prepareAiOutpaint, prepareWholePageOutpaint } from './outpaint';
 import { BackgroundRemovalDialog } from './background-removal-dialog';
 import { QrCodeDialog } from './qr-code-dialog';
 import { ShareDialog } from './share-dialog';
@@ -1502,6 +1502,7 @@ export const Designer: FC<DesignerProps> = ({
               onApply={async (candidate) => candidate.kind === 'page'
                 ? applyWholePageOutpaint({ store, candidate })
                 : applyAiOutpaint({ store, candidate })}
+              onDiscard={(candidate) => cleanupOutpaintCandidate(fetch, candidate)}
             />
           ),
         });

@@ -317,7 +317,8 @@ export interface CommitResult {
 export const commitCanvas = async (
   canvas: HTMLCanvasElement,
   id: string,
-  fetchFn: (url: string, init?: RequestInit) => Promise<Response>
+  fetchFn: (url: string, init?: RequestInit) => Promise<Response>,
+  options?: { internal?: 'design-preview' | 'design-asset' }
 ): Promise<CommitResult | null> => {
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, 'image/png')
@@ -326,6 +327,7 @@ export const commitCanvas = async (
 
   const formData = new FormData();
   formData.append('file', blob, `paint-${id}.png`);
+  if (options?.internal) formData.append('internal', options.internal);
   const endpoint =
     blob.size > MAX_UPLOAD_BYTES ? '/files/upload-server' : '/files/upload-simple';
 

@@ -21,19 +21,21 @@ const candidate = (): OutpaintCandidate => ({
 });
 
 describe('OutpaintDialog', () => {
-  it('locks duplicate submissions, reviews the result, and applies once', async () => {
+  it('locks duplicate submissions, applies once, and retains the referenced result', async () => {
     let resolvePrepare!: (value: OutpaintCandidate) => void;
     const onPrepare = vi.fn(() => new Promise<OutpaintCandidate>((resolve) => {
       resolvePrepare = resolve;
     }));
     const onApply = vi.fn(async () => true);
+    const onDiscard = vi.fn();
     const onCancel = vi.fn();
-    render(
+    const view = render(
       <OutpaintDialog
         pageWidth={1000}
         pageHeight={500}
         onPrepare={onPrepare}
         onApply={onApply}
+        onDiscard={onDiscard}
         onCancel={onCancel}
       />
     );
@@ -50,6 +52,71 @@ describe('OutpaintDialog', () => {
 
     await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
     expect(onCancel).toHaveBeenCalledOnce();
+    view.unmount();
+    expect(onDiscard).not.toHaveBeenCalled();
+  });
+
+  it('discards a reviewed result when changing settings without repeating cleanup on unmount', async () => {
+    const onDiscard = vi.fn();
+    const view = render(
+      <OutpaintDialog
+        pageWidth={1000}
+        pageHeight={500}
+        onPrepare={vi.fn(async () => candidate())}
+        onApply={vi.fn()}
+        onDiscard={onDiscard}
+        onCancel={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+    expect(await screen.findByRole('img', { name: 'After' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Change settings' }));
+    expect(onDiscard).toHaveBeenCalledOnce();
+    view.unmount();
+    expect(onDiscard).toHaveBeenCalledOnce();
+  });
+
+  it('discards a stale result and returns to settings when Apply fails', async () => {
+    const onDiscard = vi.fn();
+    render(
+      <OutpaintDialog
+        pageWidth={1000}
+        pageHeight={500}
+        onPrepare={vi.fn(async () => candidate())}
+        onApply={vi.fn(async () => false)}
+        onDiscard={onDiscard}
+        onCancel={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply result' }));
+    await waitFor(() => expect(onDiscard).toHaveBeenCalledOnce());
+    expect(screen.getByRole('button', { name: 'Expand' })).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('design changed');
+  });
+
+  it('discards a result that arrives after the dialog is closed during preparation', async () => {
+    let resolvePrepare!: (value: OutpaintCandidate) => void;
+    const onDiscard = vi.fn();
+    const view = render(
+      <OutpaintDialog
+        pageWidth={1000}
+        pageHeight={500}
+        onPrepare={vi.fn(() => new Promise<OutpaintCandidate>((resolve) => {
+          resolvePrepare = resolve;
+        }))}
+        onApply={vi.fn()}
+        onDiscard={onDiscard}
+        onCancel={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+    view.unmount();
+    resolvePrepare(candidate());
+    await waitFor(() => expect(onDiscard).toHaveBeenCalledOnce());
   });
 
   it('keeps a preparation error visible without closing', async () => {
@@ -62,6 +129,7 @@ describe('OutpaintDialog', () => {
         pageHeight={500}
         onPrepare={onPrepare}
         onApply={vi.fn()}
+        onDiscard={vi.fn()}
         onCancel={vi.fn()}
       />
     );

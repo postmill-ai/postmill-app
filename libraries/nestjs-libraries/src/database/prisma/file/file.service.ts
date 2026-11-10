@@ -174,7 +174,7 @@ export class FileService {
     folderId?: string,
     fileSize?: number,
     options?: {
-      internal?: 'design-preview';
+      internal?: 'design-preview' | 'design-asset';
       source?: string;
       attribution?: Record<string, unknown>;
       aiDesigner?: 'reference';

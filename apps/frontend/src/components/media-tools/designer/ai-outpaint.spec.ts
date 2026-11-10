@@ -10,6 +10,10 @@ vi.mock('./reflow', () => ({
 }));
 vi.mock('./image-edit-pixels', () => ({
   preserveOutpaintSource: vi.fn().mockResolvedValue({}),
+  rasterizeMediaFrame: vi.fn(async ({ frame }: { frame: { width: number; height: number } }) => ({
+    canvas: { toDataURL: () => 'data:image/png;base64,AAAA' },
+    natural: { width: frame.width, height: frame.height },
+  })),
 }));
 vi.mock('./raster-layers', () => ({
   commitCanvas: vi.fn().mockResolvedValue({ src: '/uploads/org/preserved.png', fileId: 'preserved-file' }),
@@ -62,7 +66,7 @@ describe('aiOutpaint', () => {
     vi.clearAllMocks();
   });
 
-  it('posts the image url, mode, and trimmed prompt to /media/outpaint', async () => {
+  it('posts the rasterized frame, mode, and trimmed prompt to /media/outpaint', async () => {
     const store = makeStore({ id: 'el-1', type: 'image', src: 'https://x/chicken.png', x: 10, y: 20, width: 800, height: 450 });
     const fetchMock = vi.fn().mockResolvedValue(okResponse('https://cdn/expanded.png'));
 
@@ -71,7 +75,7 @@ describe('aiOutpaint', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/media/outpaint');
     expect(JSON.parse(init.body as string)).toEqual({
-      imageUrl: 'https://x/chicken.png',
+      imageUrl: 'data:image/png;base64,AAAA',
       mode: 'zoom-2x',
       prompt: 'more grass',
     });
@@ -85,7 +89,7 @@ describe('aiOutpaint', () => {
 
     const [, init] = fetchMock.mock.calls[0];
     expect(JSON.parse(init.body as string)).toEqual({
-      imageUrl: 'https://x/chicken.png',
+      imageUrl: 'data:image/png;base64,AAAA',
       mode: 'make-square',
     });
   });
@@ -110,15 +114,12 @@ describe('aiOutpaint', () => {
 
     await aiOutpaint({ fetch: fetchMock, store, elementId: 'el-1' }, 'left');
 
-    // A crop window or smart-filter source computed against the OLD pixels would
-    // silently corrupt/revert the expansion — unlike bg-remove/upscale, outpaint
-    // clears them.
     expect(store.updates).toEqual([
       {
         x: -790,
         y: 20,
         width: 1600,
-        height: 900,
+        height: 450,
         src: '/uploads/org/preserved.png',
         fileId: 'preserved-file',
         crop: undefined,
@@ -129,13 +130,13 @@ describe('aiOutpaint', () => {
         maskFileId: undefined,
         maskEnabled: undefined,
         naturalWidth: 1600,
-        naturalHeight: 900,
+        naturalHeight: 450,
       },
     ]);
     expect(probeImageNaturalSize).toHaveBeenCalledWith('https://cdn/expanded.png');
   });
 
-  it('scales directional restore coordinates into output pixels', async () => {
+  it('restores the identical rasterized frame in canonical output pixels', async () => {
     const store = makeStore({
       id: 'el-1', type: 'image', src: 'https://x/chicken.png', x: 100, y: 50,
       width: 400, height: 225, naturalWidth: 800, naturalHeight: 450,
@@ -145,8 +146,10 @@ describe('aiOutpaint', () => {
     await aiOutpaint({ fetch: fetchMock, store, elementId: 'el-1' }, 'right');
 
     expect(preserveOutpaintSource).toHaveBeenCalledWith(expect.objectContaining({
-      resultNatural: { width: 1600, height: 900 },
-      frame: expect.objectContaining({ x: 0, y: 0, width: 800, height: 450 }),
+      sourceUrl: 'data:image/png;base64,AAAA',
+      sourceNatural: { width: 400, height: 225 },
+      resultNatural: { width: 800, height: 225 },
+      frame: expect.objectContaining({ x: 0, y: 0, width: 400, height: 225, fitMode: 'fill' }),
     }));
   });
 

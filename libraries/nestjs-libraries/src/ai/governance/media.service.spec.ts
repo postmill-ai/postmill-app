@@ -1234,6 +1234,31 @@ describe('AiMediaService', () => {
     });
   });
 
+  describe('outpaint cleanup', () => {
+    it('deletes only org-owned internal expansion assets', async () => {
+      const service = bareService();
+      const fileService = {
+        getFileById: vi.fn()
+          .mockResolvedValueOnce({ id: 'expansion-file', metadata: { internal: 'design-asset' } })
+          .mockResolvedValueOnce({ id: 'preview-file', metadata: { internal: 'design-preview' } })
+          .mockResolvedValueOnce({ id: 'user-file', metadata: {} })
+          .mockResolvedValueOnce(null),
+        deleteFile: vi.fn().mockResolvedValue(undefined),
+      };
+      (service as any)._fileService = fileService;
+
+      await service.cleanupOutpaint('expansion-file', 'org-1');
+      await service.cleanupOutpaint('preview-file', 'org-1');
+      await service.cleanupOutpaint('user-file', 'org-1');
+      await service.cleanupOutpaint('missing-file', 'org-1');
+
+      expect(fileService.getFileById).toHaveBeenCalledTimes(4);
+      expect(fileService.getFileById).toHaveBeenNthCalledWith(1, 'org-1', 'expansion-file');
+      expect(fileService.deleteFile).toHaveBeenCalledOnce();
+      expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'expansion-file');
+    });
+  });
+
   describe('outpaintImage', () => {
     it('throws CapabilityNotAvailable when no provider configured', async () => {
       const service = bareService();

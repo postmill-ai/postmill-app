@@ -33,6 +33,21 @@ describe.each([
   });
 });
 
+describe.each([
+  ['UploadSimpleBodyDto', UploadSimpleBodyDto],
+  ['UploadServerBodyDto', UploadServerBodyDto],
+])('%s internal assets', (_name, Dto) => {
+  it.each(['design-preview', 'design-asset'])('accepts the %s system-artifact stamp', (internal) => {
+    const dto = plainToInstance(Dto as never, { internal });
+    expect(validateSync(dto as object)).toHaveLength(0);
+  });
+
+  it('rejects arbitrary internal metadata stamps', () => {
+    const dto = plainToInstance(Dto as never, { internal: 'user-content' });
+    expect(validateSync(dto as object)).not.toHaveLength(0);
+  });
+});
+
 describe('UploadSimpleBodyDto preventSave', () => {
   // Guards the sibling @Transform on the same DTO against collateral damage.
   it('coerces the multipart string "true"', () => {

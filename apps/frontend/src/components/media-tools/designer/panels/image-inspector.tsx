@@ -18,7 +18,7 @@ import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, readErrorMessage } from '../ai-image-actions';
 import { OutpaintDialog, type OutpaintRequest } from '../outpaint-dialog';
-import { applyAiOutpaint, applyWholePageOutpaint, prepareAiOutpaint, prepareWholePageOutpaint } from '../outpaint';
+import { applyAiOutpaint, applyWholePageOutpaint, cleanupOutpaintCandidate, prepareAiOutpaint, prepareWholePageOutpaint } from '../outpaint';
 import { BackgroundRemovalDialog } from '../background-removal-dialog';
 import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
 import { cropFromSourceRect } from '../crop-geometry';
@@ -335,6 +335,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
           onApply={async (candidate) => candidate.kind === 'page'
             ? applyWholePageOutpaint({ store, candidate })
             : applyAiOutpaint({ store, candidate })}
+          onDiscard={(candidate) => cleanupOutpaintCandidate(fetch, candidate)}
         />
       ),
     });

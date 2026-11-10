@@ -344,10 +344,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   only the subject, and delete the temporary inpaint-mask File. It does not claim moving-subject
   extraction from video footage.
   Outpainting (`outpaint.ts`) uses one prepare/review/Apply candidate flow for selected images and
-  whole pages. The dialog owns pending/error state and blocks duplicate requests. Directional Apply
-  scales and offsets the element frame to expose the new area; whole-page Apply resizes the output
-  and selected image and translates every other layer by the same centering offset in one history
-  entry.
+  whole pages. The dialog owns pending/error state and blocks duplicate requests. Directional input
+  is the exact cropped/cover display frame, restored from the same bitmap; canonical mode geometry
+  is independent of provider-returned pixel dimensions. Whole-page Apply inserts a generated
+  extension whose original-page rect is transparent, then translates every ORIGINAL layer by the
+  same centering offset without flattening the selected image, other layers, or page background.
+  Final compositions are referenced `internal: 'design-asset'` Files, hidden from the library;
+  cancel/stale cleanup uses `/media/outpaint/cleanup`, while Apply and Undo/redo retain them.
   `cutout-refine-controls.tsx` arms the same mask for Restore
   (white brush) and Erase (alpha removal); still-image clip masks use optional-additive doc v11
   fields and mirror through `video-canvas-overlay.tsx` and the isolated frame-render buffer. Legacy
