@@ -90,11 +90,10 @@ describe('AI Designer custom sizes', () => {
     ]);
   });
 
-  it('tells the user references only guide the brief', () => {
+  it('explains visual references and direct logo placement', () => {
     render(<AiDesignerStart onStart={vi.fn()} isConnected />);
 
-    expect(
-      screen.getByText(/References guide the brief/i)
-    ).toBeTruthy();
+    expect(screen.getByText(/Visual references guide style, mood and subject/i)).toBeTruthy();
+    expect(screen.getByText(/without regenerating it/i)).toBeTruthy();
   });
 });

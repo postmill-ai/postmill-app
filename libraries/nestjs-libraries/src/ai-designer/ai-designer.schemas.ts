@@ -42,6 +42,7 @@ export const AiDesignerConfigSchema = z
     brandProfileId: z.string().max(100).optional(),
     variants: z.number().int().min(1).max(10),
     referenceFileIds: z.array(z.string().max(100)).max(10).optional(),
+    logoFileId: z.string().max(100).optional(),
     styleId: StylePresetIdSchema.optional(),
   })
   .strict()

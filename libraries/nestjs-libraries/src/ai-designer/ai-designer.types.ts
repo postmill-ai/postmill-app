@@ -31,6 +31,8 @@ export interface AiDesignerConfig {
   brandProfileId?: string;
   variants: number;
   referenceFileIds?: string[];
+  /** Reference placed as the original logo asset rather than regenerated. */
+  logoFileId?: string;
   /** User-selected style preset id (registry in `ai-designer/styles`); omitted = AI decides. */
   styleId?: string;
 }

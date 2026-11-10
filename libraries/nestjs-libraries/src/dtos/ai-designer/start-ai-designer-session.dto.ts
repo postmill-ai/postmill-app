@@ -120,6 +120,11 @@ export class AiDesignerConfigDto {
   @MaxLength(100, { each: true })
   referenceFileIds?: string[];
 
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  logoFileId?: string;
+
   // Optional style preset for the whole session — must be a registry id; the
   // frontend selector only offers these, but the payload is websocket-borne.
   @IsString()

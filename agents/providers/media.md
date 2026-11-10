@@ -44,6 +44,8 @@ Missing-key on poll → return terminal `{status:'failed', error}` (a config err
 
 **Designer compact-studio mapping contract.** `CompactStudio` receives Designer's ordered `characterReferences` (maximum three) and maps only genuine reference inputs: MiniMax `subject-reference` uses the first image as `subject_image`; ElevenLabs Veo 3.1 Fast/Quality maps them in order to `reference_image_1..3` with subject roles, removes start/end frames, and retains the 8-second requirement. `CompactReplicate` maps `google/veo-3.1` to ordered `reference_images`; its adapter requires 16:9 and 8 seconds. Unsupported providers/models and the non-compact **Default** fallback visibly report that saved references are unused rather than substituting a first frame.
 
+**AI Designer reference roles, branding and revision preservation.** Optional session config `logoFileId` designates one reference as the original logo: it is excluded from hero/background conditioning and merged directly into logo slots with `fitMode: 'contain'`; no image model recreates it. Explicit logo designation inserts a missing slot, while the selected brand profile's first valid `logoFileIds` entry fills only declared logo slots. Selected brand palettes and explicit prompt hexes are deterministic plan constraints in prompt and chat modes, added without reassigning surface/text/accent roles. A pinned style keeps its palette and surfaces the existing override warning. Ordinary revisions preserve all media references; only explicit imagery/media requests may replace them, while a requested image-background-to-color/gradient change is allowed. The guard is checked again after quality and contrast repairs.
+
 ## 2. Base adapters (`kernel/src/domains/media-helpers.ts`)
 
 | Base | Use when | Provides |

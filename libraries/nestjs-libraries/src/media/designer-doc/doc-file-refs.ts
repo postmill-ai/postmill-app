@@ -16,6 +16,46 @@ export function collectDocFileIds(doc: unknown): Set<string> {
   return ids;
 }
 
+export function collectDocMediaRefs(doc: unknown): string[] {
+  const refs: string[] = [];
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    for (const [key, value] of Object.entries(node)) {
+      if (REF_ID_KEYS.has(key) || ['src', 'originalSrc', 'maskSrc'].includes(key)) {
+        if (typeof value === 'string' && value) refs.push(`${key}:${value}`);
+      } else {
+        walk(value);
+      }
+    }
+  };
+  walk(doc);
+  return refs.sort();
+}
+
+export function collectDocBackgroundMediaRefs(doc: unknown): string[] {
+  if (!doc || typeof doc !== 'object') return [];
+  const outputs = (doc as { outputs?: unknown }).outputs;
+  if (!Array.isArray(outputs)) return [];
+  const refs: string[] = [];
+  for (const output of outputs) {
+    const bg = (output as { bg?: unknown })?.bg;
+    if (!bg || typeof bg !== 'object') continue;
+    for (const key of ['src', 'fileId'] as const) {
+      const value = (bg as Record<string, unknown>)[key];
+      if (typeof value === 'string' && value) refs.push(`${key}:${value}`);
+    }
+  }
+  return refs.sort();
+}
+
+export function collectDocMediaSignature(doc: unknown): string {
+  return collectDocMediaRefs(doc).join('|');
+}
+
 /**
  * Every fontFamily a doc names (text elements, text runs, clips, symbol
  * definitions). Same deliberate JSON-scan rationale as collectDocFileIds.

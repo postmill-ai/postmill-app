@@ -97,6 +97,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
   const [styleId, setStyleId] = useState('');
   const [variants, setVariants] = useState(3);
   const [referenceItems, setReferenceItems] = useState<MediaSelectorItem[]>([]);
+  const [logoFileId, setLogoFileId] = useState<string>();
   const [referenceImporting, setReferenceImporting] = useState(false);
   // No `requireFile` here: this screen imports the batch itself so it can keep
   // the file/stock split and its own "importing" state. Adding it would import twice.
@@ -318,6 +319,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
       brandProfileId: brandProfileId || undefined,
       styleId: styleId || undefined,
       variants,
+      logoFileId,
       referenceFileIds:
         referenceItems.length > 0
           ? referenceItems
@@ -716,12 +718,10 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
             <h2 className="text-[14px] font-semibold text-textColor">
               {t('reference_images', 'Reference images')}
             </h2>
-            {/* Honest scope: references are interpreted into the brief (style,
-                mood, subject) — the image generator cannot copy them. */}
             <p className="text-[12px] text-textColor/50">
               {t(
                 'reference_images_guide_the_brief',
-                'References guide the brief — style, mood and subject. The generated imagery is an interpretation, not a copy.'
+                'Visual references guide style, mood and subject. Choose Logo to place the original logo asset directly, without regenerating it.'
               )}
             </p>
             <div className="flex flex-wrap items-center gap-2">
@@ -756,15 +756,33 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                   <span className="truncate max-w-[120px]">
                     {item.name || t('reference', 'Reference')}
                   </span>
+                  {item.fileId && (
+                    <button
+                      type="button"
+                      aria-pressed={logoFileId === item.fileId}
+                      aria-label={t('use_reference_as_logo', 'Use reference as logo')}
+                      onClick={() => setLogoFileId((current) =>
+                        current === item.fileId ? undefined : item.fileId
+                      )}
+                      className={`px-1.5 py-0.5 rounded-sm border text-[10px] ${
+                        logoFileId === item.fileId
+                          ? 'border-designerAccent bg-designerAccent/20 text-btnPrimaryAccent'
+                          : 'border-studioBorder text-textColor/60'
+                      }`}
+                    >
+                      {t('logo', 'Logo')}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                      if (logoFileId === item.fileId) setLogoFileId(undefined);
                       setReferenceItems((prev) =>
                         prev.filter(
                           (p) => !(p.source === item.source && p.url === item.url)
                         )
-                      )
-                    }
+                      );
+                    }}
                     className="text-textColor/50 hover:text-dangerText"
                     aria-label={t('remove_reference', 'Remove reference')}
                   >

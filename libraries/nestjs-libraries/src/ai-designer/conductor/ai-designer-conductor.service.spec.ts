@@ -18,6 +18,8 @@ const makeConductor = (
     policy: AiDesignerInputPolicyService;
     budgetGuard: { checkStartBudget: () => Promise<{ allowed: boolean; reason?: string }> };
     service: { getSessionForUser: () => Promise<any>; updateSession: () => Promise<any> };
+    fileService: { getFileById: (...args: any[]) => Promise<any> };
+    brands: { getBrand: (...args: any[]) => Promise<any> };
   }> = {}
 ) => {
   const service = overrides.service ?? {
@@ -48,9 +50,10 @@ const makeConductor = (
       null as any,
       null as any,
       budgetGuard as any,
-      null as any,
+      (overrides.fileService ?? null) as any,
       policy,
-      null as any
+      null as any,
+      (overrides.brands ?? null) as any
     ),
     service,
     budgetGuard,
@@ -5272,10 +5275,7 @@ describe('AiDesignerConductorService parallel variant loops (PR D)', () => {
   });
 });
 
-// Round 8 C7b: a pinned style preset and a selected brand are both honoured by
-// the art director in the same breath, so plans could come back entirely in the
-// preset's colours with nothing telling the user the brand was dropped.
-describe('AiDesignerConductorService brand-palette override note', () => {
+describe('AiDesignerConductorService palette constraints', () => {
   const withBrand = (palette: unknown) => {
     const { conductor } = makeConductor();
     (conductor as any)._brands = {
@@ -5284,60 +5284,44 @@ describe('AiDesignerConductorService brand-palette override note', () => {
     return conductor;
   };
 
-  const note = (
-    conductor: any,
-    config: any,
-    brief: any,
-    plans: any[]
-  ): Promise<string | undefined> =>
-    conductor._brandPaletteOverrideNote(ctx, config, brief, plans);
+  const apply = (conductor: any, config: any, brief: any, plans: any[]) =>
+    conductor._applyPaletteConstraints(ctx, config, brief, plans);
 
   const CONFIG = { brandProfileId: 'brand-1', variants: 1 } as any;
   const BRIEF = { intent: 'x', styleId: 'editorial-mono' } as any;
 
-  it('warns when no plan palette entry is a brand colour', async () => {
+  it('preserves a pinned style palette and warns instead of overriding it', async () => {
     const conductor = withBrand(['#0A7D5B', '#F3E9DC']);
+    const source = [{
+      palette: ['#111111', '#ffffff', '#123456'],
+      background: { kind: 'solid', value: '#ffffff' },
+    }];
+    const [plan] = await apply(conductor, CONFIG, BRIEF, source);
 
-    expect(
-      await note(conductor, CONFIG, BRIEF, [{ palette: ['#111111', '#ffffff'] }])
-    ).toContain('brand palette wasn\'t used');
+    expect(plan.palette).toEqual(source[0].palette);
+    expect(plan.background.value).toBe('#ffffff');
+    expect(await (conductor as any)._brandPaletteOverrideNote(ctx, CONFIG, BRIEF, [plan]))
+      .toContain('"editorial-mono"');
   });
 
-  it('names the style the user actually pinned', async () => {
-    const conductor = withBrand(['#0A7D5B']);
-
-    expect(
-      await note(conductor, CONFIG, BRIEF, [{ palette: ['#111111'] }])
-    ).toContain('"editorial-mono"');
-  });
-
-  it('stays quiet when a brand colour DID survive into the plans', async () => {
+  it('adds brand accents without changing roles when no style is pinned', async () => {
     const conductor = withBrand(['#0A7D5B', '#F3E9DC']);
+    const [plan] = await apply(conductor, CONFIG, { intent: 'x' }, [{
+      palette: ['#111111', '#ffffff', '#123456'],
+      background: { kind: 'solid', value: '#ffffff' },
+    }]);
 
-    expect(
-      await note(conductor, CONFIG, BRIEF, [{ palette: ['#0a7d5b', '#ffffff'] }])
-    ).toBeUndefined();
+    expect(plan.palette.slice(0, 4)).toEqual(['#111111', '#ffffff', '#0a7d5b', '#f3e9dc']);
+    expect(plan.background.value).toBe('#ffffff');
   });
 
-  it('stays quiet with no pinned style, no brand, or an empty brand palette', async () => {
-    const conductor = withBrand(['#0A7D5B']);
-    const plans = [{ palette: ['#111111'] }];
+  it('keeps explicit prompt hexes without requiring a brand profile', async () => {
+    const { conductor } = makeConductor();
+    const [plan] = await apply(conductor, { variants: 1 }, { intent: 'Use #abcdef' }, [{
+      palette: ['#111111', '#ffffff', '#123456'],
+    }]);
 
-    expect(
-      await note(conductor, CONFIG, { intent: 'x' }, plans)
-    ).toBeUndefined();
-    expect(
-      await note(conductor, { variants: 1 } as any, BRIEF, plans)
-    ).toBeUndefined();
-    expect(
-      await note(withBrand([]), CONFIG, BRIEF, plans)
-    ).toBeUndefined();
-  });
-
-  it('stays quiet when the plans carry no palette to compare', async () => {
-    const conductor = withBrand(['#0A7D5B']);
-
-    expect(await note(conductor, CONFIG, BRIEF, [{}])).toBeUndefined();
+    expect(plan.palette).toContain('#abcdef');
   });
 
   it('never throws when the brand lookup fails', async () => {
@@ -5345,18 +5329,16 @@ describe('AiDesignerConductorService brand-palette override note', () => {
     (conductor as any)._brands = {
       getBrand: vi.fn().mockRejectedValue(new Error('db down')),
     };
+    const plans = [{ palette: ['#111111', '#ffffff', '#123456'] }];
 
-    expect(
-      await note(conductor, CONFIG, BRIEF, [{ palette: ['#111111'] }])
-    ).toBeUndefined();
+    expect(await apply(conductor, CONFIG, BRIEF, plans)).toEqual(plans);
   });
 
-  it('is inert when no BrandsService is wired in', async () => {
+  it('is inert with no brand palette or explicit prompt colors', async () => {
     const { conductor } = makeConductor();
+    const plans = [{ palette: ['#111111', '#ffffff', '#123456'] }];
 
-    expect(
-      await note(conductor, CONFIG, BRIEF, [{ palette: ['#111111'] }])
-    ).toBeUndefined();
+    expect(await apply(conductor, CONFIG, BRIEF, plans)).toEqual(plans);
   });
 });
 
@@ -7646,5 +7628,138 @@ describe('AiDesignerConductorService video scene generation + media revise', () 
     const savedDoc = designService.updateDesign.mock.calls[0][2].doc;
     expect(savedDoc.mode).toBe('video');
     expect(notes.some((n) => n.includes('icon'))).toBe(true);
+  });
+});
+
+describe('direct logo assets', () => {
+  const plans = [{ variantId: 'v1', slots: [{ id: 'logo', kind: 'logo' }] }];
+  const file = {
+    id: 'logo-1',
+    path: '/uploads/org/logo.png',
+    metadata: { dimensions: { width: 300, height: 100 } },
+  };
+
+  it('uses the explicitly designated org-owned original without generation', async () => {
+    const fileService = { getFileById: vi.fn().mockResolvedValue(file) };
+    const { conductor } = makeConductor({ fileService });
+    const assets: Record<string, any> = {};
+
+    await (conductor as any)._attachDirectLogo(ORG_ID, { logoFileId: 'logo-1' }, plans, assets);
+
+    expect(fileService.getFileById).toHaveBeenCalledWith(ORG_ID, 'logo-1');
+    expect(assets['v1:logo:square']).toMatchObject({
+      fileId: 'logo-1',
+      path: file.path,
+      naturalWidth: 300,
+      naturalHeight: 100,
+    });
+  });
+
+  it('falls back to the selected brand logo for declared logo slots', async () => {
+    const fileService = { getFileById: vi.fn().mockResolvedValue(file) };
+    const brands = { getBrand: vi.fn().mockResolvedValue({ logoFileIds: ['logo-1'] }) };
+    const { conductor } = makeConductor({ fileService, brands });
+    const assets: Record<string, any> = {};
+
+    await (conductor as any)._attachDirectLogo(ORG_ID, { brandProfileId: 'brand-1' }, plans, assets);
+
+    expect(brands.getBrand).toHaveBeenCalledWith(ORG_ID, 'brand-1');
+    expect(assets['v1:logo:square'].fileId).toBe('logo-1');
+  });
+
+  it('excludes direct-logo slots from paid asset needs', () => {
+    const { conductor } = makeConductor();
+    const plan = {
+      variantId: 'v1',
+      background: { kind: 'image', ref: 'asset:hero' },
+      slots: [
+        { id: 'hero', role: 'image', kind: 'image' },
+        { id: 'logo', role: 'logo', kind: 'logo' },
+      ],
+      assetNeeds: [
+        { slotId: 'hero', brief: 'scene', prefer: 'generate' },
+        { slotId: 'logo', brief: 'logo', prefer: 'generate' },
+      ],
+    };
+    const outputs = [{ formatId: 'ig-post', width: 1080, height: 1080 }];
+
+    const withoutDirect = (conductor as any)._collectAssetNeeds([plan], outputs);
+    const withDirect = (conductor as any)._collectAssetNeeds([plan], outputs, undefined, undefined, true);
+
+    expect(withoutDirect.needs.map((need: any) => need.slotId)).toEqual(['v1:hero', 'v1:logo']);
+    expect(withDirect.needs.map((need: any) => need.slotId)).toEqual(['v1:hero']);
+  });
+});
+
+describe('ordinary revision media invariant', () => {
+  const doc = {
+    mode: 'image',
+    outputs: [{
+      id: 'out-1',
+      formatId: 'ig-post',
+      width: 1080,
+      height: 1080,
+      background: '#ffffff',
+      children: [
+        { id: 'photo-1', type: 'image', fileId: 'photo-1', src: '/uploads/org/photo.png', x: 0, y: 0, width: 1080, height: 1080, rotation: 0, opacity: 1, locked: false, hidden: false },
+        { id: 'small-text', type: 'text', text: 'Fine print', x: 20, y: 20, width: 300, height: 50, rotation: 0, opacity: 1, locked: false, hidden: false },
+      ],
+    }],
+  } as any;
+
+  const setup = (revised: any) => {
+    const { conductor, service } = makeConductor({});
+    (conductor as any)._loadDesignDoc = vi.fn().mockResolvedValue(doc);
+    (conductor as any)._composer = {
+      reviseByInstructionWithResult: vi.fn().mockResolvedValue({ doc: revised, changed: true }),
+      canResolveFormatScope: vi.fn().mockReturnValue(true),
+    };
+    (conductor as any)._service = {
+      ...service,
+      getSessionForUser: vi.fn().mockResolvedValue({ config: {}, brief: {} }),
+    };
+    (conductor as any)._resolveSaveFolder = vi.fn().mockResolvedValue(null);
+    (conductor as any)._fixContrastOverImagery = vi.fn().mockImplementation(
+      async (_ctx, _id, nextDoc, render) => ({ doc: nextDoc, render })
+    );
+    const saver = {
+      saveDesign: vi.fn().mockResolvedValue({ designId: 'revised-1', variantId: 'v1', outputPreviews: [] }),
+    };
+    (conductor as any)._saver = saver;
+    return { conductor, saver };
+  };
+
+  it('keeps every media reference identical for a small-text-only edit', async () => {
+    const revised = structuredClone(doc);
+    revised.outputs[0].children[1].fontSize = 18;
+    const { conductor, saver } = setup(revised);
+
+    const result = await (conductor as any)._reviseDesign(
+      SESSION_ID, ctx, 'design-1',
+      { instruction: 'Only improve the small text and keep everything else', scope: 'shared', kind: 'edit' },
+      makeEmitter()
+    );
+
+    expect(result).not.toBeNull();
+    expect(saver.saveDesign.mock.calls[0][3].outputs[0].children[0]).toMatchObject({
+      fileId: 'photo-1', src: '/uploads/org/photo.png',
+    });
+  });
+
+  it('rejects a simulated media mutation before saving or delivering it', async () => {
+    const revised = structuredClone(doc);
+    revised.outputs[0].children[0].fileId = 'other-company-brand';
+    const { conductor, saver } = setup(revised);
+    const emitter = makeEmitter();
+
+    const result = await (conductor as any)._reviseDesign(
+      SESSION_ID, ctx, 'design-1',
+      { instruction: 'Only improve the small text and keep everything else', scope: 'shared', kind: 'edit' },
+      emitter
+    );
+
+    expect(result).toBeNull();
+    expect(saver.saveDesign).not.toHaveBeenCalled();
+    expect(emitter.toSession).toHaveBeenCalled();
   });
 });
