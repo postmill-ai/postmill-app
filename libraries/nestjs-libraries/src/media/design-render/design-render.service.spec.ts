@@ -283,6 +283,49 @@ describe('DesignRenderService', () => {
     expect(at(80, 50)[1]).toBeLessThan(80);
   });
 
+  it.each([1, 2])('paints a masked layer’s drop shadow outside the mask at %sx', async (ratio) => {
+    const raw = Buffer.alloc(2 * 1 * 4);
+    raw[3] = 0;
+    raw[7] = 255;
+    raw[4] = raw[5] = raw[6] = 255;
+    const maskPng = await sharp(raw, { raw: { width: 2, height: 1, channels: 4 } })
+      .png()
+      .toBuffer();
+
+    const service = makeService();
+    const doc: any = {
+      version: 5,
+      mode: 'image',
+      outputs: [{
+        id: 'o', formatId: 'square', name: 'S',
+        width: 100, height: 130, background: '#ffffff',
+        children: [{
+          id: 'masked', type: 'shape', shape: 'rect',
+          x: 0, y: 0, width: 100, height: 100,
+          rotation: 0, opacity: 1, locked: false, hidden: false,
+          fill: '#ff0000',
+          maskSrc: `data:image/png;base64,${maskPng.toString('base64')}`,
+          styles: [{
+            type: 'drop-shadow', enabled: true, color: '#000000', opacity: 1,
+            angle: 90, useGlobalLight: false, distance: 10, size: 0, spread: 0,
+          }],
+        }],
+      }],
+    };
+
+    const png = await service.renderPage(doc, 0, { pixelRatio: ratio });
+    const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const at = (x: number, y: number) => {
+      const i = (y * ratio * info.width + x * ratio) * info.channels;
+      return [data[i], data[i + 1], data[i + 2]];
+    };
+
+    expect(at(20, 50)[0]).toBeGreaterThan(200);
+    expect(at(80, 50)[0]).toBeGreaterThan(200);
+    expect(at(80, 50)[1]).toBeLessThan(80);
+    expect(at(80, 105)).toEqual([0, 0, 0]);
+  });
+
   it('draws the layer unmasked rather than erasing it when the mask cannot load', async () => {
     const service = makeService();
     const doc: any = {

@@ -1929,11 +1929,18 @@ export class DesignRenderService {
   private async drawElementWithStyles(
     ctx: any,
     el: DesignerElement,
-    ratio: number
+    ratio: number,
+    sourceLayer?: any
   ): Promise<void> {
     const { under, over } = splitStyles(elementStyles(el));
     if (!under.length && !over.length) {
-      await this.drawElement(ctx, el);
+      if (sourceLayer) {
+        ctx.save();
+        this.applyBlend(ctx, sourceLayer, el.blendMode, ratio);
+        ctx.restore();
+      } else {
+        await this.drawElement(ctx, el);
+      }
       return;
     }
 
@@ -1945,10 +1952,12 @@ export class DesignRenderService {
     // `ignoreBlend` matters: inside an empty buffer there is nothing to blend
     // against, so a `multiply` layer would composite with transparent black and
     // vanish. The blend belongs to the finished stack, applied below.
-    const layer = createCanvas(w, h);
-    const layerCtx: any = layer.getContext('2d');
-    layerCtx.scale(ratio, ratio);
-    await this.drawElement(layerCtx, el, true);
+    const layer = sourceLayer ?? createCanvas(w, h);
+    if (!sourceLayer) {
+      const layerCtx: any = layer.getContext('2d');
+      layerCtx.scale(ratio, ratio);
+      await this.drawElement(layerCtx, el, true);
+    }
 
     // Effects and layer composite into one buffer so the element's blend mode
     // applies to the whole stack, exactly as a group's does.
@@ -2017,10 +2026,8 @@ export class DesignRenderService {
   /**
    * Draw an element through its painted layer mask.
    *
-   * The layer goes into an offscreen buffer, the mask bitmap is composited
-   * `destination-in`, and the result is drawn onto the page — the same stencil
-   * the canvas applies through a cached Konva group. It wraps the WHOLE layer,
-   * styles included, so a masked layer's drop shadow is masked too.
+   * The source is masked before styles are evaluated, so a drop shadow can
+   * extend beyond the cutout while inner effects stay clipped to its alpha.
    */
   private async drawMaskedElement(
     ctx: any,
@@ -2042,12 +2049,15 @@ export class DesignRenderService {
     const bctx: any = buffer.getContext('2d');
     bctx.scale(ratio, ratio);
 
-    if (elementStyles(el)?.length) await this.drawElementWithStyles(bctx, el, ratio);
-    else await this.drawElement(bctx, el);
-
+    await this.drawElement(bctx, el, true);
     bctx.globalCompositeOperation = 'destination-in';
     bctx.drawImage(mask, el.x, el.y, el.width, el.height);
     bctx.globalCompositeOperation = 'source-over';
+
+    if (elementStyles(el)?.length) {
+      await this.drawElementWithStyles(ctx, el, ratio, buffer);
+      return;
+    }
 
     // Composite through the layer's own blend mode, exactly as a styled or
     // grouped layer does — drawing the buffer bare would silently render a

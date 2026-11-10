@@ -957,10 +957,16 @@ const leafGeometryKey = (el: DesignerElement): string =>
 export const styledLeafCacheKey = (
   element: DesignerElement,
   image: HTMLImageElement | null,
-  geometryGen?: string | number
-): string =>
-  `${element.id}:${image ? 'ready' : 'pending'}:${leafGeometryKey(element)}` +
-  `${geometryGen != null ? `:${geometryGen}` : ''}`;
+  geometryGen?: string | number,
+  maskReady = true
+): string => {
+  const mask = element.maskEnabled === false || !element.maskSrc
+    ? 'unmasked'
+    : element.maskFileId || element.maskSrc;
+  return `${element.id}:${image ? 'ready' : 'pending'}:${leafGeometryKey(element)}:${mask}` +
+    `:mask-${maskReady ? 'ready' : 'pending'}` +
+    `${geometryGen != null ? `:${geometryGen}` : ''}`;
+};
 
 /**
  * Wraps a leaf in its layer effects, if it has any.
@@ -978,6 +984,11 @@ const StyledLeaf: FC<{
   const image = useLoadedImage(
     element.type === 'image' || element.type === 'raster' ? element.src : undefined
   );
+  const maskImage = useLoadedImage(
+    element.maskEnabled === false ? undefined : element.maskSrc
+  );
+  const liveMask = getBuffer(`${element.id}:mask`);
+  const maskReady = element.maskEnabled === false || !element.maskSrc || !!liveMask || !!maskImage;
   // Frosted glass draws BEFORE the layer, from the pixels already beneath it.
   const backdrop = element.backdropFilter ? (
     <BackdropFilterShape key={`${element.id}-backdrop`} element={element} />
@@ -985,7 +996,7 @@ const StyledLeaf: FC<{
   const styled = hasLayerStyles(element) ? (
     <StyledLayer
       element={element}
-      cacheKey={styledLeafCacheKey(element, image, geometryNonce)}
+      cacheKey={styledLeafCacheKey(element, image, geometryNonce, maskReady)}
     >
       {children}
     </StyledLayer>
@@ -1728,11 +1739,11 @@ export const CanvasElements: FC<ElementsProps> = ({
                     interactive={interactive}
                   />
                 )}
-                <MaskedLeaf element={el} geometryNonce={geometryNonce}>
-                  <StyledLeaf element={el} geometryNonce={geometryNonce}>
+                <StyledLeaf element={el} geometryNonce={geometryNonce}>
+                  <MaskedLeaf element={el} geometryNonce={geometryNonce}>
                     {renderLeaf(el)}
-                  </StyledLeaf>
-                </MaskedLeaf>
+                  </MaskedLeaf>
+                </StyledLeaf>
               </React.Fragment>
             ),
             els: [el],
