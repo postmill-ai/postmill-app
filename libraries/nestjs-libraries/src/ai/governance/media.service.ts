@@ -1676,7 +1676,7 @@ export class AiMediaService {
     imageUrl: string,
     maskUrl: string,
     prompt: string,
-    options?: { orgId?: string },
+    options?: { orgId?: string; input?: MediaGenerateOptions['input'] },
   ): Promise<string> {
     const resolvedUrl = await this._resolveEditImageUrl(imageUrl, 'inpaintImage', options?.orgId);
     const resolvedMaskUrl = await this._resolveEditImageUrl(maskUrl, 'inpaintImage mask', options?.orgId);
@@ -1695,7 +1695,9 @@ export class AiMediaService {
         const result = await candidate.adapter.inpaintImage(resolvedUrl, resolvedMaskUrl, prompt, {
           credentials: candidate.credentials,
           model: candidate.model,
-          input: candidate.settings as MediaGenerateOptions['input'],
+          input: options?.input
+            ? { ...candidate.settings, ...options.input } as MediaGenerateOptions['input']
+            : candidate.settings as MediaGenerateOptions['input'],
         });
         if (!result) continue;
         const persisted = await this._persistJob({
@@ -1780,8 +1782,13 @@ export class AiMediaService {
       const generatedUrl = await this.inpaintImage(
         imageUrl,
         maskUrl,
-        'Remove the main subject completely and reconstruct the surrounding background naturally. Preserve the original scene, lighting, colors, framing, and all other details. Return only the empty background with no subject or invented objects.',
-        options,
+        'Empty background only. Seamlessly extend the visible surrounding environment through the masked area, matching its walls, floors, ground, sky, architecture, landscape, lighting, colors, perspective, and textures. Keep the reconstructed area free of foreground items.',
+        {
+          ...options,
+          input: {
+            negative_prompt: 'foreground subject, person, people, human, animal, pet, product, furniture, chair, sofa, foreground object, silhouette, cutout, duplicated foreground',
+          },
+        },
       );
       const backgroundUrl = await this._compositeMagicGrab(imageUrl, generatedUrl, maskUrl, options.orgId);
       const backgroundFile = await this.saveUrlToFile(

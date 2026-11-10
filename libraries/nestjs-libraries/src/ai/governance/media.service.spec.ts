@@ -1068,6 +1068,32 @@ describe('AiMediaService', () => {
       });
     });
 
+    it('merges operation-specific inpaint input with saved model settings', async () => {
+      const adapter = makeAdapter('replicate', { inpaint: true }, {
+        inpaintImage: vi.fn().mockResolvedValue('https://x/inpainted.png'),
+      });
+      const defaultsResolution = {
+        resolve: vi.fn().mockResolvedValue({
+          providerId: 'replicate',
+          version: 'v1',
+          model: 'stability-ai/stable-diffusion-inpainting',
+          settings: { guidance_scale: 7, negative_prompt: 'saved default' },
+        }),
+      };
+      const { service } = setup([adapter], undefined, defaultsResolution);
+
+      await service.inpaintImage('img.png', 'mask.png', 'fill sky', {
+        orgId: 'org-1',
+        input: { negative_prompt: 'foreground subject' },
+      });
+
+      expect(adapter.inpaintImage).toHaveBeenCalledWith('img.png', 'mask.png', 'fill sky', {
+        credentials: { apiKey: 'replicate-key' },
+        model: 'stability-ai/stable-diffusion-inpainting',
+        input: { guidance_scale: 7, negative_prompt: 'foreground subject' },
+      });
+    });
+
     it('propagates the typed upstream error when a configured provider fails (→ 502, not 409)', async () => {
       const upstream = new ProviderUpstreamError(
         { domain: 'media', providerId: 'replicate', providerName: 'Replicate', operation: 'inpaint' },
@@ -1085,7 +1111,7 @@ describe('AiMediaService', () => {
   });
 
   describe('magicGrab', () => {
-    it('uses only masked inpainting and persists the background plus removes the source mask', async () => {
+    it('uses background-only masked inpainting and persists the background plus removes the source mask', async () => {
       const service = bareService();
       const generate = vi.spyOn(service, 'generateImage');
       const inpaint = vi.spyOn(service, 'inpaintImage').mockResolvedValue('https://x/background.png');
@@ -1102,7 +1128,15 @@ describe('AiMediaService', () => {
       const result = await service.magicGrab('/original.png', '/cutout.png', '/mask.png', { orgId: 'org-1' });
 
       expect(generate).not.toHaveBeenCalled();
-      expect(inpaint).toHaveBeenCalledWith('/original.png', '/mask.png', expect.stringContaining('no subject'), { orgId: 'org-1' });
+      expect(inpaint).toHaveBeenCalledWith(
+        '/original.png',
+        '/mask.png',
+        expect.stringContaining('Empty background only'),
+        {
+          orgId: 'org-1',
+          input: { negative_prompt: expect.stringContaining('chair') },
+        },
+      );
       expect(composite).toHaveBeenCalledWith('/original.png', 'https://x/background.png', '/mask.png', 'org-1');
       expect(save).toHaveBeenCalledOnce();
       expect(save).toHaveBeenCalledWith('org-1', 'data:image/png;base64,Y29tcG9zaXRlZA==', 'magic-grab-background');
@@ -1110,6 +1144,42 @@ describe('AiMediaService', () => {
         background: { url: '/uploads/org/background.png', fileId: 'background-file' },
       });
       expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'mask-file');
+    });
+
+    it('persists the reconstructed empty background without the original chair or changes to unrelated pixels', async () => {
+      const sharp = (await import('sharp')).default;
+      const originalPixels = Buffer.from([
+        30, 90, 180, 255,
+        240, 220, 190, 255,
+      ]);
+      const generatedPixels = Buffer.from([
+        200, 180, 150, 255,
+        1, 2, 3, 255,
+      ]);
+      const encode = (data: Buffer) => sharp(data, {
+        raw: { width: 2, height: 1, channels: 4 },
+      }).png().toBuffer();
+      const dataUri = (data: Buffer) => `data:image/png;base64,${data.toString('base64')}`;
+      const [original, generated, mask] = await Promise.all([
+        encode(originalPixels),
+        encode(generatedPixels),
+        encode(Buffer.from([255, 255, 255, 255, 0, 0, 0, 255])),
+      ]);
+      const service = bareService();
+      vi.spyOn(service, 'inpaintImage').mockResolvedValue(dataUri(generated));
+      const save = vi.spyOn(service, 'saveUrlToFile').mockResolvedValue({
+        id: 'background-file',
+        path: '/uploads/org/background.png',
+        name: 'magic-grab-background-1.png',
+      });
+
+      await service.magicGrab(dataUri(original), '/cutout.png', dataUri(mask), { orgId: 'org-1' });
+
+      const savedUrl = save.mock.calls[0][1];
+      const composited = Buffer.from(savedUrl.split(',')[1], 'base64');
+      const pixels = await sharp(composited).ensureAlpha().raw().toBuffer();
+      expect([...pixels]).toEqual([...generatedPixels.slice(0, 4), ...originalPixels.slice(4, 8)]);
+      expect([...pixels.slice(0, 4)]).not.toEqual([...originalPixels.slice(0, 4)]);
     });
 
     it('propagates masked inpainting failures without unmasked generation and still cleans the mask', async () => {

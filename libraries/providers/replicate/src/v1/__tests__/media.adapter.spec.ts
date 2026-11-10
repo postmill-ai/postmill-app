@@ -397,10 +397,17 @@ describe('ReplicateMediaAdapter.upscaleImage / inpaintImage model resolution', (
 
     await adapter.inpaintImage('https://cdn.example.com/in.png', 'https://cdn.example.com/mask.png', 'fill', {
       credentials: { apiKey: 'k' },
+      input: { negative_prompt: 'foreground subject, chair, furniture' },
     });
     expect(lastRequestUrl(fetchMock)).toBe(
       'https://api.replicate.com/v1/models/stability-ai/stable-diffusion-inpainting/predictions'
     );
+    expect(lastRequestBody(fetchMock).input).toEqual({
+      image: 'https://cdn.example.com/in.png',
+      mask: 'https://cdn.example.com/mask.png',
+      prompt: 'fill',
+      negative_prompt: 'foreground subject, chair, furniture',
+    });
   });
 });
 
