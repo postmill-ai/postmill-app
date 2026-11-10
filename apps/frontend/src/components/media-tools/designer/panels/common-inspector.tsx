@@ -46,18 +46,18 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
   const handleWidthChange = (n: number) => {
     if (aspectLocked) {
       const h = Math.round(n / aspectRatio);
-      updateElements(ids, { width: n, height: h });
+      updateElementsSilent(ids, { width: n, height: h });
     } else {
-      updateElements(ids, { width: n });
+      updateElementsSilent(ids, { width: n });
     }
   };
 
   const handleHeightChange = (n: number) => {
     if (aspectLocked) {
       const w = Math.round(n * aspectRatio);
-      updateElements(ids, { width: w, height: n });
+      updateElementsSilent(ids, { width: w, height: n });
     } else {
-      updateElements(ids, { height: n });
+      updateElementsSilent(ids, { height: n });
     }
   };
 
@@ -163,12 +163,14 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
         <Stepper
           label={t('designer_label_x', 'X')}
           value={Math.round(primary.x)}
-          onChange={(n) => set({ x: n })}
+          onChange={(n) => updateElementsSilent(ids, { x: n })}
+          onCommit={() => pushHistory()}
         />
         <Stepper
           label={t('designer_label_y', 'Y')}
           value={Math.round(primary.y)}
-          onChange={(n) => set({ y: n })}
+          onChange={(n) => updateElementsSilent(ids, { y: n })}
+          onCommit={() => pushHistory()}
         />
       </div>
 
@@ -192,12 +194,14 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
             min={1}
             value={Math.round(primary.width)}
             onChange={handleWidthChange}
+            onCommit={() => pushHistory()}
           />
           <Stepper
             label={t('designer_label_h', 'H')}
             min={1}
             value={Math.round(primary.height)}
             onChange={handleHeightChange}
+            onCommit={() => pushHistory()}
           />
         </div>
       </div>
