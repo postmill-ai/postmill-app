@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useState } from 'react';
+import React, { FC, useEffect, useRef, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { OUTPAINT_MODES, type OutpaintCandidate, type OutpaintMode } from './outpaint';
 
@@ -27,6 +27,7 @@ interface OutpaintDialogProps {
   pageHeight: number;
   onPrepare: (request: OutpaintRequest) => Promise<OutpaintCandidate>;
   onApply: (candidate: OutpaintCandidate) => Promise<boolean>;
+  onDiscard: (candidate: OutpaintCandidate) => Promise<void> | void;
   onCancel: () => void;
 }
 
@@ -35,6 +36,7 @@ export const OutpaintDialog: FC<OutpaintDialogProps> = ({
   pageHeight,
   onPrepare,
   onApply,
+  onDiscard,
   onCancel,
 }) => {
   const t = useT();
@@ -46,6 +48,30 @@ export const OutpaintDialog: FC<OutpaintDialogProps> = ({
   const [candidate, setCandidate] = useState<OutpaintCandidate | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const candidateRef = useRef<OutpaintCandidate | null>(null);
+  const discardedRef = useRef<OutpaintCandidate | null>(null);
+  const retainedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const onDiscardRef = useRef(onDiscard);
+  candidateRef.current = candidate;
+  onDiscardRef.current = onDiscard;
+
+  const discard = (value: OutpaintCandidate) => {
+    if (retainedRef.current || discardedRef.current === value) return;
+    discardedRef.current = value;
+    void Promise.resolve(onDiscardRef.current(value)).catch(() => undefined);
+  };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      const current = candidateRef.current;
+      if (!current || retainedRef.current || discardedRef.current === current) return;
+      discardedRef.current = current;
+      void Promise.resolve(onDiscardRef.current(current)).catch(() => undefined);
+    };
+  }, []);
 
   const prepare = async () => {
     if (busy) return;
@@ -59,6 +85,10 @@ export const OutpaintDialog: FC<OutpaintDialogProps> = ({
         targetWidth: scope === 'page' ? targetWidth : undefined,
         targetHeight: scope === 'page' ? targetHeight : undefined,
       });
+      if (!mountedRef.current) {
+        discard(next);
+        return;
+      }
       setCandidate(next);
     } catch (cause) {
       setError((cause as Error)?.message || t('designer_outpaint_failed', 'Image expansion failed'));
@@ -74,9 +104,12 @@ export const OutpaintDialog: FC<OutpaintDialogProps> = ({
     try {
       const applied = await onApply(candidate);
       if (!applied) {
+        discard(candidate);
+        setCandidate(null);
         setError(t('designer_outpaint_outdated', 'The design changed before this expansion could be applied. Please generate it again.'));
         return;
       }
+      retainedRef.current = true;
       onCancel();
     } catch (cause) {
       setError((cause as Error)?.message || t('designer_outpaint_failed', 'Image expansion failed'));
@@ -170,7 +203,10 @@ export const OutpaintDialog: FC<OutpaintDialogProps> = ({
           <button
             type="button"
             disabled={busy}
-            onClick={() => setCandidate(null)}
+            onClick={() => {
+              discard(candidate);
+              setCandidate(null);
+            }}
             className="px-3 py-1.5 rounded-md text-[12px] border border-studioBorder text-textColor hover:bg-boxHover disabled:opacity-50"
           >
             {t('designer_outpaint_change_settings', 'Change settings')}

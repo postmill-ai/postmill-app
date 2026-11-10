@@ -24,12 +24,12 @@ export class UploadSimpleBodyDto {
   preventSave?: boolean;
 
   @IsOptional()
-  @IsIn(['design-preview'])
-  // System-artifact stamp. Preview thumbnails must be File rows (designs and
-  // templates reference them by FK) but are not library content; stamped rows
-  // are hidden from the default listing. Client-settable, same trust level as
-  // ImportFromUrlDto.aiDesigner='reference' — org-scoped, listing-only.
-  internal?: 'design-preview';
+  @IsIn(['design-preview', 'design-asset'])
+  // System-artifact stamp. Preview thumbnails and composed design assets must
+  // be File rows (designs reference them) but are not library content; stamped
+  // rows are hidden from the default listing. Client-settable, same trust level
+  // as ImportFromUrlDto.aiDesigner='reference' — org-scoped, listing-only.
+  internal?: 'design-preview' | 'design-asset';
 
   // Stock provenance, matching ImportFromUrlDto (`/files/import`): the locally
   // rasterized stock-icon save rides this endpoint, and CC-BY icon sets need the

@@ -240,6 +240,26 @@ describe('FilesController', () => {
       expect(mockEnqueueGenerate).toHaveBeenCalledWith('org-1', 'file-1');
     });
 
+    it('forwards the internal design-asset stamp for large server uploads', async () => {
+      const controller = makeController();
+
+      await controller.uploadServer(
+        org,
+        { originalname: 'paint-image-1:outpaint.png', mimetype: 'image/png', size: 100 } as any,
+        { internal: 'design-asset' } as any
+      );
+
+      expect(mockSaveFile).toHaveBeenCalledWith(
+        'org-1',
+        'vid.mp4',
+        '/uploads/org-1/vid.mp4',
+        'paint-image-1:outpaint.png',
+        undefined,
+        100,
+        { internal: 'design-asset' },
+      );
+    });
+
     it('never enqueues on the preventSave path (no File row exists)', async () => {
       const controller = makeController();
 

@@ -2,12 +2,17 @@
 
 import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 import { MAX_DIMENSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/media/image-source.limits';
 import type { DesignerElement, DesignerOutput } from './designer.store';
 import { probeImageNaturalSize } from './elements';
 import { loadMaskImage } from './background-removal-mask';
 import { readErrorMessage } from './read-error-message';
-import { preserveOutpaintSource } from './image-edit-pixels';
+import {
+  createPageOutpaintExtension,
+  preserveOutpaintSource,
+  rasterizeMediaFrame,
+} from './image-edit-pixels';
 import { commitCanvas } from './raster-layers';
 
 export type OutpaintMode =
@@ -78,16 +83,46 @@ const probe = async (
   return size;
 };
 
+const outpaintSize = (
+  source: { width: number; height: number },
+  mode: OutpaintMode
+): { width: number; height: number } => {
+  if (mode === 'make-square') {
+    const side = Math.max(source.width, source.height);
+    return { width: side, height: side };
+  }
+  if (mode === 'left' || mode === 'right') {
+    return { width: source.width * 2, height: source.height };
+  }
+  if (mode === 'top' || mode === 'bottom') {
+    return { width: source.width, height: source.height * 2 };
+  }
+  const scale = mode === 'zoom-1.5x' ? 1.5 : 2;
+  return { width: source.width * scale, height: source.height * scale };
+};
+
+export const outpaintResultNatural = (
+  source: { width: number; height: number },
+  mode: OutpaintMode
+): { width: number; height: number } => {
+  const size = outpaintSize(source, mode);
+  const scale = Math.min(
+    1,
+    MAX_DIMENSION / size.width,
+    MAX_DIMENSION / size.height,
+    Math.sqrt(25_000_000 / (size.width * size.height))
+  );
+  return {
+    width: Math.max(1, Math.round(size.width * scale)),
+    height: Math.max(1, Math.round(size.height * scale)),
+  };
+};
+
 export const outpaintGeometry = (
   before: Pick<DesignerElement, 'x' | 'y' | 'width' | 'height'>,
-  mode: OutpaintMode,
-  source: { width: number; height: number },
-  result: { width: number; height: number }
+  mode: OutpaintMode
 ): Pick<DesignerElement, 'x' | 'y' | 'width' | 'height'> => {
-  const scaleX = result.width / source.width;
-  const scaleY = result.height / source.height;
-  const width = before.width * scaleX;
-  const height = before.height * scaleY;
+  const { width, height } = outpaintSize(before, mode);
   const addedX = width - before.width;
   const addedY = height - before.height;
   const center = mode === 'make-square' || mode.startsWith('zoom-');
@@ -97,6 +132,22 @@ export const outpaintGeometry = (
     width,
     height,
   };
+};
+
+export const cleanupOutpaintCandidate = async (
+  fetch: FetchLike,
+  candidate: Pick<OutpaintCandidate, 'fileId'>
+): Promise<void> => {
+  if (!candidate.fileId) return;
+  try {
+    await fetch('/media/outpaint/cleanup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileId: candidate.fileId }),
+    });
+  } catch {
+    // Cleanup is best-effort; never mask the generation or editing result.
+  }
 };
 
 export const prepareAiOutpaint = async ({
@@ -116,11 +167,30 @@ export const prepareAiOutpaint = async ({
   if (!before?.src) throw new Error('No image');
   const outputIndex = store.getState().currentOutput;
   const history = store.getState().history;
+  const sourceNatural = await probe(before, before.src);
+  const sourceFrame = await rasterizeMediaFrame({
+    sourceUrl: before.src,
+    sourceNatural,
+    frame: before,
+  });
+  let imageData: string;
+  try {
+    imageData = sourceFrame.canvas.toDataURL('image/png');
+  } catch {
+    throw new Error('The expansion source is too large for this browser. Choose a smaller image.');
+  }
+  if (!imageData.startsWith('data:image/png')) {
+    throw new Error('The expansion source could not be encoded for upload.');
+  }
+  const maxEncodedLength = Math.floor((IMAGE_SOURCE_MAX_BYTES / 3) * 4);
+  if (imageData.slice(imageData.indexOf(',') + 1).length > maxEncodedLength) {
+    throw new Error('The expansion source exceeds the 20 MB image upload limit.');
+  }
   const response = await fetch('/media/outpaint', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      imageUrl: before.src,
+      imageUrl: imageData,
       mode,
       ...(prompt?.trim() ? { prompt: prompt.trim() } : {}),
     }),
@@ -128,28 +198,26 @@ export const prepareAiOutpaint = async ({
   if (!response.ok) throw new Error(await readErrorMessage(response, 'Image expansion failed'));
   const data = await response.json() as { url?: string; fileId?: string };
   if (!data.url) throw new Error('Image expansion returned no result.');
-  const [sourceNatural, resultNatural] = await Promise.all([
-    probe(before, before.src),
-    probeImageNaturalSize(data.url),
-  ]);
-  if (!resultNatural) throw new Error('Could not determine the expanded image dimensions.');
-  const expanded = outpaintGeometry(before, mode, sourceNatural, resultNatural);
+  const providerNatural = await probeImageNaturalSize(data.url);
+  if (!providerNatural) throw new Error('Could not determine the expanded image dimensions.');
+  const resultNatural = outpaintResultNatural(sourceFrame.natural, mode);
+  const expanded = outpaintGeometry(before, mode);
   const scaleX = resultNatural.width / expanded.width;
   const scaleY = resultNatural.height / expanded.height;
   const canvas = await preserveOutpaintSource({
-    sourceUrl: before.src,
+    sourceUrl: imageData,
     generatedUrl: data.url,
-    sourceNatural,
+    sourceNatural: sourceFrame.natural,
     resultNatural,
     frame: {
-      ...before,
       x: (before.x - expanded.x) * scaleX,
       y: (before.y - expanded.y) * scaleY,
       width: before.width * scaleX,
       height: before.height * scaleY,
+      fitMode: 'fill',
     },
   });
-  const uploaded = await commitCanvas(canvas, `${before.id}:outpaint`, fetch);
+  const uploaded = await commitCanvas(canvas, `${before.id}:outpaint`, fetch, { internal: 'design-asset' });
   if (!uploaded) throw new Error('The expanded image could not be saved.');
   const candidate: OutpaintCandidate = {
     kind: 'image',
@@ -164,6 +232,7 @@ export const prepareAiOutpaint = async ({
     mode,
   };
   if (!candidateIsCurrent(store, candidate)) {
+    await cleanupOutpaintCandidate(fetch, candidate);
     throw new Error('The design changed while this expansion was being prepared. Please generate it again.');
   }
   return candidate;
@@ -178,7 +247,7 @@ export const applyAiOutpaint = ({
 }): boolean => {
   if (candidate.kind !== 'image' || !candidate.mode || !candidateIsCurrent(store, candidate)) return false;
   store.getState().updateElement(candidate.before.id, {
-    ...outpaintGeometry(candidate.before, candidate.mode, candidate.sourceNatural, candidate.resultNatural),
+    ...outpaintGeometry(candidate.before, candidate.mode),
     src: candidate.assetUrl,
     fileId: candidate.fileId,
     crop: undefined,
@@ -202,6 +271,7 @@ export const aiOutpaint = async (
 ): Promise<void> => {
   const candidate = await prepareAiOutpaint({ ...args, mode, prompt });
   if (!applyAiOutpaint({ store: args.store, candidate })) {
+    await cleanupOutpaintCandidate(args.fetch, candidate);
     throw new Error('The design changed before this expansion could be applied. Please generate it again.');
   }
 };
@@ -319,19 +389,14 @@ export const prepareWholePageOutpaint = async ({
   if (!response.ok) throw new Error(await readErrorMessage(response, 'Page expansion failed'));
   const data = await response.json() as { url?: string; fileId?: string };
   if (!data.url) throw new Error('Page expansion returned no result.');
-  const compositeCanvas = await preserveOutpaintSource({
-    sourceUrl: before.src,
+  const providerNatural = await probeImageNaturalSize(data.url);
+  if (!providerNatural) throw new Error('Could not determine the expanded page dimensions.');
+  const extensionCanvas = await createPageOutpaintExtension({
     generatedUrl: data.url,
-    sourceNatural,
-    resultNatural: { width: targetWidth, height: targetHeight },
-    frame: {
-      ...destination,
-      crop: before.crop,
-      fitMode: before.fitMode,
-      focalPoint: before.focalPoint,
-    },
+    targetNatural: { width: targetWidth, height: targetHeight },
+    originalPage: { x: offsetX, y: offsetY, width: output.width, height: output.height },
   });
-  const uploaded = await commitCanvas(compositeCanvas, `${before.id}:outpaint-page`, fetch);
+  const uploaded = await commitCanvas(extensionCanvas, `${before.id}:outpaint-page`, fetch, { internal: 'design-asset' });
   if (!uploaded) throw new Error('The expanded page could not be saved.');
   const candidate: OutpaintCandidate = {
     kind: 'page',
@@ -347,6 +412,7 @@ export const prepareWholePageOutpaint = async ({
     targetHeight,
   };
   if (!candidateIsCurrent(store, candidate)) {
+    await cleanupOutpaintCandidate(fetch, candidate);
     throw new Error('The design changed while this page expansion was being prepared. Please generate it again.');
   }
   return candidate;
@@ -367,27 +433,33 @@ export const applyWholePageOutpaint = ({
   const height = candidate.targetHeight;
   const offsetX = (width - output.width) / 2;
   const offsetY = (height - output.height) / 2;
-  const children = output.children.map((element) => element.id === candidate.before.id
-    ? {
-        ...element,
-        src: candidate.assetUrl,
-        fileId: candidate.fileId,
-        x: 0,
-        y: 0,
-        width,
-        height,
-        fitMode: 'fill' as const,
-        crop: undefined,
-        originalSrc: undefined,
-        originalFileId: undefined,
-        smartFilters: undefined,
-        maskSrc: undefined,
-        maskFileId: undefined,
-        maskEnabled: undefined,
-        naturalWidth: width,
-        naturalHeight: height,
-      }
-    : { ...element, x: element.x + offsetX, y: element.y + offsetY });
+  const extension: DesignerElement = {
+    id: genId(),
+    originId: genId(),
+    type: 'image',
+    name: 'Generated page extension',
+    x: 0,
+    y: 0,
+    width,
+    height,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    src: candidate.assetUrl,
+    fileId: candidate.fileId,
+    fitMode: 'fill',
+    naturalWidth: candidate.resultNatural.width,
+    naturalHeight: candidate.resultNatural.height,
+  };
+  const children = [
+    extension,
+    ...output.children.map((element) => ({
+      ...element,
+      x: element.x + offsetX,
+      y: element.y + offsetY,
+    })),
+  ];
   const outputs = [...state.doc.outputs];
   outputs[candidate.outputIndex] = {
     ...output,

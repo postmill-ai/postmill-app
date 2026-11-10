@@ -58,6 +58,23 @@ describe('FileRepository — metadata storage', () => {
     expect(typeof data.metadata).not.toBe('string');
   });
 
+  it('stamps referenced expansion compositions as internal design assets', async () => {
+    const { repo, model } = makeRepo();
+    model.file.create.mockResolvedValue({ id: 'expansion-file' });
+
+    await repo.saveFile(
+      'org-1', 'paint-image-1:outpaint.png', 'https://cdn.example.com/expansion.png',
+      'paint-image-1:outpaint.png', undefined, 1000,
+      { internal: 'design-asset' },
+    );
+
+    const data = model.file.create.mock.calls[0][0].data;
+    expect(data.metadata).toEqual(expect.objectContaining({
+      internal: 'design-asset',
+      originalName: 'paint-image-1:outpaint.png',
+    }));
+  });
+
   it('preserves the AI Designer reference stamp on a raster upload', async () => {
     const { repo, model } = makeRepo();
     model.file.create.mockResolvedValue({ id: 'file-reference' });

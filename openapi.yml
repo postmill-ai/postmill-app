@@ -3379,6 +3379,21 @@ paths:
           description: ""
       tags:
         - Media
+  /media/outpaint/cleanup:
+    post:
+      operationId: MediaController_cleanupOutpaint
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OutpaintCleanupDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Media
   /media/upscale:
     post:
       operationId: MediaController_upscale
@@ -11454,6 +11469,14 @@ components:
       required:
         - imageUrl
         - mode
+    OutpaintCleanupDto:
+      type: object
+      properties:
+        fileId:
+          type: string
+          maxLength: 200
+      required:
+        - fileId
     UpscaleImageDto:
       type: object
       properties:
@@ -11598,6 +11621,11 @@ components:
       properties:
         folderId:
           type: string
+        internal:
+          type: string
+          enum:
+            - design-preview
+            - design-asset
     UploadSimpleBodyDto:
       type: object
       properties:
@@ -11609,6 +11637,7 @@ components:
           type: string
           enum:
             - design-preview
+            - design-asset
         source:
           type: string
           maxLength: 64

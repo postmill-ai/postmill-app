@@ -120,7 +120,7 @@ export class FileRepository {
     folderId?: string,
     fileSize?: number,
     options?: {
-      internal?: 'design-preview';
+      internal?: 'design-preview' | 'design-asset';
       source?: string;
       attribution?: Record<string, unknown>;
       aiDesigner?: 'reference';
@@ -132,8 +132,8 @@ export class FileRepository {
       mimeType,
       originalName: originalName || fileName,
     };
-    // System artifacts (design/template preview thumbnails) are real File rows
-    // — designs reference them by FK — but they are not library content.
+    // System artifacts (previews and composed design assets) are real File rows
+    // — designs reference them — but they are not library content.
     if (options?.internal) meta.internal = options.internal;
     // Stock provenance, same metadata keys FileService.importFromUrl writes.
     if (options?.source) meta.source = options.source;
@@ -438,10 +438,9 @@ export class FileRepository {
         NOT: { metadata: { path: ['aiDesigner'], not: Prisma.AnyNull } },
       });
     }
-    // Design/template preview thumbnails live as File rows (the designs
-    // reference them by FK) but are system artifacts, not library content —
-    // always hidden, no opt-in, same "direct access unaffected" contract as
-    // the aiDesigner stamp above.
+    // Preview thumbnails and composed design assets live as File rows but are
+    // system artifacts, not library content — always hidden, no opt-in, with
+    // the same "direct access unaffected" contract as the aiDesigner stamp.
     and.push({
       NOT: { metadata: { path: ['internal'], not: Prisma.AnyNull } },
     });

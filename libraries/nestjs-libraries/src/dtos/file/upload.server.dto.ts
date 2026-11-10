@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UploadServerBodyDto {
@@ -12,4 +12,8 @@ export class UploadServerBodyDto {
     value === '' || value === 'undefined' || value === 'null' ? undefined : value
   )
   folderId?: string;
+
+  @IsOptional()
+  @IsIn(['design-preview', 'design-asset'])
+  internal?: 'design-preview' | 'design-asset';
 }

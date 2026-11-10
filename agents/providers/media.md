@@ -131,8 +131,13 @@ uses the same `media:create` gate to delete only org-owned files named `magic-gr
 The shared review modal invokes it on every unapplied close; successful Apply retains the referenced
 background, and rejected static/video inserts return false and clean up rather than reporting success.
 Both review and final subject render original source pixels through the provider alpha, never an RGB
-silhouette. Directional and whole-page expansion likewise paints the provider result first and then
-restores the exact original frame over it, so generated pixels cannot repaint the source subject.
+silhouette. Directional expansion sends and restores the same cropped/cover frame and uses canonical
+mode geometry rather than independent provider-width/height scales. Whole-page expansion preserves
+all original layers and the page background, exposing generated pixels only outside the original
+page rect. Referenced final expansion Files carry `internal: 'design-asset'` (including the large
+`/files/upload-server` path), so they stay out of the library. `POST /media/outpaint/cleanup` uses
+the `media:create` gate and deletes only org-owned Files with that stamp after cancel/stale review;
+successful Apply and Undo/redo never clean up the referenced asset.
 
 **Designer genAI modal picker endpoints** (`media.controller.ts`, read-level, no admin gate): `GET /media/generation-providers?operation=image|video|audio|avatar|tts` (400 otherwise) → `{ providers: [{ identifier, name }], default: { providerId, model } | null }` — `providers` is exactly the candidate list generation would consider (`AiMediaService.listGenerationProviders` reuses `_resolveForOperation`); generation for a non-default pick goes through the studio endpoints above. `POST /media/text-to-speech` also accepts an optional `provider` pin: unknown / not-enabled / unconfigured / non-`tts` provider → 400, and a pinned call makes exactly one attempt (no fallback to other candidates).
 
