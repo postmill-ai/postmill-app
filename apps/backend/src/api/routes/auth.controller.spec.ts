@@ -131,7 +131,7 @@ describe('AuthController — F1 behavioural tests', () => {
       );
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.send).toHaveBeenCalledWith('Registration failed');
+      expect(res.json).toHaveBeenCalledWith({ message: 'Registration failed' });
       expect(res.cookie).not.toHaveBeenCalledWith('auth', expect.anything(), expect.anything());
     });
 
@@ -148,17 +148,16 @@ describe('AuthController — F1 behavioural tests', () => {
       );
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.send).toHaveBeenCalledWith('Invitation is invalid or expired');
+      expect(res.json).toHaveBeenCalledWith({ message: 'Invitation is invalid or expired' });
       expect(res.clearCookie).toHaveBeenCalledWith('org', expect.objectContaining({ path: '/' }));
       expect(authService.routeAuth).not.toHaveBeenCalled();
     });
 
-    it('returns an actionable invited-registration refusal', async () => {
+    it('returns an actionable invited-registration refusal as JSON, never HTML', async () => {
+      const message = '<img src=x onerror=alert(1)> The organization has no available seats';
       const { controller } = makeController({
         authService: {
-          routeAuth: vi.fn().mockRejectedValue(
-            new BadRequestException('The organization has no available seats')
-          ),
+          routeAuth: vi.fn().mockRejectedValue(new BadRequestException(message)),
         } as any,
       });
       const res = mockResponse();
@@ -172,7 +171,8 @@ describe('AuthController — F1 behavioural tests', () => {
       );
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.send).toHaveBeenCalledWith('The organization has no available seats');
+      expect(res.json).toHaveBeenCalledWith({ message });
+      expect(res.send).not.toHaveBeenCalled();
     });
   });
 
