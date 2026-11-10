@@ -91,12 +91,12 @@ function watchTerminalJob(page: Page): Promise<BulkJob> {
 }
 
 async function startBatch(page: Page, rows: Record<string, string>[], fixture: BulkFixture) {
-  const terminalPromise = watchTerminalJob(page);
   const startPromise = page.waitForResponse((response) =>
     response.request().method() === 'POST' && apiPath(response.url()) === '/media/designs/bulk-create'
   );
   await page.getByRole('button', { name: 'Create 5 variations', exact: true }).click();
   const response = await startPromise;
+  const terminalPromise = response.ok() ? watchTerminalJob(page) : null;
   const payload = response.request().postDataJSON() as { rows?: Record<string, string>[] };
   expect(
     Array.isArray(payload.rows) && payload.rows.length === 5 &&
@@ -144,7 +144,7 @@ export async function runBulkCreateValid(page: Page): Promise<void> {
 
   const { response, terminalPromise } = await startBatch(page, rows, fixture);
   expect(response.ok(), 'the valid batch must be accepted').toBe(true);
-  const job = await terminalPromise;
+  const job = await terminalPromise!;
   expect(job.status, 'all five valid rows must complete').toBe('completed');
   expect(job.progress).toMatchObject({ done: 5, total: 5 });
   const results = job.results || [];
@@ -213,7 +213,7 @@ export async function runBulkCreateInvalidAtomic(page: Page): Promise<void> {
     return;
   }
 
-  const job = await terminalPromise;
+  const job = await terminalPromise!;
   const results = job.results || [];
   expect(job.status, 'one invalid row must fail the whole batch, never complete a partial ZIP').toBe('failed');
   expect(Boolean(job.artifactUrl), 'an atomic failure must not create a ZIP').toBe(false);
