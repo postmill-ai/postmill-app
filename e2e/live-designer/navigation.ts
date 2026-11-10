@@ -38,7 +38,7 @@ export async function runPreflightNavigation(page: Page): Promise<void> {
 
   await openMenuAction(page, 'File', /^Export…/);
   await expect(page.getByText('Export Design', { exact: true })).toBeVisible();
-  await page.getByRole('checkbox', { name: /^Export all \d+ outputs$/ }).check();
+  await expect(page.getByText(/^Export all \d+ outputs$/, { exact: true })).toBeVisible();
   const preflight = page.getByLabel('Preflight', { exact: true });
   await expect(preflight).toBeVisible();
   const finding = preflight.getByRole('button')
