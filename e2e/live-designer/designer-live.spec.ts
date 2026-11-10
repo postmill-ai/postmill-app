@@ -15,6 +15,9 @@ import {
 import { runBulkCreateInvalidAtomic, runBulkCreateValid } from './bulk-create';
 import { runExactDesignSharing, runPreflightNavigation } from './navigation';
 import { runQrCodeAcceptance } from './qr-code';
+import { runPdesignRoundTrip } from './pdesign';
+import { runMagicGrabAcceptance } from './magic-grab';
+import { runDirectionalOutpaintAcceptance, runWholePageOutpaintAcceptance } from './outpaint';
 
 const LIVE_CASES = [
   'background-removal',
@@ -25,11 +28,16 @@ const LIVE_CASES = [
   'qr-code',
   'sharing',
   'preflight',
+  'pdesign',
 ] as const;
 
 const liveDesigner = process.env.E2E_LIVE_DESIGNER === '1';
 const liveCase = process.env.E2E_LIVE_CASE;
 const generationAllowed = process.env.E2E_LIVE_GENERATION === '1';
+const productionTarget = process.env.E2E_BASE
+  ? new URL(process.env.E2E_BASE).hostname === 'app.postmill.ai'
+  : false;
+const productionAllowed = process.env.E2E_LIVE_PRODUCTION === '1';
 
 if (liveDesigner && liveCase && !LIVE_CASES.includes(liveCase as (typeof LIVE_CASES)[number])) {
   throw new Error(`Unknown E2E_LIVE_CASE. Expected one of: ${LIVE_CASES.join(', ')}`);
@@ -43,10 +51,9 @@ test.skip(
   'The selected paid case requires explicit E2E_LIVE_GENERATION=1 before browser fixtures start'
 );
 test.skip(
-  liveDesigner && (liveCase === 'magic-grab' || liveCase === 'outpaint'),
-  'Magic Grab and outpaint remain scaffolds until their active fixes land'
+  liveDesigner && productionTarget && !productionAllowed,
+  'Production acceptance requires explicit E2E_LIVE_PRODUCTION=1 before browser fixtures start'
 );
-
 test.describe('Opt-in live Designer acceptance', () => {
   test('background removal applies, saves, reopens, and exports', async ({ page, context }) => {
     test.skip(liveCase !== 'background-removal', 'Select with E2E_LIVE_CASE=background-removal');
@@ -105,14 +112,17 @@ test.describe('Opt-in live Designer acceptance', () => {
     assertNoBrowserFailures();
   });
 
-  test('Magic Grab preserves original-RGB subject pixels and independent layers [scaffold]', () => {
+  test('Magic Grab preserves original-RGB subject pixels and independent layers', async ({ page }, testInfo) => {
     test.skip(liveCase !== 'magic-grab', 'Select with E2E_LIVE_CASE=magic-grab');
-    test.skip(true, 'Not implemented: compare original-RGB subject pixels and independently movable layers');
+    await runMagicGrabAcceptance(page, testInfo);
   });
 
-  test('outpaint preserves the original frame without an orphan artifact [scaffold]', () => {
+  test('outpaint preserves original content without orphan artifacts', async ({ page }, testInfo) => {
     test.skip(liveCase !== 'outpaint', 'Select with E2E_LIVE_CASE=outpaint');
-    test.skip(true, 'Not implemented: assert original-frame pixels and absence of an orphan generated layer/artifact');
+    const scope = requiredEnv('E2E_LIVE_OUTPAINT_SCOPE');
+    if (scope === 'image') await runDirectionalOutpaintAcceptance(page, testInfo);
+    else if (scope === 'page') await runWholePageOutpaintAcceptance(page, testInfo);
+    else throw new Error('E2E_LIVE_OUTPAINT_SCOPE must be image or page');
   });
 
   test('Bulk Create produces five editable rows and five valid PNGs', async ({ page }) => {
@@ -138,5 +148,10 @@ test.describe('Opt-in live Designer acceptance', () => {
   test('preflight findings navigate to their output, page, and element', async ({ page }) => {
     test.skip(liveCase !== 'preflight', 'Select with E2E_LIVE_CASE=preflight');
     await runPreflightNavigation(page);
+  });
+
+  test('pdesign downloads and reimports as an editable design', async ({ page }) => {
+    test.skip(liveCase !== 'pdesign', 'Select with E2E_LIVE_CASE=pdesign');
+    await runPdesignRoundTrip(page);
   });
 });
