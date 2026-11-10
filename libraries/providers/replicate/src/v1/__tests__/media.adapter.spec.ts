@@ -415,6 +415,26 @@ describe('ReplicateMediaAdapter.upscaleImage / inpaintImage model resolution', (
       negative_prompt: 'foreground subject, chair, furniture',
     });
   });
+
+  it('uses Bria Eraser native inputs and strips prompts and unrelated settings', async () => {
+    await adapter.inpaintImage('https://cdn.example.com/in.png', 'https://cdn.example.com/mask.png', 'ignored', {
+      credentials: { apiKey: 'k' },
+      model: 'bria/eraser',
+      input: {
+        prompt: 'replacement scene',
+        negative_prompt: 'foreground subject',
+        guidance_scale: 7,
+        mask_type: 'manual',
+      },
+    });
+
+    expect(lastRequestUrl(fetchMock)).toBe('https://api.replicate.com/v1/models/bria/eraser/predictions');
+    expect(lastRequestBody(fetchMock).input).toEqual({
+      image_url: 'https://cdn.example.com/in.png',
+      mask_url: 'https://cdn.example.com/mask.png',
+      mask_type: 'automatic',
+    });
+  });
 });
 
 describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {

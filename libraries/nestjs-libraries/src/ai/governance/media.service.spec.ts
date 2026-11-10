@@ -1172,7 +1172,7 @@ describe('AiMediaService', () => {
         expect.stringContaining('Do not create a replacement subject'),
         {
           orgId: 'org-1',
-          modelByProvider: { replicate: 'black-forest-labs/flux-fill-pro' },
+          modelByProvider: { replicate: 'bria/eraser' },
           input: { negative_prompt: expect.stringContaining('chair') },
         },
       );

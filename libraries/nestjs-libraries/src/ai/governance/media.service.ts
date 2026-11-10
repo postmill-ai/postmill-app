@@ -1782,7 +1782,7 @@ export class AiMediaService {
         'Remove the masked foreground subject completely and reconstruct the original background in its place. Fill the entire masked area only with the surrounding environment, seamlessly matching its walls, floors, ground, sky, architecture, landscape, lighting, colors, perspective, and textures. Do not create a replacement subject, person, furniture, product, silhouette, text, or a different scene. The masked area must look as if the subject was never there.',
         {
           ...options,
-          modelByProvider: { replicate: 'black-forest-labs/flux-fill-pro' },
+          modelByProvider: { replicate: 'bria/eraser' },
           input: {
             negative_prompt: 'foreground subject, person, people, human, animal, pet, product, furniture, chair, sofa, foreground object, silhouette, cutout, duplicated foreground, new scene',
           },

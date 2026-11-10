@@ -124,11 +124,11 @@ Generated video ingestion uses `media/video-artifact.ts`: best-effort ffprobe wr
 and source-space subject mask. `AiMediaService.magicGrab` uses only the existing masked-inpaint
 operation—never unmasked image-to-image generation—and composites the result only inside a mildly
 dilated white-subject-on-black mask so unrelated pixels remain unchanged and the provider covers the
-subject's outer edge. Replicate reconstruction pins `black-forest-labs/flux-fill-pro` rather than
-inheriting the generic Stable Diffusion inpainting default; other providers retain their resolved
-model. Its background-only positive prompt explicitly forbids replacement subjects and new scenes,
-and is paired with an explicit foreground/furniture negative prompt; the Replicate adapter forwards
-that input for models that declare support. It persists only the reconstructed
+subject's outer edge. Replicate reconstruction pins the dedicated `bria/eraser` object-removal model
+with `mask_type=automatic`, rather than asking a generative scene model to infer an empty background;
+other providers retain their resolved model and generic inpainting defaults are unchanged. The Bria
+path sends only its declared image/mask inputs and strips prompts and unrelated saved tunables. It
+persists only the reconstructed
 background and deletes both temporary mask Files server-side in `finally` (so create-only members
 do not need `media:delete`). The provider cutout URL remains a preview/mask input, not another library
 File. `POST /media/magic-grab/cleanup` accepts a `fileId` and
