@@ -1125,16 +1125,20 @@ describe('AiMediaService', () => {
   });
 
   describe('magicGrab', () => {
-    it('uses background-only masked inpainting and persists the background plus removes the source mask', async () => {
+    it('uses expanded background-only masked inpainting and cleans both temporary masks', async () => {
       const service = bareService();
       const generate = vi.spyOn(service, 'generateImage');
+      vi.spyOn(service as any, '_prepareMagicGrabMask').mockResolvedValue('/expanded-mask.png');
       const inpaint = vi.spyOn(service, 'inpaintImage').mockResolvedValue('https://x/background.png');
       const composite = vi.spyOn(service as any, '_compositeMagicGrab')
         .mockResolvedValue('data:image/png;base64,Y29tcG9zaXRlZA==');
       const save = vi.spyOn(service, 'saveUrlToFile')
         .mockResolvedValue({ id: 'background-file', path: '/uploads/org/background.png', name: 'magic-grab-background-1.png' });
       const fileService = {
-        getFileByPath: vi.fn().mockResolvedValue({ id: 'mask-file', path: '/mask.png' }),
+        getFileByPath: vi.fn().mockImplementation((_orgId, url) => Promise.resolve({
+          id: url === '/expanded-mask.png' ? 'expanded-mask-file' : 'mask-file',
+          path: url,
+        })),
         deleteFile: vi.fn().mockResolvedValue(undefined),
       };
       (service as any)._fileService = fileService;
@@ -1144,20 +1148,55 @@ describe('AiMediaService', () => {
       expect(generate).not.toHaveBeenCalled();
       expect(inpaint).toHaveBeenCalledWith(
         '/original.png',
-        '/mask.png',
-        expect.stringContaining('Empty background only'),
+        '/expanded-mask.png',
+        expect.stringContaining('Do not create a replacement subject'),
         {
           orgId: 'org-1',
           input: { negative_prompt: expect.stringContaining('chair') },
         },
       );
-      expect(composite).toHaveBeenCalledWith('/original.png', 'https://x/background.png', '/mask.png', 'org-1');
+      expect(composite).toHaveBeenCalledWith('/original.png', 'https://x/background.png', '/expanded-mask.png', 'org-1');
       expect(save).toHaveBeenCalledOnce();
       expect(save).toHaveBeenCalledWith('org-1', 'data:image/png;base64,Y29tcG9zaXRlZA==', 'magic-grab-background');
       expect(result).toEqual({
         background: { url: '/uploads/org/background.png', fileId: 'background-file' },
       });
       expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'mask-file');
+      expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'expanded-mask-file');
+    });
+
+    it('expands the reconstruction mask beyond the subject edge', async () => {
+      const sharp = (await import('sharp')).default;
+      const pixels = Buffer.alloc(9 * 9 * 4);
+      for (let index = 0; index < pixels.length; index += 4) pixels[index + 3] = 255;
+      const center = (4 * 9 + 4) * 4;
+      pixels[center] = 255;
+      pixels[center + 1] = 255;
+      pixels[center + 2] = 255;
+      const mask = await sharp(pixels, { raw: { width: 9, height: 9, channels: 4 } }).png().toBuffer();
+      const service = bareService();
+      const save = vi.spyOn(service, 'saveUrlToFile').mockResolvedValue({
+        id: 'expanded-mask-file',
+        path: '/uploads/org/expanded-mask.png',
+        name: 'magic-grab-reconstruction-mask-1.png',
+      });
+
+      const result = await (service as any)._prepareMagicGrabMask(
+        `data:image/png;base64,${mask.toString('base64')}`,
+        'org-1'
+      );
+
+      expect(result).toBe('/uploads/org/expanded-mask.png');
+      expect(save).toHaveBeenCalledOnce();
+      const savedUrl = save.mock.calls[0][1];
+      const expanded = Buffer.from(savedUrl.split(',')[1], 'base64');
+      const expandedPixels = await sharp(expanded).ensureAlpha().raw().toBuffer();
+      expect([...expandedPixels.slice(center, center + 3)]).toEqual([255, 255, 255]);
+      const neighbor = (4 * 9 + 5) * 4;
+      expect([...expandedPixels.slice(neighbor, neighbor + 3)]).toEqual([255, 255, 255]);
+      const corner = 0;
+      expect([...expandedPixels.slice(corner, corner + 3)]).toEqual([0, 0, 0]);
+      expect(save.mock.calls[0][2]).toBe('magic-grab-reconstruction-mask');
     });
 
     it('persists the reconstructed empty background without the original chair or changes to unrelated pixels', async () => {
@@ -1180,6 +1219,7 @@ describe('AiMediaService', () => {
         encode(Buffer.from([255, 255, 255, 255, 0, 0, 0, 255])),
       ]);
       const service = bareService();
+      vi.spyOn(service as any, '_prepareMagicGrabMask').mockResolvedValue(dataUri(mask));
       vi.spyOn(service, 'inpaintImage').mockResolvedValue(dataUri(generated));
       const save = vi.spyOn(service, 'saveUrlToFile').mockResolvedValue({
         id: 'background-file',
@@ -1200,9 +1240,10 @@ describe('AiMediaService', () => {
       const service = bareService();
       const upstream = new Error('masked provider failed');
       const generate = vi.spyOn(service, 'generateImage');
+      vi.spyOn(service as any, '_prepareMagicGrabMask').mockResolvedValue('/expanded-mask.png');
       vi.spyOn(service, 'inpaintImage').mockRejectedValue(upstream);
       const fileService = {
-        getFileByPath: vi.fn().mockResolvedValue({ id: 'mask-file', path: '/mask.png' }),
+        getFileByPath: vi.fn().mockImplementation((_orgId, url) => Promise.resolve({ id: `${url}-file`, path: url })),
         deleteFile: vi.fn().mockResolvedValue(undefined),
       };
       (service as any)._fileService = fileService;
@@ -1211,7 +1252,8 @@ describe('AiMediaService', () => {
         .rejects.toBe(upstream);
 
       expect(generate).not.toHaveBeenCalled();
-      expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'mask-file');
+      expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', '/mask.png-file');
+      expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', '/expanded-mask.png-file');
     });
 
     it('cleans up only Magic Grab background files owned by the org', async () => {

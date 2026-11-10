@@ -122,11 +122,12 @@ Generated video ingestion uses `media/video-artifact.ts`: best-effort ffprobe wr
 
 **Magic Grab persistence.** `POST /media/magic-grab` accepts the original image, provider cutout,
 and source-space subject mask. `AiMediaService.magicGrab` uses only the existing masked-inpaint
-operation—never unmasked image-to-image generation—and composites the result only inside the opaque
-white-subject-on-black mask so unrelated pixels remain unchanged. Its background-only positive prompt
-is paired with an explicit foreground/furniture negative prompt; the Replicate adapter forwards that
-input for models that declare support. It persists only the reconstructed
-background and deletes the temporary source-mask File server-side in `finally` (so create-only members
+operation—never unmasked image-to-image generation—and composites the result only inside a mildly
+dilated white-subject-on-black mask so unrelated pixels remain unchanged and the provider covers the
+subject's outer edge. Its background-only positive prompt explicitly forbids replacement subjects and
+new scenes, and is paired with an explicit foreground/furniture negative prompt; the Replicate adapter
+forwards that input for models that declare support. It persists only the reconstructed
+background and deletes both temporary mask Files server-side in `finally` (so create-only members
 do not need `media:delete`). The provider cutout URL remains a preview/mask input, not another library
 File. `POST /media/magic-grab/cleanup` accepts a `fileId` and
 uses the same `media:create` gate to delete only org-owned files named `magic-grab-background-*`.
