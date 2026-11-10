@@ -50,8 +50,14 @@ test('original logo and palette survive generation, and text-only revision prese
   if (!/^#[0-9a-f]{6}$/.test(brandHex)) throw new Error('E2E_LIVE_BRAND_HEX must be #rrggbb');
 
   await page.goto('/media/ai-designer');
-  await page.getByRole('button', { name: 'Prompt', exact: true }).click();
-  await page.getByText('Instagram Post', { exact: true }).click();
+  const promptMode = page.getByRole('button', { name: 'Prompt', exact: true });
+  await expect(async () => {
+    await promptMode.click();
+    await expect(page.getByLabel('Prompt', { exact: true })).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  const instagramPost = page.getByRole('button', { name: /Instagram Post/ });
+  await instagramPost.click();
+  await expect(instagramPost).toHaveAttribute('aria-pressed', 'true');
   await page.getByLabel('Variants', { exact: true }).fill('1');
   await page.getByRole('button', { name: 'Add reference', exact: true }).click();
   await page.locator('input[type="file"]').setInputFiles({
@@ -63,6 +69,7 @@ test('original logo and palette survive generation, and text-only revision prese
   await page.getByText('e2e-logo.png', { exact: true }).last().click();
   await page.getByRole('button', { name: /Confirm \(\d+\)/ }).click();
   await page.getByRole('button', { name: 'Use reference as logo', exact: true }).click();
+  await expect(page.getByLabel('Prompt', { exact: true })).toBeVisible();
   await page.getByLabel('Prompt', { exact: true }).fill(
     `A minimal typographic launch design with no photography. Use ${brandHex} as the dominant brand color.`
   );
