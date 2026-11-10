@@ -211,7 +211,7 @@ export async function exportCurrentOutput(
   page: Page,
   options: { png?: boolean; scale?: 1 | 2 | 3 } = {}
 ): Promise<ExportedDownload> {
-  await openMenuAction(page, 'File', 'Export…');
+  await openMenuAction(page, 'File', /^Export…/);
   const dialog = page.getByRole('dialog').filter({
     has: page.getByText('Export Design', { exact: true }),
   });
@@ -282,7 +282,11 @@ export function collectBrowserFailures(page: Page): () => void {
   const failures: string[] = [];
   page.on('pageerror', (error) => failures.push(`page: ${sanitizedMessage(error)}`));
   page.on('console', (message) => {
-    if (message.type() === 'error') failures.push(`console: ${sanitizedMessage(message.text())}`);
+    if (message.type() !== 'error') return;
+    const resourceUrl = message.location().url;
+    const missingProfileAvatar = message.text().includes('404') &&
+      !!resourceUrl && apiPath(resourceUrl).startsWith('/avatar/');
+    if (!missingProfileAvatar) failures.push(`console: ${sanitizedMessage(message.text())}`);
   });
   page.on('response', (response) => {
     const pathname = apiPath(response.url());

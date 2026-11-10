@@ -189,9 +189,10 @@ contracts are:
   editable design IDs, or rendered file IDs are acceptable. Whole-batch atomicity is the settled
   product behavior; do not weaken this gate into row-isolation semantics. This is a regression gate
   for the known partial-four-row-ZIP defect and is expected to fail until the active fix lands.
-- `qr-code`: any disposable static design. Inserts a QR with independent foreground/background
-  colors, verifies both through save/reopen, then checks the exported PNG's decoded value and RGB
-  colors. No generation flag is required.
+- `qr-code`: a disposable static design with no existing QR code, so decoding identifies the inserted
+  code unambiguously. Inserts a QR with independent foreground/background colors, verifies both
+  through save/reopen, then checks the 1x exported PNG's decoded value and RGB colors. No generation
+  flag is required.
 - `sharing`: any saved design. The share input must contain exactly `/media/designer` and the selected
   `designId`, with no other query parameter.
 - `preflight`: a low-contrast text element on the second page of a non-initial output; set

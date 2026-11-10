@@ -36,7 +36,7 @@ export async function runPreflightNavigation(page: Page): Promise<void> {
   expect(target!.outputIndex, 'the fixture target must be on a non-initial output').toBeGreaterThan(0);
   expect(target!.pageNumber, 'the fixture target must be on a non-initial page').toBeGreaterThan(0);
 
-  await openMenuAction(page, 'File', 'Export…');
+  await openMenuAction(page, 'File', /^Export…/);
   await expect(page.getByText('Export Design', { exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: /^Export all \d+ outputs$/ }).check();
   const preflight = page.getByLabel('Preflight', { exact: true });

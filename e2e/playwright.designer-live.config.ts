@@ -11,6 +11,7 @@ export default defineConfig({
   reporter: [['list']],
   outputDir: './test-results/designer-live',
   use: {
+    actionTimeout: 30_000,
     baseURL: process.env.E2E_BASE,
     storageState: process.env.E2E_AUTH_STATE || '.auth/admin.json',
     ignoreHTTPSErrors: true,

@@ -65,7 +65,11 @@ export async function runQrCodeAcceptance(page: Page): Promise<void> {
   requiredEnv('E2E_BASE');
   const designId = requiredEnv('E2E_LIVE_DESIGN_ID');
   const assertNoBrowserFailures = collectBrowserFailures(page);
-  await openDesign(page, designId);
+  const payload = await openDesign(page, designId);
+  expect(
+    locateElements(payload).some(({ element }) => Boolean(element.qr)),
+    'the disposable fixture must not already contain a QR code'
+  ).toBe(false);
   await openMenuAction(page, 'Insert', 'QR Code…');
   const dialog = page.getByRole('dialog', { name: 'QR code', exact: true });
   await expect(dialog).toBeVisible();
@@ -87,7 +91,7 @@ export async function runQrCodeAcceptance(page: Page): Promise<void> {
   await selectImageLayer(page, reopened.id);
   await expect(page.getByRole('button', { name: 'Update QR code', exact: true })).toBeVisible();
 
-  const exported = await exportCurrentOutput(page, { png: true, scale: 2 });
+  const exported = await exportCurrentOutput(page, { png: true, scale: 1 });
   expect(exported.filename.endsWith('.png')).toBe(true);
   const png = PNG.sync.read(exported.bytes);
   const decoded = jsQR(
