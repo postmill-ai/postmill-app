@@ -22,6 +22,11 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
   isInngestEnabled: vi.fn(() => true),
 }));
 
+const { mockSafeFetch } = vi.hoisted(() => ({ mockSafeFetch: vi.fn() }));
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
+  safeFetch: mockSafeFetch,
+}));
+
 import { BadRequestException } from '@nestjs/common';
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { DesignerDocService } from '../designer-doc/designer-doc.service';
@@ -112,9 +117,16 @@ const seedPayload = (rows = [
   }));
 };
 
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+);
+
 beforeEach(() => {
   redis.clear();
   vi.clearAllMocks();
+  mockSafeFetch.mockReset();
+  mockSafeFetch.mockImplementation(async () => new Response(PNG_BYTES));
 });
 
 describe('DesignBulkCreateService enqueue and status', () => {
@@ -165,6 +177,68 @@ describe('DesignBulkCreateService enqueue and status', () => {
     await expect(service.enqueueBulkCreate('org-1', 'user-1', {
       doc: makeDoc(), rows: [{ name: 'Ada', image: '=IMAGE("not a URL")' }],
     })).rejects.toThrow(/Row 1: outputs\.0\.pages\.0\.children\.0\.src/);
+
+    expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
+    expect(fileService.createFolder).not.toHaveBeenCalled();
+    expect(inngest.send).not.toHaveBeenCalled();
+    expect(redis.size).toBe(0);
+  });
+
+  it('rejects row 3 remote image failures before every job, folder, event or output side effect', async () => {
+    const {
+      service, lifecycle, fileService, designService, renderService, storageService, aiMediaService, writes,
+    } = makeService();
+    const doc = makeDoc();
+    doc.outputs[0].pages[0].children[0].slot.name = 'product_image';
+    const rows = Array.from({ length: 5 }, (_, index) => ({
+      name: `Product ${index + 1}`,
+      product_image: `https://cdn.example.test/product-${index + 1}.png`,
+    }));
+    let active = 0;
+    let maxActive = 0;
+    mockSafeFetch.mockImplementation(async (url: string) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await Promise.resolve();
+      try {
+        if (url.endsWith('/product-3.png')) throw new Error('Blocked URL');
+        return new Response(PNG_BYTES);
+      } finally {
+        active--;
+      }
+    });
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc, rows, nameBase: 'Launch',
+    })).rejects.toThrow(
+      'Row 3: rows[2].product_image (outputs.0.pages.0.children.0.src): Blocked URL'
+    );
+
+    expect(maxActive).toBe(1);
+    expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
+    expect(fileService.createFolder).not.toHaveBeenCalled();
+    expect(fileService.saveGeneratedMedia).not.toHaveBeenCalled();
+    expect(designService.createDesign).not.toHaveBeenCalled();
+    expect(renderService.renderPage).not.toHaveBeenCalled();
+    expect(storageService.getLocalAdapterForOrg).not.toHaveBeenCalled();
+    expect(aiMediaService.saveUrlToFile).not.toHaveBeenCalled();
+    expect(inngest.send).not.toHaveBeenCalled();
+    expect(redis.size).toBe(0);
+    expect(writes).toHaveLength(0);
+  });
+
+  it('rejects HTML returned for a remote row image before enqueue', async () => {
+    const { service, lifecycle, fileService } = makeService();
+    mockSafeFetch.mockImplementation(async (url: string) =>
+      new Response(url.endsWith('/bad.png') ? '<html>Not an image</html>' : PNG_BYTES)
+    );
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(),
+      rows: [{ name: 'Ada', image: 'https://cdn.example.test/bad.png' }],
+    })).rejects.toThrow(
+      'Row 1: rows[0].image (outputs.0.pages.0.children.0.src): The image response did not contain a supported PNG, JPEG, or WebP image.'
+    );
 
     expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
     expect(fileService.createFolder).not.toHaveBeenCalled();
@@ -294,20 +368,23 @@ describe('DesignBulkCreateService processing', () => {
     expect(writes.some((write) => write.mime === 'application/zip')).toBe(true);
   });
 
-  it('isolates a failed row and still completes the successful rows', async () => {
-    const { service, designService, aiSettings, writes } = makeService();
-    designService.createDesign
-      .mockRejectedValueOnce(new Error('Bad first row'))
-      .mockResolvedValueOnce({ id: 'design-2' } as any);
+  it('fails instead of completing a partial batch when a remote image fails after preflight', async () => {
+    const { service, designService, aiMediaService, aiSettings, writes } = makeService();
+    aiMediaService.saveUrlToFile
+      .mockResolvedValueOnce({ id: 'remote-a', path: '/uploads/org/remote-a.png' })
+      .mockRejectedValueOnce(new Error('Blocked URL'));
     seedPayload();
 
     await service.processBulkCreate('job-1');
 
-    const completed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'completed')?.[2];
-    const results = JSON.parse(completed.inputJson);
-    expect(results[0].error).toBe('Bad first row');
-    expect(results[1].designId).toBe('design-2');
-    expect(writes.some((write) => write.mime === 'application/zip')).toBe(true);
+    expect(designService.createDesign).toHaveBeenCalledTimes(1);
+    expect(aiMediaService.saveUrlToFile).toHaveBeenCalledTimes(2);
+    expect(aiSettings.updateMediaJob.mock.calls.some(([, , update]) => update.status === 'completed')).toBe(false);
+    const failed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'failed')?.[2];
+    expect(failed.error).toBe('Row 2: Blocked URL');
+    expect(JSON.parse(failed.inputJson)).toHaveLength(2);
+    expect(JSON.parse(failed.inputJson)[1].error).toBe('Blocked URL');
+    expect(writes.some((write) => write.mime === 'application/zip')).toBe(false);
   });
 
   it('heartbeats the job row and leaves existing template image URLs untouched', async () => {
@@ -344,7 +421,7 @@ describe('DesignBulkCreateService processing', () => {
     await service.processBulkCreate('job-1');
 
     expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith('org-1', 'job-1', expect.objectContaining({
-      status: 'failed', error: 'Invalid row',
+      status: 'failed', error: 'Row 1: Invalid row',
       inputJson: JSON.stringify([{ row: 1, fileIds: [], error: 'Invalid row' }]),
     }));
     expect(writes.some((write) => write.mime === 'application/zip')).toBe(false);

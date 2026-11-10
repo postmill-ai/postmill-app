@@ -520,10 +520,13 @@ bindings remain intact. Before substitution, a colour mustache renders transpare
 `canvasColor` boundary rather than inheriting the canvas's previous fill; a real row replaces it with
 the supplied colour. Spreadsheet `=IMAGE("https://…")` cells and recognized Google Drive share links
 normalize to direct image sources during substitution; other values stay unchanged. Enqueue validates
-every transformed row before creating a job/folder/event and returns its row and schema paths. Image
-ingestion verifies PNG/JPEG/WebP magic bytes, so an HTML Drive response is a clear row error rather
-than a stored blank PNG. The batch runs through `DesignBulkCreateService` and creates editable Designs
-plus per-page PNG Files and a ZIP; never substitute a client-only flattened image for the editable result.
+every transformed row, then sequentially preflights each unique remote image through `safeFetch` and
+PNG/JPEG/WebP magic-byte detection before creating a job/folder/event; errors include the row,
+spreadsheet path (for example `rows[2].product_image`) and DesignerDoc path. No files are persisted
+during preflight, so an HTML Drive response or blocked URL cannot leave outputs behind. The batch runs
+through `DesignBulkCreateService` and creates editable Designs plus per-page PNG Files and a ZIP; any
+row failure after enqueue marks the job failed and suppresses ZIP completion rather than calling a
+partial batch complete. Never substitute a client-only flattened image for the editable result.
 
 ## Forms
 
