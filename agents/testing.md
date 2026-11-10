@@ -186,8 +186,9 @@ contracts are:
   matching ZIP manifest; no row may be dropped or hidden as a partial success.
 - `bulk-create-invalid`: the same fixture. Row five uses a schema-valid but missing QA image and must
   fail the entire batch with `Row 5` and the transformed `src` schema path. No completed status, ZIP,
-  editable design IDs, or rendered file IDs are acceptable. This is a regression gate for the known
-  partial-four-row-ZIP defect and is expected to fail until the active Bulk atomicity fix lands.
+  editable design IDs, or rendered file IDs are acceptable. Whole-batch atomicity is the settled
+  product behavior; do not weaken this gate into row-isolation semantics. This is a regression gate
+  for the known partial-four-row-ZIP defect and is expected to fail until the active fix lands.
 - `qr-code`: any disposable static design. Inserts a QR with independent foreground/background
   colors, verifies both through save/reopen, then checks the exported PNG's decoded value and RGB
   colors. No generation flag is required.
