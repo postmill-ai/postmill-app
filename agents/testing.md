@@ -163,6 +163,43 @@ invocation; the other case skips. This config is not referenced by CI or the def
 Playwright projects, and the live suite must not be run as part of ordinary mocked E2E
 validation.
 
+### Opt-in live Designer acceptance (paid generation; never default CI)
+
+`live-designer/designer-live.spec.ts` and `playwright.designer-live.config.ts` are a separate,
+one-worker/zero-retry acceptance suite. The specs live outside `tests/`, so default Playwright
+discovery and the existing non-billing provider-live config never load them. Every case requires
+`E2E_LIVE_DESIGNER=1` and one explicit `E2E_LIVE_CASE`; any case that submits a paid operation also
+requires `E2E_LIVE_GENERATION=1`. A route guard blocks known generation POSTs without that second
+opt-in. `E2E_BASE` is mandatory and has no production default. Use an existing QA deployment and
+storage state (`E2E_AUTH_STATE`, default `.auth/admin.json`); do not add provider keys, run seeds or
+migrations, or start services for this suite.
+
+Only `E2E_LIVE_CASE=background-removal` is implemented. It uses a **disposable** saved QA design,
+selects a static image through the Layers UI, applies the reviewed result, explicitly saves and
+reopens the same design, then exports to Files and downloads the result. Network payloads must retain
+the selected layer and either its original-plus-mask result or flattened cutout; browser console,
+page, and media/file API failures fail the case. The design must belong to the authenticated QA
+organization and contain an unmasked static image on its first output. Set `E2E_LIVE_ELEMENT_ID`
+when the intended image is not the first static image. The
+Magic Grab, outpaint, five-row Bulk Create, QR, exact-designId sharing, and preflight-link cases are
+clearly marked skipped scaffolds, not implemented coverage.
+
+Run from `e2e/` after `pnpm install --ignore-workspace`, replacing the reserved QA hostname and
+supplying a disposable design ID:
+
+```bash
+E2E_LIVE_DESIGNER=1 \
+E2E_LIVE_CASE=background-removal \
+E2E_LIVE_GENERATION=1 \
+E2E_LIVE_DESIGN_ID=<disposable-qa-design-id> \
+E2E_AUTH_STATE=.auth/admin.json \
+E2E_BASE=https://qa-deployment.example.com \
+pnpm exec playwright test --config playwright.designer-live.config.ts
+```
+
+The command authorizes one background-removal operation and modifies the supplied design. Do not run
+it against production or as part of ordinary mocked/non-billing E2E validation.
+
 ## Lint
 
 - **One flat config at the repo root only**: `eslint.config.mjs` — **ESLint 9** (`^9.39.4`)
