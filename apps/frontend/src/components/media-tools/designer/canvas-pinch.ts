@@ -45,3 +45,37 @@ export const canvasZoomAtPoint = ({
     },
   };
 };
+
+export type CanvasWheelAction = 'pan' | 'zoom';
+
+export const canvasWheelAction = ({
+  touchpadMode,
+  ctrlKey,
+  metaKey,
+}: {
+  touchpadMode: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+}): CanvasWheelAction =>
+  touchpadMode && !ctrlKey && !metaKey ? 'pan' : 'zoom';
+
+export const normalizeCanvasWheel = ({
+  deltaX,
+  deltaY,
+  deltaMode,
+}: {
+  deltaX: number;
+  deltaY: number;
+  deltaMode: number;
+}): CanvasPoint => {
+  const multiplier = deltaMode === 1 ? 16 : deltaMode === 2 ? 800 : 1;
+  return { x: deltaX * multiplier, y: deltaY * multiplier };
+};
+
+export const canvasPanViewport = (
+  viewport: CanvasPoint,
+  delta: CanvasPoint
+): CanvasPoint => ({
+  x: viewport.x - delta.x,
+  y: viewport.y - delta.y,
+});

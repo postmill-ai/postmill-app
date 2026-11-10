@@ -195,6 +195,10 @@ const serializeNode = (
   } else {
     nextInherited = styleStringToRun(el.style, nextInherited);
   }
+  if (tag === 'font') {
+    const color = el.getAttribute('color');
+    if (color && color.length <= MAX_COLOR_LEN) nextInherited.fill = color;
+  }
 
   const runs: TextRun[] = [];
   el.childNodes.forEach((child) => {
@@ -324,6 +328,7 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
   onComplete,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
+  const savedRangeRef = useRef<Range | null>(null);
   // Our own handle on the editor node: React detaches `editorRef` BEFORE the
   // passive unmount cleanup runs, but the DOM object outlives removal, so the
   // unmount commit can still read the final innerHTML from this one.
@@ -406,7 +411,33 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
     []
   );
 
-  const handleBlur = commit;
+  const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    if ((e.relatedTarget as HTMLElement | null)?.closest('[data-text-editing-toolbar]')) return;
+    commit();
+  };
+
+  const applyTextColor = (color: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const selection = window.getSelection();
+    const liveRange = selection?.rangeCount && editor.contains(selection.anchorNode)
+      ? selection.getRangeAt(0)
+      : null;
+    const range = liveRange ?? savedRangeRef.current;
+    editor.focus();
+    if (range && selection) {
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    if (range && !range.collapsed) {
+      document.execCommand('styleWithCSS', false, 'true');
+      document.execCommand('foreColor', false, color);
+    } else {
+      editor.style.color = color;
+      onUpdate(element.id, { fill: color });
+    }
+    savedRangeRef.current = range;
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -448,43 +479,67 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
   const minHeight = Math.max(element.height * scale, 20);
 
   return (
-    <div
-      ref={editorRef}
-      data-text-editor-id={element.id}
-      contentEditable
-      suppressContentEditableWarning
-      onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
-      dangerouslySetInnerHTML={{ __html: html }}
-      style={{
-        position: 'absolute',
-        left: `${left}px`,
-        top: `${top}px`,
-        // Condensed the same way the canvas paints it, from the same origin the
-        // box is positioned at — otherwise the glyphs jump on blur.
-        transform: element.textScaleX ? `scaleX(${element.textScaleX})` : undefined,
-        transformOrigin: 'left top',
-        width: `${Math.max(width, 20) / (element.textScaleX || 1)}px`,
-        minHeight: `${minHeight}px`,
-        fontFamily: element.fontFamily || 'Arial',
-        // The canvas paints flat text at the FITTED size (shrink-to-fit), so the
-        // overlay must match it or the string reflows the moment editing ends.
-        fontSize: `${fittedFontSize(element) * scale}px`,
-        fontWeight: element.fontWeight ?? 400,
-        fontStyle: element.fontStyle === 'italic' ? 'italic' : 'normal',
-        color: element.fill || '#000000',
-        textAlign: element.align || 'left',
-        lineHeight: element.lineHeight || 1.2,
-        letterSpacing: `${(element.letterSpacing || 0) * scale}px`,
-        background: 'transparent',
-        border: 'none',
-        outline: 'none',
-        resize: 'none',
-        overflow: 'hidden',
-        whiteSpace: 'pre-wrap',
-        wordWrap: 'break-word',
-        zIndex: 100,
-      }}
-    />
+    <>
+      <div
+        data-text-editing-toolbar
+        className="absolute flex items-center gap-1 rounded-md border border-studioBorder bg-newBgColorInner p-1 shadow-lg"
+        style={{ left: `${left}px`, top: `${Math.max(4, top - 36)}px`, zIndex: 101 }}
+      >
+        <input
+          type="color"
+          aria-label={t('designer_text_color', 'Text color')}
+          title={t('designer_text_color_selection', 'Color selected text')}
+          onMouseDown={(e) => {
+            const selection = window.getSelection();
+            savedRangeRef.current = selection?.rangeCount
+              ? selection.getRangeAt(0).cloneRange()
+              : null;
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          defaultValue={/^#[0-9a-f]{6}$/i.test(element.fill || '') ? element.fill : '#000000'}
+          onChange={(e) => applyTextColor(e.currentTarget.value)}
+          className="h-7 w-8 cursor-pointer rounded-sm border border-studioBorder bg-transparent p-0.5"
+        />
+      </div>
+      <div
+        ref={editorRef}
+        data-text-editor-id={element.id}
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        dangerouslySetInnerHTML={{ __html: html }}
+        style={{
+          position: 'absolute',
+          left: `${left}px`,
+          top: `${top}px`,
+          // Condensed the same way the canvas paints it, from the same origin the
+          // box is positioned at — otherwise the glyphs jump on blur.
+          transform: element.textScaleX ? `scaleX(${element.textScaleX})` : undefined,
+          transformOrigin: 'left top',
+          width: `${Math.max(width, 20) / (element.textScaleX || 1)}px`,
+          minHeight: `${minHeight}px`,
+          fontFamily: element.fontFamily || 'Arial',
+          // The canvas paints flat text at the FITTED size (shrink-to-fit), so the
+          // overlay must match it or the string reflows the moment editing ends.
+          fontSize: `${fittedFontSize(element) * scale}px`,
+          fontWeight: element.fontWeight ?? 400,
+          fontStyle: element.fontStyle === 'italic' ? 'italic' : 'normal',
+          color: element.fill || '#000000',
+          textAlign: element.align || 'left',
+          lineHeight: element.lineHeight || 1.2,
+          letterSpacing: `${(element.letterSpacing || 0) * scale}px`,
+          background: 'transparent',
+          border: 'none',
+          outline: 'none',
+          resize: 'none',
+          overflow: 'hidden',
+          whiteSpace: 'pre-wrap',
+          wordWrap: 'break-word',
+          zIndex: 100,
+        }}
+      />
+    </>
   );
 };

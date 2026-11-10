@@ -65,6 +65,7 @@ export interface DesignerActionCtx {
   showRulers: boolean;
   /** Effective Pages-bar visibility (image mode only). */
   showPagesBar: boolean;
+  touchpadMode: boolean;
   aiActive: boolean;
   // Per-operation media-tool availability (the single status signal). Optimistic/fail-open:
   // returns true while loading or on a status outage, so a hiccup never greys every tool.
@@ -110,6 +111,7 @@ export interface DesignerActionCtx {
   onToggleSafeZones: () => void;
   onToggleRulers: () => void;
   onTogglePagesBar: () => void;
+  onToggleTouchpadMode: () => void;
   onToggleSnap: () => void;
   onFitToScreen: () => void;
   onActualSize: () => void;
@@ -467,6 +469,7 @@ export const useDesignerActions = (
       { id: 'zoom-out', label: 'Zoom Out', menu: 'view', group: 'zoom', shortcut: '⌘-', keywords: ['zoom out'], run: () => { const st = store.getState(); st.setZoom(st.zoom / 1.2); } },
       { id: 'fit-screen', label: 'Fit to Screen', menu: 'view', group: 'zoom', shortcut: '⌘0', keywords: ['fit', 'screen'], run: ctx.onFitToScreen },
       { id: 'actual-size', label: 'Actual Size (100%)', menu: 'view', group: 'zoom', keywords: ['actual', '100', 'reset zoom'], run: ctx.onActualSize },
+      { id: 'view-touchpad-mode', label: 'Touchpad mode', menu: 'view', group: 'zoom', keywords: ['touchpad', 'trackpad', 'swipe', 'pan', 'pinch'], checked: () => ctx.touchpadMode, run: ctx.onToggleTouchpadMode },
       { id: 'view-safe-zones', label: 'Safe Zones', menu: 'view', group: 'overlay', keywords: ['safe zones'], checked: () => ctx.showSafeZones, run: ctx.onToggleSafeZones },
       { id: 'view-rulers', label: 'Rulers', menu: 'view', group: 'overlay', keywords: ['rulers'], checked: () => ctx.showRulers, run: ctx.onToggleRulers },
       { id: 'view-pages', label: 'Pages', menu: 'view', group: 'overlay', keywords: ['pages'], checked: () => ctx.showPagesBar, enabled: () => !isVideoDoc(), run: ctx.onTogglePagesBar },

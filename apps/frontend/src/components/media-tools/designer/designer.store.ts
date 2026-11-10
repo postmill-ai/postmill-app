@@ -61,6 +61,7 @@ import type {
 import type { FillContents } from '@postmill-ai/nestjs-libraries/media/designer-doc/fill-stroke';
 import { mergeKeyframes } from './keyframe-props';
 import { expandClipRefs, groupRefsForClip, toggleClipRefs } from './video-selection';
+import type { DesignerAssistantSuggestionEntry } from './panels/designer-assistant-cache';
 
 export type {
   DesignerDoc,
@@ -215,6 +216,7 @@ export interface DesignerState {
    * `renamingId`.
    */
   generateRequest: 'video' | 'music' | 'voiceover' | 'record-voiceover' | null;
+  assistantSuggestions: Record<string, DesignerAssistantSuggestionEntry>;
 }
 
 export interface DesignerActions {
@@ -249,6 +251,7 @@ export interface DesignerActions {
   duplicateElement: (id: string) => void;
   duplicateElements: (ids: string[]) => void;
   setSelectedIds: (ids: string[]) => void;
+  setAssistantSuggestions: (key: string, entry: DesignerAssistantSuggestionEntry) => void;
   requestRename: (id: string | null) => void;
   // `commit: false` writes without a history entry — continuous controls
   // (texture sliders) write silently per tick and pushHistory once on release,
@@ -581,6 +584,7 @@ export const createDesignerStore = (
       generateRequest: null,
       maskTargetId: null,
       clipboard: [],
+      assistantSuggestions: {},
       setDoc: (doc) => set({ doc: migrateDoc(doc), isDirty: true }),
       adoptPersistedDoc: (sentDoc, persistedDoc) => {
         if (get().doc !== sentDoc || !persistedDoc || typeof persistedDoc !== 'object') return false;
@@ -850,6 +854,9 @@ export const createDesignerStore = (
       },
 
       setSelectedIds: (ids) => set({ selectedIds: ids }),
+      setAssistantSuggestions: (key, entry) => set((state) => ({
+        assistantSuggestions: { ...state.assistantSuggestions, [key]: entry },
+      })),
       requestRename: (id) => set({ renamingId: id }),
 
       setOutputBackground: (bg, commit = true) => {
@@ -1640,6 +1647,7 @@ export const createDesignerStore = (
           selectedClip: null,
           selectedClips: [],
           linkedUpdateFlash: {},
+          assistantSuggestions: {},
         });
       },
 
@@ -1665,6 +1673,7 @@ export const createDesignerStore = (
           selectedClips: [],
           linkedUpdateFlash: {},
           brandAdminOverride: false,
+          assistantSuggestions: {},
         });
       },
 
