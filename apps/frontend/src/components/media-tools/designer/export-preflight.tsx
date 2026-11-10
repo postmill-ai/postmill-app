@@ -41,7 +41,7 @@ export const ExportPreflight: FC<{
               onClick={() => onFinding(finding)}
               className="text-start text-[11px] text-newTextColor/70 hover:text-textColor hover:bg-yellow-500/10 rounded-sm px-1 py-0.5"
             >
-              {t(finding.key, FALLBACKS[finding.rule], finding.vars)}
+              {t(finding.key, FALLBACKS[finding.rule], { ...finding.vars, interpolation: { escapeValue: false } })}
             </button>
           ))}
           {result.findings.length > 5 && (
@@ -60,7 +60,7 @@ export const ExportPreflight: FC<{
               onClick={() => onFinding(item)}
               className="text-start text-[10px] text-newTextColor/60 hover:text-textColor rounded-sm px-1 py-0.5 hover:bg-yellow-500/10"
             >
-              {t(item.key, UNASSESSED_FALLBACKS[item.key] || 'This check needs visual review on {{target}}', item.vars)}
+              {t(item.key, UNASSESSED_FALLBACKS[item.key] || 'This check needs visual review on {{target}}', { ...item.vars, interpolation: { escapeValue: false } })}
             </button>
           ))}
         </div>

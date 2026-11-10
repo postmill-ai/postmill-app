@@ -5,8 +5,14 @@ import { ExportPreflight } from './export-preflight';
 import type { DesignerPreflightFinding } from './design-preflight';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
-  useT: () => (_key: string, fallback: string, vars: Record<string, string | number>) =>
-    fallback.replace(/\{\{(\w+)\}\}/g, (_match, name) => String(vars[name])),
+  useT: () => (
+    _key: string,
+    fallback: string,
+    vars: Record<string, string | number> & { interpolation?: { escapeValue?: boolean } }
+  ) => fallback.replace(/\{\{(\w+)\}\}/g, (_match, name) => {
+    const value = String(vars[name]);
+    return vars.interpolation?.escapeValue === false ? value : value.replaceAll('/', '&#x2F;');
+  }),
 }));
 
 const finding: DesignerPreflightFinding = {
