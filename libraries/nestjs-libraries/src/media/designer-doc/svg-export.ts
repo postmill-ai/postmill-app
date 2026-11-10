@@ -19,7 +19,7 @@ import { pointsForShape, cornerRadii } from './shape-geometry';
 import type { DesignerPathNode } from './path-geometry';
 import { buildLayerTree, walkLayerTree, type LayerNode } from './layer-tree';
 import { fitTextToBox, DEFAULT_LINE_HEIGHT, type MeasureText } from './fit-text';
-import { warpedOutline } from './warp';
+import { warpedOutlines } from './warp';
 import { renderableSrc } from './svg-src';
 import { computeCoverCrop } from './media-geometry';
 
@@ -293,8 +293,11 @@ const elementSvg = (el: DesignerElement, ctx: Ctx): string => {
         );
       }
       case 'path': {
-        const d = pathData(el.nodes || [], el.closed);
-        return d ? `<path d="${d}"${fill}${strokeAttrs(el)}/>` : '';
+        const d = el.subpaths?.length
+          ? el.subpaths.map((nodes) => pathData(nodes, el.closed)).join(' ')
+          : pathData(el.nodes || [], el.closed);
+        const fillRule = el.fillRule ? ` fill-rule="${el.fillRule}"` : '';
+        return d ? `<path d="${d}"${fillRule}${fill}${strokeAttrs(el)}/>` : '';
       }
       case 'fill': {
         const style = el.fillStyle;
@@ -320,13 +323,15 @@ const elementSvg = (el: DesignerElement, ctx: Ctx): string => {
       default: {
         // A warp is real geometry, not a filter: the same outline both
         // renderers trace becomes a path here rather than being ignored.
-        const warped = warpedOutline(el);
-        if (warped?.length) {
-          const d =
-            `M${num(warped[0].x)},${num(warped[0].y)}` +
-            warped.slice(1).map((pt) => ` L${num(pt.x)},${num(pt.y)}`).join('') +
-            ' Z';
-          return `<path d="${d}"${fill}${strokeAttrs(el)}/>`;
+        const warpedPaths = warpedOutlines(el);
+        if (warpedPaths?.length) {
+          const d = warpedPaths.map((points) =>
+            `M${num(points[0].x)},${num(points[0].y)}` +
+            points.slice(1).map((pt) => ` L${num(pt.x)},${num(pt.y)}`).join('') +
+            ' Z'
+          ).join(' ');
+          const fillRule = el.fillRule ? ` fill-rule="${el.fillRule}"` : '';
+          return `<path d="${d}"${fillRule}${fill}${strokeAttrs(el)}/>`;
         }
         if (el.shape === 'ellipse') {
           return `<ellipse cx="${num(el.width / 2)}" cy="${num(el.height / 2)}" rx="${num(

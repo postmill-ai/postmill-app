@@ -4,11 +4,13 @@ import {
   booleanPolygons,
   flattenPath,
   pointInPolygon,
+  polygonArea,
   polygonToNodes,
   type BooleanOp,
   type Point,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-boolean';
 import { offsetPolygon, roundCorners } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-offset';
+import { pathContours } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-geometry';
 import { pointsForShape } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
 import type { DesignerElement } from './designer.store';
 
@@ -123,18 +125,36 @@ const representativePoint = (polygon: Point[]): Point => {
   return candidates.find((point) => pointInPolygon(point, polygon)) || polygon[0];
 };
 
+const elementOutlines = (element: DesignerElement): Point[][] =>
+  pathContours(element).map((nodes) => elementOutline({ ...element, nodes }));
+
+const groupRegions = (regions: Point[][]): Point[][][] => {
+  const ordered = [...regions].sort((a, b) =>
+    Math.abs(polygonArea(b)) - Math.abs(polygonArea(a))
+  );
+  const groups: Point[][][] = [];
+  for (const region of ordered) {
+    const container = groups.find((group) =>
+      region.length > 0 && region.every((point) => pointInPolygon(point, group[0]))
+    );
+    if (container) container.push(region);
+    else groups.push([region]);
+  }
+  return groups;
+};
+
 export const pathfinderMany = (
   elements: DesignerElement[],
   op: BooleanOp
 ): PathfinderResult | null => {
   const [subject, ...clips] = elements;
   if (!subject || !clips.length) return null;
-  let regions = [elementOutline(subject)];
+  let regions = elementOutlines(subject);
 
   if (op === 'outline') {
-    regions.push(...clips.map(elementOutline));
+    regions.push(...clips.flatMap(elementOutlines));
   } else {
-    for (const clip of clips.map(elementOutline)) {
+    for (const clip of clips.flatMap(elementOutlines)) {
       if (op === 'unite') regions = uniteRegions([...regions, clip]);
       if (op === 'subtract') {
         regions = regions.flatMap((region) => booleanPolygons(region, clip, 'subtract').polygons);
@@ -147,7 +167,7 @@ export const pathfinderMany = (
       if (!regions.length) return null;
     }
     if (op === 'exclude') {
-      const outlines = elements.map(elementOutline);
+      const outlines = elements.flatMap(elementOutlines);
       regions = regions.filter((region) => {
         const point = representativePoint(region);
         return outlines.filter((outline) => pointInPolygon(point, outline)).length % 2 === 1;
@@ -155,23 +175,14 @@ export const pathfinderMany = (
     }
   }
   if (!regions.length) return null;
-  if (op !== 'outline') {
-    for (let outer = 0; outer < regions.length; outer++) {
-      for (let inner = 0; inner < regions.length; inner++) {
-        if (
-          outer !== inner &&
-          regions[inner].length > 0 &&
-          regions[inner].every((point) => pointInPolygon(point, regions[outer]))
-        ) {
-          return null;
-        }
-      }
-    }
-  }
 
-  const toElement = (polygon: Point[]): Partial<DesignerElement> | null => {
-    const box = bounds([polygon]);
+  const groups = op === 'outline' ? regions.map((region) => [region]) : groupRegions(regions);
+  const toElement = (group: Point[][]): Partial<DesignerElement> | null => {
+    const box = bounds(group);
     if (!box) return null;
+    const localContours = group.map((polygon) =>
+      polygonToNodes(polygon.map((point) => ({ x: point.x - box.x, y: point.y - box.y })))
+    );
     return {
       type: 'path',
       x: box.x,
@@ -182,7 +193,9 @@ export const pathfinderMany = (
       opacity: subject.opacity,
       locked: false,
       hidden: false,
-      nodes: polygonToNodes(polygon.map((point) => ({ x: point.x - box.x, y: point.y - box.y }))),
+      nodes: localContours[0],
+      subpaths: localContours.length > 1 ? localContours : undefined,
+      fillRule: localContours.length > 1 ? 'evenodd' : undefined,
       closed: true,
       fill: op === 'outline' ? 'transparent' : subject.fill,
       fillGradient: op === 'outline' ? undefined : subject.fillGradient,
@@ -192,7 +205,7 @@ export const pathfinderMany = (
       name: subject.name,
     };
   };
-  const converted = regions.map(toElement);
+  const converted = groups.map(toElement);
   if (converted.some((element) => !element)) return null;
   const [element, ...extra] = converted as Partial<DesignerElement>[];
   return { element, extra };

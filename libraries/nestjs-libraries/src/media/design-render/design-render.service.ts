@@ -36,11 +36,11 @@ import {
   type FittedText,
 } from '../designer-doc/fit-text';
 import { pointsForShape, starPoints } from '../designer-doc/shape-geometry';
-import { warpedOutline, warpPadding } from '../designer-doc/warp';
+import { warpedOutlines, warpPadding } from '../designer-doc/warp';
 import { cornerRadii, hasCornerRadius } from '../designer-doc/shape-geometry';
 import { arcBaselineY, arcGeometry, arcVerticalOffset } from '../designer-doc/curved-text';
 import { arrowHeadPoints, strokeEndpoints } from '../designer-doc/stroke-style';
-import { tracePathNodes } from '../designer-doc/path-geometry';
+import { pathContours, tracePathContours } from '../designer-doc/path-geometry';
 import { buildLayerTree, groupBounds, type LayerNode } from '../designer-doc/layer-tree';
 import { expandSymbols } from '../designer-doc/symbols';
 import { renderableSrc } from '../designer-doc/svg-src';
@@ -2320,28 +2320,31 @@ export class DesignRenderService {
    * exported curve is byte-for-byte the curve the canvas drew.
    */
   private drawPath(ctx: any, el: DesignerElement): void {
-    const nodes = el.nodes;
-    if (!nodes?.length) return;
+    const contours = pathContours(el);
+    if (!contours.some((nodes) => nodes.length)) return;
     const fill = el.fillGradient
       ? this.buildGradient(ctx, el.fillGradient, el.width, el.height)
       : el.fill;
 
     // Warping flattens the beziers to the polyline the deformation was
     // evaluated on; an unwarped path still traces its real curve.
-    const warpedPath = warpedOutline(el);
-    if (warpedPath) {
-      this.tracePath(
-        ctx,
-        warpedPath.map((p) => [p.x, p.y] as [number, number]),
-        !!el.closed
-      );
+    const warpedPaths = warpedOutlines(el);
+    if (warpedPaths) {
+      ctx.beginPath();
+      for (const points of warpedPaths) {
+        points.forEach((point, index) =>
+          index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y)
+        );
+        if (el.closed) ctx.closePath();
+      }
     } else {
-      tracePathNodes(ctx, nodes, !!el.closed);
+      tracePathContours(ctx, contours, !!el.closed);
     }
     // Only a closed path is fillable; an open one would fill its implicit chord.
     if (fill && el.closed) {
       ctx.fillStyle = canvasColor(fill);
-      ctx.fill();
+      if (el.fillRule) ctx.fill(el.fillRule);
+      else ctx.fill();
     }
     if (el.stroke && (el.strokeWidth || 0) > 0) {
       ctx.strokeStyle = canvasColor(el.stroke);
@@ -2402,13 +2405,15 @@ export class DesignRenderService {
 
     // A warped shape resamples to a single polyline whatever kind it was; the
     // unwarped branches below are untouched so nothing existing shifts.
-    const warped = warpedOutline(el);
-    if (warped) {
-      this.tracePath(
-        ctx,
-        warped.map((p) => [p.x, p.y] as [number, number]),
-        shape !== 'line'
-      );
+    const warpedPaths = warpedOutlines(el);
+    if (warpedPaths) {
+      ctx.beginPath();
+      for (const points of warpedPaths) {
+        points.forEach((point, index) =>
+          index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y)
+        );
+        if (shape !== 'line') ctx.closePath();
+      }
       if (fill && shape !== 'line') { ctx.fillStyle = canvasColor(fill); ctx.fill(); }
       if (el.stroke && (el.strokeWidth || 0) > 0) {
         ctx.strokeStyle = canvasColor(el.stroke);

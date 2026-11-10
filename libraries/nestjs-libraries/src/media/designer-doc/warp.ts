@@ -275,22 +275,43 @@ export const outlinePoints = (
  * The warped outline of an element, or null when it has no warp or nothing to
  * warp. This is the single entry point both renderers call.
  */
+export const outlinePointSets = (
+  el: Pick<
+    DesignerElement,
+    'type' | 'shape' | 'width' | 'height' | 'sides' | 'innerRatio' | 'nodes' | 'subpaths' | 'closed'
+  >,
+  segments = WARP_SEGMENTS
+): ShapePoint[][] | null => {
+  if (el.type === 'path' && el.subpaths?.length) {
+    const contours = el.subpaths.map((nodes) => outlinePoints({ ...el, nodes }, segments));
+    return contours.every((points) => !!points) ? contours as ShapePoint[][] : null;
+  }
+  const points = outlinePoints(el, segments);
+  return points ? [points] : null;
+};
+
+export const warpedOutlines = (
+  el: Pick<
+    DesignerElement,
+    'type' | 'shape' | 'width' | 'height' | 'sides' | 'innerRatio' | 'nodes' | 'subpaths' | 'closed' | 'warp'
+  >,
+  segments = WARP_SEGMENTS
+): ShapePoint[][] | null => {
+  const spec = el.warp;
+  if (!spec?.preset) return null;
+  if (!spec.bend && !spec.distortH && !spec.distortV) return null;
+  const contours = outlinePointSets(el, segments);
+  if (!contours) return null;
+  return contours.map((points) => warpOutline(points, el.width, el.height, spec));
+};
+
 export const warpedOutline = (
   el: Pick<
     DesignerElement,
-    'type' | 'shape' | 'width' | 'height' | 'sides' | 'innerRatio' | 'nodes' | 'closed' | 'warp'
+    'type' | 'shape' | 'width' | 'height' | 'sides' | 'innerRatio' | 'nodes' | 'subpaths' | 'closed' | 'warp'
   >,
   segments = WARP_SEGMENTS
-): ShapePoint[] | null => {
-  const spec = el.warp;
-  if (!spec?.preset) return null;
-  // A zero bend with no distortion is the identity; skip the whole path so an
-  // element that merely remembers a preset renders exactly as before.
-  if (!spec.bend && !spec.distortH && !spec.distortV) return null;
-  const points = outlinePoints(el, segments);
-  if (!points) return null;
-  return warpOutline(points, el.width, el.height, spec);
-};
+): ShapePoint[] | null => warpedOutlines(el, segments)?.[0] ?? null;
 
 /** Bounds of a warped outline, for callers that need the grown box. */
 export const warpedBounds = (points: ShapePoint[]) =>

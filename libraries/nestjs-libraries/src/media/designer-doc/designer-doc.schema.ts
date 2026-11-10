@@ -633,6 +633,9 @@ export interface DesignerElement {
    * pixels, which cannot be, become a `raster` element instead.
    */
   nodes?: DesignerPathNode[];
+  /** Optional additional contours; even-odd filling preserves holes. */
+  subpaths?: DesignerPathNode[][];
+  fillRule?: 'nonzero' | 'evenodd';
   /** Whether the path's last node joins back to its first. */
   closed?: boolean;
 
@@ -1403,6 +1406,22 @@ const elementCommon = {
     )
     .max(MAX_PATH_NODES)
     .optional(),
+  subpaths: z
+    .array(
+      z.array(
+        z.object({
+          x: z.number(),
+          y: z.number(),
+          inX: z.number().optional(),
+          inY: z.number().optional(),
+          outX: z.number().optional(),
+          outY: z.number().optional(),
+        })
+      ).max(MAX_PATH_NODES)
+    )
+    .max(64)
+    .optional(),
+  fillRule: z.enum(['nonzero', 'evenodd']).optional(),
   closed: z.boolean().optional(),
   innerRatio: z.number().min(0.05).max(0.95).optional(),
   stroke: ColorSchema.optional(),

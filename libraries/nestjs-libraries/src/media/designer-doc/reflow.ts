@@ -1,6 +1,7 @@
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type { DesignerBackground, DesignerElement } from './designer-doc.schema';
 import { subjectPointToFocalPoint } from './focal-point';
+import { scalePathNodes } from './path-geometry';
 
 // Scale (natW × natH) down to fit inside (maxW × maxH) using a single uniform
 // factor, so the image's real aspect ratio (and orientation) is preserved.
@@ -815,21 +816,23 @@ export const smartReflow = (
   // A path's nodes are element-local, so transforming only the box left the
   // DRAWN pixels at their source-canvas coordinates — a rule authored under a
   // square's copy floated mid-canvas on the story, detached from everything.
-  // Scale the nodes (and their handles, which are absolute control points)
+  // Scale every contour (and their handles, which are absolute control points)
   // with the box; the box's own x/y carries the translation.
-  if (el.type === 'path' && el.nodes?.length && el.width > 0 && el.height > 0) {
+  if (
+    el.type === 'path' &&
+    (el.nodes?.length || el.subpaths?.length) &&
+    el.width > 0 &&
+    el.height > 0
+  ) {
     const nodeScaleX = newW / el.width;
     const nodeScaleY = newH / el.height;
     if (nodeScaleX !== 1 || nodeScaleY !== 1) {
-      result.nodes = el.nodes.map((n) => ({
-        ...n,
-        x: n.x * nodeScaleX,
-        y: n.y * nodeScaleY,
-        inX: n.inX !== undefined ? n.inX * nodeScaleX : undefined,
-        inY: n.inY !== undefined ? n.inY * nodeScaleY : undefined,
-        outX: n.outX !== undefined ? n.outX * nodeScaleX : undefined,
-        outY: n.outY !== undefined ? n.outY * nodeScaleY : undefined,
-      }));
+      result.nodes = el.nodes
+        ? scalePathNodes(el.nodes, nodeScaleX, nodeScaleY)
+        : undefined;
+      result.subpaths = el.subpaths?.map((nodes) =>
+        scalePathNodes(nodes, nodeScaleX, nodeScaleY)
+      );
     }
   }
 

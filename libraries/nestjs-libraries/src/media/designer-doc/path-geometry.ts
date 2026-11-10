@@ -69,25 +69,38 @@ const traceSegment = (
   );
 };
 
+export const pathContours = (element: {
+  nodes?: DesignerPathNode[];
+  subpaths?: DesignerPathNode[][];
+}): DesignerPathNode[][] =>
+  element.subpaths?.length ? element.subpaths : [element.nodes || []];
+
+/** Trace every contour into one path. Callers fill/stroke afterwards. */
+export const tracePathContours = (
+  ctx: PathTraceContext,
+  contours: DesignerPathNode[][],
+  closed = false
+): void => {
+  ctx.beginPath();
+  for (const nodes of contours) {
+    if (!nodes.length) continue;
+    ctx.moveTo(nodes[0].x, nodes[0].y);
+    for (let i = 0; i < nodes.length - 1; i++) {
+      traceSegment(ctx, nodes[i], nodes[i + 1]);
+    }
+    if (closed && nodes.length >= 2) {
+      traceSegment(ctx, nodes[nodes.length - 1], nodes[0]);
+      ctx.closePath();
+    }
+  }
+};
+
 /** Trace the whole path into `ctx`. Callers fill/stroke afterwards. */
 export const tracePathNodes = (
   ctx: PathTraceContext,
   nodes: DesignerPathNode[],
   closed = false
-): void => {
-  if (!nodes.length) return;
-  ctx.beginPath();
-  ctx.moveTo(nodes[0].x, nodes[0].y);
-  for (let i = 0; i < nodes.length - 1; i++) {
-    traceSegment(ctx, nodes[i], nodes[i + 1]);
-  }
-  // A 2-node path can be closed too (the Pen tool allows it) — match
-  // `svg-export`, which closes for any count, or canvas and SVG diverge.
-  if (closed && nodes.length >= 2) {
-    traceSegment(ctx, nodes[nodes.length - 1], nodes[0]);
-    ctx.closePath();
-  }
-};
+): void => tracePathContours(ctx, [nodes], closed);
 
 export interface PathBounds {
   minX: number;

@@ -88,10 +88,14 @@ describe('pathfinder', () => {
     expect(r.extra[0].x).toBeCloseTo(200, 3);
   });
 
-  it('rejects a subtract that would punch a hole the path model cannot express', () => {
+  it('preserves a contained subtraction as one even-odd compound path', () => {
     const inner = shape({ id: 'b', x: 10, y: 10, width: 20, height: 20 });
-    // clip wholly inside the subject → [subject, clip] rings, a hole.
-    expect(pathfinder(a, inner, 'subtract')).toBeNull();
+    const result = pathfinder(a, inner, 'subtract')!;
+
+    expect(result.element.fillRule).toBe('evenodd');
+    expect(result.element.subpaths).toHaveLength(2);
+    expect(result.element.nodes).toEqual(result.element.subpaths![0]);
+    expect(result.extra).toHaveLength(0);
   });
 
   it('returns null when the operation leaves nothing', () => {
@@ -141,6 +145,28 @@ describe('pathfinderMany', () => {
   it('divides three shapes into unique non-duplicated regions', () => {
     const result = pathfinderMany([at('a', 0), at('b', 50), at('c', 100)], 'divide')!;
     expect(1 + result.extra.length).toBe(4);
+  });
+
+  it('keeps multiple contained subtractions in one even-odd path', () => {
+    const result = pathfinderMany([
+      at('outer', 0, 200),
+      { ...at('left-hole', 25, 50), y: 25, height: 50 },
+      { ...at('right-hole', 100, 50), y: 25, height: 50 },
+    ], 'subtract')!;
+
+    expect(result.element.fillRule).toBe('evenodd');
+    expect(result.element.subpaths).toHaveLength(3);
+    expect(result.extra).toHaveLength(0);
+  });
+
+  it.each(['intersect', 'exclude', 'divide'] as const)('supports contained geometry for %s', (op) => {
+    const result = pathfinderMany([
+      at('outer', 0, 200),
+      at('inner', 50, 50),
+    ], op)!;
+
+    expect(result).toBeTruthy();
+    expect(result.element.nodes!.length).toBeGreaterThan(0);
   });
 
   it('outlines every selected shape without fills', () => {

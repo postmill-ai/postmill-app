@@ -356,6 +356,38 @@ describe('DesignRenderService', () => {
     expect(data[i]).toBeLessThan(80);
   });
 
+  it('renders an even-odd compound path hole in PNG and PDF', async () => {
+    const service = makeService();
+    const outer = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
+    const inner = [{ x: 25, y: 25 }, { x: 75, y: 25 }, { x: 75, y: 75 }, { x: 25, y: 75 }];
+    const doc: any = {
+      version: 11,
+      mode: 'image',
+      outputs: [{
+        id: 'out-1', formatId: 'square', name: 'Square',
+        width: 100, height: 100, background: '#ffffff',
+        children: [{
+          id: 'compound', type: 'path', x: 0, y: 0, width: 100, height: 100,
+          rotation: 0, opacity: 1, locked: false, hidden: false,
+          nodes: outer, subpaths: [outer, inner], fillRule: 'evenodd', closed: true, fill: '#ff0000',
+        }],
+      }],
+    };
+
+    const png = await service.renderPage(doc, 0, { pixelRatio: 1 });
+    const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const at = (x: number, y: number) => {
+      const i = (y * info.width + x) * info.channels;
+      return [data[i], data[i + 1], data[i + 2]];
+    };
+
+    expect(at(50, 50)[0]).toBeGreaterThan(200);
+    expect(at(50, 50)[1]).toBeGreaterThan(200);
+    expect(at(10, 10)[0]).toBeGreaterThan(200);
+    expect(at(10, 10)[1]).toBeLessThan(80);
+    expect((await service.renderPdf(doc)).subarray(0, 4).toString()).toBe('%PDF');
+  });
+
   it('keeps a blend mode working on a layer that also has a layer style', async () => {
     // A styled layer is rendered into an offscreen buffer so its effects can
     // read its silhouette. Compositing that buffer back with a plain drawImage
