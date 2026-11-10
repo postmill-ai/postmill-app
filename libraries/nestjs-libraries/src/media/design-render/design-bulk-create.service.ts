@@ -36,6 +36,7 @@ export interface DesignBulkCreatePayload {
   userId: string;
   nameBase: string;
   folderId?: string;
+  folderOwned?: boolean;
   doc: DesignerDoc;
   rows: Record<string, string>[];
   enqueuedAt: string;
@@ -59,6 +60,48 @@ const errorDetail = (error: unknown, fallback: string): string => {
     if (body.message) return body.message;
   }
   return (error as Error)?.message || fallback;
+};
+
+export const bulkRowErrorDetail = (
+  error: unknown,
+  templateDoc: DesignerDoc,
+  transformedDoc: DesignerDoc,
+  row: Record<string, string>,
+): string => {
+  const response = (error as BadRequestException)?.getResponse?.();
+  const body = response && typeof response === 'object'
+    ? response as { issues?: { path?: (string | number)[] }[] }
+    : {};
+  const issue = (body.issues || []).find((item) => item.path?.at(-1) === 'src');
+  if (!issue?.path) return errorDetail(error, 'Invalid DesignerDoc');
+
+  let templateElement: any = (templateDoc as any)[issue.path[0]];
+  let transformedElement: any = (transformedDoc as any)[issue.path[0]];
+  for (const key of issue.path.slice(1, -1)) {
+    templateElement = templateElement?.[key];
+    transformedElement = transformedElement?.[key];
+  }
+  if (!transformedElement || typeof transformedElement.src !== 'string') {
+    return errorDetail(error, 'Invalid DesignerDoc');
+  }
+
+  let column: string | undefined;
+  if (templateElement?.slot?.kind === 'image' && row[templateElement.slot.name] !== undefined) {
+    column = templateElement.slot.name;
+  } else {
+    for (const match of (templateElement?.src || '').matchAll(/\{\{\s*([\w.-]+)\s*\}\}/g)) {
+      if (row[match[1]] !== undefined) {
+        column = match[1];
+        break;
+      }
+    }
+  }
+  column ||= Object.keys(row).find((key) => normalizeBulkImageSource(row[key]) === transformedElement.src);
+  const target = transformedElement.name || transformedElement.id || 'image';
+  const hint = column
+    ? ` (image column "${column}", element "${target}": use a direct HTTP(S) image URL, same-origin /uploads/ path, data URL, or =IMAGE("https://…"))`
+    : '';
+  return `${errorDetail(error, 'Invalid DesignerDoc')}${hint}`;
 };
 
 interface RemoteImagePreflight {
@@ -151,13 +194,16 @@ export class DesignBulkCreateService extends DesignBulkService {
     const sources: RemoteImagePreflight[] = [];
     const sourceUrls = new Set<string>();
     for (const [index, row] of rows.entries()) {
+      const transformedDoc = applyBulkRow(doc, row);
       try {
-        const transformedDoc = this._designerDocService.validate(applyBulkRow(doc, row));
+        const validatedDoc = this._designerDocService.validate(transformedDoc);
         this._collectRemoteImageSources(
-          doc, transformedDoc, row, index, templateSources, sources, sourceUrls,
+          doc, validatedDoc, row, index, templateSources, sources, sourceUrls,
         );
       } catch (error) {
-        throw new BadRequestException(`Row ${index + 1}: ${errorDetail(error, 'Invalid DesignerDoc')}`.slice(0, 1000));
+        throw new BadRequestException(
+          `Row ${index + 1}: ${bulkRowErrorDetail(error, doc, transformedDoc, row)}`.slice(0, 1000)
+        );
       }
     }
     await this._preflightRemoteImages(sources);
@@ -180,6 +226,7 @@ export class DesignBulkCreateService extends DesignBulkService {
       userId,
       nameBase,
       folderId,
+      folderOwned: !input.folderId,
       doc,
       rows,
       enqueuedAt: new Date().toISOString(),
@@ -381,6 +428,43 @@ export class DesignBulkCreateService extends DesignBulkService {
     });
   }
 
+  private async _rollbackBulkCreate(
+    orgId: string,
+    payload: DesignBulkCreatePayload | undefined,
+    designIds: string[],
+    previewFileIds: string[],
+    generatedFileIds: Set<string>,
+    remoteImageCache: Map<string, { id: string; path: string }>,
+  ): Promise<void> {
+    if (!payload) return;
+    for (const id of designIds) {
+      try {
+        await this._designService.deleteDesign(orgId, id);
+      } catch (error) {
+        this._logger.warn(`Bulk Create rollback could not delete design ${id}: ${(error as Error)?.message}`);
+      }
+    }
+    const fileIds = new Set([
+      ...generatedFileIds,
+      ...previewFileIds,
+      ...[...remoteImageCache.values()].map((file) => file.id),
+    ]);
+    for (const id of fileIds) {
+      try {
+        await this._fileService.deleteFile(orgId, id);
+      } catch (error) {
+        this._logger.warn(`Bulk Create rollback could not delete file ${id}: ${(error as Error)?.message}`);
+      }
+    }
+    if (payload.folderOwned) {
+      try {
+        await this._fileService.deleteFolder(orgId, payload.folderId);
+      } catch (error) {
+        this._logger.warn(`Bulk Create rollback could not delete batch folder: ${(error as Error)?.message}`);
+      }
+    }
+  }
+
   async processBulkCreate(jobId: string): Promise<void> {
     const job = await this._aiSettings.getMediaJobByIdUnscoped(jobId);
     if (!job || job.operation !== DESIGN_BULK_CREATE_OPERATION || job.status !== 'pending') return;
@@ -398,12 +482,16 @@ export class DesignBulkCreateService extends DesignBulkService {
     await this._aiSettings.updateMediaJob(orgId, jobId, { status: 'processing' });
 
     const results: DesignBulkCreateRowResult[] = [];
+    const remoteImageCache = new Map<string, { id: string; path: string }>();
+    const designIds: string[] = [];
+    const previewFileIds: string[] = [];
+    const generatedFileIds = new Set<string>();
+    let payload: DesignBulkCreatePayload | undefined;
     try {
-      const payload = JSON.parse(raw) as DesignBulkCreatePayload;
+      payload = JSON.parse(raw) as DesignBulkCreatePayload;
       const rows = payload.rows.slice(0, MAX_BULK_ROWS);
       const templateSources = this._templateSources(payload.doc);
       const zipEntries: BulkZipEntry[] = [];
-      const remoteImageCache = new Map<string, { id: string; path: string }>();
       let zipBytes = 0;
       let succeeded = 0;
       const rowCount = Math.min(rows.length, MAX_BULK_ROWS);
@@ -414,6 +502,8 @@ export class DesignBulkCreateService extends DesignBulkService {
           await this._persistRemoteImages(orgId, doc, remoteImageCache, templateSources);
           const name = `${payload.nameBase} ${index + 1}`;
           const design = await this._designService.createDesign(orgId, payload.userId, { name, doc });
+          designIds.push(design.id);
+          if (design.previewFileId) previewFileIds.push(design.previewFileId);
           result.designId = design.id;
           const outputCount = Math.min(doc.outputs.length, MAX_OUTPUTS);
           for (let outputIndex = 0; outputIndex < outputCount; outputIndex++) {
@@ -433,6 +523,7 @@ export class DesignBulkCreateService extends DesignBulkService {
                 folderId: payload.folderId,
                 jobId,
               });
+              generatedFileIds.add(file.id);
               result.fileIds.push(file.id);
               zipEntries.push({ name: filename, data: new Uint8Array(bytes), compress: false });
             }
@@ -445,7 +536,9 @@ export class DesignBulkCreateService extends DesignBulkService {
           throw new Error(`Row ${index + 1}: ${result.error}`);
         }
         results.push(result);
-        if (!(await this._writeProgress(jobId, index + 1, rows.length))) return;
+        if (!(await this._writeProgress(jobId, index + 1, rows.length))) {
+          throw new Error('Bulk Create was cancelled before completion');
+        }
       }
 
       if (!succeeded) throw new Error(results[0]?.error || 'Every Bulk Create row failed.');
@@ -459,7 +552,7 @@ export class DesignBulkCreateService extends DesignBulkService {
       ]);
       const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
       const artifactPath = await adapter.writeBuffer(bytes, 'application/zip');
-      await this._fileService.saveGeneratedMedia(orgId, {
+      const artifactFile = await this._fileService.saveGeneratedMedia(orgId, {
         name: `${payload.nameBase}.zip`,
         path: artifactPath,
         type: 'document',
@@ -467,8 +560,11 @@ export class DesignBulkCreateService extends DesignBulkService {
         fileSize: bytes.length,
         metadata: { source: DESIGN_BULK_CREATE_OPERATION, jobId, mime: 'application/zip' },
       });
+      generatedFileIds.add(artifactFile.id);
       const current = await this._aiSettings.getMediaJobByIdUnscoped(jobId);
-      if (current?.status !== 'processing') return;
+      if (current?.status !== 'processing') {
+        throw new Error('Bulk Create was cancelled before completion');
+      }
       await this._aiSettings.updateMediaJob(orgId, jobId, {
         status: 'completed',
         artifactUrl: artifactPath,
@@ -476,6 +572,18 @@ export class DesignBulkCreateService extends DesignBulkService {
         error: null,
       });
     } catch (error) {
+      await this._rollbackBulkCreate(
+        orgId,
+        payload,
+        designIds,
+        previewFileIds,
+        generatedFileIds,
+        remoteImageCache,
+      );
+      for (const result of results) {
+        delete result.designId;
+        result.fileIds = [];
+      }
       const message = ((error as Error)?.message || 'Bulk Create failed').slice(0, 1000);
       this._logger.warn(`Bulk Create ${jobId} failed: ${message}`);
       await this._aiSettings.updateMediaJob(orgId, jobId, {

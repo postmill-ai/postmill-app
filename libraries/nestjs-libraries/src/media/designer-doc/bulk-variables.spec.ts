@@ -102,6 +102,10 @@ describe('Bulk Create variables', () => {
   it('normalizes spreadsheet IMAGE formulas and Google Drive share links into valid image sources', () => {
     expect(normalizeBulkImageSource('=IMAGE("https://cdn.example.test/chair.png", 1)'))
       .toBe('https://cdn.example.test/chair.png');
+    expect(normalizeBulkImageSource("=IMAGE('https://cdn.example.test/chair.png'; 1)"))
+      .toBe('https://cdn.example.test/chair.png');
+    expect(normalizeBulkImageSource('=_xlfn.IMAGE("https://cdn.example.test/chair.png")'))
+      .toBe('https://cdn.example.test/chair.png');
     expect(normalizeBulkImageSource('https://drive.google.com/file/d/product-image-1/view?usp=sharing'))
       .toBe('https://drive.google.com/uc?export=download&id=product-image-1');
     expect(normalizeBulkImageSource('https://drive.google.com/open?id=product-image-2'))
@@ -120,6 +124,18 @@ describe('Bulk Create variables', () => {
       .toBe('https://drive.google.com/uc?export=download&id=product-image-3');
     expect(result.outputs[0].children[1].symbolOverrides['symbol-text'].src)
       .toBe('https://drive.google.com/uc?export=download&id=product-image-3');
+  });
+
+  it('normalizes a slotted @Variable6 image formula from the catalog workflow', () => {
+    const template = makeDoc();
+    template.outputs[0].children[1].slot = { name: '@Variable6', kind: 'image' };
+
+    const result = applyBulkRow(template, {
+      '@Variable6': "=IMAGE('https://drive.google.com/file/d/catalog-image/view?usp=sharing'; 1)",
+    });
+
+    expect(result.outputs[0].children[1].src)
+      .toBe('https://drive.google.com/uc?export=download&id=catalog-image');
   });
 
   it('leaves unknown variables intact and supports explicit empty values', () => {

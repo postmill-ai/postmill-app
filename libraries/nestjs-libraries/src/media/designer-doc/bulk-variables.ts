@@ -18,8 +18,12 @@ export const substituteBulkValue = (
 
 export const normalizeBulkImageSource = (value: string): string => {
   const trimmed = value.trim();
-  const formula = /^=IMAGE\(\s*"((?:[^"]|"")+)"(?:\s*,[\s\S]*)?\)$/i.exec(trimmed);
-  const source = formula ? formula[1].replace(/""/g, '"') : trimmed;
+  const formula = /^=(?:_xlfn\.)?IMAGE\(\s*(?:"((?:[^"]|"")+)"|'((?:[^']|'')+)')(?:\s*[,;][\s\S]*)?\)$/i.exec(trimmed);
+  const source = formula
+    ? formula[1]
+      ? formula[1].replace(/""/g, '"')
+      : formula[2].replace(/''/g, "'")
+    : trimmed;
   try {
     const url = new URL(source);
     if (url.protocol !== 'https:' || url.hostname !== 'drive.google.com') return source;

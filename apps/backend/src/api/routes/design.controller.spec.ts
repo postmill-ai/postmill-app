@@ -28,7 +28,8 @@ vi.mock('@postmill-ai/nestjs-libraries/media/design-export/design-export.service
   DesignExportService: class {},
 }));
 
-vi.mock('@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service', async (importOriginal) => ({
+  ...await importOriginal(),
   DesignBulkCreateService: class {},
 }));
 
@@ -613,6 +614,32 @@ describe('DesignController', () => {
         [],
         { orgId: 'org-1' },
       );
+    });
+    it('reports the image column and element when a preview row is invalid', async () => {
+      const doc = {
+        mode: 'image',
+        outputs: [{
+          id: 'out-1', width: 100, height: 100,
+          children: [{
+            id: 'image-1', type: 'image', src: '/uploads/original.png',
+            slot: { name: '@Variable6', kind: 'image' },
+          }],
+        }],
+      } as any;
+      designerDocService.validate
+        .mockReturnValueOnce(doc)
+        .mockImplementationOnce(() => {
+          throw {
+            getResponse: () => ({
+              issues: [{ path: ['outputs', 0, 'children', 0, 'src'], message: 'invalid src' }],
+            }),
+          };
+        });
+
+      await expect(controller.bulkGenerate(org, {
+        doc,
+        rows: [{ '@Variable6': 'not a URL' }],
+      } as any)).rejects.toThrow('image column "@Variable6", element "image-1"');
     });
   });
 
