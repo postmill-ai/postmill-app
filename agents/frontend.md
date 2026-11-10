@@ -256,8 +256,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   from the first, Intersect is successive, Exclude keeps odd-coverage regions, Divide emits unique
   regions, and Outline removes fills. Disjoint results survive and are all selected. Contained
   regions become one compound path: `nodes` is the outer contour, optional `subpaths` carries every
-  contour, and `fillRule: evenodd` preserves holes across Konva, server rendering, resize/warp, and
-  SVG export. One Undo restores every input. Axis-aligned rectangles sharing a horizontal strip use
+  contour, and `fillRule: evenodd` preserves holes across Konva, server rendering, resize/reflow/warp,
+  and SVG export. One Undo restores every input. Axis-aligned rectangles sharing a horizontal strip use
   the exact interval path in `path-boolean.ts`.
 - **Design/template previews are best-effort, never save blockers.** Video saves render through
   `DesignPreviewService`; image saves use that server renderer when no client thumbnail arrives.
