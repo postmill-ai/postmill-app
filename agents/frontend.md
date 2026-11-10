@@ -492,7 +492,12 @@ file format, newer doc version).
 / `POST /media/design-templates/:id/export` enqueue an uncosted (`creditType: 'none'`)
 `provider: 'design-export'` media job (`media/design-export` Inngest event; Redis payload key;
 deterministic same-minute event id — the video-render pattern); the Designer polls
-`GET /media/designs/export/:jobId` and downloads the artifact File. The export activity
+`GET /media/designs/export/:jobId` and downloads the completed artifact through a reusable connected
+anchor; its blob object URL is revoked only after a 60-second start window, never synchronously after
+`click()`. A successful standalone import loads the returned doc and replaces
+the current URL's `designId` through the native History API without a full-page navigation; the
+search-param effect skips that load when the store already has the same ID. Embedded Designers keep
+the import in memory and leave the host route alone. The export activity
 (`media/design-export/design-export.service.ts`) pre-flights summed asset bytes against a 1 GB
 ceiling, reads each file through its folder-resolved adapter, streams the zip (never `zipSync`)
 and lands the artifact via `writeBuffer` + `saveGeneratedMedia`. The media-jobs sweep routes

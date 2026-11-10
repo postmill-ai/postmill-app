@@ -15,6 +15,7 @@ type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 interface StartDialogProps {
   store: StoreApi;
   fetchFn: FetchLike;
+  onImportSuccess: (designId: string) => void;
   /** Called once a design has been created or opened — closes the dialog. */
   onDone: () => void;
 }
@@ -24,7 +25,7 @@ type Step = 'home' | 'formats' | 'custom';
 // Required startup modal over the editor (no dismiss): the user must Open an
 // existing design/template, or create a New one and pick ≥1 format. This
 // replaces the silent "blank → Instagram Post" default.
-export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) => {
+export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onImportSuccess, onDone }) => {
   const translate = useT();
   const toaster = useToaster();
   const [step, setStep] = useState<Step>('home');
@@ -134,6 +135,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
           throw new Error(data?.message || translate('designer_import_failed', 'Failed to import the design file'));
         }
         store.getState().loadDesign(data.doc, data.id, data.name, null);
+        onImportSuccess(data.id);
         toaster.show(translate('designer_import_success', 'Design imported'), 'success');
         onDone();
       } catch (err) {
@@ -145,7 +147,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
         setImporting(false);
       }
     },
-    [fetchFn, store, onDone, toaster, translate]
+    [fetchFn, store, onImportSuccess, onDone, toaster, translate]
   );
 
   return (

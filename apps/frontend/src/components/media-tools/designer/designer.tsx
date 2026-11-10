@@ -57,6 +57,7 @@ import { BackgroundRemovalDialog } from './background-removal-dialog';
 import { QrCodeDialog } from './qr-code-dialog';
 import { ShareDialog } from './share-dialog';
 import { fetchDesignForEditor } from './load-design';
+import { downloadPdesignArtifact, replaceDesignerDesignId } from './pdesign-file';
 import { BulkCreateDialog } from './bulk-create-dialog';
 import { MobileQuickActions, MobileSheetHeader, MobileToolsDialog, MobileWorkspaceSheet, type MobileSheetSnap } from './mobile-designer-tools';
 import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
@@ -563,7 +564,7 @@ export const Designer: FC<DesignerProps> = ({
   }, [store]);
 
   useEffect(() => {
-    if (!designId) return;
+    if (!designId || store.getState().designId === designId) return;
     let cancelled = false;
     setDesignLoadError(false);
     setShowStart(false);
@@ -949,6 +950,10 @@ export const Designer: FC<DesignerProps> = ({
   // --- .pdesign import/export (stage 2: bundled interchange file) ---
   const importInputRef = useRef<HTMLInputElement>(null);
   const [pdesignExporting, setPdesignExporting] = useState(false);
+  const syncImportedDesignLocation = useCallback((id: string) => {
+    if (setMedia || closeModal) return;
+    replaceDesignerDesignId(id);
+  }, [setMedia, closeModal]);
 
   // Export is an async job bundling the SAVED design + all its assets (the
   // server zips the stored doc), so an unsaved canvas has nothing to export —
@@ -998,20 +1003,8 @@ export const Designer: FC<DesignerProps> = ({
         throw new Error(translate('designer_export_pdesign_failed', 'Failed to export the design file'));
       }
 
-      // artifactUrl is an absolute same-origin storage URL — use the native
-      // fetch (the useFetch wrapper would prefix the backend base onto it).
-      const blobRes = await window.fetch(artifactUrl);
-      if (!blobRes.ok) throw new Error('Download failed');
-      const blob = await blobRes.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(s.designName || 'design').replace(/[\\/"]/g, ' ').replace(/[^\w\- ]+/g, '').trim() || 'design'}.pdesign`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toaster.show(translate('designer_export_pdesign_ready', 'Design file downloaded'), 'success');
+      await downloadPdesignArtifact(artifactUrl, s.designName || 'design');
+      toaster.show(translate('designer_export_pdesign_ready', 'Design file download started'), 'success');
     } catch (err) {
       toaster.show(
         (err as Error)?.message || translate('designer_export_pdesign_failed', 'Failed to export the design file'),
@@ -1045,6 +1038,7 @@ export const Designer: FC<DesignerProps> = ({
           throw new Error(data?.message || translate('designer_import_failed', 'Failed to import the design file'));
         }
         store.getState().loadDesign(data.doc, data.id, data.name, null);
+        syncImportedDesignLocation(data.id);
         toaster.show(translate('designer_import_success', 'Design imported'), 'success');
       } catch (err) {
         toaster.show(
@@ -1053,7 +1047,7 @@ export const Designer: FC<DesignerProps> = ({
         );
       }
     },
-    [confirmDiscardIfDirty, fetch, store, toaster, translate]
+    [confirmDiscardIfDirty, fetch, store, syncImportedDesignLocation, toaster, translate]
   );
 
   // Reusable image-from-media placement (centered + aspect-correct) — shared by
@@ -1925,7 +1919,12 @@ export const Designer: FC<DesignerProps> = ({
         </div>
       )}
       {showStart && (
-        <StartDialog store={store} fetchFn={fetch} onDone={() => setShowStart(false)} />
+        <StartDialog
+          store={store}
+          fetchFn={fetch}
+          onImportSuccess={syncImportedDesignLocation}
+          onDone={() => setShowStart(false)}
+        />
       )}
       {mediaPicker.element}
       <input
