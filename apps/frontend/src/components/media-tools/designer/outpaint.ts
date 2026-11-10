@@ -150,6 +150,33 @@ export const cleanupOutpaintCandidate = async (
   }
 };
 
+const normalizeOutpaintSourceFrame = <T extends {
+  canvas: HTMLCanvasElement;
+  natural: { width: number; height: number };
+}>(sourceFrame: T): T => {
+  const scale = Math.max(
+    1,
+    256 / sourceFrame.natural.width,
+    256 / sourceFrame.natural.height
+  );
+  if (scale === 1) return sourceFrame;
+  const natural = {
+    width: Math.max(256, Math.round(sourceFrame.natural.width * scale)),
+    height: Math.max(256, Math.round(sourceFrame.natural.height * scale)),
+  };
+  if (natural.width > MAX_DIMENSION || natural.height > MAX_DIMENSION ||
+    natural.width * natural.height > 25_000_000) {
+    throw new Error('The expansion source is too narrow to upscale safely. Choose a less tightly cropped image.');
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = natural.width;
+  canvas.height = natural.height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Could not create the expansion source.');
+  context.drawImage(sourceFrame.canvas, 0, 0, natural.width, natural.height);
+  return { ...sourceFrame, canvas, natural };
+};
+
 export const prepareAiOutpaint = async ({
   fetch,
   store,
@@ -168,11 +195,11 @@ export const prepareAiOutpaint = async ({
   const outputIndex = store.getState().currentOutput;
   const history = store.getState().history;
   const sourceNatural = await probe(before, before.src);
-  const sourceFrame = await rasterizeMediaFrame({
+  const sourceFrame = normalizeOutpaintSourceFrame(await rasterizeMediaFrame({
     sourceUrl: before.src,
     sourceNatural,
     frame: before,
-  });
+  }));
   let imageData: string;
   try {
     imageData = sourceFrame.canvas.toDataURL('image/png');
