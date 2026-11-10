@@ -212,24 +212,27 @@ export async function exportCurrentOutput(
   options: { png?: boolean; scale?: 1 | 2 | 3 } = {}
 ): Promise<ExportedDownload> {
   await openMenuAction(page, 'File', 'Export…');
-  await expect(page.getByText('Export Design', { exact: true })).toBeVisible();
-  if (options.png) await page.getByRole('dialog').locator('select').first().selectOption('png');
-  if (options.scale) await page.getByRole('button', { name: `${options.scale}x`, exact: true }).click();
-  await page.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
-  await page.getByRole('button', { name: 'All Files (root)', exact: true }).click();
-  await page.getByRole('button', { name: /^Next: Export \d+ files?$/ }).click();
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByText('Export Design', { exact: true }),
+  });
+  await expect(dialog).toBeVisible();
+  if (options.png) await dialog.locator('select').first().selectOption('png');
+  if (options.scale) await dialog.getByRole('button', { name: `${options.scale}x`, exact: true }).click();
+  await dialog.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
+  await dialog.getByRole('button', { name: 'All Files (root)', exact: true }).click();
+  await dialog.getByRole('button', { name: /^Next: Export \d+ files?$/ }).click();
 
   const uploadPromise = page.waitForResponse((response) =>
     response.request().method() === 'POST' &&
     /^\/files\/upload-(simple|server)$/.test(apiPath(response.url()))
   );
-  await page.getByRole('button', { name: /^Export \d+ files?$/ }).click();
+  await dialog.getByRole('button', { name: /^Export \d+ files?$/ }).click();
   const upload = await uploadPromise;
   expect(upload.ok(), 'the rendered export must upload successfully').toBe(true);
-  await expect(page.getByText('Saved to /files', { exact: true })).toBeVisible({ timeout: 90_000 });
+  await expect(dialog.getByText('Saved to /files', { exact: true })).toBeVisible({ timeout: 90_000 });
 
   const downloadPromise = page.waitForEvent('download');
-  await page.locator('a[download]').first().click();
+  await dialog.locator('a[download]').first().click();
   const download = await downloadPromise;
   const filename = download.suggestedFilename();
   expect(filename).toMatch(/\.(png|jpe?g|webp|pdf|svg)$/i);

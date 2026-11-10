@@ -4,6 +4,7 @@ import {
   collectBrowserFailures,
   exportCurrentOutput,
   installPaidOperationGuard,
+  openMenuAction,
   openSavedDesign,
   persistedImage,
   requiredEnv,
@@ -63,7 +64,8 @@ test.describe('Opt-in live Designer acceptance', () => {
       response.request().method() === 'POST' &&
       new URL(response.url()).pathname.replace(/^\/api(?=\/)/, '') === '/media/remove-background'
     );
-    await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'AI: Remove background', exact: true })).toBeVisible();
+    await openMenuAction(page, 'Tools', 'Remove Background');
     const generationResponse = await generationResponsePromise;
     expect(generationResponse.ok(), 'background removal must succeed').toBe(true);
     const generationPayload = await generationResponse.json() as { url?: unknown };
@@ -93,7 +95,7 @@ test.describe('Opt-in live Designer acceptance', () => {
       'the background-removal result must survive save and reopen'
     ).toBe(true);
     await selectImageLayer(page, image.id);
-    await expect(page.getByRole('button', { name: 'Remove Background', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'AI: Remove background', exact: true })).toBeVisible();
 
     await exportCurrentOutput(page);
     expect(paidOperations.blocked(), 'the paid-operation guard must not block the authorized case').toEqual([]);

@@ -13,7 +13,7 @@ export async function runExactDesignSharing(page: Page): Promise<void> {
   const designId = requiredEnv('E2E_LIVE_DESIGN_ID');
   const assertNoBrowserFailures = collectBrowserFailures(page);
   await openDesign(page, designId);
-  await page.getByRole('button', { name: 'Share', exact: true }).click();
+  await page.getByTitle(/^(?:Enable real-time collaboration|\d+ connected)$/).click();
   const dialog = page.getByRole('dialog', { name: 'Share design', exact: true });
   await expect(dialog).toBeVisible();
   const expected = new URL('/media/designer', new URL(base).origin);
