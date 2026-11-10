@@ -1108,6 +1108,26 @@ describe('AiMediaService', () => {
       });
     });
 
+    it('applies an operation-specific model only to its named provider', async () => {
+      const adapter = makeAdapter('replicate', { inpaint: true }, {
+        inpaintImage: vi.fn().mockResolvedValue('https://x/inpainted.png'),
+      });
+      const { service } = setup([adapter]);
+
+      await service.inpaintImage('img.png', 'mask.png', 'fill sky', {
+        orgId: 'org-1',
+        modelByProvider: {
+          replicate: 'black-forest-labs/flux-fill-pro',
+          other: 'other-provider-model',
+        },
+      });
+
+      expect(adapter.inpaintImage).toHaveBeenCalledWith('img.png', 'mask.png', 'fill sky', {
+        credentials: { apiKey: 'replicate-key' },
+        model: 'black-forest-labs/flux-fill-pro',
+      });
+    });
+
     it('propagates the typed upstream error when a configured provider fails (→ 502, not 409)', async () => {
       const upstream = new ProviderUpstreamError(
         { domain: 'media', providerId: 'replicate', providerName: 'Replicate', operation: 'inpaint' },
@@ -1152,6 +1172,7 @@ describe('AiMediaService', () => {
         expect.stringContaining('Do not create a replacement subject'),
         {
           orgId: 'org-1',
+          modelByProvider: { replicate: 'black-forest-labs/flux-fill-pro' },
           input: { negative_prompt: expect.stringContaining('chair') },
         },
       );
