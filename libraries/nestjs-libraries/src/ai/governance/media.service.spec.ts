@@ -5,6 +5,7 @@ import os from 'os';
 import path from 'path';
 import { CapabilityNotAvailable } from './errors';
 import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
+import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/media/image-source.limits';
 
 const mockImageModelGenerate = vi.fn().mockResolvedValue('https://cdn.example.com/image.png');
 const mockImageModel = vi.fn().mockResolvedValue({
@@ -937,6 +938,19 @@ describe('AiMediaService', () => {
       await expect(service.saveUrlToFile(
         'org-1', 'data:text/html;base64,PGh0bWw+PC9odG1sPg==', 'bulk-create'
       )).rejects.toThrow(/supported PNG, JPEG, or WebP/);
+
+      expect(writeBuffer).not.toHaveBeenCalled();
+      expect(saveFile).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized inline image before decoding or persistence', async () => {
+      const service = bareService();
+      const { writeBuffer, saveFile } = configureStorage(service);
+      const payload = 'A'.repeat(4 * Math.ceil(IMAGE_SOURCE_MAX_BYTES / 3) + 4);
+
+      await expect(service.saveUrlToFile(
+        'org-1', `data:image/png;base64,${payload}`, 'bulk-create'
+      )).rejects.toThrow(/20 MB/);
 
       expect(writeBuffer).not.toHaveBeenCalled();
       expect(saveFile).not.toHaveBeenCalled();

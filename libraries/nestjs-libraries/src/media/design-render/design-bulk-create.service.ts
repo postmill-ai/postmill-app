@@ -147,14 +147,20 @@ export class DesignBulkCreateService extends DesignBulkService {
       }
       return Object.fromEntries(entries);
     });
-    const transformedRows = rows.map((row, index) => {
+    const templateSources = this._templateSources(doc);
+    const sources: RemoteImagePreflight[] = [];
+    const sourceUrls = new Set<string>();
+    for (const [index, row] of rows.entries()) {
       try {
-        return this._designerDocService.validate(applyBulkRow(doc, row));
+        const transformedDoc = this._designerDocService.validate(applyBulkRow(doc, row));
+        this._collectRemoteImageSources(
+          doc, transformedDoc, row, index, templateSources, sources, sourceUrls,
+        );
       } catch (error) {
         throw new BadRequestException(`Row ${index + 1}: ${errorDetail(error, 'Invalid DesignerDoc')}`.slice(0, 1000));
       }
-    });
-    await this._preflightRemoteImages(doc, rows, transformedRows);
+    }
+    await this._preflightRemoteImages(sources);
     if (input.folderId) await this._fileService.getFolder(orgId, input.folderId);
 
     const nameBase = sanitizeDownloadName(input.nameBase || 'Bulk variation') || 'Bulk variation';
@@ -189,84 +195,88 @@ export class DesignBulkCreateService extends DesignBulkService {
     return { id: job.id, status: job.status };
   }
 
-  private async _preflightRemoteImages(
+  private _collectRemoteImageSources(
     templateDoc: DesignerDoc,
-    rows: Record<string, string>[],
-    transformedRows: DesignerDoc[],
-  ): Promise<void> {
-    const sources = new Map<string, RemoteImagePreflight>();
-
-    for (const [rowIndex, transformedDoc] of transformedRows.entries()) {
-      const row = rows[rowIndex];
-      const collect = (
-        templateElement: DesignerElement,
-        element: DesignerElement,
-        elementPath: string,
+    transformedDoc: DesignerDoc,
+    row: Record<string, string>,
+    rowIndex: number,
+    templateSources: Set<string>,
+    sources: RemoteImagePreflight[],
+    sourceUrls: Set<string>,
+  ): void {
+    const collect = (
+      templateElement: DesignerElement,
+      element: DesignerElement,
+      elementPath: string,
+    ) => {
+      const add = (
+        url: string | undefined,
+        templateUrl: string | undefined,
+        documentPath: string,
       ) => {
-        const add = (
-          url: string | undefined,
-          templateUrl: string | undefined,
-          documentPath: string,
-        ) => {
-          if (!url || !/^https?:\/\//i.test(url) || sources.has(url)) return;
-          let column: string | undefined;
-          if (templateElement.slot?.kind === 'image' && row[templateElement.slot.name] !== undefined) {
-            column = templateElement.slot.name;
-          } else {
-            for (const match of (templateUrl || '').matchAll(/\{\{\s*([\w.-]+)\s*\}\}/g)) {
-              if (row[match[1]] !== undefined) {
-                column = match[1];
-                break;
-              }
+        if (
+          !url || !/^https?:\/\//i.test(url) || templateSources.has(url) || sourceUrls.has(url)
+        ) return;
+        let column: string | undefined;
+        if (templateElement.slot?.kind === 'image' && row[templateElement.slot.name] !== undefined) {
+          column = templateElement.slot.name;
+        } else {
+          for (const match of (templateUrl || '').matchAll(/\{\{\s*([\w.-]+)\s*\}\}/g)) {
+            if (row[match[1]] !== undefined) {
+              column = match[1];
+              break;
             }
           }
-          column ||= Object.keys(row).find((key) => normalizeBulkImageSource(row[key]) === url);
-          sources.set(url, { row: rowIndex + 1, url, documentPath, column });
-        };
-
-        add(element.src, templateElement.src, `${elementPath}.src`);
-        for (const [overrideId, override] of Object.entries(element.symbolOverrides || {})) {
-          add(
-            override.src,
-            templateElement.symbolOverrides?.[overrideId]?.src,
-            `${elementPath}.symbolOverrides.${overrideId}.src`,
-          );
         }
-      };
-      const collectChildren = (
-        templateChildren: DesignerElement[] | undefined,
-        children: DesignerElement[] | undefined,
-        path: string,
-      ) => {
-        for (const [elementIndex, element] of (children || []).entries()) {
-          const templateElement = templateChildren?.[elementIndex];
-          if (templateElement) collect(templateElement, element, `${path}.${elementIndex}`);
-        }
+        column ||= Object.keys(row).find((key) => normalizeBulkImageSource(row[key]) === url);
+        sourceUrls.add(url);
+        sources.push({ row: rowIndex + 1, url, documentPath, column });
       };
 
-      for (const [outputIndex, output] of transformedDoc.outputs.entries()) {
-        if (!('children' in output)) continue;
-        const templateOutput = templateDoc.outputs[outputIndex];
-        if (!templateOutput || !('children' in templateOutput)) continue;
-        collectChildren(templateOutput.children, output.children, `outputs.${outputIndex}.children`);
-        for (const [pageIndex, page] of (output.pages || []).entries()) {
-          collectChildren(
-            templateOutput.pages?.[pageIndex]?.children,
-            page.children,
-            `outputs.${outputIndex}.pages.${pageIndex}.children`,
-          );
-        }
+      add(element.src, templateElement.src, `${elementPath}.src`);
+      for (const [overrideId, override] of Object.entries(element.symbolOverrides || {})) {
+        add(
+          override.src,
+          templateElement.symbolOverrides?.[overrideId]?.src,
+          `${elementPath}.symbolOverrides.${overrideId}.src`,
+        );
       }
-      for (const [symbolIndex, symbol] of (transformedDoc.symbols || []).entries()) {
+    };
+    const collectChildren = (
+      templateChildren: DesignerElement[] | undefined,
+      children: DesignerElement[] | undefined,
+      path: string,
+    ) => {
+      for (const [elementIndex, element] of (children || []).entries()) {
+        const templateElement = templateChildren?.[elementIndex];
+        if (templateElement) collect(templateElement, element, `${path}.${elementIndex}`);
+      }
+    };
+
+    for (const [outputIndex, output] of transformedDoc.outputs.entries()) {
+      if (!('children' in output)) continue;
+      const templateOutput = templateDoc.outputs[outputIndex];
+      if (!templateOutput || !('children' in templateOutput)) continue;
+      collectChildren(templateOutput.children, output.children, `outputs.${outputIndex}.children`);
+      for (const [pageIndex, page] of (output.pages || []).entries()) {
         collectChildren(
-          templateDoc.symbols?.[symbolIndex]?.children,
-          symbol.children,
-          `symbols.${symbolIndex}.children`,
+          templateOutput.pages?.[pageIndex]?.children,
+          page.children,
+          `outputs.${outputIndex}.pages.${pageIndex}.children`,
         );
       }
     }
+    for (const [symbolIndex, symbol] of (transformedDoc.symbols || []).entries()) {
+      collectChildren(
+        templateDoc.symbols?.[symbolIndex]?.children,
+        symbol.children,
+        `symbols.${symbolIndex}.children`,
+      );
+    }
+  }
 
-    for (const source of sources.values()) {
+  private async _preflightRemoteImages(sources: RemoteImagePreflight[]): Promise<void> {
+    for (const source of sources) {
       try {
         await readValidatedImageSource(source.url);
       } catch (error) {
