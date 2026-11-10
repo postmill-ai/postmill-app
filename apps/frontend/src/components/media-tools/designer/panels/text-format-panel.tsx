@@ -22,6 +22,7 @@ import {
   type MeasureText,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import { useBrandColors } from './use-brand-colors';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {
   AlignCenterIcon,
@@ -272,13 +273,14 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
     (s) =>
       s.doc.outputs[s.currentOutput] as import('../designer.store').DesignerOutput
   );
+  const currentPage = store((s) => s.currentPage);
 
   const textElements = useMemo<DesignerElement[]>(() => {
-    const children = out?.children ?? [];
+    const children = out ? pageChildren(out, currentPage) : [];
     return children.filter(
       (c) => selectedIds.includes(c.id) && c.type === 'text'
     );
-  }, [selectedIds, out]);
+  }, [selectedIds, out, currentPage]);
 
   const element = textElements[0] ?? null;
   const pathMode = useMemo(() => detectPathMode(element), [element]);

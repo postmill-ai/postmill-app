@@ -10,6 +10,10 @@ import type { DesignerElement } from '../designer.store';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { TextEffectPresets } from './text-effect-presets';
 import { getContrastRatio } from '../contrast';
+import {
+  pageBackground,
+  pageChildren,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 
 interface TextInspectorProps {
   store: any;
@@ -82,13 +86,14 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
   const t = useT();
   const selectedIds = store((s: any) => s.selectedIds);
   const out = store((s: any) => s.doc.outputs[s.currentOutput]);
+  const currentPage = store((s: any) => s.currentPage);
 
   const textElements = useMemo(() => {
-    const children = out?.children ?? [];
+    const children = out ? pageChildren(out, currentPage) : [];
     return children.filter(
       (c: any) => selectedIds.includes(c.id) && c.type === 'text'
     );
-  }, [selectedIds, out]);
+  }, [selectedIds, out, currentPage]);
 
   const applyPreset = useCallback(
     (preset: TextStylePreset) => {
@@ -130,7 +135,9 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
   const handleAddBackdrop = useCallback(() => {
     const state = store.getState();
     const output = state.doc.outputs[state.currentOutput];
-    const primary = output.children.find((c: DesignerElement) => state.selectedIds.includes(c.id));
+    const primary = pageChildren(output, state.currentPage).find(
+      (c: DesignerElement) => state.selectedIds.includes(c.id) && c.type === 'text'
+    );
     if (!primary) return;
 
     const backdrop: DesignerElement = {
@@ -157,9 +164,12 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
 
   const primary = textElements[0];
   const textFill = primary?.fill || '#000000';
+  const background = out ? pageBackground(out, currentPage) : undefined;
   const heuristicBg =
-    out?.bg?.type === 'gradient' || out?.bg?.type === 'image'
+    background?.type === 'gradient' || background?.type === 'image'
       ? '#808080'
+      : background?.type === 'color' && background.color
+      ? background.color
       : out?.background || '#ffffff';
   const [sampledBg, setSampledBg] = useState<string | null>(null);
   // Sample only when the element identity/geometry actually changes — keying the
