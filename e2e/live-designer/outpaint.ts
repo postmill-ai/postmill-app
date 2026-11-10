@@ -53,11 +53,15 @@ async function expandAndUpload(page: Page, operation: '/media/outpaint' | '/medi
   const after = dialog.getByRole('img', { name: 'After', exact: true });
   await expect(after).toBeVisible({ timeout: 90_000 });
   await expect.poll(() => after.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
-  return { asset: { id: asset.id!, url: (asset.path || asset.url)! }, dialog };
+  return {
+    asset: { id: asset.id!, url: (asset.path || asset.url)! },
+    apiOrigin: new URL(upload.url()).origin,
+    dialog,
+  };
 }
 
-async function expectInternalAssetHidden(page: Page, fileId: string): Promise<void> {
-  const response = await page.request.get('https://api.postmill.ai/files?limit=100&sort=createdAt&order=desc');
+async function expectInternalAssetHidden(page: Page, apiOrigin: string, fileId: string): Promise<void> {
+  const response = await page.request.get(`${apiOrigin}/files?limit=100&sort=createdAt&order=desc`);
   expect(response.ok()).toBe(true);
   const payload = await response.json() as { results?: { id: string }[] };
   expect(payload.results?.some((file) => file.id === fileId), 'generated expansion assets must stay out of All Files root').toBe(false);
@@ -88,7 +92,8 @@ export async function runDirectionalOutpaintAcceptance(page: Page, testInfo: Tes
   const assertNoBrowserFailures = collectBrowserFailures(page);
   let { payload, image } = await openSavedDesign(page, designId);
   if (process.env.E2E_LIVE_PREPARE_FIXTURE === '1') {
-    const filesResponse = await page.request.get('https://api.postmill.ai/files?limit=1&search=magic-grab-chair-source.jpg');
+    const apiOrigin = requiredEnv('E2E_API_ORIGIN').replace(/\/$/, '');
+    const filesResponse = await page.request.get(`${apiOrigin}/files?limit=1&search=magic-grab-chair-source.jpg`);
     const files = await filesResponse.json() as { results?: { id: string; path: string }[] };
     const source = files.results?.[0];
     expect(source, 'the resized chair source must exist').toBeTruthy();
@@ -167,7 +172,7 @@ export async function runDirectionalOutpaintAcceptance(page: Page, testInfo: Tes
     structuralSource.equals(structuralExpanded),
     'the original crop, focal geometry, and visible composition must survive without distortion'
   ).toBe(true);
-  await expectInternalAssetHidden(page, asset.id);
+  await expectInternalAssetHidden(page, new URL(upload.url()).origin, asset.id);
 
   const { saved, reopened } = await applySaveReopenExport(page, designId, testInfo, 'outpaint-directional', payload);
   for (const document of [saved, reopened.payload]) {
@@ -201,7 +206,7 @@ export async function runWholePageOutpaintAcceptance(page: Page, testInfo: TestI
   await dialog.locator('select').first().selectOption('page');
   await dialog.locator('input[type="number"]').first().fill(String(targetWidth));
   await dialog.locator('input[type="number"]').nth(1).fill(String(targetHeight));
-  const { asset } = await expandAndUpload(page, '/media/inpaint');
+  const { asset, apiOrigin } = await expandAndUpload(page, '/media/inpaint');
   await dialog.screenshot({ path: testInfo.outputPath('outpaint-page-review.png') });
   const extension = await pngResponse(page, asset.url);
   expect(extension.width).toBe(targetWidth);
@@ -220,7 +225,7 @@ export async function runWholePageOutpaintAcceptance(page: Page, testInfo: TestI
   }
   expect(originalAreaAlpha, 'the generated extension must be transparent behind every original layer').toBe(0);
   expect(generatedAreaPixels, 'the extension must contain generated pixels outside the original page').toBeGreaterThan(0);
-  await expectInternalAssetHidden(page, asset.id);
+  await expectInternalAssetHidden(page, apiOrigin, asset.id);
 
   const { saved, reopened } = await applySaveReopenExport(page, designId, testInfo, 'outpaint-page', payload);
   for (const document of [saved, reopened.payload]) {

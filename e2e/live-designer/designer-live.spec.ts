@@ -34,6 +34,10 @@ const LIVE_CASES = [
 const liveDesigner = process.env.E2E_LIVE_DESIGNER === '1';
 const liveCase = process.env.E2E_LIVE_CASE;
 const generationAllowed = process.env.E2E_LIVE_GENERATION === '1';
+const productionTarget = process.env.E2E_BASE
+  ? new URL(process.env.E2E_BASE).hostname === 'app.postmill.ai'
+  : false;
+const productionAllowed = process.env.E2E_LIVE_PRODUCTION === '1';
 
 if (liveDesigner && liveCase && !LIVE_CASES.includes(liveCase as (typeof LIVE_CASES)[number])) {
   throw new Error(`Unknown E2E_LIVE_CASE. Expected one of: ${LIVE_CASES.join(', ')}`);
@@ -45,6 +49,10 @@ test.skip(
     (liveCase === 'background-removal' || liveCase === 'magic-grab' || liveCase === 'outpaint') &&
     !generationAllowed,
   'The selected paid case requires explicit E2E_LIVE_GENERATION=1 before browser fixtures start'
+);
+test.skip(
+  liveDesigner && productionTarget && !productionAllowed,
+  'Production acceptance requires explicit E2E_LIVE_PRODUCTION=1 before browser fixtures start'
 );
 test.describe('Opt-in live Designer acceptance', () => {
   test('background removal applies, saves, reopens, and exports', async ({ page, context }) => {
