@@ -4,7 +4,8 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { SourceMapConsumer, SourceMapGenerator } = require('source-map');
-const MAX_ARTIFACT_BYTES = 2 * 1024 * 1024;
+const MAX_ARTIFACT_MIB = 32;
+const MAX_ARTIFACT_BYTES = MAX_ARTIFACT_MIB * 1024 * 1024;
 
 const productionFiles = async (root) => {
   const entries = await fs.readdir(root, { withFileTypes: true });
@@ -99,7 +100,7 @@ const main = async () => {
   let failed = 0;
   for (const filePath of files.filter((file) => file.endsWith('.map'))) {
     const relative = path.relative(nextDir, filePath).split(path.sep).join('/');
-    if (relative.includes('..')) {
+    if (relative.split('/').includes('..')) {
       unsupported += 1;
       console.log(`Epure sourcemap skipped (unsupported artifact path): ${relative}`);
       continue;
@@ -107,7 +108,7 @@ const main = async () => {
     const stat = await fs.stat(filePath);
     if (stat.size > MAX_ARTIFACT_BYTES) {
       oversized += 1;
-      console.log(`Epure sourcemap skipped (>2 MiB): ${relative}`);
+      console.log(`Epure sourcemap skipped (>${MAX_ARTIFACT_MIB} MiB): ${relative}`);
       continue;
     }
 
@@ -122,7 +123,7 @@ const main = async () => {
     const payload = JSON.stringify(sourcemap);
     if (Buffer.byteLength(payload) > MAX_ARTIFACT_BYTES) {
       oversized += 1;
-      console.log(`Epure sourcemap skipped (>2 MiB after flattening): ${relative}`);
+      console.log(`Epure sourcemap skipped (>${MAX_ARTIFACT_MIB} MiB after flattening): ${relative}`);
       continue;
     }
     const artifactPath = aliases.get(filePath);

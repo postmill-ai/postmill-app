@@ -1,4 +1,4 @@
-import { withSentryConfig } from '@sentry/nextjs';
+import { withSentryConfig } from '@sentry/nextjs/config';
 import type { NextConfig } from 'next';
 import { redirects } from './src/redirects.config';
 

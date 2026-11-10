@@ -2,8 +2,7 @@
 
 import i18next from './i18next';
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { UseTranslationOptions } from 'react-i18next/index';
+import { UseTranslationOptions, useTranslation } from 'react-i18next';
 
 export function useT(ns?: string, options?: UseTranslationOptions<any>) {
   const { t } = useTranslation(ns, options);

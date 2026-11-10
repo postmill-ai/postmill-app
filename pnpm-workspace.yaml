@@ -165,6 +165,7 @@ overrides:
 onlyBuiltDependencies:
   - bcrypt
   - '@sentry-internal/node-cpu-profiler'
+  - '@sentry/node-cpu-profiler'
   - canvas
   - ffmpeg-static
 
@@ -176,6 +177,7 @@ allowBuilds:
   '@prisma/engines': true
   '@scarf/scarf': false
   '@sentry-internal/node-cpu-profiler': true
+  '@sentry/node-cpu-profiler': true
   '@sentry/cli': true
   '@swc/core': true
   bcrypt: true
