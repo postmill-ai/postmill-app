@@ -30,6 +30,7 @@ const ALLOWED_MIME_TYPES = new Set([
   'video/webm', 'video/quicktime',
   'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/webm',
   'audio/x-m4a', 'audio/aac', 'audio/x-wav',
+  'application/pdf',
 ]);
 
 const MAX_IMPORT_SIZE = 512 * 1024 * 1024; // 512 MB

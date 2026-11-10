@@ -19,6 +19,9 @@ export const UPLOAD_LIMITS = {
   audio: {
     maxBytes: 50 * MB,
   },
+  document: {
+    maxBytes: 50 * MB,
+  },
   // Overall multipart cap used as a safe client default.
   maxBytes: 1 * GB,
 } as const;
@@ -47,6 +50,7 @@ export const UPLOAD_ALLOWED_MIME_TYPES = new Set([
   'audio/aac',
   'audio/x-wav',
   'video/quicktime',
+  'application/pdf',
 ]);
 
 export interface UploadLimitCheckFile {
@@ -71,7 +75,9 @@ export function checkUploadLimit(
     ? limits.image.maxBytes
     : file.mimetype.startsWith('video/')
       ? limits.video.maxBytes
-      : limits.audio.maxBytes;
+      : file.mimetype === 'application/pdf'
+        ? limits.document.maxBytes
+        : limits.audio.maxBytes;
 
   if (file.size > maxBytes) {
     return {

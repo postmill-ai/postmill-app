@@ -53,6 +53,7 @@ const LOCAL_STORAGE_ALLOWED_MIME = new Set<string>([
   'audio/aac',
   'audio/x-wav',
   'video/quicktime',
+  'application/pdf',
   'font/ttf',
   'font/otf',
   'font/woff2',

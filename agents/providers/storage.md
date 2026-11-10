@@ -107,7 +107,7 @@ Write a bespoke adapter (implement `StorageCapability` + hand-roll the `Provider
 | `local` | Writes to the local filesystem; no credentials; tenant-scoped directories |
 | `medialocker` | REST API (presign upload/download), not S3 protocol |
 
-Even bespoke adapters reuse kernel helpers `parseDataUrl`, `fromBuffer`, `fromFile` (exported from `@postmill-ai/provider-kernel`) and the same mime allowlists. The allowlists in `S3StorageBase` are a security invariant: uploads are restricted to image/video/audio/font mimes (`ALLOWED_MIME_TYPES`), `writeBuffer` to `STORED_ARTIFACT_ALLOWED_MIME` (adds webm, `text/plain`, `application/json`, and `font/ttf`/`font/otf`/`font/woff2`) so a provider cannot land `text/html` in an org bucket. Preserve equivalent gating in bespoke code.
+Even bespoke adapters reuse kernel helpers `parseDataUrl`, `fromBuffer`, `fromFile` (exported from `@postmill-ai/provider-kernel`) and the same mime allowlists. The allowlists in `S3StorageBase` are a security invariant: uploads are restricted to image/video/audio/font mimes plus `application/pdf` (`ALLOWED_MIME_TYPES`), `writeBuffer` to `STORED_ARTIFACT_ALLOWED_MIME` (adds webm, `text/plain`, `application/json`, and `font/ttf`/`font/otf`/`font/woff2`) so a provider cannot land `text/html` in an org bucket. Preserve equivalent gating in bespoke code.
 
 ## Prisma enum quirk (critical)
 

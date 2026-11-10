@@ -58,6 +58,23 @@ describe('CustomFileValidationPipe', () => {
     expect(result.originalname).toMatch(/\.png$/);
   });
 
+  it('accepts a PDF export and preserves the detected extension', async () => {
+    vi.mocked(fromBuffer).mockResolvedValue({ ext: 'pdf', mime: 'application/pdf' });
+
+    const value = {
+      buffer: Buffer.from('%PDF-1.7'),
+      mimetype: 'application/pdf',
+      fieldname: 'file',
+      originalname: 'Campaign.pdf',
+      size: 1024,
+    };
+
+    const result = await pipe.transform(value);
+
+    expect(result.mimetype).toBe('application/pdf');
+    expect(result.originalname).toBe('Campaign.pdf');
+  });
+
   it('validates a valid file from path', async () => {
     vi.mocked(fromFile).mockResolvedValue({ ext: 'jpg', mime: 'image/jpeg' });
 
