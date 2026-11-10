@@ -173,14 +173,17 @@ export class BackfillDesignThumbnails {
       for (const artifact of exports) {
         stats.processed++;
         try {
-          const doc = await this._loadExportSource(artifact);
-          if (!doc) {
+          const source = await this._loadExportSource(artifact);
+          if (!source) {
             stats.skipped++;
             this._logger.warn(`Skipping design export ${artifact.id}: source not found`);
             continue;
           }
           if (dryRun) continue;
-          const png = await this._designPreviewService.renderPreviewBuffer(doc, {
+          const existingPreview = source.previewFileId
+            ? await this._readSourcePreview(artifact.organizationId, source.previewFileId)
+            : null;
+          const png = existingPreview ?? await this._designPreviewService.renderPreviewBuffer(source.doc, {
             orgId: artifact.organizationId,
           });
           const adapter = await this._storageService.resolveAdapterForFolder(
@@ -227,10 +230,21 @@ export class BackfillDesignThumbnails {
     return this._designPreviewService.uploadPreview(orgId, png);
   }
 
+  private async _readSourcePreview(orgId: string, fileId: string): Promise<Buffer | null> {
+    try {
+      const file = await this._fileService.getFileById(orgId, fileId);
+      if (!file) return null;
+      const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, orgId);
+      return await adapter.readFile(file.path);
+    } catch {
+      return null;
+    }
+  }
+
   private async _loadExportSource(artifact: {
     organizationId: string;
     metadata: unknown;
-  }): Promise<DesignerDoc | null> {
+  }): Promise<{ doc: DesignerDoc; previewFileId?: string } | null> {
     const metadata =
       artifact.metadata && typeof artifact.metadata === 'object' && !Array.isArray(artifact.metadata)
         ? artifact.metadata as Record<string, unknown>
@@ -250,9 +264,11 @@ export class BackfillDesignThumbnails {
           organizationId: artifact.organizationId,
           deletedAt: null,
         },
-        select: { doc: true },
+        select: { doc: true, previewFileId: true },
       });
-      return design ? design.doc as unknown as DesignerDoc : null;
+      return design
+        ? { doc: design.doc as unknown as DesignerDoc, previewFileId: design.previewFileId ?? undefined }
+        : null;
     }
 
     const template = await this._prisma.designTemplate.findFirst({
@@ -262,9 +278,11 @@ export class BackfillDesignThumbnails {
         deletedAt: null,
         isSystem: false,
       },
-      select: { doc: true },
+      select: { doc: true, thumbnailFileId: true },
     });
-    return template ? template.doc as unknown as DesignerDoc : null;
+    return template
+      ? { doc: template.doc as unknown as DesignerDoc, previewFileId: template.thumbnailFileId ?? undefined }
+      : null;
   }
 
   private async _removePreview(orgId: string, fileId: string): Promise<void> {

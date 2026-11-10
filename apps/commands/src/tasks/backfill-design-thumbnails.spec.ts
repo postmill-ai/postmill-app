@@ -17,6 +17,7 @@ function createMocks() {
       { id: 'd-skip-data', organizationId: 'org-1', doc: VALID_DOC, deletedAt: null, previewFileId: null, previewDataUrl: 'data:image/jpeg;base64,bbb' },
       { id: 'd-deleted', organizationId: 'org-1', doc: VALID_DOC, deletedAt: new Date(), previewFileId: null, previewDataUrl: null },
       { id: 'd-fill', organizationId: 'org-1', doc: VIDEO_DOC, deletedAt: null, previewFileId: null, previewDataUrl: null },
+      { id: 'd-export-source', organizationId: 'org-1', doc: VIDEO_DOC, deletedAt: null, previewFileId: 'source-preview', previewDataUrl: null },
       { id: 'd-other', organizationId: 'org-2', doc: VALID_DOC, deletedAt: null, previewFileId: null, previewDataUrl: null },
     ],
     designTemplate: [
@@ -27,7 +28,7 @@ function createMocks() {
     ],
     file: [
       { id: 'x-skip', organizationId: 'org-1', folderId: null, type: 'document', deletedAt: null, thumbnail: '/already.png', metadata: { source: 'design-export', kind: 'design', designId: 'd-fill' } },
-      { id: 'x-design', organizationId: 'org-1', folderId: 'folder-cloud', type: 'document', deletedAt: null, thumbnail: null, metadata: { source: 'design-export', kind: 'design', designId: 'd-fill' } },
+      { id: 'x-design', organizationId: 'org-1', folderId: 'folder-cloud', type: 'document', deletedAt: null, thumbnail: null, metadata: { source: 'design-export', kind: 'design', designId: 'd-export-source' } },
       { id: 'x-template', organizationId: 'org-1', folderId: null, type: 'document', deletedAt: null, thumbnail: null, metadata: { source: 'design-export', kind: 'template', templateId: 't-fill' } },
       { id: 'x-missing', organizationId: 'org-1', folderId: null, type: 'document', deletedAt: null, thumbnail: null, metadata: { source: 'design-export', kind: 'design', designId: 'd-deleted' } },
       { id: 'x-other', organizationId: 'org-2', folderId: null, type: 'document', deletedAt: null, thumbnail: null, metadata: { source: 'design-export', kind: 'design', designId: 'd-other' } },
@@ -84,12 +85,16 @@ function createMocks() {
   };
   const adapter = {
     writeBuffer: vi.fn().mockResolvedValue('/uploads/export-preview.png'),
+    readFile: vi.fn().mockResolvedValue(Buffer.from('existing-preview-bytes')),
     removeFile: vi.fn().mockResolvedValue(undefined),
   };
   const storageService = {
     resolveAdapterForFolder: vi.fn().mockResolvedValue(adapter),
   };
   const fileService = {
+    getFileById: vi.fn(async () => ({
+      id: 'source-preview', folderId: 'source-folder', path: '/uploads/source-preview.png',
+    })),
     saveMediaInformation: vi.fn((orgId: string, data: any) => {
       const row = store.file.find((file) => file.id === data.id && file.organizationId === orgId);
       if (row) row.thumbnail = data.thumbnail;
@@ -121,9 +126,11 @@ describe('BackfillDesignThumbnails', () => {
     expect(mocks.store.file.find((row) => row.id === 'x-template').thumbnail).toBe('/uploads/export-preview.png');
     expect(mocks.store.file.find((row) => row.id === 'x-skip').thumbnail).toBe('/already.png');
     expect(mocks.store.file).toHaveLength(5);
-    expect(mocks.designPreviewService.renderPreviewBuffer).toHaveBeenCalledTimes(4);
+    expect(mocks.designPreviewService.renderPreviewBuffer).toHaveBeenCalledTimes(2);
     expect(mocks.designPreviewService.renderPreviewBuffer).toHaveBeenCalledWith(VIDEO_DOC, { orgId: 'org-1' });
     expect(mocks.designPreviewService.uploadPreview).toHaveBeenCalledTimes(2);
+    expect(mocks.adapter.readFile).toHaveBeenCalledWith('/uploads/source-preview.png');
+    expect(mocks.storageService.resolveAdapterForFolder).toHaveBeenCalledWith('source-folder', 'org-1');
     expect(mocks.storageService.resolveAdapterForFolder).toHaveBeenCalledWith('folder-cloud', 'org-1');
     expect(mocks.fileService.saveMediaInformation).toHaveBeenCalledTimes(2);
   });
