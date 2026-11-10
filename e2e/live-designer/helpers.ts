@@ -1,6 +1,44 @@
+import { readFile } from 'node:fs/promises';
 import { expect, type BrowserContext, type Page } from '@playwright/test';
 
-type JsonRecord = Record<string, unknown>;
+export type JsonRecord = Record<string, unknown>;
+
+export interface LocatedElement {
+  element: JsonRecord;
+  outputIndex: number;
+  pageNumber: number;
+  outputName: string;
+  pageName: string;
+}
+
+export function locateElements(payload: unknown): LocatedElement[] {
+  const root = asRecord(payload);
+  const doc = asRecord(root?.doc) || root;
+  const outputs = Array.isArray(doc?.outputs) ? doc.outputs : [];
+  const located: LocatedElement[] = [];
+  outputs.forEach((candidate, outputIndex) => {
+    const output = asRecord(candidate);
+    if (!output) return;
+    const outputName = typeof output.name === 'string' ? output.name : `Output ${outputIndex + 1}`;
+    const containers = [
+      { value: output, pageNumber: 0, pageName: 'Page 1' },
+      ...(Array.isArray(output.pages) ? output.pages : []).map((page, index) => ({
+        value: page,
+        pageNumber: index + 1,
+        pageName: typeof asRecord(page)?.name === 'string' ? asRecord(page)!.name as string : `Page ${index + 2}`,
+      })),
+    ];
+    for (const container of containers) {
+      const children = asRecord(container.value)?.children;
+      if (!Array.isArray(children)) continue;
+      for (const value of children) {
+        const element = asRecord(value);
+        if (element) located.push({ element, outputIndex, pageNumber: container.pageNumber, outputName, pageName: container.pageName });
+      }
+    }
+  });
+  return located;
+}
 
 export interface LiveImageElement {
   id: string;
@@ -86,7 +124,7 @@ export function backgroundResultApplied(
   return maskedOriginal || flattenedCutout;
 }
 
-export async function openSavedDesign(page: Page, designId: string): Promise<LiveDesign> {
+export async function openDesign(page: Page, designId: string): Promise<unknown> {
   const responsePromise = page.waitForResponse(
     (response) => isDesignResponse(response.url(), response.request().method(), designId, 'GET')
   );
@@ -96,13 +134,18 @@ export async function openSavedDesign(page: Page, designId: string): Promise<Liv
   const response = await responsePromise;
   expect(response.status(), 'the saved design must load').toBe(200);
   const payload: unknown = await response.json();
+  await expect(page.getByLabel('Design name', { exact: true })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 90_000 });
+  return payload;
+}
+
+export async function openSavedDesign(page: Page, designId: string): Promise<LiveDesign> {
+  const payload = await openDesign(page, designId);
   const image = readImage(payload, process.env.E2E_LIVE_ELEMENT_ID?.trim());
   expect(
     image,
     'the QA design must contain a static image on its first output (or match E2E_LIVE_ELEMENT_ID)'
   ).toBeTruthy();
-  await expect(page.getByLabel('Design name', { exact: true })).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 90_000 });
   return { payload, image: image! };
 }
 
@@ -121,6 +164,20 @@ export async function selectImageLayer(page: Page, elementId: string): Promise<v
   const row = panel.locator(`[data-element-id=${JSON.stringify(elementId)}]`);
   await expect(row).toBeVisible();
   await row.click();
+  await expect(row).toHaveAttribute('aria-selected', 'true');
+  await panel.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(panel).toBeHidden();
+}
+
+export async function expectSelectedLayer(page: Page, elementId: string): Promise<void> {
+  let panel = page.getByRole('dialog', { name: 'Layers', exact: true });
+  if (!await panel.isVisible()) {
+    await openMenuAction(page, 'View', 'Layers');
+  }
+  panel = page.getByRole('dialog', { name: 'Layers', exact: true });
+  await expect(panel).toBeVisible();
+  const row = panel.locator(`[data-element-id=${JSON.stringify(elementId)}]`);
+  await expect(row).toBeVisible();
   await expect(row).toHaveAttribute('aria-selected', 'true');
   await panel.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(panel).toBeHidden();
@@ -145,27 +202,44 @@ export async function saveDesign(
   return payload;
 }
 
-export async function exportCurrentOutput(page: Page): Promise<void> {
-  await openMenuAction(page, 'File', 'Export…');
-  await expect(page.getByText('Export Design', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
-  await page.getByRole('button', { name: 'All Files (root)', exact: true }).click();
-  await page.getByRole('button', { name: /^Next: Export \d+ files?$/ }).click();
+export interface ExportedDownload {
+  bytes: Buffer;
+  filename: string;
+}
+
+export async function exportCurrentOutput(
+  page: Page,
+  options: { png?: boolean; scale?: 1 | 2 | 3 } = {}
+): Promise<ExportedDownload> {
+  await openMenuAction(page, 'File', /^Export…/);
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByText('Export Design', { exact: true }),
+  });
+  await expect(dialog).toBeVisible();
+  if (options.png) await dialog.locator('select').first().selectOption('png');
+  if (options.scale) await dialog.getByRole('button', { name: `${options.scale}x`, exact: true }).click();
+  await dialog.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
+  await dialog.getByRole('button', { name: 'All Files (root)', exact: true }).click();
+  await dialog.getByRole('button', { name: /^Next: Export \d+ files?$/ }).click();
 
   const uploadPromise = page.waitForResponse((response) =>
     response.request().method() === 'POST' &&
     /^\/files\/upload-(simple|server)$/.test(apiPath(response.url()))
   );
-  await page.getByRole('button', { name: /^Export \d+ files?$/ }).click();
+  await dialog.getByRole('button', { name: /^Export \d+ files?$/ }).click();
   const upload = await uploadPromise;
   expect(upload.ok(), 'the rendered export must upload successfully').toBe(true);
-  await expect(page.getByText('Saved to /files', { exact: true })).toBeVisible({ timeout: 90_000 });
+  await expect(dialog.getByText('Saved to /files', { exact: true })).toBeVisible({ timeout: 90_000 });
 
   const downloadPromise = page.waitForEvent('download');
-  await page.locator('a[download]').first().click();
+  await dialog.locator('a[download]').first().click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/\.(png|jpe?g|webp|pdf|svg)$/i);
+  const filename = download.suggestedFilename();
+  expect(filename).toMatch(/\.(png|jpe?g|webp|pdf|svg)$/i);
   expect(await download.failure()).toBeNull();
+  const path = await download.path();
+  expect(path, 'the browser must persist the downloaded export').toBeTruthy();
+  return { bytes: await readFile(path!), filename };
 }
 
 export async function installPaidOperationGuard(context: BrowserContext): Promise<PaidOperationGuard> {
@@ -208,7 +282,11 @@ export function collectBrowserFailures(page: Page): () => void {
   const failures: string[] = [];
   page.on('pageerror', (error) => failures.push(`page: ${sanitizedMessage(error)}`));
   page.on('console', (message) => {
-    if (message.type() === 'error') failures.push(`console: ${sanitizedMessage(message.text())}`);
+    if (message.type() !== 'error') return;
+    const resourceUrl = message.location().url;
+    const missingProfileAvatar = message.text().includes('404') &&
+      !!resourceUrl && apiPath(resourceUrl).startsWith('/avatar/');
+    if (!missingProfileAvatar) failures.push(`console: ${sanitizedMessage(message.text())}`);
   });
   page.on('response', (response) => {
     const pathname = apiPath(response.url());
