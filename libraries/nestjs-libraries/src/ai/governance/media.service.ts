@@ -18,7 +18,7 @@ import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.servi
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { parseDataUrl } from '@postmill-ai/nestjs-libraries/upload/data.url';
-import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
+import { readValidatedImageSource } from '@postmill-ai/nestjs-libraries/media/image-source';
 import { compositeMagicGrabBackground } from '@postmill-ai/nestjs-libraries/media/magic-grab-composite';
 import { IMAGE_SOURCE_MAX_BYTES } from '@postmill-ai/nestjs-libraries/media/image-source.limits';
 import { resolveVisionImageUrl } from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
@@ -745,34 +745,8 @@ export class AiMediaService {
       throw new Error('Storage/file services are not available');
     }
     const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
-    let buffer: Buffer;
-    if (url.startsWith('data:')) {
-      const commaIdx = url.indexOf(',');
-      const header = url.slice(5, commaIdx);
-      const payload = url.slice(commaIdx + 1);
-      buffer = header.endsWith(';base64')
-        ? Buffer.from(payload, 'base64')
-        : Buffer.from(decodeURIComponent(payload), 'utf-8');
-    } else {
-      const res = await safeFetch(url);
-      if (!res.ok) throw new Error(`Download failed (${res.status})`);
-      buffer = Buffer.from(await res.arrayBuffer());
-    }
-    const detected = await fromBuffer(buffer).catch(() => undefined);
-    const ext = detected?.mime === 'image/png'
-      ? 'png'
-      : detected?.mime === 'image/jpeg'
-        ? 'jpg'
-        : detected?.mime === 'image/webp'
-          ? 'webp'
-          : undefined;
-    if (!ext) {
-      throw new BadRequestException('The image response did not contain a supported PNG, JPEG, or WebP image.');
-    }
-    const path = await adapter.writeBuffer(
-      buffer,
-      `image/${ext === 'png' ? 'png' : ext === 'jpg' ? 'jpeg' : 'webp'}`,
-    );
+    const { bytes, ext, mime } = await readValidatedImageSource(url);
+    const path = await adapter.writeBuffer(bytes, mime);
     const fileName = `${namePrefix}-${Date.now()}.${ext}`;
     const saved = await this._fileService.saveFile(orgId, fileName, path, fileName);
     return { id: saved.id, path: saved.path, name: saved.name };

@@ -227,9 +227,9 @@ describe('BulkCreateDialog', () => {
     expect(screen.getByText('Add an editable text, image, or color element before creating variations.')).toBeTruthy();
   });
 
-  it('shows the server row and schema path when transformed data is invalid', async () => {
+  it('shows the server row, spreadsheet schema path and remote image error', async () => {
     fetchMock.mockResolvedValueOnce(response({
-      message: 'Row 1: outputs.0.pages.0.children.0.src: src must be a data: or http(s) URL',
+      message: 'Row 3: rows[2].product_image (outputs.0.pages.0.children.0.src): Blocked URL',
     }, false));
     render(<BulkCreateDialog store={makeStore()} onClose={vi.fn()} />);
     await upload('headline,unused\nAda,x\nGrace,y');
@@ -237,7 +237,7 @@ describe('BulkCreateDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create 2 variations' }));
 
     expect((await screen.findByRole('alert')).textContent).toContain(
-      'Row 1: outputs.0.pages.0.children.0.src: src must be a data: or http(s) URL'
+      'Row 3: rows[2].product_image (outputs.0.pages.0.children.0.src): Blocked URL'
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

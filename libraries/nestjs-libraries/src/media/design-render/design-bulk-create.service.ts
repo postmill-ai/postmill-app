@@ -17,7 +17,8 @@ import {
   DESIGN_EXPORT_PROVIDER,
   designExportEventId,
 } from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
-import { applyBulkRow } from '../designer-doc/bulk-variables';
+import { applyBulkRow, normalizeBulkImageSource } from '../designer-doc/bulk-variables';
+import { readValidatedImageSource } from '../image-source';
 import { pageCount } from '../designer-doc/designer-doc.pages';
 import { MAX_OUTPUTS, MAX_PAGES_PER_OUTPUT } from '../designer-doc/designer-doc.limits';
 import { sanitizeDownloadName } from '../designer-doc/postmill-file';
@@ -59,6 +60,16 @@ const errorDetail = (error: unknown, fallback: string): string => {
   }
   return (error as Error)?.message || fallback;
 };
+
+interface RemoteImagePreflight {
+  row: number;
+  url: string;
+  documentPath: string;
+  column?: string;
+}
+
+const rowSchemaPath = (rowIndex: number, column: string): string =>
+  `rows[${rowIndex}]${/^[A-Za-z_$][\w$]*$/.test(column) ? `.${column}` : `[${JSON.stringify(column)}]`}`;
 
 @Injectable()
 export class DesignBulkCreateService extends DesignBulkService {
@@ -136,13 +147,20 @@ export class DesignBulkCreateService extends DesignBulkService {
       }
       return Object.fromEntries(entries);
     });
-    rows.forEach((row, index) => {
+    const templateSources = this._templateSources(doc);
+    const sources: RemoteImagePreflight[] = [];
+    const sourceUrls = new Set<string>();
+    for (const [index, row] of rows.entries()) {
       try {
-        this._designerDocService.validate(applyBulkRow(doc, row));
+        const transformedDoc = this._designerDocService.validate(applyBulkRow(doc, row));
+        this._collectRemoteImageSources(
+          doc, transformedDoc, row, index, templateSources, sources, sourceUrls,
+        );
       } catch (error) {
         throw new BadRequestException(`Row ${index + 1}: ${errorDetail(error, 'Invalid DesignerDoc')}`.slice(0, 1000));
       }
-    });
+    }
+    await this._preflightRemoteImages(sources);
     if (input.folderId) await this._fileService.getFolder(orgId, input.folderId);
 
     const nameBase = sanitizeDownloadName(input.nameBase || 'Bulk variation') || 'Bulk variation';
@@ -175,6 +193,101 @@ export class DesignBulkCreateService extends DesignBulkService {
       });
     }
     return { id: job.id, status: job.status };
+  }
+
+  private _collectRemoteImageSources(
+    templateDoc: DesignerDoc,
+    transformedDoc: DesignerDoc,
+    row: Record<string, string>,
+    rowIndex: number,
+    templateSources: Set<string>,
+    sources: RemoteImagePreflight[],
+    sourceUrls: Set<string>,
+  ): void {
+    const collect = (
+      templateElement: DesignerElement,
+      element: DesignerElement,
+      elementPath: string,
+    ) => {
+      const add = (
+        url: string | undefined,
+        templateUrl: string | undefined,
+        documentPath: string,
+      ) => {
+        if (
+          !url || !/^https?:\/\//i.test(url) || templateSources.has(url) || sourceUrls.has(url)
+        ) return;
+        let column: string | undefined;
+        if (templateElement.slot?.kind === 'image' && row[templateElement.slot.name] !== undefined) {
+          column = templateElement.slot.name;
+        } else {
+          for (const match of (templateUrl || '').matchAll(/\{\{\s*([\w.-]+)\s*\}\}/g)) {
+            if (row[match[1]] !== undefined) {
+              column = match[1];
+              break;
+            }
+          }
+        }
+        column ||= Object.keys(row).find((key) => normalizeBulkImageSource(row[key]) === url);
+        sourceUrls.add(url);
+        sources.push({ row: rowIndex + 1, url, documentPath, column });
+      };
+
+      add(element.src, templateElement.src, `${elementPath}.src`);
+      for (const [overrideId, override] of Object.entries(element.symbolOverrides || {})) {
+        add(
+          override.src,
+          templateElement.symbolOverrides?.[overrideId]?.src,
+          `${elementPath}.symbolOverrides.${overrideId}.src`,
+        );
+      }
+    };
+    const collectChildren = (
+      templateChildren: DesignerElement[] | undefined,
+      children: DesignerElement[] | undefined,
+      path: string,
+    ) => {
+      for (const [elementIndex, element] of (children || []).entries()) {
+        const templateElement = templateChildren?.[elementIndex];
+        if (templateElement) collect(templateElement, element, `${path}.${elementIndex}`);
+      }
+    };
+
+    for (const [outputIndex, output] of transformedDoc.outputs.entries()) {
+      if (!('children' in output)) continue;
+      const templateOutput = templateDoc.outputs[outputIndex];
+      if (!templateOutput || !('children' in templateOutput)) continue;
+      collectChildren(templateOutput.children, output.children, `outputs.${outputIndex}.children`);
+      for (const [pageIndex, page] of (output.pages || []).entries()) {
+        collectChildren(
+          templateOutput.pages?.[pageIndex]?.children,
+          page.children,
+          `outputs.${outputIndex}.pages.${pageIndex}.children`,
+        );
+      }
+    }
+    for (const [symbolIndex, symbol] of (transformedDoc.symbols || []).entries()) {
+      collectChildren(
+        templateDoc.symbols?.[symbolIndex]?.children,
+        symbol.children,
+        `symbols.${symbolIndex}.children`,
+      );
+    }
+  }
+
+  private async _preflightRemoteImages(sources: RemoteImagePreflight[]): Promise<void> {
+    for (const source of sources) {
+      try {
+        await readValidatedImageSource(source.url);
+      } catch (error) {
+        const path = source.column
+          ? `${rowSchemaPath(source.row - 1, source.column)} (${source.documentPath})`
+          : source.documentPath;
+        throw new BadRequestException(
+          `Row ${source.row}: ${path}: ${errorDetail(error, 'Image preflight failed')}`.slice(0, 1000),
+        );
+      }
+    }
   }
 
   private _templateSources(doc: DesignerDoc): Set<string> {
@@ -328,6 +441,8 @@ export class DesignBulkCreateService extends DesignBulkService {
         } catch (error) {
           result.error = errorDetail(error, 'Row failed').slice(0, 500);
           this._logger.warn(`Bulk Create ${jobId}: row ${index + 1} failed: ${result.error}`);
+          results.push(result);
+          throw new Error(`Row ${index + 1}: ${result.error}`);
         }
         results.push(result);
         if (!(await this._writeProgress(jobId, index + 1, rows.length))) return;

@@ -22,10 +22,16 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
   isInngestEnabled: vi.fn(() => true),
 }));
 
+const { mockSafeFetch } = vi.hoisted(() => ({ mockSafeFetch: vi.fn() }));
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
+  safeFetch: mockSafeFetch,
+}));
+
 import { BadRequestException } from '@nestjs/common';
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { DesignerDocService } from '../designer-doc/designer-doc.service';
 import { DesignBulkCreateService, DESIGN_BULK_CREATE_OPERATION } from './design-bulk-create.service';
+import { IMAGE_SOURCE_MAX_BYTES } from '../image-source.limits';
 
 const makeDoc = (): any => ({
   version: 11,
@@ -112,9 +118,16 @@ const seedPayload = (rows = [
   }));
 };
 
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+);
+
 beforeEach(() => {
   redis.clear();
   vi.clearAllMocks();
+  mockSafeFetch.mockReset();
+  mockSafeFetch.mockImplementation(async () => new Response(PNG_BYTES));
 });
 
 describe('DesignBulkCreateService enqueue and status', () => {
@@ -170,6 +183,163 @@ describe('DesignBulkCreateService enqueue and status', () => {
     expect(fileService.createFolder).not.toHaveBeenCalled();
     expect(inngest.send).not.toHaveBeenCalled();
     expect(redis.size).toBe(0);
+  });
+
+  it('rejects row 3 remote image failures before every job, folder, event or output side effect', async () => {
+    const {
+      service, lifecycle, fileService, designService, renderService, storageService, aiMediaService, writes,
+    } = makeService();
+    const doc = makeDoc();
+    doc.outputs[0].pages[0].children[0].slot.name = 'product_image';
+    const rows = Array.from({ length: 5 }, (_, index) => ({
+      name: `Product ${index + 1}`,
+      product_image: `https://cdn.example.test/product-${index + 1}.png`,
+    }));
+    let active = 0;
+    let maxActive = 0;
+    mockSafeFetch.mockImplementation(async (url: string) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await Promise.resolve();
+      try {
+        if (url.endsWith('/product-3.png')) throw new Error('Blocked URL');
+        return new Response(PNG_BYTES);
+      } finally {
+        active--;
+      }
+    });
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc, rows, nameBase: 'Launch',
+    })).rejects.toThrow(
+      'Row 3: rows[2].product_image (outputs.0.pages.0.children.0.src): Blocked URL'
+    );
+
+    expect(maxActive).toBe(1);
+    expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
+    expect(fileService.createFolder).not.toHaveBeenCalled();
+    expect(fileService.saveGeneratedMedia).not.toHaveBeenCalled();
+    expect(designService.createDesign).not.toHaveBeenCalled();
+    expect(renderService.renderPage).not.toHaveBeenCalled();
+    expect(storageService.getLocalAdapterForOrg).not.toHaveBeenCalled();
+    expect(aiMediaService.saveUrlToFile).not.toHaveBeenCalled();
+    expect(inngest.send).not.toHaveBeenCalled();
+    expect(redis.size).toBe(0);
+    expect(writes).toHaveLength(0);
+  });
+
+  it('rejects HTML returned for a remote row image before enqueue', async () => {
+    const { service, lifecycle, fileService } = makeService();
+    mockSafeFetch.mockImplementation(async (url: string) =>
+      new Response(url.endsWith('/bad.png') ? '<html>Not an image</html>' : PNG_BYTES)
+    );
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(),
+      rows: [{ name: 'Ada', image: 'https://cdn.example.test/bad.png' }],
+    })).rejects.toThrow(
+      'Row 1: rows[0].image (outputs.0.pages.0.children.0.src): The image response did not contain a supported PNG, JPEG, or WebP image.'
+    );
+
+    expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
+    expect(fileService.createFolder).not.toHaveBeenCalled();
+    expect(inngest.send).not.toHaveBeenCalled();
+    expect(redis.size).toBe(0);
+  });
+
+  it('rejects a declared oversize image before reading its body or creating side effects', async () => {
+    const { service, lifecycle, fileService } = makeService();
+    const response = new Response(PNG_BYTES, {
+      headers: { 'content-length': String(IMAGE_SOURCE_MAX_BYTES + 1) },
+    });
+    const cancel = vi.spyOn(response.body!, 'cancel');
+    const arrayBuffer = vi.spyOn(response, 'arrayBuffer');
+    mockSafeFetch.mockImplementation(async (url: string) =>
+      url.endsWith('/too-large.png') ? response : new Response(PNG_BYTES)
+    );
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(),
+      rows: [{ name: 'Ada', image: 'https://cdn.example.test/too-large.png' }],
+    })).rejects.toThrow(/Row 1: rows\[0\]\.image .*20 MB/);
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
+    expect(fileService.createFolder).not.toHaveBeenCalled();
+    expect(inngest.send).not.toHaveBeenCalled();
+    expect(redis.size).toBe(0);
+  });
+
+  it('cancels an unknown-length image stream at the byte cap without enqueue side effects', async () => {
+    const { service, lifecycle, fileService } = makeService();
+    const cancel = vi.fn();
+    let pulls = 0;
+    const response = new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls++;
+        if (pulls === 1) controller.enqueue(PNG_BYTES);
+        else if (pulls === 2) controller.enqueue(Buffer.alloc(IMAGE_SOURCE_MAX_BYTES));
+      },
+      cancel,
+    }));
+    const arrayBuffer = vi.spyOn(response, 'arrayBuffer');
+    mockSafeFetch.mockImplementation(async (url: string) =>
+      url.endsWith('/chunked.png') ? response : new Response(PNG_BYTES)
+    );
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(),
+      rows: [{ name: 'Ada', image: 'https://cdn.example.test/chunked.png' }],
+    })).rejects.toThrow(/Row 1: rows\[0\]\.image .*20 MB/);
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
+    expect(fileService.createFolder).not.toHaveBeenCalled();
+    expect(inngest.send).not.toHaveBeenCalled();
+    expect(redis.size).toBe(0);
+  });
+
+  it('retains only bounded source metadata while transforming 200 rows', async () => {
+    const { service } = makeService();
+    const preflight = vi.spyOn(service as any, '_preflightRemoteImages');
+    const rows = Array.from({ length: 200 }, (_, index) => ({
+      name: `Product ${index + 1} ${'x'.repeat(9900)}`,
+      image: `https://cdn.example.test/product-${index + 1}.png`,
+    }));
+
+    await service.enqueueBulkCreate('org-1', 'user-1', { doc: makeDoc(), rows });
+
+    expect(preflight).toHaveBeenCalledOnce();
+    const [sources] = preflight.mock.calls[0];
+    expect(Array.isArray(sources)).toBe(true);
+    expect(sources).toHaveLength(200);
+    expect(JSON.stringify(sources).length).toBeLessThan(100000);
+    expect(sources[0]).toEqual({
+      row: 1,
+      url: 'https://cdn.example.test/product-1.png',
+      documentPath: 'outputs.0.pages.0.children.0.src',
+      column: 'image',
+    });
+  });
+
+  it('does not raster-preflight an unchanged remote SVG template icon', async () => {
+    const { service } = makeService();
+    const doc = makeDoc();
+    doc.outputs[0].children.push({
+      id: 'icon-1', type: 'icon', src: 'https://api.iconify.design/mdi/rocket.svg', fill: '#000000',
+      x: 20, y: 20, width: 20, height: 20,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    mockSafeFetch.mockImplementation(async (url: string) =>
+      new Response(url.endsWith('.svg') ? '<svg xmlns="http://www.w3.org/2000/svg"></svg>' : PNG_BYTES)
+    );
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc, rows: [{ name: 'Ada' }],
+    })).resolves.toEqual({ id: 'job-1', status: 'pending' });
+    expect(mockSafeFetch).not.toHaveBeenCalled();
   });
 
   it('accepts spreadsheet image formulas and Drive links through the real validator', async () => {
@@ -294,20 +464,23 @@ describe('DesignBulkCreateService processing', () => {
     expect(writes.some((write) => write.mime === 'application/zip')).toBe(true);
   });
 
-  it('isolates a failed row and still completes the successful rows', async () => {
-    const { service, designService, aiSettings, writes } = makeService();
-    designService.createDesign
-      .mockRejectedValueOnce(new Error('Bad first row'))
-      .mockResolvedValueOnce({ id: 'design-2' } as any);
+  it('fails instead of completing a partial batch when a remote image fails after preflight', async () => {
+    const { service, designService, aiMediaService, aiSettings, writes } = makeService();
+    aiMediaService.saveUrlToFile
+      .mockResolvedValueOnce({ id: 'remote-a', path: '/uploads/org/remote-a.png' })
+      .mockRejectedValueOnce(new Error('Blocked URL'));
     seedPayload();
 
     await service.processBulkCreate('job-1');
 
-    const completed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'completed')?.[2];
-    const results = JSON.parse(completed.inputJson);
-    expect(results[0].error).toBe('Bad first row');
-    expect(results[1].designId).toBe('design-2');
-    expect(writes.some((write) => write.mime === 'application/zip')).toBe(true);
+    expect(designService.createDesign).toHaveBeenCalledTimes(1);
+    expect(aiMediaService.saveUrlToFile).toHaveBeenCalledTimes(2);
+    expect(aiSettings.updateMediaJob.mock.calls.some(([, , update]) => update.status === 'completed')).toBe(false);
+    const failed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'failed')?.[2];
+    expect(failed.error).toBe('Row 2: Blocked URL');
+    expect(JSON.parse(failed.inputJson)).toHaveLength(2);
+    expect(JSON.parse(failed.inputJson)[1].error).toBe('Blocked URL');
+    expect(writes.some((write) => write.mime === 'application/zip')).toBe(false);
   });
 
   it('heartbeats the job row and leaves existing template image URLs untouched', async () => {
@@ -344,7 +517,7 @@ describe('DesignBulkCreateService processing', () => {
     await service.processBulkCreate('job-1');
 
     expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith('org-1', 'job-1', expect.objectContaining({
-      status: 'failed', error: 'Invalid row',
+      status: 'failed', error: 'Row 1: Invalid row',
       inputJson: JSON.stringify([{ row: 1, fileIds: [], error: 'Invalid row' }]),
     }));
     expect(writes.some((write) => write.mime === 'application/zip')).toBe(false);
