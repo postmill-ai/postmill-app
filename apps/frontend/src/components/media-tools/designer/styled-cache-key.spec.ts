@@ -52,7 +52,7 @@ describe('styledLeafCacheKey', () => {
     // StyledLeaf passes no src for non-image layers, so `image` stays null
     // and nothing forces a re-cache for them.
     expect(styledLeafCacheKey(shape, null)).toBe(styledLeafCacheKey(shape, null));
-    expect(styledLeafCacheKey(shape, null)).toBe('shape-1:pending:0,0,200,200,0,0,0:unmasked');
+    expect(styledLeafCacheKey(shape, null)).toBe('shape-1:pending:0,0,200,200,0,0,0:unmasked:mask-ready');
   });
 
   it('turns over when the painted mask changes or is disabled', () => {
@@ -76,6 +76,20 @@ describe('styledLeafCacheKey', () => {
     expect(second).not.toBe(first);
     expect(disabled).not.toBe(second);
     expect(disabled).toContain(':unmasked');
+  });
+
+  it('turns over when the mask bitmap arrives', () => {
+    const element = {
+      ...styledImage,
+      maskSrc: '/uploads/mask-a.png',
+      maskFileId: 'mask-a',
+    } as DesignerElement;
+    const pending = styledLeafCacheKey(element, null, undefined, false);
+    const ready = styledLeafCacheKey(element, null, undefined, true);
+
+    expect(ready).not.toBe(pending);
+    expect(pending).toContain(':mask-pending');
+    expect(ready).toContain(':mask-ready');
   });
 
   it('turns over when the element’s own geometry changes — and on a commit bump', () => {
