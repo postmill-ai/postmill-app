@@ -106,20 +106,29 @@ export const detectFocalPointClient = (imageUrl: string): Promise<{ x: number; y
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
+const isAbsoluteHttpUrl = (value: string) => {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Provider-aware focal-point detection.
  *
- * When an authenticated fetcher is supplied, asks the backend to run a
- * vision-capable AI provider. If the provider returns a valid focal point,
- * use it. Otherwise — or if AI is not configured / the call fails — fall back
- * to the client-side brightness-centroid heuristic (which itself falls back to
- * center).
+ * When an authenticated fetcher is supplied for an absolute HTTP(S) source,
+ * asks the backend to run a vision-capable AI provider. If the provider returns
+ * a valid focal point, use it. Otherwise — or if AI is not configured / the call
+ * fails — fall back to the client-side brightness-centroid heuristic (which
+ * itself falls back to center).
  */
 export const detectFocalPoint = async (
   imageUrl: string,
   fetch?: FetchLike
 ): Promise<{ x: number; y: number }> => {
-  if (fetch) {
+  if (fetch && isAbsoluteHttpUrl(imageUrl)) {
     try {
       const res = await fetch('/media/detect-focal-point', {
         method: 'POST',

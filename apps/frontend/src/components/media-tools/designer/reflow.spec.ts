@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { smartReflow, deriveAnchor } from './reflow';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { detectFocalPoint, smartReflow, deriveAnchor } from './reflow';
 import type { DesignerElement, DesignerOutput } from './designer.store';
 
 const squareSource: DesignerOutput = {
@@ -130,4 +130,61 @@ describe('smartReflow', () => {
     expect(result.x).toBeGreaterThanOrEqual(50);
     expect(result.y).toBeGreaterThanOrEqual(50);
   });
+});
+
+describe('detectFocalPoint', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const mockClientImage = () => {
+    class ClientImage {
+      naturalWidth = 2;
+      naturalHeight = 1;
+      crossOrigin = '';
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      set src(_src: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+
+    vi.stubGlobal('Image', ClientImage);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: () => ({
+        data: new Uint8ClampedArray([0, 0, 0, 255, 255, 255, 255, 255]),
+      }),
+    } as unknown as CanvasRenderingContext2D);
+  };
+
+  it.each([
+    ['data URL', 'data:image/png;base64,iVBORw0KGgo='],
+    ['blob URL', 'blob:https://app.postmill.ai/image-id'],
+  ])('uses the client heuristic for a %s without calling the provider', async (_label, imageUrl) => {
+    mockClientImage();
+    const fetcher = vi.fn();
+
+    await expect(detectFocalPoint(imageUrl, fetcher)).resolves.toEqual({ x: 0.5, y: 0 });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(['http://example.com/photo.jpg', 'https://example.com/photo.jpg'])(
+    'requests the provider for %s',
+    async (imageUrl) => {
+      const fetcher = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ x: 0.2, y: 0.3, source: 'provider' }),
+      });
+
+      await expect(detectFocalPoint(imageUrl, fetcher)).resolves.toEqual({ x: 0.2, y: 0.3 });
+      expect(fetcher).toHaveBeenCalledWith('/media/detect-focal-point', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl }),
+      });
+    }
+  );
 });
