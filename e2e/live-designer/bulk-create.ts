@@ -28,29 +28,40 @@ interface BulkJob {
 const apiPath = (url: string): string => new URL(url).pathname.replace(/^\/api(?=\/)/, '');
 const csvCell = (value: string): string => `"${value.replaceAll('"', '""')}"`;
 
-function bulkImageSource(payload: unknown): string {
-  const elements = locateElements(payload);
-  const headline = elements.some(({ element }) =>
-    element.slot && typeof element.slot === 'object' &&
-    (element.slot as Record<string, unknown>).name === 'headline' &&
-    (element.slot as Record<string, unknown>).kind === 'text'
-  );
-  const hero = elements.find(({ element }) =>
-    element.slot && typeof element.slot === 'object' &&
-    (element.slot as Record<string, unknown>).name === 'hero' &&
-    (element.slot as Record<string, unknown>).kind === 'image'
-  );
-  expect(headline, 'the Bulk fixture needs a headline text slot').toBe(true);
-  expect(hero, 'the Bulk fixture needs a hero image slot').toBeTruthy();
-  const source = hero!.element.src;
-  expect(
-    typeof source === 'string' && /^https?:\/\//.test(source),
-    'the Bulk fixture hero slot needs an existing HTTP(S) source for valid rows'
-  ).toBe(true);
-  return source as string;
+interface BulkFixture {
+  source: string;
+  textSlot: string;
+  imageSlot: string;
 }
 
-async function openBulkDialog(page: Page, csv: string): Promise<void> {
+function bulkFixture(payload: unknown): BulkFixture {
+  const elements = locateElements(payload);
+  const slotName = (kind: string): string | undefined => {
+    const match = elements.find(({ element }) =>
+      element.slot && typeof element.slot === 'object' &&
+      (element.slot as Record<string, unknown>).kind === kind &&
+      typeof (element.slot as Record<string, unknown>).name === 'string' &&
+      (element.slot as Record<string, unknown>).name
+    );
+    return match ? String((match.element.slot as Record<string, unknown>).name) : undefined;
+  };
+  const textSlot = slotName('text');
+  const imageSlot = slotName('image');
+  expect(textSlot, 'the Bulk fixture needs a named text slot').toBeTruthy();
+  expect(imageSlot, 'the Bulk fixture needs a named image slot').toBeTruthy();
+  const image = elements.find(({ element }) =>
+    element.slot && typeof element.slot === 'object' &&
+    (element.slot as Record<string, unknown>).name === imageSlot
+  );
+  const source = image!.element.src;
+  expect(
+    typeof source === 'string' && /^https?:\/\//.test(source),
+    'the Bulk fixture image slot needs an existing HTTP(S) source for valid rows'
+  ).toBe(true);
+  return { source: source as string, textSlot: textSlot!, imageSlot: imageSlot! };
+}
+
+async function openBulkDialog(page: Page, csv: string, fixture: BulkFixture): Promise<void> {
   await openMenuAction(page, 'File', 'Bulk Create…');
   const dialog = page.getByRole('dialog', { name: 'Bulk Create', exact: true });
   await expect(dialog).toBeVisible();
@@ -60,8 +71,8 @@ async function openBulkDialog(page: Page, csv: string): Promise<void> {
     buffer: Buffer.from(csv),
   });
   await expect(dialog.getByText('5 data rows loaded', { exact: true })).toBeVisible();
-  await dialog.getByRole('combobox', { name: 'Column for headline', exact: true }).selectOption('headline');
-  await dialog.getByRole('combobox', { name: 'Column for hero', exact: true }).selectOption('hero');
+  await dialog.getByRole('combobox', { name: `Column for ${fixture.textSlot}`, exact: true }).selectOption(fixture.textSlot);
+  await dialog.getByRole('combobox', { name: `Column for ${fixture.imageSlot}`, exact: true }).selectOption(fixture.imageSlot);
 }
 
 function watchTerminalJob(page: Page): Promise<BulkJob> {
@@ -79,7 +90,7 @@ function watchTerminalJob(page: Page): Promise<BulkJob> {
   });
 }
 
-async function startBatch(page: Page, rows: Record<string, string>[]) {
+async function startBatch(page: Page, rows: Record<string, string>[], fixture: BulkFixture) {
   const terminalPromise = watchTerminalJob(page);
   const startPromise = page.waitForResponse((response) =>
     response.request().method() === 'POST' && apiPath(response.url()) === '/media/designs/bulk-create'
@@ -89,7 +100,10 @@ async function startBatch(page: Page, rows: Record<string, string>[]) {
   const payload = response.request().postDataJSON() as { rows?: Record<string, string>[] };
   expect(
     Array.isArray(payload.rows) && payload.rows.length === 5 &&
-      payload.rows.every((row, index) => row.headline === rows[index].headline && row.hero === rows[index].hero),
+      payload.rows.every((row, index) =>
+        row[fixture.textSlot] === rows[index][fixture.textSlot] &&
+        row[fixture.imageSlot] === rows[index][fixture.imageSlot]
+      ),
     'the UI must submit all five mapped rows without truncation'
   ).toBe(true);
   return { response, terminalPromise };
@@ -107,13 +121,16 @@ export async function runBulkCreateValid(page: Page): Promise<void> {
   requiredEnv('E2E_BASE');
   const designId = requiredEnv('E2E_LIVE_DESIGN_ID');
   const assertNoBrowserFailures = collectBrowserFailures(page);
-  const source = bulkImageSource(await openDesign(page, designId));
-  const rows = Array.from({ length: 5 }, (_, index) => ({
-    headline: `Live QA Product ${index + 1}`,
-    hero: source,
+  const fixture = bulkFixture(await openDesign(page, designId));
+  const rows: Record<string, string>[] = Array.from({ length: 5 }, (_, index) => ({
+    [fixture.textSlot]: `Live QA Product ${index + 1}`,
+    [fixture.imageSlot]: fixture.source,
   }));
-  const csv = ['headline,hero', ...rows.map((row) => `${csvCell(row.headline)},${csvCell(row.hero)}`)].join('\n');
-  await openBulkDialog(page, csv);
+  const headers = `${csvCell(fixture.textSlot)},${csvCell(fixture.imageSlot)}`;
+  const csv = [headers, ...rows.map((row) =>
+    `${csvCell(row[fixture.textSlot])},${csvCell(row[fixture.imageSlot])}`
+  )].join('\n');
+  await openBulkDialog(page, csv, fixture);
 
   const dialog = page.getByRole('dialog', { name: 'Bulk Create', exact: true });
   const previewPromise = page.waitForResponse((response) =>
@@ -125,7 +142,7 @@ export async function runBulkCreateValid(page: Page): Promise<void> {
   await expect(preview).toBeVisible({ timeout: 90_000 });
   await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
 
-  const { response, terminalPromise } = await startBatch(page, rows);
+  const { response, terminalPromise } = await startBatch(page, rows, fixture);
   expect(response.ok(), 'the valid batch must be accepted').toBe(true);
   const job = await terminalPromise;
   expect(job.status, 'all five valid rows must complete').toBe('completed');
@@ -169,16 +186,19 @@ export async function runBulkCreateValid(page: Page): Promise<void> {
 export async function runBulkCreateInvalidAtomic(page: Page): Promise<void> {
   const base = requiredEnv('E2E_BASE');
   const designId = requiredEnv('E2E_LIVE_DESIGN_ID');
-  const source = bulkImageSource(await openDesign(page, designId));
+  const fixture = bulkFixture(await openDesign(page, designId));
   const missing = new URL('/e2e-live-designer/missing-row-5.png', base).toString();
-  const rows = Array.from({ length: 5 }, (_, index) => ({
-    headline: `Atomic QA Product ${index + 1}`,
-    hero: index === 4 ? missing : source,
+  const rows: Record<string, string>[] = Array.from({ length: 5 }, (_, index) => ({
+    [fixture.textSlot]: `Atomic QA Product ${index + 1}`,
+    [fixture.imageSlot]: index === 4 ? missing : fixture.source,
   }));
-  const csv = ['headline,hero', ...rows.map((row) => `${csvCell(row.headline)},${csvCell(row.hero)}`)].join('\n');
-  await openBulkDialog(page, csv);
+  const headers = `${csvCell(fixture.textSlot)},${csvCell(fixture.imageSlot)}`;
+  const csv = [headers, ...rows.map((row) =>
+    `${csvCell(row[fixture.textSlot])},${csvCell(row[fixture.imageSlot])}`
+  )].join('\n');
+  await openBulkDialog(page, csv, fixture);
   const dialog = page.getByRole('dialog', { name: 'Bulk Create', exact: true });
-  const { response, terminalPromise } = await startBatch(page, rows);
+  const { response, terminalPromise } = await startBatch(page, rows, fixture);
 
   if (!response.ok()) {
     expect(response.status(), 'an invalid row must be rejected as a client data error').toBe(400);

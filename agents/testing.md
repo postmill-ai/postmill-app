@@ -181,9 +181,10 @@ contracts are:
 - `background-removal`: an unmasked static image on the first output, optionally selected with
   `E2E_LIVE_ELEMENT_ID`. Verifies Apply, explicit save/reopen, export, and download. This is the only
   currently implemented case that requires `E2E_LIVE_GENERATION=1`.
-- `bulk-create`: one static output/page with a `headline` text slot and a `hero` image slot whose
-  existing source is an HTTP(S) QA image. Requires five editable designs, five decodable PNGs, and a
-  matching ZIP manifest; no row may be dropped or hidden as a partial success.
+- `bulk-create`: one static output/page with a named text slot and a named image slot whose existing
+  source is an HTTP(S) QA image. The test discovers both slot names from the document. Requires five
+  editable designs, five decodable PNGs, and a matching ZIP manifest; no row may be dropped or hidden
+  as a partial success.
 - `bulk-create-invalid`: the same fixture. Row five uses a schema-valid but missing QA image and must
   fail the entire batch with `Row 5` and the transformed `src` schema path. No completed status, ZIP,
   editable design IDs, or rendered file IDs are acceptable. Whole-batch atomicity is the settled
