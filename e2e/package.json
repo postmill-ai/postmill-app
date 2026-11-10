@@ -11,6 +11,10 @@
   "devDependencies": {
     "@axe-core/playwright": "4.10.1",
     "@playwright/test": "1.58.2",
-    "axe-core": "4.10.2"
+    "@types/pngjs": "^6.0.5",
+    "axe-core": "4.10.2",
+    "fflate": "0.8.2",
+    "jsqr": "1.4.0",
+    "pngjs": "5.0.0"
   }
 }

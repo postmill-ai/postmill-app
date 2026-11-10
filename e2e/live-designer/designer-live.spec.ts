@@ -11,12 +11,16 @@ import {
   selectImageLayer,
   watchDesignSave,
 } from './helpers';
+import { runBulkCreateInvalidAtomic, runBulkCreateValid } from './bulk-create';
+import { runExactDesignSharing, runPreflightNavigation } from './navigation';
+import { runQrCodeAcceptance } from './qr-code';
 
 const LIVE_CASES = [
   'background-removal',
   'magic-grab',
   'outpaint',
   'bulk-create',
+  'bulk-create-invalid',
   'qr-code',
   'sharing',
   'preflight',
@@ -38,8 +42,8 @@ test.skip(
   'The selected paid case requires explicit E2E_LIVE_GENERATION=1 before browser fixtures start'
 );
 test.skip(
-  liveDesigner && !!liveCase && liveCase !== 'background-removal',
-  'Only background-removal is implemented; every other selected case is a skipped scaffold'
+  liveDesigner && (liveCase === 'magic-grab' || liveCase === 'outpaint'),
+  'Magic Grab and outpaint remain scaffolds until their active fixes land'
 );
 
 test.describe('Opt-in live Designer acceptance', () => {
@@ -109,23 +113,28 @@ test.describe('Opt-in live Designer acceptance', () => {
     test.skip(true, 'Not implemented: assert original-frame pixels and absence of an orphan generated layer/artifact');
   });
 
-  test('Bulk Create produces five independent rows [scaffold]', () => {
+  test('Bulk Create produces five editable rows and five valid PNGs', async ({ page }) => {
     test.skip(liveCase !== 'bulk-create', 'Select with E2E_LIVE_CASE=bulk-create');
-    test.skip(true, 'Not implemented: submit the focused five-row fixture and assert all five generated outputs');
+    await runBulkCreateValid(page);
   });
 
-  test('QR colors persist through save and export [scaffold]', () => {
+  test('Bulk Create rejects an invalid row without a partial batch or side effects', async ({ page }) => {
+    test.skip(liveCase !== 'bulk-create-invalid', 'Select with E2E_LIVE_CASE=bulk-create-invalid');
+    await runBulkCreateInvalidAtomic(page);
+  });
+
+  test('QR colors persist through save and the exported PNG decodes', async ({ page }) => {
     test.skip(liveCase !== 'qr-code', 'Select with E2E_LIVE_CASE=qr-code');
-    test.skip(true, 'Not implemented: set foreground/background colors, save, reopen, and decode the exported QR');
+    await runQrCodeAcceptance(page);
   });
 
-  test('sharing links to the exact designId [scaffold]', () => {
+  test('sharing links to the exact designId', async ({ page }) => {
     test.skip(liveCase !== 'sharing', 'Select with E2E_LIVE_CASE=sharing');
-    test.skip(true, 'Not implemented: assert the Design link input contains exactly the selected designId');
+    await runExactDesignSharing(page);
   });
 
-  test('preflight findings link to their target [scaffold]', () => {
+  test('preflight findings navigate to their output, page, and element', async ({ page }) => {
     test.skip(liveCase !== 'preflight', 'Select with E2E_LIVE_CASE=preflight');
-    test.skip(true, 'Not implemented: activate every preflight finding and assert its output/page/element target');
+    await runPreflightNavigation(page);
   });
 });

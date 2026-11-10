@@ -163,7 +163,7 @@ invocation; the other case skips. This config is not referenced by CI or the def
 Playwright projects, and the live suite must not be run as part of ordinary mocked E2E
 validation.
 
-### Opt-in live Designer acceptance (paid generation; never default CI)
+### Opt-in live Designer acceptance (never default CI)
 
 `live-designer/designer-live.spec.ts` and `playwright.designer-live.config.ts` are a separate,
 one-worker/zero-retry acceptance suite. The specs live outside `tests/`, so default Playwright
@@ -174,18 +174,33 @@ opt-in. `E2E_BASE` is mandatory and has no production default. Use an existing Q
 storage state (`E2E_AUTH_STATE`, default `.auth/admin.json`); do not add provider keys, run seeds or
 migrations, or start services for this suite.
 
-Only `E2E_LIVE_CASE=background-removal` is implemented. It uses a **disposable** saved QA design,
-selects a static image through the Layers UI, applies the reviewed result, explicitly saves and
-reopens the same design, then exports to Files and downloads the result. Network payloads must retain
-the selected layer and either its original-plus-mask result or flattened cutout; browser console,
-page, and media/file API failures fail the case. The design must belong to the authenticated QA
-organization and contain an unmasked static image on its first output. Set `E2E_LIVE_ELEMENT_ID`
-when the intended image is not the first static image. The
-Magic Grab, outpaint, five-row Bulk Create, QR, exact-designId sharing, and preflight-link cases are
-clearly marked skipped scaffolds, not implemented coverage.
+Every design ID must belong to the authenticated QA organization. Background removal, Bulk Create,
+and QR insertion modify data, so use **disposable** fixtures. Implemented cases and their fixture
+contracts are:
+
+- `background-removal`: an unmasked static image on the first output, optionally selected with
+  `E2E_LIVE_ELEMENT_ID`. Verifies Apply, explicit save/reopen, export, and download. This is the only
+  currently implemented case that requires `E2E_LIVE_GENERATION=1`.
+- `bulk-create`: one static output/page with a `headline` text slot and a `hero` image slot whose
+  existing source is an HTTP(S) QA image. Requires five editable designs, five decodable PNGs, and a
+  matching ZIP manifest; no row may be dropped or hidden as a partial success.
+- `bulk-create-invalid`: the same fixture. Row five uses a schema-valid but missing QA image and must
+  fail the entire batch with `Row 5` and the transformed `src` schema path. No completed status, ZIP,
+  editable design IDs, or rendered file IDs are acceptable. This is a regression gate for the known
+  partial-four-row-ZIP defect and is expected to fail until the active Bulk atomicity fix lands.
+- `qr-code`: any disposable static design. Inserts a QR with independent foreground/background
+  colors, verifies both through save/reopen, then checks the exported PNG's decoded value and RGB
+  colors. No generation flag is required.
+- `sharing`: any saved design. The share input must contain exactly `/media/designer` and the selected
+  `designId`, with no other query parameter.
+- `preflight`: a low-contrast text element on the second page of a non-initial output; set
+  `E2E_LIVE_ELEMENT_ID` to that element. The finding must switch output/page and select the same
+  element without the test clicking the layer itself.
+
+Magic Grab and outpaint remain clearly marked skipped scaffolds until their active fixes land.
 
 Run from `e2e/` after `pnpm install --ignore-workspace`, replacing the reserved QA hostname and
-supplying a disposable design ID:
+supplying the appropriate design ID. Example for the one authorized background-removal operation:
 
 ```bash
 E2E_LIVE_DESIGNER=1 \
@@ -197,8 +212,8 @@ E2E_BASE=https://qa-deployment.example.com \
 pnpm exec playwright test --config playwright.designer-live.config.ts
 ```
 
-The command authorizes one background-removal operation and modifies the supplied design. Do not run
-it against production or as part of ordinary mocked/non-billing E2E validation.
+For non-generation cases, substitute the case and fixture and omit `E2E_LIVE_GENERATION`. Do not run
+this config against production or as part of ordinary mocked/non-billing E2E validation.
 
 ## Lint
 
