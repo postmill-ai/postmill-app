@@ -76,15 +76,20 @@ const makeService = () => {
       Object.assign(job, update);
     }),
   };
-  const designService = { createDesign: vi.fn(async (_org: string, _user: string, data: any) => {
-    designerDocService.validate(data.doc);
-    return { id: `design-${data.doc.outputs[0].children[0].text}`, ...data };
-  }) };
+  const designService = {
+    createDesign: vi.fn(async (_org: string, _user: string, data: any) => {
+      designerDocService.validate(data.doc);
+      return { id: `design-${data.doc.outputs[0].children[0].text}`, ...data };
+    }),
+    deleteDesign: vi.fn(async () => undefined),
+  };
   const designerDocService = new DesignerDocService();
   vi.spyOn(designerDocService, 'validate');
   const fileService = {
     getFolder: vi.fn(async () => ({ id: 'folder-1' })),
     createFolder: vi.fn(async () => ({ id: 'batch-folder' })),
+    deleteFolder: vi.fn(async () => undefined),
+    deleteFile: vi.fn(async () => undefined),
     saveGeneratedMedia: vi.fn(async (_org: string, data: any) => ({ id: `file-${++fileNumber}`, ...data })),
   };
   const writes: { bytes: Buffer; mime: string }[] = [];
@@ -114,7 +119,8 @@ const seedPayload = (rows = [
   { name: 'Grace', image: 'https://cdn.example.test/b.png' },
 ]) => {
   redis.set('design-bulk:payload:job-1', JSON.stringify({
-    organizationId: 'org-1', userId: 'user-1', nameBase: 'Campaign', doc: makeDoc(), rows,
+    organizationId: 'org-1', userId: 'user-1', nameBase: 'Campaign',
+    folderId: 'batch-folder', folderOwned: true, doc: makeDoc(), rows,
   }));
 };
 
@@ -183,6 +189,23 @@ describe('DesignBulkCreateService enqueue and status', () => {
     expect(fileService.createFolder).not.toHaveBeenCalled();
     expect(inngest.send).not.toHaveBeenCalled();
     expect(redis.size).toBe(0);
+  });
+
+  it('names the symbol image column and element instead of walking outputs', async () => {
+    const { service } = makeService();
+    const doc = makeDoc();
+    doc.symbols = [{
+      id: 'symbol-1', name: 'Footer', width: 100, height: 100,
+      children: [{
+        id: 'symbol-image', type: 'image', src: '/uploads/original.png', slot: { name: 'symbolImage', kind: 'image' },
+        x: 0, y: 20, width: 50, height: 50, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }],
+    }];
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc,
+      rows: [{ symbolImage: 'not a URL' }],
+    })).rejects.toThrow('image column "symbolImage", element "symbol-image"');
   });
 
   it('rejects row 3 remote image failures before every job, folder, event or output side effect', async () => {
@@ -464,8 +487,8 @@ describe('DesignBulkCreateService processing', () => {
     expect(writes.some((write) => write.mime === 'application/zip')).toBe(true);
   });
 
-  it('fails instead of completing a partial batch when a remote image fails after preflight', async () => {
-    const { service, designService, aiMediaService, aiSettings, writes } = makeService();
+  it('rolls back every created design and file when a remote image fails after preflight', async () => {
+    const { service, designService, aiMediaService, aiSettings, fileService, writes } = makeService();
     aiMediaService.saveUrlToFile
       .mockResolvedValueOnce({ id: 'remote-a', path: '/uploads/org/remote-a.png' })
       .mockRejectedValueOnce(new Error('Blocked URL'));
@@ -474,13 +497,37 @@ describe('DesignBulkCreateService processing', () => {
     await service.processBulkCreate('job-1');
 
     expect(designService.createDesign).toHaveBeenCalledTimes(1);
+    expect(designService.deleteDesign).toHaveBeenCalledWith('org-1', 'design-Hello Ada');
     expect(aiMediaService.saveUrlToFile).toHaveBeenCalledTimes(2);
+    expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'file-1');
+    expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'remote-a');
+    expect(fileService.deleteFolder).toHaveBeenCalledWith('org-1', 'batch-folder');
     expect(aiSettings.updateMediaJob.mock.calls.some(([, , update]) => update.status === 'completed')).toBe(false);
     const failed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'failed')?.[2];
     expect(failed.error).toBe('Row 2: Blocked URL');
-    expect(JSON.parse(failed.inputJson)).toHaveLength(2);
-    expect(JSON.parse(failed.inputJson)[1].error).toBe('Blocked URL');
+    const results = JSON.parse(failed.inputJson);
+    expect(results).toHaveLength(2);
+    expect(results.every((result: any) => !result.designId && result.fileIds.length === 0)).toBe(true);
+    expect(results[1].error).toBe('Blocked URL');
     expect(writes.some((write) => write.mime === 'application/zip')).toBe(false);
+  });
+
+  it('cleans generated previews but preserves a caller-selected folder on rollback', async () => {
+    const { service, designService, fileService } = makeService();
+    designService.createDesign
+      .mockResolvedValueOnce({ id: 'design-1', previewFileId: 'preview-1' })
+      .mockRejectedValueOnce(new Error('render failed'));
+    seedPayload();
+    const payload = JSON.parse(redis.get('design-bulk:payload:job-1')!);
+    payload.folderId = 'folder-1';
+    payload.folderOwned = false;
+    redis.set('design-bulk:payload:job-1', JSON.stringify(payload));
+
+    await service.processBulkCreate('job-1');
+
+    expect(designService.deleteDesign).toHaveBeenCalledWith('org-1', 'design-1');
+    expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'preview-1');
+    expect(fileService.deleteFolder).not.toHaveBeenCalled();
   });
 
   it('heartbeats the job row and leaves existing template image URLs untouched', async () => {
