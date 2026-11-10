@@ -327,6 +327,19 @@ describe('S3StorageBase', () => {
       expect(result.path).toContain('.png');
     });
 
+    it('uploads an application/pdf export', async () => {
+      s3ClientMock.send.mockResolvedValue({});
+      const adapter = make('us-east-1', 'my-bucket');
+      const pdf = Buffer.from('%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF');
+
+      const result = await adapter.uploadFile({ buffer: pdf, size: pdf.length });
+
+      const cmd = s3ClientMock.send.mock.calls[0][0];
+      expect(cmd.config.ContentType).toBe('application/pdf');
+      expect(cmd.config.Body).toBe(pdf);
+      expect(result.path).toContain('.pdf');
+    });
+
     it('uploads from a disk path when there is no buffer (upload-server)', async () => {
       s3ClientMock.send.mockResolvedValue({});
       const dir = mkdtempSync(join(tmpdir(), 's3-upload-'));

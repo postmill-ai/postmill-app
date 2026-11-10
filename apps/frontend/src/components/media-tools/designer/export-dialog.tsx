@@ -42,6 +42,11 @@ import { mergePosterPoll } from './poster-selection';
 import { analyzeDesignerPreflight } from './design-preflight';
 import { ExportPreflight } from './export-preflight';
 import { openDesignerPreflightFinding } from './preflight-navigation';
+import {
+  MAX_UPLOAD_BYTES,
+  renderWithFormatFallback,
+  type ExportFallbackFormat,
+} from './export-format';
 
 const useFocusTrap = (containerRef: React.RefObject<HTMLElement | null>) => {
   useEffect(() => {
@@ -402,52 +407,18 @@ const renderOutputAsSvg = async (
   });
 };
 
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-
 const renderOutputWithFallback = async (
   output: DesignerOutput,
-  format: FormatValue,
+  format: ExportFallbackFormat,
   quality: number,
   scale: number,
   symbols?: SymbolDefinition[]
-): Promise<{ blob: Blob; usedFormat: FormatValue; usedQuality: number; usedScale: number }> => {
-  const tryRender = async (f: FormatValue, q: number, s: number) => {
-    const blob = await renderOutputToBlob(output, f, q, s, symbols);
+): Promise<{ blob: Blob; usedFormat: ExportFallbackFormat; usedQuality: number; usedScale: number }> =>
+  renderWithFormatFallback(format, quality, scale, async (nextFormat, nextQuality, nextScale) => {
+    const blob = await renderOutputToBlob(output, nextFormat, nextQuality, nextScale, symbols);
     if (!blob) throw new Error('Render failed');
     return blob;
-  };
-
-  let blob = await tryRender(format, quality, scale);
-  if (blob.size <= MAX_UPLOAD_BYTES) {
-    return { blob, usedFormat: format, usedQuality: quality, usedScale: scale };
-  }
-
-  // Fallback 1: JPEG at same scale with reduced quality.
-  if (format !== 'jpeg') {
-    const fallbackQ = Math.min(quality, 0.9);
-    blob = await tryRender('jpeg', fallbackQ, scale);
-    if (blob.size <= MAX_UPLOAD_BYTES) {
-      return { blob, usedFormat: 'jpeg', usedQuality: fallbackQ, usedScale: scale };
-    }
-  }
-
-  // Fallback 2: lower-quality JPEG at the same scale.
-  const lowQ = 0.6;
-  blob = await tryRender('jpeg', lowQ, scale);
-  if (blob.size <= MAX_UPLOAD_BYTES) {
-    return { blob, usedFormat: 'jpeg', usedQuality: lowQ, usedScale: scale };
-  }
-
-  // Fallback 3: drop to 1x JPEG.
-  if (scale > 1) {
-    blob = await tryRender('jpeg', 0.7, 1);
-    if (blob.size <= MAX_UPLOAD_BYTES) {
-      return { blob, usedFormat: 'jpeg', usedQuality: 0.7, usedScale: 1 };
-    }
-  }
-
-  throw new Error('Could not reduce output under 10 MB');
-};
+  });
 
 /**
  * One page of an output as a standalone output view (doc v8) — same canvas
@@ -1388,14 +1359,16 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
       // upload-simple is capped at 10 MB; fall back to the server-side endpoint for larger files.
       const endpoint = blob.size > MAX_UPLOAD_BYTES ? '/files/upload-server' : '/files/upload-simple';
       const res = await fetch(endpoint, { method: 'POST', body: formData });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, t('designer_file_upload_failed', 'File upload failed')));
+      }
       const saved = (await res.json()) as { id: string; path: string };
       try {
         downloadUrlsRef.current.set(saved.id, URL.createObjectURL(blob));
       } catch {}
       return saved;
     },
-    [fetch, selectedFolderId]
+    [fetch, selectedFolderId, t]
   );
 
   // --- Thumbnail generation (for step 3) ---
@@ -1518,13 +1491,27 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                 }
                 continue;
               }
-              const { blob, usedFormat } = await renderOutputWithFallback(
+              const { blob, usedFormat, usedQuality, usedScale } = await renderOutputWithFallback(
                 pageView,
-                fmt,
+                fmt as ExportFallbackFormat,
                 quality,
                 scale,
                 doc.symbols
               );
+              if (usedScale !== scale || usedQuality !== quality) {
+                const reduction = [
+                  usedScale !== scale ? `${usedScale}x` : '',
+                  usedQuality !== quality ? `${Math.round(usedQuality * 100)}% quality` : '',
+                ].filter(Boolean).join(', ');
+                toaster.show(
+                  t(
+                    'designer_export_reduced_to_fit',
+                    'Export reduced to {{reduction}} to stay under 10 MB; the selected format was preserved.',
+                    { reduction }
+                  ),
+                  'warning'
+                );
+              }
               const ext = extFor(usedFormat);
               const fileName = `${baseName} - ${outputName}${pageSuffix}.${ext}`;
               const saved = await uploadBlob(blob, fileName);

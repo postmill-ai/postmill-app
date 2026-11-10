@@ -286,6 +286,7 @@ export class FilesController {
       image: UPLOAD_LIMITS.image,
       video: UPLOAD_LIMITS.video,
       audio: UPLOAD_LIMITS.audio,
+      document: UPLOAD_LIMITS.document,
     };
   }
 

@@ -8,11 +8,12 @@ const limits = {
   image: { maxBytes: 10 * MB },
   video: { maxBytes: 1 * GB },
   audio: { maxBytes: 50 * MB },
+  document: { maxBytes: 50 * MB },
   maxBytes: 1 * GB,
 } as const;
 
 describe('checkUploadLimit', () => {
-  it('accepts supported image, video, and audio categories', () => {
+  it('accepts supported image, video, audio, and PDF document categories', () => {
     expect(
       checkUploadLimit({ size: 5 * MB, mimetype: 'image/png' }, limits).ok,
     ).toBe(true);
@@ -22,6 +23,12 @@ describe('checkUploadLimit', () => {
     expect(
       checkUploadLimit({ size: 40 * MB, mimetype: 'audio/mpeg' }, limits).ok,
     ).toBe(true);
+    expect(
+      checkUploadLimit({ size: 40 * MB, mimetype: 'application/pdf' }, limits).ok,
+    ).toBe(true);
+    expect(
+      checkUploadLimit({ size: 60 * MB, mimetype: 'application/pdf' }, limits).ok,
+    ).toBe(false);
   });
 
   it('accepts webm in both spellings (MediaRecorder voiceover uploads)', () => {
@@ -54,7 +61,6 @@ describe('checkUploadLimit', () => {
 
   it('rejects unsupported document/archive MIME types', () => {
     for (const mimetype of [
-      'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.ms-excel',
@@ -79,12 +85,13 @@ describe('checkUploadLimit', () => {
 });
 
 describe('UPLOAD_ALLOWED_MIME_TYPES', () => {
-  it('contains only image, video, and audio MIMEs', () => {
+  it('contains only supported media and PDF document MIMEs', () => {
     for (const mimetype of UPLOAD_ALLOWED_MIME_TYPES) {
       expect(
         mimetype.startsWith('image/') ||
           mimetype.startsWith('video/') ||
-          mimetype.startsWith('audio/'),
+          mimetype.startsWith('audio/') ||
+          mimetype === 'application/pdf',
       ).toBe(true);
     }
   });

@@ -23,6 +23,7 @@ type UploadLimits = {
   image: { maxBytes: number };
   video: { maxBytes: number };
   audio: { maxBytes: number };
+  document: { maxBytes: number };
 };
 
 const DEFAULT_LIMITS: UploadLimits = {
@@ -30,6 +31,7 @@ const DEFAULT_LIMITS: UploadLimits = {
   image: { maxBytes: 10 * MB },
   video: { maxBytes: 1 * GB },
   audio: { maxBytes: 50 * MB },
+  document: { maxBytes: 50 * MB },
 };
 
 export class CompressionWrapper<M = any, B = any> extends Compressor<any, any> {
@@ -216,7 +218,9 @@ export function useUppyUploader(props: {
               ? limits.image.maxBytes
               : file.type?.startsWith('video/')
                 ? limits.video.maxBytes
-                : limits.audio.maxBytes;
+                : file.type === 'application/pdf'
+                  ? limits.document.maxBytes
+                  : limits.audio.maxBytes;
             const maxMB = Math.round(maxBytes / MB);
             const error = new Error(
               tRef.current(

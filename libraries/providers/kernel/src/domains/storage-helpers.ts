@@ -115,6 +115,7 @@ const ALLOWED_MIME_TYPES = new Set<string>([
   'audio/aac',
   'audio/x-wav',
   'video/quicktime',
+  'application/pdf',
   'font/ttf',
   'font/otf',
   'font/woff2',

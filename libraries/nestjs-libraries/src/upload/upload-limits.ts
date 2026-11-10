@@ -35,6 +35,9 @@ export const UPLOAD_LIMITS = {
   audio: {
     maxBytes: envBytes('UPLOAD_AUDIO_MAX_BYTES', DEFAULT_UPLOAD_LIMITS.audio.maxBytes),
   },
+  document: {
+    maxBytes: envBytes('UPLOAD_DOCUMENT_MAX_BYTES', DEFAULT_UPLOAD_LIMITS.document.maxBytes),
+  },
   // Overall multipart cap used by FileInterceptor / raw upload endpoints.
   // Defaults to 1 GB; this is a backstop, not the per-category limit.
   maxBytes: envBytes('MEDIA_UPLOAD_MAX_BYTES', DEFAULT_UPLOAD_LIMITS.maxBytes),
