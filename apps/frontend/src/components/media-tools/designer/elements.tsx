@@ -958,9 +958,13 @@ export const styledLeafCacheKey = (
   element: DesignerElement,
   image: HTMLImageElement | null,
   geometryGen?: string | number
-): string =>
-  `${element.id}:${image ? 'ready' : 'pending'}:${leafGeometryKey(element)}` +
-  `${geometryGen != null ? `:${geometryGen}` : ''}`;
+): string => {
+  const mask = element.maskEnabled === false || !element.maskSrc
+    ? 'unmasked'
+    : element.maskFileId || element.maskSrc;
+  return `${element.id}:${image ? 'ready' : 'pending'}:${leafGeometryKey(element)}:${mask}` +
+    `${geometryGen != null ? `:${geometryGen}` : ''}`;
+};
 
 /**
  * Wraps a leaf in its layer effects, if it has any.
@@ -1728,11 +1732,11 @@ export const CanvasElements: FC<ElementsProps> = ({
                     interactive={interactive}
                   />
                 )}
-                <MaskedLeaf element={el} geometryNonce={geometryNonce}>
-                  <StyledLeaf element={el} geometryNonce={geometryNonce}>
+                <StyledLeaf element={el} geometryNonce={geometryNonce}>
+                  <MaskedLeaf element={el} geometryNonce={geometryNonce}>
                     {renderLeaf(el)}
-                  </StyledLeaf>
-                </MaskedLeaf>
+                  </MaskedLeaf>
+                </StyledLeaf>
               </React.Fragment>
             ),
             els: [el],
