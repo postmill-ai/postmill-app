@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { randomBytes } from 'crypto';
+import sharp from 'sharp';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
@@ -1729,6 +1730,22 @@ export class AiMediaService {
     return buffer;
   }
 
+  private async _prepareMagicGrabMask(maskUrl: string, orgId: string): Promise<string> {
+    const mask = await this._readMagicGrabBuffer(maskUrl, orgId);
+    const source = sharp(mask).ensureAlpha();
+    const { width, height } = await source.metadata();
+    if (!width || !height) throw new BadRequestException('The Magic Grab mask dimensions could not be read.');
+    const radius = Math.max(2, Math.min(24, Math.round(Math.min(width, height) * 0.01)));
+    const blurred = await source.greyscale().blur(Math.max(1, radius / 3)).toBuffer();
+    const expanded = await sharp(blurred).threshold(1).png().toBuffer();
+    const file = await this.saveUrlToFile(
+      orgId,
+      `data:image/png;base64,${expanded.toString('base64')}`,
+      'magic-grab-reconstruction-mask'
+    );
+    return file.path;
+  }
+
   private async _compositeMagicGrab(
     imageUrl: string,
     generatedUrl: string,
@@ -1752,19 +1769,21 @@ export class AiMediaService {
   ): Promise<{
     background: { url: string; fileId: string };
   }> {
+    let reconstructionMaskUrl: string | undefined;
     try {
+      reconstructionMaskUrl = await this._prepareMagicGrabMask(maskUrl, options.orgId);
       const generatedUrl = await this.inpaintImage(
         imageUrl,
-        maskUrl,
-        'Empty background only. Seamlessly extend the visible surrounding environment through the masked area, matching its walls, floors, ground, sky, architecture, landscape, lighting, colors, perspective, and textures. Keep the reconstructed area free of foreground items.',
+        reconstructionMaskUrl,
+        'Remove the masked foreground subject completely and reconstruct the original background in its place. Fill the entire masked area only with the surrounding environment, seamlessly matching its walls, floors, ground, sky, architecture, landscape, lighting, colors, perspective, and textures. Do not create a replacement subject, person, furniture, product, silhouette, text, or a different scene. The masked area must look as if the subject was never there.',
         {
           ...options,
           input: {
-            negative_prompt: 'foreground subject, person, people, human, animal, pet, product, furniture, chair, sofa, foreground object, silhouette, cutout, duplicated foreground',
+            negative_prompt: 'foreground subject, person, people, human, animal, pet, product, furniture, chair, sofa, foreground object, silhouette, cutout, duplicated foreground, new scene',
           },
         },
       );
-      const backgroundUrl = await this._compositeMagicGrab(imageUrl, generatedUrl, maskUrl, options.orgId);
+      const backgroundUrl = await this._compositeMagicGrab(imageUrl, generatedUrl, reconstructionMaskUrl, options.orgId);
       const backgroundFile = await this.saveUrlToFile(
         options.orgId,
         backgroundUrl,
@@ -1774,10 +1793,12 @@ export class AiMediaService {
         background: { url: backgroundFile.path, fileId: backgroundFile.id },
       };
     } finally {
-      const maskFile = await this._fileService?.getFileByPath(options.orgId, maskUrl).catch(() => null);
-      if (maskFile) {
-        await this._fileService?.deleteFile(options.orgId, maskFile.id).catch(() => undefined);
-      }
+      const temporaryMaskUrls = new Set([maskUrl]);
+      if (reconstructionMaskUrl) temporaryMaskUrls.add(reconstructionMaskUrl);
+      await Promise.all([...temporaryMaskUrls].map(async (url) => {
+        const file = await this._fileService?.getFileByPath(options.orgId, url).catch(() => null);
+        if (file) await this._fileService?.deleteFile(options.orgId, file.id).catch(() => undefined);
+      }));
     }
   }
 
