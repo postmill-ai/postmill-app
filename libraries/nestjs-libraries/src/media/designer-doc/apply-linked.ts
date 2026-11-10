@@ -78,15 +78,18 @@ const resizePathNodes = (
   el: DesignerElement,
   updates: Partial<DesignerElement>
 ): Partial<DesignerElement> => {
-  if (el.type !== 'path' || !el.nodes?.length) return updates;
+  if (el.type !== 'path' || (!el.nodes?.length && !el.subpaths?.length)) return updates;
   const nextW = updates.width ?? el.width;
   const nextH = updates.height ?? el.height;
   if (nextW === el.width && nextH === el.height) return updates;
   if (!(el.width > 0) || !(el.height > 0) || !(nextW > 0) || !(nextH > 0)) return updates;
-  if (updates.nodes) return updates;
+  if (updates.nodes || updates.subpaths) return updates;
   return {
     ...updates,
-    nodes: scalePathNodes(el.nodes, nextW / el.width, nextH / el.height),
+    nodes: el.nodes ? scalePathNodes(el.nodes, nextW / el.width, nextH / el.height) : undefined,
+    subpaths: el.subpaths?.map((nodes) =>
+      scalePathNodes(nodes, nextW / el.width, nextH / el.height)
+    ),
   };
 };
 

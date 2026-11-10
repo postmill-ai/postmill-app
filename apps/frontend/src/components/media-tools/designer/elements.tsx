@@ -22,8 +22,8 @@ import {
   flattenPoints,
   starPoints,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
-import { tracePathNodes } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-geometry';
-import { warpedOutline } from '@postmill-ai/nestjs-libraries/media/designer-doc/warp';
+import { pathContours, tracePathContours } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-geometry';
+import { warpedOutlines } from '@postmill-ai/nestjs-libraries/media/designer-doc/warp';
 import { arcPathData } from '@postmill-ai/nestjs-libraries/media/designer-doc/curved-text';
 import {
   arrowHeadPoints,
@@ -1447,19 +1447,24 @@ export const CanvasElements: FC<ElementsProps> = ({
             // A warped shape has no primitive left to draw — every shape kind
             // resamples to one polyline. The unwarped path below is untouched,
             // so nothing that isn't warped moves a pixel.
-            const warped = warpedOutline(el);
-            if (warped) {
+            const warpedPaths = warpedOutlines(el);
+            if (warpedPaths) {
               return (
-                <Line
-                  key={el.id}
-                  {...commonProps}
-                  points={flattenPoints(warped)}
-                  closed={el.shape !== 'line'}
-                  fill={hasGrad ? undefined : canvasColor(el.fill || '#2B5CD3')}
-                  {...grad}
-                  stroke={canvasColor(el.stroke)}
-                  strokeWidth={el.strokeWidth}
-                />
+                <React.Fragment key={el.id}>
+                  {warpedPaths.map((points, index) => (
+                    <Line
+                      key={`${el.id}-warp-${index}`}
+                      {...commonProps}
+                      points={flattenPoints(points)}
+                      closed={el.shape !== 'line'}
+                      fill={hasGrad ? undefined : canvasColor(el.fill || '#2B5CD3')}
+                      fillRule={el.fillRule}
+                      {...grad}
+                      stroke={canvasColor(el.stroke)}
+                      strokeWidth={el.strokeWidth}
+                    />
+                  ))}
+                </React.Fragment>
               );
             }
 
@@ -1567,7 +1572,7 @@ export const CanvasElements: FC<ElementsProps> = ({
             const hasGrad = !!el.fillGradient;
             // Warping flattens the beziers to the polyline the deformation was
             // evaluated on; an unwarped path still traces its real curve.
-            const warpedPath = warpedOutline(el);
+            const warpedPaths = warpedOutlines(el);
             return (
               <React.Fragment key={el.id}>
                 <Shape
@@ -1575,14 +1580,16 @@ export const CanvasElements: FC<ElementsProps> = ({
                   // Traced through the shared helper the server uses, so the
                   // exported curve matches the one on screen.
                   sceneFunc={(ctx, shape) => {
-                    if (warpedPath) {
+                    if (warpedPaths) {
                       ctx.beginPath();
-                      warpedPath.forEach((p, i) =>
-                        i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)
-                      );
-                      if (el.closed) ctx.closePath();
+                      for (const points of warpedPaths) {
+                        points.forEach((p, i) =>
+                          i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)
+                        );
+                        if (el.closed) ctx.closePath();
+                      }
                     } else {
-                      tracePathNodes(ctx as never, el.nodes || [], !!el.closed);
+                      tracePathContours(ctx as never, pathContours(el), !!el.closed);
                     }
                     // Only a closed path is fillable; filling an open one would
                     // paint its implicit closing chord.
@@ -1590,6 +1597,7 @@ export const CanvasElements: FC<ElementsProps> = ({
                     else ctx.strokeShape(shape);
                   }}
                   fill={hasGrad ? undefined : canvasColor(el.fill)}
+                  fillRule={el.fillRule}
                   {...grad}
                   // No fallback colour: the server draws nothing when `stroke`
                   // is unset, so inventing black here would make the canvas

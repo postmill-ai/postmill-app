@@ -50,19 +50,24 @@ describe('multi-shape Pathfinder document edits', () => {
     expect(store.getState().history).toHaveLength(historyBefore + 1);
   });
 
-  it('makes no partial edit when the result requires an unsupported hole', () => {
+  it('stores a contained subtraction as one compound path and restores inputs with one Undo', () => {
     const store = storeWith(shape('a', 0, 200), { ...shape('inner', 50, 100), y: 20, height: 60 });
     const before = store.getState().doc.outputs[0].children;
     const historyBefore = store.getState().history.length;
 
-    expect(combineElements(store, before, 'subtract')).toBe(false);
+    expect(combineElements(store, before, 'subtract')).toBe(true);
 
+    const result = store.getState().doc.outputs[0].children;
+    expect(result).toHaveLength(1);
+    expect(result[0].fillRule).toBe('evenodd');
+    expect(result[0].subpaths).toHaveLength(2);
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+    store.getState().undo();
     expect(store.getState().doc.outputs[0].children).toEqual(before);
-    expect(store.getState().history).toHaveLength(historyBefore);
   });
 
-  it('reports an unsupported operation through the action failure callback', () => {
-    const store = storeWith(shape('a', 0), { ...shape('inner', 20, 20), y: 20, height: 20 });
+  it('reports an empty operation through the action failure callback', () => {
+    const store = storeWith(shape('a', 0), { ...shape('inner', 200, 20), y: 200, height: 20 });
     const before = store.getState().doc.outputs[0].children;
     const onFailure = vi.fn();
     const actions = layerActions(store, () => ({
@@ -71,7 +76,7 @@ describe('multi-shape Pathfinder document edits', () => {
       children: before,
     }), onFailure);
 
-    actions.find((action) => action.id === 'pathfinder-subtract')!.run();
+    actions.find((action) => action.id === 'pathfinder-intersect')!.run();
 
     expect(onFailure).toHaveBeenCalledTimes(1);
     expect(store.getState().doc.outputs[0].children).toEqual(before);

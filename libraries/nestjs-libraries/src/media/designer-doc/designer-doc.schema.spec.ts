@@ -723,4 +723,26 @@ describe('primitive schemas', () => {
   it('accepts a valid filter token', () => {
     expect(DesignerFilterStringSchema.safeParse('brightness:1.2').success).toBe(true);
   });
+
+  it('accepts an even-odd compound path without changing existing single-contour paths', () => {
+    const outer = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
+    const inner = [{ x: 25, y: 25 }, { x: 75, y: 25 }, { x: 75, y: 75 }, { x: 25, y: 75 }];
+    const doc = {
+      version: 11,
+      mode: 'image',
+      outputs: [{
+        id: 'out-1', formatId: 'square', name: 'Square', width: 100, height: 100, background: '#ffffff',
+        children: [{
+          id: 'path-1', type: 'path', x: 0, y: 0, width: 100, height: 100,
+          nodes: outer, subpaths: [outer, inner], fillRule: 'evenodd', closed: true,
+        }],
+      }],
+    };
+
+    expect(DesignerDocLenientSchema.safeParse(doc).success).toBe(true);
+    expect(DesignerDocLenientSchema.safeParse({
+      ...doc,
+      outputs: [{ ...doc.outputs[0], children: [{ ...doc.outputs[0].children[0], subpaths: undefined, fillRule: undefined }] }],
+    }).success).toBe(true);
+  });
 });

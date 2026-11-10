@@ -2613,20 +2613,25 @@ test.describe('Designer multi-shape Pathfinder', () => {
     mocks.expectClean();
   });
 
-  test('keeps inputs unchanged and explains an unsupported hole', async ({ page }) => {
+  test('preserves a contained result as one even-odd compound path', async ({ page }) => {
     const mocks = new DesignerMocks();
     mocks.doc = pathfinderDoc(2);
     mocks.doc.outputs[0].children![0].width = 200;
     Object.assign(mocks.doc.outputs[0].children![1], { x: 50, y: 20, width: 100, height: 60 });
-    const before = structuredClone(mocks.doc.outputs[0].children);
     await mocks.install(page);
     await openStaticDesigner(page, mocks);
 
     await selectPathfinderShapes(page, 2);
     await runPathfinder(page, 'Minus Front');
 
-    await expect(page.getByText('Pathfinder could not combine the selected shapes. Try a different selection or operation.', { exact: true })).toBeVisible();
-    expect(mocks.doc.outputs[0].children).toEqual(before);
+    await expect.poll(() => mocks.doc.outputs[0].children).toHaveLength(1);
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({
+      type: 'path',
+      fillRule: 'evenodd',
+    });
+    expect(mocks.doc.outputs[0].children![0].subpaths).toHaveLength(2);
+    await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children).toHaveLength(2);
     mocks.expectClean();
   });
 });
