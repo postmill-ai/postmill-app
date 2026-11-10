@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { PNG } from 'pngjs';
 
 const enabled = process.env.E2E_LIVE_AI_DESIGNER === '1';
@@ -33,16 +33,23 @@ const mediaRefs = (value: unknown): string[] => {
   return refs.sort();
 };
 
-async function readDesign(page: Page, href: string): Promise<Record<string, unknown>> {
-  const designId = new URL(href, 'https://app.postmill.ai').searchParams.get('designId')!;
-  const responsePromise = page.waitForResponse((response) =>
-    response.request().method() === 'GET' &&
-    new URL(response.url()).pathname.replace(/^\/api(?=\/)/, '') === `/media/designs/${designId}`
-  );
-  await page.goto(href, { waitUntil: 'domcontentloaded' });
+async function openDesign(
+  page: Page,
+  button: Locator
+): Promise<{ id: string; design: Record<string, unknown> }> {
+  const responsePromise = page.waitForResponse((response) => {
+    if (response.request().method() !== 'GET') return false;
+    const path = new URL(response.url()).pathname.replace(/^\/api(?=\/)/, '');
+    return /^\/media\/designs\/[^/]+$/.test(path);
+  });
+  await button.click();
   const response = await responsePromise;
-  expect(response.ok(), 'the delivered design must load in the Designer').toBe(true);
-  return response.json() as Promise<Record<string, unknown>>;
+  expect(response.ok(), 'the delivered design must load in the Designer modal').toBe(true);
+  const design = await response.json() as Record<string, unknown>;
+  expect(typeof design.id, 'the design response must include its id').toBe('string');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Edit in Designer', exact: true })).toHaveCount(0);
+  return { id: design.id as string, design };
 }
 
 test('original logo and palette survive generation, and text-only revision preserves media', async ({ page }) => {
@@ -89,24 +96,17 @@ test('original logo and palette survive generation, and text-only revision prese
 
   const editDesignButtons = page.getByRole('button', { name: 'Edit in Designer', exact: true });
   await expect(editDesignButtons.first()).toBeVisible({ timeout: 300_000 });
-  await editDesignButtons.first().click();
-  await expect(page).toHaveURL(/designId=/);
-  const originalHref = page.url();
-  const original = await readDesign(page, originalHref);
-  expect(JSON.stringify(original).toLowerCase()).toContain(brandHex);
-  expect(JSON.stringify(original)).toContain('"originId":"logo"');
-  const originalRefs = mediaRefs(original);
+  const original = await openDesign(page, editDesignButtons.first());
+  expect(JSON.stringify(original.design).toLowerCase()).toContain(brandHex);
+  expect(JSON.stringify(original.design)).toContain('"originId":"logo"');
+  const originalRefs = mediaRefs(original.design);
 
-  await page.goBack({ waitUntil: 'domcontentloaded' });
   const message = page.getByLabel('Message', { exact: true });
   await message.fill('Only improve the small text and keep everything else');
   await message.press('Enter');
 
   await expect.poll(() => editDesignButtons.count(), { timeout: 300_000 }).toBeGreaterThan(1);
-  await editDesignButtons.last().click();
-  await expect(page).toHaveURL(/designId=/);
-  const revisedHref = page.url();
-  expect(revisedHref).not.toBe(originalHref);
-  const revised = await readDesign(page, revisedHref);
-  expect(mediaRefs(revised)).toEqual(originalRefs);
+  const revised = await openDesign(page, editDesignButtons.last());
+  expect(revised.id).not.toBe(original.id);
+  expect(mediaRefs(revised.design)).toEqual(originalRefs);
 });
