@@ -149,8 +149,10 @@ interface AssetRequestInput {
   regenerate?: boolean;
 }
 
-// Reference images: a need MAY carry `sourceFileId`/`sourceUrl` (the conductor
-// stamps the session's first reference onto background/hero slots). When one is
+// Visual references: a need MAY carry `sourceFileId`/`sourceUrl` (the conductor
+// stamps the first non-logo reference onto background/hero slots). A logo-designated
+// reference instead travels directly from the org's File row to its logo slot.
+// When a visual reference is
 // present the agent FIRST tries the org's `media/image-to-image` default via
 // `AiDefaultsService.imageToImage`, falling back to plain text-to-image when
 // i2i is unconfigured or fails, then to stock. References also still reach the

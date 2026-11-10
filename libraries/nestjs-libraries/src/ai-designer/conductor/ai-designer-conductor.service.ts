@@ -39,6 +39,9 @@ import { matchSlotTexts, normalizeSlotText } from '../util/slot-keys';
 import { applyReferenceGeometry } from '../util/apply-reference-geometry';
 import { isDeliveredAccept } from '../util/accept-phrases';
 import { collectDocFileIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
+import { revisionMediaChanged, shouldPreserveRevisionMedia } from './revision-preservation';
+import { ensureExplicitLogoSlots, visualReferenceFileId } from './reference-assets';
+import { applyPaletteConstraints as constrainPlanPalettes } from './palette-fidelity';
 import { imageDocToVideoDoc } from '../util/image-doc-to-video';
 import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import { MAX_TRACKS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
@@ -315,53 +318,28 @@ export class AiDesignerConductorService {
     @Optional() private readonly _mediaJobs?: MediaJobLifecycleService
   ) {}
 
-  /**
-   * A pinned style preset silently overrode the org's selected brand palette.
-   *
-   * Both inputs are honoured by the art director in the same breath ("only
-   * diverge when the brand enrichment demands it"), so when a user pins a style
-   * AND selects a brand the plans can come back entirely in the preset's
-   * colours with no sign that the brand was dropped. Deterministic to detect:
-   * a brand is configured, a style is pinned, and NOT ONE plan palette entry is
-   * a brand colour. Best-effort and never throws — an undetectable collision
-   * just produces no note, same as today.
-   */
-  private async _brandPaletteOverrideNote(
+  private async _applyPaletteConstraints(
     ctx: AiDesignerAgentContext,
     config: AiDesignerConfig,
     brief: DesignBrief,
     plans: DesignPlan[]
-  ): Promise<string | undefined> {
-    if (!this._brands || !config.brandProfileId || !brief.styleId) {
-      return undefined;
+  ): Promise<DesignPlan[]> {
+    let brandPalette: unknown;
+    if (this._brands && config.brandProfileId) {
+      try {
+        const brand = await this._brands.getBrand(ctx.orgId, config.brandProfileId);
+        brandPalette = brand?.palette;
+      } catch (err) {
+        this._logger.warn(
+          `Brand palette lookup skipped: ${(err as Error).message}`,
+          AiDesignerConductorService.name
+        );
+      }
     }
-    try {
-      const brand = await this._brands.getBrand(
-        ctx.orgId,
-        config.brandProfileId
-      );
-      const brandPalette = (
-        Array.isArray(brand?.palette) ? (brand.palette as unknown[]) : []
-      )
-        .filter((c): c is string => typeof c === 'string' && !!c.trim())
-        .map((c) => c.trim().toLowerCase());
-      if (brandPalette.length === 0) return undefined;
-      const planned = new Set(
-        plans
-          .flatMap((plan) => plan.palette ?? [])
-          .filter((c): c is string => typeof c === 'string')
-          .map((c) => c.trim().toLowerCase())
-      );
-      if (planned.size === 0) return undefined;
-      if (brandPalette.some((color) => planned.has(color))) return undefined;
-      return `the "${brief.styleId}" style you pinned set the colours, so your brand palette wasn't used — clear the style to design on brand`;
-    } catch (err) {
-      this._logger.warn(
-        `Brand-palette override check skipped: ${(err as Error).message}`,
-        AiDesignerConductorService.name
-      );
-      return undefined;
-    }
+    return constrainPlanPalettes(plans, {
+      brandPalette: brandPalette as string[] | undefined,
+      intent: brief.intent,
+    });
   }
 
   private _config(session: { config?: unknown }): AiDesignerConfig {
@@ -993,11 +971,17 @@ export class AiDesignerConductorService {
           );
         }
       }
+      const revision = {
+        ...intent.revision,
+        ...(shouldPreserveRevisionMedia(intent.revision.instruction)
+          ? { kind: 'edit' as const }
+          : {}),
+      };
       const revised = await this._reviseDesign(
         sessionId,
         ctx,
         revisionTarget,
-        intent.revision,
+        revision,
         emitter,
         reviseNotes
       );
@@ -1102,8 +1086,9 @@ export class AiDesignerConductorService {
         throw new Error('No design plans were generated');
       }
 
+      const constrained = await this._applyPaletteConstraints(ctx, config, revisionBrief, plans);
       // Persists lastPlans + a fresh plan message and stays in awaiting_plan.
-      await this._emitPlan(sessionId, ctx, emitter, revisionBrief, plans);
+      await this._emitPlan(sessionId, ctx, emitter, revisionBrief, constrained);
     } catch (err) {
       if (this._wasCancelled(err)) {
         this._logger.log(`AI Designer plan revise cancelled for session ${sessionId}`);
@@ -1160,7 +1145,8 @@ export class AiDesignerConductorService {
       this._parsePlans(planResponse, config),
       brief.referenceLayout
     );
-    await this._emitPlan(sessionId, ctx, emitter, brief, plans);
+    const constrained = await this._applyPaletteConstraints(ctx, config, brief, plans);
+    await this._emitPlan(sessionId, ctx, emitter, brief, constrained);
   }
 
   private async _runChatIntake(
@@ -1482,7 +1468,7 @@ export class AiDesignerConductorService {
     // DTO caps config.variants at 10, but `brief.lastPlans` is stored JSON —
     // never execute more plans than the session legitimately requested.
     const maxPlans = Math.min(10, Math.max(1, config.variants ?? 1));
-    plans = plans.slice(0, maxPlans);
+    plans = ensureExplicitLogoSlots(plans.slice(0, maxPlans), config.logoFileId);
 
     // Honest-degradation trail: everything that silently fell back below gets
     // one user-facing note at delivery (never one message per note).
@@ -1499,13 +1485,7 @@ export class AiDesignerConductorService {
       );
     }
 
-    const brandOverrideNote = await this._brandPaletteOverrideNote(
-      ctx,
-      config,
-      brief,
-      plans
-    );
-    if (brandOverrideNote) notes.push(brandOverrideNote);
+    plans = await this._applyPaletteConstraints(ctx, config, brief, plans);
 
     const outputs = this._resolveOutputs(config);
     if (outputs.length === 0) {
@@ -1533,14 +1513,14 @@ export class AiDesignerConductorService {
       plans,
       outputs,
       brief.intent,
-      config.referenceFileIds?.[0]
+      visualReferenceFileId(config)
     );
     if (assetNeeds.dropped > 0) {
       notes.push(
         `only the ${AiDesignerConductorService.MAX_ASSET_NEEDS} most-needed images were generated — the remaining slots have no generated imagery`
       );
     }
-    // The session's first reference image rides the background/hero needs as
+    // The first non-logo visual reference rides the background/hero needs as
     // `sourceFileId` — the asset agent conditions those generations on the
     // reference pixels through the org's image-to-image default when one is
     // configured (text-to-image otherwise). The references ALSO shape the
@@ -1557,6 +1537,7 @@ export class AiDesignerConductorService {
     });
     const { assets, wellFormed: assetsWellFormed } =
       this._parseAssets(assetResponse);
+    await this._attachDirectLogo(ctx.orgId, config, plans, assets);
     emitter.progress('asset', 'Assets ready');
 
     // Compare what each asset actually is against what the plan asked for:
@@ -2159,7 +2140,7 @@ export class AiDesignerConductorService {
               [planForRebuild],
               outputs,
               brief.intent,
-              config.referenceFileIds?.[0]
+              visualReferenceFileId(config)
             ).needs;
             // Assets the fresh set displaces: once the rebuilt doc no longer
             // references them their File rows leak, so they are soft-deleted
@@ -3330,6 +3311,54 @@ export class AiDesignerConductorService {
     'badge-burst',
     'editorial-sidebar',
   ]);
+
+  private async _directLogoFileId(
+    orgId: string,
+    config: AiDesignerConfig
+  ): Promise<string | undefined> {
+    if (config.logoFileId) return config.logoFileId;
+    if (!config.brandProfileId || !this._brands) return undefined;
+    try {
+      const brand = await this._brands.getBrand(orgId, config.brandProfileId);
+      const ids = Array.isArray(brand?.logoFileIds) ? brand.logoFileIds : [];
+      return ids.find((id): id is string => typeof id === 'string' && !!id.trim());
+    } catch (err) {
+      this._logger.warn(
+        `Brand logo lookup skipped: ${(err as Error).message}`,
+        AiDesignerConductorService.name
+      );
+      return undefined;
+    }
+  }
+
+  private async _attachDirectLogo(
+    orgId: string,
+    config: AiDesignerConfig,
+    plans: DesignPlan[],
+    assets: Record<string, AssetResult>
+  ): Promise<void> {
+    const fileId = await this._directLogoFileId(orgId, config);
+    if (!fileId) return;
+    const file = await this._fileService.getFileById(orgId, fileId);
+    if (!file) throw new Error('The selected logo file was not found');
+    const metadata = (file.metadata ?? {}) as {
+      dimensions?: { width?: number; height?: number };
+    };
+    for (const plan of plans) {
+      const slot = plan.slots.find((candidate) => candidate.kind === 'logo');
+      if (!slot) continue;
+      const slotId = `${plan.variantId}:${slot.id}`;
+      assets[assetKey(slotId, 'square')] = {
+        slotId,
+        fileId: file.id,
+        path: file.path,
+        type: 'image',
+        aspect: 'square',
+        naturalWidth: metadata.dimensions?.width,
+        naturalHeight: metadata.dimensions?.height,
+      };
+    }
+  }
 
   // ONE need per plan×slot: the slotId is scoped by the plan's variantId
   // (`${variantId}:${slotId}`) so every plan's `asset:<slot>` resolves to its
@@ -4981,8 +5010,12 @@ export class AiDesignerConductorService {
     const briefForPlans = this._brief(sessionForPlans ?? {});
     const plansForSanitize = (briefForPlans.lastPlans as DesignPlan[] | undefined) ?? [];
 
+    const mediaRevision = this._isMediaRevision(revision, doc);
+    const imageryRevision = !mediaRevision && this._isImageryRevision(revision, doc);
+    const ordinaryRevision = !mediaRevision && !imageryRevision;
+
     let revisedDoc: DesignerDoc;
-    if (this._isMediaRevision(revision, doc)) {
+    if (mediaRevision) {
       // "Regenerate the video" / "change the subject" on a video design: doc
       // ops cannot create footage (`_filterReviseOps` drops media swaps), so
       // the request routes to the conductor's own generate + replaceClipMedia
@@ -4999,7 +5032,7 @@ export class AiDesignerConductorService {
       // provider, or a failed generation) — do not re-deliver unchanged.
       if (!patched) return null;
       revisedDoc = patched;
-    } else if (this._isImageryRevision(revision, doc)) {
+    } else if (imageryRevision) {
       // "Change the background" on an image-backed design: doc ops cannot
       // touch an image background (the composer correctly drops them), so the
       // request routes to the same deterministic asset-regeneration path the
@@ -5081,6 +5114,20 @@ export class AiDesignerConductorService {
     const genre = (sessionBrief.skillId as string | undefined) ?? 'meme';
     const lastPlans = plansForSanitize;
     const saveFolderId = await this._resolveSaveFolder(ctx.orgId, config);
+
+    if (
+      ordinaryRevision &&
+      revisionMediaChanged(doc, revisedDoc, revision.instruction)
+    ) {
+      await this._emitText(
+        sessionId,
+        ctx,
+        emitter,
+        'conversationalist',
+        "I couldn't apply that change without replacing the imagery, so I kept the original design. Try asking only for a text, color, or layout change."
+      );
+      return null;
+    }
 
     this._throwIfCancelled(sessionId);
     emitter.progress('composer', 'Saving');
@@ -5192,6 +5239,20 @@ export class AiDesignerConductorService {
     );
     render = contrastFixed.render;
     revisedDoc = contrastFixed.doc;
+
+    if (
+      ordinaryRevision &&
+      revisionMediaChanged(doc, revisedDoc, revision.instruction)
+    ) {
+      await this._emitText(
+        sessionId,
+        ctx,
+        emitter,
+        'conversationalist',
+        "I couldn't apply that change without replacing the imagery, so I kept the original design. Try asking only for a text, color, or layout change."
+      );
+      return null;
+    }
 
     // Mint the delivery File rows for the final state (every save above ran
     // with registerPreviews: false). Optional call: mocked savers in tests

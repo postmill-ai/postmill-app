@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   collectDocFileIds,
   collectDocFontFamilies,
+  collectDocMediaSignature,
   rewriteDocFileRefs,
 } from './doc-file-refs';
 
@@ -131,5 +132,27 @@ describe('rewriteDocFileRefs', () => {
   it('is a no-op with an empty map', () => {
     const doc = { outputs: [{ children: [{ fileId: 'old-1' }] }] };
     expect(rewriteDocFileRefs(doc, new Map())).toBe(doc);
+  });
+});
+
+describe('collectDocMediaSignature', () => {
+  it('ignores layout-only edits and detects any media replacement', () => {
+    const doc = {
+      outputs: [{
+        bg: { type: 'image', src: '/uploads/org/background.png' },
+        children: [
+          { type: 'image', fileId: 'image-1', src: '/uploads/org/photo.png', x: 0 },
+          { type: 'image', maskFileId: 'mask-1', maskSrc: '/uploads/org/mask.png' },
+        ],
+      }],
+    };
+    const moved = structuredClone(doc);
+    moved.outputs[0].children.reverse();
+    moved.outputs[0].children[1].x = 100;
+    expect(collectDocMediaSignature(moved)).toBe(collectDocMediaSignature(doc));
+
+    const replaced = structuredClone(doc);
+    replaced.outputs[0].children[0].fileId = 'image-2';
+    expect(collectDocMediaSignature(replaced)).not.toBe(collectDocMediaSignature(doc));
   });
 });
