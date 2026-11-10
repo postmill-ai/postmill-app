@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -48,7 +49,8 @@ import {
 } from '@postmill-ai/nestjs-libraries/dtos/design/render-video.design.dto';
 import { BulkGenerateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/bulk.generate.design.dto';
 import { BulkCreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/bulk-create.design.dto';
-import { DesignBulkCreateService } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service';
+import { DesignBulkCreateService, bulkRowErrorDetail } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service';
+import { applyBulkRow } from '@postmill-ai/nestjs-libraries/media/designer-doc/bulk-variables';
 import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design.dto';
 import { ImportLibraryDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/import-library-design.dto';
 import { UpdateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-design.dto';
@@ -466,6 +468,16 @@ export class DesignController {
     @Body() body: BulkGenerateDesignDto,
   ) {
     const doc = this._designerDocService.validate(body.doc);
+    for (const [index, row] of body.rows.entries()) {
+      const transformedDoc = applyBulkRow(doc, row);
+      try {
+        this._designerDocService.validate(transformedDoc);
+      } catch (error) {
+        throw new BadRequestException(
+          `Row ${index + 1}: ${bulkRowErrorDetail(error, doc, transformedDoc, row)}`.slice(0, 1000)
+        );
+      }
+    }
     const { images, truncated, totalRows } =
       await this._designBulkService.generateBatch(doc, body.rows, {
         orgId: org.id,

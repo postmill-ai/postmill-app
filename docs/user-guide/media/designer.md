@@ -265,11 +265,18 @@ design has no variables yet, use **Assign design elements** to map columns direc
 or colors on any page and choose **Apply variable assignments**. One column can feed multiple
 elements. Applying is one undoable edit and keeps the resulting design fully editable.
 
+Use the first spreadsheet row for unique column headers. Text cells are plain text and colors use
+`#RRGGBB`. Image cells accept direct HTTP(S) image URLs, same-origin `/uploads/` paths, Google Drive
+sharing links, and `=IMAGE("https://example.com/image.png")` formulas. Single-quoted formulas,
+semicolon argument separators, and Excel's `_xlfn.IMAGE` prefix are accepted too. The dialog's
+**Spreadsheet format** guide can download a CSV template based on the current mappings.
+
 Each successful row creates a separate editable design and saves every output and page as a PNG in
 a dedicated batch folder in Files. The completed batch provides links to those designs and a ZIP
 containing all PNGs and a `results.json` report. Existing template assets stay in place; only remote
-images substituted by a row are imported. A failed row is reported without stopping the remaining
-rows. Batches heartbeat while running and stop if the job is cancelled or swept as stale.
+images substituted by a row are imported. Every row is validated first; if any row fails, the whole
+batch stops without partial designs or a ZIP. Batches heartbeat while running and stop if the job is
+cancelled or swept as stale.
 
 ---
 > Verified against v1.4.0

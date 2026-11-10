@@ -61,6 +61,48 @@ const errorDetail = (error: unknown, fallback: string): string => {
   return (error as Error)?.message || fallback;
 };
 
+export const bulkRowErrorDetail = (
+  error: unknown,
+  templateDoc: DesignerDoc,
+  transformedDoc: DesignerDoc,
+  row: Record<string, string>,
+): string => {
+  const response = (error as BadRequestException)?.getResponse?.();
+  const body = response && typeof response === 'object'
+    ? response as { issues?: { path?: (string | number)[] }[] }
+    : {};
+  const issue = (body.issues || []).find((item) => item.path?.at(-1) === 'src');
+  if (!issue?.path) return errorDetail(error, 'Invalid DesignerDoc');
+
+  let templateElement: any = templateDoc.outputs;
+  let transformedElement: any = transformedDoc.outputs;
+  for (const key of issue.path.slice(1, -1)) {
+    templateElement = templateElement?.[key];
+    transformedElement = transformedElement?.[key];
+  }
+  if (!transformedElement || typeof transformedElement.src !== 'string') {
+    return errorDetail(error, 'Invalid DesignerDoc');
+  }
+
+  let column: string | undefined;
+  if (templateElement?.slot?.kind === 'image' && row[templateElement.slot.name] !== undefined) {
+    column = templateElement.slot.name;
+  } else {
+    for (const match of (templateElement?.src || '').matchAll(/\{\{\s*([\w.-]+)\s*\}\}/g)) {
+      if (row[match[1]] !== undefined) {
+        column = match[1];
+        break;
+      }
+    }
+  }
+  column ||= Object.keys(row).find((key) => normalizeBulkImageSource(row[key]) === transformedElement.src);
+  const target = transformedElement.name || transformedElement.id || 'image';
+  const hint = column
+    ? ` (image column "${column}", element "${target}": use a direct HTTP(S) image URL, same-origin /uploads/ path, data URL, or =IMAGE("https://…"))`
+    : '';
+  return `${errorDetail(error, 'Invalid DesignerDoc')}${hint}`;
+};
+
 interface RemoteImagePreflight {
   row: number;
   url: string;
@@ -151,13 +193,16 @@ export class DesignBulkCreateService extends DesignBulkService {
     const sources: RemoteImagePreflight[] = [];
     const sourceUrls = new Set<string>();
     for (const [index, row] of rows.entries()) {
+      const transformedDoc = applyBulkRow(doc, row);
       try {
-        const transformedDoc = this._designerDocService.validate(applyBulkRow(doc, row));
+        const validatedDoc = this._designerDocService.validate(transformedDoc);
         this._collectRemoteImageSources(
-          doc, transformedDoc, row, index, templateSources, sources, sourceUrls,
+          doc, validatedDoc, row, index, templateSources, sources, sourceUrls,
         );
       } catch (error) {
-        throw new BadRequestException(`Row ${index + 1}: ${errorDetail(error, 'Invalid DesignerDoc')}`.slice(0, 1000));
+        throw new BadRequestException(
+          `Row ${index + 1}: ${bulkRowErrorDetail(error, doc, transformedDoc, row)}`.slice(0, 1000)
+        );
       }
     }
     await this._preflightRemoteImages(sources);

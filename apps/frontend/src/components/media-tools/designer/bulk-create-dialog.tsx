@@ -11,6 +11,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/bulk-variables';
 import { parseSpreadsheetText } from '@postmill-ai/frontend/components/shared/csv';
 import { Button } from '@postmill-ai/react/form/button';
+import { buildBulkTemplateCsv, inferBulkHeaderKind } from './bulk-create-template';
 
 type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
 type Row = Record<string, string>;
@@ -125,11 +126,6 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
         const nextRows = parsed.slice(1).map((cells) => Object.fromEntries(
           nextHeaders.map((header, index) => [header, cells[index] ?? ''])
         ));
-        const inferredKind = (header: string) => {
-          if (/(?:image|photo|logo|hero|src|url)/i.test(header)) return 'image';
-          if (/(?:colou?r|hex|fill)/i.test(header)) return 'color';
-          return 'text';
-        };
         const selected = new Set(selectedIds);
         const orderedTargets = [...assignmentTargets].sort((a, b) =>
           Number(selected.has(b.elementId)) - Number(selected.has(a.elementId))
@@ -140,12 +136,12 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
           variable.name,
           nextHeaders.includes(variable.name)
             ? variable.name
-            : nextHeaders.find((header) => inferredKind(header) === variable.kind) || nextHeaders[0],
+            : nextHeaders.find((header) => inferBulkHeaderKind(header) === variable.kind) || nextHeaders[0],
         ])));
         setAssignments(Object.fromEntries(orderedTargets.map((target) => [
           target.id,
           selected.has(target.elementId)
-            ? nextHeaders.find((header) => inferredKind(header) === target.kind) || ''
+            ? nextHeaders.find((header) => inferBulkHeaderKind(header) === target.kind) || ''
             : '',
         ])));
       } catch (cause) {
@@ -219,6 +215,22 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
     }
   };
 
+  const downloadTemplate = () => {
+    const csv = buildBulkTemplateCsv(headers, (header) =>
+      variables.find((variable) => mapping[variable.name] === header)?.kind ||
+      assignmentTargets.find((target) => assignments[target.id] === header)?.kind ||
+      inferBulkHeaderKind(header)
+    );
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${(designName || 'bulk-create').replace(/[\\/"]/g, '-')}-template.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const completed = job?.status === 'completed';
   const failed = job?.status === 'failed';
   const progress = job?.progress;
@@ -229,6 +241,19 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
       <p className="text-[12px] text-newTextColor/65">
         {t('designer_bulk_description', 'Generate editable design variations from CSV or TSV data. Map columns to text, image, and color variables, preview one row, then create the batch.')}
       </p>
+      <details className="rounded-md border border-studioBorder p-3 text-[12px] text-newTextColor/65">
+        <summary className="cursor-pointer font-medium text-textColor">
+          {t('designer_bulk_spreadsheet_format', 'Spreadsheet format')}
+        </summary>
+        <div className="mt-2 space-y-2">
+          <p>{t('designer_bulk_format_headers', 'Use the first row for unique column headers. Plain text works for text; use #RRGGBB for colors.')}</p>
+          <p>{t('designer_bulk_format_images', 'Images accept direct HTTPS URLs, Google Drive sharing links, or =IMAGE("https://…") formulas. Single-quoted formulas and semicolon argument separators work too.')}</p>
+          <p>{t('designer_bulk_format_atomic', 'Every row is validated first. If any row fails, the whole batch stops without partial designs or a ZIP.')}</p>
+          <Button secondary onClick={downloadTemplate}>
+            {t('designer_bulk_download_template', 'Download CSV template')}
+          </Button>
+        </div>
+      </details>
       {!job && (
         <>
           <input

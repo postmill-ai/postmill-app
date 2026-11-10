@@ -177,7 +177,7 @@ describe('DesignBulkCreateService enqueue and status', () => {
 
     await expect(service.enqueueBulkCreate('org-1', 'user-1', {
       doc: makeDoc(), rows: [{ name: 'Ada', image: '=IMAGE("not a URL")' }],
-    })).rejects.toThrow(/Row 1: outputs\.0\.pages\.0\.children\.0\.src/);
+    })).rejects.toThrow(/Row 1: outputs\.0\.pages\.0\.children\.0\.src.*image column "image", element "image-1"/);
 
     expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
     expect(fileService.createFolder).not.toHaveBeenCalled();
