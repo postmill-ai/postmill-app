@@ -82,3 +82,25 @@ describe('CommonInspector blend modes', () => {
     expect(children(store)[0].blendMode).toBe('normal');
   });
 });
+
+describe('CommonInspector geometry history', () => {
+  it('commits a typed width once on blur so one Undo restores the original width', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({ ...element('image'), width: 486, height: 864 });
+    const selected = children(store);
+    const ids = [selected[0].id];
+    store.getState().setSelectedIds(ids);
+    render(<CommonInspector selected={selected} ids={ids} store={store} />);
+
+    const width = screen.getByRole('spinbutton', { name: 'W' });
+    fireEvent.change(width, { target: { value: '60' } });
+    fireEvent.change(width, { target: { value: '600' } });
+    fireEvent.blur(width);
+    expect(children(store)[0].width).toBe(600);
+
+    act(() => {
+      store.getState().undo();
+    });
+    expect(children(store)[0].width).toBe(486);
+  });
+});
