@@ -250,8 +250,8 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   // valid for one model 422s another because Replicate rejects unknown inputs
   // (prod failure: `aspect_ratio` is invalid for kling-v2.1 image-to-video).
   // Strip tunable keys the target model's metadata schema does not declare.
-  // Core adapter-managed inputs (prompt fields, native source fields) are
-  // always allowed; a model absent from the metadata (custom version hash,
+  // Core adapter-managed inputs (prompt fields where supported, native source
+  // fields) are allowed; a model absent from the metadata (custom version hash,
   // undeclared community model) keeps the historical verbatim passthrough.
   private _filterTunableInput(
     model: string,
@@ -280,7 +280,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     const mediaModels = providerMetadata.mediaModels as
       | Record<string, { id: string; fields?: { name: string }[] }[]>
       | undefined;
-    const allowed = new Set<string>(['prompt', 'prompt_a', 'prompt_b']);
+    const allowed = new Set<string>(model === 'bria/eraser' ? [] : ['prompt', 'prompt_a', 'prompt_b']);
     let declared = false;
     for (const models of Object.values(mediaModels ?? {})) {
       for (const entry of models) {
@@ -675,8 +675,19 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
   }
 
   async inpaintImage(imageUrl: string, maskUrl: string, prompt: string, options?: MediaGenerateOptions): Promise<string> {
+    const model = options?.version || options?.model || DEFAULT_INPAINT_MODEL;
+    if (model === 'bria/eraser') {
+      return this._createAndResolveUrl(
+        {
+          ...options,
+          version: model,
+          input: { ...options?.input, mask_type: 'automatic' },
+        },
+        { image_url: imageUrl, mask_url: maskUrl, mask_type: 'automatic' },
+      );
+    }
     return this._createAndResolveUrl(
-      { ...options, version: options?.version || options?.model || DEFAULT_INPAINT_MODEL },
+      { ...options, version: model },
       { image: imageUrl, mask: maskUrl, prompt },
     );
   }

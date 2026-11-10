@@ -2036,6 +2036,47 @@ export const metadata: ProviderMetadata = {
     ],
     "image-inpaint": [
       {
+        "id": "bria/eraser",
+        "label": "Bria Eraser",
+        "fields": [
+          {
+            "name": "mask_type",
+            "label": "Mask type",
+            "help": "Use automatic for algorithm-generated masks and manual for user-drawn masks.",
+            "type": "select",
+            "options": [
+              {
+                "value": "manual",
+                "label": "manual"
+              },
+              {
+                "value": "automatic",
+                "label": "automatic"
+              }
+            ],
+            "default": "manual"
+          },
+          {
+            "name": "preserve_alpha",
+            "label": "Preserve alpha",
+            "type": "toggle",
+            "default": true
+          },
+          {
+            "name": "sync",
+            "label": "Synchronous response",
+            "type": "toggle",
+            "default": true
+          },
+          {
+            "name": "content_moderation",
+            "label": "Content moderation",
+            "type": "toggle",
+            "default": false
+          }
+        ]
+      },
+      {
         "id": "black-forest-labs/flux-fill-pro",
         "label": "flux-fill-pro",
         "fields": [
