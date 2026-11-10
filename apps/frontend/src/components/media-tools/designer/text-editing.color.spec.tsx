@@ -60,9 +60,11 @@ describe('TextEditingOverlay text color', () => {
 
     const input = editor.parentElement!.querySelector('input[type="color"]') as HTMLInputElement;
     fireEvent.mouseDown(input);
-    fireEvent.change(input, { target: { value: '#ff0000' } });
+    fireEvent.input(input, { target: { value: '#ff0000' } });
+    fireEvent.input(input, { target: { value: '#00ff00' } });
 
     expect(document.execCommand).toHaveBeenCalledWith('foreColor', false, '#ff0000');
+    expect(document.execCommand).toHaveBeenCalledWith('foreColor', false, '#00ff00');
     expect(onUpdate).not.toHaveBeenCalled();
     expect(onComplete).not.toHaveBeenCalled();
 

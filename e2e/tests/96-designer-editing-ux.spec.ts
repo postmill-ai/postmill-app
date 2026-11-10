@@ -160,13 +160,16 @@ test('selected words retain independent colors through autosave and reopen', asy
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '#ff0000');
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '#00ff00');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await page.getByRole('textbox', { name: 'Design name' }).click();
 
   await expect.poll(() => {
     const children = state.doc.outputs[0].children as Array<Record<string, unknown>>;
     return JSON.stringify(children[0]?.richText);
-  }).toContain('rgb(255, 0, 0)');
+  }).toContain('rgb(0, 255, 0)');
   const children = state.doc.outputs[0].children as Array<Record<string, unknown>>;
   expect(children[0]?.text).toBe('Hello world');
   expect(JSON.stringify(children[0]?.richText)).toContain('Hello ');

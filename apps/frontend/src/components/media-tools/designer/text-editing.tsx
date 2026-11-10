@@ -420,7 +420,10 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
     const editor = editorRef.current;
     if (!editor) return;
     const selection = window.getSelection();
-    const range = savedRangeRef.current;
+    const liveRange = selection?.rangeCount && editor.contains(selection.anchorNode)
+      ? selection.getRangeAt(0)
+      : null;
+    const range = liveRange ?? savedRangeRef.current;
     editor.focus();
     if (range && selection) {
       selection.removeAllRanges();
@@ -433,7 +436,7 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
       editor.style.color = color;
       onUpdate(element.id, { fill: color });
     }
-    savedRangeRef.current = null;
+    savedRangeRef.current = range;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
