@@ -28,4 +28,4 @@ All three tabs follow the standard [Media Studios flow](./index.md): jobs appear
 - **Test connection is free.** Settings → Content → AI Media → **Test connection** probes a status endpoint with your key pair; no generation is billed.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

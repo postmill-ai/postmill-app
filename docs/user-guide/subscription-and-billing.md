@@ -23,7 +23,7 @@ Postmill uses four fixed plans. Prices and limits are defined in `libraries/nest
 | **Team** | $99 | $990 | 30 | Unlimited | 10 | 200 | 20 GB | ✓ | ✓ | ✓ | 20 | 20 | 18 months |
 | **Agency** | $249 | $2,490 | 100 | Unlimited | 25 | 600 | 100 GB | ✓ | ✓ | ✓ | Unlimited | 50 | 18 months |
 
-**Unlimited AI** — AI is bring-your-own-key across 30 providers. There are no per-request AI credits or token quotas; usage is governed only by your own provider keys and any spend caps you configure in **Settings → AI → LLM Providers** (an organisation-wide budget plus optional per-provider caps).
+**Unlimited AI** — AI is bring-your-own-key across 31 providers. There are no per-request AI credits or token quotas; usage is governed only by your own provider keys and any spend caps you configure in **Settings → AI → LLM Providers** (an organisation-wide budget plus optional per-provider caps).
 
 **30-day free trial** — new organizations start with a 30-day trial on the plan they select. The trial can be ended early from `/billing`.
 
@@ -94,4 +94,4 @@ An organisation stays **locked to the provider it first subscribed through**, ev
 
 Card details are entered in the provider's own payment form (Stripe's embedded form, or PayPal's or the app store's checkout) and never touch Postmill's servers. With Stripe, the **Update Payment Method / Invoices History** button opens Stripe's customer portal, where you can add, update, or remove cards, set the default payment method, and download past invoices.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

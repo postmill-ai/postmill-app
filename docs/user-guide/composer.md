@@ -12,7 +12,8 @@ The composer lives on dedicated pages:
   **New Post** button navigates here; clicking a calendar slot prefills the slot's date and time
   (in your timezone).
 - **`/posts/post/<post-id>`** — edit an existing post. The edit action on a calendar card
-  opens this page.
+  opens this page. If the post has been deleted or you no longer have access to it, the page
+  shows **Post not found** with a **Back to posts** button instead of an empty screen.
 
 Create and edit share the same composer form.
 
@@ -198,4 +199,4 @@ You can import multiple posts at once via CSV. Each row is validated and created
 and per-row successes, warnings, and errors are reported. Failed rows do not block successful rows. See [Bulk Import](./bulk-import.md)
 for details.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

@@ -168,6 +168,7 @@ Key rules:
 - Resolve API keys with `resolveApiKey(options)`.
 - On transient poll errors (429, 5xx), **throw** so the lifecycle retries; on terminal errors, return `{ status: 'failed', error }`.
 - Throw upstream HTTP failures as `await mediaUpstreamError(this, res, operation)` (from `@postmill-ai/provider-kernel`) so they surface as a provider-attributed `ProviderUpstreamError` (HTTP 502 naming the provider) instead of a bare 500.
+- If generation still throws a plain `Error`, `MediaStudioService` classifies its message: quota-style text becomes a `quota` `ProviderUpstreamError`, and the failed job stores that `kind`. `StudioShell` toasts each job that moves from pending/processing to failed once, adding provider-specific advice and an **Open settings** link when one applies.
 
 ## Step 3: add provider metadata
 
@@ -310,4 +311,4 @@ A workflow that returns something other than a media artifact (Deepgram's captio
 - [User Guide: Media studios](../user-guide/media/index.md)
 - [Backend conventions](./backend-conventions.md)
 
-> Verified against v1.4.0
+> Verified against v1.5.0

@@ -25,4 +25,4 @@ Ideogram follows the standard [Media Studios flow](./index.md): generate, watch 
 - **Test connection is free.** Settings → Content → AI Media → **Test connection** reads your account's API-key list; no image is billed.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

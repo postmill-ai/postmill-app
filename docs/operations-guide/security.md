@@ -11,7 +11,7 @@ Applied in production via `helmet()` middleware. **Bypassed in development** —
 `NOT_SECURED` in production does not strip these headers.
 
 ```typescript
-// apps/backend/src/main.ts:156-181
+// apps/backend/src/main.ts:152-177
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -48,6 +48,16 @@ app.use(helmet({
 | X-Content-Type-Options     | `nosniff`                             | Prevent MIME sniffing |
 | Referrer-Policy            | `strict-origin-when-cross-origin`     | Limit referrer leakage |
 | Cross-Origin-Embedder-Policy | `false`                             | Disabled for CopilotKit/Swagger CDN assets |
+
+### Frontend Content-Security-Policy
+
+The Next.js frontend sends its own CSP from `apps/frontend/next.config.ts`. Its `connect-src` allows
+`'self'`, the backend origin (from `NEXT_PUBLIC_BACKEND_URL`), the Sentry ingest origin (from
+`NEXT_PUBLIC_SENTRY_DSN`), the Epure origin (from `NEXT_PUBLIC_EPURE_DSN`), and the fixed
+Plausible, Stripe and Google Tag Manager endpoints. The Sentry and Epure origins are derived from
+their DSNs at **build time**. Each is empty when its DSN is unset or unparsable, so the browser can
+reach an error-reporting origin only if it was configured when the frontend was built. Changing
+`NEXT_PUBLIC_EPURE_DSN` needs a frontend rebuild before the browser may post to the new origin.
 
 ## CSRF protection
 
@@ -277,6 +287,8 @@ is unchanged.
 ## Sentry scrubbing
 
 Error and breadcrumb data sent to Sentry is scrubbed of secrets and PII before transmission.
+When an Epure DSN is configured, error events are mirrored to Epure by the transport after
+scrubbing, so Epure receives the same scrubbed events (no replays, traces, profiles or logs).
 
 ### Scrubbed fields
 
@@ -312,6 +324,32 @@ Applied via `ThrottlerBehindProxyGuard`, which respects `X-Forwarded-For` header
 
 The throttler guard applies its default limit to all routes — per-route `@Throttle` caps
 actually take effect (unlike earlier versions where most routes bypassed the throttler).
+
+## Organization export & import
+
+Organization portability (export an organization, or import an archive into a new workspace)
+carries every tenant secret in the archive, so it is locked down:
+
+- **Owner-only.** The routes require the `organization:manage` permission, and the service also
+  checks that the caller is an active member holding the system `owner` role. Admins and custom
+  roles cannot export or import, and each owner sees only the jobs they created.
+- **Encrypted archive.** Each export gets a random archive key. Secret fields (channel tokens,
+  provider credentials, storage, AI, media, short-link, VPN, comms and content-pack credentials)
+  are decrypted from the database and sealed inside the archive with AES-256-GCM, and the manifest
+  is HMAC-authenticated. The archive key is wrapped with a key derived by scrypt from the owner's
+  passphrase (12–256 characters), which is never stored. The server keeps its copy of the archive
+  key encrypted with `EncryptionService` and clears it when the job expires. Share tokens, comms
+  webhook tokens and connect codes are not exported; import regenerates them.
+- **One-time download.** A download link is a 32-byte random token held in Redis for 5 minutes and
+  consumed on first use. Requests and download issuance are recorded in the audit log.
+- **24-hour expiry.** Jobs expire 24 hours after creation. The hourly `org-portability-expiry`
+  function marks them expired and deletes the spooled file.
+- **Private spool.** Archives are written under `ORG_PORTABILITY_SPOOL_DIR` with directories
+  created `0700` and files `0600`. Keep the spool outside `UPLOAD_DIRECTORY`, public buckets and the
+  repository (see [Docker → Organization archive spool](./docker.md#organization-archive-spool)).
+- **Safe import defaults.** Imported secrets are re-encrypted with this deployment's key, imported
+  channels start disabled, autoposts and plugs start inactive, unpublished posts become drafts, and
+  campaign sharing is turned off.
 
 ## Additional security invariants
 
@@ -354,7 +392,7 @@ fields on all DTOs. Declare new optional fields explicitly on their DTO.
 
 - CSP headers (see Helmet section above)
 - `HttpOnly` auth cookies
-- Production builds ship without source maps
+- Production builds ship without browser source maps, unless `NEXT_PUBLIC_EPURE_DSN` is set at build time. Then client source maps stay in the build and are served publicly under `/_next/static` for Epure symbolication. See [Configuration → Monitoring](./configuration.md#monitoring).
 - `dangerouslySetInnerHTML` content is sanitized with DOMPurify
 
 ## Related
@@ -364,4 +402,4 @@ fields on all DTOs. Declare new optional fields explicitly on their DTO.
 - [Configuration](./configuration.md) — `ENCRYPTION_KEY`, `SSRF_ALLOWED_PRIVATE_CIDRS`,
   `INTEGRATION_RETURN_URL_ALLOWLIST`, `NOT_SECURED`
 
-> Verified against v1.4.0
+> Verified against v1.5.0

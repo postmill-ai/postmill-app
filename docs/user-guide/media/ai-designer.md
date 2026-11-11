@@ -48,13 +48,24 @@ Before chatting, you configure the brief:
 - **Custom sizes** — for image sessions, arbitrary width/height pairs in addition to or instead of
   channel presets.
 - **Save to folder** — an optional destination folder in `/files`.
-- **Brand profile** — apply an existing brand's voice/visual guidelines.
+- **Brand profile** — apply an existing brand's voice/visual guidelines. The brand palette (and any
+  hex colors you name in the prompt) are applied as fixed plan colors without swapping which color
+  is used for backgrounds, text, or accents. The brand's first logo fills any logo slot the plan
+  declares, placed as the original file rather than regenerated.
 - **Style** — a style preset, or **Let AI decide**.
 - **Variants** — how many design variants to generate.
-- **Reference images** — pick existing files or import stock media as visual references. When
-  your workspace has an image-to-image default, the first reference also conditions the generated
-  background/hero imagery (falling back to text-to-image, then stock).
+- **Reference images** — pick existing files or import stock media as visual references. Choose
+  **Logo** on a reference to place that original logo directly in the design; it is never
+  regenerated and is not used to condition other imagery. When your workspace has an
+  image-to-image default, the first reference also conditions the generated background/hero
+  imagery. Those reference-guided images never fall back to stock or a gradient: if image-to-image
+  generation fails, the run reports an error instead. Without an image-to-image default, those
+  slots use text-to-image instead.
 - **Mode** — **Chat** (open-ended conversation) or **Prompt** (a single one-shot brief).
+- **Attach files** (Prompt mode) — attach up to 10 files, 20 MB each: images, PDF, TXT, Markdown,
+  CSV, TSV, or JSON. Images join the reference images; documents are read as background context for
+  planning (PDFs up to 5 MB, first 10 pages; extracted text is capped per file and per session).
+  Files from another workspace or of an unsupported type are rejected before any paid planning.
 
 ## In the session
 
@@ -65,10 +76,21 @@ Once started, you get a chat interface showing:
 - **Rendered previews** as variants complete.
 - Interactive prompts the pipeline may ask (e.g. a form or a plan to approve) before continuing.
 - **Delivery notes** that disclose any slot where a stock photo (or a gradient placeholder) stood in
-  for imagery that couldn't be generated.
+  for imagery that couldn't be generated. Slots that must show a specific subject (reference-guided
+  imagery, or a requested product, screenshot, or mockup being regenerated) never get a stock or
+  gradient stand-in.
+
+If planning only produces a generic fallback concept, the run stops before composing with "Design
+planning did not produce a usable concept. Please retry." The Vision Critic also checks that each
+variant actually shows the subject you asked for; a variant missing it is held back while other
+variants remain, and if every variant still has quality issues after its repair passes, the last one
+is delivered with an explicit quality warning rather than nothing.
 
 After delivery you can ask for revisions in the chat — for example, "change the background"
-regenerates the background imagery of an image-backed design.
+regenerates the background imagery of an image-backed design. Ordinary text or style revisions keep
+every existing image and logo; only an explicit imagery request replaces them. While a plan is
+awaiting approval or a design has been delivered, the chat composer's **Attach files** button accepts
+the same attachments as the start form for that revision.
 
 ### Video sessions
 
@@ -94,4 +116,4 @@ thumbnails are kept out of the [Media Library](../media-library) listing. Deleti
 its intermediates, except any a delivered design still uses.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

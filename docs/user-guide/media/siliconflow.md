@@ -31,4 +31,4 @@ The studio follows the standard Studio Kit flow: fill the form, click **Generate
 - **Test connection is free** — Settings → Content → AI Media → **Test connection** reads the model catalog; no generation is billed.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

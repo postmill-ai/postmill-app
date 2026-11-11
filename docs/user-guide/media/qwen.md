@@ -29,4 +29,4 @@ Completed artifacts land in `/files` via the **Render Queue**. Images finish syn
 - **Test connection is free:** Settings → Content → AI Media → **Test connection** lists models on DashScope's OpenAI-compatible endpoint; no generation is billed.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

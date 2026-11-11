@@ -82,6 +82,8 @@ Most social providers use OAuth 2.0 or OAuth 1.0a:
 3. The provider redirects to the backend OAuth callback, which posts to `POST /integrations/social-connect/:integration` (`NoAuthIntegrationsController.connectSocialMedia`).
 4. The backend validates state, exchanges the code for tokens via the adapter's `authenticate`, and creates or updates the `Integration` row.
 
+A failed exchange answers **409** through `NotEnoughScopesFilter` with `{ msg }`. Expected authorization rejections (the adapter returned an error string, threw `NotEnoughScopes`, or Instagram returned a recognisable OAuth error) also carry `code: 'CHANNEL_AUTHORIZATION_REJECTED'`, so the UI can show the provider's reason. Unexpected failures are logged with the provider, organization and config id, then surface only as `Authentication failed` with no `code`.
+
 `redirectUrl` values are allowlisted via `INTEGRATION_RETURN_URL_ALLOWLIST` before persist/return.
 
 ### Token/cookie auth
@@ -151,4 +153,4 @@ Tool dispatch is whitelisted: only methods decorated with `@Tool` plus the speci
 - [Public API](./public-api.md)
 - [Operations: configuration](../operations-guide/configuration.md)
 
-> Verified against v1.4.0
+> Verified against v1.5.0

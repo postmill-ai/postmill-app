@@ -212,6 +212,7 @@ database/prisma/
 ├── migration-ledger/  → MigrationLedger
 ├── notifications/     → notifications.repository.ts
 ├── oauth/             → oauth.repository.ts
+├── org-portability/   → org-portability.repository.ts, org-import.repository.ts
 ├── organizations/     → organization.repository.ts
 ├── posts/             → posts.repository.ts
 ├── provider-configs/  → org-provider-config.repository.ts
@@ -243,4 +244,4 @@ Resolution is through `ProviderResolutionService` — the kernel is the sole res
 
 See [Architecture](./architecture.md) and [Provider Framework](./provider-framework.md).
 
-> Verified against v1.4.0
+> Verified against v1.5.0

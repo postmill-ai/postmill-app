@@ -31,8 +31,8 @@ docker exec postmill-postgres pg_dump -U postmill-user postmill-db-local > pre_u
 # docker-compose.yaml or your deployment config
 services:
   postmill:
-    image: ghcr.io/postmill-ai/postmill-app:v1.4.0  # pin a specific tag, not :latest
-    # image: postmillai/postmill-app:v1.4.0         # the same image on Docker Hub
+    image: ghcr.io/postmill-ai/postmill-app:v1.5.0  # pin a specific tag, not :latest
+    # image: postmillai/postmill-app:v1.5.0         # the same image on Docker Hub
 ```
 
 Pinning specific tags gives you a known rollback target. Using `:latest` means every restart may
@@ -77,6 +77,26 @@ CHANGELOG carefully, take a backup, and follow the expand-contract path document
 
 Check the CHANGELOG for any new env vars required by the release. Add them to your `.env` file,
 Docker Compose environment, or deployment config, then redeploy if needed.
+
+## v1.5.0
+
+- **Migrations.** v1.5.0 adds two additive migrations. Neither needs `ALLOW_DESTRUCTIVE_SCHEMA`.
+  - `20261102160000_add_user_preferred_language_and_email_campaigns` adds a nullable `UserProfile.preferredLanguage` and a nullable `EmailLog.campaignId`, with a unique index on `(campaignId, toAddress)` and an index on `(campaignId, status)`. Existing email-log rows keep `campaignId = NULL`, so the unique index cannot conflict with them.
+  - `20261108001500_add_org_portability_jobs` adds the `OrgPortabilityJob` table for organization export and setup import.
+- **No new required env vars.** The new variables are all optional. See [Configuration](./configuration.md):
+  - `STORAGE_PROVIDER` (`local` default, or `s3`) plus `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT` and `S3_PUBLIC_URL` select an operator-managed S3-compatible platform base. With `STORAGE_PROVIDER=s3`, an incomplete or invalid `S3_*` set is a fatal boot error in production.
+  - `STORAGE_MIGRATION_DIRECTORY` sets where the `storage:local-to-s3` manifest is kept.
+  - `ORG_PORTABILITY_SPOOL_DIR`, `ORG_PORTABILITY_MAX_ARCHIVE_BYTES` and `ORG_PORTABILITY_MAX_ASSET_BYTES` configure the private archive spool and size limits.
+  - `EPURE_DSN` (backend, read at runtime) and `NEXT_PUBLIC_EPURE_DSN` (frontend, baked in at build time) mirror error events to Epure. Both also need `NEXT_PUBLIC_SENTRY_DSN`. The published image is built without `NEXT_PUBLIC_EPURE_DSN`, so the frontend mirror needs a self-built image.
+  - The `INNGEST_*` descriptions now cover a production self-hosted Inngest engine as well as Inngest Cloud. The variable names are unchanged. See [Inngest & Cron](./inngest-and-cron.md#for-production-self-hosted).
+- **Moving platform storage to S3 is optional and operator-initiated.** Nothing moves on upgrade, and `STORAGE_PROVIDER` defaults to `local`. To move, follow [Platform local-to-S3 migration](./storage.md#platform-local-to-s3-migration) using the new `storage:local-to-s3 inventory|copy|verify|copy-back` command. The command never deletes from either side. In S3 mode, a legacy `/uploads/...` request that reaches the frontend gets a 307 redirect to the same key under `S3_PUBLIC_URL`. In the published all-in-one image, nginx serves files still on the uploads volume and passes missing ones to the frontend for that redirect.
+- **Re-sync the Inngest app.** Three new functions must register: `org-portability-export` (event `org/portability.export`), `org-portability-import` (event `org/portability.import`) and the hourly cron `org-portability-expiry` (`17 * * * *`). If Inngest does not sync the app automatically, re-sync it after the redeploy. Until then, exports and imports stay pending and expired archives are not purged. See [Inngest & Cron](./inngest-and-cron.md).
+- **Organization export and setup import.** Owners can now export an organization as a passphrase-encrypted archive and import one into a new workspace. Archives are spooled under `ORG_PORTABILITY_SPOOL_DIR` and expire after 24 hours. By default that is the container's temp directory, which is lost when the container is recreated. See [Docker → Organization archive spool](./docker.md#organization-archive-spool). Setup import requires `USE_INNGEST=true`. The import upload routes accept JSON bodies up to 50 MB, so a reverse proxy with a smaller body limit returns 413.
+- **Graceful shutdown drains HTTP first.** On `SIGTERM` the backend now closes idle and websocket connections and waits up to 5 seconds for in-flight requests before it closes Redis and Prisma. Docker's default stop timeout is 10 seconds, so give the container more headroom, for example `stop_grace_period: 30s` (Compose) or `terminationGracePeriodSeconds: 30` (Kubernetes). See [Scaling → Graceful shutdown](./scaling.md#graceful-shutdown).
+- **Comment sync no longer deletes stored comments on a failed fetch.** Only a successful, empty provider response can reconcile deletions. Fetch, authentication, parsing, malformed-response and HTTP-200 error-payload failures leave stored comments untouched. Channels already flagged `refreshNeeded` are skipped. The comments sweep is now throttled by a function rate limit rather than a trailing sleep.
+- **Invited registration is atomic.** A valid invite creates the user, profile and invited-organization membership in one transaction, with no personal organization. A present but invalid or expired invite is rejected instead of silently falling back to an uninvited signup. A signed-in user with no active workspace now gets `403 NO_WORKSPACE` from organization-scoped routes.
+- **Rebuild the render image when using Podman renders.** `docker/Containerfile.render` is unchanged, but the frame renderer and encoder it compiles in changed (for example, odd export dimensions are normalized). A stale `localhost/postmill-render:latest` keeps the old behaviour. See [Video rendering](./video-rendering.md).
+- **New operator commands.** `storage:local-to-s3 <inventory|copy|verify|copy-back>` (above) and `announcement:open-beta-end <preview|test|status|send>` (see [Requirements → CLI commands](./requirements.md#cli-commands)). The published image does not include the commands app, so run them from a source checkout against the production environment.
 
 ## v1.4.0
 
@@ -256,4 +276,4 @@ If an upgrade causes issues:
 - [Backup & Retention](./backup-and-retention.md) — backup before upgrade
 - [Developer Docs: Database](../developer-docs/database.md) — schema management and safety
 
-> Verified against v1.4.0
+> Verified against v1.5.0

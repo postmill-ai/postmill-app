@@ -44,7 +44,12 @@ Each folder has a `parentId`, enabling unlimited nesting.
 - Deleting a non-empty folder asks you to confirm **Delete folder and move contents to All Files?** —
   only the folder is removed: its files become unfiled (they appear under **All Files**) and its
   subfolders move to the root level.
-- Click the **+** button in the folder header to create a new folder at the root level.
+- Click the **+** button in the folder header to create a new folder at the root level. If the
+  folder cannot be created, the notification shows the reason.
+- The open folder is reflected in the URL (`/files/<folder>/<subfolder>`), so folder views can be
+  bookmarked and the browser's back button steps between folders.
+- [Bulk Create](./media/designer.md#bulk-create-from-a-spreadsheet) saves each batch in its own
+  folder, holding the PNGs, each row's editable `.pdesign`, and the `source/` template and CSV.
 
 ## Uploading files
 
@@ -53,6 +58,9 @@ Files upload into the currently selected folder. Two upload methods are supporte
 - **Drag and drop**: drag files from your file system onto the media area. The uploader accepts
   images, videos, audio, and documents.
 - **File picker**: click the upload button in the toolbar to browse and select files.
+
+Default size limits are 10 MB per image, 1 GB per video, and 50 MB per audio file or document
+(PDF, TXT, Markdown, CSV, TSV, JSON); operators can change them (`UPLOAD_*_MAX_BYTES`).
 
 Uploads show progress indicators and complete with a success notification. A video's poster
 thumbnail is generated in the background after the upload (and after a generation job completes),
@@ -98,6 +106,7 @@ label such as **Image design**, **Video design**, **Image template**, or **Video
 | **Tags** | Add tags by typing and pressing Enter, comma, or Tab. Remove tags by clicking the × icon. Tags persist to the file metadata. |
 | **Campaigns** | Tag the file to one or more campaigns. |
 | **Metadata** | Read-only display of file size (formatted as B/KB/MB), MIME type, and creation date. |
+| **Video thumbnail** | Video files only: shows the current poster and **Upload custom thumbnail** to replace it with your own image (used in Files and video previews). Also available in the preview. |
 | **Actions** | **Copy URL**, **Download**, **Open file**, and **Delete** (soft-delete to trash). |
 
 ## Drag to move between folders
@@ -160,4 +169,4 @@ cloud object storage.
 Configure storage providers in **Settings → File Storage**. See
 [Storage Setup](../operations-guide/storage.md) for provider configuration and quota management.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

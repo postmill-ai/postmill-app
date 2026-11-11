@@ -82,6 +82,10 @@ additional scopes:
 POSTMILL_OAUTH_SCOPE: 'openid profile email groups'
 ```
 
+`POSTMILL_OAUTH_SCOPE` is space-separated and optional; unset or blank means `openid profile email`.
+Keep `openid` in the list. It applies only to the environment bootstrap: a DB-managed `GENERIC`
+provider config (administration app) uses its own scopes, which win.
+
 ### 4. Redeploy
 
 Restart the application after setting these variables. The login page will show a button with
@@ -105,7 +109,7 @@ Restart the application after setting these variables. The login page will show 
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `POSTMILL_OAUTH_SCOPE` | `openid profile email` | OIDC scopes to request |
+| `POSTMILL_OAUTH_SCOPE` | `openid profile email` | OIDC scopes to request (space-separated). Overridden by a DB-managed config's scopes |
 
 ## Provider-specific examples
 
@@ -388,4 +392,4 @@ Existing users can still log in. Create new users through the Teams settings pag
 - [Platform Channel Apps](./platform-channel-apps.md) — the shared channel-OAuth apps the Facebook/X/LinkedIn/Google logins dual-use
 - [Security](./security.md) — OAuth 2.0 / PKCE hardening, open-redirect allowlisting
 
-> Verified against v1.4.0
+> Verified against v1.5.0

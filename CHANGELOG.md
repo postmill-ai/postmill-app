@@ -7,6 +7,128 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-11
+
+### Added
+
+- **Organization export and import:**
+  - Owners can export a whole organization from **Settings → Data** as an encrypted `postmill.org-export` archive. The archive holds the domain data plus de-duplicated media and custom brand fonts, streamed from each file's own storage. Provider credentials go into an AES-256-GCM secret bundle behind a passphrase. Archives sit in a private spool with mode `0600`, download through one-time 5-minute tokens, and expire after 24 hours. Billing entitlements, passwords, sessions, API keys and OAuth grants are never exported. The existing GDPR export is unchanged.
+  - The first-run setup has an optional **Import** step. It validates every hash and the full asset inventory, then remaps data, members, custom roles, files, webhooks and secrets in one transaction. Imported channels, providers, sharing and automation stay disabled until you turn them on.
+  - New optional env vars: `ORG_PORTABILITY_SPOOL_DIR`, `ORG_PORTABILITY_MAX_ARCHIVE_BYTES`, `ORG_PORTABILITY_MAX_ASSET_BYTES`.
+  - New Inngest functions: `org-portability-export`, `org-portability-import`, and the hourly `org-portability-expiry` cron.
+- **Platform S3 base storage:**
+  - `STORAGE_PROVIDER=local|s3` (with `S3_*`) selects object storage for root and unmounted organization files and for generated media. Objects are partitioned by tenant and date, and the hosted quota is enforced per organization. Per-org BYO storage mounts still take precedence for their folders.
+  - Existing `/uploads/...` URLs keep working through temporary redirects.
+  - A resumable `storage:local-to-s3` operator command (`inventory`, `copy`, `verify` with SHA-256, `copy-back`) handles the move. Production refuses to boot on incomplete S3 configuration.
+- **Designer:**
+  - **Magic Grab / Select Subject:** splits an image into independently movable subject and reconstructed-background layers, on static images and still-image video clips. It needs both a background-removal and an inpainting provider; on Replicate the background is rebuilt with `bria/eraser`.
+  - **Background removal review:** a before/after dialog with Preserve frame, Fit to canvas or manual geometry, and nothing changes until **Apply**. Non-destructive **Restore/Erase** refinement keeps the original pixels. Replicate background removal now defaults to Bria.
+  - **Image expansion:** directional and whole-page expansion with before/after review. The original pixels are restored over the result, so only new regions are generated.
+  - **Bulk Create** (File → Bulk Create):
+    - Map CSV/TSV columns to text, image and color variables across outputs, pages, rich text and symbols.
+    - Accepts spreadsheet `IMAGE()` formulas, including the Excel `_xlfn` and semicolon forms, and Google Drive share links.
+    - Validates every row and remote image before any side effect, and rolls back the whole batch on failure.
+    - Each row produces an editable design and a `.pdesign`, plus per-output PNGs and a ZIP with `results.json`. The batch folder also gets `source/template.pdesign` and `source/data.csv` so the batch can be re-run. The dialog has a format guide and a CSV template download.
+  - **QR codes:** Insert → QR Code on static canvases and as video clips, with editable content, colors, error correction and quiet zone.
+  - **Pathfinder:**
+    - Operations work across two or more shapes.
+    - Contained results become editable compound paths that keep their holes, using even-odd fill.
+    - Unite handles rotation, flips and edge-touching shapes.
+  - **Text effects and animation:**
+    - Arc, Wave, Circle, Gradient, Outline, Shadow and 3D Extrusion presets.
+    - Entrance, emphasis and exit animation presets for every visual clip type.
+    - Per-word text colors inside rich text.
+  - **Video editing:**
+    - Split, Duplicate, Delete and Start/End/Duration controls.
+    - Multi-select and marquee selection, with group/ungroup.
+    - Shape gradients and corner radius, four-way text alignment, and italic styles.
+    - Custom video posters.
+    - Character references (up to three images, reused across scenes on MiniMax S2V-01 and Veo 3.1).
+    - A Clip Inspector **Playback** group with Reverse and an Original audio mute.
+  - **Brand Kit on video designs:** apply palette and fonts to video text, caption and shape clips, and insert logos as image clips.
+  - **AI Content Assistant:** three headline, copy, caption or CTA alternatives from a short brief. **Smart suggestions** for font, color, spacing and align/distribute layout, cached per layer for the session.
+  - **Export preflight:** non-blocking checks for low contrast, text in unsafe zones, missing media and text overflow, with links to the affected layer or clip.
+  - **Version compare:** see the current design and a saved version side by side before restoring.
+  - **Mobile workspace:** canvas-first layout with quick actions, bottom sheets for Tools, Inspector and Brand, a collapsible timeline, and touch editing with pinch zoom.
+  - **View → Touchpad mode** (two-finger pan, pinch to zoom), saved per organization.
+  - Blend modes in the Inspector, a Share dialog with the exact design link, and a batch font upload.
+- **AI Designer:**
+  - **Attach files** to the start prompt and to revisions: up to 10 images, PDF, TXT, Markdown, CSV/TSV or JSON files, 20 MB each. Text is extracted within bounds (first 10 PDF pages).
+  - **Use as logo** on reference images. Selected brand-profile logos fill logo slots, and brand palettes and explicit hex colors are applied exactly.
+- **Files:**
+  - Custom video thumbnails in file details.
+  - PDF uploads, with their own 50 MiB limit (`UPLOAD_DOCUMENT_MAX_BYTES`).
+  - Reliable folder creation and navigation.
+  - Faster, lazy-loaded previews.
+- **AI providers:** **Demon Route** joins as a 14th hub/gateway, making 31 AI providers (17 direct + 14 hubs). Its models are discovered live, and credentials are org-scoped with no env fallback.
+- **User language:** the UI language is saved on the user profile (`UserProfile.preferredLanguage`). It is captured at registration and restored on sign-in across devices.
+- **Owner announcement command:** `announcement:open-beta-end` (`preview`, `test`, `status`, `send`) sends a one-time operator email campaign. Campaign log claims and provider idempotency keys prevent duplicate delivery.
+- **Observability:** an optional Epure error-event mirror (`EPURE_DSN`, `NEXT_PUBLIC_EPURE_DSN`). Sentry stays primary and receives every envelope; only exceptions are mirrored, and source maps are uploaded for the release.
+- **Self-hosted Inngest in production:** the health check probes `INNGEST_BASE_URL` instead of Inngest Cloud when a self-hosted engine is configured.
+
+### Changed
+
+- **Two additive migrations:**
+  - `20261102160000_add_user_preferred_language_and_email_campaigns` adds a nullable `UserProfile.preferredLanguage` and a nullable `EmailLog.campaignId`, with a unique index on `(campaignId, toAddress)`.
+  - `20261108001500_add_org_portability_jobs` adds the new `OrgPortabilityJob` table.
+  - Neither is destructive.
+- **AI Designer fidelity:**
+  - Generic fallback plans are rejected before any paid generation.
+  - A `subject_fidelity` vision check covers explicit objects, screenshots and mockups.
+  - Reference-guided and strict-subject slots never fall back to stock or an unconditioned image.
+  - Text-only revisions no longer replace photos.
+  - Off-brief results are held back with an actionable error.
+- **Designer exports:**
+  - PNG, transparent PNG and WebP keep their format when an export exceeds the size limit; scale or quality is lowered, with a warning, instead of silently switching to JPEG.
+  - Multi-output raster exports render on the server, one output at a time with progress, so the browser no longer stalls.
+- **Comment sync:** the sweep is a function-wide Inngest rate limit (one fan-out per `COMMENTS_SWEEP_INTERVAL_MINUTES`). Previously every organization synced every minute. A failed provider fetch now marks only that channel `refreshNeeded` and never deletes stored comments.
+- **Invited registration** (local and OAuth): the user and the invited membership are created in one transaction, with no personal workspace created first. An invalid or expired invite is rejected instead of silently becoming an uninvited signup.
+- **Media provider errors** name the provider and give a safe, translated message instead of raw JSON or "Internal server error". On quota or billing failures, active organization owners are notified, at most once a day per provider.
+- **Graceful shutdown:** HTTP stops and drains in-flight requests before Redis and Prisma close, with a bounded drain, and open WebSockets are closed.
+- `GET /settings/media/config` reads AI credentials in one query instead of one per provider.
+
+### Fixed
+
+- **Designer:**
+  - Odd export dimensions no longer fail H.264 encoding.
+  - Crop, cover and focal geometry match across preview, server export and video.
+  - Previews:
+    - Previews of saved designs and `.pdesign` files are reliable.
+    - The thumbnail backfill reuses source previews.
+    - SVG icons render in server previews.
+    - Font stylesheets are loaded before text is measured.
+  - `.pdesign` import:
+    - Imports now open as the addressed design.
+    - Nested groups, effects and masks survive the import.
+  - Editing:
+    - Oversized pasted font stacks no longer break autosave.
+    - Typed X/Y/width/height values commit as one undo step.
+    - The text inspector works on later pages.
+    - Masked layers keep their drop shadows.
+    - Still-image clips no longer stay black after reopening.
+  - Inline images on `/media/remove-background`, `/inpaint`, `/outpaint`, `/magic-grab` and `/upscale` no longer return 413.
+  - Small outpaint sources are upscaled to the provider minimum, and Flux outpaint mask validation passes.
+  - Stock vectors and outline icons recolor correctly.
+  - Repeated output formats are allowed.
+- **Composer:** removing a selected channel, or opening a deleted post group, now shows "Post not found" instead of crashing; post groups that are unknown or not yours return 404.
+- **Auth:** registration errors are returned as JSON (closes a reflected-XSS code-scanning alert), and join-org no longer fails on response serialization.
+- **OAuth:** expected Instagram/Meta authorization rejections show the provider's message and are no longer reported to Sentry as crashes.
+- **Media:** large video thumbnail sources (up to about 2 GB) are streamed instead of skipped. ElevenLabs restricted API keys pass the connection test. Focal detection no longer sends data/blob URLs to the provider.
+- **Frontend:** Plus Jakarta Sans is self-hosted, so builds no longer depend on Google Fonts.
+- **Pre-release fixes** found during the docs re-verification:
+  - **Uploads:** in the published image, nginx now passes `/uploads/...` requests for files missing from the uploads volume to the frontend. In S3 mode this means legacy URLs keep redirecting after local files are removed (#420).
+  - **OIDC:** `POSTMILL_OAUTH_SCOPE` is honored by the environment bootstrap; it was documented but ignored (#421).
+  - **Stock media:** premium Content Pack icons and SVG vectors are saved from their licensed download instead of a rasterized low-res preview (#422).
+  - **Organization export/import** (#423):
+    - The hourly expiry sweep no longer deletes an archive while its export or import is still running.
+    - The download window now runs for 24 hours from when the export finishes.
+    - The spool directory is tightened to `0700` on every use.
+    - Plain-text, Markdown, CSV, TSV and JSON uploads are checked against the document limit instead of the audio limit.
+
+### Security
+
+- Dependency patches for follow-redirects, node-forge and systeminformation.
+
 ## [1.4.0] - 2026-10-28
 
 ### Added

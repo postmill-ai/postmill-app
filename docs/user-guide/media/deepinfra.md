@@ -31,4 +31,4 @@ All three tabs post to DeepInfra's synchronous `/v1/inference/{model}` endpoint.
 - [Settings](../settings) — configuring AI providers.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

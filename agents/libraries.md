@@ -48,10 +48,10 @@ here. Tour of `libraries/nestjs-libraries/src/`:
 | Directory | Purpose | Put code here when… |
 |---|---|---|
 | `database/prisma/` | `schema.prisma` + committed `migrations/` + `prisma.service.ts` (exports `PrismaService`, `PrismaRepository<T>`, `PrismaTransaction`) + `database.module.ts` | Schema change (edit schema → `pnpm run prisma-migrate-dev`), or touching the base Prisma classes. |
-| `database/prisma/<domain>/` | 39 domain dirs (`posts`, `users`, `integrations`, `campaigns`, `analytics`, `media`, `roles`, …), each holding that domain's `*.repository.ts` (only layer that touches Prisma) and usually `*.service.ts` | Any new DB access — always via a repository; controllers/services never call Prisma directly. |
+| `database/prisma/<domain>/` | 41 domain dirs (`posts`, `users`, `integrations`, `campaigns`, `analytics`, `media`, `roles`, …), each holding that domain's `*.repository.ts` (only layer that touches Prisma) and usually `*.service.ts` | Any new DB access — always via a repository; controllers/services never call Prisma directly. |
 | `database/seeds/` | `RbacSeeder`, `BackfillService`, `demo-seeder.ts`, `featured-provider.seeder.ts` — sanctioned to use `PrismaService` + `$transaction` directly (cross-table seeds/backfills) | Writing a seed or a data backfill. |
 | `dtos/<domain>/` | All class-validator DTOs, one dir per domain. `dtos/webhooks/safe.fetch.ts` exports **`safeFetch`** — the mandatory SSRF-safe outbound HTTP wrapper | New request/response body shape. Global pipe has `whitelist` + `forbidNonWhitelisted` — undeclared fields are rejected. |
-| `services/` | Cross-domain infra services: `email.service.ts`, `stripe.service.ts`, `exception.filter.ts`, `codes.service.ts`, `make.is.ts` | Infra that has no single domain owner. |
+| `services/` | Cross-domain infra services: `email.service.ts`, `owner-email-campaign.service.ts`, `exception.filter.ts`, `codes.service.ts`, `make.is.ts`, `stripe.country.list.ts` | Infra that has no single domain owner. |
 | `integrations/` | `integration.manager.ts` — **sole funnel** `getClientInformation(integration, orgId?, configId?)` for channel OAuth credentials; `channel-env-credentials.ts` (env-fallback resolution); `social/` + `social.abstract.ts` (channel posting abstraction) | Channel credential resolution or posting-behavior changes. |
 | `inngest/` | `inngest.client.ts` / `inngest.module.ts` / `inngest.service.ts`, `inngest-run.service.ts`, `activities/` (job logic), `errors/` | New background-job logic goes in `activities/`; function definitions live in `apps/backend/src/inngest/functions`. Idempotency ids must be event-unique. |
 | `agent/` | LangGraph generator agent (`agent.graph.service.ts` — `StateGraph`, topics/categories) | Changes to the AI content-generation graph. |
@@ -135,7 +135,7 @@ path. Full mechanics, versioning lifecycle, and how to add a provider: `agents/p
 ## `apps/*` quick map
 
 - **`apps/backend`** (`postmill-backend`) — thin NestJS REST API shell. `src/api/routes/` holds all
-  REST controllers (112 files; `src/api/controllers/` only has the Inngest serve controller);
+  REST controllers (70 non-spec `.ts` files; `src/api/controllers/` only has the Inngest serve controller);
   `src/api/api.module.ts` wires them via its `imports`/`controllers`/`providers` arrays;
   `src/inngest/functions/` defines the Inngest functions (logic in nestjs-libraries activities);
   `src/public-api/` is the public REST API module; `src/providers.generated.ts` +
@@ -146,7 +146,11 @@ path. Full mechanics, versioning lifecycle, and how to add a provider: `agents/p
 - **`apps/commands`** (`postmill-command`) — operator CLI: NestJS `nestjs-command` runner
   (`src/main.ts` + `src/command.module.ts`) with tasks in `src/tasks/`: `seed-demo.ts`,
   `refresh.tokens.ts`, `configuration.ts`, `agent.run.ts`, `backfill-provider-versions.ts`,
-  `backfill-design-thumbnails.ts`. The command module imports the same `@Global` module set
+  `backfill-design-thumbnails.ts`, `owner-announcement.ts` (`announcement:open-beta-end
+  <preview|test|send|status>` — one-time owner email campaign, deduped per recipient by
+  `EmailLog.campaignId`), `storage-migration.ts` (`storage:local-to-s3
+  <inventory|copy|verify|copy-back>` — copies platform objects between local disk and the
+  operator S3 base without deleting either side). The command module imports the same `@Global` module set
   as the backend app module (minus `ChatModule`) plus `ProvidersBootstrap` — without those,
   `DatabaseModule` services and kernel resolution (`storage/local@v1`, …) fail standalone.
   **Run a command against the COMPILED dist with the path register** — the kernel and provider

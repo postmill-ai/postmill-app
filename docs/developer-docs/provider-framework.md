@@ -1,6 +1,6 @@
 # Provider framework
 
-> Verified against v1.4.0
+> Verified against v1.5.0
 
 Postmill integrates with external services across AI, media generation, social channels, short-links, VPN egress, storage, email, auth, content packs, chat comms, and payments. The **unified provider framework** replaces the previous collection of bespoke registries with a single `ProviderKernel` and a consistent package-per-provider model.
 
@@ -66,8 +66,9 @@ See [Adding a Provider](./adding-a-provider.md) for the social-channel recipe. T
 2. Add one `src/v1/<domain>.adapter.ts` module per domain the provider participates in, exporting a `ProviderModule`.
 3. Add a `src/v1/metadata.ts` with the static `ProviderMetadata` the defaults resolver and catalog read.
 4. Add the package import + spread to `apps/backend/src/providers.generated.ts` (hand-maintained, alphabetical order), the path mapping in `tsconfig.base.json`, and the dependency in `apps/backend/package.json`.
-5. Add a conformance test under `libraries/providers/<id>/src/__tests__/`.
-6. Update [Provider Versions](./provider-versions.md) and bump the "Verified against vX.Y.Z" (the current `version.txt`) note.
+5. Add a conformance test under `libraries/providers/<id>/src/v1/__tests__/`.
+6. If the adapter was built without a live credential, add `'<domain>/<id>'` to `BETA_PROVIDER_KEYS` in `libraries/providers/kernel/src/verification.ts` so the settings UI shows a "Beta" badge until it is smoke-tested.
+7. Update [Provider Versions](./provider-versions.md) and bump the "Verified against vX.Y.Z" (the current `version.txt`) note.
 
 ## Provider metadata (`src/v1/metadata.ts`)
 

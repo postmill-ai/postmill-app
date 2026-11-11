@@ -33,11 +33,16 @@ Each category can be enabled or disabled per channel. The defaults are:
 | **Channel issues** | on | on | on | A channel needs reconnecting or is disabled. |
 | **Replies** | on | off | on | New synced comments or a comment backlog digest. |
 | **AI budget** | on | off | on | AI spend reaches a percentage of the provider or organisation budget cap. |
-| **Media jobs** | off | off | on | A media render, transcription, or stock import finishes. |
+| **Media jobs** | off | off | on | A media render, transcription, or stock import finishes; a media provider reports its quota or billing limit was reached. |
 | **Announcements** | on | off | on | An admin broadcasts a message to the organisation. |
 | **Streak reminders** | on | off | on | Your posting streak is about to expire. |
 | **Agent briefs** | off | off | off | Weekly proactive agent digest (opt-in). |
 | **Analytics alerts** | on | off | on | Anomaly spike/drop or the weekly summary. |
+
+When a media generation fails because the provider's quota or billing limit was reached, active
+organisation owners get a **Media provider quota reached** notification naming the provider and
+linking to AI media settings. It is sent at most once per day per provider and follows the owners'
+normal **Media jobs** preferences.
 
 The category list is enforced by the API and the preference panel. A stale frontend sending an unknown category is silently merged; unknown categories fall back to the master channel toggle.
 
@@ -77,4 +82,4 @@ A small set of single-recipient emails is sent regardless of notification prefer
 
 > See also [Team & Roles](./team-and-roles.md) for broadcast permissions, [Settings](./settings.md) for the settings layout, and [Operations Guide → Configuration](../operations-guide/configuration.md) for email and FCM environment variables.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

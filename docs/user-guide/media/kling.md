@@ -29,4 +29,4 @@ Video jobs are submitted to the official Kling API (`/text-to-video/<model>` or 
 - [Settings](../settings) — configuring direct Kling AI credentials.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

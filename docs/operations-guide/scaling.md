@@ -134,6 +134,9 @@ broken traffic. Fatal (boot-blocking) issues:
 - neither `FRONTEND_URL` nor `MAIN_URL` set
 - Inngest keys (`INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY`) missing when `USE_INNGEST=true` and
   `INNGEST_DEV` is not `1`
+- an invalid `STORAGE_PROVIDER` (anything but `local` or `s3`), or `STORAGE_PROVIDER=s3` with any of
+  `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_REGION` or `S3_PUBLIC_URL` missing,
+  or with a non-HTTP(S) `S3_PUBLIC_URL`/`S3_ENDPOINT`
 
 The exit fires when `NODE_ENV=production` (and `NOT_SECURED` is unset), or anywhere
 `CONFIG_CHECK_STRICT` is set. In local development without `CONFIG_CHECK_STRICT`, these are
@@ -159,4 +162,4 @@ When enabled, Node auto-instrumentations (HTTP, Express/Nest, Postgres, Redis, u
 are registered and traces are shut down cleanly on `SIGTERM`/`SIGINT` alongside the
 graceful-shutdown path.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

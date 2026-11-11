@@ -17,8 +17,15 @@ log in. The first user of an organization becomes its **Owner** (full access inc
 see [team roles](./team-and-roles.md)). Depending on how your instance is configured, you may
 also be able to sign in with Google, GitHub, or your company's OIDC identity provider.
 
+If registration fails, the error message is shown on the signup form. If you are registering from a team invitation, your account is created inside the
+inviting organization instead of a new one — an expired invitation is refused with
+**Invitation is invalid or expired** (see [Team & Roles](./team-and-roles.md#accepting-an-invitation)).
+The interface language you are using when you sign up is saved as your language preference.
+
 A brand-new organization first lands on the one-time `/setup` wizard, where an owner or admin
 connects at least one AI provider before the app opens — see [First-run Setup](./first-run-setup.md).
+Moving from another Postmill organization? The wizard's first step, **Import**, restores an
+[Organization export](./organization-export.md) archive instead.
 
 ## 2. Connect Your First Channel
 
@@ -118,9 +125,11 @@ Postmill is organized into these sections, accessible from the left sidebar:
 
 - Customize your timezone in the avatar menu → **Profile** (`/user/me`) — all calendar dates and
   scheduling times respect your selected timezone.
+- Change the interface language from the avatar menu → **Language** — the choice is saved to your
+  profile and follows you across devices.
 - Invite team members from **Settings** → **Team**.
 - Configure AI providers in **Settings** → **AI** to enable AI-powered content generation.
 - Set up campaigns to organize posts into themed folders: [Campaigns](./campaigns.md).
 - Explore the full composer capabilities: [Composer](./composer.md).
 
-> Verified against v1.4.0
+> Verified against v1.5.0

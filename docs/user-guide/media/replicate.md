@@ -29,6 +29,10 @@ speech-to-text mode and two native editors (mask painting, video merge) and a ca
 | Voice Clone | Audio | Async | Clone a voice from a short audio sample. |
 | Speech to Text | Audio → Text | Sync | Transcribe an audio file to text. |
 
+The **Inpaint** category also lists **Bria Eraser**, which removes the masked area and fills it
+from the surroundings without a prompt. The [Designer](./designer)'s **Magic Grab / Select Subject**
+always uses Bria Eraser on Replicate to reconstruct the background behind the subject.
+
 Background removal defaults to **Bria Remove Background** for higher-quality subject masks when the image is reachable by URL. Inline uploads use **851-labs Background Remover**, which accepts image bytes directly. An organization's explicit background-removal model default still takes precedence.
 
 Every run uses the org's own Replicate token, configured in **Settings → Content → AI Media**
@@ -51,8 +55,9 @@ Kling 2.5 Turbo Pro, and 300 for Riffusion.
 
 When Replicate is your workspace's **image-to-image** model default, [AI Designer](./ai-designer)
 can also condition its generated imagery on a reference image — supported for
-`black-forest-labs/flux-kontext-pro` and `black-forest-labs/flux-dev`; other models fall back to
-text-to-image.
+`black-forest-labs/flux-kontext-pro` and `black-forest-labs/flux-dev`. Another image-to-image
+model cannot take the reference, so a reference-guided AI Designer image fails instead of being
+replaced by text-to-image or stock.
 
 ## Video duration and image inputs
 
@@ -158,4 +163,4 @@ The meme editor is a native canvas tool:
 - [Settings](../settings) — configuring the Replicate media provider.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

@@ -1,6 +1,6 @@
 # Data Model
 
-90 Prisma models and 8 enums in a single schema at `libraries/nestjs-libraries/src/database/prisma/schema.prisma`. This page lists every model grouped by domain with a one-line purpose and key relationships.
+91 Prisma models and 8 enums in a single schema at `libraries/nestjs-libraries/src/database/prisma/schema.prisma`. This page lists every model grouped by domain with a one-line purpose and key relationships.
 
 ---
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | `Organization` | Tenant — every resource belongs to an org. Carries `paymentProvider` (the payments provider its `paymentId` belongs to) and the nullable org-wide AI budget columns `aiBudgetMonthlyCap` / `aiBudgetDailyCap` / `aiBudgetAlertThresholdPct` | FK to `Subscription`; has many `Integration`, `UserOrganization`, `Post`, `Campaign` |
 | `User` | Identity/auth only — email, password, `providerName`/`providerId`, `isSuperAdmin`, `activated`, last-online telemetry | Unique on `(email, providerName)`; has one `UserProfile`, many `Session`, `UserOrganization` |
-| `UserProfile` | 1:1 profile split off from `User` — name, lastName, bio, `avatarUrl` (provider/Gravatar), `pictureId` (uploaded), IANA `timezone`, notification prefs | FK → `User` (unique, cascade), `File` (picture) |
+| `UserProfile` | 1:1 profile split off from `User` — name, lastName, bio, `avatarUrl` (provider/Gravatar), `pictureId` (uploaded), IANA `timezone`, `preferredLanguage` (persisted UI language, set via `POST /user/preferred-language`), notification prefs | FK → `User` (unique, cascade), `File` (picture) |
 | `Session` | Login session backing refresh-token rotation — `tokenHash` (sha256 of the refresh token, rotated on every use), `previousTokenHash` (last rotated-out hash; reusing it revokes the session), userAgent/ip, `expiresAt`, `revokedAt` | FK → `User` (cascade) |
 | `UserOrganization` | Many-to-many join between users and orgs. `roleId` → `AppRole` is the role pointer. | FK → `Organization`, `User`, `AppRole` (nullable `roleId`) |
 | `AppRole` | RBAC role. Org-scoped when `organizationId` is set; NULL org = seeded system role (`owner`/`admin`/`editor`/`member`/`viewer`, `isSystem: true`) | FK → `Organization` (nullable); has many `AppRolePermission`, `UserOrganization` |
@@ -208,14 +208,15 @@ All 6 models are managed by the Mastra framework. They are **not** accessed thro
 
 ---
 
-## Miscellaneous (4)
+## Miscellaneous (5)
 
 | Model | Purpose | Key Relationships |
 |---|---|---|
 | `AuditLog` | DB-backed audit log for credential and storage mutations | FK → `Organization` |
-| `EmailLog` | Email send-log metadata (no body). Lifecycle: queued → sent → delivered/bounced/complained/opened/clicked | Indexed on `(provider, providerMessageId)`, `sentAt`, `status` |
+| `EmailLog` | Email send-log metadata (no body). Lifecycle: queued → sent → delivered/bounced/complained/opened/clicked. Nullable `campaignId` tags one-time owner email campaigns (the `announcement:open-beta-end` command) so each recipient is sent at most once | Unique on `(campaignId, toAddress)`; indexed on `(provider, providerMessageId)`, `sentAt`, `status`, `(campaignId, status)` |
 | `MigrationLedger` | Internal migration bookkeeping | Unique on `key` |
 | `InngestFunctionRun` | Latest run timing/status per Inngest cron function for `/health` | Unique on `functionId` |
+| `OrgPortabilityJob` | Owner-only organization export/import job (`kind` = `export`/`import`) — status (`uploading`/`validating`/`ready`/`pending`/`processing`/`completed`/`failed`/`expired`), JSON `progress`, private `spoolPath`, `archiveSha256`, deployment-encrypted temporary `archiveKeyCiphertext`, `expiresAt`. Processed by the `org-portability-export` / `org-portability-import` Inngest functions; `org-portability-expiry` purges expired archives | FK → `Organization`, `User` (`ownerId`), both cascade; unique on `(organizationId, archiveSha256)`; indexed on `(status, expiresAt)` |
 
 ---
 
@@ -236,4 +237,8 @@ All 6 models are managed by the Mastra framework. They are **not** accessed thro
 `20260714150606_add_medialocker_storage_type` (`ALTER TYPE ... ADD VALUE` — backward-compatible, no
 data rewrite).
 
-> Verified against v1.4.0
+`UserProfile.preferredLanguage` and `EmailLog.campaignId` were added as nullable columns by
+`20261102160000_add_user_preferred_language_and_email_campaigns`; `OrgPortabilityJob` was created by
+`20261108001500_add_org_portability_jobs`. Both are additive.
+
+> Verified against v1.5.0

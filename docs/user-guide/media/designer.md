@@ -29,7 +29,9 @@ saved.
   should be edited separately. Linked formats remain the default.
 - **Pathfinder** — select two or more unlocked shapes, paths, or icons to Unite, Minus Front,
   Intersect, Exclude, Divide, or Outline them in selection order. The whole operation is one undo
-  step; disjoint regions are preserved, and invalid hole results leave the design unchanged.
+  step. Disjoint regions are preserved as separate paths, and a region enclosed by another (a hole,
+  such as Minus Front cutting through the middle of a shape) becomes one compound path with that hole.
+  If the shapes cannot be combined, a warning appears and the design is left unchanged.
 - **Pages** — image outputs can hold multiple pages (up to 20 per output), managed in the **Pages**
   panel (add, duplicate, rename, delete). PDF export combines an output's pages into one file.
 - **Versions** — **File ▸ Save Version…** snapshots the design; the **Versions** panel lists manual
@@ -70,11 +72,16 @@ via headless Chromium + FFmpeg.
 - **Clip inspector** — exact clip **Start**, **End**, and **Duration** fields in seconds (separate
   from the whole-output duration stepper), speed and speed ramps, reverse, volume (keyframable),
   fade in/out, auto-duck under voice, **Looks** presets, filters, blend modes, motion blur, Ken Burns
-  presets, and per-property keyframes with a graph editor. Image clips can be replaced through the media picker
-  or have their background removed when a provider is configured. Shape clips have uniform or
+  presets, and per-property keyframes with a graph editor. Video and audio clips have a **Playback**
+  group directly below the timing fields with a **Reverse** switch; video clips also get an
+  **Original audio** switch that mutes or restores the clip's own sound. Image clips can be replaced
+  through the media picker, have their background removed, or use **Magic Grab / Select Subject**
+  when the required providers are configured. Shape clips have uniform or
   per-corner radius controls; text clips have Normal, Bold, Italic, and Bold Italic styles.
-  **Animations** presets apply to text, shape, image, and sticker clips; text clips also get a
-  **Typewriter** reveal. Audio clips can detect beats.
+  **Animations** presets apply to text, shape, image, and sticker clips and are grouped into
+  **Entrance** (such as Pop, Fade Up, Slide In Left, Zoom In), **Emphasis** (Pulse, Shake, Swing), and
+  **Exit** (such as Fade Out, Slide Out Left, Spin Out) presets; text clips also get a **Typewriter**
+  reveal. Audio clips can detect beats.
 - **Captions** — **CC** auto-generates captions from every audio-bearing clip (needs a
   speech-to-text provider such as Deepgram), imports `.srt`/`.vtt` files, and exports the caption
   tracks as `.srt`.
@@ -128,12 +135,20 @@ Tools, Brand, and the Inspector open as inline bottom sheets rather than coverin
 design name remains editable beside the logo. On desktop, **Brand** is available directly from the
 tool rail as well as the Window menu.
 
+The Brand panel works on video designs too: palette colors apply to the selected text, caption, or
+shape clip, brand fonts apply to the selected text or caption clip, and a logo is added to the
+timeline as an image clip.
+
 ## Canvas tools
 
 The mouse wheel zooms by default. Laptop users can enable **View → Touchpad mode** to pan with a
 two-finger swipe and zoom with a pinch (or **Ctrl/Cmd+scroll**). The preference is remembered per
 organization. While editing text, the color control above the text box colors only the selected
 characters, so one text box can contain multiple colors.
+
+With a text element selected, the Inspector's **Text Effects** presets apply **Arc text**, **Wave
+text**, **Circle text**, **Gradient text**, **Text outline**, **Text shadow**, or **3D Extrusion** in
+one click; the result stays editable text.
 
 Beyond layers, shapes, text, and pen/paint tools, the **Tools** menu carries the AI image
 actions — **Generate Image…**, **Inpaint…**, **Remove Background**, and **Expand Image (AI)…**,
@@ -185,8 +200,12 @@ for still images and still-image clips, not per-frame moving-video background re
 ### Magic Grab / Select Subject
 
 **Magic Grab / Select Subject** separates the subject into a movable layer and reconstructs the
-background through masked inpainting. Only the subject-mask area is regenerated; unrelated pixels
-stay unchanged. Review the result before Apply, then use Restore/Erase for any remaining edge cleanup.
+background through masked inpainting. It appears in the image Inspector's **AI Tools** section, and
+in the clip Inspector for still-image clips on the video timeline, only when both a
+background-removal and an inpainting provider are available. Only the subject-mask area is
+regenerated; unrelated pixels stay unchanged. Review the original, the movable subject, and the
+reconstructed background before **Apply Magic Grab**, then use Restore/Erase for any remaining edge
+cleanup. On [Replicate](./replicate) the background is reconstructed with Bria Eraser.
 
 ### AI Content Assistant and Smart Suggestions
 
@@ -240,6 +259,13 @@ Video exports also take a resolution (720p / 1080p / 4K shorthands or a free sca
 is used. After rendering, you can switch between the generated and custom poster, and the choice is
 saved to the rendered file in Files. Video renders run asynchronously; progress shows in the dialog.
 
+Static PNG, JPEG, transparent PNG, and WebP files are rendered on the server one output at a time,
+so exporting every output stays responsive at high scales. A file saved to Files must be 10 MB or
+smaller: an oversized export keeps the format you chose and steps down the scale (and, for JPEG or
+WebP, the quality) until it fits, and a warning says what was reduced. If it still cannot fit, the
+export fails with "Could not reduce PNG under 10 MB" (or the chosen format) — pick a smaller scale
+or JPEG.
+
 GIF and animated WebP are deliberately excluded from the static-canvas format list — a single-frame
 Konva snapshot can't produce real animation, so those two only exist as video-mode exports.
 
@@ -286,4 +312,4 @@ fails, the whole batch rolls back without partial designs, editable files, sourc
 Batches heartbeat while running and stop if the job is cancelled or swept as stale.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

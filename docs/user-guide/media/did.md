@@ -31,4 +31,4 @@ D-ID creates a `talk` job and returns a talk id. The job renders in the backgrou
 - [Settings](../settings) — configuring media providers.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

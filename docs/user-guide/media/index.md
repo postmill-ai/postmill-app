@@ -38,7 +38,11 @@ all work the same way:
 4. **Track progress** — the Render Queue polls while any job is `pending`/`processing` and shows a
    status pill (Queued, Rendering, Ready, Failed). Image and audio/TTS generations from most
    providers complete synchronously and appear almost immediately; video generations typically run
-   as background jobs.
+   as background jobs. When a provider rejects a job, the error names that provider and says what
+   kind of problem it was (rejected API key, quota or billing limit, rate limit, invalid request, or
+   unavailable) — it comes from your provider account, not Postmill. Quota and billing failures
+   include an **Open settings** link, and your organization's owners are notified (at most once a day
+   per provider) with a link to **Settings → Content → AI Media**.
 5. **Land in Files** — a completed job's artifact is already saved into your media storage; the
    queue card shows an inline preview (image, video, or audio player).
 6. **Hand off** — every completed image/video/audio card offers three buttons:
@@ -105,4 +109,4 @@ rides another provider's credential entirely (your fal.ai key). Each studio's ow
 its credential lives.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

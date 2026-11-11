@@ -1,6 +1,6 @@
 # Provider versions catalog
 
-> Verified against v1.4.0
+> Verified against v1.5.0
 
 This page lists every provider currently registered in the unified provider framework, grouped by domain. All current providers are at version `v1`.
 
@@ -12,7 +12,7 @@ The branded **Pika** studio uses the `fal` (`fal.ai`) adapter and credential. Th
 
 The table below shows each provider's registered domains. A provider that appears in both `ai` and `media` can share a single org credential across both surfaces.
 
-## AI (`ai`) — 30 providers
+## AI (`ai`) — 31 providers
 
 | Provider | ID | Domains | Kind / Notes |
 |---|---|---|---|
@@ -24,6 +24,7 @@ The table below shows each provider's registered domains. A provider that appear
 | Cohere | `cohere` | ai | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point |
 | DeepInfra | `deepinfra` | ai, media | hub; image-slide, image-to-image, image-to-video, text-to-image, text-to-music, text-to-speech, text-to-video |
 | DeepSeek | `deepseek` | ai | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point |
+| Demon Route | `demonroute` | ai | hub; low-reasoning, high-reasoning, workflow; OpenAI-compatible, Beta (built without a live key) |
 | Fireworks AI | `fireworks` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, image-to-image, text-to-image |
 | GMI Cloud | `gmihub` | ai | action |
 | Google Gemini | `google` | ai, auth, media, payments | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point |

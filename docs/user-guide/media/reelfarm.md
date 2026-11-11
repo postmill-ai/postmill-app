@@ -31,4 +31,4 @@ Choose **4:5** (1080×1350, default), **9:16** (1080×1920), **1:1** (1080×1080
 - Reel.Farm's public API creates **slideshow videos only**. Their UGC/avatar and greenscreen videos are generated in the Reel.Farm app — the API can list them (`video_type: "ugc" | "greenscreen"` in `GET /videos`) but cannot create them, so they are not available in this studio.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

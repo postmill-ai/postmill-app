@@ -149,7 +149,7 @@ The raw Prisma row is never shipped. **The envelope shape differs by delivery pa
 }
 ```
 
-The batched digest path emits a different flat shape — `{ "event": "comment.new", "batchSize": 12, "timeframe": "..." }` (`comments.activity.ts:96-99`).
+The batched digest path emits a different flat shape — `{ "event": "comment.new", "batchSize": 12, "timeframe": "..." }` (`comments.activity.ts:99-102`).
 
 `comment.reply` (flat, no `timestamp`):
 
@@ -231,4 +231,4 @@ The secret is deployment-wide, not per-webhook. (The management UI once showed a
 | `OUTBOUND_HTTP_TIMEOUT_MS` | `30000` | Default `safeFetch` timeout |
 | `SSRF_ALLOWED_PRIVATE_CIDRS` | — | Opt-in allowlist of private CIDRs for self-hosted internal targets |
 
-> Verified against v1.4.0
+> Verified against v1.5.0

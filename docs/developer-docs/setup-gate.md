@@ -24,18 +24,20 @@ Only users who can complete the required LLM step stay in the wizard. Once the p
 - `POST /settings/setup/complete` (auth + org-scoped + `@RequirePermission('settings', 'update')`, no billing gate) calls `OrganizationService.completeSetup(orgId)`. A member cannot mark setup done for the whole organization.
 - `OrganizationService.completeSetup` rejects the call with a 400 if the organization has no active LLM provider.
 - `OrgAiSettingsService.upsert` auto-activates the first saved LLM provider when no active provider exists, so the wizard's LLM step can proceed after a single save.
+- `/org-portability/import-uploads` (`OrgImportController`, `@RequirePermission('organization', 'manage')`; `OrgImportService` additionally requires an organization **owner**) backs the Import step: `POST /` creates an upload job, `PUT /:id/chunks` appends base64 chunks of at most 8 MiB at an explicit `offset`, `POST /:id/validate` and `POST /:id/commit` take the archive passphrase, and `GET /:id` is polled for status. Imports are refused once `setupCompletedAt` is set or when the destination organization already holds data. Validation and import run in the `org-portability-import` Inngest function; the import transaction sets `setupCompletedAt` itself.
 
 ## Wizard steps
 
-The wizard has seven steps. Only the first step is required; the rest can be skipped and configured later in Settings.
+The wizard has eight steps. Only the LLM step is required; the rest can be skipped and configured later in Settings.
 
-1. **LLM** — required. Configure an AI provider (Settings → AI). The first saved provider is auto-activated.
-2. **AI Media** — optional. Configure media-generation providers.
-3. **Channels** — optional. Connect social channels.
-4. **Content Packs** — optional. Configure premium stock providers.
-5. **Storage** — optional. Configure S3/R2/B2/IDrive/local storage.
-6. **Shortlinks** — optional. Configure a short-link provider.
-7. **VPN** — optional. Configure VPN/proxy providers.
+1. **Import** — optional, owner-only. Move an existing organization in from a `postmill.org-export` archive (exported by an owner on another instance) plus its passphrase of at least 12 characters. A completed import marks setup complete and redirects to `/dashboard`.
+2. **LLM** — required. Configure an AI provider (Settings → AI). The first saved provider is auto-activated.
+3. **AI Media** — optional. Configure media-generation providers.
+4. **Channels** — optional. Connect social channels.
+5. **Content Packs** — optional. Configure premium stock providers.
+6. **Storage** — optional. Configure S3/R2/B2/IDrive/local storage.
+7. **Shortlinks** — optional. Configure a short-link provider.
+8. **VPN** — optional. Configure VPN/proxy providers.
 
 ## Frontend components
 
@@ -44,6 +46,7 @@ The wizard has seven steps. Only the first step is required; the rest can be ski
 - `apps/frontend/src/components/setup/setup-stepper.tsx` — responsive stepper header.
 - `apps/frontend/src/components/setup/step-frame.tsx` — uniform step wrapper.
 - `apps/frontend/src/components/setup/steps/step-*.tsx` — thin wrappers over existing Settings panels:
+  - `step-import.tsx` (chunked upload, validation/import polling)
   - `step-llm.tsx`
   - `step-ai-media.tsx`
   - `step-channels.tsx`
@@ -54,8 +57,8 @@ The wizard has seven steps. Only the first step is required; the rest can be ski
 
 ## Completion flow
 
-`setup-wizard.tsx` mutates the `/user/self` SWR cache to `{ setupCompleted: true }` **before** calling `router.replace('/dashboard')`. This prevents the `LayoutComponent` gate from seeing stale state and bouncing the user back to `/setup`.
+`setup-wizard.tsx` mutates the `/user/self` SWR cache to `{ setupCompleted: true }` **before** calling `router.replace('/dashboard')`. This prevents the `LayoutComponent` gate from seeing stale state and bouncing the user back to `/setup`. `step-import.tsx` does the same (`setupCompleted: true`, then `/dashboard`) when a polled import job reaches `completed`.
 
 After completion, the org can still change every configured provider from the corresponding Settings tab.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

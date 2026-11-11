@@ -244,7 +244,7 @@ See [OAuth / SSO](./oauth-sso.md) for a complete setup walkthrough.
 | `POSTMILL_OAUTH_USERINFO_URL` | — | OIDC provider userinfo endpoint |
 | `POSTMILL_OAUTH_CLIENT_ID` | — | OIDC client ID |
 | `POSTMILL_OAUTH_CLIENT_SECRET` | — | OIDC client secret |
-| `POSTMILL_OAUTH_SCOPE` | `openid profile email` | OIDC scopes to request |
+| `POSTMILL_OAUTH_SCOPE` | `openid profile email` | OIDC scopes to request (space-separated; unset or blank uses the default). Scopes set on a DB-managed `AuthProviderConfig` take precedence (see [OAuth / SSO](./oauth-sso.md#_3-optional-override-oidc-scopes)) |
 | `NEXT_PUBLIC_POSTMILL_OAUTH_DISPLAY_NAME` | — | Name shown on the login button |
 | `NEXT_PUBLIC_POSTMILL_OAUTH_LOGO_URL` | — | Logo URL shown on the login button |
 
@@ -336,8 +336,8 @@ Three opt-in flags add the platform channel apps as **login providers** (the log
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `NEXT_PUBLIC_SENTRY_DSN` | — | Sentry DSN for error tracking (frontend browser/server **and** backend — one variable). Unset = Sentry off. The frontend value is baked in at build time |
-| `EPURE_DSN` | — | Optional Epure DSN for the NestJS error-event mirror (exceptions and `captureMessage`). Unset or invalid = Sentry only |
-| `NEXT_PUBLIC_EPURE_DSN` | — | Optional Epure DSN for Next.js client/server/edge error-event mirroring. Rebuild after changing it. With this set, client source maps remain in the build and are publicly served under `/_next/static` (expected for the open-source frontend); run `pnpm run sourcemaps:upload-epure -- <release-sha>` after the build to upload eligible maps to Epure under `~/_next/...` |
+| `EPURE_DSN` | — | Optional Epure DSN for the NestJS error-event mirror (exceptions and `captureMessage`). Read at runtime. It is a mirror, so it also needs `NEXT_PUBLIC_SENTRY_DSN`: with no Sentry DSN, nothing is sent. Unset or invalid = Sentry only |
+| `NEXT_PUBLIC_EPURE_DSN` | — | Optional Epure DSN for Next.js client/server/edge error-event mirroring. Also needs `NEXT_PUBLIC_SENTRY_DSN`. It is baked in at build time, along with the Epure origin in the CSP `connect-src`. Rebuild after changing it. The published image is built without it (`build-containers.yml` passes only `NEXT_PUBLIC_VERSION`), so the frontend mirror needs a [self-built image](./upgrading.md#building-from-source). With this set, client source maps remain in the build and are publicly served under `/_next/static` (expected for the open-source frontend); run `pnpm run sourcemaps:upload-epure -- <release-sha>` after the build to upload eligible maps to Epure under `~/_next/...` |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0.2` (production) | Backend trace sample rate, `0`–`1`. Development always samples at `1.0`; an unset, non-numeric or out-of-range value falls back to the default |
 | `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | `0.25` (production) | Frontend trace sample rate, `0`–`1`. Same rules as above; baked into the frontend bundle at build time, so a change needs a frontend rebuild |
 | `SENTRY_PROFILING` | — | Set to `1` to enable backend (`@sentry/profiling-node`) profiling in development; production always profiles |
@@ -466,4 +466,4 @@ See [Video Rendering](./video-rendering.md) for the full list of `VIDEO_RENDER_*
 | `PUPPETEER_EXECUTABLE_PATH` | (bundled Chromium) | Path to a system/distro Chromium binary for design frame capture (used by the render-worker container). Unset = Puppeteer's bundled Chromium |
 | `PUPPETEER_DISABLE_SANDBOX` | `false` | Set to `true` to launch the campaign-report PDF Chromium with `--no-sandbox` (for CI/containers without user namespaces; also disabled automatically when `CI=true`). Production defaults to sandboxed mode |
 
-> Verified against v1.4.0
+> Verified against v1.5.0

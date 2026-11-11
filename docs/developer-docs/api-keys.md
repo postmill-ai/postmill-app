@@ -126,4 +126,4 @@ When an API key is used with the MCP server, the resolved scopes depend on the u
 
 Admin-configured `mcpsettings.allowedScopes` is an allow-list **ceiling**, not a requirement: every request must hold only `mcp:read`, and any scope a token carries outside `allowedScopes` is stripped before per-tool scope checks (so a write tool still needs `mcp:posts:write`, and only when `allowedScopes` permits it). `mcp:read` is always within the ceiling; when `allowedScopes` is unset there is no ceiling.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

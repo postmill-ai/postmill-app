@@ -64,6 +64,14 @@ organisation:
 
 See [Team & Roles](./team-and-roles.md) for the full RBAC model.
 
+## Organization export tab
+
+Visible only to the organisation **Owner**. Create a passphrase-protected, restorable archive of the
+organisation (configuration, members, designs, posts, provider settings, files, and custom brand
+fonts), then generate a single-use, five-minute download link. Archives are deleted from the
+server after 24 hours. The archive can be imported into a new, empty organisation from
+**Setup → Import**. See [Organization export](./organization-export.md).
+
 ## Broadcast tab
 
 Visible to members with the `notifications:manage` permission. Send an in-app announcement or
@@ -566,6 +574,11 @@ These live outside the Settings page, in the avatar menu:
   to display schedule dates and the composer's time picker). Your avatar resolves in this order:
   external avatar (OAuth login provider's picture, or a Gravatar generated from your email) →
   uploaded profile picture → your initials.
+- **Language** (avatar menu → **Language**) — pick the interface language. The choice is saved to
+  your user profile, so it follows you to other browsers and devices and applies in every
+  organisation you belong to. If the preference cannot be saved, a warning appears and the
+  language is left unchanged. Accounts without a saved preference adopt the language they are
+  currently using the first time they sign in.
 - **Security** (`/user/me/security`) — change your password, and an **Active Sessions** device list (browser,
   IP, last used). Revoke any session individually, or log out all other sessions at once. Logging
   out revokes all of your sessions.
@@ -583,4 +596,4 @@ Settings access is permission-gated: reading and changing the org-level settings
 permissions. A member whose role lacks the grant receives **HTTP 403**; an org can grant these
 permissions to a custom role. Billing management is owner-only.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

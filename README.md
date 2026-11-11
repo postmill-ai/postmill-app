@@ -12,7 +12,7 @@
     <img src="https://img.shields.io/badge/License-AGPL%203.0-blue.svg" alt="License: AGPL-3.0">
   </a>
   <a href="https://postmill.ai">
-    <img src="https://img.shields.io/badge/version-v1.4.0-2B5CD3.svg" alt="Version v1.4.0">
+    <img src="https://img.shields.io/badge/version-v1.5.0-2B5CD3.svg" alt="Version v1.5.0">
   </a>
   <a href="https://docs.postmill.ai">
     <img src="https://img.shields.io/badge/docs-docs.postmill.ai-2B5CD3.svg" alt="Documentation">
@@ -25,7 +25,7 @@
 
 **Open-source, AI-native social media management, design and scheduling.**
 
-Postmill is a self-hostable social media scheduler for agencies and multi-brand teams: a visual publishing calendar, 45+ channels, 46 built-in media tools, and bring-your-own-key AI across 30 providers. Run it on infrastructure you control, and let every organization manage its own channels, brands, and AI keys. An open-source alternative to Buffer, Hootsuite, and Sprout Social.
+Postmill is a self-hostable social media scheduler for agencies and multi-brand teams: a visual publishing calendar, 45+ channels, 46 built-in media tools, and bring-your-own-key AI across 31 providers. Run it on infrastructure you control, and let every organization manage its own channels, brands, and AI keys. An open-source alternative to Buffer, Hootsuite, and Sprout Social.
 
 **[Website](https://postmill.ai)** · **[Docs](https://docs.postmill.ai)** · **[Quick Start](#-quick-start)** · **[Node SDK (`@postmill-ai/postmill-sdk`)](https://www.npmjs.com/package/@postmill-ai/postmill-sdk)** · **[Public API](https://docs.postmill.ai/developer-docs/public-api.html)**
 
@@ -123,7 +123,7 @@ Per-channel VPN routing is available for outbound publishing — each channel ca
 
 ## 🤖 AI at the core — BYOK, governed, multi-provider
 
-Postmill is AI-native from the ground up. A single governed AI layer powers every surface, and you bring your own keys: **30 providers** — 17 direct model providers plus 13 multi-model hubs and gateways — configured per organization, with no bundled credits, quotas, or metering.
+Postmill is AI-native from the ground up. A single governed AI layer powers every surface, and you bring your own keys: **31 providers** — 17 direct model providers plus 14 multi-model hubs and gateways — configured per organization, with no bundled credits, quotas, or metering.
 
 Configure as many LLM and media providers as you like, then pick separate default models for text, vision, workflows, and media tasks — a specific LLM, or a model from a media provider such as Replicate, HeyGen, or Runway. Media tasks span image, video, audio, avatars, captions, and music, including editing and upscaling.
 
@@ -175,7 +175,7 @@ The full UI — composer, settings, media tools, analytics, and auth — ships i
 
 ## 🔒 Self-hosted & security-hardened
 
-Own your whole stack — posts, analytics, media, and provider credentials stay on infrastructure you control, deployed from the published Docker image (`postmillai/postmill-app`, mirrored at `ghcr.io/postmill-ai/postmill-app`) and Compose setup.
+Own your whole stack — posts, analytics, media, and provider credentials stay on infrastructure you control, deployed from the published Docker image (`ghcr.io/postmill-ai/postmill-app`, mirrored at `postmillai/postmill-app` on Docker Hub) and Compose setup.
 
 Security runs through the application: secrets are encrypted at rest with AES-256-GCM, data access is scoped to each organization, and requests to user-supplied URLs are SSRF-checked across DNS lookups and redirects. Cookie-authenticated changes require CSRF protection, and production security headers, a Content Security Policy, API rate limits, and strict request validation add further safeguards. Bring your own object storage (S3 / R2 / Backblaze B2 / IDrive), swap in pluggable email and short-link providers, and optionally route outbound posting through per-channel VPN egress.
 

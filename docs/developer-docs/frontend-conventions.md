@@ -185,9 +185,10 @@ Reuse the `StudioErrorBoundary` pattern for new canvas tools rather than adding 
 
 - All components are functional components with hooks.
 - Use `useT()` for translatable strings (provided by the React shared libraries).
+- The UI language is persisted per user on `UserProfile.preferredLanguage`. `usePreferredLanguageSync` (`components/layout/use-preferred-language-sync.ts`) applies the saved language on login, or saves the current one when none is stored; language switches go through `savePreferredLanguage` (`POST /user/preferred-language`) in `preferred-language.client.ts`. Do not keep the language only in a cookie or local state.
 - Use `useUser()` for the current user/org/role (in `apps/frontend/src/components/layout/user.context`).
 - Use `useVariables()` for feature flags and deployment variables (provided by the React shared libraries).
 - Modals use `useModals()` (in `apps/frontend/src/components/layout/new-modal`).
 - **No `dangerouslySetInnerHTML` without DOMPurify sanitization.**
 
-> Verified against v1.4.0
+> Verified against v1.5.0

@@ -1,22 +1,37 @@
 # First-run setup
 
-> Verified against v1.4.0
+> Verified against v1.5.0
 
 When a brand-new organization is created, Postmill shows a one-time onboarding wizard at **`/setup`**. The wizard walks the first user through the minimum configuration needed before the app is usable:
 
-1. **LLM provider (required)** — connect and activate at least one AI provider.
-2. **AI media providers** — optional image/video/audio generation providers.
-3. **Channels** — optional social-channel OAuth apps.
-4. **Content packs** — optional premium stock-media provider.
-5. **Storage** — optional cloud storage buckets (local storage is already enabled).
-6. **Shortlinks** — optional link-shortening provider.
-7. **VPN / proxy** — optional outbound proxy configuration.
+1. **Import** — optional: move an existing organization into this one from an
+   [Organization export](./organization-export.md) archive.
+2. **LLM provider (required)** — connect and activate at least one AI provider.
+3. **AI media providers** — optional image/video/audio generation providers.
+4. **Channels** — optional social-channel OAuth apps.
+5. **Content packs** — optional premium stock-media provider.
+6. **Storage** — optional cloud storage buckets (local storage is already enabled).
+7. **Shortlinks** — optional link-shortening provider.
+8. **VPN / proxy** — optional outbound proxy configuration.
 
 The wizard reuses the same [Settings](./settings.md) panels you will see later, so anything skipped can be configured afterward from **Settings**.
 
 Setup configures organization-level providers, so only an owner or admin can complete it: finishing calls `POST /settings/setup/complete`, which requires the `settings:update` permission. A member who opens `/setup` is sent to `/dashboard` instead — also when the permission lookup itself fails (for example while the backend restarts), rather than being stranded on the wizard. If the backend restarts during your session, the wizard keeps retrying its permission and account lookups and revalidates when the connection is back, so **Finish setup** recovers on its own.
 
-Every step except **LLM** has a **Skip** button. The wizard footer links back to this guide (**Need help? Read the setup guide**) and to **Contact support**.
+Every step except **LLM** and the final **VPN** step has a **Skip** button (the last step shows **Finish setup** instead). The wizard footer links back to this guide (**Need help? Read the setup guide**) and to **Contact support**.
+
+## The Import step
+
+The wizard opens on **Import**. If you are starting fresh, choose **Skip**. To move an existing
+organization, the owner selects the export ZIP, enters the archive passphrase (at least 12
+characters), and chooses **Upload and verify archive**. Once the archive is verified, a summary
+shows the source organization (and any files that were already missing at export); choose
+**Import organization** to start the background import. Keep the page open — when the import
+finishes, setup is marked complete and you are taken to `/dashboard`, so the remaining steps are
+not needed. If verification is interrupted, **Retry verification** resumes without re-uploading.
+
+Only an organization owner can import, and only into an empty organization whose setup is not yet
+complete. See [Organization export](./organization-export.md) for what is and is not restored.
 
 ## The LLM step
 

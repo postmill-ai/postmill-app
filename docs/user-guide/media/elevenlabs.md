@@ -4,7 +4,7 @@
 
 ## Where to configure
 
-Configure your ElevenLabs API key under **Settings → Content → AI Media**. **Test connection** is free — it probes `GET /v1/user` with your key and never generates anything. See [Settings](../settings) for provider setup.
+Configure your ElevenLabs API key under **Settings → Content → AI Media**. **Test connection** is free — it probes `GET /v1/user` with your key and never generates anything. A restricted key without the `user_read` permission still passes — the result reads "Connection successful (user_read scope not granted)". See [Settings](../settings) for provider setup.
 
 > **Image & Video requires an ElevenLabs Pro plan.** The Flows API (image + video generation) rejects keys on lower tiers with `402 paid_plan_required`. TTS works on any plan.
 
@@ -19,6 +19,8 @@ Configure your ElevenLabs API key under **Settings → Content → AI Media**. *
 | **Image → Video** | Video | Same Veo 3.1 models and video fields, plus an optional **Start frame**, an optional **End frame** (needs a start frame), and up to three **Reference images**, each with a **Subject / scene** or **Visual style** role | Video clip (MP4) |
 
 Veo image inputs are read from `/files` and sent inline (25 MB per image max). Subject/style references require an 8-second duration and cannot be combined with an end frame.
+
+When opened from the [Designer](./designer)'s AI Video dialog with saved character references, the Veo 3.1 **Image → Video** tab fills the reference slots from those references (as **Subject / scene**, up to three) and hides the start/end frame and reference fields.
 
 TTS models offered: Multilingual v2 (`eleven_multilingual_v2`, the default), Eleven v3, Flash v2.5, and Turbo v2.5 (legacy — Flash is recommended over it). The retired `eleven_monolingual_v1` / `eleven_multilingual_v1` models are no longer listed; ElevenLabs rejects them with `unsupported_model`.
 
@@ -47,4 +49,4 @@ From the queue card you can play or preview the result, open it in the [Designer
 - [Settings](../settings) — configuring media providers.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

@@ -54,7 +54,7 @@ Technical documentation for developers working on the Postmill codebase. This di
 | [Adding an AI Adapter](./adding-an-ai-adapter.md) | Guide for implementing a new AI provider adapter. |
 | [Adding a Media Studio](./adding-a-media-studio.md) | Descriptor + adapter + route recipe for the studio-kit. |
 | [Testing](./testing.md) | Vitest per-package configuration, co-located specs, CI workflow. |
-| [Setup Gate](./setup-gate.md) | The `/setup` onboarding wizard and gate semantics. |
+| [Setup Gate](./setup-gate.md) | The `/setup` onboarding wizard (including organization import) and gate semantics. |
 | [Contributing](./contributing.md) | Ground rules, invariants, PR workflow, review checklist. |
 | [Glossary](./glossary.md) | Terminology used across the codebase. |
 
@@ -101,4 +101,4 @@ openapi.yml          Generated from the controllers — never hand-edited
 Root `scripts/` is maintainer-local and gitignored; a fresh clone does not have it. Anything CI or a
 documented workflow needs lives in `tools/`.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

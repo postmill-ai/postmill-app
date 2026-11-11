@@ -48,8 +48,8 @@ Analytics **Watchlist** tab.
 
 Watched account probes run as part of the standard analytics collection sweep
 (`analyticsCollection`). Each enabled watched account is probed once per sweep (daily cycle).
-The backend must have `USE_INNGEST=true` and valid Inngest Cloud credentials (or `INNGEST_DEV=1`
-for local development).
+The backend must have `USE_INNGEST=true` and valid Inngest Cloud credentials or a production self-hosted Inngest engine (or
+`INNGEST_DEV=1` for local development).
 
 ## Auto-Disable on Failure
 
@@ -77,4 +77,4 @@ appear in the Overview, Channels, Posts, or Insights tabs.
 You can manage your watched accounts (enable/disable, remove) from the Watchlist tab, or edit the
 display name too via the watchlist API endpoints under `/public/v1/analytics/watchlist`.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

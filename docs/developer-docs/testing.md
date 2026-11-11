@@ -2,7 +2,7 @@
 
 Postmill uses **Vitest** for all tests. The old root `jest.config.ts` has been deleted — do not add Jest-style configuration.
 
-> Verified against v1.4.0
+> Verified against v1.5.0
 
 ---
 
@@ -121,7 +121,7 @@ Coverage is measured across integrations, analytics, AI, RAG, governance, and ag
     'src/components/dashboard/**/*.spec.{ts,tsx}',
     'src/components/settings/ai/**/*.spec.{ts,tsx}',
     'src/components/media-tools/designer/*.spec.{ts,tsx}',
-    // … ~60 explicit entries in total
+    // … ~70 explicit entries in total
     'src/app/**/*.spec.{ts,tsx}',
   ],
   environment: 'jsdom',
@@ -142,6 +142,39 @@ Coverage is measured on `src/components/analytics/**/*.{ts,tsx}` (charts exclude
 | Branches | 62 |
 | Functions | 58 |
 | Lines | 69 |
+
+---
+
+## End-to-End (Playwright)
+
+The Playwright suite lives in `e2e/`, outside the pnpm workspace scripts. Install it standalone and run it from that directory:
+
+```bash
+cd e2e
+pnpm install --ignore-workspace
+pnpm test            # playwright.config.ts → e2e/tests/
+pnpm run test:audit  # playwright.audit.config.ts (axe a11y audit)
+```
+
+The default config targets a live deployment, so it exercises the real app rather than booting one locally. A full run can exceed the default `API_LIMIT` throttle (600 requests/hour/IP).
+
+### Opt-in live Designer acceptance
+
+Two additional configs run paid, data-modifying acceptance checks against a deployment you choose. Their specs live outside `e2e/tests/`, so the default run never loads them, and CI never runs them. Each runs on one worker with zero retries:
+
+| Config | Spec | Required opt-ins |
+|---|---|---|
+| `playwright.designer-live.config.ts` | `live-designer/designer-live.spec.ts` | `E2E_LIVE_DESIGNER=1` plus one `E2E_LIVE_CASE` (`background-removal`, `magic-grab`, `outpaint`, `bulk-create`, `bulk-create-invalid`, `qr-code`, `sharing`, `preflight`, `pdesign`) and `E2E_LIVE_DESIGN_ID`; `E2E_LIVE_GENERATION=1` for the paid cases (`background-removal`, `magic-grab`, `outpaint`) |
+| `playwright.ai-designer-live.config.ts` | `live-ai-designer/ai-designer-live.spec.ts` | `E2E_LIVE_AI_DESIGNER=1` and `E2E_LIVE_GENERATION=1`; `E2E_LIVE_AI_CASE` is `logo` (default) or `subject` |
+
+Both require `E2E_BASE` (there is no default target) and read the storage state from `E2E_AUTH_STATE` (default `.auth/admin.json`). Targeting `app.postmill.ai` additionally requires `E2E_LIVE_PRODUCTION=1`. Use disposable QA fixtures only, because these cases modify data:
+
+```bash
+E2E_LIVE_DESIGNER=1 E2E_LIVE_CASE=qr-code \
+E2E_LIVE_DESIGN_ID=<disposable-design-id> \
+E2E_BASE=https://qa-deployment.example.com \
+pnpm exec playwright test --config playwright.designer-live.config.ts
+```
 
 ---
 

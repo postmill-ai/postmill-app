@@ -2,7 +2,7 @@
 
 This guide gets the Postmill stack running on a normal developer machine without swapping or crashing. The repo ships with opt-in subsystems and lightweight commands so you only pay for what you use.
 
-> Verified against v1.4.0
+> Verified against v1.5.0
 
 ---
 
@@ -53,6 +53,10 @@ Copy `.env.example` to `.env` and adjust values if your local ports differ. The 
 REDIS_URL=redis://localhost:6379
 ```
 
+The backend dev script loads `.env.dev.local` before `.env`, so machine-specific overrides (for example a localhost `DATABASE_URL`) can live there.
+
+Platform base storage defaults to local disk under `UPLOAD_DIRECTORY` (`STORAGE_PROVIDER` unset or `local`); set `STORAGE_PROVIDER=s3` plus the `S3_*` variables only to exercise operator-managed S3-compatible storage. Organization export/import archives spool to `ORG_PORTABILITY_SPOOL_DIR` (default `${TMPDIR}/postmill-org-archives`), which must stay outside `UPLOAD_DIRECTORY`.
+
 ---
 
 ## 3. Apply the database schema
@@ -100,8 +104,8 @@ pnpm run dev:frontend     # Next.js on :4200
 
 ```bash
 pnpm run dev:frontend     # Turbopack (default)
-pnpm run dev:webpack      # webpack fallback if Turbopack exhausts memory
-pnpm run analyze          # webpack bundle analyzer; reports in .next/analyze/
+pnpm --filter ./apps/frontend run dev:webpack   # webpack fallback if Turbopack exhausts memory
+pnpm --filter ./apps/frontend run analyze       # webpack bundle analyzer; reports in .next/analyze/
 ```
 
 > The webpack dev build has a pre-existing failure on `/p/[id]` related to old CSS, so Turbopack remains the default.
@@ -157,6 +161,7 @@ The backend dev script caps the V8 heap at 6 GB via `--max-old-space-size=6144`.
 
 - Sentry source-map upload is **disabled in dev** unless both `SENTRY_AUTH_TOKEN` and `NEXT_PUBLIC_SENTRY_DSN` are set.
 - Browser profiling (`Document-Policy: js-profiling`) is **disabled in dev** unless `FRONTEND_PROFILING=1` is set.
+- The optional Epure error mirror is off unless `EPURE_DSN` / `NEXT_PUBLIC_EPURE_DSN` are set. With `NEXT_PUBLIC_EPURE_DSN` set, a production build keeps browser source maps; upload them with `pnpm run sourcemaps:upload-epure -- <release-sha>`.
 
 ### Pruning `node_modules`
 
@@ -178,7 +183,7 @@ pnpm run test:int         # real-Postgres integration tests
 vitest run --root apps/backend            # one package
 ```
 
-Tests run with Vitest. The old root `jest.config.ts` has been deleted — do not add Jest-style configuration.
+Tests run with Vitest. The old root `jest.config.ts` has been deleted — do not add Jest-style configuration. The Playwright suite in `e2e/` (including the opt-in live Designer acceptance configs) is described in [Testing](./testing.md#end-to-end-playwright).
 
 ---
 
@@ -199,7 +204,7 @@ There is no per-package `lint` script.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Backend crashes with OOM | Heap cap or AI/media modules loaded | Add feature flags; lower heap further |
-| Frontend dev is slow / fans spin | Turbopack memory pressure or Sentry plugin | Use `pnpm run dev:webpack` or set `DEV_DISABLE_SENTRY=true` |
+| Frontend dev is slow / fans spin | Turbopack memory pressure or Sentry plugin | Use `pnpm --filter ./apps/frontend run dev:webpack` or set `DEV_DISABLE_SENTRY=true` |
 | `/p/[id]` fails under webpack | Old CSS import | Use Turbopack (`pnpm run dev:frontend`) |
 | Redis connection error | No Redis running | Start `docker compose -f ./docker/docker-compose.dev.yaml up -d` |
 | Inngest functions not running | Inngest dev server not started | Start with `--profile jobs` and set `USE_INNGEST=true` / `INNGEST_DEV=1` |
