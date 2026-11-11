@@ -240,8 +240,8 @@ export const offsetElement = (
   if (!box) return null;
   return {
     type: 'path',
-    x: box.x,
-    y: box.y,
+    x: el.x + box.x,
+    y: el.y + box.y,
     width: box.width,
     height: box.height,
     nodes: polygonToNodes(offset.map((p) => ({ x: p.x - box.x, y: p.y - box.y }))),

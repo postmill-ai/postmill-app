@@ -222,10 +222,10 @@ describe('offsetElement', () => {
 
 describe('offsetElement transforms', () => {
   it('offsets in local coordinates so rotation is not applied twice', () => {
-    const patch = offsetElement(shape({ width: 100, height: 50, rotation: 90 }), 10)!;
+    const patch = offsetElement(shape({ x: 40, y: 60, width: 100, height: 50, rotation: 90 }), 10)!;
 
-    expect(patch.x).toBeCloseTo(-10, 6);
-    expect(patch.y).toBeCloseTo(-10, 6);
+    expect(patch.x).toBeCloseTo(30, 6);
+    expect(patch.y).toBeCloseTo(50, 6);
     expect(patch.width).toBeCloseTo(120, 6);
     expect(patch.height).toBeCloseTo(70, 6);
     expect(patch.rotation).toBeUndefined();
