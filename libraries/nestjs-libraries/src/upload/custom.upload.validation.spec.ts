@@ -108,6 +108,17 @@ describe('CustomFileValidationPipe', () => {
     })).rejects.toThrow('Could not detect the file type.');
   });
 
+  it('rejects a text-document path outside the temporary upload directory', async () => {
+    vi.mocked(fromFile).mockResolvedValue(null);
+
+    await expect(pipe.transform({
+      path: '/etc/passwd',
+      fieldname: 'file',
+      originalname: 'payload.txt',
+      size: 100,
+    })).rejects.toThrow('Could not detect the file type.');
+  });
+
   it('validates a valid file from path', async () => {
     vi.mocked(fromFile).mockResolvedValue({ ext: 'jpg', mime: 'image/jpeg' });
 

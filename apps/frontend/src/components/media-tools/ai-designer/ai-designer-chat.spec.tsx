@@ -143,25 +143,14 @@ describe('AiDesignerChat thinking bubble', () => {
     expect(hoisted.socket.sendMessage).not.toHaveBeenCalled();
   });
 
-  it('passes attachments while an existing revision is still in progress', async () => {
+  it('disables attachments while an existing revision is still in progress', () => {
     render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
     act(() => {
       hoisted.socketCallbacks.onSessionTransition('revising');
     });
-    fireEvent.change(screen.getByLabelText('Attach files'), {
-      target: { files: [new File(['brief'], 'brief.pdf', { type: 'application/pdf' })] },
-    });
-    expect(await screen.findByText('brief.pdf')).toBeTruthy();
 
-    sendChatMessage('Use the attached launch date');
-
-    expect(hoisted.socket.revisePlan).toHaveBeenCalledWith(
-      'Use the attached launch date',
-      undefined,
-      [],
-      ['doc-1'],
-    );
-    expect(hoisted.socket.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Attach files' })).toHaveProperty('disabled', true);
+    expect(hoisted.socket.revisePlan).not.toHaveBeenCalled();
   });
 
   it('disables attachments when the current state cannot forward them', () => {

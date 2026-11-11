@@ -30,10 +30,12 @@ const detectTextDocument = async (value: any) => {
     : undefined;
   const detected = extension ? TEXT_DOCUMENT_TYPES.get(extension) : undefined;
   if (!detected) return null;
+  const safePath = value.path ? resolveInsideTmp(value.path) : null;
+  if (value.path && !safePath) return null;
   const bytes = value.buffer && Buffer.isBuffer(value.buffer)
     ? value.buffer
-    : value.path
-      ? await fs.readFile(value.path)
+    : safePath
+      ? await fs.readFile(safePath)
       : null;
   if (!bytes || bytes.includes(0)) return null;
   try {

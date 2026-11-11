@@ -272,7 +272,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
   // socket-reported state wins, the SWR hydrate covers the pre-join gap, and
   // the optimistic flags cover the action→server latency.
   const effectiveState = liveState ?? displaySession?.state ?? null;
-  const canAttach = effectiveState === 'delivered' || effectiveState === 'awaiting_plan' || effectiveState === 'revising';
+  const canAttach = effectiveState === 'delivered' || effectiveState === 'awaiting_plan';
   const busy =
     !errorHalted && (sending || optimisticBusy || isBusyState(effectiveState));
 
