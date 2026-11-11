@@ -1119,4 +1119,39 @@ describe('AiDesignerGateway input policy fast-fail', () => {
       nonce: 'n1',
     });
   });
+
+  it('forwards reference and attachment ids to the conductor on revise', async () => {
+    const conductor = { handleRevise: vi.fn().mockResolvedValue(undefined) };
+    const policy = {
+      check: vi.fn().mockResolvedValue({ ok: true, instruction: 'Use the attachment' }),
+    } as any;
+    const gw = makeGatewayWithMocks({ conductor, policy });
+    const client = fakeSocket({
+      userId: 'u1',
+      orgId: 'o1',
+      sessionId: 's1',
+      lastAuthzAt: Date.now(),
+    });
+
+    await gw.handleRevise(client, {
+      nonce: 'n1',
+      instruction: 'Use the attachment',
+      targetDesignId: 'd1',
+      referenceFileIds: ['ref-1'],
+      attachmentFileIds: ['doc-1'],
+    });
+
+    expect(conductor.handleRevise).toHaveBeenCalledWith(
+      's1',
+      { orgId: 'o1', userId: 'u1', sessionId: 's1' },
+      expect.objectContaining({
+        instruction: 'Use the attachment',
+        targetDesignId: 'd1',
+        referenceFileIds: ['ref-1'],
+        attachmentFileIds: ['doc-1'],
+        nonce: 'n1',
+      }),
+      expect.anything(),
+    );
+  });
 });

@@ -75,6 +75,39 @@ describe('CustomFileValidationPipe', () => {
     expect(result.originalname).toBe('Campaign.pdf');
   });
 
+  it.each([
+    ['txt', 'text/plain'],
+    ['md', 'text/markdown'],
+    ['csv', 'text/csv'],
+    ['tsv', 'text/tab-separated-values'],
+    ['json', 'application/json'],
+  ] as const)('accepts a UTF-8 .%s document when sniffing returns no signature', async (extension, mime) => {
+    vi.mocked(fromBuffer).mockResolvedValue(null);
+
+    const result = await pipe.transform({
+      buffer: Buffer.from('name,price\nCoffee,10'),
+      mimetype: 'application/octet-stream',
+      fieldname: 'file',
+      originalname: `brief.${extension}`,
+      size: 1024,
+    });
+
+    expect(result.mimetype).toBe(mime);
+    expect(result.originalname).toBe(`brief.${extension}`);
+  });
+
+  it('rejects binary bytes with a text-document extension', async () => {
+    vi.mocked(fromBuffer).mockResolvedValue(null);
+
+    await expect(pipe.transform({
+      buffer: Buffer.from([0, 1, 2, 3]),
+      mimetype: 'text/plain',
+      fieldname: 'file',
+      originalname: 'payload.txt',
+      size: 4,
+    })).rejects.toThrow('Could not detect the file type.');
+  });
+
   it('validates a valid file from path', async () => {
     vi.mocked(fromFile).mockResolvedValue({ ext: 'jpg', mime: 'image/jpeg' });
 

@@ -685,6 +685,8 @@ export class AiDesignerGateway
         {
           instruction,
           targetDesignId: payload.targetDesignId,
+          referenceFileIds: payload.referenceFileIds,
+          attachmentFileIds: payload.attachmentFileIds,
           nonce: payload.nonce,
         },
         emitter

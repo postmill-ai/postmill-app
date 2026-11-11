@@ -272,6 +272,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
   // socket-reported state wins, the SWR hydrate covers the pre-join gap, and
   // the optimistic flags cover the action→server latency.
   const effectiveState = liveState ?? displaySession?.state ?? null;
+  const canAttach = effectiveState === 'delivered' || effectiveState === 'awaiting_plan' || effectiveState === 'revising';
   const busy =
     !errorHalted && (sending || optimisticBusy || isBusyState(effectiveState));
 
@@ -347,6 +348,10 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
 
   const handleAttachments = async (files: File[]) => {
     if (!files.length) return;
+    if (!canAttach) {
+      toaster.show(t('ai_designer_attachment_state', 'Attachments are available when revising a plan or design.'), 'warning');
+      return;
+    }
     if (referenceItems.length + documentItems.length + files.length > MAX_AI_DESIGNER_ATTACHMENTS) {
       toaster.show(t('ai_designer_attachment_limit', 'You can attach up to 10 files.'), 'warning');
       return;
@@ -375,10 +380,14 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     const text = input.trim();
     // Also guards the Enter path — the Send button's disabled state does not.
     if (!text || sending || !socket.connected || attachmentUploading) return;
-    setSending(true);
     const referenceFileIds = referenceItems.map((item) => item.fileId).filter(Boolean) as string[];
     const attachmentFileIds = documentItems.map((item) => item.fileId);
-    const nonce = effectiveState === 'delivered' || effectiveState === 'awaiting_plan'
+    if (!canAttach && (referenceFileIds.length || attachmentFileIds.length)) {
+      toaster.show(t('ai_designer_attachment_state', 'Attachments are available when revising a plan or design.'), 'warning');
+      return;
+    }
+    setSending(true);
+    const nonce = canAttach
       ? socket.revisePlan(text, undefined, referenceFileIds, attachmentFileIds)
       : socket.sendMessage(text);
     setReferenceItems([]);
@@ -586,6 +595,8 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
             type="button"
             secondary
             loading={attachmentUploading}
+            disabled={!canAttach || attachmentUploading}
+            title={!canAttach ? t('ai_designer_attachment_state', 'Attachments are available when revising a plan or design.') : undefined}
             onClick={() => attachmentInputRef.current?.click()}
           >
             {t('attach_files', 'Attach files')}

@@ -16,6 +16,34 @@ import {
 
 const ALLOWED_MIME_TYPES = UPLOAD_ALLOWED_MIME_TYPES;
 
+const TEXT_DOCUMENT_TYPES = new Map([
+  ['txt', { ext: 'txt', mime: 'text/plain' }],
+  ['md', { ext: 'md', mime: 'text/markdown' }],
+  ['csv', { ext: 'csv', mime: 'text/csv' }],
+  ['tsv', { ext: 'tsv', mime: 'text/tab-separated-values' }],
+  ['json', { ext: 'json', mime: 'application/json' }],
+]);
+
+const detectTextDocument = async (value: any) => {
+  const extension = typeof value.originalname === 'string'
+    ? value.originalname.split('.').pop()?.toLowerCase()
+    : undefined;
+  const detected = extension ? TEXT_DOCUMENT_TYPES.get(extension) : undefined;
+  if (!detected) return null;
+  const bytes = value.buffer && Buffer.isBuffer(value.buffer)
+    ? value.buffer
+    : value.path
+      ? await fs.readFile(value.path)
+      : null;
+  if (!bytes || bytes.includes(0)) return null;
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return detected;
+  } catch {
+    return null;
+  }
+};
+
 // Resolve a client/multer-supplied path and confine it to the OS temp dir, returning
 // the resolved path only when it stays inside tmpdir (else null). The containment test
 // is a `path.relative` escape check — the sanitizer shape CodeQL's js/path-injection
@@ -41,11 +69,11 @@ export class CustomFileValidationPipe implements PipeTransform {
         throw new BadRequestException('Invalid file upload.');
       }
 
-      const detected = value.buffer && Buffer.isBuffer(value.buffer)
+      const detected = (value.buffer && Buffer.isBuffer(value.buffer)
         ? await fromBuffer(value.buffer)
         : value.path
           ? await fromFile(value.path)
-          : null;
+          : null) ?? await detectTextDocument(value);
 
       if (!detected) {
         this._logger.warn('Upload rejected: no file type could be sniffed from the uploaded bytes');

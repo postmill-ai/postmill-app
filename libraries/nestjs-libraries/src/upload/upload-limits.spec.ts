@@ -85,14 +85,19 @@ describe('checkUploadLimit', () => {
 });
 
 describe('UPLOAD_ALLOWED_MIME_TYPES', () => {
-  it('contains only supported media and PDF document MIMEs', () => {
+  it('contains only supported media and document MIMEs', () => {
     for (const mimetype of UPLOAD_ALLOWED_MIME_TYPES) {
       expect(
         mimetype.startsWith('image/') ||
           mimetype.startsWith('video/') ||
           mimetype.startsWith('audio/') ||
-          mimetype === 'application/pdf',
+          mimetype.startsWith('text/') ||
+          mimetype === 'application/pdf' ||
+          mimetype === 'application/json',
       ).toBe(true);
+    }
+    for (const mimetype of ['text/plain', 'text/markdown', 'text/csv', 'text/tab-separated-values', 'application/json']) {
+      expect(UPLOAD_ALLOWED_MIME_TYPES.has(mimetype)).toBe(true);
     }
   });
 });
