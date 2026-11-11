@@ -16,8 +16,8 @@ import { renderOutputThumbnail } from '../export-dialog';
  * CURRENT output — add / duplicate / rename / reorder / delete. Page 1 is the
  * output's own `children` and can be renamed only via the output tab (and
  * never deleted). Thumbnails render off the shared Konva stage into an
- * off-screen host (renderOutputThumbnail, the export pipeline's renderer), so
- * the strip never steals the main stage.
+ * off-screen host (renderOutputThumbnail), so the strip never steals the main
+ * stage. Full-resolution static exports use the server renderer instead.
  */
 
 interface PagesPanelProps {

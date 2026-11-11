@@ -1,5 +1,9 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { strToU8 } from 'fflate';
+import { mkdtemp, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import sharp from 'sharp';
 import { DesignBulkService, MAX_BULK_ROWS } from './design-bulk.service';
 import { DesignRenderService } from './design-render.service';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
@@ -13,8 +17,10 @@ import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { NO_CREDIT } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
 import {
+  createDesignExportBundleCache,
   DESIGN_EXPORT_EVENT,
   DESIGN_EXPORT_PROVIDER,
+  DesignExportService,
   designExportEventId,
 } from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
 import { applyBulkRow, normalizeBulkImageSource } from '../designer-doc/bulk-variables';
@@ -22,10 +28,12 @@ import { readValidatedImageSource } from '../image-source';
 import { pageCount } from '../designer-doc/designer-doc.pages';
 import { MAX_OUTPUTS, MAX_PAGES_PER_OUTPUT } from '../designer-doc/designer-doc.limits';
 import { sanitizeDownloadName } from '../designer-doc/postmill-file';
-import { zipBulkEntries, type BulkZipEntry } from './design-bulk-zip';
+import { zipBulkEntriesToFile, type BulkZipEntry } from './design-bulk-zip';
 import type { DesignerDoc, DesignerElement } from './design-render.types';
 
 export const DESIGN_BULK_CREATE_OPERATION = 'design-bulk-create';
+const MAX_BULK_CREATE_PNG_BYTES = 128 * 1024 * 1024;
+const MAX_BULK_CREATE_OUTPUT_BYTES = 1024 * 1024 * 1024;
 const PAYLOAD_TTL_SECONDS = 24 * 60 * 60;
 const payloadKey = (jobId: string) => `design-bulk:payload:${jobId}`;
 const claimKey = (jobId: string) => `design-bulk:claim:${jobId}`;
@@ -46,7 +54,16 @@ export interface DesignBulkCreateRowResult {
   row: number;
   designId?: string;
   fileIds: string[];
+  editableFileId?: string;
   error?: string;
+}
+
+interface PersistedBulkImage {
+  id: string;
+  path: string;
+  width?: number;
+  height?: number;
+  owned?: boolean;
 }
 
 const errorDetail = (error: unknown, fallback: string): string => {
@@ -127,6 +144,7 @@ export class DesignBulkCreateService extends DesignBulkService {
     private readonly _fileService: FileService,
     private readonly _storageService: StorageService,
     private readonly _aiMediaService: AiMediaService,
+    private readonly _designExport: DesignExportService,
   ) {
     super(renderService);
   }
@@ -378,26 +396,92 @@ export class DesignBulkCreateService extends DesignBulkService {
   private async _persistRemoteImages(
     orgId: string,
     doc: DesignerDoc,
-    cache: Map<string, { id: string; path: string }>,
+    cache: Map<string, PersistedBulkImage>,
     templateSources: Set<string>
   ): Promise<void> {
     const importUrl = async (url: string) => {
       if (!cache.has(url)) {
-        cache.set(url, await this._aiMediaService.saveUrlToFile(orgId, url, 'bulk-create'));
+        const file = await this._aiMediaService.saveUrlToFile(orgId, url, 'bulk-create');
+        cache.set(url, { ...file });
+        const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
+        const metadata = await sharp(await adapter.readFile(file.path)).metadata();
+        cache.set(url, {
+          ...file,
+          width: metadata.width,
+          height: metadata.height,
+        });
       }
       return cache.get(url)!;
     };
+    const persistLocal = async (target: {
+      src?: string;
+      fileId?: string;
+      naturalWidth?: number;
+      naturalHeight?: number;
+    }) => {
+      if (!target.src || templateSources.has(target.src) || !target.src.startsWith('/uploads/')) return;
+      const cacheKey = `local:${target.src}`;
+      let persisted = cache.get(cacheKey);
+      if (!persisted) {
+        const source = target.src;
+        const existing = await this._fileService.getFileByPath(orgId, source);
+        const adapter = existing
+          ? await this._storageService.resolveAdapterForFolder(existing.folderId, orgId)
+          : await this._storageService.getLocalAdapterForOrg(orgId, true);
+        const bytes = await adapter.readFile(existing?.path || source);
+        const metadata = await sharp(bytes).metadata();
+        if (existing) {
+          persisted = {
+            id: existing.id,
+            path: existing.path,
+            width: metadata.width,
+            height: metadata.height,
+            owned: false,
+          };
+        } else {
+          const path = await adapter.writeBuffer(
+            bytes,
+            metadata.format === 'jpeg' ? 'image/jpeg' : `image/${metadata.format || 'png'}`,
+          );
+          const created = await this._fileService.saveGeneratedMedia(orgId, {
+            name: source.split('/').pop() || 'bulk-create-image',
+            path,
+            type: 'image',
+            fileSize: bytes.length,
+            metadata: { source: DESIGN_BULK_CREATE_OPERATION },
+          });
+          persisted = {
+            id: created.id,
+            path: created.path,
+            width: metadata.width,
+            height: metadata.height,
+            owned: true,
+          };
+        }
+        cache.set(cacheKey, persisted);
+      }
+      target.src = persisted.path;
+      target.fileId = persisted.id;
+      target.naturalWidth = persisted.width;
+      target.naturalHeight = persisted.height;
+    };
     const persist = async (element: DesignerElement) => {
+      await persistLocal(element);
       if (element.src && !templateSources.has(element.src) && /^https?:\/\//i.test(element.src)) {
         const file = await importUrl(element.src);
         element.src = file.path;
         element.fileId = file.id;
+        element.naturalWidth = file.width;
+        element.naturalHeight = file.height;
       }
       for (const override of Object.values(element.symbolOverrides || {})) {
+        await persistLocal(override);
         if (!override.src || templateSources.has(override.src) || !/^https?:\/\//i.test(override.src)) continue;
         const file = await importUrl(override.src);
         override.src = file.path;
         override.fileId = file.id;
+        override.naturalWidth = file.width;
+        override.naturalHeight = file.height;
       }
     };
     for (const output of doc.outputs) {
@@ -428,13 +512,44 @@ export class DesignBulkCreateService extends DesignBulkService {
     });
   }
 
+  private async _saveDocument(
+    orgId: string,
+    data: { name: string; bytes: Buffer; folderId?: string; jobId: string; thumbnail?: string }
+  ): Promise<{ id: string; path: string }> {
+    const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
+    const path = await adapter.writeBuffer(data.bytes, data.name.endsWith('.csv') ? 'text/csv' : 'application/zip');
+    const created = await this._fileService.saveGeneratedMedia(orgId, {
+      name: data.name,
+      path,
+      type: 'document',
+      folderId: data.folderId,
+      fileSize: data.bytes.length,
+      metadata: { source: DESIGN_BULK_CREATE_OPERATION, jobId: data.jobId, mime: data.name.endsWith('.csv') ? 'text/csv' : 'application/zip' },
+    });
+    if (data.thumbnail) {
+      try {
+        await this._fileService.saveMediaInformation(orgId, {
+          id: created.id,
+          thumbnail: data.thumbnail,
+          alt: '',
+          thumbnailTimestamp: 0,
+        });
+      } catch (error) {
+        this._logger.warn(
+          `Bulk Create ${data.jobId}: editable thumbnail metadata failed: ${(error as Error)?.message}`
+        );
+      }
+    }
+    return created;
+  }
+
   private async _rollbackBulkCreate(
     orgId: string,
     payload: DesignBulkCreatePayload | undefined,
     designIds: string[],
     previewFileIds: string[],
     generatedFileIds: Set<string>,
-    remoteImageCache: Map<string, { id: string; path: string }>,
+    remoteImageCache: Map<string, PersistedBulkImage>,
   ): Promise<void> {
     if (!payload) return;
     for (const id of designIds) {
@@ -447,7 +562,7 @@ export class DesignBulkCreateService extends DesignBulkService {
     const fileIds = new Set([
       ...generatedFileIds,
       ...previewFileIds,
-      ...[...remoteImageCache.values()].map((file) => file.id),
+      ...[...remoteImageCache.values()].filter((file) => file.owned !== false).map((file) => file.id),
     ]);
     for (const id of fileIds) {
       try {
@@ -482,17 +597,30 @@ export class DesignBulkCreateService extends DesignBulkService {
     await this._aiSettings.updateMediaJob(orgId, jobId, { status: 'processing' });
 
     const results: DesignBulkCreateRowResult[] = [];
-    const remoteImageCache = new Map<string, { id: string; path: string }>();
+    const remoteImageCache = new Map<string, PersistedBulkImage>();
     const designIds: string[] = [];
     const previewFileIds: string[] = [];
     const generatedFileIds = new Set<string>();
     let payload: DesignBulkCreatePayload | undefined;
     try {
       payload = JSON.parse(raw) as DesignBulkCreatePayload;
+      const designExport = this._designExport;
       const rows = payload.rows.slice(0, MAX_BULK_ROWS);
       const templateSources = this._templateSources(payload.doc);
+      const bundleCache = createDesignExportBundleCache();
       const zipEntries: BulkZipEntry[] = [];
       let zipBytes = 0;
+      let pngBytes = 0;
+      const addZipBytes = (size: number, png = false) => {
+        zipBytes += size;
+        if (zipBytes > MAX_BULK_CREATE_OUTPUT_BYTES) {
+          throw new Error('Bulk Create output exceeds the 1 GB batch limit.');
+        }
+        if (png) pngBytes += size;
+        if (pngBytes > MAX_BULK_CREATE_PNG_BYTES) {
+          throw new Error('Bulk Create PNG output exceeds the 128 MB batch limit.');
+        }
+      };
       let succeeded = 0;
       const rowCount = Math.min(rows.length, MAX_BULK_ROWS);
       for (let index = 0; index < rowCount; index++) {
@@ -505,6 +633,7 @@ export class DesignBulkCreateService extends DesignBulkService {
           designIds.push(design.id);
           if (design.previewFileId) previewFileIds.push(design.previewFileId);
           result.designId = design.id;
+          let firstPreviewPath: string | undefined;
           const outputCount = Math.min(doc.outputs.length, MAX_OUTPUTS);
           for (let outputIndex = 0; outputIndex < outputCount; outputIndex++) {
             const output = doc.outputs[outputIndex];
@@ -512,11 +641,8 @@ export class DesignBulkCreateService extends DesignBulkService {
             const pages = Math.min(pageCount(output), MAX_PAGES_PER_OUTPUT);
             for (let page = 0; page < pages; page++) {
               const bytes = await this._renderService.renderPage(doc, outputIndex, { orgId }, page);
-              zipBytes += bytes.length;
-              if (zipBytes > 128 * 1024 * 1024) {
-                throw new Error('Bulk Create PNG output exceeds the 128 MB batch limit.');
-              }
               const filename = `row-${String(index + 1).padStart(3, '0')}-output-${outputIndex + 1}-page-${page + 1}.png`;
+              addZipBytes(bytes.length, true);
               const file = await this._saveBuffer(orgId, {
                 name: `${payload.nameBase} ${filename}`,
                 bytes,
@@ -525,9 +651,41 @@ export class DesignBulkCreateService extends DesignBulkService {
               });
               generatedFileIds.add(file.id);
               result.fileIds.push(file.id);
-              zipEntries.push({ name: filename, data: new Uint8Array(bytes), compress: false });
+              firstPreviewPath ||= file.path;
+              zipEntries.push({
+                name: filename,
+                size: bytes.length,
+                source: 'stored',
+                path: file.path,
+                compress: false,
+              });
             }
           }
+          const bundle = await designExport.buildBundleForDoc(
+            orgId,
+            jobId,
+            name,
+            doc,
+            firstPreviewPath || null,
+            bundleCache,
+          );
+          addZipBytes(bundle.bytes.length);
+          const editableFile = await this._saveDocument(orgId, {
+            name: `${name}.pdesign`,
+            bytes: bundle.bytes,
+            folderId: payload.folderId,
+            jobId,
+            thumbnail: firstPreviewPath,
+          });
+          generatedFileIds.add(editableFile.id);
+          result.editableFileId = editableFile.id;
+          zipEntries.push({
+            name: `editable/row-${String(index + 1).padStart(3, '0')}.pdesign`,
+            size: bundle.bytes.length,
+            source: 'stored',
+            path: editableFile.path,
+            compress: false,
+          });
           succeeded++;
         } catch (error) {
           result.error = errorDetail(error, 'Row failed').slice(0, 500);
@@ -542,22 +700,81 @@ export class DesignBulkCreateService extends DesignBulkService {
       }
 
       if (!succeeded) throw new Error(results[0]?.error || 'Every Bulk Create row failed.');
-      const bytes = await zipBulkEntries([
-        {
-          name: 'results.json',
-          data: strToU8(JSON.stringify(results, null, 2)),
-          compress: true,
-        },
-        ...zipEntries,
-      ]);
+      const templateBundle = await designExport.buildBundleForDoc(
+        orgId,
+        jobId,
+        `${payload.nameBase} template`,
+        payload.doc,
+        null,
+        bundleCache,
+      );
+      addZipBytes(templateBundle.bytes.length);
+      const templateFile = await this._saveDocument(orgId, {
+        name: `${payload.nameBase} source template.pdesign`,
+        bytes: templateBundle.bytes,
+        folderId: payload.folderId,
+        jobId,
+      });
+      generatedFileIds.add(templateFile.id);
+      zipEntries.push({
+        name: 'source/template.pdesign',
+        size: templateBundle.bytes.length,
+        source: 'stored',
+        path: templateFile.path,
+        compress: false,
+      });
+
+      const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))];
+      const quoteCsv = (value: string) => `"${value.replaceAll('"', '""')}"`;
+      const sourceCsv = [
+        headers.map(quoteCsv).join(','),
+        ...rows.map((row) => headers.map((header) => quoteCsv(row[header] ?? '')).join(',')),
+      ].join('\r\n');
+      const sourceBytes = Buffer.from(sourceCsv, 'utf8');
+      addZipBytes(sourceBytes.length);
+      const sourceFile = await this._saveDocument(orgId, {
+        name: `${payload.nameBase} source data.csv`,
+        bytes: sourceBytes,
+        folderId: payload.folderId,
+        jobId,
+      });
+      generatedFileIds.add(sourceFile.id);
+      zipEntries.push({
+        name: 'source/data.csv',
+        size: sourceBytes.length,
+        source: 'stored',
+        path: sourceFile.path,
+        compress: true,
+      });
+
+      const resultData = strToU8(JSON.stringify(results, null, 2));
+      addZipBytes(resultData.byteLength);
       const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
-      const artifactPath = await adapter.writeBuffer(bytes, 'application/zip');
+      const temporaryDirectory = await mkdtemp(join(tmpdir(), 'postmill-bulk-create-'));
+      let artifactPath = '';
+      let zipSize = 0;
+      try {
+        const zipPath = join(temporaryDirectory, 'batch.zip');
+        zipSize = await zipBulkEntriesToFile([
+          {
+            name: 'results.json',
+            size: resultData.byteLength,
+            source: 'inline',
+            data: resultData,
+            compress: true,
+          },
+          ...zipEntries,
+        ], zipPath, (path) => adapter.readFileStream(path));
+        artifactPath = await adapter.writeFileStream(zipPath, 'application/zip');
+      } finally {
+        await rm(temporaryDirectory, { recursive: true, force: true });
+      }
       const artifactFile = await this._fileService.saveGeneratedMedia(orgId, {
         name: `${payload.nameBase}.zip`,
         path: artifactPath,
         type: 'document',
         folderId: payload.folderId,
-        fileSize: bytes.length,
+        fileSize: zipSize,
         metadata: { source: DESIGN_BULK_CREATE_OPERATION, jobId, mime: 'application/zip' },
       });
       generatedFileIds.add(artifactFile.id);
@@ -582,6 +799,7 @@ export class DesignBulkCreateService extends DesignBulkService {
       );
       for (const result of results) {
         delete result.designId;
+        delete result.editableFileId;
         result.fileIds = [];
       }
       const message = ((error as Error)?.message || 'Bulk Create failed').slice(0, 1000);

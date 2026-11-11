@@ -140,19 +140,12 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
     try {
       plans = await this._generatePlans(skillId, brief, sizes, variants, orgId, signal);
     } catch (err) {
-      // An abort is a cancel, not a plan-generation failure — don't mask it
-      // with a fallback plan nobody is waiting for.
       throwIfAborted(signal);
-      this._logger.warn(
-        `Plan generation failed, using fallback: ${(err as Error).message}`
-      );
-      plans = [this._fallbackPlan(skillId, brief, sizes)];
+      this._logger.warn(`Plan generation failed: ${(err as Error).message}`);
+      throw err;
     }
 
-    // Never pad with duplicate fallbacks: only the plans that actually parsed
-    // and validated are returned (at least one fallback when everything
-    // failed). The conductor tells the user when they got fewer variants than
-    // requested — identical filler plans would waste render spend.
+    // Only validated plans may reach paid composition and asset generation.
     plans = plans.slice(0, variants);
 
     // Assign fresh, unique variantIds so every returned plan is distinct.
@@ -1601,52 +1594,6 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       // perChannel/channelLayouts stay in the stored-plan schema (optional)
       // for backward compat with older briefs, but new plans are
       // single-format and must not emit them.
-    };
-  }
-
-  private _fallbackPlan(
-    skillId: string,
-    brief: EnrichedBrief,
-    _sizes: SizeOutput[]
-  ): DesignPlan {
-    const isMeme = skillId === 'meme';
-    const defaultPalette =
-      brief.brandPalette && brief.brandPalette.length > 0
-        ? brief.brandPalette
-        : ['#ffffff', '#000000', '#2B5CD3'];
-
-    return {
-      variantId: randomUUID(),
-      skill: skillId,
-      concept: brief.intent || 'A clean, on-brand design',
-      formatTemplate: isMeme ? 'top-bottom' : 'hero-fullbleed',
-      styleId: brief.styleId ?? DEFAULT_STYLE_ID,
-      palette: defaultPalette,
-      typeScale: { headline: 48, body: 24, cta: 18 },
-      background: { kind: 'solid', value: defaultPalette[0] || '#ffffff' },
-      fallback: true,
-      slots: isMeme
-        ? [
-            { id: 'image', role: 'image', kind: 'image' },
-            { id: 'top', role: 'top-caption', kind: 'text' },
-            { id: 'bottom', role: 'bottom-caption', kind: 'text' },
-          ]
-        : [
-            { id: 'image', role: 'image', kind: 'image' },
-            { id: 'headline', role: 'headline', kind: 'text' },
-            { id: 'cta', role: 'cta', kind: 'text' },
-          ],
-      assetNeeds: [
-        {
-          slotId: 'image',
-          brief: 'A high-quality background image matching the brief',
-          // 'either', not 'stock': the fallback plan is a DETERMINISTIC
-          // stand-in for a failed planning pass, not an art-direction choice
-          // — hardcoding 'stock' both skipped generation entirely and (via the
-          // prefer:'stock' suppression) hid the substitution from the user.
-          prefer: 'either',
-        },
-      ],
     };
   }
 }

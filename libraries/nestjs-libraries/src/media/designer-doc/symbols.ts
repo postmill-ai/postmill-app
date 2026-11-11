@@ -14,6 +14,7 @@
  */
 
 import type { DesignerElement } from './designer-doc.schema';
+import { resetBulkImageGeometry } from './bulk-variables';
 import {
   MAX_SYMBOL_EXPANSION_DEPTH,
   MAX_SYMBOL_EXPANSION_TOTAL,
@@ -31,7 +32,15 @@ export interface SymbolDefinition {
 /** What one instance overrides, keyed by the id of the element inside the symbol. */
 export type SymbolOverrides = Record<
   string,
-  { text?: string; src?: string; fileId?: string; fill?: string }
+  {
+    text?: string;
+    src?: string;
+    fileId?: string;
+    fill?: string;
+    naturalWidth?: number;
+    naturalHeight?: number;
+    fitMode?: 'contain' | 'cover' | 'fill';
+  }
 >;
 
 export interface SlotDefinition {
@@ -42,8 +51,10 @@ export interface SlotDefinition {
   order?: number;
 }
 
-/** The override keys an instance is allowed to set. Structure is never one. */
-export const OVERRIDABLE_KEYS = ['text', 'src', 'fileId', 'fill'] as const;
+/** Content and source-media geometry may change; layer structure never may. */
+export const OVERRIDABLE_KEYS = [
+  'text', 'src', 'fileId', 'fill', 'naturalWidth', 'naturalHeight', 'fitMode',
+] as const;
 
 /** Strip anything an instance may not override. */
 export const sanitiseOverrides = (overrides: SymbolOverrides): SymbolOverrides => {
@@ -52,7 +63,13 @@ export const sanitiseOverrides = (overrides: SymbolOverrides): SymbolOverrides =
     const clean: SymbolOverrides[string] = {};
     for (const key of OVERRIDABLE_KEYS) {
       const value = (patch as Record<string, unknown>)[key];
-      if (typeof value === 'string') clean[key] = value;
+      if (
+        typeof value === 'string' ||
+        ((key === 'naturalWidth' || key === 'naturalHeight') &&
+          typeof value === 'number' && Number.isFinite(value))
+      ) {
+        (clean as Record<string, unknown>)[key] = value;
+      }
     }
     if (Object.keys(clean).length) out[id] = clean;
   }
@@ -76,9 +93,14 @@ export const expandSymbolInstance = (
 
   return definition.children.map((child) => {
     const patch = overrides[child.id] || {};
+    const base = { ...child };
+    if (patch.src && patch.src !== child.src) {
+      base.src = patch.src;
+      resetBulkImageGeometry(base, child.src);
+    }
     const sizeScale = Math.min(scaleX, scaleY);
     return {
-      ...child,
+      ...base,
       ...patch,
       id: `${instance.id}::${child.id}`,
       parentId: child.parentId ? `${instance.id}::${child.parentId}` : instance.parentId,

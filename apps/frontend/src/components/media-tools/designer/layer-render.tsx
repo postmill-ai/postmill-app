@@ -168,6 +168,7 @@ export const StyledLayer: FC<{
 }> = ({ element, children, cacheKey }) => {
   const outerRef = useRef<Konva.Group>(null);
   const innerRef = useRef<Konva.Group>(null);
+  const bitmapRef = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
   const { under, over } = splitStyles(elementStyles(element));
   // The warp slack is part of the buffer, or an arched banner's drop shadow is
   // clipped at the element box — see `warpPadding`.
@@ -180,6 +181,7 @@ export const StyledLayer: FC<{
   // away everything painted outside it — the glow, the drop shadow, an outside
   // stroke. The pad is the same one the paint surface uses.
   useEffect(() => {
+    bitmapRef.current = null;
     const node = outerRef.current;
     if (!node) return;
     try {
@@ -223,18 +225,22 @@ export const StyledLayer: FC<{
     };
     if (device.w <= 0 || device.h <= 0) return;
 
-    let layer: HTMLCanvasElement;
-    try {
-      layer = node.toCanvas({
-        x: surface.x * zoom + stage.x(),
-        y: surface.y * zoom + stage.y(),
-        width: surface.width * zoom,
-        height: surface.height * zoom,
-        pixelRatio: ratio / zoom,
-      });
-    } catch {
-      // A zero-size or not-yet-laid-out node; nothing to key off.
-      return;
+    const bitmapKey = `${cacheKey ?? ''}:${surface.x},${surface.y},${surface.width},${surface.height}:${zoom}:${stage.x()}:${stage.y()}`;
+    let layer = bitmapRef.current?.key === bitmapKey ? bitmapRef.current.canvas : undefined;
+    if (!layer) {
+      try {
+        layer = node.toCanvas({
+          x: surface.x * zoom + stage.x(),
+          y: surface.y * zoom + stage.y(),
+          width: surface.width * zoom,
+          height: surface.height * zoom,
+          pixelRatio: ratio / zoom,
+        });
+        bitmapRef.current = { key: bitmapKey, canvas: layer };
+      } catch {
+        // A zero-size or not-yet-laid-out node; nothing to key off.
+        return;
+      }
     }
 
     const buf = createCanvas(device.w, device.h);

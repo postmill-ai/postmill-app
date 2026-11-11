@@ -1158,6 +1158,23 @@ describe('AiDesignerAssetService image-to-image conditioning (PR D)', () => {
     expect(JSON.parse(response.content).assets['s1'].source).toBe('generate');
   });
 
+  it('allows steered text-to-image for a strict subject when i2i is not configured', async () => {
+    const { service, aiDefaults } = makeI2iService();
+    aiDefaults.imageToImage.mockRejectedValue(
+      new DefaultNotConfiguredError('image-to-image')
+    );
+
+    const response = await (service as any)._handler(
+      sourceRequest({
+        sourceUrl: 'https://cdn.example/ref.png',
+        allowStockFallback: false,
+      })
+    );
+
+    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(response.content).assets['s1'].source).toBe('generate');
+  });
+
   it('falls back to text-to-image when the i2i call fails', async () => {
     const { service, aiDefaults } = makeI2iService();
     aiDefaults.imageToImage.mockRejectedValue(new Error('provider down'));
@@ -1190,23 +1207,44 @@ describe('AiDesignerAssetService image-to-image conditioning (PR D)', () => {
     expect(JSON.parse(response.content).assets['s1'].source).toBe('stock');
   });
 
-  it('ignores a sourceUrl that is neither https nor an image data URI', async () => {
-    const { service, aiDefaults } = makeI2iService();
+  it('returns no asset instead of substituting stock when the subject requires a reference', async () => {
+    const { service, aiDefaults, stockMedia, fileService } = makeI2iService();
+    aiDefaults.imageToImage.mockRejectedValue(new Error('i2i down'));
+    aiDefaults.textToImage.mockRejectedValue(new Error('t2i down'));
 
-    await (service as any)._handler(sourceRequest({ sourceUrl: 'file:///etc/passwd' }));
+    const response = await (service as any)._handler(
+      sourceRequest({
+        sourceUrl: 'https://cdn.example/ref.png',
+        allowStockFallback: false,
+      })
+    );
 
-    expect(aiDefaults.imageToImage).not.toHaveBeenCalled();
-    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(1);
+    expect(stockMedia.searchPhotos).not.toHaveBeenCalled();
+    expect(aiDefaults.textToImage).not.toHaveBeenCalled();
+    expect(fileService.importFromUrl).not.toHaveBeenCalled();
+    expect(fileService.saveGeneratedMedia).not.toHaveBeenCalled();
+    expect(JSON.parse(response.content).assets).toEqual({});
   });
 
-  it('generates text-only when the sourceFileId resolves to nothing', async () => {
+  it('returns no asset for a sourceUrl that is neither https nor an image data URI', async () => {
+    const { service, aiDefaults } = makeI2iService();
+
+    const response = await (service as any)._handler(sourceRequest({ sourceUrl: 'file:///etc/passwd' }));
+
+    expect(aiDefaults.imageToImage).not.toHaveBeenCalled();
+    expect(aiDefaults.textToImage).not.toHaveBeenCalled();
+    expect(JSON.parse(response.content).assets).toEqual({});
+  });
+
+  it('returns no asset instead of generating unconditioned imagery when sourceFileId resolution fails', async () => {
     const { service, aiDefaults, fileService } = makeI2iService();
     fileService.getFileById = vi.fn().mockResolvedValue(null);
 
-    await (service as any)._handler(sourceRequest({ sourceFileId: 'gone' }));
+    const response = await (service as any)._handler(sourceRequest({ sourceFileId: 'gone' }));
 
     expect(aiDefaults.imageToImage).not.toHaveBeenCalled();
-    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(1);
+    expect(aiDefaults.textToImage).not.toHaveBeenCalled();
+    expect(JSON.parse(response.content).assets).toEqual({});
   });
 });
 

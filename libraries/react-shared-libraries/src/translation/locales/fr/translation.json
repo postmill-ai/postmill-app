@@ -3305,6 +3305,7 @@
   "designer_exported_n_files": "{{count}} fichier exporté",
   "designer_exporting_current_output": "Export de la sortie actuelle",
   "designer_exporting_ellipsis": "Export en cours...",
+  "designer_exporting_progress": "Exportation {{done}}/{{total}}…",
   "designer_apply_result": "Apply result",
   "designer_before": "Before",
   "designer_after": "After",

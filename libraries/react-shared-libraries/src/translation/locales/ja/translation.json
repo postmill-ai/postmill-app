@@ -3305,6 +3305,7 @@
   "designer_exported_n_files": "{{count}}件のファイルをエクスポートしました",
   "designer_exporting_current_output": "現在の出力をエクスポート中",
   "designer_exporting_ellipsis": "エクスポート中...",
+  "designer_exporting_progress": "エクスポート中 {{done}}/{{total}}…",
   "designer_apply_result": "Apply result",
   "designer_before": "Before",
   "designer_after": "After",

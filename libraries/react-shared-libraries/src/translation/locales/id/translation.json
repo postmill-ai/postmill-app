@@ -3318,6 +3318,7 @@
   "designer_exported_n_files": "{{count}} file diekspor",
   "designer_exporting_current_output": "Mengekspor output saat ini",
   "designer_exporting_ellipsis": "Mengekspor...",
+  "designer_exporting_progress": "Mengekspor {{done}}/{{total}}…",
   "designer_apply_result": "Apply result",
   "designer_before": "Before",
   "designer_after": "After",

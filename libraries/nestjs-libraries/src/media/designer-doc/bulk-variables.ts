@@ -35,10 +35,41 @@ export const normalizeBulkImageSource = (value: string): string => {
   }
 };
 
+export const resetBulkImageGeometry = (element: {
+  src?: string;
+  fileId?: string;
+  crop?: unknown;
+  naturalWidth?: number;
+  naturalHeight?: number;
+  fitMode?: 'contain' | 'cover' | 'fill';
+  originalSrc?: string;
+  originalFileId?: string;
+  smartFilters?: unknown;
+  maskSrc?: string;
+  maskFileId?: string;
+  maskEnabled?: boolean;
+  qr?: unknown;
+}, previousSrc?: string): void => {
+  if (element.src === previousSrc) return;
+  delete element.fileId;
+  delete element.crop;
+  delete element.naturalWidth;
+  delete element.naturalHeight;
+  delete element.originalSrc;
+  delete element.originalFileId;
+  delete element.smartFilters;
+  delete element.maskSrc;
+  delete element.maskFileId;
+  delete element.maskEnabled;
+  delete element.qr;
+  if (!element.fitMode) element.fitMode = 'cover';
+};
+
 const substituteElement = (
   element: DesignerElement,
   row: Record<string, string>
 ): void => {
+  const previousSrc = element.src;
   if (typeof element.text === 'string') {
     element.text = substituteBulkValue(element.text, row);
   }
@@ -68,6 +99,7 @@ const substituteElement = (
   }
   if ((element.type === 'image' || element.type === 'raster') && element.src) {
     element.src = normalizeBulkImageSource(element.src);
+    resetBulkImageGeometry(element, previousSrc);
   }
 };
 
@@ -79,9 +111,11 @@ const substituteChildren = (
     substituteElement(element, row);
     if (element.symbolOverrides) {
       for (const override of Object.values(element.symbolOverrides)) {
+        const previousSrc = override.src;
         if (override.text) override.text = substituteBulkValue(override.text, row);
         if (override.src) override.src = normalizeBulkImageSource(substituteBulkValue(override.src, row));
         if (override.fill) override.fill = substituteBulkValue(override.fill, row);
+        resetBulkImageGeometry(override, previousSrc);
       }
     }
   }

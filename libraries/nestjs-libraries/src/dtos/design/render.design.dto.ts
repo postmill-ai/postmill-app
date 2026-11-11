@@ -34,14 +34,20 @@ export class RenderDesignDto {
   pageNumber?: number;
 
   @IsOptional()
-  @IsIn(['png', 'pdf'])
-  format?: 'png' | 'pdf';
+  @IsIn(['png', 'jpeg', 'webp', 'pdf'])
+  format?: 'png' | 'jpeg' | 'webp' | 'pdf';
 
   @IsOptional()
   @IsNumber()
   @Min(0.1)
   @Max(4)
   pixelRatio?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  @Max(1)
+  quality?: number;
 
   @IsOptional()
   @IsBoolean()

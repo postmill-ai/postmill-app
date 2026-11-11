@@ -50,7 +50,7 @@ describe('BulkCreateDialog', () => {
         id: 'job-1', status: 'completed', artifactUrl: '/uploads/org/bulk.zip',
         progress: { done: 2, total: 2 },
         results: [
-          { row: 1, designId: 'design-1', fileIds: ['file-1'] },
+          { row: 1, designId: 'design-1', fileIds: ['file-1'], editableFileId: 'editable-1' },
           { row: 2, error: 'Invalid image', fileIds: [] },
         ],
       }));
@@ -70,8 +70,10 @@ describe('BulkCreateDialog', () => {
     expect(await screen.findByText('1 of 2 rows processed')).toBeTruthy();
 
     expect(await screen.findByText('Bulk Create complete', undefined, { timeout: 4000 })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Download PNG bundle (.zip)' }).getAttribute('href')).toBe('/uploads/org/bulk.zip');
+    expect(screen.getByRole('link', { name: 'Download PNG + editable designs (.zip)' }).getAttribute('href')).toBe('/uploads/org/bulk.zip');
+    expect(screen.getByRole('link', { name: 'Open Recent Designs' }).getAttribute('href')).toBe('/media/designer');
     expect(screen.getByRole('link', { name: 'Open editable design' }).getAttribute('href')).toBe('/media/designer?designId=design-1');
+    expect(screen.getByText(/The ZIP also includes each \.pdesign file/)).toBeTruthy();
     expect(screen.getByText('Invalid image')).toBeTruthy();
   });
 

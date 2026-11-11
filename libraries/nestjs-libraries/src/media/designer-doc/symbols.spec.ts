@@ -65,6 +65,14 @@ describe('sanitiseOverrides', () => {
     });
   });
 
+  it('keeps replacement-image dimensions and fit while dropping other numeric fields', () => {
+    expect(sanitiseOverrides({
+      a: { src: 'new.png', naturalWidth: 400, naturalHeight: 200, fitMode: 'cover', width: 10 } as never,
+    })).toEqual({
+      a: { src: 'new.png', naturalWidth: 400, naturalHeight: 200, fitMode: 'cover' },
+    });
+  });
+
   it('drops anything structural', () => {
     // An instance that could move a child would be a copy, not an instance.
     expect(
@@ -144,6 +152,38 @@ describe('expandSymbolInstance', () => {
       definition
     );
     expect(out[1].text).toBe('Other');
+  });
+
+  it('resets old media geometry when an image override changes the source', () => {
+    const mediaDefinition: SymbolDefinition = {
+      id: 'sym-media',
+      name: 'Product',
+      width: 100,
+      height: 100,
+      children: [el({
+        id: 'photo', type: 'image', src: '/uploads/org/old.png', fileId: 'old-file',
+        crop: { x: 1, y: 2, width: 20, height: 20 }, naturalWidth: 100, naturalHeight: 50,
+        originalSrc: '/uploads/org/original.png', originalFileId: 'original-file',
+        maskSrc: '/uploads/org/mask.png', maskFileId: 'mask-file', maskEnabled: true,
+        focalPoint: { x: 0.25, y: 0.75 },
+      })],
+    };
+    const out = expandSymbolInstance({
+      ...instance,
+      symbolOverrides: {
+        photo: {
+          src: '/uploads/org/new.png', fileId: 'new-file', naturalWidth: 400, naturalHeight: 200,
+        },
+      },
+    }, mediaDefinition);
+
+    expect(out[0]).toMatchObject({
+      src: '/uploads/org/new.png', fileId: 'new-file', naturalWidth: 400, naturalHeight: 200,
+      fitMode: 'cover', focalPoint: { x: 0.25, y: 0.75 },
+    });
+    for (const key of ['crop', 'originalSrc', 'originalFileId', 'maskSrc', 'maskFileId', 'maskEnabled']) {
+      expect(out[0][key as keyof DesignerElement], key).toBeUndefined();
+    }
   });
 
   it('refuses a structural override even if one is stored', () => {

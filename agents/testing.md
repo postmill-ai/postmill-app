@@ -197,13 +197,17 @@ fixtures. Implemented cases and their fixture contracts are:
   this is fixture provisioning, not acceptance. Other API origins come from responses observed by
   the browser, never a hardcoded deployment host.
 - `bulk-create`: one static output/page with a named text slot and a named image slot whose existing
-  source is an HTTP(S) image. The test discovers both slot names from the document. Requires five
-  editable designs, five decodable PNGs, and a matching ZIP manifest; no row may be dropped or hidden
-  as a partial success.
+  source is an HTTP(S) image and whose fit is unset (so replacement defaults to `cover`). The test
+  discovers both slot names from the document. Requires five
+  editable designs, five decodable PNGs, five self-contained `.pdesign` archives, and a matching ZIP
+  manifest; no row may be dropped or hidden as a partial success. It reimports every archive and
+  checks independent text and remapped image references, then reimports `source/template.pdesign`
+  and reruns the quoted `source/data.csv` successfully. Mixed-aspect sources must retain real natural
+  dimensions and aspect-preserving fit rather than stretching.
 - `bulk-create-invalid`: the same fixture. Row five uses a schema-valid but missing image and must
   fail the entire batch with `Row 5` and the transformed `src` schema path. No completed status, ZIP,
-  editable design IDs, or rendered file IDs are acceptable. Whole-batch atomicity is the settled
-  product behavior; do not weaken this gate into row-isolation semantics.
+  editable design IDs, editable archive IDs, or rendered file IDs are acceptable. Whole-batch
+  atomicity is the settled product behavior; do not weaken this gate into row-isolation semantics.
 - `qr-code`: a disposable static design with no existing QR code, so decoding identifies the inserted
   code unambiguously. Inserts a QR with independent foreground/background colors, verifies both
   through save/reopen, then checks the 1x exported PNG's decoded value and RGB colors. No generation
@@ -216,6 +220,12 @@ fixtures. Implemented cases and their fixture contracts are:
 - `pdesign`: a saved design containing an editable QR element. Downloads the archive, validates its
   manifest and document, reimports it under a new ID and URL, and confirms the QR remains editable
   after reopening. No generation flag is required.
+
+Multi-output export performance acceptance must run against a production build with browser
+screencast recording active. Export every output at 1× and 3×, assert the page remains responsive
+and the formats/dimensions/transparency are correct, and cold-reopen a shadow-heavy design to check
+both time-to-stable-frame and zero position drift. Static raster previews/exports use the server
+renderer sequentially; do not reintroduce full-resolution off-screen Konva stages for this flow.
 
 Run from `e2e/` after `pnpm install --ignore-workspace`, supplying the appropriate deployment and
 design ID. Example for one authorized background-removal operation on a QA deployment:
@@ -235,9 +245,11 @@ explicit production acceptance run, add `E2E_LIVE_PRODUCTION=1`.
 
 ### Opt-in live AI Designer acceptance (never default CI)
 
-`live-ai-designer/ai-designer-live.spec.ts` and `playwright.ai-designer-live.config.ts` verify one
-paid prompt-mode design with a disposable original logo and a requested palette, then revise its small
-text and require every saved media reference to remain identical. It needs `E2E_LIVE_AI_DESIGNER=1`,
+`live-ai-designer/ai-designer-live.spec.ts` and `playwright.ai-designer-live.config.ts` run one paid
+case per invocation. The default `E2E_LIVE_AI_CASE=logo` verifies an original logo and palette, then
+requires a text-only revision to preserve every saved media reference. `E2E_LIVE_AI_CASE=subject`
+uses a screenshot-guided laptop mockup and captures the delivered design at
+`/tmp/qa-ai-subject-laptop.png` for subject/content review. Both need `E2E_LIVE_AI_DESIGNER=1`,
 `E2E_LIVE_GENERATION=1`, and `E2E_BASE`; production also needs `E2E_LIVE_PRODUCTION=1`. Use the
 disposable QA organization and no paid retries. `E2E_LIVE_BRAND_HEX` optionally overrides `#ff0000`.
 

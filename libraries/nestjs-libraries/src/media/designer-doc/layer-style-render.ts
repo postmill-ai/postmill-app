@@ -32,18 +32,31 @@ export { extrusionOffsets, MAX_EXTRUSION_DEPTH } from './text-extrusion';
  * variants are stored but not yet expressed.
  */
 
+const blurWithNativeFilter = (canvas: any, radius: number): boolean => {
+  if (typeof HTMLCanvasElement === 'undefined' || !(canvas instanceof HTMLCanvasElement)) {
+    return false;
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx || typeof ctx.filter !== 'string') return false;
+  const source = canvas.cloneNode(false) as HTMLCanvasElement;
+  source.width = canvas.width;
+  source.height = canvas.height;
+  source.getContext('2d')?.drawImage(canvas, 0, 0);
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.filter = `blur(${radius}px)`;
+  ctx.drawImage(source, 0, 0);
+  ctx.restore();
+  return true;
+};
+
 /**
- * Blur a canvas in place.
- *
- * `ctx.filter = 'blur(Npx)'` is accepted but silently ignored by node-canvas,
- * which is why every blur-based effect (glows, inner shadows, the soft part of
- * a drop shadow) used to render hard-edged in exports while looking correct in
- * a browser. Doing it in pixel space instead means one implementation and no
- * divergence.
- *
- * Three box passes approximate a Gaussian closely enough for a shadow, at a
- * fraction of the cost. Alpha is premultiplied first, or transparent pixels
- * drag their black RGB into the result and every glow grows a dark halo.
+ * Blur a canvas in place. Browsers use their native filter rather than blocking
+ * the main thread on pixel loops. node-canvas accepts but ignores `ctx.filter`,
+ * so it keeps the three-pass approximation below, with premultiplied alpha to
+ * prevent transparent black from darkening coloured glows.
  */
 export const blurCanvas = (canvas: any, radius: number): void => {
   const r = Math.round(radius);
@@ -51,6 +64,7 @@ export const blurCanvas = (canvas: any, radius: number): void => {
   const width = canvas.width;
   const height = canvas.height;
   if (!width || !height) return;
+  if (blurWithNativeFilter(canvas, r)) return;
 
   const ctx = canvas.getContext('2d');
   const image = ctx.getImageData(0, 0, width, height);

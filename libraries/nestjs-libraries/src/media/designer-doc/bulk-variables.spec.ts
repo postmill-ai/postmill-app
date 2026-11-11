@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBulkAssignments, applyBulkRow, collectBulkAssignmentTargets, collectBulkVariables, normalizeBulkImageSource } from './bulk-variables';
+import { applyBulkAssignments, applyBulkRow, collectBulkAssignmentTargets, collectBulkVariables, normalizeBulkImageSource, resetBulkImageGeometry } from './bulk-variables';
 
 const element = (id: string, extra: Record<string, unknown>) => ({
   id,
@@ -92,6 +92,7 @@ describe('Bulk Create variables', () => {
     expect(result.outputs[0].children[1].symbolOverrides['symbol-text']).toEqual({
       text: 'Override Thanks',
       src: row.hero,
+      fitMode: 'cover',
     });
     expect(result.outputs[0].children[2].fill).toBe('#ff00ff');
     expect(result.outputs[0].children[3].text).toBe('New headline');
@@ -303,5 +304,48 @@ describe('Bulk Create variables', () => {
       [imageTarget.id]: 'shared',
     })).toThrow('Column "shared" cannot be assigned to both text and image data.');
     expect(template.outputs[0].children.every((child: any) => !child.slot)).toBe(true);
+  });
+});
+
+describe('resetBulkImageGeometry', () => {
+  it('clears source-specific identity, derived pixels, crop and dimensions and defaults omitted fit to cover', () => {
+    const element: any = {
+      src: 'https://cdn.example.test/replacement.png',
+      fileId: 'old-file',
+      crop: { x: 5, y: 5, width: 20, height: 20 },
+      naturalWidth: 100,
+      naturalHeight: 50,
+      originalSrc: '/uploads/org/original.png',
+      originalFileId: 'original-file',
+      smartFilters: [{ type: 'grayscale' }],
+      maskSrc: '/uploads/org/mask.png',
+      maskFileId: 'mask-file',
+      maskEnabled: true,
+      qr: { value: 'old QR' },
+      focalPoint: { x: 0.25, y: 0.75 },
+    };
+    resetBulkImageGeometry(element, 'https://cdn.example.test/original.png');
+
+    for (const key of [
+      'fileId', 'crop', 'naturalWidth', 'naturalHeight', 'originalSrc', 'originalFileId',
+      'smartFilters', 'maskSrc', 'maskFileId', 'maskEnabled', 'qr',
+    ]) {
+      expect(element[key], key).toBeUndefined();
+    }
+    expect(element.fitMode).toBe('cover');
+    expect(element.focalPoint).toEqual({ x: 0.25, y: 0.75 });
+  });
+
+  it('preserves an explicit fit and the current source geometry', () => {
+    const explicit: any = { src: 'new.png', fitMode: 'fill' };
+    resetBulkImageGeometry(explicit, 'old.png');
+    expect(explicit.fitMode).toBe('fill');
+
+    const unchanged: any = { src: 'same.png', crop: { x: 1, y: 1, width: 5, height: 5 }, naturalWidth: 20, naturalHeight: 10 };
+    resetBulkImageGeometry(unchanged, 'same.png');
+    expect(unchanged.crop).toBeDefined();
+    expect(unchanged.naturalWidth).toBe(20);
+    expect(unchanged.naturalHeight).toBe(10);
+    expect(unchanged.fitMode).toBeUndefined();
   });
 });

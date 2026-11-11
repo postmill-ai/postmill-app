@@ -383,6 +383,8 @@ export interface AssetNeedRequest {
    * re-generating is the same dice, not an escalation).
    */
   stockOnly?: boolean;
+  /** Set false when an unrelated stock photo cannot satisfy the requested subject. */
+  allowStockFallback?: boolean;
   /**
    * A reference image (media-library File id) the generation should be
    * conditioned on. The asset agent resolves it to a fetchable URL itself

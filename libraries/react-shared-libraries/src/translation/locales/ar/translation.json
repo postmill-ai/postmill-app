@@ -3305,6 +3305,7 @@
   "designer_exported_n_files": "تم تصدير {{count}} ملف",
   "designer_exporting_current_output": "جارٍ تصدير المخرج الحالي",
   "designer_exporting_ellipsis": "جارٍ التصدير...",
+  "designer_exporting_progress": "جارٍ التصدير {{done}}/{{total}}…",
   "designer_apply_result": "Apply result",
   "designer_before": "Before",
   "designer_after": "After",

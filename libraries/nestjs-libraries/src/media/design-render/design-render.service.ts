@@ -2,6 +2,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import * as path from 'path';
+import sharp from 'sharp';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import {
   isLocalStorageUrl,
@@ -756,15 +757,14 @@ export class DesignRenderService {
     }
     await this._fontLoaderService.loadCuratedFonts(children);
 
-    const ratio = opts?.pixelRatio && opts.pixelRatio > 0 ? opts.pixelRatio : 1;
-    const width = Math.max(
-      1,
-      Math.min(Math.round(output.width * ratio), MAX_CANVAS_DIMENSION)
+    const requestedRatio = opts?.pixelRatio && opts.pixelRatio > 0 ? opts.pixelRatio : 1;
+    const ratio = Math.min(
+      requestedRatio,
+      MAX_CANVAS_DIMENSION / output.width,
+      MAX_CANVAS_DIMENSION / output.height,
     );
-    const height = Math.max(
-      1,
-      Math.min(Math.round(output.height * ratio), MAX_CANVAS_DIMENSION)
-    );
+    const width = Math.max(1, Math.round(output.width * ratio));
+    const height = Math.max(1, Math.round(output.height * ratio));
 
     const { createCanvas } = await loadCanvasModule();
     const canvas = createCanvas(width, height);
@@ -785,6 +785,26 @@ export class DesignRenderService {
     );
 
     return canvas.toBuffer('image/png');
+  }
+
+  async renderPageToFormat(
+    doc: DesignerDoc,
+    outputIndex: number,
+    opts: RenderOptions | undefined,
+    pageNumber: number,
+    format: 'png' | 'jpeg' | 'webp',
+    quality = 0.92,
+  ): Promise<{ bytes: Buffer; mime: string; extension: string }> {
+    const png = await this.renderPage(doc, outputIndex, opts, pageNumber);
+    if (format === 'png') {
+      return { bytes: png, mime: 'image/png', extension: 'png' };
+    }
+    const encoder = sharp(png)[format]({ quality: Math.round(quality * 100) });
+    return {
+      bytes: await encoder.toBuffer(),
+      mime: format === 'jpeg' ? 'image/jpeg' : 'image/webp',
+      extension: format === 'jpeg' ? 'jpg' : 'webp',
+    };
   }
 
   async assertVisualAssets(
@@ -1863,6 +1883,7 @@ export class DesignRenderService {
     depth = 0
   ): Promise<void> {
     for (let i = 0; i < nodes.length; i++) {
+      if (i > 0) await new Promise<void>((resolve) => setImmediate(resolve));
       const node = nodes[i];
       const el = node.element;
       if (el.hidden) continue;

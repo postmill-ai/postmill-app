@@ -12756,11 +12756,17 @@ components:
           type: string
           enum:
             - png
+            - jpeg
+            - webp
             - pdf
         pixelRatio:
           type: number
           minimum: 0.1
           maximum: 4
+        quality:
+          type: number
+          minimum: 0.1
+          maximum: 1
         transparent:
           type: boolean
       required:

@@ -3305,6 +3305,7 @@
   "designer_exported_n_files": "{{count}} dosya dışa aktarıldı",
   "designer_exporting_current_output": "Geçerli çıktı dışa aktarılıyor",
   "designer_exporting_ellipsis": "Dışa aktarılıyor...",
+  "designer_exporting_progress": "Dışa aktarılıyor {{done}}/{{total}}…",
   "designer_apply_result": "Apply result",
   "designer_before": "Before",
   "designer_after": "After",

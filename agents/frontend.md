@@ -170,8 +170,8 @@ Gate composer/UI features per channel on the shared capability matrix, not on ad
 
 | Path | Where | Used for |
 |---|---|---|
-| Konva | `designer/elements.tsx`, `designer/video-canvas-overlay.tsx` | the canvas *and* PNG/JPEG/WebP export |
-| node-canvas | `design-render/design-render.service.ts` | PDF and bulk generation |
+| Konva | `designer/elements.tsx`, `designer/video-canvas-overlay.tsx` | the canvas, page thumbnails and SVG rasterization |
+| node-canvas | `design-render/design-render.service.ts` | PDF, bulk generation, and static PNG/JPEG/WebP previews/exports through `/media/designs/render` |
 | a browser script | `design-render/frame-renderer-script.ts` | video frames, in headless Chromium |
 | an SVG translator | `designer-doc/svg-export.ts` | SVG export |
 
@@ -257,8 +257,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   regions, and Outline removes fills. Disjoint results survive and are all selected. Contained
   regions become one compound path: `nodes` is the outer contour, optional `subpaths` carries every
   contour, and `fillRule: evenodd` preserves holes across Konva, server rendering, resize/reflow/warp,
-  and SVG export. One Undo restores every input. Axis-aligned rectangles sharing a horizontal strip use
-  the exact interval path in `path-boolean.ts`.
+  and SVG export. One Undo restores every input. Canvas-space outlines include each element's
+  rotation (origin pivot) and flips (center pivot). Axis-aligned rectangles sharing a horizontal or
+  vertical strip use the exact interval path in `path-boolean.ts`; vertical merging writes all four
+  corners in top-left → top-right → bottom-right → bottom-left order. Offset Path and Live Corners
+  instead use the pre-transform local outline, so the element's existing rotation/flips apply once.
 - **Design/template previews are best-effort, never save blockers.** Video saves render through
   `DesignPreviewService`; image saves use that server renderer when no client thumbnail arrives.
   Org-owned background `fileId`s resolve through the folder storage adapter before the remote URL,
@@ -412,8 +415,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   frame renderer, SVG, previews, Files and `.pdesign` all use the existing raster source and document fields.
 - **node-canvas is not a browser canvas.** `ctx.filter = 'blur(…)'` is accepted and ignored, and
   `ctx.scale()` does not condense glyphs — text is rasterised at the font size with only the origin
-  moving. Anything that needs either must work in pixel space (`blurCanvas`) or squeeze a rendered
-  bitmap. A visual effect that "works locally" and not in an export is almost always this.
+  moving. `blurCanvas` therefore uses the browser's native filter when available and retains its
+  pixel-space three-pass fallback for node-canvas; text still needs a squeezed rendered bitmap.
+  The native path resets compositing to `source-over` and alpha to 1 inside its save/restore block.
+  Styled layers also reuse one inner bitmap for under/over effects instead of recapturing per style.
+  Server rendering yields between layers, and an oversized requested pixel ratio is reduced to fit
+  the 16384px canvas bound instead of cropping the page. A visual effect that "works locally" and
+  not in an export is almost always this platform split.
 - **The CANVAS is authoritative when two renderers disagree.** It is the authoring surface, and
   stored geometry means what it drew — so a fix goes into the other renderer, not into the canvas.
   Two consequences worth stating outright, because both were wrong on the server for a long time:
@@ -537,9 +545,20 @@ fetched. Remote and inline images are capped at 20 MiB; declared lengths are rej
 false lengths are streamed with cancellation on overflow. Errors include the row, spreadsheet path
 (for example `rows[2].product_image`) and DesignerDoc path. No files are persisted during preflight,
 so an HTML Drive response or blocked URL cannot leave outputs behind. The batch runs
-through `DesignBulkCreateService` and creates editable Designs plus per-page PNG Files and a ZIP; any
-row failure after enqueue marks the job failed and suppresses ZIP completion rather than calling a
-partial batch complete. Never substitute a client-only flattened image for the editable result.
+through `DesignBulkCreateService` and creates editable Designs, per-page PNG Files, and one
+self-contained `.pdesign` per row. Changed image sources drop stale file identity, derived pixels,
+crop/natural-size metadata, default to aspect-preserving `cover` unless the template explicitly
+chose another fit, and adopt the persisted image's real dimensions. A per-batch `.pdesign` asset/font cache deduplicates shared reads.
+Existing `/uploads/...` substitutions also resolve once per batch; legacy/preventSave objects without
+File rows are copied into new org-owned Files, never rejected or deleted on rollback. The batch folder
+and ZIP retain every editable archive plus `source/template.pdesign` and the quoted normalized
+`source/data.csv`; the completion dialog links every editable Design, Recent Designs, and the PNG +
+editable ZIP. PNG output is capped at 128 MB and accounted batch output at 1 GB. Stored entries stream
+one at a time through a temporary ZIP file and into the storage adapter's streaming upload; entry
+arrays, compressed chunks, and a concatenated ZIP buffer are never retained in memory. Any row or artifact failure
+after enqueue rolls back every design, imported/generated file, editable archive, and source artifact
+rather than calling a partial batch complete. Never substitute a client-only flattened image for the
+editable result.
 
 ## Forms
 

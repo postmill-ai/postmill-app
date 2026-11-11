@@ -669,6 +669,16 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
             },
           ]
         : []),
+      ...(payload.briefIntent
+        ? [
+            {
+              name: 'subject_fidelity',
+              description:
+                'The render contains the concrete subject and required object/content in the user\'s brief below, not merely a related theme or style. Check every explicit visual requirement: named products, devices, screenshots, interface content, people, places and compositional mockups. For a screenshot/mockup request, the requested object AND the supplied screen content must be visible; an unrelated stock scene is always a finding. Repair a missing or wrong subject with regenerateAsset, adding the exact missed subject/content to the brief.',
+              weight: 1,
+            },
+          ]
+        : []),
       // Plan conformance needs the plan spec (serialized below) — the render
       // must exhibit the art direction the user approved. A "full-bleed,
       // dramatic slice pull" plan that renders as type on a bare card passed
@@ -878,7 +888,7 @@ Look at the contact sheet and identify concrete, actionable visual issues. For e
   - "geometry": partial element geometry such as { x, y, width, height, fontSize }
   - "style": partial style such as { fill, stroke, opacity, fontFamily (a loadable face OR a style class — "a casual script", "condensed slab serif", "formal copperplate script" — the composer resolves the class to a loadable family; the fix for a type-class mismatch against a reference), align ("left"|"center"|"right"), verticalAlign ("top"|"middle"|"bottom"), letterSpacing (px tracking — 2-6 for all-caps labels), lineHeight (1.0-1.6; 1.0-1.1 for display headlines), textScaleX (0.5-1 — condense display type that wraps or overflows instead of shrinking it), textTransform ("uppercase"|"lowercase"|"capitalize" — case as a style, never retype the copy), curve (degrees, -60..60 — arc a single accent/ribbon line), warpBend (-100..100 — deepen or flatten an existing banner warp), backdropBlur (0-40 — the frost on a glass panel), blend (a blend-mode name, e.g. "multiply"), badgeStyle ("pill"|"ribbon" — re-shape a badge plate; a band whose long edges bow the same way is an arched ribbon, never a pill), textStroke { color, width }, textShadow (true = add a default shadow, false = remove it) }
   - "text": { slotId, newText } — rewrite the copy of a TEXT slot only; never target an image slot with a text fix
-  - "regenerateAsset": { slotId, brief? } — regenerate the underlying imagery for that slot; the ONLY fix for a no_baked_in_text, text_accuracy or brand_safety defect inside a generated photo: imagery containing baked-in text, letters, logos, watermarks, or a recognizable third-party brand mark / branded product / celebrity likeness must be fixed with regenerateAsset targeting the image slot — never with a text fix. Optional "brief" adds guidance for the regeneration (subject, mood, what to avoid — e.g. "generic unbranded sneaker, no logos or brand marks")
+  - "regenerateAsset": { slotId, brief? } — regenerate the underlying imagery for that slot; the fix for a no_baked_in_text, text_accuracy, brand_safety or subject_fidelity defect inside imagery. Baked-in text, letters, logos, watermarks, recognizable third-party branding, or a missing/wrong explicitly requested subject must be fixed with regenerateAsset targeting the image slot — never with a text fix. Optional "brief" adds exact guidance for the regeneration (subject, required screen content, mood, what to avoid)
   - "addElement": { slotId, type: "text" | "shape", text?, shape?, box? { x, y, width, height }, style? { fill, fontFamily, fontSize, align, textStroke, textShadow } } — add a small text/shape/badge-style element
   - "removeElement": a slot id to remove from the targeted outputs
   - "recompose": a composition id (one of: ${COMPOSITION_IDS.join(', ')}) — swap the WHOLE arrangement when the problem is the layout itself (the stack anchored at the wrong edge, copy in the wrong region, a panel where the reference has none); the design re-composes under the new arrangement with the same copy and imagery, so pair it only with layout-level findings
