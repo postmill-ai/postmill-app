@@ -116,7 +116,9 @@ export class MagnificContentPack implements ContentPackCapabilityContract {
       case 'vectors':
         return `/v1/resources/${safeId}/download`;
       case 'icons':
-        return `/v1/icons/${safeId}/download`;
+        // Request a raster: the import pipeline rejects SVG (anti-XSS), and the
+        // format default is unspecified upstream. 512 is the largest PNG size.
+        return `/v1/icons/${safeId}/download?format=png&png_size=512`;
       case 'videos':
         return `/v1/videos/${safeId}/download`;
       default:
