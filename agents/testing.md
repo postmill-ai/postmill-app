@@ -235,9 +235,11 @@ explicit production acceptance run, add `E2E_LIVE_PRODUCTION=1`.
 
 ### Opt-in live AI Designer acceptance (never default CI)
 
-`live-ai-designer/ai-designer-live.spec.ts` and `playwright.ai-designer-live.config.ts` verify one
-paid prompt-mode design with a disposable original logo and a requested palette, then revise its small
-text and require every saved media reference to remain identical. It needs `E2E_LIVE_AI_DESIGNER=1`,
+`live-ai-designer/ai-designer-live.spec.ts` and `playwright.ai-designer-live.config.ts` run one paid
+case per invocation. The default `E2E_LIVE_AI_CASE=logo` verifies an original logo and palette, then
+requires a text-only revision to preserve every saved media reference. `E2E_LIVE_AI_CASE=subject`
+uses a screenshot-guided laptop mockup and captures the delivered design at
+`/tmp/qa-ai-subject-laptop.png` for subject/content review. Both need `E2E_LIVE_AI_DESIGNER=1`,
 `E2E_LIVE_GENERATION=1`, and `E2E_BASE`; production also needs `E2E_LIVE_PRODUCTION=1`. Use the
 disposable QA organization and no paid retries. `E2E_LIVE_BRAND_HEX` optionally overrides `#ff0000`.
 

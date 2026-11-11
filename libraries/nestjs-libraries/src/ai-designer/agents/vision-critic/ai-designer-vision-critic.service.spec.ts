@@ -800,6 +800,20 @@ describe('AiDesignerVisionCriticService', () => {
     expect(prompt).toContain('buy 1 get 1 free');
   });
 
+  it('checks concrete subject and screen-content requirements against the brief', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+    const raw = JSON.parse(makeRequest());
+    raw.briefIntent = 'Make a laptop mockup with the Designer Canvas on the screen. Screenshot attached.';
+
+    await handler(JSON.stringify(raw), 'org1');
+
+    const prompt = aiDefaults.vision.mock.calls[0][2] as string;
+    expect(prompt).toContain('subject_fidelity');
+    expect(prompt).toContain('the requested object AND the supplied screen content must be visible');
+    expect(prompt).toContain('an unrelated stock scene is always a finding');
+    expect(prompt).toContain('regenerateAsset');
+  });
+
   it('omits offer_fidelity when no brief intent is known', async () => {
     aiDefaults.vision.mockResolvedValue('{"findings": []}');
 
