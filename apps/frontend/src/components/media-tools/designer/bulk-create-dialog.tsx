@@ -25,6 +25,7 @@ interface JobResult {
   row: number;
   designId?: string;
   fileIds: string[];
+  editableFileId?: string;
   error?: string;
 }
 
@@ -378,10 +379,20 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
             </div>
           )}
           {job.error && <div role="alert" className="text-[12px] text-dangerText">{job.error}</div>}
+          {completed && (
+            <p className="text-[12px] text-newTextColor/65">
+              {t('designer_bulk_editable_note', 'Every row remains editable in Recent Designs. The ZIP also includes each .pdesign file, the source template, and the normalized CSV.')}
+            </p>
+          )}
           {completed && job.artifactUrl && (
-            <a href={job.artifactUrl} target="_blank" rel="noreferrer" className="inline-block px-3 py-2 rounded-md bg-designerAccent text-[12px] text-white hover:bg-designerAccent/80">
-              {t('designer_bulk_download_zip', 'Download PNG bundle (.zip)')}
-            </a>
+            <div className="flex flex-wrap items-center gap-3">
+              <a href={job.artifactUrl} target="_blank" rel="noreferrer" className="inline-block px-3 py-2 rounded-md bg-designerAccent text-[12px] text-white hover:bg-designerAccent/80">
+                {t('designer_bulk_download_zip', 'Download PNG + editable designs (.zip)')}
+              </a>
+              <a href="/media/designer" className="text-[12px] text-btnPrimaryAccent hover:underline">
+                {t('designer_bulk_open_recent', 'Open Recent Designs')}
+              </a>
+            </div>
           )}
           {!!results.length && (
             <div className="max-h-[260px] overflow-y-auto rounded-md border border-studioBorder divide-y divide-studioBorder">

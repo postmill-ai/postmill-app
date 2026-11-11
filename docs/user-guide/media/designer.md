@@ -272,11 +272,18 @@ semicolon argument separators, and Excel's `_xlfn.IMAGE` prefix are accepted too
 **Spreadsheet format** guide can download a CSV template based on the current mappings.
 
 Each successful row creates a separate editable design and saves every output and page as a PNG in
-a dedicated batch folder in Files. The completed batch provides links to those designs and a ZIP
-containing all PNGs and a `results.json` report. Existing template assets stay in place; only remote
-images substituted by a row are imported. Every row is validated first; if any row fails, the whole
-batch stops without partial designs or a ZIP. Batches heartbeat while running and stop if the job is
-cancelled or swept as stale.
+a dedicated batch folder in Files. It also saves a self-contained `.pdesign` archive, so you can
+reimport that row and continue editing its text, images, and other elements. Replacement images keep
+their aspect ratio: an unspecified fit uses **Cover**, while an explicit Fill, Contain, Cover, or
+focal choice is respected. Source-specific crops from the previous image are cleared.
+
+The completed batch links every editable design and Recent Designs. Its ZIP contains all PNGs, the
+per-row `.pdesign` files under `editable/`, a `results.json` report, and `source/template.pdesign`
+plus `source/data.csv`. Edit that CSV and reimport the template to rerun the same batch with revised
+data. The batch folder retains those source files too. Existing template assets stay in place; only
+remote images substituted by a row are imported. Every row is validated first; if any row or output
+fails, the whole batch rolls back without partial designs, editable files, source files, or a ZIP.
+Batches heartbeat while running and stop if the job is cancelled or swept as stale.
 
 ---
 > Verified against v1.4.0

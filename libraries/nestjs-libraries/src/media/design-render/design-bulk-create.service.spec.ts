@@ -30,6 +30,9 @@ vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
 import { BadRequestException } from '@nestjs/common';
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { DesignerDocService } from '../designer-doc/designer-doc.service';
+import { DesignExportService } from '../design-export/design-export.service';
+import { parsePostmillFile } from '../designer-doc/postmill-file';
+import { computeMediaDraw } from '../designer-doc/media-geometry';
 import { DesignBulkCreateService, DESIGN_BULK_CREATE_OPERATION } from './design-bulk-create.service';
 import { IMAGE_SOURCE_MAX_BYTES } from '../image-source.limits';
 
@@ -85,33 +88,75 @@ const makeService = () => {
   };
   const designerDocService = new DesignerDocService();
   vi.spyOn(designerDocService, 'validate');
+  const remoteFiles = new Map<string, any>();
+  const existingFile = {
+    id: 'existing-file', folderId: null, path: '/uploads/org/existing.png',
+    name: 'existing.png', originalName: 'existing.png', fileSize: PNG_BYTES.length,
+  };
   const fileService = {
     getFolder: vi.fn(async () => ({ id: 'folder-1' })),
     createFolder: vi.fn(async () => ({ id: 'batch-folder' })),
     deleteFolder: vi.fn(async () => undefined),
     deleteFile: vi.fn(async () => undefined),
+    getFileById: vi.fn(async (_org: string, id: string) =>
+      id === existingFile.id ? existingFile : remoteFiles.get(id) ?? null
+    ),
+    getFileByPath: vi.fn(async () => null),
     saveGeneratedMedia: vi.fn(async (_org: string, data: any) => ({ id: `file-${++fileNumber}`, ...data })),
+    saveMediaInformation: vi.fn(async () => ({})),
   };
   const writes: { bytes: Buffer; mime: string }[] = [];
+  const readFile = vi.fn(async (path: string) => {
+    const remote = [...remoteFiles.values()].find((file) => file.path === path);
+    return remote?.bytes || PNG_BYTES;
+  });
+  const localAdapter = {
+    readFile,
+    writeBuffer: vi.fn(async (bytes: Buffer, mime: string) => {
+      writes.push({ bytes, mime });
+      return `/uploads/org/artifact-${writes.length}`;
+    }),
+  };
   const storageService = {
-    getLocalAdapterForOrg: vi.fn(async () => ({
-      writeBuffer: vi.fn(async (bytes: Buffer, mime: string) => {
-        writes.push({ bytes, mime });
-        return `/uploads/org/artifact-${writes.length}`;
-      }),
-    })),
+    getLocalAdapterForOrg: vi.fn(async () => localAdapter),
+    resolveAdapterForFolder: vi.fn(async () => ({ readFile })),
   };
   const aiMediaService = {
     saveUrlToFile: vi.fn(async (_org: string, url: string) => {
-      const name = new URL(url).pathname.split('/').pop()!.split('.')[0];
-      return { id: `remote-${name}`, path: `/uploads/org/remote-${name}.png` };
+      const parsed = new URL(url);
+      const name = parsed.searchParams.get('id') || parsed.pathname.split('/').pop()!.split('.')[0];
+      const bytes = name.includes('landscape')
+        ? LANDSCAPE_BYTES
+        : name.includes('portrait')
+          ? PORTRAIT_BYTES
+          : PNG_BYTES;
+      const file = {
+        id: `remote-${name}`, folderId: null, path: `/uploads/org/remote-${name}.png`,
+        name: `${name}.png`, originalName: `${name}.png`, fileSize: bytes.length, bytes,
+      };
+      remoteFiles.set(file.id, file);
+      return { id: file.id, path: file.path };
     }),
   };
+  const designExport = new DesignExportService(
+    lifecycle as any,
+    aiSettings as any,
+    designService as any,
+    designerDocService,
+    fileService as any,
+    storageService as any,
+    { getCustomFonts: vi.fn(async () => []) } as any,
+    { renderPreviewBuffer: vi.fn(async () => PNG_BYTES) } as any,
+  );
   const service = new DesignBulkCreateService(
     renderService as any, lifecycle as any, aiSettings as any, designService as any,
     designerDocService as any, fileService as any, storageService as any, aiMediaService as any,
+    designExport,
   );
-  return { service, renderService, lifecycle, aiSettings, designService, designerDocService, fileService, storageService, aiMediaService, writes };
+  return {
+    service, renderService, lifecycle, aiSettings, designService, designerDocService,
+    fileService, storageService, aiMediaService, writes, localAdapter, readFile, designExport,
+  };
 };
 
 const seedPayload = (rows = [
@@ -126,6 +171,14 @@ const seedPayload = (rows = [
 
 const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+);
+const LANDSCAPE_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWP4z8DwHxkzoAsAAA8hD/E58b5bAAAAAElFTkSuQmCC',
+  'base64',
+);
+const PORTRAIT_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAAECAYAAACk7+45AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEElEQVQImWNgYPj/H4JxMgAPIw/xT2/EuwAAAABJRU5ErkJggg==',
   'base64',
 );
 
@@ -393,8 +446,8 @@ describe('DesignBulkCreateService enqueue and status', () => {
 });
 
 describe('DesignBulkCreateService processing', () => {
-  it('creates editable designs, imports row images and writes every page into a real ZIP', async () => {
-    const { service, designService, aiMediaService, fileService, aiSettings, writes } = makeService();
+  it('creates editable designs, imports row images and writes self-contained archives and source files into the ZIP', async () => {
+    const { service, designService, aiMediaService, fileService, aiSettings, writes, readFile } = makeService();
     seedPayload();
 
     await service.processBulkCreate('job-1');
@@ -404,21 +457,116 @@ describe('DesignBulkCreateService processing', () => {
     expect(designService.createDesign.mock.calls[1][2].doc.outputs[0].children[0].text).toBe('Hello Grace');
     expect(aiMediaService.saveUrlToFile).toHaveBeenCalledTimes(2);
     expect(designService.createDesign.mock.calls[0][2].doc.outputs[0].pages[0].children[0]).toMatchObject({
-      src: '/uploads/org/remote-a.png', fileId: 'remote-a',
+      src: '/uploads/org/remote-a.png', fileId: 'remote-a', naturalWidth: 1, naturalHeight: 1,
+      fitMode: 'cover',
     });
-    expect(fileService.saveGeneratedMedia).toHaveBeenCalledTimes(5);
-    const zipWrite = writes.find((write) => write.mime === 'application/zip')!;
+    expect(fileService.saveGeneratedMedia).toHaveBeenCalledTimes(9);
+    expect(fileService.saveMediaInformation).toHaveBeenCalledTimes(2);
+    const zipWrite = [...writes].reverse().find((write) => write.mime === 'application/zip')!;
     const entries = unzipSync(zipWrite.bytes);
-    expect(Object.keys(entries)).toHaveLength(5);
-    expect(Object.keys(entries)).toContain('results.json');
-    expect(Object.keys(entries)).toContain('row-002-output-1-page-2.png');
+    expect(Object.keys(entries)).toHaveLength(9);
+    expect(Object.keys(entries)).toEqual(expect.arrayContaining([
+      'results.json',
+      'row-002-output-1-page-2.png',
+      'editable/row-001.pdesign',
+      'editable/row-002.pdesign',
+      'source/template.pdesign',
+      'source/data.csv',
+    ]));
     const results = JSON.parse(strFromU8(entries['results.json']));
     expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({ designId: 'design-Hello Ada', editableFileId: 'file-3' });
     expect(results[0].fileIds).toHaveLength(2);
+    expect(results[1]).toMatchObject({ designId: 'design-Hello Grace', editableFileId: 'file-6' });
+
+    for (const [index, remoteId] of ['remote-a', 'remote-b'].entries()) {
+      const parsed = parsePostmillFile(entries[`editable/row-${String(index + 1).padStart(3, '0')}.pdesign`]);
+      const doc = new DesignerDocService().validate(parsed.doc);
+      expect(parsed.manifest.name).toBe(`Campaign ${index + 1}`);
+      expect((doc.outputs[0] as any).children[0]).toMatchObject({
+        type: 'text', text: `Hello ${index === 0 ? 'Ada' : 'Grace'}`,
+      });
+      expect(parsed.manifest.assets).toHaveProperty(remoteId);
+      expect(parsed.manifest.assets).toHaveProperty('existing-file');
+      expect(parsed.assets.get(parsed.manifest.assets![remoteId].path)).toBeDefined();
+    }
+    const template = parsePostmillFile(entries['source/template.pdesign']);
+    const templateDoc = new DesignerDocService().validate(template.doc);
+    expect((templateDoc.outputs[0] as any).children[0].text).toBe('Hello {{name}}');
+    expect(template.manifest.assets).toHaveProperty('existing-file');
+    expect(strFromU8(entries['source/data.csv'])).toBe(
+      '"name","image"\r\n"Ada","https://cdn.example.test/a.png"\r\n"Grace","https://cdn.example.test/b.png"'
+    );
+    expect(readFile.mock.calls.filter(([path]) => path === '/uploads/org/existing.png').length).toBe(1);
     expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith('org-1', 'job-1', expect.objectContaining({
-      status: 'completed', artifactUrl: '/uploads/org/artifact-5',
+      status: 'completed', artifactUrl: '/uploads/org/artifact-9',
     }));
     expect(redis.has('design-bulk:payload:job-1')).toBe(false);
+  });
+
+  it('resolves an existing uploads replacement and bundles its real image bytes and dimensions', async () => {
+    const { service, designService, fileService, readFile, aiMediaService, writes } = makeService();
+    const localFile = {
+      id: 'local-portrait', folderId: 'folder-assets', path: '/uploads/org/local-portrait.png',
+      name: 'local-portrait.png', originalName: 'local-portrait.png', fileSize: PORTRAIT_BYTES.length,
+    };
+    fileService.getFileByPath.mockResolvedValue(localFile);
+    fileService.getFileById.mockImplementation(async (_org: string, id: string) =>
+      id === localFile.id ? localFile : null
+    );
+    readFile.mockResolvedValue(PORTRAIT_BYTES);
+    seedPayload([{ name: 'Local', image: localFile.path }]);
+
+    await service.processBulkCreate('job-1');
+
+    expect(fileService.getFileByPath).toHaveBeenCalledWith('org-1', localFile.path);
+    expect(aiMediaService.saveUrlToFile).not.toHaveBeenCalled();
+    expect(designService.createDesign.mock.calls[0][2].doc.outputs[0].pages[0].children[0]).toMatchObject({
+      src: localFile.path, fileId: localFile.id, naturalWidth: 2, naturalHeight: 4, fitMode: 'cover',
+    });
+    const zipWrite = [...writes].reverse().find((write) => write.mime === 'application/zip')!;
+    const entries = unzipSync(zipWrite.bytes);
+    const archive = parsePostmillFile(entries['editable/row-001.pdesign']);
+    expect(archive.manifest.assets).toHaveProperty(localFile.id);
+    expect(Buffer.from(archive.assets.get(`assets/${localFile.id}.png`)!)).toEqual(PORTRAIT_BYTES);
+  });
+
+  it('uses real portrait and landscape metadata to cover-crop replacement pixels without distortion', async () => {
+    const { service, designService } = makeService();
+    const doc = makeDoc();
+    Object.assign(doc.outputs[0].pages[0].children[0], {
+      crop: { x: 0, y: 0, width: 10, height: 10 }, naturalWidth: 10, naturalHeight: 10,
+    });
+    redis.set('design-bulk:payload:job-1', JSON.stringify({
+      organizationId: 'org-1', userId: 'user-1', nameBase: 'Campaign', folderId: 'batch-folder',
+      folderOwned: true, doc,
+      rows: [
+        { name: 'Wide', image: 'https://cdn.example.test/landscape.png' },
+        { name: 'Tall', image: 'https://cdn.example.test/portrait.png' },
+      ],
+    }));
+
+    await service.processBulkCreate('job-1');
+
+    const replacements = designService.createDesign.mock.calls.map(([, , data]) =>
+      data.doc.outputs[0].pages[0].children[0]
+    );
+    expect(replacements).toMatchObject([
+      { naturalWidth: 4, naturalHeight: 2, fitMode: 'cover' },
+      { naturalWidth: 2, naturalHeight: 4, fitMode: 'cover' },
+    ]);
+    for (const element of replacements) {
+      expect(element.crop).toBeUndefined();
+      const draw = computeMediaDraw({
+        sourceWidth: element.naturalWidth,
+        sourceHeight: element.naturalHeight,
+        targetWidth: element.width,
+        targetHeight: element.height,
+        fitMode: element.fitMode,
+      });
+      expect(draw.source.width / draw.source.height).toBeCloseTo(1);
+      expect(draw.destination).toEqual({ x: 0, y: 0, width: 50, height: 50 });
+    }
   });
 
   it('creates editable symbol variations and persists their row-owned images', async () => {
@@ -449,7 +597,10 @@ describe('DesignBulkCreateService processing', () => {
 
     expect(designService.createDesign.mock.calls[0][2].doc.symbols[0].children).toMatchObject([
       { text: 'New footer' },
-      { src: '/uploads/org/remote-symbol.png', fileId: 'remote-symbol' },
+      {
+        src: '/uploads/org/remote-symbol.png', fileId: 'remote-symbol',
+        naturalWidth: 1, naturalHeight: 1, fitMode: 'cover',
+      },
       { fill: '#ff0000' },
     ]);
   });
@@ -488,7 +639,7 @@ describe('DesignBulkCreateService processing', () => {
   });
 
   it('rolls back every created design and file when a remote image fails after preflight', async () => {
-    const { service, designService, aiMediaService, aiSettings, fileService, writes } = makeService();
+    const { service, designService, aiMediaService, aiSettings, fileService } = makeService();
     aiMediaService.saveUrlToFile
       .mockResolvedValueOnce({ id: 'remote-a', path: '/uploads/org/remote-a.png' })
       .mockRejectedValueOnce(new Error('Blocked URL'));
@@ -499,17 +650,94 @@ describe('DesignBulkCreateService processing', () => {
     expect(designService.createDesign).toHaveBeenCalledTimes(1);
     expect(designService.deleteDesign).toHaveBeenCalledWith('org-1', 'design-Hello Ada');
     expect(aiMediaService.saveUrlToFile).toHaveBeenCalledTimes(2);
-    expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'file-1');
-    expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'remote-a');
+    for (const id of ['file-1', 'file-2', 'file-3', 'remote-a']) {
+      expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', id);
+    }
+    expect(fileService.saveGeneratedMedia.mock.calls.some(([, data]) => data.name === 'Campaign.zip')).toBe(false);
     expect(fileService.deleteFolder).toHaveBeenCalledWith('org-1', 'batch-folder');
     expect(aiSettings.updateMediaJob.mock.calls.some(([, , update]) => update.status === 'completed')).toBe(false);
     const failed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'failed')?.[2];
     expect(failed.error).toBe('Row 2: Blocked URL');
     const results = JSON.parse(failed.inputJson);
     expect(results).toHaveLength(2);
-    expect(results.every((result: any) => !result.designId && result.fileIds.length === 0)).toBe(true);
+    expect(results.every((result: any) =>
+      !result.designId && !result.editableFileId && result.fileIds.length === 0
+    )).toBe(true);
     expect(results[1].error).toBe('Blocked URL');
-    expect(writes.some((write) => write.mime === 'application/zip')).toBe(false);
+  });
+
+  it('enforces the batch cap before saving an oversized editable archive', async () => {
+    const { service, designExport, aiSettings, fileService } = makeService();
+    seedPayload([{ name: 'Only', image: 'https://cdn.example.test/a.png' }]);
+    vi.spyOn(designExport, 'buildBundleForDoc').mockResolvedValueOnce({
+      bytes: { length: 128 * 1024 * 1024 + 1 },
+    } as any);
+
+    await service.processBulkCreate('job-1');
+
+    const failed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'failed')?.[2];
+    expect(failed.error).toBe('Row 1: Bulk Create output exceeds the 128 MB batch limit.');
+    expect(fileService.saveGeneratedMedia).toHaveBeenCalledTimes(2);
+    expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'file-1');
+    expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'file-2');
+  });
+
+  it('escapes normalized source CSV cells for a rerun', async () => {
+    const { service, writes } = makeService();
+    seedPayload([{ name: 'Ada, "A"\nLine', image: 'https://cdn.example.test/a.png' }]);
+
+    await service.processBulkCreate('job-1');
+
+    const zipWrite = [...writes].reverse().find((write) => write.mime === 'application/zip')!;
+    const entries = unzipSync(zipWrite.bytes);
+    expect(strFromU8(entries['source/data.csv'])).toBe(
+      '"name","image"\r\n"Ada, ""A""\nLine","https://cdn.example.test/a.png"'
+    );
+  });
+
+  it('rolls back editable and source artifacts when final ZIP persistence fails', async () => {
+    const { service, fileService, aiSettings } = makeService();
+    let generated = 0;
+    fileService.saveGeneratedMedia.mockImplementation(async (_org: string, data: any) => {
+      if (data.name === 'Campaign.zip') throw new Error('ZIP write failed');
+      return { id: `file-${++generated}`, ...data };
+    });
+    seedPayload([{ name: 'Only', image: 'https://cdn.example.test/a.png' }]);
+
+    await service.processBulkCreate('job-1');
+
+    for (const id of ['file-1', 'file-2', 'file-3', 'file-4', 'file-5']) {
+      expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', id);
+    }
+    expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith('org-1', 'job-1', expect.objectContaining({
+      status: 'failed', error: 'ZIP write failed',
+    }));
+    const failed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'failed')?.[2];
+    expect(JSON.parse(failed.inputJson)[0].editableFileId).toBeUndefined();
+  });
+
+  it('tracks an imported row image for rollback when metadata reading fails', async () => {
+    const { service, fileService, localAdapter, aiSettings } = makeService();
+    localAdapter.readFile.mockRejectedValueOnce(new Error('metadata read failed'));
+    seedPayload([{ name: 'Only', image: 'https://cdn.example.test/a.png' }]);
+
+    await service.processBulkCreate('job-1');
+
+    expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'remote-a');
+    expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith('org-1', 'job-1', expect.objectContaining({
+      status: 'failed', error: 'Row 1: metadata read failed',
+    }));
+  });
+
+  it('keeps the editable archive when thumbnail metadata is unavailable', async () => {
+    const { service, fileService, aiSettings } = makeService();
+    fileService.saveMediaInformation.mockRejectedValue(new Error('thumbnail failed'));
+    seedPayload([{ name: 'Only', image: 'https://cdn.example.test/a.png' }]);
+
+    await service.processBulkCreate('job-1');
+
+    expect(aiSettings.updateMediaJob.mock.calls.some(([, , update]) => update.status === 'completed')).toBe(true);
+    expect(fileService.deleteFile).not.toHaveBeenCalled();
   });
 
   it('cleans generated previews but preserves a caller-selected folder on rollback', async () => {

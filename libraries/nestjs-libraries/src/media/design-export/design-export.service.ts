@@ -76,6 +76,18 @@ interface ZipEntry {
   compress?: boolean;
 }
 
+export interface DesignExportBundleCache {
+  assets: Map<string, { manifest: PostmillAssetEntry; data: Uint8Array }>;
+  fonts: Map<string, { manifest: PostmillFontEntry; data: Uint8Array }>;
+  assetBytes: number;
+}
+
+export const createDesignExportBundleCache = (): DesignExportBundleCache => ({
+  assets: new Map(),
+  fonts: new Map(),
+  assetBytes: 0,
+});
+
 /** Streaming zip assembly (never zipSync): inputs are pushed entry-by-entry. */
 const zipEntries = async (entries: ZipEntry[]): Promise<Buffer> =>
   new Promise((resolve, reject) => {
@@ -375,7 +387,23 @@ export class DesignExportService {
       kind: payload.kind,
       id: payload.sourceId,
     });
+    return this.buildBundleForDoc(orgId, jobId, name, doc, previewPath);
+  }
 
+  async buildBundleForDoc(
+    orgId: string,
+    jobId: string,
+    name: string,
+    doc: DesignerDoc,
+    previewPath: string | null = null,
+    cache: DesignExportBundleCache = createDesignExportBundleCache(),
+  ): Promise<{
+    name: string;
+    bytes: Buffer;
+    previewPath: string | null;
+    previewBuffer?: Buffer;
+    metadata: NonNullable<ReturnType<typeof designFileMetadata>>;
+  }> {
     const fileIds = [...collectDocFileIds(doc)];
     const files = [];
     for (const id of fileIds) {
@@ -392,26 +420,35 @@ export class DesignExportService {
 
     const manifestAssets: Record<string, PostmillAssetEntry> = {};
     const assetEntries: ZipEntry[] = [];
-    let actualTotal = 0;
     let done = 0;
     const total = files.length;
     for (const file of files) {
+      const cached = cache.assets.get(file.id);
+      if (cached) {
+        manifestAssets[file.id] = cached.manifest;
+        assetEntries.push({ name: cached.manifest.path, data: cached.data });
+        done++;
+        await this._writeProgress(jobId, done, total);
+        continue;
+      }
       const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, orgId);
       const bytes = await adapter.readFile(file.path);
-      actualTotal += bytes.length;
-      if (actualTotal > DESIGN_EXPORT_MAX_ASSET_BYTES) {
+      cache.assetBytes += bytes.length;
+      if (cache.assetBytes > DESIGN_EXPORT_MAX_ASSET_BYTES) {
         throw new Error('Design assets exceed the 1 GB export ceiling');
       }
       const detected = await fromBuffer(bytes);
       const mime = detected?.mime || 'application/octet-stream';
       const ext = detected?.ext || pathExtension(file.path) || 'bin';
       const zipPath = `assets/${file.id}.${ext}`;
-      manifestAssets[file.id] = {
+      const manifest = {
         path: zipPath,
         mime,
         originalName: file.originalName || file.name,
         size: bytes.length,
       };
+      cache.assets.set(file.id, { manifest, data: bytes });
+      manifestAssets[file.id] = manifest;
       assetEntries.push({ name: zipPath, data: bytes });
       done++;
       await this._writeProgress(jobId, done, total);
@@ -428,25 +465,40 @@ export class DesignExportService {
     if (customFonts.length) {
       const fontAdapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
       for (const font of customFonts as any[]) {
+        const weight = font.weights?.[0] ?? 400;
+        const cacheKey = `${font.family}:${font.path}:${weight}:${font.italic ? 'italic' : 'normal'}`;
+        const cached = cache.fonts.get(cacheKey);
+        if (cached) {
+          manifestFonts.push(cached.manifest);
+          assetEntries.push({ name: cached.manifest.path, data: cached.data });
+          continue;
+        }
+        let bytes: Buffer;
         try {
-          const bytes = await fontAdapter.readFile(font.path);
-          const weight = font.weights?.[0] ?? 400;
-          const ext = pathExtension(font.path) || 'ttf';
-          const zipPath = `assets/fonts/${sanitizeDownloadName(font.family)}-${weight}${font.italic ? 'i' : ''}.${ext}`;
-          manifestFonts.push({
-            family: font.family,
-            weight,
-            ...(font.italic ? { italic: true } : {}),
-            path: zipPath,
-          });
-          assetEntries.push({ name: zipPath, data: bytes });
+          bytes = await fontAdapter.readFile(font.path);
         } catch (err) {
           // A font whose bytes are gone degrades to a renderer fallback on
           // import — never fail the whole export over it.
           this._logger.warn(
             `Design export ${jobId}: skipping unreadable font ${font.family}: ${(err as Error)?.message}`
           );
+          continue;
         }
+        cache.assetBytes += bytes.length;
+        if (cache.assetBytes > DESIGN_EXPORT_MAX_ASSET_BYTES) {
+          throw new Error('Design assets exceed the 1 GB export ceiling');
+        }
+        const ext = pathExtension(font.path) || 'ttf';
+        const zipPath = `assets/fonts/${sanitizeDownloadName(font.family)}-${weight}${font.italic ? 'i' : ''}.${ext}`;
+        const manifest = {
+          family: font.family,
+          weight,
+          ...(font.italic ? { italic: true } : {}),
+          path: zipPath,
+        };
+        cache.fonts.set(cacheKey, { manifest, data: bytes });
+        manifestFonts.push(manifest);
+        assetEntries.push({ name: zipPath, data: bytes });
       }
     }
 

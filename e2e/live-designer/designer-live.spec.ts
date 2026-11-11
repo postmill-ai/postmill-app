@@ -125,8 +125,9 @@ test.describe('Opt-in live Designer acceptance', () => {
     else throw new Error('E2E_LIVE_OUTPAINT_SCOPE must be image or page');
   });
 
-  test('Bulk Create produces five editable rows and five valid PNGs', async ({ page }) => {
+  test('Bulk Create produces reimportable editable archives and a rerunnable source bundle', async ({ page }) => {
     test.skip(liveCase !== 'bulk-create', 'Select with E2E_LIVE_CASE=bulk-create');
+    test.setTimeout(900_000);
     await runBulkCreateValid(page);
   });
 
