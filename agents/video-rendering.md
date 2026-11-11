@@ -166,14 +166,15 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      ramped clip; the preview plays ramped audio elements at the same average.
      Variable-tempo audio is a separate project; the inspector notes the
      approximation next to the curve editor.
-   - The selected video clip's **Playback** group sits directly below Clip timing:
-     Reverse uses the existing `clip.reverse` mapping, and Original audio writes
-     volume zero or restores the previous nonzero volume. These are inspector UX
+   - The selected video or audio clip's **Playback** group sits directly below Clip timing:
+     Reverse uses the existing `clip.reverse` mapping. The video-only Original audio control writes
+     volume zero and removes volume keyframes so no audible keyframe can bypass mute; unmute restores
+     the selected clip's previous nonzero base volume, not another clip's. These are inspector UX
      only — no schema, preview mapping, or FFmpeg changes.
-   - Timeline filmstrips use `preload="metadata"`, start after the first UI frame,
-     and capture ONE source at a time through a shared queue. They never open a
-     second full-source `preload="auto"` download per clip. The playback registry
-     remains authoritative for real media elements and audio/volume behavior.
+   - Timeline filmstrips use `preload="metadata"` and wait for `loadedmetadata` (WebKit may defer
+     `loadeddata` until a seek), start after the first UI frame, and capture ONE source at a time
+     through a shared queue. They never open a second full-source `preload="auto"` download per clip.
+     The playback registry remains authoritative for real media elements and audio/volume behavior.
    - Clip `blendMode` (native canvas modes only — the schema's
      `CLIP_BLEND_MODES`) is honored by both renderers: the preview sets it as
      `globalCompositeOperation` on the clip's Konva node and the frame script

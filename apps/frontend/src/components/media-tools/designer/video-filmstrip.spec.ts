@@ -14,7 +14,7 @@ class FakeVideo {
   muted = false;
   playsInline = false;
   crossOrigin = '';
-  onloadeddata?: () => void;
+  onloadedmetadata?: () => void;
   onseeked?: () => void;
   onerror?: () => void;
   load = vi.fn(() => this.onFinish());
@@ -25,7 +25,7 @@ class FakeVideo {
 
   set src(value: string) {
     this.source = value;
-    queueMicrotask(() => this.onloadeddata?.());
+    queueMicrotask(() => this.onloadedmetadata?.());
   }
   get src() { return this.source; }
   set currentTime(_value: number) {

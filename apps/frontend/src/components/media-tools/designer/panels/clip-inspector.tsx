@@ -906,9 +906,17 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     }, vo));
   };
 
-  const audibleVolumeRef = useRef(1);
+  const audibleVolumeRef = useRef({ clipId: '', volume: 1 });
   useEffect(() => {
-    if (clip && (clip.volume ?? 1) > 0) audibleVolumeRef.current = clip.volume ?? 1;
+    if (!clip) return;
+    if (audibleVolumeRef.current.clipId !== clip.id) {
+      audibleVolumeRef.current = {
+        clipId: clip.id,
+        volume: (clip.volume ?? 1) > 0 ? clip.volume ?? 1 : 1,
+      };
+    } else if ((clip.volume ?? 1) > 0) {
+      audibleVolumeRef.current = { clipId: clip.id, volume: clip.volume ?? 1 };
+    }
   }, [clip]);
 
   if (!clip) return null;
@@ -996,7 +1004,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         disabled={!!parentTrack?.locked}
       />
 
-      {clipTrackType === 'video' && !!clip.src && (
+      {(clipTrackType === 'video' || clipTrackType === 'audio') && !!clip.src && (
         <div className="pt-1 border-t border-studioBorder space-y-2">
           <div className="text-[11px] text-textColor/50">{translate('designer_playback', 'Playback')}</div>
           <div className="flex items-center justify-between">
@@ -1018,27 +1026,32 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
               />
             </button>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-textColor/70">{translate('designer_original_audio', 'Original audio')}</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={(clip.volume ?? 1) > 0}
-              aria-label={translate('designer_original_audio', 'Original audio')}
-              onClick={() => updateClip({
-                volume: (clip.volume ?? 1) > 0 ? 0 : audibleVolumeRef.current,
-              })}
-              className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
-                (clip.volume ?? 1) > 0 ? 'bg-designerAccent' : 'bg-studioBorder'
-              }`}
-            >
-              <span
-                className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
-                  (clip.volume ?? 1) > 0 ? 'translate-x-[18px]' : ''
+          {clipTrackType === 'video' && (
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-textColor/70">{translate('designer_original_audio', 'Original audio')}</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={(clip.volume ?? 1) > 0}
+                aria-label={translate('designer_original_audio', 'Original audio')}
+                onClick={() => updateClip({
+                  volume: (clip.volume ?? 1) > 0 ? 0 : audibleVolumeRef.current.volume,
+                  ...((clip.volume ?? 1) > 0
+                    ? { keyframes: keyframes.filter((kf) => kf.props.volume === undefined) }
+                    : {}),
+                })}
+                className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
+                  (clip.volume ?? 1) > 0 ? 'bg-designerAccent' : 'bg-studioBorder'
                 }`}
-              />
-            </button>
-          </div>
+              >
+                <span
+                  className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
+                    (clip.volume ?? 1) > 0 ? 'translate-x-[18px]' : ''
+                  }`}
+                />
+              </button>
+            </div>
+          )}
         </div>
       )}
 

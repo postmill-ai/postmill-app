@@ -300,7 +300,7 @@ export async function captureFilmstrip(src: string): Promise<string | null> {
       video.preload = 'metadata';
       video.src = src;
       await new Promise<void>((resolve, reject) => {
-        video.onloadeddata = () => resolve();
+        video.onloadedmetadata = () => resolve();
         video.onerror = () => reject(new Error('filmstrip: video load failed'));
         setTimeout(() => reject(new Error('filmstrip: load timeout')), 10000);
       });
