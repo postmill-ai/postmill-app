@@ -42,6 +42,7 @@ export const AiDesignerConfigSchema = z
     brandProfileId: z.string().max(100).optional(),
     variants: z.number().int().min(1).max(10),
     referenceFileIds: z.array(z.string().max(100)).max(10).optional(),
+    attachmentFileIds: z.array(z.string().max(100)).max(10).optional(),
     logoFileId: z.string().max(100).optional(),
     styleId: StylePresetIdSchema.optional(),
   })
@@ -356,6 +357,11 @@ export const DesignBriefSchema = z
     fixedCopy: z.string().max(5000).optional(),
     referenceCues: z.array(z.string().max(2000)).max(50).optional(),
     referenceCueFileIds: z.array(z.string().max(200)).max(10).optional(),
+    documentContexts: z.array(z.object({
+      fileId: z.string().max(100),
+      name: z.string().max(300),
+      text: z.string().max(12000),
+    })).max(10).optional(),
     referenceLayout: ReferenceLayoutSchema.optional(),
     questionsAsked: z.array(z.string().max(1000)).max(50).optional(),
     lastPlans: z.array(DesignPlanSchema).max(20).optional(),

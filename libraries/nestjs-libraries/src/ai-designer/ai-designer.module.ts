@@ -17,6 +17,7 @@ import { AiDesignerSaverService } from './ai-designer-saver.service';
 import { AiDesignerSkillRouter } from './skills/ai-designer-skill-router.service';
 import { AiDesignerConductorService } from './conductor/ai-designer-conductor.service';
 import { AiDesignerInputPolicyService } from './ai-designer-input-policy.service';
+import { AiDesignerAttachmentsService } from './attachments/ai-designer-attachments.service';
 
 @Module({
   imports: [AiModule, AiDesignerAgentMeshModule],
@@ -37,6 +38,7 @@ import { AiDesignerInputPolicyService } from './ai-designer-input-policy.service
     AiDesignerSkillRouter,
     AiDesignerConductorService,
     AiDesignerInputPolicyService,
+    AiDesignerAttachmentsService,
   ],
   exports: [
     AiDesignerService,

@@ -23,6 +23,16 @@ vi.mock('./ai-designer.hooks', () => ({
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: vi.fn() }),
 }));
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
+  useFetch: () => vi.fn(),
+}));
+vi.mock('./ai-designer-attachments', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./ai-designer-attachments')>(),
+  uploadAiDesignerAttachments: vi.fn(async () => ({
+    references: [],
+    documents: [{ fileId: 'doc-1', name: 'brief.pdf' }],
+  })),
+}));
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback?: string) => fallback ?? _key,
@@ -110,6 +120,46 @@ describe('AiDesignerChat thinking bubble', () => {
     expect(screen.getByTestId('progress-bubble').textContent).toBe(
       'assistant: Thinking…'
     );
+  });
+
+  it('passes direct attachments through the revision socket payload', async () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('delivered');
+    });
+    fireEvent.change(screen.getByLabelText('Attach files'), {
+      target: { files: [new File(['brief'], 'brief.pdf', { type: 'application/pdf' })] },
+    });
+    expect(await screen.findByText('brief.pdf')).toBeTruthy();
+
+    sendChatMessage('Use this canvas on the laptop screen');
+
+    expect(hoisted.socket.revisePlan).toHaveBeenCalledWith(
+      'Use this canvas on the laptop screen',
+      undefined,
+      [],
+      ['doc-1'],
+    );
+    expect(hoisted.socket.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('disables attachments while an existing revision is still in progress', () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('revising');
+    });
+
+    expect(screen.getByRole('button', { name: 'Attach files' })).toHaveProperty('disabled', true);
+    expect(hoisted.socket.revisePlan).not.toHaveBeenCalled();
+  });
+
+  it('disables attachments when the current state cannot forward them', () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('executing');
+    });
+
+    expect(screen.getByRole('button', { name: 'Attach files' })).toHaveProperty('disabled', true);
   });
 
   it('replaces the thinking bubble with the first real agent:progress event', () => {

@@ -120,6 +120,13 @@ export class AiDesignerConfigDto {
   @MaxLength(100, { each: true })
   referenceFileIds?: string[];
 
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  attachmentFileIds?: string[];
+
   @IsString()
   @IsOptional()
   @MaxLength(100)
@@ -211,6 +218,20 @@ export class AiDesignerReviseDto {
   @IsOptional()
   @MaxLength(100)
   targetDesignId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  referenceFileIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  attachmentFileIds?: string[];
 
   @IsString()
   @MaxLength(100)

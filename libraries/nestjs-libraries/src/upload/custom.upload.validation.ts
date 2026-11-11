@@ -5,6 +5,7 @@ import {
   PipeTransform,
 } from '@nestjs/common';
 import { fromBuffer, fromFile } from './file-type.compat';
+import { detectTextDocument } from '@postmill-ai/provider-kernel';
 import { statSync } from 'fs';
 import { promises as fs } from 'fs';
 import { resolve, relative, isAbsolute } from 'path';
@@ -41,11 +42,11 @@ export class CustomFileValidationPipe implements PipeTransform {
         throw new BadRequestException('Invalid file upload.');
       }
 
-      const detected = value.buffer && Buffer.isBuffer(value.buffer)
+      const detected = (value.buffer && Buffer.isBuffer(value.buffer)
         ? await fromBuffer(value.buffer)
         : value.path
           ? await fromFile(value.path)
-          : null;
+          : null) ?? await detectTextDocument(value);
 
       if (!detected) {
         this._logger.warn('Upload rejected: no file type could be sniffed from the uploaded bytes');

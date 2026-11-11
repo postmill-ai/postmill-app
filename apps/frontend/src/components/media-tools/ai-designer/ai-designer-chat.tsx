@@ -4,9 +4,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@postmill-ai/react/form/button';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import {
+  MAX_AI_DESIGNER_ATTACHMENTS,
+  uploadAiDesignerAttachments,
+  type AiDesignerDocumentItem,
+} from './ai-designer-attachments';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
+import type { MediaSelectorItem } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
 import { MessageRenderer, TypingIndicator } from './message-renderer';
 import { useAiDesignerSession } from './ai-designer.hooks';
 import {
@@ -56,6 +63,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
 }) => {
   const toaster = useToaster();
   const t = useT();
+  const fetch = useFetch();
   const surface = useFullscreenSurface('rounded-[12px] overflow-hidden');
   const { data: hydrate } = useAiDesignerSession(sessionId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -80,6 +88,10 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
   const [preview, setPreview] = useState<AiDesignerRenderResult | null>(null);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [referenceItems, setReferenceItems] = useState<MediaSelectorItem[]>([]);
+  const [documentItems, setDocumentItems] = useState<AiDesignerDocumentItem[]>([]);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   // Mirror of the derived `busy` for socket handlers (updated in the effect
   // below the derivation) — event callbacks can't see the render-scope value.
   const busyRef = useRef(false);
@@ -260,6 +272,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
   // socket-reported state wins, the SWR hydrate covers the pre-join gap, and
   // the optimistic flags cover the action→server latency.
   const effectiveState = liveState ?? displaySession?.state ?? null;
+  const canAttach = effectiveState === 'delivered' || effectiveState === 'awaiting_plan';
   const busy =
     !errorHalted && (sending || optimisticBusy || isBusyState(effectiveState));
 
@@ -333,12 +346,52 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     socket.cancel();
   };
 
+  const handleAttachments = async (files: File[]) => {
+    if (!files.length) return;
+    if (!canAttach) {
+      toaster.show(t('ai_designer_attachment_state', 'Attachments are available when revising a plan or design.'), 'warning');
+      return;
+    }
+    if (referenceItems.length + documentItems.length + files.length > MAX_AI_DESIGNER_ATTACHMENTS) {
+      toaster.show(t('ai_designer_attachment_limit', 'You can attach up to 10 files.'), 'warning');
+      return;
+    }
+    setAttachmentUploading(true);
+    try {
+      const uploaded = await uploadAiDesignerAttachments(fetch, files);
+      setReferenceItems((prev) => {
+        const byUrl = new Map(prev.map((item) => [item.url, item]));
+        for (const item of uploaded.references) byUrl.set(item.url, item);
+        return [...byUrl.values()];
+      });
+      setDocumentItems((prev) => {
+        const byId = new Map(prev.map((item) => [item.fileId, item]));
+        for (const item of uploaded.documents) byId.set(item.fileId, item);
+        return [...byId.values()];
+      });
+    } catch (error) {
+      toaster.show((error as Error).message || t('upload_failed', 'Upload failed'), 'warning');
+    } finally {
+      setAttachmentUploading(false);
+    }
+  };
+
   const handleSend = () => {
     const text = input.trim();
     // Also guards the Enter path — the Send button's disabled state does not.
-    if (!text || sending || !socket.connected) return;
+    if (!text || sending || !socket.connected || attachmentUploading) return;
+    const referenceFileIds = referenceItems.map((item) => item.fileId).filter(Boolean) as string[];
+    const attachmentFileIds = documentItems.map((item) => item.fileId);
+    if (!canAttach && (referenceFileIds.length || attachmentFileIds.length)) {
+      toaster.show(t('ai_designer_attachment_state', 'Attachments are available when revising a plan or design.'), 'warning');
+      return;
+    }
     setSending(true);
-    const nonce = socket.sendMessage(text);
+    const nonce = canAttach
+      ? socket.revisePlan(text, undefined, referenceFileIds, attachmentFileIds)
+      : socket.sendMessage(text);
+    setReferenceItems([]);
+    setDocumentItems([]);
     setInput('');
     // Optimistically append a user message so the UI feels responsive. The
     // server echo carries the same nonce and replaces this entry.
@@ -517,8 +570,49 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
         )}
       </div>
 
-      <div className="border-t border-studioBorder p-[12px] shrink-0">
+      <div className="border-t border-studioBorder p-[12px] shrink-0 space-y-2">
+        {!!documentItems.length && (
+          <div className="flex flex-wrap gap-2">
+            {documentItems.map((item) => (
+              <span
+                key={item.fileId}
+                className="inline-flex items-center gap-2 px-2 py-1 rounded-lg border border-studioBorder bg-newBgColorInner text-[12px] text-textColor"
+              >
+                {item.name}
+                <button
+                  type="button"
+                  aria-label={t('remove_attachment', 'Remove attachment')}
+                  onClick={() => setDocumentItems((prev) => prev.filter((other) => other.fileId !== item.fileId))}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-[10px]">
+          <Button
+            type="button"
+            secondary
+            loading={attachmentUploading}
+            disabled={!canAttach || attachmentUploading}
+            title={!canAttach ? t('ai_designer_attachment_state', 'Attachments are available when revising a plan or design.') : undefined}
+            onClick={() => attachmentInputRef.current?.click()}
+          >
+            {t('attach_files', 'Attach files')}
+          </Button>
+          <input
+            ref={attachmentInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            accept="image/*,.pdf,.txt,.md,.csv,.tsv,.json"
+            aria-label={t('attach_files', 'Attach files')}
+            onChange={(event) => {
+              void handleAttachments(Array.from(event.target.files || []));
+              event.target.value = '';
+            }}
+          />
           <label htmlFor="ai-designer-message-input" className="sr-only">
             {t('message', 'Message')}
           </label>
@@ -534,7 +628,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           <Button
             type="button"
             loading={sending}
-            disabled={!input.trim() || !socket.connected}
+            disabled={!input.trim() || !socket.connected || attachmentUploading}
             onClick={handleSend}
           >
             {t('send', 'Send')}

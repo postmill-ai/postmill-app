@@ -253,6 +253,12 @@ uses a screenshot-guided laptop mockup and captures the delivered design at
 `E2E_LIVE_GENERATION=1`, and `E2E_BASE`; production also needs `E2E_LIVE_PRODUCTION=1`. Use the
 disposable QA organization and no paid retries. `E2E_LIVE_BRAND_HEX` optionally overrides `#ff0000`.
 
+Attachment acceptance does not require paid generation: upload an image, a small PDF and CSV content
+through the prompt and revision composers, verify the chips and planner payload, and prove a second
+org cannot use those file IDs. Exercise malformed PDFs, unsupported types, size/count caps and
+malformed document text through unit tests. Paid AI acceptance is never needed for upload,
+extraction, authorization or planner-payload verification.
+
 ## Lint
 
 - **One flat config at the repo root only**: `eslint.config.mjs` — **ESLint 9** (`^9.39.4`)

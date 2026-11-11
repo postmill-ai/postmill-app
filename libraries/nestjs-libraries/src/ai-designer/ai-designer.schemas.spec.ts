@@ -278,6 +278,14 @@ describe('AiDesignerConfigSchema v2', () => {
     expect(res.success).toBe(true);
   });
 
+  it('accepts optional attachment file IDs', () => {
+    const res = AiDesignerConfigSchema.safeParse({
+      ...baseConfig,
+      attachmentFileIds: ['doc-1'],
+    });
+    expect(res.success).toBe(true);
+  });
+
   it('accepts a custom-sizes-only config (channels may be empty)', () => {
     const res = AiDesignerConfigSchema.safeParse({
       channels: [],

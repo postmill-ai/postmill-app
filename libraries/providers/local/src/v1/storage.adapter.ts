@@ -23,6 +23,7 @@ import {
   parseDataUrl,
   fromBuffer,
   fromFile,
+  detectTextDocument,
   storedArtifactFile,
   UploadValidationError,
 } from '@postmill-ai/provider-kernel';
@@ -54,6 +55,11 @@ const LOCAL_STORAGE_ALLOWED_MIME = new Set<string>([
   'audio/x-wav',
   'video/quicktime',
   'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'text/tab-separated-values',
+  'application/json',
   'font/ttf',
   'font/otf',
   'font/woff2',
@@ -235,6 +241,7 @@ export class LocalStorage implements StorageCapability {
       } else {
         throw new UploadValidationError('Invalid file upload.');
       }
+      detected ??= await detectTextDocument(file);
 
       if (!detected || !LOCAL_STORAGE_ALLOWED_MIME.has(detected.mime)) {
         throw new UploadValidationError('Unsupported file type.');

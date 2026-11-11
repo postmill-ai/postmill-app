@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Button } from '@postmill-ai/react/form/button';
 import { Input } from '@postmill-ai/react/form/input';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
@@ -18,6 +19,11 @@ import {
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
 import { useImportStockMedia } from './ai-designer.hooks';
+import {
+  MAX_AI_DESIGNER_ATTACHMENTS,
+  uploadAiDesignerAttachments,
+  type AiDesignerDocumentItem,
+} from './ai-designer-attachments';
 import { markdownToHtml } from './markdown-lite';
 import { PlatformIcon } from '@postmill-ai/frontend/components/shared/platform-icon';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
@@ -74,6 +80,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
 }) => {
   const toaster = useToaster();
   const t = useT();
+  const fetch = useFetch();
   const modals = useModals();
   const { data: brands } = useBrands();
   const surface = useFullscreenSurface('rounded-[12px] overflow-hidden');
@@ -99,6 +106,9 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
   const [referenceItems, setReferenceItems] = useState<MediaSelectorItem[]>([]);
   const [logoFileId, setLogoFileId] = useState<string>();
   const [referenceImporting, setReferenceImporting] = useState(false);
+  const [documentItems, setDocumentItems] = useState<AiDesignerDocumentItem[]>([]);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   // No `requireFile` here: this screen imports the batch itself so it can keep
   // the file/stock split and its own "importing" state. Adding it would import twice.
   const referencePicker = useMediaPicker({
@@ -274,6 +284,28 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
     return Array.from(map.values());
   };
 
+  const handleAttachments = async (files: File[]) => {
+    if (!files.length) return;
+    if (referenceItems.length + documentItems.length + files.length > MAX_AI_DESIGNER_ATTACHMENTS) {
+      toaster.show(t('ai_designer_attachment_limit', 'You can attach up to 10 files.'), 'warning');
+      return;
+    }
+    setAttachmentUploading(true);
+    try {
+      const uploaded = await uploadAiDesignerAttachments(fetch, files);
+      setReferenceItems((prev) => mergeReferenceItems(prev, uploaded.references));
+      setDocumentItems((prev) => {
+        const byId = new Map(prev.map((item) => [item.fileId, item]));
+        for (const item of uploaded.documents) byId.set(item.fileId, item);
+        return [...byId.values()];
+      });
+    } catch (error) {
+      toaster.show((error as Error).message || t('upload_failed', 'Upload failed'), 'warning');
+    } finally {
+      setAttachmentUploading(false);
+    }
+  };
+
   const handleStart = () => {
     if (selectedChannels.length === 0 && customSizes.length === 0) {
       toaster.show(
@@ -325,6 +357,10 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
           ? referenceItems
               .map((item) => item.fileId)
               .filter(Boolean) as string[]
+          : undefined,
+      attachmentFileIds:
+        documentItems.length > 0
+          ? documentItems.map((item) => item.fileId)
           : undefined,
     };
 
@@ -796,12 +832,34 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
           {/* Prompt (prompt mode) */}
           {mode === 'prompt' && (
             <section className="space-y-2">
-              <label
-                htmlFor="ai-designer-prompt"
-                className="block text-[14px] font-semibold text-textColor"
-              >
-                {t('prompt', 'Prompt')}
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label
+                  htmlFor="ai-designer-prompt"
+                  className="block text-[14px] font-semibold text-textColor"
+                >
+                  {t('prompt', 'Prompt')}
+                </label>
+                <Button
+                  type="button"
+                  secondary
+                  loading={attachmentUploading}
+                  onClick={() => attachmentInputRef.current?.click()}
+                >
+                  {t('attach_files', 'Attach files')}
+                </Button>
+                <input
+                  ref={attachmentInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept="image/*,.pdf,.txt,.md,.csv,.tsv,.json"
+                  aria-label={t('attach_files', 'Attach files')}
+                  onChange={(event) => {
+                    void handleAttachments(Array.from(event.target.files || []));
+                    event.target.value = '';
+                  }}
+                />
+              </div>
               <textarea
                 id="ai-designer-prompt"
                 value={prompt}
@@ -813,6 +871,25 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                 rows={4}
                 className="w-full rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-hidden focus:border-designerAccent resize-none"
               />
+              {!!documentItems.length && (
+                <div className="flex flex-wrap gap-2">
+                  {documentItems.map((item) => (
+                    <span
+                      key={item.fileId}
+                      className="inline-flex items-center gap-2 px-2 py-1 rounded-lg border border-studioBorder bg-newBgColorInner text-[12px] text-textColor"
+                    >
+                      {item.name}
+                      <button
+                        type="button"
+                        aria-label={t('remove_attachment', 'Remove attachment')}
+                        onClick={() => setDocumentItems((prev) => prev.filter((other) => other.fileId !== item.fileId))}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
@@ -826,7 +903,8 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                   (selectedChannels.length === 0 && customSizes.length === 0) ||
                   isStarting ||
                   !isConnected ||
-                  referenceImporting
+                  referenceImporting ||
+                  attachmentUploading
                 }
               >
                 {isConnected

@@ -340,6 +340,33 @@ describe('S3StorageBase', () => {
       expect(result.path).toContain('.pdf');
     });
 
+    it('uploads real CSV bytes instead of rejecting an unknown magic-byte type', async () => {
+      s3ClientMock.send.mockResolvedValue({});
+      const adapter = make('us-east-1', 'my-bucket');
+      const csv = Buffer.from('name,price\nCoffee,12\n', 'utf8');
+
+      const result = await adapter.uploadFile({
+        buffer: csv,
+        originalname: 'products.csv',
+        size: csv.length,
+      });
+
+      const cmd = s3ClientMock.send.mock.calls[0][0];
+      expect(cmd.config.ContentType).toBe('text/csv');
+      expect(cmd.config.Body).toBe(csv);
+      expect(result.filename).toMatch(/\.csv$/);
+    });
+
+    it('does not infer an active HTML upload from a filename', async () => {
+      const adapter = make();
+      await expect(adapter.uploadFile({
+        buffer: Buffer.from('<script>alert(1)</script>'),
+        originalname: 'payload.html',
+        size: 25,
+      })).rejects.toThrow('Unsupported file type.');
+      expect(s3ClientMock.send).not.toHaveBeenCalled();
+    });
+
     it('uploads from a disk path when there is no buffer (upload-server)', async () => {
       s3ClientMock.send.mockResolvedValue({});
       const dir = mkdtempSync(join(tmpdir(), 's3-upload-'));

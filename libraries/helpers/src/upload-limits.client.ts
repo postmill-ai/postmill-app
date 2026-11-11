@@ -51,6 +51,11 @@ export const UPLOAD_ALLOWED_MIME_TYPES = new Set([
   'audio/x-wav',
   'video/quicktime',
   'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'text/tab-separated-values',
+  'application/json',
 ]);
 
 export interface UploadLimitCheckFile {

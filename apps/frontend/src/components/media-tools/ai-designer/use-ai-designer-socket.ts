@@ -258,10 +258,17 @@ export function useAiDesignerSocket(
   );
 
   const revisePlan = useCallback(
-    (instruction: string, targetDesignId?: string) => {
+    (
+      instruction: string,
+      targetDesignId?: string,
+      referenceFileIds?: string[],
+      attachmentFileIds?: string[],
+    ) => {
       return emitGuarded('revise', {
         instruction,
         targetDesignId,
+        referenceFileIds,
+        attachmentFileIds,
       } as Omit<AiDesignerRevisePayload, 'nonce'>);
     },
     [emitGuarded]

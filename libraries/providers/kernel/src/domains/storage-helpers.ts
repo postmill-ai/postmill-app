@@ -8,6 +8,9 @@ import {
 } from '@aws-sdk/client-s3';
 import { randomBytes } from 'crypto';
 import { createReadStream, statSync } from 'fs';
+import { readFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { isAbsolute, relative, resolve } from 'path';
 import type { Readable } from 'stream';
 import * as fileType from 'file-type';
 import { CredentialField } from '../manifest';
@@ -48,6 +51,39 @@ export const fromBuffer = (
 export const fromFile = (path: string): Promise<DetectedFileType> => {
   const fn = pick('fromFile', 'fileTypeFromFile');
   return fn ? fn(path) : Promise.resolve(undefined);
+};
+
+const TEXT_DOCUMENT_TYPES = new Map<string, { ext: string; mime: string }>([
+  ['txt', { ext: 'txt', mime: 'text/plain' }],
+  ['md', { ext: 'md', mime: 'text/markdown' }],
+  ['csv', { ext: 'csv', mime: 'text/csv' }],
+  ['tsv', { ext: 'tsv', mime: 'text/tab-separated-values' }],
+  ['json', { ext: 'json', mime: 'application/json' }],
+]);
+
+export const detectTextDocument = async (value: any): Promise<DetectedFileType> => {
+  const extension = typeof value.originalname === 'string'
+    ? value.originalname.split('.').pop()?.toLowerCase()
+    : undefined;
+  const detected = extension ? TEXT_DOCUMENT_TYPES.get(extension) : undefined;
+  if (!detected) return undefined;
+
+  let bytes: Buffer | undefined;
+  if (value.buffer && Buffer.isBuffer(value.buffer)) {
+    bytes = value.buffer;
+  } else if (typeof value.path === 'string') {
+    const resolved = resolve(value.path);
+    const rel = relative(resolve(tmpdir()), resolved);
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) return undefined;
+    bytes = await readFile(resolved);
+  }
+  if (!bytes || bytes.includes(0)) return undefined;
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return detected;
+  } catch {
+    return undefined;
+  }
 };
 
 // ── data: URL parsing ───────────────────────────────────────────────────────
@@ -116,6 +152,11 @@ const ALLOWED_MIME_TYPES = new Set<string>([
   'audio/x-wav',
   'video/quicktime',
   'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'text/tab-separated-values',
+  'application/json',
   'font/ttf',
   'font/otf',
   'font/woff2',
@@ -367,6 +408,7 @@ export class S3StorageBase implements StorageCapability {
       } else {
         throw new UploadValidationError('Invalid file upload.');
       }
+      detected ??= await detectTextDocument(file);
 
       if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
         throw new UploadValidationError('Unsupported file type.');

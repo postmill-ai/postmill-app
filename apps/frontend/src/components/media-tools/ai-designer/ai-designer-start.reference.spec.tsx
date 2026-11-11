@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { AiDesignerStart } from './ai-designer-start';
 
@@ -32,6 +32,13 @@ vi.mock('@postmill-ai/frontend/components/media-tools/use-media-picker', () => (
     element: null,
   }),
 }));
+vi.mock('./ai-designer-attachments', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./ai-designer-attachments')>(),
+  uploadAiDesignerAttachments: vi.fn(async () => ({
+    references: [],
+    documents: [{ fileId: 'doc-1', name: 'brief.pdf' }],
+  })),
+}));
 
 describe('AI Designer reference roles', () => {
   beforeEach(() => onStart.mockReset());
@@ -52,5 +59,23 @@ describe('AI Designer reference roles', () => {
       logoFileId: 'logo-1',
       referenceFileIds: ['logo-1'],
     });
+  });
+
+  it('passes directly attached document IDs in the start payload', async () => {
+    render(<AiDesignerStart onStart={onStart} isConnected />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Prompt', exact: true }));
+    fireEvent.change(screen.getByLabelText('Attach files'), {
+      target: { files: [new File(['brief'], 'brief.pdf', { type: 'application/pdf' })] },
+    });
+    expect(await screen.findByText('brief.pdf')).toBeTruthy();
+    fireEvent.click(screen.getByText('Instagram Post'));
+    fireEvent.change(screen.getByLabelText('Prompt', { exact: true }), {
+      target: { value: 'Make a laptop mockup' },
+    });
+    fireEvent.click(screen.getByText('Start designing'));
+
+    await waitFor(() => expect(onStart).toHaveBeenCalledTimes(1));
+    expect(onStart.mock.calls[0][0].config.attachmentFileIds).toEqual(['doc-1']);
   });
 });

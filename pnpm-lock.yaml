@@ -251,7 +251,7 @@ importers:
         version: link:../../libraries/helpers
       '@postmill-ai/nestjs-libraries':
         specifier: workspace:*
-        version: file:libraries/nestjs-libraries(27d019bc61513f2b4190745b93eb09b1)
+        version: file:libraries/nestjs-libraries(9d459aecd7260fe884d1f6ac13e7d4f8)
       '@postmill-ai/provider-adobe-stock':
         specifier: workspace:*
         version: file:libraries/providers/adobe-stock(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
@@ -371,13 +371,13 @@ importers:
         version: file:libraries/providers/gateway(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
       '@postmill-ai/provider-generic':
         specifier: workspace:*
-        version: file:libraries/providers/generic(e104f067858e2c9d3926a375f2c40e82)
+        version: file:libraries/providers/generic(b59cd5a5dc5e97fef27cfb11084803f0)
       '@postmill-ai/provider-genviral':
         specifier: workspace:*
         version: file:libraries/providers/genviral(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
       '@postmill-ai/provider-github':
         specifier: workspace:*
-        version: file:libraries/providers/github(e104f067858e2c9d3926a375f2c40e82)
+        version: file:libraries/providers/github(b59cd5a5dc5e97fef27cfb11084803f0)
       '@postmill-ai/provider-gmb':
         specifier: workspace:*
         version: file:libraries/providers/gmb(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
@@ -807,7 +807,7 @@ importers:
         version: link:../../libraries/helpers
       '@postmill-ai/nestjs-libraries':
         specifier: workspace:*
-        version: file:libraries/nestjs-libraries(00ff1879a78c35f5d9252a6808688115)
+        version: file:libraries/nestjs-libraries(6bdad2c7268819436d3196765d599f38)
       nestjs-command:
         specifier: ^3.1.4
         version: 3.1.5(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(yargs@17.7.3)
@@ -1648,6 +1648,9 @@ importers:
       p-limit:
         specifier: ^3.1.0
         version: 3.1.0
+      pdf-parse:
+        specifier: 2.4.5
+        version: 2.4.5
       pg:
         specifier: ^8.13.3
         version: 8.23.0
@@ -2035,7 +2038,7 @@ importers:
     dependencies:
       '@postmill-ai/nestjs-libraries':
         specifier: workspace:*
-        version: file:libraries/nestjs-libraries(00ff1879a78c35f5d9252a6808688115)
+        version: file:libraries/nestjs-libraries(6bdad2c7268819436d3196765d599f38)
       '@postmill-ai/provider-kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -2050,7 +2053,7 @@ importers:
     dependencies:
       '@postmill-ai/nestjs-libraries':
         specifier: workspace:*
-        version: file:libraries/nestjs-libraries(00ff1879a78c35f5d9252a6808688115)
+        version: file:libraries/nestjs-libraries(6bdad2c7268819436d3196765d599f38)
       '@postmill-ai/provider-kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -29198,7 +29201,7 @@ snapshots:
 
   '@posthog/types@1.416.0': {}
 
-  '@postmill-ai/nestjs-libraries@file:libraries/nestjs-libraries(00ff1879a78c35f5d9252a6808688115)':
+  '@postmill-ai/nestjs-libraries@file:libraries/nestjs-libraries(6bdad2c7268819436d3196765d599f38)':
     dependencies:
       '@ag-ui/mastra': 1.1.2(@ag-ui/client@0.0.57)(@ag-ui/core@0.0.59)(@copilotkit/runtime@1.69.3(ac20ab6d0c719650d374099003a07cd9))(@mastra/client-js@1.23.2(@bufbuild/protobuf@2.13.0)(@cfworker/json-schema@4.1.1)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
       '@ai-sdk/amazon-bedrock': 2.2.12(zod@4.6.7)
@@ -29334,6 +29337,7 @@ snapshots:
       openai: 7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
       opentype.js: 2.0.0
       p-limit: 3.1.0
+      pdf-parse: 2.4.5
       pg: 8.23.0
       postmark: 4.0.7
       prisma: 6.5.0(typescript@5.9.3)
@@ -29509,7 +29513,6 @@ snapshots:
       - node-llama-cpp
       - notion-to-md
       - officeparser
-      - pdf-parse
       - peggy
       - pg-copy-streams
       - pg-native
@@ -29546,7 +29549,7 @@ snapshots:
       - youtubei.js
       - zod-to-json-schema
 
-  '@postmill-ai/nestjs-libraries@file:libraries/nestjs-libraries(27d019bc61513f2b4190745b93eb09b1)':
+  '@postmill-ai/nestjs-libraries@file:libraries/nestjs-libraries(9d459aecd7260fe884d1f6ac13e7d4f8)':
     dependencies:
       '@ag-ui/mastra': 1.1.2(@ag-ui/client@0.0.57)(@ag-ui/core@0.0.59)(@copilotkit/runtime@1.69.3(4b0d32216dd3074360df548a5e503459))(@mastra/client-js@1.23.2(@bufbuild/protobuf@2.13.0)(@cfworker/json-schema@4.1.1)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))(@mastra/core@1.63.0(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.4)(@opentelemetry/api@1.10.0)(ai@6.0.313(zod@4.6.7))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.2)(utf-8-validate@6.0.6)(zod@4.6.7))
       '@ai-sdk/amazon-bedrock': 2.2.12(zod@4.6.7)
@@ -29682,6 +29685,7 @@ snapshots:
       openai: 7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
       opentype.js: 2.0.0
       p-limit: 3.1.0
+      pdf-parse: 2.4.5
       pg: 8.23.0
       postmark: 4.0.7
       prisma: 6.5.0(typescript@5.9.3)
@@ -29857,7 +29861,6 @@ snapshots:
       - node-llama-cpp
       - notion-to-md
       - officeparser
-      - pdf-parse
       - peggy
       - pg-copy-streams
       - pg-native
@@ -30582,9 +30585,9 @@ snapshots:
       - ws
       - zod
 
-  '@postmill-ai/provider-generic@file:libraries/providers/generic(e104f067858e2c9d3926a375f2c40e82)':
+  '@postmill-ai/provider-generic@file:libraries/providers/generic(b59cd5a5dc5e97fef27cfb11084803f0)':
     dependencies:
-      '@postmill-ai/nestjs-libraries': file:libraries/nestjs-libraries(27d019bc61513f2b4190745b93eb09b1)
+      '@postmill-ai/nestjs-libraries': file:libraries/nestjs-libraries(9d459aecd7260fe884d1f6ac13e7d4f8)
       '@postmill-ai/provider-kernel': file:libraries/providers/kernel(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
     transitivePeerDependencies:
       - '@ag-ui/client'
@@ -30746,7 +30749,6 @@ snapshots:
       - notion-to-md
       - officeparser
       - openai
-      - pdf-parse
       - peggy
       - pg-copy-streams
       - pg-native
@@ -30803,9 +30805,9 @@ snapshots:
       - ws
       - zod
 
-  '@postmill-ai/provider-github@file:libraries/providers/github(e104f067858e2c9d3926a375f2c40e82)':
+  '@postmill-ai/provider-github@file:libraries/providers/github(b59cd5a5dc5e97fef27cfb11084803f0)':
     dependencies:
-      '@postmill-ai/nestjs-libraries': file:libraries/nestjs-libraries(27d019bc61513f2b4190745b93eb09b1)
+      '@postmill-ai/nestjs-libraries': file:libraries/nestjs-libraries(9d459aecd7260fe884d1f6ac13e7d4f8)
       '@postmill-ai/provider-kernel': file:libraries/providers/kernel(@aws-sdk/credential-provider-node@3.972.88)(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.219.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(openai@7.42.0(@aws-sdk/credential-provider-node@3.972.88)(@smithy/hash-node@4.3.6)(@smithy/signature-v4@5.7.4)(google-auth-library@9.15.1)(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7))(undici@8.12.3)(ws@8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@4.6.7)
     transitivePeerDependencies:
       - '@ag-ui/client'
@@ -30967,7 +30969,6 @@ snapshots:
       - notion-to-md
       - officeparser
       - openai
-      - pdf-parse
       - peggy
       - pg-copy-streams
       - pg-native
