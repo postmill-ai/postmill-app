@@ -46,6 +46,8 @@ Missing-key on poll → return terminal `{status:'failed', error}` (a config err
 
 **AI Designer reference roles, branding and revision preservation.** Optional session config `logoFileId` designates one reference as the original logo: it is excluded from hero/background conditioning and merged directly into logo slots with `fitMode: 'contain'`; no image model recreates it. Explicit logo designation inserts a missing slot, while the selected brand profile's first valid `logoFileIds` entry fills only declared logo slots. Selected brand palettes and explicit prompt hexes are deterministic plan constraints in prompt and chat modes, added without reassigning surface/text/accent roles. A pinned style keeps its palette and surfaces the existing override warning. Ordinary revisions preserve all media references; only explicit imagery/media requests may replace them, while a requested image-background-to-color/gradient change is allowed. The guard is checked again after quality and contrast repairs.
 
+**AI Designer document attachments.** The prompt and revision composers accept up to 10 image/PDF/TXT/Markdown/CSV/TSV/JSON files (20 MB each). Images ride the existing `referenceFileIds` pipeline; document IDs use optional-additive `attachmentFileIds`. `AiDesignerAttachmentsService` org-scopes every read, verifies actual content, extracts at most 12,000 characters per file and 40,000 per session (first 10 PDF pages, text files ≤2 MB), and injects named excerpts into the planner as untrusted context. Invalid or cross-org input fails before paid planning, and document contents never enter logs/Sentry.
+
 ## 2. Base adapters (`kernel/src/domains/media-helpers.ts`)
 
 | Base | Use when | Provides |

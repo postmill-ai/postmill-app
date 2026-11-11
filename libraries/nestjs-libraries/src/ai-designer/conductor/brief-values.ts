@@ -14,6 +14,7 @@ export const RESERVED_BRIEF_KEYS = new Set([
   'pendingReviseTarget',
   'questionsAsked',
   'referenceCues',
+  'documentContexts',
   'recapShown',
   'classifierFailures',
   'llmWarningShown',

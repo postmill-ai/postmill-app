@@ -104,6 +104,15 @@ describe('StartAiDesignerSessionDto', () => {
     const errors = await validate(dto);
     expect(errors).toHaveLength(0);
   });
+
+  it('accepts optional attachment file IDs', async () => {
+    const dto = makeDto({
+      channels: ['ig-post'],
+      variants: 1,
+      attachmentFileIds: ['doc-1'],
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
 });
 
 describe('AiDesignerAcceptPlanDto', () => {

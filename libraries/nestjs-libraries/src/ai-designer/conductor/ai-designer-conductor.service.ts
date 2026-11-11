@@ -74,6 +74,7 @@ import type {
 } from '../ai-designer.types';
 import { isCopySlot } from '../ai-designer.types';
 import { ReferenceLayoutSchema } from '../ai-designer.schemas';
+import { AiDesignerAttachmentsService } from '../attachments/ai-designer-attachments.service';
 
 export interface AiDesignerEmitter {
   toSession(event: string, payload: unknown): void;
@@ -315,7 +316,8 @@ export class AiDesignerConductorService {
     // and the async media-job polling behind it. Optional for the same reason:
     // without them video sessions keep the static-conversion behavior.
     @Optional() private readonly _aiDefaults?: AiDefaultsService,
-    @Optional() private readonly _mediaJobs?: MediaJobLifecycleService
+    @Optional() private readonly _mediaJobs?: MediaJobLifecycleService,
+    @Optional() private readonly _attachments?: AiDesignerAttachmentsService
   ) {}
 
   private async _brandPaletteOverrideNote(
@@ -859,6 +861,25 @@ export class AiDesignerConductorService {
     const session = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
     if (!session) return;
 
+    if (payload.referenceFileIds || payload.attachmentFileIds) {
+      const config = this._config(session);
+      const referenceFileIds = [...new Set([
+        ...(config.referenceFileIds ?? []),
+        ...(payload.referenceFileIds ?? []),
+      ])];
+      const attachmentFileIds = [...new Set([
+        ...(config.attachmentFileIds ?? []),
+        ...(payload.attachmentFileIds ?? []),
+      ])];
+      if (referenceFileIds.length > 10 || attachmentFileIds.length > 10) {
+        this._emitPolicyError(emitter, 'value_bounds', 'AI Designer is limited to 10 references and 10 documents.');
+        return;
+      }
+      const nextConfig: AiDesignerConfig = { ...config, referenceFileIds, attachmentFileIds };
+      session.config = nextConfig as any;
+      await this._service.updateSession(sessionId, ctx.orgId, ctx.userId, { config: nextConfig });
+    }
+
     // Plan-stage revision: the plan message's Revise button arrives while the
     // session still awaits plan acceptance. Re-run the art director with the
     // instruction instead of rejecting the event.
@@ -1157,9 +1178,11 @@ export class AiDesignerConductorService {
       config,
       this._brief(priorSession ?? {})
     );
+    const documentContexts = await this._documentContextsFor(ctx, config);
     const brief: DesignBrief = {
       intent: prompt,
       ...reference,
+      ...(documentContexts.length ? { documentContexts } : {}),
       styleId: config.styleId,
     };
     await this._service.updateSession(sessionId, ctx.orgId, ctx.userId, { brief });
@@ -1439,9 +1462,11 @@ export class AiDesignerConductorService {
     await this._setState(sessionId, ctx, emitter, 'planning');
 
     const reference = await this._referenceCuesFor(ctx, config, brief);
+    const documentContexts = await this._documentContextsFor(ctx, config);
     const enriched: DesignBrief = {
       ...brief,
       ...reference,
+      ...(documentContexts.length ? { documentContexts } : {}),
       styleId: brief.styleId ?? config.styleId,
     };
     await this._service.updateSession(sessionId, ctx.orgId, ctx.userId, { brief: enriched });
@@ -3253,6 +3278,16 @@ export class AiDesignerConductorService {
    * interpretation leaves `referenceCueFileIds` unset so the next run
    * retries).
    */
+  private async _documentContextsFor(
+    ctx: AiDesignerAgentContext,
+    config: AiDesignerConfig,
+  ) {
+    const ids = config.attachmentFileIds ?? [];
+    if (!ids.length) return [];
+    if (!this._attachments) throw new Error('AI Designer attachments are unavailable');
+    return this._attachments.contextsFor(ctx.orgId, ids);
+  }
+
   private async _referenceCuesFor(
     ctx: AiDesignerAgentContext,
     config: AiDesignerConfig,

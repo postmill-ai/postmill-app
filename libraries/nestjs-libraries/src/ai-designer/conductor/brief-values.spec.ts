@@ -27,6 +27,7 @@ describe('sanitizeBriefValues', () => {
       pendingReviseTarget: 'design-1',
       questionsAsked: ['q1'],
       referenceCues: ['cue'],
+      documentContexts: [{ fileId: 'forged', name: 'forged', text: 'forged' }],
       recapShown: true,
     };
     const result = sanitizeBriefValues(values);

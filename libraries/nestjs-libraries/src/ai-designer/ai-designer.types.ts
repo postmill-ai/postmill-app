@@ -31,6 +31,8 @@ export interface AiDesignerConfig {
   brandProfileId?: string;
   variants: number;
   referenceFileIds?: string[];
+  /** PDF/text documents whose bounded extracted excerpts guide the brief. */
+  attachmentFileIds?: string[];
   /** Reference placed as the original logo asset rather than regenerated. */
   logoFileId?: string;
   /** User-selected style preset id (registry in `ai-designer/styles`); omitted = AI decides. */
@@ -97,6 +99,8 @@ export interface DesignBrief {
    * presentations made the spec itself drift.
    */
   referenceCueFileIds?: string[];
+  /** Bounded, untrusted document excerpts used as supporting brief context. */
+  documentContexts?: { fileId: string; name: string; text: string }[];
   /**
    * Server-owned: the first reference's measured spatial spec, cached next to
    * the cues (same file-id key). Fail-soft — absent when the measurement call
@@ -720,6 +724,8 @@ export interface AiDesignerAcceptPlanPayload {
 export interface AiDesignerRevisePayload {
   instruction: string;
   targetDesignId?: string;
+  referenceFileIds?: string[];
+  attachmentFileIds?: string[];
   nonce: string;
 }
 
