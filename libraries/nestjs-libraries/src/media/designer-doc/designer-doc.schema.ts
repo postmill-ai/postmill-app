@@ -136,6 +136,9 @@ const SymbolOverridesSchema = z
       src: SrcSchema.optional(),
       fileId: z.string().max(200).optional(),
       fill: ColorSchema.optional(),
+      naturalWidth: z.number().finite().min(0).max(MAX_DIMENSION).optional(),
+      naturalHeight: z.number().finite().min(0).max(MAX_DIMENSION).optional(),
+      fitMode: z.enum(['contain', 'cover', 'fill']).optional(),
     })
   )
   .optional();

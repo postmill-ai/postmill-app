@@ -197,13 +197,17 @@ fixtures. Implemented cases and their fixture contracts are:
   this is fixture provisioning, not acceptance. Other API origins come from responses observed by
   the browser, never a hardcoded deployment host.
 - `bulk-create`: one static output/page with a named text slot and a named image slot whose existing
-  source is an HTTP(S) image. The test discovers both slot names from the document. Requires five
-  editable designs, five decodable PNGs, and a matching ZIP manifest; no row may be dropped or hidden
-  as a partial success.
+  source is an HTTP(S) image and whose fit is unset (so replacement defaults to `cover`). The test
+  discovers both slot names from the document. Requires five
+  editable designs, five decodable PNGs, five self-contained `.pdesign` archives, and a matching ZIP
+  manifest; no row may be dropped or hidden as a partial success. It reimports every archive and
+  checks independent text and remapped image references, then reimports `source/template.pdesign`
+  and reruns the quoted `source/data.csv` successfully. Mixed-aspect sources must retain real natural
+  dimensions and aspect-preserving fit rather than stretching.
 - `bulk-create-invalid`: the same fixture. Row five uses a schema-valid but missing image and must
   fail the entire batch with `Row 5` and the transformed `src` schema path. No completed status, ZIP,
-  editable design IDs, or rendered file IDs are acceptable. Whole-batch atomicity is the settled
-  product behavior; do not weaken this gate into row-isolation semantics.
+  editable design IDs, editable archive IDs, or rendered file IDs are acceptable. Whole-batch
+  atomicity is the settled product behavior; do not weaken this gate into row-isolation semantics.
 - `qr-code`: a disposable static design with no existing QR code, so decoding identifies the inserted
   code unambiguously. Inserts a QR with independent foreground/background colors, verifies both
   through save/reopen, then checks the 1x exported PNG's decoded value and RGB colors. No generation

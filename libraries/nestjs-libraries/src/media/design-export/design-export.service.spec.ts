@@ -528,6 +528,38 @@ describe('DesignExportService.processExport', () => {
   });
 });
 
+describe('DesignExportService.buildBundleForDoc', () => {
+  it('deduplicates shared asset and font reads across per-design archives', async () => {
+    const { service, assetAdapter, localAdapter } = makeService({
+      files: {
+        'file-1': {
+          id: 'file-1', folderId: null, path: '/uploads/org-1/aaaa.png',
+          originalName: 'hero.png', name: 'hero.png', fileSize: PNG_BYTES.length,
+        },
+      },
+      customFonts: [{
+        family: 'Acme', fileId: 'font-file', path: '/uploads/org-1/acme.ttf', weights: [700], italic: true,
+      }],
+    });
+    const cache = { assets: new Map(), fonts: new Map(), assetBytes: 0 };
+
+    const first = await service.buildBundleForDoc(
+      'org-1', 'job-1', 'First', docWithMedia(), '/uploads/org-1/preview.png', cache,
+    );
+    const second = await service.buildBundleForDoc(
+      'org-1', 'job-1', 'Second', docWithMedia(), '/uploads/org-1/preview.png', cache,
+    );
+
+    expect(assetAdapter.readFile).toHaveBeenCalledOnce();
+    expect(localAdapter.readFile).toHaveBeenCalledOnce();
+    for (const bundle of [first, second]) {
+      const parsed = parsePostmillFile(bundle.bytes);
+      expect(parsed.assets.get('assets/file-1.png')).toBeDefined();
+      expect(parsed.assets.get('assets/fonts/Acme-700i.ttf')).toBeDefined();
+    }
+  });
+});
+
 describe('DesignExportService.getJob', () => {
   it('never returns another org\'s job or a non-export job', async () => {
     const { service } = makeService({ job: pendingExportJob });

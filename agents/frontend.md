@@ -545,9 +545,20 @@ fetched. Remote and inline images are capped at 20 MiB; declared lengths are rej
 false lengths are streamed with cancellation on overflow. Errors include the row, spreadsheet path
 (for example `rows[2].product_image`) and DesignerDoc path. No files are persisted during preflight,
 so an HTML Drive response or blocked URL cannot leave outputs behind. The batch runs
-through `DesignBulkCreateService` and creates editable Designs plus per-page PNG Files and a ZIP; any
-row failure after enqueue marks the job failed and suppresses ZIP completion rather than calling a
-partial batch complete. Never substitute a client-only flattened image for the editable result.
+through `DesignBulkCreateService` and creates editable Designs, per-page PNG Files, and one
+self-contained `.pdesign` per row. Changed image sources drop stale file identity, derived pixels,
+crop/natural-size metadata, default to aspect-preserving `cover` unless the template explicitly
+chose another fit, and adopt the persisted image's real dimensions. A per-batch `.pdesign` asset/font cache deduplicates shared reads.
+Existing `/uploads/...` substitutions also resolve once per batch; legacy/preventSave objects without
+File rows are copied into new org-owned Files, never rejected or deleted on rollback. The batch folder
+and ZIP retain every editable archive plus `source/template.pdesign` and the quoted normalized
+`source/data.csv`; the completion dialog links every editable Design, Recent Designs, and the PNG +
+editable ZIP. PNG output is capped at 128 MB and accounted batch output at 1 GB. Stored entries stream
+one at a time through a temporary ZIP file and into the storage adapter's streaming upload; entry
+arrays, compressed chunks, and a concatenated ZIP buffer are never retained in memory. Any row or artifact failure
+after enqueue rolls back every design, imported/generated file, editable archive, and source artifact
+rather than calling a partial batch complete. Never substitute a client-only flattened image for the
+editable result.
 
 ## Forms
 

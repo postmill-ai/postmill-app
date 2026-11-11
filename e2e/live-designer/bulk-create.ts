@@ -13,6 +13,7 @@ interface BulkRowResult {
   row: number;
   designId?: string;
   fileIds?: string[];
+  editableFileId?: string;
   error?: string;
 }
 
@@ -117,14 +118,66 @@ function expectRowAndSchemaDetail(detail: string): void {
   ).toBe(true);
 }
 
+async function importArchive(page: Page, name: string, bytes: Uint8Array) {
+  const importPromise = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && apiPath(response.url()) === '/media/designs/import'
+  );
+  await page.locator('input[type="file"][accept*=".pdesign"]').setInputFiles({
+    name,
+    mimeType: 'application/zip',
+    buffer: Buffer.from(bytes),
+  });
+  const response = await importPromise;
+  expect(response.ok(), `${name} must reimport successfully`).toBe(true);
+  const imported = await response.json() as { id?: string; name?: string; doc?: unknown };
+  expect(imported.id, `${name} must create a new editable design`).toBeTruthy();
+  await expect(page).toHaveURL(new RegExp(`/media/designer\\?designId=${imported.id}$`));
+  await expect(page.getByLabel('Design name', { exact: true })).toHaveValue(imported.name || '');
+  return imported;
+}
+
+async function uploadMixedAspectSource(page: Page, width: number, height: number, index: number) {
+  const png = new PNG({ width, height });
+  for (let offset = 0; offset < png.data.length; offset += 4) {
+    png.data[offset] = 40 + index * 30;
+    png.data[offset + 1] = 80 + index * 20;
+    png.data[offset + 2] = 200 - index * 25;
+    png.data[offset + 3] = 255;
+  }
+  const csrf = await page.evaluate(() =>
+    document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] || ''
+  );
+  expect(csrf, 'fixture uploads need the authenticated CSRF cookie').toBeTruthy();
+  const response = await page.request.post('/api/files/upload-simple', {
+    headers: { 'x-csrf-token': csrf },
+    multipart: {
+      file: {
+        name: `bulk-create-mixed-${width}x${height}.png`,
+        mimeType: 'image/png',
+        buffer: PNG.sync.write(png),
+      },
+      preventSave: 'true',
+    },
+  });
+  expect(response.ok(), 'the mixed-aspect fixture image must upload').toBe(true);
+  const body = await response.json() as { path?: string };
+  expect(body.path).toBeTruthy();
+  return new URL(body.path!, requiredEnv('E2E_BASE')).toString();
+}
+
 export async function runBulkCreateValid(page: Page): Promise<void> {
   requiredEnv('E2E_BASE');
   const designId = requiredEnv('E2E_LIVE_DESIGN_ID');
   const assertNoBrowserFailures = collectBrowserFailures(page);
   const fixture = bulkFixture(await openDesign(page, designId));
-  const rows: Record<string, string>[] = Array.from({ length: 5 }, (_, index) => ({
+  const dimensions = [[64, 32], [32, 64], [80, 40], [40, 80], [96, 48]] as const;
+  const sources: string[] = [];
+  for (const [index, [width, height]] of dimensions.entries()) {
+    sources.push(await uploadMixedAspectSource(page, width, height, index));
+  }
+  const rows: Record<string, string>[] = dimensions.map((_, index) => ({
     [fixture.textSlot]: `Live QA Product ${index + 1}`,
-    [fixture.imageSlot]: fixture.source,
+    [fixture.imageSlot]: sources[index],
   }));
   const headers = `${csvCell(fixture.textSlot)},${csvCell(fixture.imageSlot)}`;
   const csv = [headers, ...rows.map((row) =>
@@ -150,14 +203,16 @@ export async function runBulkCreateValid(page: Page): Promise<void> {
   const results = job.results || [];
   expect(results.map((result) => result.row)).toEqual([1, 2, 3, 4, 5]);
   expect(
-    results.every((result) => !!result.designId && !result.error && (result.fileIds?.length || 0) > 0),
-    'every row must produce an editable design and a rendered file'
+    results.every((result) =>
+      !!result.designId && !!result.editableFileId && !result.error && (result.fileIds?.length || 0) > 0
+    ),
+    'every row must produce an editable design, archive, and rendered file'
   ).toBe(true);
   expect(new Set(results.map((result) => result.designId)).size, 'row designs must be independent').toBe(5);
   await expect(dialog.getByText('Bulk Create complete', { exact: true })).toBeVisible();
   await expect(dialog.getByRole('link', { name: 'Open editable design', exact: true })).toHaveCount(5);
 
-  const zipLink = dialog.getByRole('link', { name: 'Download PNG bundle (.zip)', exact: true });
+  const zipLink = dialog.getByRole('link', { name: 'Download PNG + editable designs (.zip)', exact: true });
   await expect(zipLink).toBeVisible();
   const href = await zipLink.getAttribute('href');
   expect(href, 'the completed batch must expose its ZIP artifact').toBeTruthy();
@@ -177,8 +232,65 @@ export async function runBulkCreateValid(page: Page): Promise<void> {
   const zippedResults = JSON.parse(strFromU8(entries['results.json'])) as BulkRowResult[];
   expect(zippedResults.map((result) => result.row)).toEqual([1, 2, 3, 4, 5]);
   expect(
-    zippedResults.every((result) => !!result.designId && !result.error && (result.fileIds?.length || 0) > 0),
+    zippedResults.every((result) =>
+      !!result.designId && !!result.editableFileId && !result.error && (result.fileIds?.length || 0) > 0
+    ),
     'the ZIP manifest must not hide a partial or failed row'
+  ).toBe(true);
+  expect(Object.keys(entries)).toEqual(expect.arrayContaining([
+    'source/template.pdesign', 'source/data.csv',
+    ...Array.from({ length: 5 }, (_, index) =>
+      `editable/row-${String(index + 1).padStart(3, '0')}.pdesign`
+    ),
+  ]));
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+
+  for (const [index, result] of zippedResults.entries()) {
+    const name = `editable/row-${String(index + 1).padStart(3, '0')}.pdesign`;
+    const archive = entries[name]!;
+    expect(archive, `${name} must exist`).toBeDefined();
+    const manifest = JSON.parse(strFromU8(archive['manifest.json'])) as {
+      assets?: Record<string, { path: string }>;
+    };
+    const exportedDoc = JSON.parse(strFromU8(archive['doc.json'])) as unknown;
+    for (const asset of Object.values(manifest.assets || {})) {
+      expect(archive[asset.path], `${name} must contain ${asset.path}`).toBeDefined();
+    }
+    const originalImage = locateElements(exportedDoc).find(({ element }) =>
+      (element.slot as Record<string, unknown> | undefined)?.name === fixture.imageSlot
+    );
+    expect(originalImage?.element).toMatchObject({
+      naturalWidth: dimensions[index][0],
+      naturalHeight: dimensions[index][1],
+      fitMode: 'cover',
+    });
+    const imported = await importArchive(page, name.split('/').pop()!, archive);
+    const importedElements = locateElements(imported.doc);
+    const importedText = importedElements.find(({ element }) =>
+      (element.slot as Record<string, unknown> | undefined)?.name === fixture.textSlot
+    );
+    const importedImage = importedElements.find(({ element }) =>
+      (element.slot as Record<string, unknown> | undefined)?.name === fixture.imageSlot
+    );
+    expect(importedText?.element.text).toBe(rows[index][fixture.textSlot]);
+    expect(importedImage?.element.fileId, 'imported image bytes must belong to the new design').toBeTruthy();
+    expect(importedImage?.element.fileId).not.toBe(originalImage?.element.fileId);
+    expect(imported.id).not.toBe(result.designId);
+  }
+
+  expect(strFromU8(entries['source/data.csv'])).toBe(csv.replaceAll('\n', '\r\n'));
+  const template = await importArchive(page, 'template.pdesign', entries['source/template.pdesign']);
+  expect(locateElements(template.doc).some(({ element }) =>
+    (element.slot as Record<string, unknown> | undefined)?.name === fixture.textSlot
+  )).toBe(true);
+  await openBulkDialog(page, strFromU8(entries['source/data.csv']), fixture);
+  const rerun = await startBatch(page, rows, fixture);
+  expect(rerun.response.ok(), 'the exported source template and CSV must rerun').toBe(true);
+  const rerunJob = await rerun.terminalPromise!;
+  expect(rerunJob.status).toBe('completed');
+  expect(
+    (rerunJob.results || []).every((result) => !!result.designId && !!result.editableFileId && !result.error),
+    'the source rerun must produce five editable rows'
   ).toBe(true);
   assertNoBrowserFailures();
 }
@@ -208,7 +320,7 @@ export async function runBulkCreateInvalidAtomic(page: Page): Promise<void> {
     await expect(dialog.getByRole('alert')).toContainText('Row 5');
     await expect(dialog.getByRole('alert')).toContainText('.src');
     expectRowAndSchemaDetail(await dialog.innerText());
-    await expect(dialog.getByRole('link', { name: 'Download PNG bundle (.zip)' })).toHaveCount(0);
+    await expect(dialog.getByRole('link', { name: 'Download PNG + editable designs (.zip)' })).toHaveCount(0);
     await expect(dialog.getByRole('link', { name: 'Open editable design' })).toHaveCount(0);
     return;
   }
@@ -218,14 +330,16 @@ export async function runBulkCreateInvalidAtomic(page: Page): Promise<void> {
   expect(job.status, 'one invalid row must fail the whole batch, never complete a partial ZIP').toBe('failed');
   expect(Boolean(job.artifactUrl), 'an atomic failure must not create a ZIP').toBe(false);
   expect(
-    results.every((result) => !result.designId && (result.fileIds || []).length === 0),
-    'an atomic failure must not leave editable designs or rendered files from valid prefix rows'
+    results.every((result) =>
+      !result.designId && !result.editableFileId && (result.fileIds || []).length === 0
+    ),
+    'an atomic failure must not leave editable designs, archives, or rendered files from valid prefix rows'
   ).toBe(true);
   const detail = [job.error, ...results.map((result) => result.error)].filter(Boolean).join('\n');
   expectRowAndSchemaDetail(detail);
   const dialogText = await dialog.innerText();
   expectRowAndSchemaDetail(dialogText);
   await expect(dialog.getByText('Bulk Create failed', { exact: true })).toBeVisible();
-  await expect(dialog.getByRole('link', { name: 'Download PNG bundle (.zip)' })).toHaveCount(0);
+  await expect(dialog.getByRole('link', { name: 'Download PNG + editable designs (.zip)' })).toHaveCount(0);
   await expect(dialog.getByRole('link', { name: 'Open editable design' })).toHaveCount(0);
 }
