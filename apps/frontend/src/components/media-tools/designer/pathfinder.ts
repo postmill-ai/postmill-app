@@ -48,7 +48,17 @@ export const elementOutline = (el: DesignerElement): Point[] => {
     ];
   })();
 
-  return local.map((p) => ({ x: p.x + el.x, y: p.y + el.y }));
+  const angle = (el.rotation ?? 0) * Math.PI / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return local.map((point) => {
+    const x = el.flipX ? el.width - point.x : point.x;
+    const y = el.flipY ? el.height - point.y : point.y;
+    return {
+      x: el.x + x * cos - y * sin,
+      y: el.y + x * sin + y * cos,
+    };
+  });
 };
 
 const bounds = (polys: Point[][]) => {

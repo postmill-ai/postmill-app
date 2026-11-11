@@ -42,6 +42,18 @@ describe('elementOutline', () => {
     expect(elementOutline(shape({ shape: 'triangle' }))).toHaveLength(3);
   });
 
+  it('rotates around the element origin and flips around its center', () => {
+    const rotated = elementOutline(shape({ width: 100, height: 50, rotation: 90 }));
+    expect(Math.min(...rotated.map((point) => point.x))).toBeCloseTo(-50, 6);
+    expect(Math.max(...rotated.map((point) => point.x))).toBeCloseTo(0, 6);
+    expect(Math.min(...rotated.map((point) => point.y))).toBeCloseTo(0, 6);
+    expect(Math.max(...rotated.map((point) => point.y))).toBeCloseTo(100, 6);
+
+    const flipped = elementOutline(shape({ x: 10, y: 20, width: 100, height: 50, flipX: true }));
+    expect(Math.min(...flipped.map((point) => point.x))).toBeCloseTo(10, 6);
+    expect(Math.max(...flipped.map((point) => point.x))).toBeCloseTo(110, 6);
+  });
+
   it('flattens a path element', () => {
     const pts = elementOutline(
       shape({ type: 'path', nodes: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] })
@@ -86,6 +98,17 @@ describe('pathfinder', () => {
     const r = pathfinder(a, far, 'unite')!;
     expect(r.extra).toHaveLength(1);
     expect(r.extra[0].x).toBeCloseTo(200, 3);
+  });
+
+  it('unites vertically touching rectangles into one outer silhouette', () => {
+    const left = shape({ id: 'left', x: 0, y: 0, width: 100, height: 100 });
+    const right = shape({ id: 'right', x: 100, y: 0, width: 100, height: 100 });
+    const result = pathfinder(left, right, 'unite')!;
+
+    expect(result.extra).toHaveLength(0);
+    expect(result.element.x).toBeCloseTo(0, 3);
+    expect(result.element.width).toBeCloseTo(200, 3);
+    expect(result.element.height).toBeCloseTo(100, 3);
   });
 
   it('preserves a contained subtraction as one even-odd compound path', () => {
