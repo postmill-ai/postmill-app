@@ -111,6 +111,20 @@ describe('R2Storage.uploadFile — buffer vs disk path', () => {
     expect(result.path).toContain('.png');
   });
 
+  it('uploads real JSON bytes with an inert content type', async () => {
+    const json = Buffer.from('{"product":"Coffee"}', 'utf8');
+    const result = await adapter.uploadFile({
+      buffer: json,
+      originalname: 'product.json',
+      size: json.length,
+    });
+
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.ContentType).toBe('application/json');
+    expect(cmd.Body).toBe(json);
+    expect(result.filename).toMatch(/\.json$/);
+  });
+
   it('uploads from a disk path when there is no buffer (upload-server)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'r2-upload-'));
     const filePath = join(dir, 'upload.tmp');

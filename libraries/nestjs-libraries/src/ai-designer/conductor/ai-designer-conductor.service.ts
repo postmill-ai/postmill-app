@@ -75,6 +75,7 @@ import type {
 import { isCopySlot } from '../ai-designer.types';
 import { ReferenceLayoutSchema } from '../ai-designer.schemas';
 import { AiDesignerAttachmentsService } from '../attachments/ai-designer-attachments.service';
+import { MAX_AI_DESIGNER_ATTACHMENTS } from '@postmill-ai/helpers/utils/ai-designer-attachments';
 
 export interface AiDesignerEmitter {
   toSession(event: string, payload: unknown): void;
@@ -871,8 +872,8 @@ export class AiDesignerConductorService {
         ...(config.attachmentFileIds ?? []),
         ...(payload.attachmentFileIds ?? []),
       ])];
-      if (referenceFileIds.length > 10 || attachmentFileIds.length > 10) {
-        this._emitPolicyError(emitter, 'value_bounds', 'AI Designer is limited to 10 references and 10 documents.');
+      if (referenceFileIds.length > MAX_AI_DESIGNER_ATTACHMENTS || attachmentFileIds.length > MAX_AI_DESIGNER_ATTACHMENTS) {
+        this._emitPolicyError(emitter, 'value_bounds', `AI Designer is limited to ${MAX_AI_DESIGNER_ATTACHMENTS} references and ${MAX_AI_DESIGNER_ATTACHMENTS} documents.`);
         return;
       }
       const nextConfig: AiDesignerConfig = { ...config, referenceFileIds, attachmentFileIds };

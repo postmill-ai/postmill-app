@@ -5,6 +5,7 @@ import {
   PipeTransform,
 } from '@nestjs/common';
 import { fromBuffer, fromFile } from './file-type.compat';
+import { detectTextDocument } from '@postmill-ai/provider-kernel';
 import { statSync } from 'fs';
 import { promises as fs } from 'fs';
 import { resolve, relative, isAbsolute } from 'path';
@@ -15,36 +16,6 @@ import {
 } from './upload-limits';
 
 const ALLOWED_MIME_TYPES = UPLOAD_ALLOWED_MIME_TYPES;
-
-const TEXT_DOCUMENT_TYPES = new Map([
-  ['txt', { ext: 'txt', mime: 'text/plain' }],
-  ['md', { ext: 'md', mime: 'text/markdown' }],
-  ['csv', { ext: 'csv', mime: 'text/csv' }],
-  ['tsv', { ext: 'tsv', mime: 'text/tab-separated-values' }],
-  ['json', { ext: 'json', mime: 'application/json' }],
-]);
-
-const detectTextDocument = async (value: any) => {
-  const extension = typeof value.originalname === 'string'
-    ? value.originalname.split('.').pop()?.toLowerCase()
-    : undefined;
-  const detected = extension ? TEXT_DOCUMENT_TYPES.get(extension) : undefined;
-  if (!detected) return null;
-  const safePath = value.path ? resolveInsideTmp(value.path) : null;
-  if (value.path && !safePath) return null;
-  const bytes = value.buffer && Buffer.isBuffer(value.buffer)
-    ? value.buffer
-    : safePath
-      ? await fs.readFile(safePath)
-      : null;
-  if (!bytes || bytes.includes(0)) return null;
-  try {
-    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    return detected;
-  } catch {
-    return null;
-  }
-};
 
 // Resolve a client/multer-supplied path and confine it to the OS temp dir, returning
 // the resolved path only when it stays inside tmpdir (else null). The containment test

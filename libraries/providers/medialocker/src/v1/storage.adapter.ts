@@ -16,6 +16,7 @@ import {
   fromFile,
   storedArtifactFile,
   DetectedFileType,
+  detectTextDocument,
   UploadValidationError,
 } from '@postmill-ai/provider-kernel';
 
@@ -56,6 +57,11 @@ const ALLOWED_MIME_TYPES = new Set<string>([
   'audio/x-wav',
   'video/quicktime',
   'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'text/tab-separated-values',
+  'application/json',
   'font/ttf',
   'font/otf',
   'font/woff2',
@@ -351,6 +357,7 @@ export class MediaLockerStorage implements StorageCapability {
       } else {
         throw new UploadValidationError('Invalid file upload.');
       }
+      detected ??= await detectTextDocument(file);
       if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
         throw new UploadValidationError('Unsupported file type.');
       }

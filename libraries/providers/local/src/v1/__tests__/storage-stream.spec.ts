@@ -11,6 +11,25 @@ afterEach(() => {
   while (dirs.length) rmSync(dirs.pop()!, { recursive: true, force: true });
 });
 
+describe('LocalStorage.uploadFile', () => {
+  it('stores real CSV bytes with the detected text MIME and extension', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'local-storage-text-'));
+    dirs.push(root);
+    const bytes = Buffer.from('name,price\nCoffee,12\n', 'utf8');
+    const adapter = new LocalStorage(logger, root, 'org-1');
+
+    const result = await adapter.uploadFile({
+      buffer: bytes,
+      originalname: 'products.csv',
+      size: bytes.length,
+    });
+
+    expect(result.mimetype).toBe('text/csv');
+    expect(result.filename).toMatch(/\.csv$/);
+    expect(readFileSync(result.path.replace(/^.*\/uploads\//, root + '/'))).toEqual(bytes);
+  });
+});
+
 describe('LocalStorage.writeFileStream', () => {
   it('stores ZIP and JSON artifacts without using the image/video upload path', async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'local-storage-stream-'));

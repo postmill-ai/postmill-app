@@ -95,6 +95,23 @@ describe('AiDesignerAttachmentsService', () => {
     await expect(service.contextsFor('org-1', ['bad.pdf'])).rejects.toThrow();
   });
 
+  it('rejects an oversized PDF before invoking the parser', async () => {
+    const bytes = Buffer.concat([
+      Buffer.from('%PDF-1.7\n'),
+      Buffer.alloc(5 * 1024 * 1024),
+    ]);
+    const { service } = makeService({
+      'pdf-large': {
+        row: { id: 'pdf-large', name: 'large.pdf', originalName: 'large.pdf', fileSize: bytes.length, path: 'pdf-large' },
+        bytes,
+      },
+    });
+
+    await expect(service.contextsFor('org-1', ['pdf-large'])).rejects.toThrow(
+      'PDF attachments are limited to 5 MB each.'
+    );
+  });
+
   it('caps extracted characters per document and across the session', async () => {
     const { service } = makeService({
       'large-1': textFile('large-1', 'a'.repeat(12_100)),

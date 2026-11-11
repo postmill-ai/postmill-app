@@ -1,4 +1,8 @@
 import type { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import {
+  MAX_AI_DESIGNER_ATTACHMENTS,
+  MAX_AI_DESIGNER_ATTACHMENT_BYTES,
+} from '@postmill-ai/helpers/utils/ai-designer-attachments';
 import type { MediaSelectorItem } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
 import { downscaleImageForUpload } from '@postmill-ai/frontend/components/media-tools/downscale-image';
 import { readErrorMessage } from '@postmill-ai/frontend/components/media-tools/designer/read-error-message';
@@ -13,8 +17,11 @@ export interface AiDesignerAttachmentUploads {
   documents: AiDesignerDocumentItem[];
 }
 
-export const MAX_AI_DESIGNER_ATTACHMENTS = 10;
-export const MAX_AI_DESIGNER_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export {
+  MAX_AI_DESIGNER_ATTACHMENTS,
+  MAX_AI_DESIGNER_ATTACHMENT_BYTES,
+} from '@postmill-ai/helpers/utils/ai-designer-attachments';
+
 const DOCUMENT_EXTENSIONS = new Set(['pdf', 'txt', 'md', 'csv', 'tsv', 'json']);
 
 const extensionFor = (file: File): string =>

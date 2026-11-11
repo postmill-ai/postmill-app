@@ -3,6 +3,16 @@ import { PDFParse } from 'pdf-parse';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
+import {
+  MAX_AI_DESIGNER_ATTACHMENTS,
+  MAX_AI_DESIGNER_ATTACHMENT_BYTES,
+  MAX_AI_DESIGNER_PDF_BYTES,
+} from '@postmill-ai/helpers/utils/ai-designer-attachments';
+
+export {
+  MAX_AI_DESIGNER_ATTACHMENTS,
+  MAX_AI_DESIGNER_ATTACHMENT_BYTES,
+} from '@postmill-ai/helpers/utils/ai-designer-attachments';
 
 export interface AiDesignerDocumentContext {
   fileId: string;
@@ -10,8 +20,6 @@ export interface AiDesignerDocumentContext {
   text: string;
 }
 
-export const MAX_AI_DESIGNER_ATTACHMENTS = 10;
-export const MAX_AI_DESIGNER_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const MAX_AI_DESIGNER_ATTACHMENT_CHARS = 12_000;
 export const MAX_AI_DESIGNER_ATTACHMENT_TOTAL_CHARS = 40_000;
 const MAX_TEXT_ATTACHMENT_BYTES = 2 * 1024 * 1024;
@@ -54,6 +62,9 @@ export class AiDesignerAttachmentsService {
       const isText = detected?.mime?.startsWith('text/') || detected?.mime === 'application/json' || TEXT_EXTENSIONS.has(extension);
       if (!isPdf && !isText) {
         throw new BadRequestException('Attachments must be PDF, TXT, Markdown, CSV, TSV, or JSON documents.');
+      }
+      if (isPdf && bytes.length > MAX_AI_DESIGNER_PDF_BYTES) {
+        throw new BadRequestException('PDF attachments are limited to 5 MB each.');
       }
       if (!isPdf && bytes.length > MAX_TEXT_ATTACHMENT_BYTES) {
         throw new BadRequestException('Text attachments are limited to 2 MB each.');
