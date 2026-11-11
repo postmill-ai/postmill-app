@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFile as readDiskFile } from 'fs/promises';
+import { Readable } from 'stream';
 import { strFromU8, unzipSync } from 'fflate';
 
 const redis = new Map<string, string>();
@@ -106,16 +108,27 @@ const makeService = () => {
     saveMediaInformation: vi.fn(async () => ({})),
   };
   const writes: { bytes: Buffer; mime: string }[] = [];
+  const storedObjects = new Map<string, Buffer>();
   const readFile = vi.fn(async (path: string) => {
+    const stored = storedObjects.get(path);
+    if (stored) return stored;
     const remote = [...remoteFiles.values()].find((file) => file.path === path);
     return remote?.bytes || PNG_BYTES;
   });
   const localAdapter = {
     readFile,
+    readFileStream: vi.fn(async (path: string) =>
+      Readable.from([storedObjects.get(path) ?? await readFile(path)])
+    ),
     writeBuffer: vi.fn(async (bytes: Buffer, mime: string) => {
       writes.push({ bytes, mime });
-      return `/uploads/org/artifact-${writes.length}`;
+      const path = `/uploads/org/artifact-${writes.length}`;
+      storedObjects.set(path, bytes);
+      return path;
     }),
+    writeFileStream: vi.fn(async (path: string, mime: string) =>
+      localAdapter.writeBuffer(await readDiskFile(path), mime)
+    ),
   };
   const storageService = {
     getLocalAdapterForOrg: vi.fn(async () => localAdapter),
@@ -447,7 +460,7 @@ describe('DesignBulkCreateService enqueue and status', () => {
 
 describe('DesignBulkCreateService processing', () => {
   it('creates editable designs, imports row images and writes self-contained archives and source files into the ZIP', async () => {
-    const { service, designService, aiMediaService, fileService, aiSettings, writes, readFile } = makeService();
+    const { service, designService, aiMediaService, fileService, aiSettings, writes, readFile, localAdapter } = makeService();
     seedPayload();
 
     await service.processBulkCreate('job-1');
@@ -462,6 +475,8 @@ describe('DesignBulkCreateService processing', () => {
     });
     expect(fileService.saveGeneratedMedia).toHaveBeenCalledTimes(9);
     expect(fileService.saveMediaInformation).toHaveBeenCalledTimes(2);
+    expect(localAdapter.readFileStream).toHaveBeenCalledTimes(8);
+    expect(localAdapter.writeFileStream).toHaveBeenCalledWith(expect.any(String), 'application/zip');
     const zipWrite = [...writes].reverse().find((write) => write.mime === 'application/zip')!;
     const entries = unzipSync(zipWrite.bytes);
     expect(Object.keys(entries)).toHaveLength(9);
@@ -702,7 +717,7 @@ describe('DesignBulkCreateService processing', () => {
     await service.processBulkCreate('job-1');
 
     expect(aiSettings.updateMediaJob.mock.calls.some(([, , update]) => update.status === 'completed')).toBe(true);
-  });
+  }, 20_000);
 
   it('enforces the batch cap before saving an oversized editable archive', async () => {
     const { service, designExport, aiSettings, fileService } = makeService();

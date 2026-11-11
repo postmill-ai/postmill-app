@@ -545,7 +545,9 @@ Existing `/uploads/...` substitutions also resolve once per batch; legacy/preven
 File rows are copied into new org-owned Files, never rejected or deleted on rollback. The batch folder
 and ZIP retain every editable archive plus `source/template.pdesign` and the quoted normalized
 `source/data.csv`; the completion dialog links every editable Design, Recent Designs, and the PNG +
-editable ZIP. PNG output is capped at 128 MB and the complete batch at 1 GB. Any row or artifact failure
+editable ZIP. PNG output is capped at 128 MB and accounted batch output at 1 GB. Stored entries stream
+one at a time through a temporary ZIP file and into the storage adapter's streaming upload; entry
+arrays, compressed chunks, and a concatenated ZIP buffer are never retained in memory. Any row or artifact failure
 after enqueue rolls back every design, imported/generated file, editable archive, and source artifact
 rather than calling a partial batch complete. Never substitute a client-only flattened image for the
 editable result.
