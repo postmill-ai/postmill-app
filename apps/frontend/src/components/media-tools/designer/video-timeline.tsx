@@ -279,8 +279,9 @@ const FILMSTRIP_HEIGHT = 24;
 const FILMSTRIP_CACHE_MAX = 50;
 const filmstripCache = new Map<string, string | null>();
 const filmstripInflight = new Map<string, Promise<string | null>>();
+let filmstripQueue: Promise<void> = Promise.resolve();
 
-async function captureFilmstrip(src: string): Promise<string | null> {
+export async function captureFilmstrip(src: string): Promise<string | null> {
   if (filmstripCache.has(src)) {
     const hit = filmstripCache.get(src)!;
     filmstripCache.delete(src);
@@ -290,16 +291,16 @@ async function captureFilmstrip(src: string): Promise<string | null> {
   const inflight = filmstripInflight.get(src);
   if (inflight) return inflight;
 
-  const p = (async (): Promise<string | null> => {
+  const run = async (): Promise<string | null> => {
     const video = document.createElement('video');
     try {
       video.crossOrigin = 'anonymous';
       video.muted = true;
       video.playsInline = true;
-      video.preload = 'auto';
+      video.preload = 'metadata';
       video.src = src;
       await new Promise<void>((resolve, reject) => {
-        video.onloadeddata = () => resolve();
+        video.onloadedmetadata = () => resolve();
         video.onerror = () => reject(new Error('filmstrip: video load failed'));
         setTimeout(() => reject(new Error('filmstrip: load timeout')), 10000);
       });
@@ -345,8 +346,10 @@ async function captureFilmstrip(src: string): Promise<string | null> {
       video.load();
       filmstripInflight.delete(src);
     }
-  })();
+  };
 
+  const p = filmstripQueue.then(run, run);
+  filmstripQueue = p.then(() => undefined, () => undefined);
   filmstripInflight.set(src, p);
   return p;
 }
@@ -356,11 +359,14 @@ const ClipFilmstrip = React.memo(function ClipFilmstrip({ src }: { src: string |
   useEffect(() => {
     if (!src) return;
     let cancelled = false;
-    captureFilmstrip(src).then((url) => {
-      if (!cancelled && url) setStrip(url);
-    });
+    const timer = setTimeout(() => {
+      captureFilmstrip(src).then((url) => {
+        if (!cancelled && url) setStrip(url);
+      });
+    }, 50);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [src]);
   if (!src || !strip) return null;
