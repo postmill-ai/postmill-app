@@ -388,7 +388,7 @@ const verticalStripBoolean = (
         const previous = polygons[polygons.length - 1];
         if (previous[2].y === top) {
           previous[2] = { x: a.right, y: bottom };
-          previous[1] = { x: a.left, y: bottom };
+          previous[3] = { x: a.left, y: bottom };
           continue;
         }
       }

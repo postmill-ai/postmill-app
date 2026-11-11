@@ -227,12 +227,15 @@ export const pathfinder = (
   op: BooleanOp
 ): PathfinderResult | null => pathfinderMany([subject, clip], op);
 
+const elementLocalOutline = (el: DesignerElement): Point[] =>
+  elementOutline({ ...el, x: 0, y: 0, rotation: 0, flipX: false, flipY: false });
+
 /** Offset Path, as an in-place edit of one element's own outline. */
 export const offsetElement = (
   el: DesignerElement,
   distance: number
 ): Partial<DesignerElement> | null => {
-  const offset = offsetPolygon(elementOutline(el), distance);
+  const offset = offsetPolygon(elementLocalOutline(el), distance);
   const box = bounds([offset]);
   if (!box) return null;
   return {
@@ -251,8 +254,7 @@ export const roundElementCorners = (
   el: DesignerElement,
   radius: number
 ): Partial<DesignerElement> | null => {
-  const outline = elementOutline(el).map((p) => ({ x: p.x - el.x, y: p.y - el.y }));
-  const rounded = roundCorners(polygonToNodes(outline), radius);
+  const rounded = roundCorners(polygonToNodes(elementLocalOutline(el)), radius);
   if (!rounded.length) return null;
   return { type: 'path', nodes: rounded, closed: true };
 };
