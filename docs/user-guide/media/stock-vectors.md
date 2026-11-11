@@ -35,7 +35,8 @@ larger view, dimensions, author, and a "Powered by Pixabay" attribution line for
 - **Save to Files** — imports the preview file into `/files`. When Pixabay supplies the original
   SVG, the result points at that SVG; because `/files/import` rejects raw SVG, it is rasterized
   client-side to a 2048×2048 PNG and uploaded instead, so the saved file is a PNG. Content Pack
-  assets always go through `/files/import`, which mints a licensed download URL from the item id. The Save to Files dialog
+  assets always go through `/files/import`, which mints a licensed download URL from the item id;
+  a licensed SVG is rasterized to PNG on the server, while ZIP/EPS/AI downloads are not supported. The Save to Files dialog
   lets you rename the file, pick or create a destination folder, and choose **Save File** or
   **Save & Post**.
 
