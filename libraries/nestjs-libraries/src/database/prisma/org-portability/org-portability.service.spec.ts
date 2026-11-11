@@ -76,7 +76,7 @@ const makeService = () => {
     getJob: vi.fn(async () => job),
     completeExportJob: vi.fn(async (_id: string, update: any) => {
       Object.assign(job, update, { status: 'completed', archiveKeyCiphertext: null });
-      return job;
+      return { count: 1 };
     }),
     failExportJob: vi.fn(async (_id: string, error: string) => {
       Object.assign(job, { status: 'failed', error, archiveKeyCiphertext: null });
@@ -120,7 +120,7 @@ const makeService = () => {
     encryption as any,
     audit as any,
   );
-  return { service, repository, adapter, job };
+  return { service, repository, adapter, job, audit };
 };
 
 beforeEach(() => {
@@ -244,6 +244,27 @@ describe('OrgPortabilityService export', () => {
 
     expect(statSync(process.env.ORG_PORTABILITY_SPOOL_DIR!).mode & 0o777).toBe(0o700);
     expect(statSync(job.spoolPath).mode & 0o777).toBe(0o600);
+  });
+
+  it('discards its archive and records nothing when the claim was lost before completion', async () => {
+    const { service, repository, job, audit } = makeService();
+    repository.completeExportJob.mockResolvedValueOnce({ count: 0 });
+
+    await service.processExport(job.id);
+
+    expect(existsSync(path.join(process.env.ORG_PORTABILITY_SPOOL_DIR!, `${job.id}.zip`))).toBe(false);
+    expect(repository.failExportJob).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'org.export.completed' }));
+  });
+
+  it('purges only the archives of rows the sweep actually expired', async () => {
+    const { service, repository, job } = makeService();
+    await service.processExport(job.id);
+    repository.expireJobs.mockResolvedValue([]);
+
+    await expect(service.purgeExpired()).resolves.toBe(0);
+
+    expect(existsSync(job.spoolPath)).toBe(true);
   });
 
   it('purges expired private archives', async () => {

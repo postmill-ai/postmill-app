@@ -75,9 +75,11 @@ export class OrgPortabilityRepository {
     });
   }
 
+  // Conditional on the worker still holding the claim: a job expired or failed meanwhile
+  // reports count 0 and the caller must discard its archive.
   completeExportJob(id: string, data: { spoolPath: string; archiveSha256: string; progress: Prisma.InputJsonValue }) {
-    return this._prisma.orgPortabilityJob.update({
-      where: { id },
+    return this._prisma.orgPortabilityJob.updateMany({
+      where: { id, kind: 'export', status: 'processing' },
       data: {
         status: 'completed',
         spoolPath: data.spoolPath,
@@ -100,7 +102,10 @@ export class OrgPortabilityRepository {
   // A job in an active status keeps its spool and key past `expiresAt` while its worker or
   // uploader is still touching it; only once it has also been idle for a full TTL is it
   // treated as orphaned and expired. Each row is re-checked in its own guarded update so a
-  // job that moves (e.g. ready -> pending) between the read and the write is left alone.
+  // job that moves (e.g. ready -> pending) between the read and the write is left alone; the
+  // update also pins the spoolPath that was read, so the caller only removes the file the row
+  // held at the moment it became `expired`. Every completion is itself conditional on an
+  // active status, so a row can never be both expired here and completed by a worker.
   async expireJobs(now: Date) {
     const staleBefore = new Date(now.getTime() - ORG_PORTABILITY_JOB_TTL_HOURS * 3_600_000);
     const where: Prisma.OrgPortabilityJobWhereInput = {
@@ -114,7 +119,7 @@ export class OrgPortabilityRepository {
     const expired = [];
     for (const job of jobs) {
       const result = await this._prisma.orgPortabilityJob.updateMany({
-        where: { ...where, id: job.id },
+        where: { ...where, id: job.id, spoolPath: job.spoolPath },
         data: { status: 'expired', archiveKeyCiphertext: null },
       });
       if (result.count === 1) expired.push(job);

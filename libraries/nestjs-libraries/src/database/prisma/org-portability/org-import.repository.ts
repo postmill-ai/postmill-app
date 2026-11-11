@@ -109,9 +109,10 @@ export class OrgImportRepository {
     });
   }
 
+  // Conditional on the import still being claimed; count 0 means it expired or failed meanwhile.
   completeJobInTransaction(tx: OrgImportTransaction, id: string, progress: Prisma.InputJsonValue) {
-    return tx.orgPortabilityJob.update({
-      where: { id },
+    return tx.orgPortabilityJob.updateMany({
+      where: { id, kind: 'import', status: 'processing' },
       data: { status: 'completed', progress, spoolPath: null, archiveKeyCiphertext: null, error: null },
     });
   }

@@ -493,11 +493,17 @@ export class OrgPortabilityService {
         throw new Error('Organization export exceeds the archive size limit');
       }
       const archiveSha256 = await sha256File(spoolPath);
-      await this._repository.completeExportJob(job.id, {
+      const completed = await this._repository.completeExportJob(job.id, {
         spoolPath,
         archiveSha256,
         progress: { counts, uniqueAssetBytes: uniqueAssetBytes.toString(), archiveBytes: statSync(spoolPath).size },
       });
+      if (completed.count !== 1) {
+        // The claim was lost (expired or failed meanwhile): nothing references this archive.
+        rmSync(spoolPath, { force: true });
+        this._logger.warn(`Organization export ${jobId} lost its claim before completion; archive discarded`);
+        return;
+      }
       await this._audit.record({
         orgId: job.organizationId,
         userId: job.ownerId,

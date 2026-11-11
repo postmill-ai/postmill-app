@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OrgPortabilityRepository } from './org-portability.repository';
+import { OrgImportRepository } from './org-import.repository';
 
 describe('OrgPortabilityRepository export claims', () => {
   it('atomically claims pending jobs and processing jobs stale for one hour', async () => {
@@ -90,14 +91,76 @@ describe('OrgPortabilityRepository expiry', () => {
   });
 
   it('restarts the 24-hour download window when an export completes', async () => {
-    const update = vi.fn(async () => ({}));
-    const repository = new OrgPortabilityRepository({ orgPortabilityJob: { update } } as any);
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const repository = new OrgPortabilityRepository({ orgPortabilityJob: { updateMany } } as any);
     const before = Date.now();
 
     await repository.completeExportJob('job-1', { spoolPath: '/spool/job-1.zip', archiveSha256: 'sha', progress: {} });
 
-    const expiresAt = (update.mock.calls[0] as any[])[0].data.expiresAt as Date;
+    const input = (updateMany.mock.calls[0] as any[])[0];
+    expect(input.where).toEqual({ id: 'job-1', kind: 'export', status: 'processing' });
+    const expiresAt = input.data.expiresAt as Date;
     expect(expiresAt.getTime()).toBeGreaterThanOrEqual(before + 24 * 3_600_000);
     expect(expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 24 * 3_600_000);
+  });
+
+  it('never leaves a row both expired and completed, whichever transition lands first', async () => {
+    const stale = () => ({
+      id: 'job-1',
+      kind: 'export',
+      status: 'processing',
+      spoolPath: null as string | null,
+      expiresAt: hoursAgo(30),
+      updatedAt: hoursAgo(25),
+    });
+    const conditional = (jobs: any[]) => vi.fn(async ({ where, data }: any) => {
+      const hits = jobs.filter((job) => (
+        where.expiresAt ? matches(job, where) : job.id === where.id && job.status === where.status
+      ) && (!('spoolPath' in where) || job.spoolPath === where.spoolPath));
+      hits.forEach((job) => Object.assign(job, data, data.expiresAt ? { updatedAt: now } : {}));
+      return { count: hits.length };
+    });
+    const completion = { spoolPath: '/spool/job-1.zip', archiveSha256: 'sha', progress: {} };
+
+    // Expiry wins: the worker's completion loses its claim and the row stays expired.
+    const expiredFirst = [stale()];
+    const a = new OrgPortabilityRepository({
+      orgPortabilityJob: {
+        findMany: vi.fn(async ({ where }: any) => expiredFirst.filter((job) => matches(job, where))),
+        updateMany: conditional(expiredFirst),
+      },
+    } as any);
+    expect(await a.expireJobs(now)).toHaveLength(1);
+    await expect(a.completeExportJob('job-1', completion)).resolves.toEqual({ count: 0 });
+    expect(expiredFirst[0]).toMatchObject({ status: 'expired', spoolPath: null });
+
+    // Completion lands after the sweep's read: the guarded expire update no longer matches,
+    // so the sweep returns nothing and the fresh archive is never removed.
+    const completedFirst = [stale()];
+    const b = new OrgPortabilityRepository({
+      orgPortabilityJob: {
+        findMany: vi.fn(async ({ where }: any) => completedFirst.filter((job) => matches(job, where)).map((job) => ({ ...job }))),
+        updateMany: conditional(completedFirst),
+      },
+    } as any);
+    const findMany = (b as any)._prisma.orgPortabilityJob.findMany;
+    findMany.mockImplementationOnce(async ({ where }: any) => {
+      const read = completedFirst.filter((job) => matches(job, where)).map((job) => ({ ...job }));
+      await b.completeExportJob('job-1', completion);
+      return read;
+    });
+    await expect(b.expireJobs(now)).resolves.toEqual([]);
+    expect(completedFirst[0]).toMatchObject({ status: 'completed', spoolPath: '/spool/job-1.zip' });
+  });
+});
+
+describe('OrgImportRepository completion', () => {
+  it('completes an import only while it is still claimed as processing', async () => {
+    const updateMany = vi.fn(async () => ({ count: 0 }));
+    const repository = new OrgImportRepository({} as any);
+
+    await expect(repository.completeJobInTransaction({ orgPortabilityJob: { updateMany } } as any, 'job-1', {}))
+      .resolves.toEqual({ count: 0 });
+    expect((updateMany.mock.calls[0] as any[])[0].where).toEqual({ id: 'job-1', kind: 'import', status: 'processing' });
   });
 });
