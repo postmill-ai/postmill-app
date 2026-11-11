@@ -12,7 +12,6 @@ import {
   appendFileSync,
   chmodSync,
   createReadStream,
-  mkdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -36,6 +35,7 @@ import {
   validateOrgArchiveWithKey,
   type OrgArchiveExtraction,
 } from './org-import-archive';
+import { ensureOrgSpoolDir } from './org-portability.archive';
 import {
   decryptOrgSecretRefs,
   unwrapOrgArchiveKey,
@@ -181,7 +181,7 @@ export class OrgImportService {
     await this._assertOwner(orgId, ownerId);
     await this._assertDestination(orgId);
     const root = this._spoolRoot();
-    mkdirSync(root, { recursive: true, mode: 0o700 });
+    ensureOrgSpoolDir(root);
     const id = randomUUID();
     const spoolPath = path.join(root, `${id}.zip`);
     writeFileSync(spoolPath, new Uint8Array(), { flag: 'wx', mode: 0o600 });

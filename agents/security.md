@@ -283,7 +283,7 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   in jobs, logs, Sentry, or archive metadata. HMAC-SHA256 protects the manifest and asset inventory.
 - In-flight archive keys exist only as `EncryptionService` ciphertext and are cleared on
   completion, failure, or expiry. Archives are mode-0600 files in `ORG_PORTABILITY_SPOOL_DIR`
-  (default `${TMPDIR}/postmill-org-archives`), never public `/uploads` or public buckets; hourly
+  (default `${TMPDIR}/postmill-org-archives`, re-chmod-ed to 0700 on every use via `ensureOrgSpoolDir`), never public `/uploads` or public buckets; hourly
   cleanup removes expired archives. The manifest authenticates each domain's exact NDJSON SHA-256
   as well as the asset inventory. Missing source objects are explicitly marked in the manifest.
 - Billing entitlements, passwords, sessions, API keys, OAuth grants, and runtime state are excluded.

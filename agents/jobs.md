@@ -53,7 +53,7 @@ All ids below are copied verbatim from `inngest.createFunction({ id: ... })` cal
 | `comms-matrix-sync` | `TZ=UTC * * * * *` (minutely) | 1 | Fans out `comms/matrix.sync-one` per enabled Matrix comms config (Matrix has no webhooks). |
 | `campaign-tag-purge` | `TZ=UTC 0 3 * * *` | — | Purges expired campaign tags. |
 | `retention-purge` | `TZ=UTC 30 3 * * *` | — | Data-retention purge. |
-| `org-portability-expiry` | `17 * * * *` (hourly) | — | Marks expired organization-export jobs and removes their private spool archives and temporary archive keys. |
+| `org-portability-expiry` | `17 * * * *` (hourly) | — | Marks expired organization-portability jobs and removes their private spool archives and temporary archive keys. `ready`/`completed`/`failed` jobs expire at `expiresAt`; active `uploading`/`validating`/`pending`/`processing` jobs are kept past it until they have also been idle (no `updatedAt` bump) for a full 24h TTL, so a running job never loses its archive mid-run while a stuck one is still reaped. A completed export's `expiresAt` restarts at completion + 24h. |
 | `payments-expire-canceled` | `TZ=UTC 15 3 * * *` | — | Tears down subscriptions whose `cancelAt` passed (+1 day) for payment providers without period-end cancel (Stripe and manual rows are excluded at the query), then counts Stripe rows past `cancelAt` with no teardown webhook and warns with sample ids (observability only). Returns `{checked, tornDown, failed, staleStripe}`. `PaymentsService.expireCanceledSubscriptions`. |
 
 ### Event-triggered functions

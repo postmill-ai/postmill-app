@@ -1,7 +1,18 @@
 import { Zip, ZipDeflate, ZipPassThrough, strToU8 } from 'fflate';
-import { createWriteStream, chmodSync } from 'fs';
+import { createWriteStream, chmodSync, mkdirSync } from 'fs';
 import type { WriteStream } from 'fs';
 import { once } from 'events';
+
+// mkdir's mode only applies when the directory is created, so re-assert 0700 on an existing
+// spool. A directory owned by another account cannot be chmod-ed; that stays best-effort.
+export function ensureOrgSpoolDir(dir: string): void {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(dir, 0o700);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'EPERM') throw error;
+  }
+}
 
 export class OrgArchiveWriter {
   private readonly _zip: Zip;

@@ -12,7 +12,10 @@ import Compressor from '@uppy/compressor';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { uniqBy } from 'lodash';
-import { checkUploadLimit } from '@postmill-ai/helpers/upload-limits.client';
+import {
+  checkUploadLimit,
+  uploadMaxBytesFor,
+} from '@postmill-ai/helpers/upload-limits.client';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const MB = 1024 * 1024;
@@ -214,13 +217,7 @@ export function useUppyUploader(props: {
               continue;
             }
 
-            const maxBytes = file.type?.startsWith('image/')
-              ? limits.image.maxBytes
-              : file.type?.startsWith('video/')
-                ? limits.video.maxBytes
-                : file.type === 'application/pdf'
-                  ? limits.document.maxBytes
-                  : limits.audio.maxBytes;
+            const maxBytes = uploadMaxBytesFor(file.type || '', limits);
             const maxMB = Math.round(maxBytes / MB);
             const error = new Error(
               tRef.current(

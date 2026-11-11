@@ -10,7 +10,6 @@ import { createHash, randomBytes } from 'crypto';
 import {
   createReadStream,
   createWriteStream,
-  mkdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -25,7 +24,7 @@ import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audi
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { OrgPortabilityRepository } from './org-portability.repository';
-import { OrgArchiveWriter } from './org-portability.archive';
+import { ensureOrgSpoolDir, OrgArchiveWriter } from './org-portability.archive';
 import {
   lowerFirst,
   orgPortabilityModelNames,
@@ -407,7 +406,7 @@ export class OrgPortabilityService {
     let writer: OrgArchiveWriter | undefined;
     try {
       archiveKey = Buffer.from(this._encryption.decrypt(job.archiveKeyCiphertext), 'base64');
-      mkdirSync(spoolRoot, { recursive: true, mode: 0o700 });
+      ensureOrgSpoolDir(spoolRoot);
       rmSync(spoolPath, { force: true });
       rmSync(assetTemp, { force: true });
       writer = await OrgArchiveWriter.create(spoolPath);

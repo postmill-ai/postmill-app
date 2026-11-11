@@ -64,6 +64,27 @@ export interface UploadLimitCheckFile {
 }
 
 /**
+ * Per-category byte cap for an allowed MIME type. PDFs and the text/JSON
+ * document types share the document limit; everything else that is not an
+ * image or video is audio.
+ */
+export function uploadMaxBytesFor(
+  mimetype: string,
+  limits: Record<'image' | 'video' | 'audio' | 'document', { maxBytes: number }> = UPLOAD_LIMITS
+): number {
+  if (mimetype.startsWith('image/')) return limits.image.maxBytes;
+  if (mimetype.startsWith('video/')) return limits.video.maxBytes;
+  if (
+    mimetype === 'application/pdf' ||
+    mimetype === 'application/json' ||
+    mimetype.startsWith('text/')
+  ) {
+    return limits.document.maxBytes;
+  }
+  return limits.audio.maxBytes;
+}
+
+/**
  * Shared limit check used by the client-side Uppy pre-processor. Passes an
  * explicit `limits` object (fetched from `/files/limits`) or falls back to the
  * pure defaults above.
@@ -76,13 +97,7 @@ export function checkUploadLimit(
     return { ok: false, reason: 'Unsupported file type.' };
   }
 
-  const maxBytes = file.mimetype.startsWith('image/')
-    ? limits.image.maxBytes
-    : file.mimetype.startsWith('video/')
-      ? limits.video.maxBytes
-      : file.mimetype === 'application/pdf'
-        ? limits.document.maxBytes
-        : limits.audio.maxBytes;
+  const maxBytes = uploadMaxBytesFor(file.mimetype, limits);
 
   if (file.size > maxBytes) {
     return {
