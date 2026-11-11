@@ -140,6 +140,8 @@ const FALLBACK_GRADIENT_SIZE: Record<AssetAspect, { width: number; height: numbe
   tall: { width: 504, height: 896 },
 };
 
+class ReferenceResolutionError extends Error {}
+
 type AssetNeed = AssetNeedRequest;
 
 interface AssetRequestInput {
@@ -329,6 +331,7 @@ export class AiDesignerAssetService implements OnModuleInit {
           // An unusable URL shape won't change on a retry — go to stock.
           break;
         } catch (err) {
+          if (err instanceof ReferenceResolutionError) return null;
           // A cancel is not a provider failure — don't retry it, don't fall
           // through to stock, and don't log it as a generation failure.
           throwIfAborted(signal);
@@ -373,6 +376,9 @@ export class AiDesignerAssetService implements OnModuleInit {
     // the org's image-to-image default FIRST. Ordinary text-to-image remains a
     // fallback except when the subject requires the reference to survive.
     const sourceUrl = await this._sourceUrlFor(orgId, need);
+    if ((need.sourceUrl || need.sourceFileId) && !sourceUrl) {
+      throw new ReferenceResolutionError(`The reference image for slot ${assetKey(need.slotId, need.aspect)} could not be resolved.`);
+    }
     if (sourceUrl) {
       try {
         return await raceWithTimeout(
@@ -382,7 +388,7 @@ export class AiDesignerAssetService implements OnModuleInit {
         );
       } catch (err) {
         throwIfAborted(signal);
-        if (need.allowStockFallback === false) throw err;
+        if (need.allowStockFallback === false && !(err instanceof DefaultNotConfiguredError)) throw err;
         this._logger.warn(
           `Image-to-image generation failed for slot ${assetKey(need.slotId, need.aspect)} — falling back to text-to-image: ${(err as Error).message}`
         );

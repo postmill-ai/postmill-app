@@ -2264,7 +2264,7 @@ export class AiDesignerConductorService {
         const firstIssue = aestheticFindings[0].issue;
         const subjectIssue = aestheticFindings.find((finding) => finding.criterion === 'subject_fidelity')?.issue;
         const referenceRun = (config.referenceFileIds ?? []).length > 0;
-        if (subjectIssue) {
+        if (subjectIssue && results.length - heldBack.size > 1) {
           heldBack.add(results[i].variantId);
           subjectIssues.push(subjectIssue);
           notes.push(

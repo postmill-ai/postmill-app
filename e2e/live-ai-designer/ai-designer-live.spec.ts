@@ -55,9 +55,8 @@ async function openDesign(
   return { id: design.id as string, design };
 }
 
-test.skip(acceptanceCase !== 'logo', 'The logo case runs only with E2E_LIVE_AI_CASE=logo');
-
 test('original logo and palette survive generation, and text-only revision preserves media', async ({ page }) => {
+  test.skip(acceptanceCase !== 'logo', 'The logo case runs only with E2E_LIVE_AI_CASE=logo');
   requiredEnv('E2E_BASE');
   const brandHex = (process.env.E2E_LIVE_BRAND_HEX || '#ff0000').toLowerCase();
   if (!/^#[0-9a-f]{6}$/.test(brandHex)) throw new Error('E2E_LIVE_BRAND_HEX must be #rrggbb');
@@ -116,9 +115,8 @@ test('original logo and palette survive generation, and text-only revision prese
   expect(mediaRefs(revised.design)).toEqual(originalRefs);
 });
 
-test.skip(acceptanceCase !== 'subject', 'The subject case runs only with E2E_LIVE_AI_CASE=subject');
-
 test('a screenshot-guided laptop mockup preserves the requested subject', async ({ page }) => {
+  test.skip(acceptanceCase !== 'subject', 'The subject case runs only with E2E_LIVE_AI_CASE=subject');
   requiredEnv('E2E_BASE');
   await page.goto('/media/ai-designer');
   await page.getByRole('button', { name: 'Prompt', exact: true }).click();

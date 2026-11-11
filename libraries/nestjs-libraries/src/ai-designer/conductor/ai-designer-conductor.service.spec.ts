@@ -4307,7 +4307,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     expect(need.brief).toContain('laptop with the Designer Canvas on screen');
   });
 
-  it('refuses delivery when the only variant misses the requested subject', async () => {
+  it('delivers the only remaining variant with a subject-fidelity warning instead of an empty result', async () => {
     const emitter = makeEmitter();
     const { conductor, service } = makeRegenConductor({
       primarySkipped: false,
@@ -4320,9 +4320,10 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
 
     await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
 
-    expect(JSON.stringify(service.appendMessage.mock.calls)).toContain(
-      'No generated variant contains the requested subject'
-    );
+    const messages = JSON.stringify(service.appendMessage.mock.calls);
+    expect(messages).toContain('still has known quality issues');
+    expect(messages).not.toContain('No generated variant contains the requested subject');
+    expect(messages).not.toContain('was held back');
   });
 
   it('caps a brand_safety slot at ONE stock attempt — the technique must change', async () => {
