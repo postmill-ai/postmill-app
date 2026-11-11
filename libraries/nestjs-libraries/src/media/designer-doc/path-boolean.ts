@@ -351,6 +351,54 @@ const horizontalStripBoolean = (
   return { polygons: rectangles(op !== 'divide') };
 };
 
+const verticalStripBoolean = (
+  subject: Point[],
+  clip: Point[],
+  op: BooleanOp
+): BooleanResult | null => {
+  if (op === 'outline') return null;
+  const a = axisAlignedBox(subject);
+  const b = axisAlignedBox(clip);
+  if (!a || !b || a.left !== b.left || a.right !== b.right) return null;
+  const boundaries = [...new Set([a.top, a.bottom, b.top, b.bottom])].sort((x, y) => x - y);
+  const rectangles = (merge: boolean) => {
+    const polygons: Point[][] = [];
+    for (let index = 0; index < boundaries.length - 1; index++) {
+      const top = boundaries[index];
+      const bottom = boundaries[index + 1];
+      if (top === bottom) continue;
+      const y = (top + bottom) / 2;
+      const inA = y > a.top && y < a.bottom;
+      const inB = y > b.top && y < b.bottom;
+      const keep = op === 'unite' || op === 'divide'
+        ? inA || inB
+        : op === 'intersect'
+          ? inA && inB
+          : op === 'subtract'
+            ? inA && !inB
+            : inA !== inB;
+      if (!keep) continue;
+      const polygon = [
+        { x: a.left, y: top },
+        { x: a.right, y: top },
+        { x: a.right, y: bottom },
+        { x: a.left, y: bottom },
+      ];
+      if (merge && polygons.length) {
+        const previous = polygons[polygons.length - 1];
+        if (previous[2].y === top) {
+          previous[2] = { x: a.right, y: bottom };
+          previous[3] = { x: a.left, y: bottom };
+          continue;
+        }
+      }
+      polygons.push(polygon);
+    }
+    return polygons;
+  };
+  return { polygons: rectangles(op !== 'divide') };
+};
+
 /**
  * Run a pathfinder operation on two closed polygons.
  *
@@ -384,6 +432,8 @@ export const booleanPolygons = (
 
   const horizontalStrip = horizontalStripBoolean(subject, clip, op);
   if (horizontalStrip) return horizontalStrip;
+  const verticalStrip = verticalStripBoolean(subject, clip, op);
+  if (verticalStrip) return verticalStrip;
 
   const subjectInClip = pointInPolygon(subject[0], clip);
   const clipInSubject = pointInPolygon(clip[0], subject);

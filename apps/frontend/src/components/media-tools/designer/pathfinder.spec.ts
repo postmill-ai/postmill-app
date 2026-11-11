@@ -42,6 +42,18 @@ describe('elementOutline', () => {
     expect(elementOutline(shape({ shape: 'triangle' }))).toHaveLength(3);
   });
 
+  it('rotates around the element origin and flips around its center', () => {
+    const rotated = elementOutline(shape({ width: 100, height: 50, rotation: 90 }));
+    expect(Math.min(...rotated.map((point) => point.x))).toBeCloseTo(-50, 6);
+    expect(Math.max(...rotated.map((point) => point.x))).toBeCloseTo(0, 6);
+    expect(Math.min(...rotated.map((point) => point.y))).toBeCloseTo(0, 6);
+    expect(Math.max(...rotated.map((point) => point.y))).toBeCloseTo(100, 6);
+
+    const flipped = elementOutline(shape({ x: 10, y: 20, width: 100, height: 50, flipX: true }));
+    expect(Math.min(...flipped.map((point) => point.x))).toBeCloseTo(10, 6);
+    expect(Math.max(...flipped.map((point) => point.x))).toBeCloseTo(110, 6);
+  });
+
   it('flattens a path element', () => {
     const pts = elementOutline(
       shape({ type: 'path', nodes: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] })
@@ -86,6 +98,23 @@ describe('pathfinder', () => {
     const r = pathfinder(a, far, 'unite')!;
     expect(r.extra).toHaveLength(1);
     expect(r.extra[0].x).toBeCloseTo(200, 3);
+  });
+
+  it('unites vertically touching stacked rectangles into one rectangular node list', () => {
+    const top = shape({ id: 'top', x: 0, y: 0, width: 100, height: 100 });
+    const bottom = shape({ id: 'bottom', x: 0, y: 100, width: 100, height: 100 });
+    const result = pathfinder(top, bottom, 'unite')!;
+
+    expect(result.extra).toHaveLength(0);
+    expect(result.element.x).toBeCloseTo(0, 3);
+    expect(result.element.width).toBeCloseTo(100, 3);
+    expect(result.element.height).toBeCloseTo(200, 3);
+    expect(result.element.nodes!.map(({ x, y }) => ({ x, y }))).toEqual([
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 200 },
+      { x: 0, y: 200 },
+    ]);
   });
 
   it('preserves a contained subtraction as one even-odd compound path', () => {
@@ -191,6 +220,18 @@ describe('offsetElement', () => {
   });
 });
 
+describe('offsetElement transforms', () => {
+  it('offsets in local coordinates so rotation is not applied twice', () => {
+    const patch = offsetElement(shape({ x: 40, y: 60, width: 100, height: 50, rotation: 90 }), 10)!;
+
+    expect(patch.x).toBeCloseTo(30, 6);
+    expect(patch.y).toBeCloseTo(50, 6);
+    expect(patch.width).toBeCloseTo(120, 6);
+    expect(patch.height).toBeCloseTo(70, 6);
+    expect(patch.rotation).toBeUndefined();
+  });
+});
+
 describe('roundElementCorners', () => {
   it('turns a rect into a path with bezier corners', () => {
     const patch = roundElementCorners(shape({}), 10)!;
@@ -203,5 +244,14 @@ describe('roundElementCorners', () => {
     const patch = roundElementCorners(shape({ x: 40, y: 60 }), 10)!;
     expect(patch.x).toBeUndefined();
     expect(Math.min(...patch.nodes!.map((n) => n.x))).toBeGreaterThanOrEqual(0);
+  });
+
+  it('rounds the local outline instead of rotating it a second time', () => {
+    const patch = roundElementCorners(shape({ width: 100, height: 50, rotation: 90 }), 10)!;
+
+    expect(Math.min(...patch.nodes!.map((n) => n.x))).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...patch.nodes!.map((n) => n.x))).toBeLessThanOrEqual(100);
+    expect(Math.min(...patch.nodes!.map((n) => n.y))).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...patch.nodes!.map((n) => n.y))).toBeLessThanOrEqual(50);
   });
 });

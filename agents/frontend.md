@@ -257,8 +257,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   regions, and Outline removes fills. Disjoint results survive and are all selected. Contained
   regions become one compound path: `nodes` is the outer contour, optional `subpaths` carries every
   contour, and `fillRule: evenodd` preserves holes across Konva, server rendering, resize/reflow/warp,
-  and SVG export. One Undo restores every input. Axis-aligned rectangles sharing a horizontal strip use
-  the exact interval path in `path-boolean.ts`.
+  and SVG export. One Undo restores every input. Canvas-space outlines include each element's
+  rotation (origin pivot) and flips (center pivot). Axis-aligned rectangles sharing a horizontal or
+  vertical strip use the exact interval path in `path-boolean.ts`; vertical merging writes all four
+  corners in top-left → top-right → bottom-right → bottom-left order. Offset Path and Live Corners
+  instead use the pre-transform local outline, so the element's existing rotation/flips apply once.
 - **Design/template previews are best-effort, never save blockers.** Video saves render through
   `DesignPreviewService`; image saves use that server renderer when no client thumbnail arrives.
   Org-owned background `fileId`s resolve through the folder storage adapter before the remote URL,
