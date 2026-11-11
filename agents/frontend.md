@@ -541,9 +541,11 @@ through `DesignBulkCreateService` and creates editable Designs, per-page PNG Fil
 self-contained `.pdesign` per row. Changed image sources drop stale file identity, derived pixels,
 crop/natural-size metadata, default to aspect-preserving `cover` unless the template explicitly
 chose another fit, and adopt the persisted image's real dimensions. A per-batch `.pdesign` asset/font cache deduplicates shared reads.
-The batch folder and ZIP retain every editable archive plus `source/template.pdesign` and the quoted
-normalized `source/data.csv`; the completion dialog links every editable Design, Recent Designs, and
-the PNG + editable ZIP. All output bytes count toward the 128 MB cap. Any row or artifact failure
+Existing `/uploads/...` substitutions also resolve once per batch; legacy/preventSave objects without
+File rows are copied into new org-owned Files, never rejected or deleted on rollback. The batch folder
+and ZIP retain every editable archive plus `source/template.pdesign` and the quoted normalized
+`source/data.csv`; the completion dialog links every editable Design, Recent Designs, and the PNG +
+editable ZIP. PNG output is capped at 128 MB and the complete batch at 1 GB. Any row or artifact failure
 after enqueue rolls back every design, imported/generated file, editable archive, and source artifact
 rather than calling a partial batch complete. Never substitute a client-only flattened image for the
 editable result.

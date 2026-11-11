@@ -531,6 +531,33 @@ describe('DesignBulkCreateService processing', () => {
     expect(Buffer.from(archive.assets.get(`assets/${localFile.id}.png`)!)).toEqual(PORTRAIT_BYTES);
   });
 
+  it('imports a preventSave uploads path once and reuses it across rows', async () => {
+    const { service, designService, fileService, readFile } = makeService();
+    const imported = {
+      id: 'file-1', folderId: null, path: '/uploads/org/artifact-1',
+      name: 'legacy.png', originalName: 'legacy.png', fileSize: PORTRAIT_BYTES.length,
+    };
+    fileService.getFileById.mockImplementation(async (_org: string, id: string) =>
+      id === imported.id ? imported : null
+    );
+    readFile.mockResolvedValue(PORTRAIT_BYTES);
+    seedPayload([
+      { name: 'First', image: '/uploads/org/legacy.png' },
+      { name: 'Second', image: '/uploads/org/legacy.png' },
+    ]);
+
+    await service.processBulkCreate('job-1');
+
+    expect(fileService.getFileByPath).toHaveBeenCalledOnce();
+    expect(readFile.mock.calls.filter(([path]) => path === '/uploads/org/legacy.png')).toHaveLength(1);
+    for (const [, , data] of designService.createDesign.mock.calls) {
+      expect(data.doc.outputs[0].pages[0].children[0]).toMatchObject({
+        fileId: 'file-1', naturalWidth: 2, naturalHeight: 4, fitMode: 'cover',
+      });
+    }
+    expect(fileService.deleteFile).not.toHaveBeenCalled();
+  });
+
   it('uses real portrait and landscape metadata to cover-crop replacement pixels without distortion', async () => {
     const { service, designService } = makeService();
     const doc = makeDoc();
@@ -666,17 +693,28 @@ describe('DesignBulkCreateService processing', () => {
     expect(results[1].error).toBe('Blocked URL');
   });
 
+  it('allows an editable archive larger than the old 128 MB total cap', async () => {
+    const { service, designExport, aiSettings } = makeService();
+    const bytes = Buffer.alloc(128 * 1024 * 1024 + 1);
+    vi.spyOn(designExport, 'buildBundleForDoc').mockResolvedValue({ bytes } as any);
+    seedPayload([{ name: 'Only', image: 'https://cdn.example.test/a.png' }]);
+
+    await service.processBulkCreate('job-1');
+
+    expect(aiSettings.updateMediaJob.mock.calls.some(([, , update]) => update.status === 'completed')).toBe(true);
+  });
+
   it('enforces the batch cap before saving an oversized editable archive', async () => {
     const { service, designExport, aiSettings, fileService } = makeService();
     seedPayload([{ name: 'Only', image: 'https://cdn.example.test/a.png' }]);
     vi.spyOn(designExport, 'buildBundleForDoc').mockResolvedValueOnce({
-      bytes: { length: 128 * 1024 * 1024 + 1 },
+      bytes: { length: 1024 * 1024 * 1024 + 1 },
     } as any);
 
     await service.processBulkCreate('job-1');
 
     const failed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'failed')?.[2];
-    expect(failed.error).toBe('Row 1: Bulk Create output exceeds the 128 MB batch limit.');
+    expect(failed.error).toBe('Row 1: Bulk Create output exceeds the 1 GB batch limit.');
     expect(fileService.saveGeneratedMedia).toHaveBeenCalledTimes(2);
     expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'file-1');
     expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'file-2');

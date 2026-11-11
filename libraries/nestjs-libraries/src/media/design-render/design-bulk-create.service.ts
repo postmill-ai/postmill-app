@@ -29,6 +29,8 @@ import { zipBulkEntries, type BulkZipEntry } from './design-bulk-zip';
 import type { DesignerDoc, DesignerElement } from './design-render.types';
 
 export const DESIGN_BULK_CREATE_OPERATION = 'design-bulk-create';
+const MAX_BULK_CREATE_PNG_BYTES = 128 * 1024 * 1024;
+const MAX_BULK_CREATE_OUTPUT_BYTES = 1024 * 1024 * 1024;
 const PAYLOAD_TTL_SECONDS = 24 * 60 * 60;
 const payloadKey = (jobId: string) => `design-bulk:payload:${jobId}`;
 const claimKey = (jobId: string) => `design-bulk:claim:${jobId}`;
@@ -58,6 +60,7 @@ interface PersistedBulkImage {
   path: string;
   width?: number;
   height?: number;
+  owned?: boolean;
 }
 
 const errorDetail = (error: unknown, fallback: string): string => {
@@ -414,16 +417,50 @@ export class DesignBulkCreateService extends DesignBulkService {
       naturalHeight?: number;
     }) => {
       if (!target.src || templateSources.has(target.src) || !target.src.startsWith('/uploads/')) return;
-      const file = await this._fileService.getFileByPath(orgId, target.src);
-      if (!file) {
-        throw new BadRequestException(`Image path is not an org-owned File: ${target.src}`);
+      const cacheKey = `local:${target.src}`;
+      let persisted = cache.get(cacheKey);
+      if (!persisted) {
+        const source = target.src;
+        const existing = await this._fileService.getFileByPath(orgId, source);
+        const adapter = existing
+          ? await this._storageService.resolveAdapterForFolder(existing.folderId, orgId)
+          : await this._storageService.getLocalAdapterForOrg(orgId, true);
+        const bytes = await adapter.readFile(existing?.path || source);
+        const metadata = await sharp(bytes).metadata();
+        if (existing) {
+          persisted = {
+            id: existing.id,
+            path: existing.path,
+            width: metadata.width,
+            height: metadata.height,
+            owned: false,
+          };
+        } else {
+          const path = await adapter.writeBuffer(
+            bytes,
+            metadata.format === 'jpeg' ? 'image/jpeg' : `image/${metadata.format || 'png'}`,
+          );
+          const created = await this._fileService.saveGeneratedMedia(orgId, {
+            name: source.split('/').pop() || 'bulk-create-image',
+            path,
+            type: 'image',
+            fileSize: bytes.length,
+            metadata: { source: DESIGN_BULK_CREATE_OPERATION },
+          });
+          persisted = {
+            id: created.id,
+            path: created.path,
+            width: metadata.width,
+            height: metadata.height,
+            owned: true,
+          };
+        }
+        cache.set(cacheKey, persisted);
       }
-      const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, orgId);
-      const metadata = await sharp(await adapter.readFile(file.path)).metadata();
-      target.src = file.path;
-      target.fileId = file.id;
-      target.naturalWidth = metadata.width;
-      target.naturalHeight = metadata.height;
+      target.src = persisted.path;
+      target.fileId = persisted.id;
+      target.naturalWidth = persisted.width;
+      target.naturalHeight = persisted.height;
     };
     const persist = async (element: DesignerElement) => {
       await persistLocal(element);
@@ -522,7 +559,7 @@ export class DesignBulkCreateService extends DesignBulkService {
     const fileIds = new Set([
       ...generatedFileIds,
       ...previewFileIds,
-      ...[...remoteImageCache.values()].map((file) => file.id),
+      ...[...remoteImageCache.values()].filter((file) => file.owned !== false).map((file) => file.id),
     ]);
     for (const id of fileIds) {
       try {
@@ -573,10 +610,15 @@ export class DesignBulkCreateService extends DesignBulkService {
       const bundleCache = createDesignExportBundleCache();
       const zipEntries: BulkZipEntry[] = [];
       let zipBytes = 0;
-      const addZipBytes = (size: number) => {
+      let pngBytes = 0;
+      const addZipBytes = (size: number, png = false) => {
         zipBytes += size;
-        if (zipBytes > 128 * 1024 * 1024) {
-          throw new Error('Bulk Create output exceeds the 128 MB batch limit.');
+        if (zipBytes > MAX_BULK_CREATE_OUTPUT_BYTES) {
+          throw new Error('Bulk Create output exceeds the 1 GB batch limit.');
+        }
+        if (png) pngBytes += size;
+        if (pngBytes > MAX_BULK_CREATE_PNG_BYTES) {
+          throw new Error('Bulk Create PNG output exceeds the 128 MB batch limit.');
         }
       };
       const addZipEntry = (entry: BulkZipEntry) => {
@@ -604,7 +646,7 @@ export class DesignBulkCreateService extends DesignBulkService {
             for (let page = 0; page < pages; page++) {
               const bytes = await this._renderService.renderPage(doc, outputIndex, { orgId }, page);
               const filename = `row-${String(index + 1).padStart(3, '0')}-output-${outputIndex + 1}-page-${page + 1}.png`;
-              addZipBytes(bytes.length);
+              addZipBytes(bytes.length, true);
               const file = await this._saveBuffer(orgId, {
                 name: `${payload.nameBase} ${filename}`,
                 bytes,
