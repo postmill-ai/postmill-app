@@ -757,15 +757,14 @@ export class DesignRenderService {
     }
     await this._fontLoaderService.loadCuratedFonts(children);
 
-    const ratio = opts?.pixelRatio && opts.pixelRatio > 0 ? opts.pixelRatio : 1;
-    const width = Math.max(
-      1,
-      Math.min(Math.round(output.width * ratio), MAX_CANVAS_DIMENSION)
+    const requestedRatio = opts?.pixelRatio && opts.pixelRatio > 0 ? opts.pixelRatio : 1;
+    const ratio = Math.min(
+      requestedRatio,
+      MAX_CANVAS_DIMENSION / output.width,
+      MAX_CANVAS_DIMENSION / output.height,
     );
-    const height = Math.max(
-      1,
-      Math.min(Math.round(output.height * ratio), MAX_CANVAS_DIMENSION)
-    );
+    const width = Math.max(1, Math.round(output.width * ratio));
+    const height = Math.max(1, Math.round(output.height * ratio));
 
     const { createCanvas } = await loadCanvasModule();
     const canvas = createCanvas(width, height);
@@ -1884,6 +1883,7 @@ export class DesignRenderService {
     depth = 0
   ): Promise<void> {
     for (let i = 0; i < nodes.length; i++) {
+      if (i > 0) await new Promise<void>((resolve) => setImmediate(resolve));
       const node = nodes[i];
       const el = node.element;
       if (el.hidden) continue;

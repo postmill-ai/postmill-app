@@ -3305,6 +3305,7 @@
   "designer_exported_n_files": "已导出 {{count}} 个文件",
   "designer_exporting_current_output": "正在导出当前输出",
   "designer_exporting_ellipsis": "正在导出…",
+  "designer_exporting_progress": "正在导出 {{done}}/{{total}}…",
   "designer_apply_result": "Apply result",
   "designer_before": "Before",
   "designer_after": "After",

@@ -43,6 +43,8 @@ const blurWithNativeFilter = (canvas: any, radius: number): boolean => {
   source.height = canvas.height;
   source.getContext('2d')?.drawImage(canvas, 0, 0);
   ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.filter = `blur(${radius}px)`;
   ctx.drawImage(source, 0, 0);

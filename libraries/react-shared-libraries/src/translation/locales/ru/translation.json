@@ -3305,6 +3305,7 @@
   "designer_exported_n_files": "Экспортировано файлов: {{count}}",
   "designer_exporting_current_output": "Экспорт текущего результата",
   "designer_exporting_ellipsis": "Экспорт...",
+  "designer_exporting_progress": "Экспорт {{done}}/{{total}}…",
   "designer_apply_result": "Apply result",
   "designer_before": "Before",
   "designer_after": "After",

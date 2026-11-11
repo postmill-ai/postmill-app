@@ -39,3 +39,26 @@ describe('DesignRenderService.renderPageToFormat', () => {
     expect(metadata.height).toBe(2);
   });
 });
+
+describe('DesignRenderService.renderPage canvas bounds', () => {
+  it('downscales the whole page instead of cropping an oversized requested ratio', async () => {
+    const service = new DesignRenderService({
+      loadOrgFonts: vi.fn(async () => undefined),
+      loadCuratedFonts: vi.fn(async () => undefined),
+    } as any);
+    const doc = {
+      version: 13,
+      mode: 'image',
+      outputs: [{
+        id: 'wide', formatId: 'custom', name: 'Wide', width: 6000, height: 100,
+        background: '#ffffff', children: [],
+      }],
+    } as any;
+
+    const bytes = await service.renderPage(doc, 0, { pixelRatio: 3 });
+    const metadata = await sharp(bytes).metadata();
+
+    expect(metadata.width).toBe(16384);
+    expect(metadata.height).toBe(273);
+  });
+});

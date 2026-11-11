@@ -414,8 +414,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `ctx.scale()` does not condense glyphs — text is rasterised at the font size with only the origin
   moving. `blurCanvas` therefore uses the browser's native filter when available and retains its
   pixel-space three-pass fallback for node-canvas; text still needs a squeezed rendered bitmap.
+  The native path resets compositing to `source-over` and alpha to 1 inside its save/restore block.
   Styled layers also reuse one inner bitmap for under/over effects instead of recapturing per style.
-  A visual effect that "works locally" and not in an export is almost always this platform split.
+  Server rendering yields between layers, and an oversized requested pixel ratio is reduced to fit
+  the 16384px canvas bound instead of cropping the page. A visual effect that "works locally" and
+  not in an export is almost always this platform split.
 - **The CANVAS is authoritative when two renderers disagree.** It is the authoring surface, and
   stored geometry means what it drew — so a fix goes into the other renderer, not into the canvas.
   Two consequences worth stating outright, because both were wrong on the server for a long time:

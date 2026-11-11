@@ -55,18 +55,27 @@ describe('blurCanvas', () => {
     expect(px(canvas, 10, 20)).toEqual(before);
   });
 
-  it('uses the browser filter instead of pixel reads when available', () => {
+  it('uses the browser filter with neutral compositing instead of pixel reads', () => {
     const previous = (globalThis as any).HTMLCanvasElement;
     let appliedFilter = '';
+    let appliedComposite = '';
+    let appliedAlpha = 0;
     class BrowserCanvas {
       width = 80;
       height = 80;
       context = {
         filter: '',
+        globalCompositeOperation: 'source-over',
+        globalAlpha: 1,
         save: () => {},
         restore: () => {},
         clearRect: () => {},
-        drawImage: () => { appliedFilter = this.context.filter; },
+        drawImage: () => {
+          if (!this.context.filter) return;
+          appliedFilter = this.context.filter;
+          appliedComposite = this.context.globalCompositeOperation;
+          appliedAlpha = this.context.globalAlpha;
+        },
         getImageData: () => { throw new Error('pixel path should not run'); },
       };
       cloneNode() { return new BrowserCanvas(); }
@@ -74,8 +83,13 @@ describe('blurCanvas', () => {
     }
     (globalThis as any).HTMLCanvasElement = BrowserCanvas;
     try {
-      blurCanvas(new BrowserCanvas(), 6);
+      const canvas = new BrowserCanvas();
+      canvas.context.globalCompositeOperation = 'destination-out';
+      canvas.context.globalAlpha = 0.5;
+      blurCanvas(canvas, 6);
       expect(appliedFilter).toBe('blur(6px)');
+      expect(appliedComposite).toBe('source-over');
+      expect(appliedAlpha).toBe(1);
     } finally {
       if (previous === undefined) delete (globalThis as any).HTMLCanvasElement;
       else (globalThis as any).HTMLCanvasElement = previous;
