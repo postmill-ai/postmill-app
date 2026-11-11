@@ -588,13 +588,36 @@ describe('DesignController', () => {
       const doc = { mode: 'image', outputs: [{ id: 'out-1' }] } as any;
       designerDocService.validate.mockReturnValue(doc);
       (controller as any)._designRenderService = {
-        renderPage: vi.fn().mockResolvedValue(Buffer.from('png')),
+        renderPageToFormat: vi.fn().mockResolvedValue({
+          bytes: Buffer.from('png'), mime: 'image/png', extension: 'png',
+        }),
       };
 
       const res = { setHeader: vi.fn(), end: vi.fn() } as any;
       await controller.render(org, { doc, format: 'png' } as any, res);
 
       expect(designerDocService.validate).toHaveBeenCalledWith(doc);
+    });
+
+    it('returns the encoded raster format and quality options', async () => {
+      const doc = { mode: 'image', outputs: [{ id: 'out-1' }] } as any;
+      designerDocService.validate.mockReturnValue(doc);
+      const renderPageToFormat = vi.fn().mockResolvedValue({
+        bytes: Buffer.from('webp'), mime: 'image/webp', extension: 'webp',
+      });
+      (controller as any)._designRenderService = { renderPageToFormat };
+      const res = { setHeader: vi.fn(), end: vi.fn() } as any;
+
+      await controller.render(org, {
+        doc, format: 'webp', outputIndex: 1, pageNumber: 2, pixelRatio: 2, quality: 0.7,
+      } as any, res);
+
+      expect(renderPageToFormat).toHaveBeenCalledWith(
+        doc, 1, { pixelRatio: 2, transparent: undefined, orgId: org.id }, 2, 'webp', 0.7,
+      );
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'image/webp');
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'inline; filename="design.webp"');
+      expect(res.end).toHaveBeenCalledWith(Buffer.from('webp'));
     });
   });
 

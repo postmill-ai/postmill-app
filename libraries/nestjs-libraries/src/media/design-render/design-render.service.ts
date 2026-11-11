@@ -2,6 +2,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import * as path from 'path';
+import sharp from 'sharp';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import {
   isLocalStorageUrl,
@@ -785,6 +786,26 @@ export class DesignRenderService {
     );
 
     return canvas.toBuffer('image/png');
+  }
+
+  async renderPageToFormat(
+    doc: DesignerDoc,
+    outputIndex: number,
+    opts: RenderOptions | undefined,
+    pageNumber: number,
+    format: 'png' | 'jpeg' | 'webp',
+    quality = 0.92,
+  ): Promise<{ bytes: Buffer; mime: string; extension: string }> {
+    const png = await this.renderPage(doc, outputIndex, opts, pageNumber);
+    if (format === 'png') {
+      return { bytes: png, mime: 'image/png', extension: 'png' };
+    }
+    const encoder = sharp(png)[format]({ quality: Math.round(quality * 100) });
+    return {
+      bytes: await encoder.toBuffer(),
+      mime: format === 'jpeg' ? 'image/jpeg' : 'image/webp',
+      extension: format === 'jpeg' ? 'jpg' : 'webp',
+    };
   }
 
   async assertVisualAssets(

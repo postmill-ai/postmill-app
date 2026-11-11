@@ -217,6 +217,12 @@ fixtures. Implemented cases and their fixture contracts are:
   manifest and document, reimports it under a new ID and URL, and confirms the QR remains editable
   after reopening. No generation flag is required.
 
+Multi-output export performance acceptance must run against a production build with browser
+screencast recording active. Export every output at 1× and 3×, assert the page remains responsive
+and the formats/dimensions/transparency are correct, and cold-reopen a shadow-heavy design to check
+both time-to-stable-frame and zero position drift. Static raster previews/exports use the server
+renderer sequentially; do not reintroduce full-resolution off-screen Konva stages for this flow.
+
 Run from `e2e/` after `pnpm install --ignore-workspace`, supplying the appropriate deployment and
 design ID. Example for one authorized background-removal operation on a QA deployment:
 

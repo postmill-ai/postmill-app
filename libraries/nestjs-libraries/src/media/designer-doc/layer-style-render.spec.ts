@@ -2,11 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createCanvas } from 'canvas';
 import { blurCanvas, buildStyleGradient, drawOverStyle, drawUnderStyle } from './layer-style-render';
 
-/**
- * `ctx.filter = 'blur(Npx)'` is accepted and silently ignored by node-canvas,
- * so every blur-based layer style rendered hard-edged in exports while looking
- * correct in the browser. These pin the pixel-space blur that replaced it.
- */
+/** Browser-native blur and the node-canvas pixel fallback share these semantics. */
 
 const px = (canvas: any, x: number, y: number): number[] => {
   const d = canvas.getContext('2d').getImageData(x, y, 1, 1).data;
@@ -57,6 +53,33 @@ describe('blurCanvas', () => {
     blurCanvas(canvas, 0);
     blurCanvas(canvas, -3);
     expect(px(canvas, 10, 20)).toEqual(before);
+  });
+
+  it('uses the browser filter instead of pixel reads when available', () => {
+    const previous = (globalThis as any).HTMLCanvasElement;
+    let appliedFilter = '';
+    class BrowserCanvas {
+      width = 80;
+      height = 80;
+      context = {
+        filter: '',
+        save: () => {},
+        restore: () => {},
+        clearRect: () => {},
+        drawImage: () => { appliedFilter = this.context.filter; },
+        getImageData: () => { throw new Error('pixel path should not run'); },
+      };
+      cloneNode() { return new BrowserCanvas(); }
+      getContext() { return this.context; }
+    }
+    (globalThis as any).HTMLCanvasElement = BrowserCanvas;
+    try {
+      blurCanvas(new BrowserCanvas(), 6);
+      expect(appliedFilter).toBe('blur(6px)');
+    } finally {
+      if (previous === undefined) delete (globalThis as any).HTMLCanvasElement;
+      else (globalThis as any).HTMLCanvasElement = previous;
+    }
   });
 });
 

@@ -170,8 +170,8 @@ Gate composer/UI features per channel on the shared capability matrix, not on ad
 
 | Path | Where | Used for |
 |---|---|---|
-| Konva | `designer/elements.tsx`, `designer/video-canvas-overlay.tsx` | the canvas *and* PNG/JPEG/WebP export |
-| node-canvas | `design-render/design-render.service.ts` | PDF and bulk generation |
+| Konva | `designer/elements.tsx`, `designer/video-canvas-overlay.tsx` | the canvas, page thumbnails and SVG rasterization |
+| node-canvas | `design-render/design-render.service.ts` | PDF, bulk generation, and static PNG/JPEG/WebP previews/exports through `/media/designs/render` |
 | a browser script | `design-render/frame-renderer-script.ts` | video frames, in headless Chromium |
 | an SVG translator | `designer-doc/svg-export.ts` | SVG export |
 
@@ -412,8 +412,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   frame renderer, SVG, previews, Files and `.pdesign` all use the existing raster source and document fields.
 - **node-canvas is not a browser canvas.** `ctx.filter = 'blur(…)'` is accepted and ignored, and
   `ctx.scale()` does not condense glyphs — text is rasterised at the font size with only the origin
-  moving. Anything that needs either must work in pixel space (`blurCanvas`) or squeeze a rendered
-  bitmap. A visual effect that "works locally" and not in an export is almost always this.
+  moving. `blurCanvas` therefore uses the browser's native filter when available and retains its
+  pixel-space three-pass fallback for node-canvas; text still needs a squeezed rendered bitmap.
+  Styled layers also reuse one inner bitmap for under/over effects instead of recapturing per style.
+  A visual effect that "works locally" and not in an export is almost always this platform split.
 - **The CANVAS is authoritative when two renderers disagree.** It is the authoring surface, and
   stored geometry means what it drew — so a fix goes into the other renderer, not into the canvas.
   Two consequences worth stating outright, because both were wrong on the server for a long time:
