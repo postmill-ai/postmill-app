@@ -62,7 +62,7 @@ describe('AiDesignerArtDirectorService', () => {
   it('threads the dispatch signal into the plan-generation generateObject call', async () => {
     model.generateObject.mockResolvedValue({
       type: 'plans',
-      plans: [{ concept: 'x' }],
+      plans: [{ concept: 'x', slots: [{ id: 'headline', role: 'headline', kind: 'text' }] }],
     });
     const controller = new AbortController();
 
@@ -74,23 +74,15 @@ describe('AiDesignerArtDirectorService', () => {
     expect(model.generateObject.mock.calls[0][3].signal).toBe(controller.signal);
   });
 
-  it('falls back to a single plan when every plan item is invalid', async () => {
+  it('fails planning instead of returning a generic paid plan when every item is invalid', async () => {
     model.generateObject.mockResolvedValue({
       type: 'plans',
       plans: [{ concept: 'x' }],
     });
 
-    const res = await handler(makeRequest(), 'org1');
-    const content = JSON.parse(res.content);
-
-    expect(content.type).toBe('plans');
-    expect(content.plans).toHaveLength(1);
-    const plan: DesignPlan = content.plans[0];
-    expect(plan.concept).toBe('A bold product launch graphic');
-    expect(plan.fallback).toBe(true);
-    expect(Array.isArray(plan.slots)).toBe(true);
-    expect(plan.slots.length).toBeGreaterThan(0);
-    expect(plan.slots.every((s) => typeof s.id === 'string')).toBe(true);
+    await expect(handler(makeRequest(), 'org1')).rejects.toThrow(
+      'AI response contained no valid plan items'
+    );
   });
 
   it('drops invalid plan items instead of replacing them with fallbacks', async () => {
@@ -123,7 +115,9 @@ describe('AiDesignerArtDirectorService', () => {
       plans: [{ concept: 'missing slots' }],
     });
 
-    await handler(makeRequest(), 'org1');
+    await expect(handler(makeRequest(), 'org1')).rejects.toThrow(
+      'AI response contained no valid plan items'
+    );
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -144,7 +138,9 @@ describe('AiDesignerArtDirectorService', () => {
       ],
     });
 
-    await handler(makeRequest(), 'org1');
+    await expect(handler(makeRequest(), 'org1')).rejects.toThrow(
+      'AI response contained no valid plan items'
+    );
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('schema-v2 fields failed validation:')

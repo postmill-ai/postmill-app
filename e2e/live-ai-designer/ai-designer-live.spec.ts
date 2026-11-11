@@ -7,6 +7,7 @@ const productionTarget = process.env.E2E_BASE
   ? new URL(process.env.E2E_BASE).hostname === 'app.postmill.ai'
   : false;
 const productionAllowed = process.env.E2E_LIVE_PRODUCTION === '1';
+const acceptanceCase = process.env.E2E_LIVE_AI_CASE || 'logo';
 
 test.skip(!enabled, 'Requires E2E_LIVE_AI_DESIGNER=1');
 test.skip(enabled && !generationAllowed, 'Paid AI Designer acceptance requires E2E_LIVE_GENERATION=1');
@@ -35,7 +36,8 @@ const mediaRefs = (value: unknown): string[] => {
 
 async function openDesign(
   page: Page,
-  button: Locator
+  button: Locator,
+  screenshotPath?: string,
 ): Promise<{ id: string; design: Record<string, unknown> }> {
   const responsePromise = page.waitForResponse((response) => {
     if (response.request().method() !== 'GET') return false;
@@ -47,10 +49,13 @@ async function openDesign(
   expect(response.ok(), 'the delivered design must load in the Designer modal').toBe(true);
   const design = await response.json() as Record<string, unknown>;
   expect(typeof design.id, 'the design response must include its id').toBe('string');
+  if (screenshotPath) await page.screenshot({ path: screenshotPath, fullPage: true });
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Edit in Designer', exact: true })).toHaveCount(0);
   return { id: design.id as string, design };
 }
+
+test.skip(acceptanceCase !== 'logo', 'The logo case runs only with E2E_LIVE_AI_CASE=logo');
 
 test('original logo and palette survive generation, and text-only revision preserves media', async ({ page }) => {
   requiredEnv('E2E_BASE');
@@ -109,4 +114,56 @@ test('original logo and palette survive generation, and text-only revision prese
   const revised = await openDesign(page, editDesignButtons.last());
   expect(revised.id).not.toBe(original.id);
   expect(mediaRefs(revised.design)).toEqual(originalRefs);
+});
+
+test.skip(acceptanceCase !== 'subject', 'The subject case runs only with E2E_LIVE_AI_CASE=subject');
+
+test('a screenshot-guided laptop mockup preserves the requested subject', async ({ page }) => {
+  requiredEnv('E2E_BASE');
+  await page.goto('/media/ai-designer');
+  await page.getByRole('button', { name: 'Prompt', exact: true }).click();
+  const instagramPost = page.getByRole('button', { name: /Instagram Post/ });
+  await instagramPost.click();
+  await expect(instagramPost).toHaveAttribute('aria-pressed', 'true');
+  await page.getByLabel('Variants', { exact: true }).fill('1');
+  await page.getByRole('button', { name: 'Add reference', exact: true }).click();
+
+  const screenshot = new PNG({ width: 640, height: 360 });
+  const rect = (left: number, top: number, width: number, height: number, rgb: number[]) => {
+    for (let y = top; y < top + height; y += 1) {
+      for (let x = left; x < left + width; x += 1) {
+        const index = (y * 640 + x) * 4;
+        screenshot.data[index] = rgb[0];
+        screenshot.data[index + 1] = rgb[1];
+        screenshot.data[index + 2] = rgb[2];
+        screenshot.data[index + 3] = 255;
+      }
+    }
+  };
+  rect(0, 0, 640, 360, [20, 24, 38]);
+  rect(40, 35, 560, 260, [235, 239, 248]);
+  rect(60, 55, 220, 28, [44, 85, 210]);
+  rect(60, 105, 460, 14, [160, 170, 190]);
+  rect(60, 135, 380, 14, [160, 170, 190]);
+  rect(60, 180, 180, 70, [44, 85, 210]);
+  rect(270, 180, 250, 70, [190, 198, 215]);
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'e2e-designer-canvas.png',
+    mimeType: 'image/png',
+    buffer: PNG.sync.write(screenshot),
+  });
+  await expect(page.getByText('e2e-designer-canvas.png', { exact: true }).last()).toBeVisible({ timeout: 90_000 });
+  await page.getByText('e2e-designer-canvas.png', { exact: true }).last().click();
+  await page.getByRole('button', { name: /Confirm \(\d+\)/ }).click();
+  await page.getByLabel('Prompt', { exact: true }).fill(
+    'Create a Social Media post for Postmill AI. Make a laptop mockup with the Designer Canvas on the screen. Screenshot attached.'
+  );
+  await page.getByRole('button', { name: 'Start designing', exact: true }).click();
+  await page.getByRole('button', { name: 'Accept plan', exact: true }).click({ timeout: 180_000 });
+
+  const editDesignButtons = page.getByRole('button', { name: 'Edit in Designer', exact: true });
+  await expect(editDesignButtons.first()).toBeVisible({ timeout: 300_000 });
+  const delivered = await openDesign(page, editDesignButtons.first(), '/tmp/qa-ai-subject-laptop.png');
+  expect(JSON.stringify(delivered.design)).toContain('"type":"image"');
 });

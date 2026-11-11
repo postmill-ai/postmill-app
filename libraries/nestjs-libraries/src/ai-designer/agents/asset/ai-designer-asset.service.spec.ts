@@ -1190,6 +1190,25 @@ describe('AiDesignerAssetService image-to-image conditioning (PR D)', () => {
     expect(JSON.parse(response.content).assets['s1'].source).toBe('stock');
   });
 
+  it('returns no asset instead of substituting stock when the subject requires a reference', async () => {
+    const { service, aiDefaults, stockMedia, fileService } = makeI2iService();
+    aiDefaults.imageToImage.mockRejectedValue(new Error('i2i down'));
+    aiDefaults.textToImage.mockRejectedValue(new Error('t2i down'));
+
+    const response = await (service as any)._handler(
+      sourceRequest({
+        sourceUrl: 'https://cdn.example/ref.png',
+        allowStockFallback: false,
+      })
+    );
+
+    expect(stockMedia.searchPhotos).not.toHaveBeenCalled();
+    expect(aiDefaults.textToImage).not.toHaveBeenCalled();
+    expect(fileService.importFromUrl).not.toHaveBeenCalled();
+    expect(fileService.saveGeneratedMedia).not.toHaveBeenCalled();
+    expect(JSON.parse(response.content).assets).toEqual({});
+  });
+
   it('ignores a sourceUrl that is neither https nor an image data URI', async () => {
     const { service, aiDefaults } = makeI2iService();
 

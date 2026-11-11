@@ -4285,6 +4285,46 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     ).toHaveLength(1);
   });
 
+  it('disables stock substitution for a subject_fidelity regeneration', async () => {
+    const emitter = makeEmitter();
+    const { conductor, regenDispatches } = makeRegenConductor({
+      primarySkipped: true,
+      criticFindings: (call) => (call === 1 ? [] : [{
+        ...REGEN_FINDING,
+        criterion: 'subject_fidelity',
+        issue: 'The render has a mountain but no laptop showing the Designer Canvas',
+        fix: {
+          ...REGEN_FINDING.fix,
+          regenerateAsset: { slotId: 'hero', brief: 'laptop with the Designer Canvas on screen' },
+        },
+      }]),
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    const need = regenDispatches()[0][2].assetNeeds[0];
+    expect(need.allowStockFallback).toBe(false);
+    expect(need.brief).toContain('laptop with the Designer Canvas on screen');
+  });
+
+  it('refuses delivery when the only variant misses the requested subject', async () => {
+    const emitter = makeEmitter();
+    const { conductor, service } = makeRegenConductor({
+      primarySkipped: false,
+      criticFindings: () => [{
+        ...REGEN_FINDING,
+        criterion: 'subject_fidelity',
+        issue: 'The render has a mountain but no laptop showing the Designer Canvas',
+      }],
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(JSON.stringify(service.appendMessage.mock.calls)).toContain(
+      'No generated variant contains the requested subject'
+    );
+  });
+
   it('caps a brand_safety slot at ONE stock attempt — the technique must change', async () => {
     const emitter = makeEmitter();
     const { conductor, regenDispatches } = makeRegenConductor({
@@ -5062,8 +5102,10 @@ describe('AiDesignerConductorService stamps sourceFileId on design-carrying asse
     const bg = needs.find((n: any) => n.slotId === 'v1:bg');
     const accent = needs.find((n: any) => n.slotId === 'v1:accent');
     expect(bg.sourceFileId).toBe('file-a');
+    expect(bg.allowStockFallback).toBe(false);
     expect(accent).toBeDefined();
     expect(accent).not.toHaveProperty('sourceFileId');
+    expect(accent).not.toHaveProperty('allowStockFallback');
   });
 
   it('stamps the reference onto hero-layout subject image slots too', async () => {
@@ -6544,7 +6586,7 @@ describe('AiDesignerConductorService stock fallback disclosure (PR C)', () => {
       )
       .map((call) => call[0].content.md)
       .join('\n');
-    return { headsUp };
+    return { headsUp, dispatch: (conductor as any)._dispatchAgent };
   };
 
   const STOCK = {
@@ -6568,10 +6610,8 @@ describe('AiDesignerConductorService stock fallback disclosure (PR C)', () => {
     );
   });
 
-  it('discloses stock served by the deterministic fallback plan', async () => {
-    // The fallback plan used to hardcode prefer:'stock' — it now asks for
-    // 'either', and a stock landing is disclosed like any other fallback.
-    const { headsUp } = await runPipelineWithAsset(
+  it('rejects a generic fallback plan before paid composition', async () => {
+    const { dispatch } = await runPipelineWithAsset(
       {
         slotId: 'image',
         brief: 'A high-quality background image matching the brief',
@@ -6581,8 +6621,7 @@ describe('AiDesignerConductorService stock fallback disclosure (PR C)', () => {
       { fallback: true }
     );
 
-    expect(headsUp).toContain('planning ran in fallback mode');
-    expect(headsUp).toContain('a stock photo was used');
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('stays silent when the planner deliberately chose stock', async () => {

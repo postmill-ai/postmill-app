@@ -345,6 +345,12 @@ export class AiDesignerAssetService implements OnModuleInit {
     }
 
     throwIfAborted(signal);
+    if (need.allowStockFallback === false) {
+      this._logger.warn(
+        `Asset for slot ${assetKey(need.slotId, need.aspect)} has no reference-conditioned result; stock substitution is disabled for this subject.`
+      );
+      return null;
+    }
     const stock = await this._tryStock(orgId, need, regenerate, sessionId);
     if (stock) return stock;
 
@@ -364,11 +370,8 @@ export class AiDesignerAssetService implements OnModuleInit {
     const timeoutMs = Number.isFinite(raw) && raw > 0 ? raw : 90_000;
     const prompt = this._buildPrompt(need, regenerate);
     // Reference-conditioned generation: a need carrying a source image tries
-    // the org's image-to-image default FIRST — the reference steers the
-    // pixels directly instead of only through the prose cues. Unconfigured
-    // (DefaultNotConfiguredError) or failed i2i falls through to the ordinary
-    // text-to-image path; the retry/fallback chain around this call is
-    // unchanged either way.
+    // the org's image-to-image default FIRST. Ordinary text-to-image remains a
+    // fallback except when the subject requires the reference to survive.
     const sourceUrl = await this._sourceUrlFor(orgId, need);
     if (sourceUrl) {
       try {
@@ -378,8 +381,8 @@ export class AiDesignerAssetService implements OnModuleInit {
           { signal, label: 'Asset image-to-image generation' }
         );
       } catch (err) {
-        // A cancel belongs to the whole run, not to this technique swap.
         throwIfAborted(signal);
+        if (need.allowStockFallback === false) throw err;
         this._logger.warn(
           `Image-to-image generation failed for slot ${assetKey(need.slotId, need.aspect)} — falling back to text-to-image: ${(err as Error).message}`
         );

@@ -225,6 +225,7 @@ export class AiDesignerConductorService {
     'display_hierarchy',
     'composition_balance',
     'offer_fidelity',
+    'subject_fidelity',
     // A render that ignores the art direction the user APPROVED (composition
     // never manifests, declared decor absent, background kind wrong) is a
     // ship-blocker too — the plan card is a contract, not a mood board.
@@ -1493,6 +1494,9 @@ export class AiDesignerConductorService {
     if (plans.length === 0) {
       throw new Error('No design plans were generated');
     }
+    if (plans.some((plan) => plan.fallback)) {
+      throw new Error('Design planning did not produce a usable concept. Please retry.');
+    }
 
     // Hard ceiling on executed plans, regardless of where they came from: the
     // DTO caps config.variants at 10, but `brief.lastPlans` is stored JSON —
@@ -1503,10 +1507,7 @@ export class AiDesignerConductorService {
     // Honest-degradation trail: everything that silently fell back below gets
     // one user-facing note at delivery (never one message per note).
     const notes: string[] = [];
-    const fallbackCount = plans.filter((p) => p.fallback).length;
-    if (fallbackCount > 0 && fallbackCount === plans.length) {
-      notes.push('planning ran in fallback mode, so the concepts are generic');
-    } else if (!presetPlans && plans.length < maxPlans) {
+    if (!presetPlans && plans.length < maxPlans) {
       // Only a genuine planning shortfall (art-director returned fewer plans
       // than requested) earns this note — a deliberate subset accept
       // (presetPlans present) is not a planning failure.
@@ -1807,6 +1808,7 @@ export class AiDesignerConductorService {
     // un-critiqued result, never roll the session back and orphan the saved
     // designs.
     const heldBack = new Set<string>();
+    const subjectIssues: string[] = [];
     // Variants whose PRIMARY render passed its first critique clean. Their
     // seeded formats are faithful re-fits of that render, so the expansion
     // loop skips their per-format critique passes (each would be a vision
@@ -2260,8 +2262,15 @@ export class AiDesignerConductorService {
       // an empty set.
       if (aestheticFindings.length > 0) {
         const firstIssue = aestheticFindings[0].issue;
+        const subjectIssue = aestheticFindings.find((finding) => finding.criterion === 'subject_fidelity')?.issue;
         const referenceRun = (config.referenceFileIds ?? []).length > 0;
-        if (referenceRun && results.length - heldBack.size > 1) {
+        if (subjectIssue) {
+          heldBack.add(results[i].variantId);
+          subjectIssues.push(subjectIssue);
+          notes.push(
+            `variant ${i + 1} was held back — it does not contain the requested subject (${subjectIssue})`
+          );
+        } else if (referenceRun && results.length - heldBack.size > 1) {
           heldBack.add(results[i].variantId);
           notes.push(
             `variant ${i + 1} was held back — after ${AiDesignerConductorService.MAX_QUALITY_PASSES} review passes it still missed the quality bar (${firstIssue})`
@@ -2289,6 +2298,9 @@ export class AiDesignerConductorService {
       results.length = 0;
       results.push(...survivors.map(({ result }) => result));
       ordinals = survivors.map(({ ordinal }) => ordinal);
+    }
+    if (results.length === 0 && subjectIssues.length > 0) {
+      throw new Error(`No generated variant contains the requested subject: ${subjectIssues[0]}. Please retry.`);
     }
 
     // Best-of-N against the reference (winner-only delivery): every run used
@@ -3460,7 +3472,7 @@ export class AiDesignerConductorService {
           aspect: primaryAspect,
           heroLayout,
           ...(sourceFileId && (isBackground || heroLayout)
-            ? { sourceFileId }
+            ? { sourceFileId, allowStockFallback: false }
             : {}),
         });
       }
@@ -3709,6 +3721,7 @@ export class AiDesignerConductorService {
             .join('. '),
           prefer: technique === 'stock' ? 'stock' : planNeed?.prefer ?? 'generate',
           ...(technique === 'stock' ? { stockOnly: true } : {}),
+          ...(finding.criterion === 'subject_fidelity' ? { allowStockFallback: false } : {}),
           aspect: primary
             ? aspectClass(primary.width, primary.height)
             : 'square',
@@ -5644,6 +5657,9 @@ export class AiDesignerConductorService {
       return "That request was blocked by this workspace's content guardrails.";
     }
     const message = (err as Error)?.message ?? '';
+    if (message.startsWith('No generated variant contains the requested subject:')) {
+      return message;
+    }
     if (/budget/i.test(message)) {
       return 'The AI budget for this workspace is exhausted — an admin can raise it under Settings → AI.';
     }
@@ -5682,6 +5698,13 @@ export class AiDesignerConductorService {
 
     const validPlans: DesignPlan[] = [];
     for (const plan of raw) {
+      if (plan?.fallback) {
+        this._logger.warn(
+          'Dropping a generic fallback plan before paid composition.',
+          AiDesignerConductorService.name
+        );
+        continue;
+      }
       if (
         plan &&
         typeof plan.variantId === 'string' &&
