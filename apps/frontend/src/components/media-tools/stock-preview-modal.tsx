@@ -100,6 +100,7 @@ export const StockPreviewModal: FC<StockPreviewModalProps> = ({ item: initialIte
     // Free SVG sources are rasterized in the browser (`/files/import` rejects SVG).
     // Premium content packs must go through `/files/import` so the server mints and
     // stores the licensed asset — rasterizing would save the low-res preview instead.
+    // The server renders a licensed SVG download to PNG, so SVG never 415s there.
     const rasterize =
       !isContentPack &&
       (type === 'icon' || (type === 'vector' && /\.svg(?:$|[?#])/i.test(item.url)));

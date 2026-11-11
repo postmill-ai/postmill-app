@@ -418,6 +418,8 @@ describe('FilesController', () => {
         source: 'magnific',
         downloadLocation: 'asset-123',
         type: 'photo',
+        // Licensed downloads may be SVG — the service rasterizes instead of 415ing.
+        rasterizeSvg: true,
       });
       expect(result).toEqual({ id: 'file-1' });
     });

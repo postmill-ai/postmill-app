@@ -501,7 +501,13 @@ export class FilesController {
           body.downloadLocation,
           body.type,
         );
-        return this._fileService.importFromUrl(org.id, { ...body, url: licensedUrl });
+        // Licensed downloads can be SVG (provider-chosen format); the service
+        // rasterizes them to PNG rather than rejecting — never storing raw SVG.
+        return this._fileService.importFromUrl(org.id, {
+          ...body,
+          url: licensedUrl,
+          rasterizeSvg: true,
+        });
       } catch (err) {
         if (err instanceof ContentPackDailyCapError) {
           throw new HttpException(err.message, 402);
