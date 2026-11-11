@@ -44,7 +44,7 @@ import { ExportPreflight } from './export-preflight';
 import { openDesignerPreflightFinding } from './preflight-navigation';
 import {
   MAX_UPLOAD_BYTES,
-  renderWithFormatFallback,
+  renderOutputWithFallback,
   type ExportFallbackFormat,
 } from './export-format';
 
@@ -407,19 +407,6 @@ const renderOutputAsSvg = async (
   });
 };
 
-const renderOutputWithFallback = async (
-  output: DesignerOutput,
-  format: ExportFallbackFormat,
-  quality: number,
-  scale: number,
-  symbols?: SymbolDefinition[]
-): Promise<{ blob: Blob; usedFormat: ExportFallbackFormat; usedQuality: number; usedScale: number }> =>
-  renderWithFormatFallback(format, quality, scale, async (nextFormat, nextQuality, nextScale) => {
-    const blob = await renderOutputToBlob(output, nextFormat, nextQuality, nextScale, symbols);
-    if (!blob) throw new Error('Render failed');
-    return blob;
-  });
-
 /**
  * One page of an output as a standalone output view (doc v8) — same canvas
  * size, the page's own background override and children. The render/export
@@ -436,8 +423,8 @@ const outputPageView = (output: DesignerOutput, page: number): DesignerOutput =>
 
 // --- Thumbnail renderer ---
 
-// Exported for the pages panel's thumbnail strip — same off-screen Konva
-// render, so a page thumb always matches the export pipeline's output.
+// Exported for the pages panel's thumbnail strip. Export-dialog previews use
+// the server renderer instead, so opening a multi-output export stays responsive.
 export const renderOutputThumbnail = async (
   output: DesignerOutput,
   symbols?: SymbolDefinition[]
@@ -563,6 +550,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState({ done: 0, total: 0 });
   const [savedFiles, setSavedFiles] = useState<ExportedFile[]>([]);
   const [previews, setPreviews] = useState<{ idx: number; dataUrl: string }[]>([]);
   const [loadingPreviews, setLoadingPreviews] = useState(false);
@@ -1378,15 +1366,20 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     previewDoneRef.current = true;
     setLoadingPreviews(true);
     const result: { idx: number; dataUrl: string }[] = [];
-    for (let i = 0; i < selectedOutputs.length; i++) {
-      const out = selectedOutputs[i];
-      if (!('children' in out)) continue;
-      const dataUrl = await renderOutputThumbnail(out as DesignerOutput, doc.symbols);
-      if (dataUrl) result.push({ idx: i, dataUrl });
+    try {
+      for (let i = 0; i < selectedOutputs.length; i++) {
+        const out = selectedOutputs[i];
+        if (!('children' in out)) continue;
+        const { blob } = await renderOutputWithFallback(doc, out as DesignerOutput, 'png', 1, 0.25, fetch);
+        result.push({ idx: i, dataUrl: await blobDataUrl(blob) });
+      }
+      setPreviews(result);
+    } catch (error) {
+      toaster.show((error as Error).message || t('designer_export_failed', 'Export failed'), 'warning');
+    } finally {
+      setLoadingPreviews(false);
     }
-    setPreviews(result);
-    setLoadingPreviews(false);
-  }, [selectedOutputs]);
+  }, [selectedOutputs, doc, fetch, toaster, t]);
 
   useEffect(() => {
     if (step === 'export') {
@@ -1414,6 +1407,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
 
   const handleExport = useCallback(async () => {
     setExporting(true);
+    setExportProgress({ done: 0, total: selectedOutputs.length });
     try {
       // A re-export replaces the last batch's download URLs.
       downloadUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -1445,6 +1439,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
             name: pdfName,
             outputId: selectedOutputs[0].id,
           });
+          setExportProgress({ done: selectedOutputs.length, total: selectedOutputs.length });
         }
       } else {
         for (let i = 0; i < selectedOutputs.length; i++) {
@@ -1492,11 +1487,12 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                 continue;
               }
               const { blob, usedFormat, usedQuality, usedScale } = await renderOutputWithFallback(
+                doc,
                 pageView,
                 fmt as ExportFallbackFormat,
                 quality,
                 scale,
-                doc.symbols
+                fetch,
               );
               if (usedScale !== scale || usedQuality !== quality) {
                 const reduction = [
@@ -1526,6 +1522,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                 });
               }
             }
+            setExportProgress({ done: i + 1, total: selectedOutputs.length });
           } catch (err) {
             toaster.show((err as Error).message || t('designer_export_failed', 'Export failed'), 'warning');
             setExporting(false);
@@ -1560,6 +1557,9 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     }
   }, [
     store,
+    doc,
+    fetch,
+    t,
     outputFormats,
     quality,
     scale,
@@ -1979,7 +1979,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
               className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
             >
               {exporting
-                ? t('designer_exporting_ellipsis', 'Exporting...')
+                ? t('designer_exporting_progress', 'Exporting {{done}}/{{total}}…', exportProgress)
                 : creatingDrafts
                   ? t('designer_creating_drafts_ellipsis', 'Creating drafts...')
                   : isCreatePost

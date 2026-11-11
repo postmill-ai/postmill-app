@@ -1,3 +1,7 @@
+import type { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import type { DesignerDoc, DesignerOutput } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { readErrorMessage } from './read-error-message';
+
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 export type ExportFallbackFormat = 'png' | 'jpeg' | 'transparent' | 'webp';
@@ -38,3 +42,30 @@ export const renderWithFormatFallback = async (
   const label = format === 'transparent' ? 'Transparent PNG' : format.toUpperCase();
   throw new Error(`Could not reduce ${label} under 10 MB. Choose a smaller scale or JPEG.`);
 };
+
+export const renderOutputWithFallback = async (
+  doc: DesignerDoc,
+  output: DesignerOutput,
+  format: ExportFallbackFormat,
+  quality: number,
+  scale: number,
+  fetchFn: ReturnType<typeof useFetch>,
+): Promise<FallbackRenderResult> =>
+  renderWithFormatFallback(format, quality, scale, async (nextFormat, nextQuality, nextScale) => {
+    const response = await fetchFn('/media/designs/render', {
+      method: 'POST',
+      body: JSON.stringify({
+        doc: { ...doc, outputs: [output] },
+        outputIndex: 0,
+        pageNumber: 0,
+        format: nextFormat === 'transparent' ? 'png' : nextFormat,
+        quality: nextQuality,
+        pixelRatio: nextScale,
+        transparent: nextFormat === 'transparent',
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response, 'Render failed'));
+    }
+    return response.blob();
+  });

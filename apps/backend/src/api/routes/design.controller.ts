@@ -374,15 +374,18 @@ export class DesignController {
       return;
     }
 
-    const png = await this._designRenderService.renderPage(
+    const format = body.format ?? 'png';
+    const rendered = await this._designRenderService.renderPageToFormat(
       doc,
       body.outputIndex ?? body.pageIndex ?? 0,
       opts,
       body.pageNumber ?? 0,
+      format,
+      body.quality,
     );
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Content-Disposition', 'inline; filename="design.png"');
-    res.end(png);
+    res.setHeader('Content-Type', rendered.mime);
+    res.setHeader('Content-Disposition', `inline; filename="design.${rendered.extension}"`);
+    res.end(rendered.bytes);
   }
 
   /**
