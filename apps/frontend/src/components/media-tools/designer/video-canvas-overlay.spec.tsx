@@ -494,6 +494,8 @@ describe('video overlay selection and gesture commits', () => {
     first.position({ x: 45, y: 55 });
     second.position({ x: 205, y: 115 });
     const depth = store.getState().history.length;
+    await act(async () => first.fire('dragstart'));
+    expect(store.getState().gestureDepth).toBe(1);
     await act(async () => {
       first.fire('dragend');
       second.fire('dragend');
@@ -502,6 +504,7 @@ describe('video overlay selection and gesture commits', () => {
     const clips = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips;
     expect(clips.map((clip) => [clip.x, clip.y])).toEqual([[45, 55], [205, 115]]);
     expect(store.getState().history.length).toBe(depth + 1);
+    expect(store.getState().gestureDepth).toBe(0);
     await act(async () => store.getState().undo());
     const restored = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips;
     expect(restored.map((clip) => [clip.x, clip.y])).toEqual([[20, 30], [180, 90]]);

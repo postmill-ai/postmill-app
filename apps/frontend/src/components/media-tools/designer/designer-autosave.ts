@@ -78,32 +78,44 @@ export const createAutosaveSubscription = (
 ): (() => void) => {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let prev = store.getState();
-  const schedule = () => {
+  const clearTimer = () => {
     if (timer) clearTimeout(timer);
+    timer = null;
+  };
+  const schedule = () => {
+    clearTimer();
     timer = setTimeout(() => {
       timer = null;
       const s = store.getState();
-      if (s.isDirty) designAutosave.save(s.doc);
+      if (s.isDirty && s.gestureDepth === 0) designAutosave.save(s.doc);
     }, debounceMs);
   };
   const unsubscribe = store.subscribe((state) => {
     const prevState = prev;
     prev = state;
     if (state.doc !== prevState.doc || state.designName !== prevState.designName) {
-      schedule();
+      if (state.gestureDepth > 0) clearTimer();
+      else schedule();
+    } else if (state.gestureDepth === 0 && prevState.gestureDepth > 0) {
+      if (state.isDirty) schedule();
     } else if (
       state.previewRevision !== prevState.previewRevision &&
       !state.isPreviewing &&
-      state.isDirty
+      state.isDirty &&
+      state.gestureDepth === 0
     ) {
       schedule();
-    } else if (state.designId !== prevState.designId && state.designId) {
+    } else if (
+      state.designId !== prevState.designId &&
+      state.designId &&
+      state.gestureDepth === 0
+    ) {
       designAutosave.save(state.doc);
     }
   });
   return () => {
     unsubscribe();
-    if (timer) clearTimeout(timer);
+    clearTimer();
   };
 };
 
@@ -116,6 +128,8 @@ export interface DesignAutosave {
    * untouched canvas).
    */
   save: (sentDoc: DesignerDoc) => void;
+  /** Manual Save: skip debounce/idle capture and wait for the queued write. */
+  saveNow: (sentDoc: DesignerDoc) => Promise<void>;
   /**
    * Create the design once and resolve to its id. Concurrent callers share the
    * same in-flight POST — manual Save awaits this so Cmd+S mid-create can
@@ -132,6 +146,7 @@ export const createDesignAutosave = ({
   uploadPreview,
 }: DesignAutosaveDeps): DesignAutosave => {
   let createPromise: Promise<string> | null = null;
+  let createDoc: DesignerDoc | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retryAttempt = 0;
   /**
@@ -150,6 +165,43 @@ export const createDesignAutosave = ({
    * which also orphaned a File row until the next successful save).
    */
   let lastFailed: { doc: DesignerDoc; name: string; preview: PreviewUpload } | null = null;
+  let lastPersistedDoc: DesignerDoc | null = null;
+
+  type PreviewTask = { promise: Promise<PreviewUpload>; start: () => void };
+  const previewTasks = new Map<DesignerDoc, PreviewTask>();
+  const schedulePreview = (work: () => void) => {
+    if (typeof globalThis.requestIdleCallback === 'function') {
+      const id = globalThis.requestIdleCallback(work, { timeout: 1000 });
+      return () => globalThis.cancelIdleCallback(id);
+    }
+    const id = setTimeout(work, 0);
+    return () => clearTimeout(id);
+  };
+  const previewFor = (doc: DesignerDoc, immediate: boolean): Promise<PreviewUpload> => {
+    if (doc.mode === 'video') return Promise.resolve({});
+    const existing = previewTasks.get(doc);
+    if (existing) {
+      if (immediate) existing.start();
+      return existing.promise;
+    }
+    let cancelIdle = () => {};
+    let started = false;
+    let resolveTask: (preview: PreviewUpload) => void = () => {};
+    const promise = new Promise<PreviewUpload>((resolve) => {
+      resolveTask = resolve;
+    });
+    const start = () => {
+      if (started) return;
+      started = true;
+      cancelIdle();
+      uploadPreview().then(resolveTask, () => resolveTask({}));
+    };
+    const task = { promise, start };
+    previewTasks.set(doc, task);
+    if (immediate) start();
+    else cancelIdle = schedulePreview(start);
+    return promise;
+  };
 
   const clearRetry = () => {
     if (retryTimer) clearTimeout(retryTimer);
@@ -199,25 +251,32 @@ export const createDesignAutosave = ({
     s.setSaveRetryPaused(false);
   };
 
-  const ensureCreated = (): Promise<string> => {
+  const retainPreview = (sentDoc: DesignerDoc) => {
+    const task = previewTasks.get(sentDoc);
+    previewTasks.clear();
+    if (lastPersistedDoc && task) previewTasks.set(lastPersistedDoc, task);
+  };
+
+  const ensureCreated = (immediate = true): Promise<string> => {
     const existing = store.getState().designId;
     if (existing) return Promise.resolve(existing);
-    if (createPromise) return createPromise;
+    if (createPromise) {
+      if (immediate && createDoc) previewTasks.get(createDoc)?.start();
+      return createPromise;
+    }
+    createDoc = store.getState().doc;
     createPromise = (async () => {
       try {
         const s = store.getState();
         const sentDoc = s.doc;
         const sentName = s.designName;
-        // Best-effort preview, identical fallback semantics to manual save:
-        // upload wins, else base64, else nothing. A thumbnail failure must
-        // never sink the create, so degrade to no preview. A retry of a failed
-        // create for the same doc + name reuses the preview it already
-        // uploaded rather than serializing the canvas again.
+        // Preview work is shared by doc reference; manual Save can promote an
+        // idle capture to immediate work without starting a second upload.
         const { previewFileId, previewDataUrl } = sentDoc.mode === 'video'
           ? {} as PreviewUpload
           : lastFailed && lastFailed.doc === sentDoc && lastFailed.name === sentName
             ? lastFailed.preview
-            : await uploadPreview().catch(() => ({}) as PreviewUpload);
+            : await previewFor(sentDoc, immediate);
         const payload: Record<string, unknown> = {
           name: sentName,
           doc: sentDoc,
@@ -255,36 +314,38 @@ export const createDesignAutosave = ({
         const after = store.getState();
         if (after.doc === sentDoc && after.designName === sentName) {
           if (data.doc) after.adoptPersistedDoc(sentDoc, data.doc);
+          lastPersistedDoc = store.getState().doc;
           store.getState().markSaved();
+        } else {
+          lastPersistedDoc = (data.doc as DesignerDoc | undefined) ?? sentDoc;
         }
+        retainPreview(sentDoc);
         notePersisted();
         return data.id as string;
       } finally {
         createPromise = null;
+        createDoc = null;
       }
     })();
     return createPromise;
   };
 
-  const putDoc = async (designId: string, sentDoc: DesignerDoc) => {
-    // Check staleness BEFORE uploading: the PUT below omits preview fields
-    // for a stale doc, so a thumbnail uploaded for one would orphan its
-    // File row in the library (backend cleanup only deletes REPLACED
-    // referenced previews).
+  const putDoc = async (designId: string, sentDoc: DesignerDoc, immediate: boolean) => {
+    // A name-only save needs no new bitmap. Otherwise share capture/upload by
+    // doc reference, and never attach a stale upload to a newer document.
     let preview: PreviewUpload = {};
-    if (sentDoc.mode !== 'video' && store.getState().doc === sentDoc) {
+    if (
+      sentDoc.mode !== 'video' &&
+      lastPersistedDoc !== sentDoc &&
+      store.getState().doc === sentDoc
+    ) {
       if (lastFailed && lastFailed.doc === sentDoc) {
-        // A backoff retry for a doc whose preview already uploaded — reuse it
-        // instead of re-serializing the canvas and re-uploading an identical
-        // thumbnail on every attempt (the expensive half of a retry storm).
         preview = lastFailed.preview;
       } else {
-        preview = await uploadPreview();
-        // Re-check after the upload: an edit landed mid-flight, so the PUT
-        // must not carry the stale thumbnail — and the just-created File row
-        // would orphan, so trash it (same endpoint the file manager uses).
+        preview = await previewFor(sentDoc, immediate);
         if (store.getState().doc !== sentDoc) {
           if (preview.previewFileId) {
+            previewTasks.delete(sentDoc);
             fetchFn(`/files/${preview.previewFileId}/trash`, { method: 'POST' }).catch(() => {});
           }
           preview = {};
@@ -316,68 +377,93 @@ export const createDesignAutosave = ({
     return { sentName, persistedDoc: data.doc as DesignerDoc | undefined };
   };
 
-  const save = (sentDoc: DesignerDoc) => {
+  const persistPut = async (designId: string, sentDoc: DesignerDoc, immediate: boolean) => {
+    store.getState().setSaving(true);
+    const { sentName, persistedDoc } = await putDoc(designId, sentDoc, immediate);
+    const s = store.getState();
+    if (s.doc === sentDoc && s.designName === sentName) {
+      if (persistedDoc) s.adoptPersistedDoc(sentDoc, persistedDoc);
+      lastPersistedDoc = store.getState().doc;
+      store.getState().markSaved();
+    } else {
+      lastPersistedDoc = persistedDoc ?? sentDoc;
+      s.setSaving(false);
+    }
+    retainPreview(sentDoc);
+    notePersisted();
+  };
+
+  const persist = async (sentDoc: DesignerDoc, immediate: boolean) => {
     const state = store.getState();
-    if (!state.isDirty) return;
+    if (!state.isDirty || state.doc !== sentDoc) return;
     if (pausedOn) {
-      // Retries paused after repeated failures — only a real edit (doc or name
-      // moved on from the paused snapshot) re-arms the pipeline.
       if (state.doc === pausedOn.doc && state.designName === pausedOn.name) return;
       pausedOn = null;
       consecutiveFailures = 0;
       retryAttempt = 0;
       state.setSaveRetryPaused(false);
     }
-    // Never mint a design row for an untouched canvas: with no designId yet a
-    // save would POST a create, so a dirty-but-blank doc (e.g. a rename of a
-    // canvas the user never drew on) is skipped. An existing design is
-    // unaffected — deleting all content must still persist.
     if (!state.designId && isBlankDoc(sentDoc)) {
-      // A retry that lands here (the create failed, then the canvas went
-      // blank) must not leave the failure pill stuck on "Save failed —
-      // retrying": nothing exists server-side to be out of sync with, and
-      // the gate swallows every later retry the same way.
       clearRetry();
       state.setSaveFailed(false);
       state.setSaveRetryPaused(false);
       return;
     }
-    if (!state.designId) {
-      // First-edit autosave. The brand-compliance check stays manual-save-only
-      // — autosave never blocks on it. When the create lands its id in the
-      // store, the debounced-doc effect re-fires and the PUT cycle takes over.
-      state.setSaving(true);
-      ensureCreated().catch(() => {
-        store.getState().setSaving(false);
-        scheduleRetry();
-      });
-      return;
-    }
-    const designId = state.designId;
-    state.setSaving(true);
-    putDoc(designId, sentDoc)
-      .then(({ sentName, persistedDoc }) => {
-        // Only clear isDirty when neither the doc nor the name moved on while
-        // the PUT was in flight — it persisted exactly those two snapshots. A
-        // mid-flight rename keeps the design dirty so the debounced effect
-        // (which also watches the name) re-fires and persists it.
-        const s = store.getState();
-        if (s.doc === sentDoc && s.designName === sentName) {
-          if (persistedDoc) s.adoptPersistedDoc(sentDoc, persistedDoc);
-          store.getState().markSaved();
-        } else {
-          s.setSaving(false);
+    try {
+      if (!state.designId) {
+        await ensureCreated(immediate);
+        const after = store.getState();
+        if (after.designId && after.isDirty) {
+          await persistPut(after.designId, after.doc, immediate);
         }
-        notePersisted();
-      })
-      .catch(() => {
-        store.getState().setSaving(false);
-        scheduleRetry();
-      });
+        return;
+      }
+      await persistPut(state.designId, sentDoc, immediate);
+    } catch (err) {
+      store.getState().setSaving(false);
+      throw err;
+    }
   };
+
+  type PendingSave = { name: string; immediate: boolean; promise: Promise<void> };
+  const pendingSaves = new Map<DesignerDoc, PendingSave[]>();
+  let writeChain: Promise<unknown> = Promise.resolve();
+  const enqueueSave = (sentDoc: DesignerDoc, immediate: boolean): Promise<void> => {
+    const name = store.getState().designName;
+    const pending = pendingSaves.get(sentDoc) ?? [];
+    const existing = pending.find((entry) => entry.name === name);
+    if (existing) {
+      if (immediate) {
+        existing.immediate = true;
+        previewTasks.get(sentDoc)?.start();
+      }
+      return existing.promise;
+    }
+    const entry: PendingSave = { name, immediate, promise: Promise.resolve() };
+    const promise = writeChain.then(() => persist(sentDoc, entry.immediate));
+    entry.promise = promise;
+    pendingSaves.set(sentDoc, [...pending, entry]);
+    writeChain = promise.catch(() => {});
+    const settled = () => {
+      const current = pendingSaves.get(sentDoc) ?? [];
+      const remaining = current.filter((candidate) => candidate !== entry);
+      if (remaining.length) pendingSaves.set(sentDoc, remaining);
+      else pendingSaves.delete(sentDoc);
+    };
+    promise.then(settled, settled);
+    return promise;
+  };
+
+  const save = (sentDoc: DesignerDoc) => {
+    if (store.getState().gestureDepth > 0) return;
+    enqueueSave(sentDoc, false).catch(() => scheduleRetry());
+  };
+
+  const saveNow = (sentDoc: DesignerDoc) => enqueueSave(sentDoc, true);
 
   return {
     save,
+    saveNow,
     ensureCreated,
     createInFlight: () => createPromise,
   };

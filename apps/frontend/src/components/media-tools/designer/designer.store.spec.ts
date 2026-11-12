@@ -2249,6 +2249,24 @@ describe('preset preview isolation', () => {
     unsubscribe();
   });
 
+  it('broadcasts only the final base document when a gesture ends', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(text);
+    const sent: DesignerDoc[] = [];
+    const unsubscribe = subscribeToBaseDocument(store, (doc) => sent.push(doc));
+
+    store.getState().beginGesture();
+    store.getState().updateElementEphemeral(text.id, { x: 120 });
+    expect(sent).toHaveLength(1);
+    store.getState().previewElements({ [text.id]: { fontSize: 72 } });
+    expect(sent).toHaveLength(1);
+
+    store.getState().endGesture();
+    expect(sent).toHaveLength(2);
+    expect(sent[1].outputs[0].children[0]).toMatchObject({ x: 120, fontSize: 32 });
+    unsubscribe();
+  });
+
   it('applies async focal-point writes to the base document during a frame preview', async () => {
     focalMock.result = { x: 0.25, y: 0.75 };
     try {

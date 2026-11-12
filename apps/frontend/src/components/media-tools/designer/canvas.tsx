@@ -233,7 +233,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const pushHistory = store((s) => s.pushHistory);
   const setSelectedIds = store((s) => s.setSelectedIds);
   const updateElement = store((s) => s.updateElement);
-  const updateElementEphemeral = store((s) => s.updateElementEphemeral);
+  const updateElementsEphemeral = store((s) => s.updateElementsEphemeral);
+  const commitElementGesture = store((s) => s.commitElementGesture);
   const addElement = store((s) => s.addElement);
   const setZoom = store((s) => s.setZoom);
   const setViewport = store((s) => s.setViewport);
@@ -1197,61 +1198,54 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     (e: Konva.KonvaEventObject<DragEvent>) => {
       if (isVideo) return;
       if (e.target === e.target.getStage()) return;
-      computeSnap(e.target);
       if (rafIdRef.current) return;
       rafIdRef.current = requestAnimationFrame(() => {
-        // Gesture-scoped write: current output only, no cross-output
-        // applyLinked per frame. dragEnd re-commits through updateElement.
-        // Every attached node is written, not just the drag target: the
-        // Transformer moves the whole multi-selection together, and each
-        // moved element's own cached wrappers key off its store geometry —
-        // a member left unwritten keeps its styled bitmap frozen until drop.
+        computeSnap(e.target);
         const trNodes = transformerRef.current?.nodes() || [];
         const nodes = trNodes.length > 1 ? trNodes : [e.target];
-        nodes.forEach((node) => {
+        const patches = nodes.flatMap((node) => {
           const id = node.id();
-          if (id) {
-            updateElementEphemeral(id, { x: node.x(), y: node.y() });
-          }
+          return id ? [{ id, updates: { x: node.x(), y: node.y() } }] : [];
         });
+        updateElementsEphemeral(patches);
         rafIdRef.current = null;
       });
     },
-    [computeSnap, updateElementEphemeral, isVideo]
+    [computeSnap, updateElementsEphemeral, isVideo]
   );
 
   const handleDragEnd = useCallback(
     (e: Konva.KonvaEventObject<DragEvent>) => {
       if (isVideo) return;
-      noteGestureEnd();
-      setGuides([]);
-      setSpacingGuide(null);
-      setHud(null);
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      if (e.target === e.target.getStage()) return;
-      const trNodes = transformerRef.current?.nodes() || [];
-      const nodes = trNodes.length > 1 ? trNodes : [e.target];
-      let changed = false;
-      nodes.forEach((node) => {
-        const id = node.id();
-        if (id) {
-          updateElement(id, { x: node.x(), y: node.y() });
-          changed = true;
+      try {
+        setGuides([]);
+        setSpacingGuide(null);
+        setHud(null);
+        if (rafIdRef.current) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
         }
-      });
-      if (changed) {
-        pushHistory();
-        // Gesture committed: rebuild the cached wrappers around the moved
-        // nodes exactly once (see useGeometryNonce). Other commit paths (a
-        // direct-select anchor drag ends here with no element id) are caught
-        // by the store subscription's trailing debounce.
-        bumpGeometryNow();
+        if (e.target === e.target.getStage()) return;
+        const trNodes = transformerRef.current?.nodes() || [];
+        const nodes = trNodes.length > 1 ? trNodes : [e.target];
+        const patches = nodes.flatMap((node) => {
+          const id = node.id();
+          return id ? [{ id, updates: { x: node.x(), y: node.y() } }] : [];
+        });
+        if (patches.length) {
+          commitElementGesture(patches);
+          // Gesture committed: rebuild the cached wrappers around the moved
+          // nodes exactly once (see useGeometryNonce). Other commit paths (a
+          // direct-select anchor drag ends here with no element id) are caught
+          // by the store subscription's trailing debounce.
+          bumpGeometryNow();
+        }
+      } finally {
+        noteGestureEnd();
+        store.getState().endGesture();
       }
     },
-    [pushHistory, updateElement, noteGestureEnd, bumpGeometryNow, isVideo]
+    [commitElementGesture, noteGestureEnd, bumpGeometryNow, isVideo, store]
   );
 
   /**
@@ -1347,29 +1341,34 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       // Throttle only the store write; the node attrs above are already correct.
       if (rafIdRef.current) return;
       rafIdRef.current = requestAnimationFrame(() => {
-        // Same gesture-scoped write as dragMove; transformEnd commits.
-        patches.forEach(({ id, patch }) => updateElementEphemeral(id, patch));
+        updateElementsEphemeral(
+          patches.map(({ id, patch }) => ({ id, updates: patch }))
+        );
         rafIdRef.current = null;
       });
     },
-    [bakeTransform, updateElementEphemeral, isVideo]
+    [bakeTransform, updateElementsEphemeral, isVideo]
   );
 
   const handleTransformEnd = useCallback(
     async (e: Konva.KonvaEventObject<Event>) => {
       if (isVideo) return;
-      noteGestureEnd();
       setHud(null);
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
       const patches = bakeTransform(e);
-      if (!patches.length) return;
+      if (!patches.length) {
+        noteGestureEnd();
+        store.getState().endGesture();
+        return;
+      }
       const originals = new Map(transformOriginalsRef.current);
       transformOriginalsRef.current.clear();
       const history = store.getState().history;
       patches.forEach(({ id, patch }) => updateElement(id, patch));
+      noteGestureEnd();
 
       const remapped: { id: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
       for (const { id, patch } of patches) {
@@ -1410,6 +1409,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       });
       if (stale) {
         await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetch, mask)));
+        store.getState().endGesture();
         return;
       }
       remapped.forEach(({ id, src, fileId, canvas }) => {
@@ -1421,6 +1421,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         });
       });
       pushHistory();
+      store.getState().endGesture();
       // Same commit-time cache rebuild as dragEnd (see useGeometryNonce).
       bumpGeometryNow();
     },
@@ -2026,7 +2027,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         }}
       >
         <Layer
-          onDragStart={() => { if (!isVideo) noteGestureStart(); }}
+          onDragStart={() => {
+            if (!isVideo) {
+              noteGestureStart();
+              store.getState().beginGesture();
+            }
+          }}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
         >
@@ -2442,7 +2448,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               anchorSize={coarsePointer ? 22 : 10}
               anchorCornerRadius={coarsePointer ? 8 : 5}
               rotateAnchorOffset={coarsePointer ? 40 : 24}
-              onTransformStart={() => { if (!isVideo) noteGestureStart(); }}
+              onTransformStart={() => {
+                if (!isVideo) noteGestureStart();
+                store.getState().beginGesture();
+              }}
               onTransform={handleTransform}
               onTransformEnd={handleTransformEnd}
             />

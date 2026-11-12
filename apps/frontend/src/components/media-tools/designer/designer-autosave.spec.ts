@@ -9,7 +9,11 @@ import { createAutosaveSubscription, createDesignAutosave, type PreviewUpload } 
  * like designer.store.spec.ts — a Response-shaped object per endpoint.
  */
 
-const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const flush = async () => {
+  for (let i = 0; i < 3; i++) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+};
 
 const okJson = (body: unknown) =>
   ({ ok: true, json: async () => body }) as Response;
@@ -428,7 +432,8 @@ describe('createDesignAutosave', () => {
     await flush();
 
     expect(store.getState().designId).toBe('design-4');
-    expect(store.getState().isDirty).toBe(true);
+    // The same queued operation follows the create with the newer doc.
+    expect(store.getState().isDirty).toBe(false);
 
     autosave.save(store.getState().doc);
     await flush();
@@ -706,8 +711,144 @@ describe('createDesignAutosave retry bound', () => {
   });
 });
 
+describe('createDesignAutosave scheduling', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('defers automatic previews to idle and promotes the same task for manual Save', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-idle');
+    addText(store, 'Edit');
+    const cancelIdle = vi.fn();
+    vi.stubGlobal('requestIdleCallback', vi.fn(() => 17));
+    vi.stubGlobal('cancelIdleCallback', cancelIdle);
+    const uploadPreview = vi.fn().mockResolvedValue({ previewFileId: 'preview-idle' });
+    const fetchMock = vi.fn(() => Promise.resolve(okJson({})));
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
+
+    autosave.save(store.getState().doc);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(uploadPreview).not.toHaveBeenCalled();
+
+    await autosave.saveNow(store.getState().doc);
+    expect(uploadPreview).toHaveBeenCalledTimes(1);
+    expect(cancelIdle).toHaveBeenCalledWith(17);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-idle')).toHaveLength(1);
+  });
+
+  it('reuses the persisted preview for a name-only save', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-rename');
+    addText(store, 'Edit');
+    const uploadPreview = vi.fn().mockResolvedValue({ previewFileId: 'preview-1' });
+    const fetchMock = vi.fn(() => Promise.resolve(okJson({})));
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
+
+    autosave.save(store.getState().doc);
+    await flush();
+    store.getState().setDesignName('Renamed');
+    autosave.save(store.getState().doc);
+    await flush();
+
+    const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-rename');
+    expect(puts).toHaveLength(2);
+    expect(uploadPreview).toHaveBeenCalledTimes(1);
+    expect(JSON.parse((puts[1][1] as RequestInit).body as string)).toMatchObject({
+      name: 'Renamed',
+    });
+    expect(JSON.parse((puts[1][1] as RequestInit).body as string).previewFileId).toBeUndefined();
+  });
+
+  it('does not reuse a cleaned-up preview File after undoing to an older doc', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-history-preview');
+    const uploadPreview = vi.fn()
+      .mockResolvedValueOnce({ previewFileId: 'preview-1' })
+      .mockResolvedValueOnce({ previewFileId: 'preview-2' })
+      .mockResolvedValueOnce({ previewFileId: 'preview-3' });
+    const fetchMock = vi.fn(() => Promise.resolve(okJson({})));
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
+
+    addText(store, 'First');
+    autosave.save(store.getState().doc);
+    await flush();
+    addText(store, 'Second');
+    autosave.save(store.getState().doc);
+    await flush();
+    store.getState().undo();
+    autosave.save(store.getState().doc);
+    await flush();
+
+    expect(uploadPreview).toHaveBeenCalledTimes(3);
+    const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-history-preview');
+    expect(JSON.parse((puts[2][1] as RequestInit).body as string).previewFileId).toBe('preview-3');
+  });
+
+  it('serializes an older in-flight PUT before sending the newer document', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-serial');
+    const resolvers: Array<(response: Response) => void> = [];
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => resolvers.push(resolve)));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    addText(store, 'First');
+    autosave.save(store.getState().doc);
+    await flush();
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-serial')).toHaveLength(1);
+
+    addText(store, 'Second');
+    const latestDoc = store.getState().doc;
+    autosave.save(latestDoc);
+    await flush();
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-serial')).toHaveLength(1);
+
+    resolvers[0](okJson({}));
+    await flush();
+    const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-serial');
+    expect(puts).toHaveLength(2);
+    expect(JSON.parse((puts[1][1] as RequestInit).body as string).doc).toEqual(latestDoc);
+
+    resolvers[1](okJson({}));
+    await flush();
+    expect(store.getState().doc).toBe(latestDoc);
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('trashes a stale preview upload and omits it from the older PUT', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-stale-preview');
+    let resolvePreview: (preview: PreviewUpload) => void = () => {};
+    const uploadPreview = vi.fn(() => new Promise<PreviewUpload>((resolve) => {
+      resolvePreview = resolve;
+    }));
+    const fetchMock = vi.fn(() => Promise.resolve(okJson({})));
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
+
+    addText(store, 'First');
+    const sentDoc = store.getState().doc;
+    autosave.save(sentDoc);
+    await flush();
+    addText(store, 'Newer edit');
+    resolvePreview({ previewFileId: 'stale-preview' });
+    await flush();
+
+    expect(callsTo(fetchMock, 'POST', '/files/stale-preview/trash')).toHaveLength(1);
+    const put = callsTo(fetchMock, 'PUT', '/media/designs/design-stale-preview')[0];
+    expect(JSON.parse((put[1] as RequestInit).body as string).previewFileId).toBeUndefined();
+    expect(store.getState().isDirty).toBe(true);
+  });
+});
+
 describe('createAutosaveSubscription', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -735,8 +876,65 @@ describe('createAutosaveSubscription', () => {
 
     expect(store.getState().designId).toBe('design-r1');
     expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(1);
-    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-r1')).toHaveLength(1);
+    // The id notification coalesces into the completed create, not a duplicate PUT.
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-r1')).toHaveLength(0);
     expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('does not autosave during a static gesture and saves once after it ends', async () => {
+    vi.useFakeTimers();
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-static-gesture');
+    const fetchMock = vi.fn(() => Promise.resolve(okJson({})));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+    const unsubscribe = createAutosaveSubscription(store, autosave, 2000);
+
+    store.getState().beginGesture();
+    addText(store, 'Gesture edit');
+    const id = store.getState().doc.outputs[0].children[0].id;
+    store.getState().updateElementsEphemeral([{ id, updates: { x: 50 } }]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    store.getState().commitElementGesture([{ id, updates: { x: 60 } }]);
+    store.getState().endGesture();
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-static-gesture')).toHaveLength(1);
+    unsubscribe();
+  });
+
+  it('does not autosave during a video clip gesture', async () => {
+    vi.useFakeTimers();
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-video-gesture');
+    addVideo(store);
+    store.getState().markSaved();
+    const fetchMock = vi.fn(() => Promise.resolve(okJson({})));
+    const uploadPreview = vi.fn().mockResolvedValue({});
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
+    const unsubscribe = createAutosaveSubscription(store, autosave, 2000);
+    const output = store.getState().doc.outputs[0];
+    if (!('tracks' in output)) throw new Error('Expected video output');
+    const clip = output.tracks[0].clips[0];
+
+    store.getState().beginGesture();
+    store.getState().updateClipSilent(0, output.tracks[0].id, clip.id, { volume: 0.4 });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    store.getState().pushHistory('Edit clip');
+    store.getState().endGesture();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-video-gesture')).toHaveLength(1);
+    expect(uploadPreview).not.toHaveBeenCalled();
+    unsubscribe();
   });
 
   it('stops scheduling after unsubscribe', async () => {

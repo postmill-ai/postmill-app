@@ -715,7 +715,10 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
       : [...attached, target];
     const state = store.getState();
     const output = state.doc.outputs[currentOutput] as VideoOutput | undefined;
-    if (!output) return;
+    if (!output) {
+      store.getState().endGesture();
+      return;
+    }
     const anchor = getTransformAnchor?.();
     const history = state.history;
     const updates: {
@@ -758,7 +761,10 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
         updates.push({ clip, trackId, trackType, before, after, update });
       }
     }
-    if (!updates.length) return;
+    if (!updates.length) {
+      store.getState().endGesture();
+      return;
+    }
 
     const remapped: { trackId: string; clipId: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
     if (fetchFn) {
@@ -792,6 +798,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     });
     if (stale) {
       if (fetchFn) await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetchFn, mask)));
+      store.getState().endGesture();
       return;
     }
     remapped.forEach(({ trackId, clipId, src, fileId, canvas }) => {
@@ -803,6 +810,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
       });
     });
     store.getState().pushHistory('Edit clip geometry');
+    store.getState().endGesture();
   };
 
   if (!isVideo) return null;
@@ -823,7 +831,10 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           draggable: interactive && !trackLocked,
           onClick: (e: Konva.KonvaEventObject<MouseEvent>) => selectClip(trackId, clip.id, e),
           onTap: (e: Konva.KonvaEventObject<TouchEvent>) => selectClip(trackId, clip.id, e),
-          onDragStart: () => selectClip(trackId, clip.id, undefined, true),
+          onDragStart: () => {
+            selectClip(trackId, clip.id, undefined, true);
+            store.getState().beginGesture();
+          },
           onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => {
             e.evt.preventDefault();
             selectClip(trackId, clip.id, undefined, true);

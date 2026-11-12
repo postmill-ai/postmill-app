@@ -386,10 +386,23 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   create a second hidden video for canvas drawing, and never let one consumer's teardown destroy the
   other's element. Same-id `src` changes must reload the shared element.
 
+- **Gesture commits and history stay immutable.** Static canvas frames batch every moved node into one
+  current-output-only write through `updateElementsEphemeral`; `commitElementGesture` then applies
+  linked edits once and pushes one Undo. Static and video gestures bracket their work with
+  `beginGesture`/`endGesture`, which suppresses autosave and collaboration broadcast until the final
+  write. History stores immutable document references with structural sharing, never JSON-cloned
+  snapshots: every edit must replace the affected document/output/element/clip objects and must never
+  mutate an object reachable from an earlier snapshot. Materialized-save adoption replaces the current
+  snapshot in place, and saved indices become `-1` when branching or eviction discards the saved doc.
+
 - **Autosave adopts materialized assets.** Create/update responses carry the validated document with
   large inline rasters replaced by stored URLs. `designer-autosave.ts` adopts that document only when
   the sent document reference and name are still current, without a history entry; an in-flight edit
-  always wins and is materialized by the next save. This prevents repeated base64 uploads and hashing.
+  always wins and is materialized by the next save. Writes are serialized and coalesced by document
+  reference AND name so an older response cannot overwrite newer server state. Static preview capture
+  and upload share one task per doc, run after idle for autosave, and are promoted to immediate work by
+  manual Save; stale uploaded File rows are trashed, and name-only saves reuse the persisted preview.
+  Video saves still omit client snapshots. This prevents repeated base64 uploads and hashing.
 
 - **Stock vectors and icons.** Pixabay vector searches omit blank `q`, cache for 24 hours, and
   prefer `vectorURL` with the documented raster fallback. Only actual SVG URLs are rasterized into an

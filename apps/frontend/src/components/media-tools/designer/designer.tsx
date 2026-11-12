@@ -653,27 +653,10 @@ const DesignerContent: FC<
         await designAutosave.ensureCreated();
       }
       const cur = store.getState();
-      // ensureCreated already persisted the current doc + preview; only PUT
-      // when edits landed while it was in flight (or a pre-existing design
-      // still has unsaved work).
+      // Manual Save joins the same serialized pipeline but promotes preview
+      // capture to immediate work; no trailing debounce or idle wait.
       if (cur.designId && cur.isDirty) {
-        const { previewFileId, previewDataUrl } = await uploadPreview();
-        const payload: Record<string, unknown> = {
-          name: cur.designName,
-          doc: cur.doc,
-          width: cur.doc.outputs[0]?.width,
-          height: cur.doc.outputs[0]?.height,
-        };
-        if (previewFileId) payload.previewFileId = previewFileId;
-        // Only ship the base64 preview as a fallback when the upload failed, to keep
-        // the save JSON small.
-        else if (previewDataUrl) payload.previewDataUrl = previewDataUrl;
-        const res = await fetch(`/media/designs/${cur.designId}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error('Save failed');
-        cur.markSaved();
+        await designAutosave.saveNow(cur.doc);
       }
       toaster.show(translate('design_saved', 'Design saved'), 'success');
     } catch {
@@ -681,7 +664,7 @@ const DesignerContent: FC<
     } finally {
       store.getState().setSaving(false);
     }
-  }, [fetch, toaster, store, getBrandViolationsNow, translate, uploadPreview, designAutosave]);
+  }, [toaster, store, getBrandViolationsNow, translate, designAutosave]);
 
   const handleSaveAsTemplate = useCallback(async () => {
     const s = store.getState();
