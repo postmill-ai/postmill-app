@@ -1,20 +1,28 @@
 import { BadRequestException } from '@nestjs/common';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 
-export interface BrandCustomFont {
+export type BrandCustomFont = {
   fileId: string;
   family: string;
   path: string;
   weights: number[];
   italic?: boolean;
   serverRender?: boolean;
-}
+};
 
-export interface BrandAsset {
+export type BrandCustomFontInput = Pick<BrandCustomFont, 'fileId'> & Partial<Omit<BrandCustomFont, 'fileId'>>;
+
+export type BrandAsset = {
   fileId?: string;
   url: string;
   caption?: string;
-}
+};
+
+export type BrandAssetInput = {
+  fileId?: string;
+  url?: string;
+  caption?: string;
+};
 
 export interface BrandKit {
   id: string;
@@ -35,6 +43,46 @@ export interface BrandKit {
   enforcement: Record<string, any>;
   [key: string]: any;
 }
+
+export interface BrandProfileWrite {
+  name?: string;
+  instructions?: string | null;
+  language?: string | null;
+  platformInstructions?: Record<string, any>;
+  languageProfiles?: Record<string, any>;
+  enabled?: boolean;
+  isDefault?: boolean;
+  slug?: string | null;
+  logoFileIds?: string[];
+  palette?: string[];
+  fontFamilies?: string[];
+  preferredFormats?: string[];
+  customFonts?: BrandCustomFontInput[];
+  introFileId?: string | null;
+  outroFileId?: string | null;
+  assets?: BrandAssetInput[];
+  enforcement?: Record<string, any>;
+}
+
+export type BrandProfileInput = Omit<BrandProfileWrite, 'palette' | 'fontFamilies' | 'preferredFormats'> & {
+  palette?: Array<string | { hex?: string; name?: string }>;
+  fontFamilies?: Array<string | { name?: string }>;
+  preferredFormats?: Array<string | { name?: string }>;
+};
+
+const WRITE_FIELDS = [
+  'name', 'instructions', 'language', 'platformInstructions', 'languageProfiles',
+  'enabled', 'isDefault', 'slug', 'logoFileIds', 'palette', 'fontFamilies',
+  'preferredFormats', 'customFonts', 'introFileId', 'outroFileId', 'assets', 'enforcement',
+] as const;
+
+export const pickBrandProfileWrite = (data: BrandProfileWrite): BrandProfileWrite => {
+  const picked: BrandProfileWrite = {};
+  for (const key of WRITE_FIELDS) {
+    if (data[key] !== undefined) (picked as any)[key] = data[key];
+  }
+  return picked;
+};
 
 const VALID_FORMAT_IDS = new Set(
   CHANNEL_PRESETS.filter((preset) => preset.id !== 'custom').map((preset) => preset.id),
@@ -79,8 +127,8 @@ export const normalizeBrandProfile = (brand: Record<string, any>): BrandKit => (
   assets: Array.isArray(brand.assets) ? brand.assets : [],
 } as BrandKit);
 
-export const normalizeBrandProfilePatch = <T extends Record<string, any>>(patch: T): T => {
-  const normalized: Record<string, any> = { ...patch };
+export const normalizeBrandProfilePatch = (patch: BrandProfileInput): BrandProfileWrite => {
+  const normalized = { ...patch } as BrandProfileWrite;
   if (patch.palette !== undefined) normalized.palette = normalizeStrings(patch.palette, 'hex');
   if (patch.fontFamilies !== undefined) {
     normalized.fontFamilies = normalizeStrings(patch.fontFamilies, 'name');
@@ -88,5 +136,5 @@ export const normalizeBrandProfilePatch = <T extends Record<string, any>>(patch:
   if (patch.preferredFormats !== undefined) {
     normalized.preferredFormats = validatePreferredFormats(patch.preferredFormats);
   }
-  return normalized as T;
+  return normalized;
 };

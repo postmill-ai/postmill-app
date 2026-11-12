@@ -17,6 +17,7 @@ function makeModel() {
       update: vi.fn(),
       count: vi.fn(),
     },
+    $queryRawUnsafe: vi.fn(),
     designTemplateFolder: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
@@ -228,6 +229,23 @@ describe('DesignRepository — templates pagination', () => {
     expect(model.designTemplate.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 48, take: 24 })
     );
+  });
+
+  it('prioritizes the selected brand in SQL before applying pagination', async () => {
+    const { repo, model } = makeRepo();
+    model.$queryRawUnsafe.mockResolvedValue([{ id: 'brand-template' }, { id: 'shared-template' }]);
+    model.designTemplate.findMany.mockResolvedValue([
+      { id: 'shared-template', name: 'Shared' },
+      { id: 'brand-template', name: 'Brand' },
+    ]);
+
+    const result = await repo.findTemplatesByOrg('org-1', 1, 24, 'brand-1');
+
+    expect(model.$queryRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('CASE WHEN "brandProfileId" = $2 THEN 0 ELSE 1 END'),
+      'org-1', 'brand-1', 24, 0,
+    );
+    expect(result.map((template) => template.id)).toEqual(['brand-template', 'shared-template']);
   });
 
   it('countTemplatesByOrg counts the same org/system scope as the list', async () => {

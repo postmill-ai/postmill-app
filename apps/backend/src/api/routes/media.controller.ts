@@ -586,7 +586,7 @@ export class MediaController {
   @CheckPolicies([AuthorizationActions.Read, Sections.BRANDS])
   @RequirePermission('brands', 'read')
   async listFonts(@GetOrgFromRequest() org: Organization, @Query('brandId') brandId?: string) {
-    return this._brandsService.getCustomFonts(org.id, brandId);
+    return this._brandsService.getCustomFonts(org.id, brandId === 'null' ? null : brandId);
   }
 
   @Post('/fonts/upload')

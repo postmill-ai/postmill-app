@@ -309,6 +309,15 @@ describe('AiRagRepository', () => {
       });
       expect(result).toEqual(posts);
     });
+
+    it('filters brand backfills by the post brand', async () => {
+      model.post.findMany.mockResolvedValue([]);
+      await repository.findPostsForBackfill('org-1', 'brand-1');
+      expect(model.post.findMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', deletedAt: null, brandId: 'brand-1' },
+        select: { id: true, content: true, title: true, description: true },
+      });
+    });
   });
 
   describe('findMediaForBackfill', () => {

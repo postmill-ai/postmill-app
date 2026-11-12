@@ -326,6 +326,12 @@ export class AiDesignerConductorService {
 
   private async _brandKitFor(ctx: AiDesignerAgentContext, config: AiDesignerConfig) {
     if (!config.brandProfileId || !this._brands) return null;
+    const brand = await this._brands.getBrand(ctx.orgId, config.brandProfileId).catch(() => null);
+    return brand?.enabled ? brand : null;
+  }
+
+  private async _brandKitForStart(ctx: AiDesignerAgentContext, config: AiDesignerConfig) {
+    if (!config.brandProfileId || !this._brands) return null;
     return this._brands.getBrandStrict(ctx.orgId, config.brandProfileId);
   }
 
@@ -338,14 +344,14 @@ export class AiDesignerConductorService {
     if (!config.brandProfileId || !brief.styleId) return undefined;
     const brand = await this._brandKitFor(ctx, config);
     const brandPalette = (brand?.palette || [])
-      .map((color) => color.trim().toLowerCase());
+      .map((color: string) => color.trim().toLowerCase());
     if (!brandPalette.length) return undefined;
     const planned = new Set(
       plans.flatMap((plan) => plan.palette ?? [])
         .filter((color): color is string => typeof color === 'string')
         .map((color) => color.trim().toLowerCase())
     );
-    if (!planned.size || brandPalette.some((color) => planned.has(color))) return undefined;
+    if (!planned.size || brandPalette.some((color: string) => planned.has(color))) return undefined;
     return `the "${brief.styleId}" style you pinned set the colours, so your brand palette wasn't used — clear the style to design on brand`;
   }
 
@@ -389,7 +395,7 @@ export class AiDesignerConductorService {
     }
     prompt = policy.instruction;
 
-    const brand = await this._brandKitFor(ctx, config);
+    const brand = await this._brandKitForStart(ctx, config);
     if (brand) {
       const referenceFileIds = [...new Set([
         ...(config.referenceFileIds ?? []),
@@ -1109,7 +1115,7 @@ export class AiDesignerConductorService {
     try {
       const config = this._config(session);
       const brief = this._brief(session);
-      const documentContexts = await this._documentContextsFor(ctx, config);
+      const documentContexts = await this._documentContextsFor(ctx, config, instruction);
       const revisionBrief: DesignBrief = {
         ...brief,
         revisionInstruction: instruction,
@@ -1187,7 +1193,7 @@ export class AiDesignerConductorService {
       config,
       this._brief(priorSession ?? {})
     );
-    const documentContexts = await this._documentContextsFor(ctx, config);
+    const documentContexts = await this._documentContextsFor(ctx, config, prompt);
     const brief: DesignBrief = {
       intent: prompt,
       ...reference,
@@ -1471,7 +1477,7 @@ export class AiDesignerConductorService {
     await this._setState(sessionId, ctx, emitter, 'planning');
 
     const reference = await this._referenceCuesFor(ctx, config, brief);
-    const documentContexts = await this._documentContextsFor(ctx, config);
+    const documentContexts = await this._documentContextsFor(ctx, config, brief.intent);
     const enriched: DesignBrief = {
       ...brief,
       ...reference,
@@ -3302,14 +3308,21 @@ export class AiDesignerConductorService {
   private async _documentContextsFor(
     ctx: AiDesignerAgentContext,
     config: AiDesignerConfig,
+    intent = '',
   ) {
     const contexts: { fileId: string; name: string; text: string }[] = [];
+    const ids = config.attachmentFileIds ?? [];
+    if (ids.length) {
+      if (!this._attachments) throw new Error('AI Designer attachments are unavailable');
+      contexts.push(...await this._attachments.contextsFor(ctx.orgId, ids));
+    }
+
     const brand = await this._brandKitFor(ctx, config);
     if (brand && this._rag) {
       try {
         const hits = await this._rag.search({
           organizationId: ctx.orgId,
-          query: brand.name,
+          query: intent.trim() || `${brand.name} brand voice and visual identity`,
           limit: 3,
           brandProfileId: brand.id,
         });
@@ -3321,12 +3334,6 @@ export class AiDesignerConductorService {
       } catch {
         // Knowledge is optional: disabled or unavailable retrieval never blocks visual Brand Mode.
       }
-    }
-
-    const ids = config.attachmentFileIds ?? [];
-    if (ids.length) {
-      if (!this._attachments) throw new Error('AI Designer attachments are unavailable');
-      contexts.push(...await this._attachments.contextsFor(ctx.orgId, ids));
     }
 
     let remaining = 40_000;
@@ -3437,8 +3444,8 @@ export class AiDesignerConductorService {
   ): Promise<string | undefined> {
     if (config.logoFileId) return config.logoFileId;
     if (!config.brandProfileId || !this._brands) return undefined;
-    const brand = await this._brands.getBrandStrict(orgId, config.brandProfileId);
-    return brand.logoFileIds.find((id) => !!id.trim());
+    const brand = await this._brands.getBrand(orgId, config.brandProfileId).catch(() => null);
+    return brand?.enabled ? brand.logoFileIds.find((id: string) => !!id.trim()) : undefined;
   }
 
   private async _attachDirectLogo(
@@ -5122,7 +5129,7 @@ export class AiDesignerConductorService {
     // and into the imagery branch (background slot + plan brief lookup).
     const sessionForPlans = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
     const config = this._config(sessionForPlans ?? {});
-    const documentContexts = await this._documentContextsFor(ctx, config);
+    const documentContexts = await this._documentContextsFor(ctx, config, this._brief(sessionForPlans ?? {}).intent);
     const briefForPlans = {
       ...this._brief(sessionForPlans ?? {}),
       ...(documentContexts.length ? { documentContexts } : {}),

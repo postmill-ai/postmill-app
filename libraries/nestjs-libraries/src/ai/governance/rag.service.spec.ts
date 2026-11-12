@@ -105,6 +105,7 @@ const mockOrgDefaultModels = {
 
 const mockBrands = {
   getBrandStrict: vi.fn().mockResolvedValue({ id: 'brand-1', enabled: true }),
+  getBrandOwnedStrict: vi.fn().mockResolvedValue({ id: 'brand-1', enabled: true }),
 };
 
 // Default replaceSourceChunks behaviour: mirror the real transaction's return —
@@ -160,6 +161,7 @@ describe('RagService', () => {
     mockRepo.getOrgRagEnabled.mockResolvedValue(null);
     mockRepo.getOrgContentIndexEntries.mockResolvedValue([]);
     mockBrands.getBrandStrict.mockResolvedValue({ id: 'brand-1', enabled: true });
+    mockBrands.getBrandOwnedStrict.mockResolvedValue({ id: 'brand-1', enabled: true });
     defaultReplace();
     mockAiSettings.getDecryptedSystemSettings.mockResolvedValue(null);
     mockCreateSpendLog.mockResolvedValue(undefined);
@@ -386,25 +388,21 @@ describe('RagService', () => {
       mockRepo.findPostsForBackfill.mockResolvedValue([]);
       const service = createService();
       await service.backfill('org-1');
-      expect(mockRepo.findPostsForBackfill).toHaveBeenCalledWith('org-1');
+      expect(mockRepo.findPostsForBackfill).toHaveBeenCalledWith('org-1', undefined);
     });
 
-    it('attributes backfilled posts and media to the selected Brand Kit', async () => {
+    it('backfills only the selected brand posts and skips unowned media', async () => {
       enableRag();
       mockRepo.findPostsForBackfill.mockResolvedValue([
         { id: 'post-1', title: 'Launch', description: '', content: 'Brand fact' },
       ]);
-      mockRepo.findMediaForBackfill.mockResolvedValue([
-        { id: 'media-1', name: 'Product', originalName: '', alt: 'Brand image' },
-      ]);
       const service = createService();
-      await expect(service.backfill('org-1', 'user-1', 'brand-1')).resolves.toEqual({ indexed: 2 });
+      await expect(service.backfill('org-1', 'user-1', 'brand-1')).resolves.toEqual({ indexed: 1 });
       expect(mockBrands.getBrandStrict).toHaveBeenCalledWith('org-1', 'brand-1');
+      expect(mockRepo.findPostsForBackfill).toHaveBeenCalledWith('org-1', 'brand-1');
+      expect(mockRepo.findMediaForBackfill).not.toHaveBeenCalled();
       expect(mockRepo.replaceSourceChunks).toHaveBeenCalledWith(expect.objectContaining({
         sourceType: 'post', sourceId: 'brand:brand-1:post-1', brandProfileId: 'brand-1',
-      }));
-      expect(mockRepo.replaceSourceChunks).toHaveBeenCalledWith(expect.objectContaining({
-        sourceType: 'media', sourceId: 'brand:brand-1:media-1', brandProfileId: 'brand-1',
       }));
     });
   });
@@ -942,6 +940,18 @@ describe('RagService', () => {
       expect(results[0].text).toBe('qdrant chunk');
     });
 
+    it('uses native brand filters and the requested limit for external searches', async () => {
+      enableQdrant();
+      mockEmbeddingModel.doEmbed.mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]] });
+      mockQdrantSearch.mockResolvedValue([]);
+      const service = createService();
+      await service.search({ organizationId: 'org-1', query: 'pricing thread', limit: 2, brandProfileId: 'brand-1' });
+      expect(mockQdrantSearch).toHaveBeenCalledWith(expect.objectContaining({
+        topK: 2,
+        filter: { organizationId: 'org-1', brandProfileId: 'brand-1' },
+      }));
+    });
+
     it('drops Qdrant hits whose payload org does not match (isolation)', async () => {
       enableQdrant();
       mockEmbeddingModel.doEmbed.mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]] });
@@ -971,10 +981,11 @@ describe('RagService', () => {
       enableQdrant();
       mockEmbeddingModel.doEmbed.mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]] });
       const service = createService();
-      await (service as any)._doIndex('org-1', 'post', 'p1', ['only chunk.'], 'hash-1');
+      await (service as any)._doIndex('org-1', 'post', 'p1', ['only chunk.'], 'hash-1', 'utility', undefined, 'brand-1');
       expect(mockQdrantUpsert).toHaveBeenCalled();
       const points = mockQdrantUpsert.mock.calls[0][0];
       expect(points[0].payload.organizationId).toBe('org-1');
+      expect(points[0].payload.brandProfileId).toBe('brand-1');
     });
   });
 

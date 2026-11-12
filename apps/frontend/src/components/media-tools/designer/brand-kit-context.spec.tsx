@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     mutate: vi.fn(),
   },
   customFonts: { fonts: [], mutate: vi.fn() },
+  fontScopes: [] as unknown[],
   setBrandEnforcement: vi.fn(),
   setBrandProfileId: vi.fn(),
 }));
@@ -20,7 +21,10 @@ vi.mock('@postmill-ai/frontend/components/settings/brand/use-brands', () => ({
   useBrands: () => mocks.brands,
 }));
 vi.mock('./panels/use-brand-fonts', () => ({
-  useCustomFonts: () => mocks.customFonts,
+  useCustomFonts: (scope: unknown) => {
+    mocks.fontScopes.push(scope);
+    return mocks.customFonts;
+  },
 }));
 
 const makeStore = (brandProfileId?: string | null) => {
@@ -38,7 +42,10 @@ const makeStore = (brandProfileId?: string | null) => {
 };
 
 describe('BrandKitProvider', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fontScopes = [];
+  });
 
   it('uses the explicitly selected brand instead of the default', () => {
     const { result } = renderHook(() => useBrandKit(), {
@@ -47,6 +54,7 @@ describe('BrandKitProvider', () => {
     expect(result.current.activeBrand?.id).toBe('brand-b');
     expect(result.current.activeBrand?.palette).toEqual(['#bbbbbb']);
     expect(mocks.setBrandEnforcement).toHaveBeenLastCalledWith(false);
+    expect(mocks.fontScopes).toEqual(['brand-b']);
   });
 
   it('distinguishes General Mode from legacy default resolution', () => {
@@ -56,6 +64,7 @@ describe('BrandKitProvider', () => {
     expect(result.current.isGeneralMode).toBe(true);
     expect(result.current.activeBrand).toBeNull();
     expect(mocks.setBrandEnforcement).toHaveBeenLastCalledWith(false);
+    expect(mocks.fontScopes).toEqual([null]);
   });
 
   it('uses the default only for legacy documents and never hides an unavailable explicit selection', () => {
@@ -63,11 +72,13 @@ describe('BrandKitProvider', () => {
       wrapper: ({ children }) => <BrandKitProvider store={makeStore()}>{children}</BrandKitProvider>,
     });
     expect(legacy.result.current.activeBrand?.id).toBe('brand-a');
+    expect(mocks.fontScopes).toEqual(['brand-a']);
 
     const missing = renderHook(() => useBrandKit(), {
       wrapper: ({ children }) => <BrandKitProvider store={makeStore('deleted-brand')}>{children}</BrandKitProvider>,
     });
     expect(missing.result.current.activeBrand).toBeNull();
     expect(missing.result.current.brandUnavailable).toBe(true);
+    expect(mocks.fontScopes).toEqual(['brand-a', false]);
   });
 });

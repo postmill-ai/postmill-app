@@ -6142,6 +6142,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: scope
+          required: false
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: ""
@@ -6180,6 +6185,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: scope
+          required: false
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: ""
@@ -6200,6 +6210,11 @@ paths:
           schema:
             type: string
         - name: brandId
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: scope
           required: false
           in: query
           schema:
@@ -8075,6 +8090,11 @@ paths:
           schema:
             type: string
         - name: limit
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: brandId
           required: false
           in: query
           schema:

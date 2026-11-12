@@ -1074,7 +1074,7 @@ describe('DesignService', () => {
 
       expect(Array.isArray(out)).toBe(true);
       expect((out as any[])[0]).toMatchObject({ id: 't1', thumbnail: null });
-      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1');
+      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', undefined, undefined, undefined);
       expect(repository.countTemplatesByOrg).not.toHaveBeenCalled();
     });
 
@@ -1086,7 +1086,7 @@ describe('DesignService', () => {
 
       const out = await service.listTemplates('org-1', 2, 24);
 
-      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 2, 24);
+      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 2, 24, undefined);
       expect(repository.countTemplatesByOrg).toHaveBeenCalledWith('org-1');
       expect(out).toMatchObject({ total: 42, page: 2, limit: 24 });
       // Same slimmed mapping as the plain-array shape.
@@ -1095,6 +1095,13 @@ describe('DesignService', () => {
         doc: { mode: 'video' },
         thumbnail: '/up/t2.png',
       });
+    });
+
+    it('passes the selected brand through to repository ordering', async () => {
+      repository.findTemplatesByOrg.mockResolvedValue([]);
+      repository.countTemplatesByOrg.mockResolvedValue(0);
+      await service.listTemplates('org-1', 1, 24, 'brand-1');
+      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1');
     });
   });
 

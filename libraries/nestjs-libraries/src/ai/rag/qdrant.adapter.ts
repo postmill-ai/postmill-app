@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { VectorStoreAdapter, RagHit } from './vector-store.adapter';
+import { VectorStoreAdapter, RagHit, VectorStorePoint } from './vector-store.adapter';
 
 interface QdrantConfig {
   url: string;
@@ -58,7 +58,7 @@ export class QdrantVectorStoreAdapter implements VectorStoreAdapter {
 
   async upsertBatch(
     organizationId: string,
-    points: Array<{ id: string; vector: number[]; text: string; sourceType: string; sourceId: string }>,
+    points: VectorStorePoint[],
   ): Promise<void> {
     if (points.length === 0) return;
     const client = await this._getClient();
@@ -66,7 +66,13 @@ export class QdrantVectorStoreAdapter implements VectorStoreAdapter {
       points.map((p) => ({
         id: p.id,
         vector: p.vector,
-        payload: { organizationId, text: p.text, sourceType: p.sourceType, sourceId: p.sourceId },
+        payload: {
+          organizationId,
+          text: p.text,
+          sourceType: p.sourceType,
+          sourceId: p.sourceId,
+          brandProfileId: p.brandProfileId ?? null,
+        },
       })),
     );
   }

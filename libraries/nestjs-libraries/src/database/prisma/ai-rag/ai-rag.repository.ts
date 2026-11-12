@@ -313,9 +313,13 @@ export class AiRagRepository {
   getOrgContentIndexEntries(
     organizationId: string,
     brandProfileId?: string,
+    unassigned = false,
   ): Promise<Array<{ id: string; sourceType: string; sourceId: string; brandProfileId: string | null; chunk: string | null; createdAt: Date; updatedAt: Date }>> {
     return this._aiContentIndex.model.aIContentIndex.findMany({
-      where: { organizationId, ...(brandProfileId ? { brandProfileId } : {}) },
+      where: {
+        organizationId,
+        ...(brandProfileId ? { brandProfileId } : unassigned ? { brandProfileId: null } : {}),
+      },
       select: { id: true, sourceType: true, sourceId: true, brandProfileId: true, chunk: true, createdAt: true, updatedAt: true },
     }) as any;
   }
@@ -339,9 +343,20 @@ export class AiRagRepository {
    * Deletes all content index entries for a given source, org-scoped.
    * Embedding side table rows are cascade-deleted by the FK constraint.
    */
-  deleteContentIndexEntries(organizationId: string, sourceType: string, sourceId: string, brandProfileId?: string) {
+  deleteContentIndexEntries(
+    organizationId: string,
+    sourceType: string,
+    sourceId: string,
+    brandProfileId?: string,
+    unassigned = false,
+  ) {
     return this._aiContentIndex.model.aIContentIndex.deleteMany({
-      where: { organizationId, sourceType, sourceId, ...(brandProfileId ? { brandProfileId } : {}) },
+      where: {
+        organizationId,
+        sourceType,
+        sourceId,
+        ...(brandProfileId ? { brandProfileId } : unassigned ? { brandProfileId: null } : {}),
+      },
     });
   }
 
@@ -350,9 +365,10 @@ export class AiRagRepository {
    */
   findPostsForBackfill(
     organizationId: string,
+    brandProfileId?: string,
   ): Promise<Array<{ id: string; content: string | null; title: string | null; description: string | null }>> {
     return this._raw.post.findMany({
-      where: { organizationId, deletedAt: null },
+      where: { organizationId, deletedAt: null, ...(brandProfileId ? { brandId: brandProfileId } : {}) },
       select: { id: true, content: true, title: true, description: true },
     });
   }

@@ -25,7 +25,10 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
   const state = {
     brands: structuredClone(brands),
     ragEnabled: false,
-    knowledge: [] as { sourceId: string; sourceType: string; content: string; brandId: string }[],
+    ragGlobalEnabled: true,
+    platformSettingsRequests: 0,
+    fontRequests: [] as (string | null)[],
+    knowledge: [] as { sourceId: string; sourceType: string; content: string; brandId?: string }[],
     doc: {
       version: 13,
       mode: 'image',
@@ -94,9 +97,12 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
       return json(route, created, 201);
     }
     if (method === 'GET' && pathname === '/rag/status') {
+      const legacy = url.searchParams.get('scope') === 'unassigned';
       return json(route, {
-        enabled: state.ragEnabled,
-        indexedItems: state.knowledge.filter((item) => item.brandId === brandId).length,
+        enabled: state.ragGlobalEnabled && state.ragEnabled,
+        globalEnabled: state.ragGlobalEnabled,
+        organizationEnabled: state.ragEnabled,
+        indexedItems: state.knowledge.filter((item) => legacy ? !item.brandId : item.brandId === brandId).length,
         lastIndexed: null, embeddingModel: 'test/embedding', vectorStore: 'pgvector',
       });
     }
@@ -105,7 +111,8 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
       return json(route, { ragEnabled: true });
     }
     if (method === 'GET' && pathname === '/rag/items') {
-      const items = state.knowledge.filter((item) => item.brandId === brandId);
+      const legacy = url.searchParams.get('scope') === 'unassigned';
+      const items = state.knowledge.filter((item) => legacy ? !item.brandId : item.brandId === brandId);
       return json(route, {
         items: items.map((item) => ({
           sourceId: item.sourceId, sourceType: item.sourceType,
@@ -113,6 +120,14 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
         })),
         total: items.length, offset: 0, limit: 20,
       });
+    }
+    if (method === 'DELETE' && pathname.startsWith('/rag/items/')) {
+      const sourceId = decodeURIComponent(pathname.split('/').pop() || '');
+      const legacy = url.searchParams.get('scope') === 'unassigned';
+      state.knowledge = state.knowledge.filter((item) => !(
+        item.sourceId === sourceId && (legacy ? !item.brandId : item.brandId === brandId)
+      ));
+      return json(route, { success: true });
     }
     if (method === 'POST' && pathname === '/rag/index') {
       const body = request.postDataJSON() as { sourceType: string; content: string; brandId: string; sourceId?: string };
@@ -132,7 +147,14 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
           .map((item) => ({ text: item.content, sourceType: item.sourceType, sourceId: item.sourceId, score: 1 })),
       });
     }
-    if (method === 'GET' && pathname === '/media/fonts') return json(route, []);
+    if (method === 'GET' && pathname === '/media/fonts') {
+      state.fontRequests.push(brandId === 'null' ? null : brandId);
+      return json(route, [{ fileId: 'font-b', family: 'B Custom', path: '/font-b.ttf', weights: [400], serverRender: true }]);
+    }
+    if (method === 'GET' && pathname === '/rag/settings') {
+      state.platformSettingsRequests += 1;
+      return json(route, { message: 'Super admin access required' }, 403);
+    }
     if (method === 'GET' && pathname === '/files') {
       return json(route, {
         pages: 1,
@@ -144,13 +166,11 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
       });
     }
     if (method === 'GET' && pathname === '/media/design-templates') {
-      return json(route, {
-        templates: [
-          { id: 'template-b', name: 'B template', isSystem: false, brandProfileId: 'brand-b', doc: { mode: 'image' } },
-          { id: 'template-shared', name: 'Shared template', isSystem: false, brandProfileId: null, doc: { mode: 'image' } },
-        ],
-        total: 2, page: 1, limit: 100,
-      });
+      const templates = [
+        { id: 'template-shared', name: 'Shared template', isSystem: false, brandProfileId: null, doc: { mode: 'image' } },
+        { id: 'template-b', name: 'B template', isSystem: false, brandProfileId: 'brand-b', doc: { mode: 'image' } },
+      ].sort((a, b) => Number(b.brandProfileId === brandId) - Number(a.brandProfileId === brandId));
+      return json(route, { templates, total: 2, page: 1, limit: 100 });
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}`) {
       return json(route, { id: DESIGN_ID, name: 'Brand workflow', doc: state.doc });
@@ -251,10 +271,12 @@ test('editor uses two Brand Kits, Knowledge, and persistent Designer modes', asy
   await picker.selectOption('');
   await expect(picker).toHaveValue('');
   await expect.poll(() => state.doc.brandProfileId).toBeNull();
+  await expect.poll(() => state.fontRequests.at(-1)).toBeNull();
+  expect(state.platformSettingsRequests).toBe(0);
 });
 
 test('member can read Brand Kits and Knowledge but cannot mutate them', async ({ page }) => {
-  await installMocks(page, 'member');
+  const state = await installMocks(page, 'member');
 
   await page.goto('/brands');
   await expect(page.getByRole('heading', { name: 'Brand Studio', exact: true, level: 3 })).toBeVisible();
@@ -271,4 +293,40 @@ test('member can read Brand Kits and Knowledge but cannot mutate them', async ({
   await expect(page.getByRole('button', { name: 'Enable Knowledge', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: '+ Add Content', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Learn from my posts', exact: true })).toBeDisabled();
+
+  await page.goto(`/media/designer?designId=${DESIGN_ID}`);
+  await page.getByRole('button', { name: 'Brand', exact: true }).first().click();
+  await expect(page.getByRole('button', { name: 'Remove logo', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Choose intro video…', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Remove B Custom', exact: true })).toHaveCount(0);
+  expect(state.platformSettingsRequests).toBe(0);
+});
+
+test('legacy Knowledge remains visible and deletable without exposing brand content', async ({ page }) => {
+  const state = await installMocks(page);
+  state.knowledge.push(
+    { sourceId: 'legacy-note', sourceType: 'text', content: 'Pre-upgrade fact' },
+    { sourceId: 'brand-note', sourceType: 'text', content: 'Brand-only fact', brandId: 'brand-a' },
+  );
+
+  await page.goto('/brands/knowledge');
+  await expect(page.getByText('Unassigned Knowledge', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('legacy-note', { exact: true })).toBeVisible();
+  await expect(page.getByText('brand-note', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.getByText('legacy-note', { exact: true })).toHaveCount(0);
+  expect(state.knowledge).toEqual([
+    { sourceId: 'brand-note', sourceType: 'text', content: 'Brand-only fact', brandId: 'brand-a' },
+  ]);
+});
+
+test('an org cannot enable Knowledge while the operator switch is off', async ({ page }) => {
+  const state = await installMocks(page);
+  state.ragGlobalEnabled = false;
+
+  await page.goto('/brands/brand-a/knowledge');
+  await expect(page.getByText('Knowledge is disabled by the platform operator.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enable Knowledge', exact: true })).toBeDisabled();
+  expect(state.ragEnabled).toBe(false);
+  expect(state.platformSettingsRequests).toBe(0);
 });

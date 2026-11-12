@@ -432,14 +432,16 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
                       </span>
                     )}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleLogo(id)}
-                    aria-label={t('remove_logo', 'Remove logo')}
-                    className="absolute top-1 end-1 w-5 h-5 rounded-full bg-newBgColorInner border border-studioBorder text-dangerText opacity-0 group-hover:opacity-100 focus:opacity-100"
-                  >
-                    ×
-                  </button>
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => toggleLogo(id)}
+                      aria-label={t('remove_logo', 'Remove logo')}
+                      className="absolute top-1 end-1 w-5 h-5 rounded-full bg-newBgColorInner border border-studioBorder text-dangerText opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -469,7 +471,8 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
               <button
                 type="button"
                 onClick={picker.open}
-                className="flex-1 px-3 py-2 rounded-lg text-[12px] border border-studioBorder text-textColor hover:bg-boxHover transition-colors text-start truncate"
+                disabled={!activeBrand || !canManage}
+                className="flex-1 px-3 py-2 rounded-lg text-[12px] border border-studioBorder text-textColor hover:bg-boxHover transition-colors text-start truncate disabled:opacity-50"
               >
                 {file?.name ||
                   (fileId
@@ -478,7 +481,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
                       ? t('designer_choose_intro', 'Choose intro video…')
                       : t('designer_choose_outro', 'Choose outro video…'))}
               </button>
-              {fileId && (
+              {canManage && fileId && (
                 <button
                   type="button"
                   onClick={() => setBrandVideo(key, null)}
@@ -631,7 +634,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
           <div className="flex flex-col gap-1">
             {customFonts.map((f) => (
               <div
-                key={f.fileId}
+                key={`${f.fileId}-${f.weights.join(',')}-${f.italic ? 'i' : 'n'}`}
                 className="flex items-center justify-between px-3 py-2 rounded-[6px] border border-studioBorder bg-newBgColorInner"
               >
                 <div className="flex-1 min-w-0">
@@ -654,14 +657,16 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleFontDelete(f)}
-                  className="ml-2 w-5 h-5 rounded-full border border-studioBorder text-[11px] text-textColor/60 hover:text-dangerText hover:border-red-400 flex items-center justify-center shrink-0 transition-colors"
-                  title={t('designer_remove_font', 'Remove {{name}}', { name: f.family })}
-                >
-                  ✕
-                </button>
+                {canManage && activeBrand && (
+                  <button
+                    type="button"
+                    onClick={() => handleFontDelete(f)}
+                    className="ml-2 w-5 h-5 rounded-full border border-studioBorder text-[11px] text-textColor/60 hover:text-dangerText hover:border-red-400 flex items-center justify-center shrink-0 transition-colors"
+                    title={t('designer_remove_font', 'Remove {{name}}', { name: f.family })}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
           </div>

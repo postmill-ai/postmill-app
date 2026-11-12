@@ -201,6 +201,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
     setSelectedChannels([]);
     setCustomSizes([]);
     setFormatsTouched(false);
+    setShowCustomSizes(false);
   };
 
   // Sessions are single-mode: image-only or video-only. A cross-mode toggle is

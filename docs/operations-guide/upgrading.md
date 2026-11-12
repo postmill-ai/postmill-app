@@ -78,6 +78,26 @@ CHANGELOG carefully, take a backup, and follow the expand-contract path document
 Check the CHANGELOG for any new env vars required by the release. Add them to your `.env` file,
 Docker Compose environment, or deployment config, then redeploy if needed.
 
+## Brand Studio upgrade notes
+
+- **Apply the additive migration.** `20261112020000_brand_studio_knowledge` adds nullable org RAG,
+  brand Knowledge, preferred-format and template-association columns. Existing Knowledge rows retain
+  `brandProfileId = NULL`; they are not assigned to an arbitrary brand. They remain available to
+  intentionally org-wide AI searches and under **Brand Studio → Unassigned Knowledge**, where they can
+  be reviewed and deleted. Re-add content to a Brand Kit for brand-scoped retrieval.
+- **Knowledge enablement is two-level.** Effective access requires the platform RAG flag and the org
+  not being disabled (`globalEnabled && Organization.ragEnabled !== false`). Existing NULL org values
+  inherit the platform setting. Platform vector-store read/write/test routes are super-admin only;
+  org admins need `ai-config:update` to change the org switch.
+- **Brand permissions affect custom roles.** Fonts, the legacy `/ai/brand-profile` read, and `/rag`
+  routes now require `brands:read`; mutations require the corresponding brand write permission. The
+  editor system role receives these grants on boot. Review custom roles that previously relied on
+  media-only or ungated access. Brand-kit quotas limit creation only; existing brands and fonts still
+  work on Starter and at the plan cap.
+- **Brand backfills are intentionally narrower.** A Brand Kit backfill indexes only posts with that
+  kit's `Post.brandId` and skips media, which has no brand ownership field. External vector stores
+  persist native brand metadata for newly indexed content; legacy unassigned vectors remain org-wide.
+
 ## v1.5.0
 
 - **Migrations.** v1.5.0 adds two additive migrations. Neither needs `ALLOW_DESTRUCTIVE_SCHEMA`. The container does not apply them on boot; run `prisma migrate deploy` as in [Apply migrations](#_5-apply-migrations).

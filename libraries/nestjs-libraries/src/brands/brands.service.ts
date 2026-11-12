@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { BrandsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/brands/brands.repository';
 import {
   BrandCustomFont,
+  BrandProfileInput,
   normalizeBrandProfile,
   normalizeBrandProfilePatch,
 } from './brand-kit';
@@ -19,9 +20,14 @@ export class BrandsService {
     return brand ? normalizeBrandProfile(brand) : null;
   }
 
-  async getBrandStrict(orgId: string, brandId: string) {
+  async getBrandOwnedStrict(orgId: string, brandId: string) {
     const brand = await this.getBrand(orgId, brandId);
     if (!brand) throw new NotFoundException('Brand not found');
+    return brand;
+  }
+
+  async getBrandStrict(orgId: string, brandId: string) {
+    const brand = await this.getBrandOwnedStrict(orgId, brandId);
     if (!brand.enabled) throw new BadRequestException('Brand is disabled');
     return brand;
   }
@@ -31,7 +37,7 @@ export class BrandsService {
     return brand ? normalizeBrandProfile(brand) : null;
   }
 
-  async createBrand(orgId: string, data: Record<string, any> & { name: string }) {
+  async createBrand(orgId: string, data: BrandProfileInput & { name: string }) {
     const count = await this._repository.countBrands(orgId);
     const normalized = normalizeBrandProfilePatch(data);
     const slug = data.name
@@ -42,13 +48,14 @@ export class BrandsService {
       .replace(/^-|-$/g, '');
     const brand = await this._repository.createBrand(orgId, {
       ...normalized,
+      name: data.name,
       slug,
       isDefault: count === 0,
     });
     return normalizeBrandProfile(brand);
   }
 
-  async updateBrand(orgId: string, brandId: string, data: Record<string, any>) {
+  async updateBrand(orgId: string, brandId: string, data: BrandProfileInput) {
     const brand = await this._repository.updateBrand(
       orgId,
       brandId,
@@ -57,7 +64,7 @@ export class BrandsService {
     return brand ? normalizeBrandProfile(brand) : null;
   }
 
-  async upsertDefaultBrand(orgId: string, data: Record<string, any>) {
+  async upsertDefaultBrand(orgId: string, data: BrandProfileInput) {
     const existing = await this._repository.getDefaultBrand(orgId);
     if (existing) return this.updateBrand(orgId, existing.id, data);
     return this.createBrand(orgId, { ...data, name: 'Default Brand' });

@@ -5,11 +5,20 @@ export interface RagHit {
   score: number;
 }
 
+export interface VectorStorePoint {
+  id: string;
+  vector: number[];
+  text: string;
+  sourceType: string;
+  sourceId: string;
+  brandProfileId?: string;
+}
+
 export interface VectorStoreAdapter {
   readonly type: 'pgvector' | 'qdrant' | 'pinecone' | 'pgvector-remote';
   probe(): Promise<boolean>;
   search(organizationId: string, vector: number[], limit: number, filter?: Record<string, any>): Promise<RagHit[]>;
-  upsertBatch(organizationId: string, points: Array<{ id: string; vector: number[]; text: string; sourceType: string; sourceId: string }>): Promise<void>;
+  upsertBatch(organizationId: string, points: VectorStorePoint[]): Promise<void>;
   removeSource(organizationId: string, sourceType: string, sourceId: string): Promise<void>;
   // Optional teardown for adapters that own a connection pool (remote pgvector).
   close?(): Promise<void>;

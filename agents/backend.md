@@ -209,15 +209,23 @@ Invariants:
   read only. Custom fonts and template associations always carry an explicit brand id.
 - Designer documents carry `brandProfileId`: string = Brand Mode, `null` = General Mode, absent =
   legacy default. Preserve it in schemas, migration, version restore, and `.pdesign` round trips.
-- `Organization.ragEnabled` is a nullable org override: null inherits the deployment RAG setting,
-  true/false overrides it. `PUT /rag/enabled` changes only the current org and requires
-  `brands:update`; deployment vector configuration and its secrets require `ai-config:update`.
+- Effective Knowledge access requires both the deployment RAG flag and the org not being disabled:
+  `globalEnabled && Organization.ragEnabled !== false`. NULL preserves inheritance. `PUT /rag/enabled`
+  changes only the current org and requires `ai-config:update`; deployment vector configuration, its
+  secrets, and its read/write/test endpoints are super-admin only.
 - `AIContentIndex.brandProfileId` associates brand-owned Knowledge. Indexing, replacement, vector
   and text search, item lists, delete, and backfill all scope by org + requested brand; legacy null
-  rows stay shared. Brand-owned source ids are namespaced internally so identical public source ids
-  cannot replace another brand's chunks. Manual Knowledge mutations require `brands:update`, reads
-  require `brands:read`, and the expected disabled state is a 4xx, not a Sentry-worthy 500. Brand
-  deletion cascades its chunks; template associations use `SetNull`.
+  rows remain available through `/brands/knowledge` (`scope=unassigned`) and intentionally org-wide
+  searches. Public responses strip the internal `brand:<id>:` source prefix. Brand-owned source ids
+  are namespaced internally so identical public source ids cannot replace another brand's chunks.
+  External vector stores persist and filter brand metadata natively. Brand backfills include only
+  posts with that `Post.brandId` and skip unowned media. Manual Knowledge mutations require
+  `brands:update`, reads require `brands:read`, and the expected disabled state is a 4xx, not a
+  Sentry-worthy 500. Disabled brands still allow Knowledge list/delete. Brand deletion cascades its
+  chunks; template associations use `SetNull`.
+- Brand-kit billing limits only `create`: reads, updates, deletes, and existing custom fonts continue
+  to work on Starter and at the plan cap. Repository writes use `BrandProfileInput` normalization
+  followed by the supported-field `BrandProfileWrite` mapping, never an arbitrary object spread.
 
 ---
 

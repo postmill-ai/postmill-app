@@ -63,9 +63,18 @@ export const BrandAssets = ({
   const { data: files } = useSWR(
     `brand-studio-files-${brandId}`,
     async () => {
-      const res = await fetch('/files?page=1&limit=100');
-      if (!res.ok) throw new Error('Failed to load brand files');
-      return res.json() as Promise<{ results: FileItem[] }>;
+      const results: FileItem[] = [];
+      let page = 1;
+      let pages = 1;
+      do {
+        const res = await fetch(`/files?page=${page}&limit=100`);
+        if (!res.ok) throw new Error('Failed to load brand files');
+        const body = await res.json() as { results: FileItem[]; pages?: number };
+        results.push(...(body.results || []));
+        pages = body.pages ?? page;
+        page += 1;
+      } while (page <= pages);
+      return { results };
     },
     { revalidateOnFocus: false },
   );
@@ -76,9 +85,19 @@ export const BrandAssets = ({
   const { data: templateData, mutate: mutateTemplates } = useSWR(
     `brand-studio-templates-${brandId}`,
     async () => {
-      const res = await fetch('/media/design-templates?page=1&limit=100');
-      if (!res.ok) throw new Error('Failed to load brand templates');
-      return res.json() as Promise<{ templates: BrandTemplate[] }>;
+      const templates: BrandTemplate[] = [];
+      let page = 1;
+      let total = 0;
+      do {
+        const res = await fetch(`/media/design-templates?page=${page}&limit=100&brandId=${encodeURIComponent(brandId)}`);
+        if (!res.ok) throw new Error('Failed to load brand templates');
+        const body = await res.json() as { templates: BrandTemplate[]; total: number };
+        if (!body.templates?.length) break;
+        templates.push(...body.templates);
+        total = body.total;
+        page += 1;
+      } while (templates.length < total);
+      return { templates };
     },
     { revalidateOnFocus: false },
   );

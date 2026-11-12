@@ -166,14 +166,15 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       return brief;
     }
 
-    const brand = await this._brands.getBrandStrict(orgId, brandProfileId);
+    const brand = await this._brands.getBrand(orgId, brandProfileId).catch(() => null);
+    if (!brand?.enabled) return brief;
     return {
       ...brief,
       brandInstructions: brand.instructions || undefined,
       brandPalette: brand.palette,
       brandFontFamilies: [...new Set([
         ...brand.fontFamilies,
-        ...brand.customFonts.map((font) => font.family),
+        ...brand.customFonts.map((font: { family: string }) => font.family),
       ])],
     };
   }

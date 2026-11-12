@@ -56,4 +56,15 @@ describe('AiRagRepository Brand Kit filters', () => {
       where: { organizationId: 'org-1', sourceType: 'text', sourceId: 'source-1', brandProfileId: 'brand-1' },
     });
   });
+
+  it('isolates legacy unassigned rows for listing and deletion', async () => {
+    await repository.getOrgContentIndexEntries('org-1', undefined, true);
+    expect(model.aIContentIndex.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { organizationId: 'org-1', brandProfileId: null },
+    }));
+    await repository.deleteContentIndexEntries('org-1', 'text', 'legacy-1', undefined, true);
+    expect(model.aIContentIndex.deleteMany).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', sourceType: 'text', sourceId: 'legacy-1', brandProfileId: null },
+    });
+  });
 });

@@ -781,7 +781,7 @@ describe('DesignController', () => {
       designService.listTemplates.mockResolvedValue(templates);
 
       expect(await templateController.list(org)).toBe(templates);
-      expect(designService.listTemplates).toHaveBeenCalledWith('org-1');
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', undefined, undefined, undefined);
     });
 
     it('passes page/limit through and returns the envelope when paginating', async () => {
@@ -789,17 +789,23 @@ describe('DesignController', () => {
       designService.listTemplates.mockResolvedValue(envelope);
 
       expect(await templateController.list(org, '2', '24')).toBe(envelope);
-      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 2, 24);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 2, 24, undefined);
     });
 
     it('clamps out-of-range pagination params', async () => {
       designService.listTemplates.mockResolvedValue({ templates: [], total: 0, page: 1, limit: 100 });
 
       await templateController.list(org, '0', '99999');
-      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 100);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 100, undefined);
 
       await templateController.list(org, 'abc', undefined);
-      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24, undefined);
+    });
+
+    it('passes the selected brand through for server-side priority', async () => {
+      designService.listTemplates.mockResolvedValue({ templates: [], total: 0, page: 1, limit: 24 });
+      await templateController.list(org, '1', '24', 'brand-1');
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1');
     });
   });
 

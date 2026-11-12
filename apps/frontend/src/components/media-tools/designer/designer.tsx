@@ -67,7 +67,7 @@ import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-too
 import { getBrandViolations } from './brand-compliance';
 import { useBrandColors } from './panels/use-brand-colors';
 import { BrandKitProvider } from './brand-kit-context';
-import { useBrandFonts, useCustomFonts } from './panels/use-brand-fonts';
+import { useBrandFonts } from './panels/use-brand-fonts';
 import { captureStageThumbnail } from './stage-thumbnail';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
@@ -307,11 +307,6 @@ const DesignerContent: FC<
   });
   const brandColors = useBrandColors();
   const brandFonts = useBrandFonts();
-  // Mounted at the Designer root (not just in the panels that list fonts) so
-  // reopening a saved design paints its custom-font glyphs immediately, before
-  // any panel is visited. The hook's FontFaceSet guard makes the panels' own
-  // mounts of it no-ops, and its effect re-runs when the font list changes.
-  useCustomFonts();
   const {
     url: initialAssetUrl,
     source: initialAssetSource,

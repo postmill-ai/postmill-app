@@ -27,7 +27,10 @@ export const BrandKitProvider = ({ store, children }: { store: any; children: Re
     if (selection === null) return null;
     return brands?.find((brand) => brand.isDefault && brand.enabled) || brands?.find((brand) => brand.enabled) || null;
   }, [brands, selection]);
-  const { fonts: customFonts, mutate: refreshFonts } = useCustomFonts(activeBrand?.id);
+  const fontScope = selection === null
+    ? null
+    : activeBrand?.id ?? (typeof selection === 'string' ? false : undefined);
+  const { fonts: customFonts, mutate: refreshFonts } = useCustomFonts(fontScope);
 
   useEffect(() => {
     store.getState().setBrandEnforcement(!!activeBrand?.enforcement?.enabled);

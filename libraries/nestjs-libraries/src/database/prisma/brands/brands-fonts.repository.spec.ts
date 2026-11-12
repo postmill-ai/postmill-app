@@ -36,6 +36,28 @@ describe('per-Brand Kit custom fonts', () => {
     await expect(repository.getCustomFonts('org-1', null)).resolves.toHaveLength(2);
   });
 
+  it('deduplicates General Mode faces deterministically with default-first precedence', async () => {
+    model.aIBrandProfile.findMany.mockResolvedValue([
+      { customFonts: [{ ...font, weights: [400, 700], path: '/default.ttf' }] },
+      { customFonts: [
+        { ...font, weights: [400], path: '/other.ttf' },
+        { ...font, weights: [700], path: '/other-bold.ttf', italic: true },
+      ] },
+    ]);
+    const fonts = await repository.getCustomFonts('org-1', null);
+    expect(fonts).toEqual([
+      { ...font, weights: [400], path: '/default.ttf' },
+      { ...font, weights: [700], path: '/default.ttf' },
+      { ...font, weights: [700], path: '/other-bold.ttf', italic: true },
+    ]);
+  });
+
+  it('fails an explicit-brand upload if the brand disappears', async () => {
+    model.aIBrandProfile.findFirst.mockResolvedValue(null);
+    await expect(repository.addCustomFont('org-1', font, 'brand-2')).rejects.toThrow('Brand not found');
+    expect(model.aIBrandProfile.create).not.toHaveBeenCalled();
+  });
+
   it('uploads and removes from the selected brand, not the default', async () => {
     model.aIBrandProfile.findFirst.mockResolvedValue({ id: 'brand-2', customFonts: [] });
     model.aIBrandProfile.update.mockResolvedValue({});
@@ -48,6 +70,18 @@ describe('per-Brand Kit custom fonts', () => {
     expect(model.aIBrandProfile.update).toHaveBeenLastCalledWith({
       where: { id: 'brand-2', organizationId: 'org-1' },
       data: { customFonts: [] },
+    });
+  });
+
+  it('maps only supported Brand Kit fields into Prisma writes', async () => {
+    model.aIBrandProfile.findFirst.mockResolvedValue({ id: 'brand-1' });
+    await repository.updateBrand('org-1', 'brand-1', {
+      name: 'Known',
+      ...({ unexpectedPrismaKey: 'rejected' } as any),
+    });
+    expect(model.aIBrandProfile.update).toHaveBeenCalledWith({
+      where: { id: 'brand-1', organizationId: 'org-1' },
+      data: { name: 'Known' },
     });
   });
 });

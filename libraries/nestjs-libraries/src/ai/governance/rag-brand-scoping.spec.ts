@@ -21,7 +21,7 @@ const repository = {
   findChunksForBm25: vi.fn(),
   deleteContentIndexEntries: vi.fn(),
 };
-const brands = { getBrandStrict: vi.fn() };
+const brands = { getBrandStrict: vi.fn(), getBrandOwnedStrict: vi.fn() };
 const settingsManager = { getSettings: vi.fn() };
 const modelProvider = {
   embeddingModel: vi.fn().mockResolvedValue(null),
@@ -51,10 +51,20 @@ describe('RAG organization and Brand Kit scoping', () => {
     repository.vectorSearch.mockResolvedValue([]);
     repository.findChunksForBm25.mockResolvedValue([]);
     brands.getBrandStrict.mockResolvedValue({ id: 'brand-1', enabled: true });
-    settingsManager.getSettings.mockResolvedValue({ ragSettings: { enabled: false } });
+    brands.getBrandOwnedStrict.mockResolvedValue({ id: 'brand-1', enabled: true });
+    settingsManager.getSettings.mockResolvedValue({ ragSettings: { enabled: true } });
   });
 
-  it('allows an org override to enable Knowledge without changing the global default', async () => {
+  it('keeps the global operator off-switch authoritative over an org opt-in', async () => {
+    repository.getOrgRagEnabled.mockResolvedValue({ ragEnabled: true });
+    settingsManager.getSettings.mockResolvedValue({ ragSettings: { enabled: false } });
+    await expect(createService().indexContent({
+      organizationId: 'org-1', sourceType: 'text', sourceId: 'source-1', content: 'Brand fact', brandProfileId: 'brand-1',
+    })).rejects.toMatchObject({ status: 400 });
+    expect(redis.lpush).not.toHaveBeenCalled();
+  });
+
+  it('allows an org opt-in when the operator enables Knowledge', async () => {
     repository.getOrgRagEnabled.mockResolvedValue({ ragEnabled: true });
     await createService().indexContent({
       organizationId: 'org-1', sourceType: 'text', sourceId: 'source-1', content: 'Brand fact', brandProfileId: 'brand-1',
@@ -115,8 +125,26 @@ describe('RAG organization and Brand Kit scoping', () => {
       .resolves.toMatchObject({ items: [{ sourceId: 'shared' }] });
     await service.deleteItem('org-1', 'text', 'shared', 'brand-1');
     expect(repository.deleteContentIndexEntries).toHaveBeenCalledWith(
-      'org-1', 'text', 'brand:brand-1:shared', 'brand-1',
+      'org-1', 'text', 'brand:brand-1:shared', 'brand-1', false,
     );
+  });
+
+  it('lists and deletes only legacy unassigned rows without leaking brand prefixes', async () => {
+    repository.getOrgContentIndexEntries.mockResolvedValue([
+      { sourceType: 'text', sourceId: 'legacy-shared', brandProfileId: null, chunk: 'Legacy', createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-02') },
+    ]);
+    repository.textSearchTerms.mockResolvedValue([
+      { text: 'Fact', sourceType: 'text', sourceId: 'brand:brand-1:shared', score: 1 },
+    ]);
+    const service = createService();
+    await expect(service.getItems('org-1', { unassigned: true })).resolves.toMatchObject({
+      items: [{ sourceId: 'legacy-shared' }],
+    });
+    expect(repository.getOrgContentIndexEntries).toHaveBeenCalledWith('org-1', undefined, true);
+    await service.deleteItem('org-1', 'text', 'legacy-shared', undefined, true);
+    expect(repository.deleteContentIndexEntries).toHaveBeenCalledWith('org-1', 'text', 'legacy-shared', undefined, true);
+    await expect(service.search({ organizationId: 'org-1', query: 'fact' }))
+      .resolves.toEqual([{ text: 'Fact', sourceType: 'text', sourceId: 'shared', score: 1 }]);
   });
 
   it('persists false as an org override rather than converting it to inherit', async () => {

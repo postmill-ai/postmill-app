@@ -147,7 +147,29 @@ export class DesignRepository {
   // No page/limit = the historical full list (callers that group/bucket the
   // whole gallery in memory). Both present = one page plus a count via
   // countTemplatesByOrg.
-  findTemplatesByOrg(orgId: string, page?: number, limit?: number) {
+  async findTemplatesByOrg(orgId: string, page?: number, limit?: number, brandProfileId?: string) {
+    if (brandProfileId) {
+      const paginated = page !== undefined && limit !== undefined;
+      const ordered = await (this._designTemplate.model as any).$queryRawUnsafe(
+        `SELECT "id"
+         FROM "DesignTemplate"
+         WHERE "deletedAt" IS NULL
+           AND ("organizationId" = $1 OR "isSystem" = true)
+         ORDER BY CASE WHEN "brandProfileId" = $2 THEN 0 ELSE 1 END,
+                  "isSystem" DESC, "name" ASC, "id" ASC
+         ${paginated ? 'LIMIT $3 OFFSET $4' : ''}`,
+        orgId,
+        brandProfileId,
+        ...(paginated ? [limit, (page - 1) * limit] : []),
+      ) as Array<{ id: string }>;
+      if (!ordered.length) return [];
+      const templates = await this._designTemplate.model.designTemplate.findMany({
+        where: { id: { in: ordered.map((row) => row.id) } },
+        include: { thumbnailFile: { select: { path: true } } },
+      });
+      const byId = new Map(templates.map((template) => [template.id, template]));
+      return ordered.map((row) => byId.get(row.id)!);
+    }
     return this._designTemplate.model.designTemplate.findMany({
       where: {
         deletedAt: null,

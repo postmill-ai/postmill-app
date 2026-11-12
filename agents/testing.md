@@ -261,9 +261,11 @@ extraction, authorization or planner-payload verification.
 
 Brand Studio acceptance uses two distinct kits in a disposable QA org: editor management and reload,
 org-scoped Knowledge enablement/add/search, General vs Brand Mode persistence, logo save-vs-canvas,
-per-brand fonts and template/format priority, and AI Designer selection in the delivered document.
-Members/viewers are read-only and foreign brand/file ids are rejected. Run the complete non-paid
-workflow before any optional single-variant paid visual acceptance; paid runs require separate
+deterministic per-brand/General fonts and server-paginated template/format priority, and AI Designer
+selection in the delivered document. Include pre-upgrade unassigned Knowledge list/delete, the global
+operator off-switch, disabled-brand cleanup, native external-vector brand filters, and Starter/at-cap
+font reads. Members/viewers are read-only and foreign brand/file ids are rejected. Run the complete
+non-paid workflow before any optional single-variant paid visual acceptance; paid runs require separate
 explicit authorization and no automatic retries.
 
 ## Lint

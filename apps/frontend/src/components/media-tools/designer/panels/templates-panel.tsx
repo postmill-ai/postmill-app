@@ -75,12 +75,14 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   const t = useT();
   const { activeBrand } = useBrandKit();
 
+  const brandQuery = activeBrand ? `&brandId=${encodeURIComponent(activeBrand.id)}` : '';
+
   // Page 1 stays on SWR (cache + revalidate-on-focus); pages 2+ accumulate in
   // local state behind "Load more" (same pattern as my-designs-panel).
   const { data, error, isLoading, mutate } = useSWR(
-    `design-templates-${user.orgId}`,
+    `design-templates-${user.orgId}-${activeBrand?.id || 'general'}`,
     async () => {
-      const res = await fetch(`/media/design-templates?page=1&limit=${PAGE_LIMIT}`);
+      const res = await fetch(`/media/design-templates?page=1&limit=${PAGE_LIMIT}${brandQuery}`);
       if (!res.ok) throw new Error('Failed to load templates');
       return res.json() as Promise<TemplatePage>;
     },
@@ -91,23 +93,19 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   const [page, setPage] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // A paged list is only meaningful for the org it was fetched under — a
-  // different org starts back at page 1.
+  // A paged list is only meaningful for the org and brand it was fetched under.
   useEffect(() => {
     setExtraTemplates([]);
     setPage(1);
-  }, [user.orgId]);
+  }, [user.orgId, activeBrand?.id]);
 
   const templates: DesignTemplate[] = useMemo(() => {
     const seen = new Map<string, DesignTemplate>();
     for (const template of [...(data?.templates || []), ...extraTemplates]) {
       seen.set(template.id, template);
     }
-    return [...seen.values()].sort((a, b) => {
-      if (!activeBrand) return 0;
-      return Number(b.brandProfileId === activeBrand.id) - Number(a.brandProfileId === activeBrand.id);
-    });
-  }, [activeBrand, data, extraTemplates]);
+    return [...seen.values()];
+  }, [data, extraTemplates]);
   const total: number = data?.total ?? templates.length;
   const hasMore = templates.length < total;
 
@@ -115,7 +113,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     setLoadingMore(true);
     try {
       const next = page + 1;
-      const res = await fetch(`/media/design-templates?page=${next}&limit=${PAGE_LIMIT}`);
+      const res = await fetch(`/media/design-templates?page=${next}&limit=${PAGE_LIMIT}${brandQuery}`);
       if (!res.ok) return;
       const json = (await res.json()) as TemplatePage;
       setExtraTemplates((cur) => [...cur, ...((json?.templates || []) as DesignTemplate[])]);
@@ -123,7 +121,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     } finally {
       setLoadingMore(false);
     }
-  }, [fetch, page]);
+  }, [fetch, page, brandQuery]);
 
   const { data: folders, mutate: mutateFolders } = useTemplateFolders(user?.orgId);
   const [selection, setSelection] = useState<FolderSelection>(null);

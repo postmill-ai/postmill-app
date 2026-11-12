@@ -11,6 +11,7 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Organization, User } from '@prisma/client';
@@ -22,6 +23,7 @@ import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { RagSearchDto } from '@postmill-ai/backend/dtos/rag/rag-search.dto';
 import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { SuperAdminGuard } from '@postmill-ai/backend/services/auth/rbac/super-admin.guard';
 
 // 'pgvector' = built-in Postmill default; the rest are remote stores.
 const VECTOR_STORES = ['pgvector', 'pgvector-remote', 'qdrant', 'pinecone'];
@@ -37,11 +39,29 @@ export class RagController {
     private _aiSettingsService: AiSettingsService,
   ) {}
 
+  private _assertSuperAdmin(user: User) {
+    if (!user?.isSuperAdmin) {
+      throw new HttpException('Super admin access required', HttpStatus.FORBIDDEN);
+    }
+  }
+
+  private _scope(brandId?: string, scope?: string) {
+    if (brandId && scope === 'unassigned') {
+      throw new BadRequestException('brandId and unassigned scope are mutually exclusive');
+    }
+    return { brandProfileId: brandId, unassigned: scope === 'unassigned' };
+  }
+
   @Get('/status')
   @RequirePermission('brands', 'read')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async getStatus(@GetOrgFromRequest() org: Organization, @Query('brandId') brandId?: string) {
-    return this._ragService.getStatus(org.id, brandId);
+  async getStatus(
+    @GetOrgFromRequest() org: Organization,
+    @Query('brandId') brandId?: string,
+    @Query('scope') scope?: string,
+  ) {
+    const selection = this._scope(brandId, scope);
+    return this._ragService.getStatus(org.id, selection.brandProfileId, selection.unassigned);
   }
 
   @Post('/index')
@@ -93,17 +113,19 @@ export class RagController {
     @Query('limit') limit?: string,
     @Query('sourceType') sourceType?: string,
     @Query('brandId') brandId?: string,
+    @Query('scope') scope?: string,
   ) {
     const parsedOffset = offset ? Math.max(0, parseInt(offset, 10)) : 0;
     const parsedLimit = limit
       ? Math.min(100, Math.max(1, parseInt(limit, 10)))
       : 20;
+    const selection = this._scope(brandId, scope);
 
     return this._ragService.getItems(org.id, {
       sourceType,
       offset: parsedOffset,
       limit: parsedLimit,
-      brandProfileId: brandId,
+      ...selection,
     });
   }
 
@@ -115,9 +137,17 @@ export class RagController {
     @Param('sourceType') sourceType: string,
     @Param('sourceId') sourceId: string,
     @Query('brandId') brandId?: string,
+    @Query('scope') scope?: string,
   ) {
     try {
-      await this._ragService.deleteItem(org.id, sourceType, sourceId, brandId);
+      const selection = this._scope(brandId, scope);
+      await this._ragService.deleteItem(
+        org.id,
+        sourceType,
+        sourceId,
+        selection.brandProfileId,
+        selection.unassigned,
+      );
       return { success: true };
     } catch (err) {
       if (err instanceof HttpException) throw err;
@@ -167,15 +197,19 @@ export class RagController {
   }
 
   @Get('/settings')
-  @RequirePermission('brands', 'read')
+  @UseGuards(SuperAdminGuard)
+  @RequirePermission('ai-config', 'update')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async getSettings(@GetOrgFromRequest() org: Organization) {
+  async getSettings(@GetOrgFromRequest() org: Organization, @GetUserFromRequest() user: User) {
+    this._assertSuperAdmin(user);
     const settings = await this._aiSettingsManager.getSettings();
     const rag = (settings?.ragSettings || {}) as Record<string, any>;
     const secret = (settings as any)?.secretSettings || {};
     const status = await this._ragService.getStatus(org.id);
     return {
-      enabled: status.enabled,
+      enabled: !!rag.enabled,
+      effectiveEnabled: status.enabled,
+      organizationEnabled: status.organizationEnabled,
       vectorStore: rag.vectorStore || 'pgvector',
       // Qdrant (remote)
       qdrantUrl: rag.qdrantUrl || '',
@@ -198,7 +232,7 @@ export class RagController {
   }
 
   @Put('/enabled')
-  @RequirePermission('brands', 'update')
+  @RequirePermission('ai-config', 'update')
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   async setEnabled(
     @GetOrgFromRequest() org: Organization,
@@ -214,11 +248,14 @@ export class RagController {
   }
 
   @Put('/settings')
+  @UseGuards(SuperAdminGuard)
   @RequirePermission('ai-config', 'update')
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   async saveSettings(
+    @GetUserFromRequest() user: User,
     @Body()
     body: {
+      enabled?: boolean;
       vectorStore?: string;
       qdrantUrl?: string;
       qdrantApiKey?: string;
@@ -236,6 +273,7 @@ export class RagController {
       autoIndexSources?: string[];
     },
   ) {
+    this._assertSuperAdmin(user);
     if (body.vectorStore && !VECTOR_STORES.includes(body.vectorStore)) {
       throw new BadRequestException(
         `vectorStore must be one of ${VECTOR_STORES.join(', ')}`,
@@ -251,6 +289,7 @@ export class RagController {
     delete rag.pgUrl;
     delete rag.pineconeApiKey;
 
+    if (body.enabled !== undefined) rag.enabled = body.enabled;
     if (body.vectorStore !== undefined) rag.vectorStore = body.vectorStore;
     if (body.qdrantUrl !== undefined) rag.qdrantUrl = body.qdrantUrl;
     if (body.qdrantCollection !== undefined) rag.qdrantCollection = body.qdrantCollection;
@@ -276,14 +315,17 @@ export class RagController {
       secretSettings: secret,
     });
     await this._aiSettingsManager.refreshCache();
+    this._ragService.refreshSettings();
 
     return { success: true };
   }
 
   @Post('/settings/test-connection')
+  @UseGuards(SuperAdminGuard)
   @RequirePermission('ai-config', 'update')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async testConnection(
+    @GetUserFromRequest() user: User,
     @Body()
     body: {
       vectorStore: string;
@@ -299,6 +341,7 @@ export class RagController {
       embeddingDimension?: number;
     },
   ) {
+    this._assertSuperAdmin(user);
     if (!VECTOR_STORES.includes(body.vectorStore)) {
       throw new BadRequestException(
         `vectorStore must be one of ${VECTOR_STORES.join(', ')}`,

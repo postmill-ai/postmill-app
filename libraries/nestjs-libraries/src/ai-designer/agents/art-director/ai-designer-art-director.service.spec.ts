@@ -24,7 +24,7 @@ describe('AiDesignerArtDirectorService', () => {
     getSkillPrompt: ReturnType<typeof vi.fn>;
     getLayoutHints: ReturnType<typeof vi.fn>;
   };
-  let brands: { getBrandStrict: ReturnType<typeof vi.fn> };
+  let brands: { getBrand: ReturnType<typeof vi.fn> };
   let model: { generateObject: ReturnType<typeof vi.fn> };
   let service: AiDesignerArtDirectorService;
 
@@ -34,7 +34,7 @@ describe('AiDesignerArtDirectorService', () => {
       getSkillPrompt: vi.fn(() => 'skill prompt'),
       getLayoutHints: vi.fn(() => undefined),
     };
-    brands = { getBrandStrict: vi.fn() };
+    brands = { getBrand: vi.fn() };
     model = { generateObject: vi.fn() };
     service = new AiDesignerArtDirectorService(
       skillRouter as any,
@@ -50,7 +50,8 @@ describe('AiDesignerArtDirectorService', () => {
     });
 
   it('uses named and uploaded custom fonts from the selected Brand Kit', async () => {
-    brands.getBrandStrict.mockResolvedValue({
+    brands.getBrand.mockResolvedValue({
+      enabled: true,
       instructions: 'Warm and direct',
       palette: ['#112233'],
       fontFamilies: ['Named Sans'],
@@ -62,7 +63,13 @@ describe('AiDesignerArtDirectorService', () => {
         brandPalette: ['#112233'],
         brandFontFamilies: ['Named Sans', 'Uploaded Sans'],
       });
-    expect(brands.getBrandStrict).toHaveBeenCalledWith('org1', 'brand1');
+    expect(brands.getBrand).toHaveBeenCalledWith('org1', 'brand1');
+  });
+
+  it('keeps the original brief when a brand disappears after session start', async () => {
+    brands.getBrand.mockResolvedValue(null);
+    await expect((service as any)._enrichBrief({ intent: 'Launch' }, 'org1', 'brand1'))
+      .resolves.toEqual({ intent: 'Launch' });
   });
 
   it('does no billable work when the dispatch signal is already aborted', async () => {

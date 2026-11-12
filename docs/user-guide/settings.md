@@ -240,15 +240,20 @@ viewers can read them. The old Settings → AI → Brands links redirect here.
 ### Brand Knowledge
 
 Enable **Knowledge** for your organization to add and search brand-specific facts, examples, web
-pages, or notes. This is an organization-level switch and does not change the deployment-wide
-vector-store configuration. Indexing, searching, listing, and deleting items are scoped to the
-brand you opened; another brand's knowledge is not returned. Existing shared post/media memory
-stays separate.
+pages, or notes. A platform operator must also allow Knowledge on the deployment; an organization
+cannot override an operator-wide off-switch. Org administrators control the org switch, while editors
+manage brand content. Indexing, searching, listing, and deleting items are scoped to the brand you
+opened; another brand's knowledge is not returned.
 
-The built-in **Postmill (PostgreSQL + pgvector)** store needs no configuration. AI administrators
+**Unassigned Knowledge** on the Brand Studio home page preserves content added before Brand Kits.
+Those items remain available to intentionally org-wide AI searches and can be reviewed or deleted
+there. Re-add an item to a Brand Kit when you want it used for brand-scoped retrieval. **Learn from
+my posts** adds only posts assigned to the selected brand; unbranded posts and media are not copied
+into every kit.
+
+The built-in **Postmill (PostgreSQL + pgvector)** store needs no configuration. Platform super-admins
 can configure PG Vector Remote, Qdrant, or Pinecone, including connection tests and encrypted
 secrets. When a remote store is unreachable, indexing/search fall back to the built-in text path.
-**Learn from my posts** adds historical posts and media to the selected brand's Knowledge.
 
 ## Shortlinks tab
 

@@ -79,6 +79,10 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
   private _ragSettingsCache: { value: RagSettings; expiry: number } | null = null;
   private readonly _ragCacheTtlMs = 30_000;
 
+  refreshSettings() {
+    this._ragSettingsCache = null;
+  }
+
   private async _getRagSettings(): Promise<RagSettings> {
     if (this._ragSettingsCache && Date.now() < this._ragSettingsCache.expiry) {
       return this._ragSettingsCache.value;
@@ -180,12 +184,16 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
     return brandProfileId ? `brand:${brandProfileId}:${sourceId}` : sourceId;
   }
 
+  private _publicSourceId(sourceId: string, brandProfileId?: string): string {
+    const prefix = brandProfileId ? `brand:${brandProfileId}:` : '';
+    if (prefix && sourceId.startsWith(prefix)) return sourceId.slice(prefix.length);
+    return sourceId.replace(/^brand:[^:]+:/, '');
+  }
+
   private _publicHits(hits: RagHit[], brandProfileId?: string): RagHit[] {
-    if (!brandProfileId) return hits;
-    const prefix = `brand:${brandProfileId}:`;
     return hits.map((hit) => ({
       ...hit,
-      sourceId: hit.sourceId.startsWith(prefix) ? hit.sourceId.slice(prefix.length) : hit.sourceId,
+      sourceId: this._publicSourceId(hit.sourceId, brandProfileId),
     }));
   }
 
@@ -302,6 +310,7 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
           text: idx.chunk,
           sourceType,
           sourceId,
+          brandProfileId,
         }))
         .filter((p) => Array.isArray(p.vector) && p.vector.length > 0);
       await store.adapter.upsertBatch(organizationId, points);
@@ -524,18 +533,6 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async _scopeHits(
-    organizationId: string,
-    hits: RagHit[],
-    limit: number,
-    brandProfileId?: string,
-  ): Promise<RagHit[]> {
-    if (!brandProfileId) return hits;
-    const entries = await this._aiRagRepository.getOrgContentIndexEntries(organizationId, brandProfileId);
-    const sources = new Set(entries.map((entry) => `${entry.sourceType}:${entry.sourceId}`));
-    return hits.filter((hit) => sources.has(`${hit.sourceType}:${hit.sourceId}`)).slice(0, limit);
-  }
-
   async search(
     params: { organizationId: string; query: string; limit?: number; brandProfileId?: string },
   ): Promise<{ text: string; sourceType: string; sourceId: string; score: number }[]> {
@@ -552,7 +549,6 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
     }
 
     const limit = params.limit || SEARCH_DEFAULT_LIMIT;
-    const retrievalLimit = params.brandProfileId ? limit * 3 : limit;
     const store = await this._resolveStore();
     let hits: RagHit[];
 
@@ -560,15 +556,20 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
       try {
         const embeddings = await this._computeEmbeddings([params.query], params.organizationId);
         if (embeddings.length && embeddings[0]?.length) {
-          const vectorHits = await store.adapter.search(params.organizationId, embeddings[0], retrievalLimit);
+          const vectorHits = await store.adapter.search(
+            params.organizationId,
+            embeddings[0],
+            limit,
+            params.brandProfileId ? { brandProfileId: params.brandProfileId } : undefined,
+          );
           const fused = await this._bm25Fuse(
             params.organizationId,
             params.query,
             vectorHits,
-            retrievalLimit,
+            limit,
             params.brandProfileId,
           );
-          hits = await this._scopeHits(params.organizationId, fused ?? vectorHits, limit, params.brandProfileId);
+          hits = (fused ?? vectorHits).slice(0, limit);
           return this._publicHits(hits, params.brandProfileId);
         }
       } catch (err) {
@@ -584,17 +585,17 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
       const vectorHits = await this._vectorSearch(
         params.organizationId,
         params.query,
-        retrievalLimit,
+        limit,
         params.brandProfileId,
       );
       const fused = await this._bm25Fuse(
         params.organizationId,
         params.query,
         vectorHits,
-        retrievalLimit,
+        limit,
         params.brandProfileId,
       );
-      hits = await this._scopeHits(params.organizationId, fused ?? vectorHits, limit, params.brandProfileId);
+      hits = (fused ?? vectorHits).slice(0, limit);
       return this._publicHits(hits, params.brandProfileId);
     }
 
@@ -656,7 +657,7 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
 
     let indexed = 0;
 
-    const posts = await this._aiRagRepository.findPostsForBackfill(organizationId);
+    const posts = await this._aiRagRepository.findPostsForBackfill(organizationId, brandProfileId);
 
     for (let i = 0; i < posts.length; i += BACKFILL_BATCH_SIZE) {
       const batch = posts.slice(i, i + BACKFILL_BATCH_SIZE);
@@ -666,6 +667,8 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
       }
       this._logger.log(`Backfill: indexed ${Math.min(i + BACKFILL_BATCH_SIZE, posts.length)}/${posts.length} posts`);
     }
+
+    if (brandProfileId) return { indexed };
 
     // §3.6 — also walk the org's media (alt-text / name) so semantic search covers the
     // media library, not just posts. Same batched + idempotent (contentHash) path.
@@ -863,12 +866,11 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async _isRagEnabled(organizationId?: string): Promise<boolean> {
-    if (organizationId) {
-      const org = await this._aiRagRepository.getOrgRagEnabled(organizationId);
-      if (typeof org?.ragEnabled === 'boolean') return org.ragEnabled;
-    }
     const ragSettings = await this._getRagSettings();
-    return ragSettings.enabled;
+    if (!ragSettings.enabled) return false;
+    if (!organizationId) return true;
+    const org = await this._aiRagRepository.getOrgRagEnabled(organizationId);
+    return org?.ragEnabled !== false;
   }
 
   async setOrgRagEnabled(organizationId: string, enabled: boolean | null) {
@@ -950,8 +952,10 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
       .slice(0, limit);
   }
 
-  async getStatus(organizationId: string, brandProfileId?: string): Promise<{
+  async getStatus(organizationId: string, brandProfileId?: string, unassigned = false): Promise<{
     enabled: boolean;
+    globalEnabled: boolean;
+    organizationEnabled: boolean | null;
     indexedItems: number;
     lastIndexed: string | null;
     embeddingModel: string;
@@ -960,24 +964,20 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
     if (!organizationId) {
       throw new Error('getStatus requires a valid organizationId');
     }
-    if (brandProfileId) await this._brands.getBrandStrict(organizationId, brandProfileId);
+    if (brandProfileId) await this._brands.getBrandOwnedStrict(organizationId, brandProfileId);
 
-    const enabled = await this._isRagEnabled(organizationId);
+    const [rag, org, entries] = await Promise.all([
+      this._getRagSettings(),
+      this._aiRagRepository.getOrgRagEnabled(organizationId),
+      this._aiRagRepository.getOrgContentIndexEntries(organizationId, brandProfileId, unassigned),
+    ]);
+    const enabled = rag.enabled && org?.ragEnabled !== false;
+    const lastIndexed = entries.length > 0
+      ? entries.reduce((latest, e) =>
+        new Date(e.updatedAt) > new Date(latest.updatedAt) ? e : latest,
+      ).updatedAt.toISOString()
+      : null;
 
-    let indexedItems = 0;
-    let lastIndexed: string | null = null;
-    if (enabled) {
-      const entries = await this._aiRagRepository.getOrgContentIndexEntries(organizationId, brandProfileId);
-      indexedItems = entries.length;
-      if (entries.length > 0) {
-        lastIndexed = entries.reduce((latest, e) =>
-          new Date(e.updatedAt) > new Date(latest.updatedAt) ? e : latest,
-        ).updatedAt.toISOString();
-      }
-    }
-
-    const settings = await this._aiSettingsManager.getSettings();
-    const rag = settings?.ragSettings as any;
     const utilityDefault = await this._orgDefaultModels.get(
       organizationId,
       'ai',
@@ -985,13 +985,15 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
     );
     const activeProvider = utilityDefault?.providerId || 'openai';
     const activeModel =
-      rag?.embeddingModel ||
+      (rag as any)?.embeddingModel ||
       utilityDefault?.model ||
       'text-embedding-3-small';
 
     return {
       enabled,
-      indexedItems,
+      globalEnabled: rag.enabled,
+      organizationEnabled: org?.ragEnabled ?? null,
+      indexedItems: entries.length,
       lastIndexed,
       embeddingModel: `${activeProvider}/${activeModel}`,
       vectorStore: rag?.vectorStore || 'pgvector',
@@ -1000,7 +1002,7 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
 
   async getItems(
     organizationId: string,
-    params: { sourceType?: string; limit?: number; offset?: number; brandProfileId?: string },
+    params: { sourceType?: string; limit?: number; offset?: number; brandProfileId?: string; unassigned?: boolean },
   ): Promise<{
     items: Array<{ sourceId: string; sourceType: string; indexedDate: string; chunkCount: number; charCount: number }>;
     total: number;
@@ -1011,7 +1013,7 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
       throw new Error('getItems requires a valid organizationId');
     }
     if (params.brandProfileId) {
-      await this._brands.getBrandStrict(organizationId, params.brandProfileId);
+      await this._brands.getBrandOwnedStrict(organizationId, params.brandProfileId);
     }
 
     const parsedOffset = Math.max(0, params.offset ?? 0);
@@ -1020,6 +1022,7 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
     const entries = await this._aiRagRepository.getOrgContentIndexEntries(
       organizationId,
       params.brandProfileId,
+      params.unassigned,
     );
 
     const filtered = params.sourceType
@@ -1052,24 +1055,28 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
 
     const items = Array.from(grouped.values());
     const total = items.length;
-    const sourcePrefix = params.brandProfileId ? `brand:${params.brandProfileId}:` : '';
     const paged = items.slice(parsedOffset, parsedOffset + parsedLimit).map((item) => ({
       ...item,
-      sourceId: sourcePrefix && item.sourceId.startsWith(sourcePrefix)
-        ? item.sourceId.slice(sourcePrefix.length)
-        : item.sourceId,
+      sourceId: this._publicSourceId(item.sourceId, params.brandProfileId),
     }));
 
     return { items: paged, total, offset: parsedOffset, limit: parsedLimit };
   }
 
-  async deleteItem(organizationId: string, sourceType: string, sourceId: string, brandProfileId?: string): Promise<void> {
-    if (brandProfileId) await this._brands.getBrandStrict(organizationId, brandProfileId);
+  async deleteItem(
+    organizationId: string,
+    sourceType: string,
+    sourceId: string,
+    brandProfileId?: string,
+    unassigned = false,
+  ): Promise<void> {
+    if (brandProfileId) await this._brands.getBrandOwnedStrict(organizationId, brandProfileId);
     await this._aiRagRepository.deleteContentIndexEntries(
       organizationId,
       sourceType,
       this._storedSourceId(sourceId, brandProfileId),
       brandProfileId,
+      unassigned,
     );
   }
 }

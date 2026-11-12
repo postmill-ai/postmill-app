@@ -88,14 +88,22 @@ export const BrandList = () => {
             )}
           </p>
         </div>
-        {canEdit && (
+        <div className="flex items-center gap-[8px] shrink-0">
           <button
-            onClick={() => setShowCreate(!showCreate)}
-            className="bg-btnPrimary text-white rounded-[8px] px-[16px] py-[8px] text-[14px] hover:opacity-90 shrink-0"
+            onClick={() => router.push('/brands/knowledge')}
+            className="border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[13px] hover:bg-boxHover"
           >
-            {t('create_brand', 'Create Brand')}
+            {t('unassigned_knowledge', 'Unassigned Knowledge')}
           </button>
-        )}
+          {canEdit && (
+            <button
+              onClick={() => setShowCreate(!showCreate)}
+              className="bg-btnPrimary text-white rounded-[8px] px-[16px] py-[8px] text-[14px] hover:opacity-90 shrink-0"
+            >
+              {t('create_brand', 'Create Brand')}
+            </button>
+          )}
+        </div>
       </div>
 
       {canEdit && showCreate && (

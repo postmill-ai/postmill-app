@@ -1,5 +1,6 @@
 import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { BrandProfileWrite, pickBrandProfileWrite } from '@postmill-ai/nestjs-libraries/brands/brand-kit';
 
 @Injectable()
 export class BrandsRepository {
@@ -39,21 +40,22 @@ export class BrandsRepository {
     });
   }
 
-  createBrand(organizationId: string, data: Record<string, any> & { name: string }) {
+  createBrand(organizationId: string, data: BrandProfileWrite & { name: string }) {
+    const values = pickBrandProfileWrite(data);
     return this._aiBrandProfile.model.aIBrandProfile.create({
       data: {
-        ...data,
+        ...values,
         organizationId,
-        platformInstructions: data.platformInstructions || {},
-        languageProfiles: data.languageProfiles ?? {},
-        enabled: data.enabled ?? true,
-        isDefault: data.isDefault ?? false,
-        logoFileIds: data.logoFileIds ?? [],
-        palette: data.palette ?? [],
-        fontFamilies: data.fontFamilies ?? [],
-        preferredFormats: data.preferredFormats ?? [],
-        assets: data.assets ?? [],
-        enforcement: data.enforcement ?? {},
+        platformInstructions: values.platformInstructions || {},
+        languageProfiles: values.languageProfiles ?? {},
+        enabled: values.enabled ?? true,
+        isDefault: values.isDefault ?? false,
+        logoFileIds: values.logoFileIds ?? [],
+        palette: values.palette ?? [],
+        fontFamilies: values.fontFamilies ?? [],
+        preferredFormats: values.preferredFormats ?? [],
+        assets: values.assets ?? [],
+        enforcement: values.enforcement ?? {},
       },
     });
   }
@@ -61,7 +63,7 @@ export class BrandsRepository {
   async updateBrand(
     organizationId: string,
     brandId: string,
-    data: Record<string, any>,
+    data: BrandProfileWrite,
   ) {
     const brand = await this._aiBrandProfile.model.aIBrandProfile.findFirst({
       where: { id: brandId, organizationId },
@@ -69,7 +71,7 @@ export class BrandsRepository {
     if (!brand) return null;
     return this._aiBrandProfile.model.aIBrandProfile.update({
       where: { id: brandId, organizationId },
-      data,
+      data: pickBrandProfileWrite(data),
     });
   }
 
@@ -114,7 +116,17 @@ export class BrandsRepository {
   async getCustomFonts(organizationId: string, brandId?: string | null) {
     if (brandId === null) {
       const brands = await this.getBrands(organizationId);
-      return brands.flatMap((brand) => Array.isArray(brand.customFonts) ? brand.customFonts : []);
+      const faces = new Map<string, any>();
+      for (const brand of brands) {
+        const fonts = Array.isArray(brand.customFonts) ? brand.customFonts as any[] : [];
+        for (const font of fonts) {
+          for (const weight of font.weights?.length ? font.weights : [400]) {
+            const key = `${(font.family || '').toLowerCase()}|${weight}|${font.italic ? 'i' : 'n'}`;
+            if (!faces.has(key)) faces.set(key, { ...font, weights: [weight] });
+          }
+        }
+      }
+      return [...faces.values()];
     }
     const brand = await this._brandForFonts(organizationId, brandId);
     if (!brand) return [];
@@ -129,11 +141,17 @@ export class BrandsRepository {
   ) {
     let brand = await this._brandForFonts(organizationId, brandId);
     if (!brand) {
-      if (brandId) return [];
+      if (brandId) throw new NotFoundException('Brand not found');
+      // Fonts live on the org's default profile — an org with zero profiles
+      // used to get a silent no-op here (the upload "succeeded" and vanished).
+      // Create the default profile, named like the AI-settings upsert does.
       brand = await this._aiBrandProfile.model.aIBrandProfile.create({
         data: { organizationId, name: 'Default Brand', isDefault: true },
       });
     }
+    // Identity is (family, weight, italic), not the row. Re-uploading a weight
+    // used to append a second entry for it, and which of the two the renderers
+    // picked depended on iteration order — the new file replaces the old one.
     const key = (f: { family?: string; weights?: number[]; italic?: boolean }) =>
       `${(f.family || '').toLowerCase()}|${f.weights?.[0] ?? 400}|${f.italic ? 'i' : 'n'}`;
     const existing = ((brand.customFonts as any[]) || []).filter(

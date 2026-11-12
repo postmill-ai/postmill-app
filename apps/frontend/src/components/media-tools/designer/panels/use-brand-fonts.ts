@@ -37,16 +37,19 @@ export const useBrandFonts = () => {
   ], [activeBrand?.fontFamilies, customFonts]);
 };
 
-export const useCustomFonts = (brandId?: string | null): {
+export const useCustomFonts = (brandId?: string | null | false): {
   fonts: CustomFontEntry[];
   mutate: () => void;
 } => {
   const user = useUser();
   const fetch = useFetch();
+  const fontScope = brandId === null ? 'general' : brandId || 'default';
   const { data, mutate } = useSWR<CustomFontEntry[]>(
-    user?.orgId && brandId !== null ? `custom-fonts-${user.orgId}-${brandId || 'default'}` : null,
+    user?.orgId && brandId !== false ? `custom-fonts-${user.orgId}-${fontScope}` : null,
     async () => {
-      const query = brandId ? `?brandId=${encodeURIComponent(brandId)}` : '';
+      const query = brandId === null
+        ? '?brandId=null'
+        : brandId ? `?brandId=${encodeURIComponent(brandId)}` : '';
       const res = await fetch(`/media/fonts${query}`);
       if (!res.ok) return [];
       return res.json();

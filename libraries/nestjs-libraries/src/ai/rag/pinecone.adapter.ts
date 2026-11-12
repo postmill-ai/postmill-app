@@ -1,4 +1,4 @@
-import { VectorStoreAdapter, RagHit } from './vector-store.adapter';
+import { VectorStoreAdapter, RagHit, VectorStorePoint } from './vector-store.adapter';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 
 interface PineconeConfig {
@@ -85,7 +85,10 @@ export class PineconeVectorStoreAdapter implements VectorStoreAdapter {
       vector,
       topK: limit,
       includeMetadata: true,
-      filter: { organizationId: { $eq: organizationId }, ...filter },
+      filter: {
+        organizationId: { $eq: organizationId },
+        ...(filter?.brandProfileId ? { brandProfileId: { $eq: filter.brandProfileId } } : {}),
+      },
     });
     return (data?.matches || [])
       .filter((m: any) => m?.metadata?.organizationId === organizationId)
@@ -99,7 +102,7 @@ export class PineconeVectorStoreAdapter implements VectorStoreAdapter {
 
   async upsertBatch(
     organizationId: string,
-    points: Array<{ id: string; vector: number[]; text: string; sourceType: string; sourceId: string }>
+    points: VectorStorePoint[]
   ): Promise<void> {
     if (points.length === 0) return;
     await this._dataFetch('/vectors/upsert', {
@@ -111,6 +114,7 @@ export class PineconeVectorStoreAdapter implements VectorStoreAdapter {
           text: p.text,
           sourceType: p.sourceType,
           sourceId: p.sourceId,
+          brandProfileId: p.brandProfileId ?? null,
         },
       })),
     });
