@@ -5391,6 +5391,9 @@ describe('AiDesignerConductorService Brand Kit integration', () => {
   it('applies preferred formats, original logo, and brand reference assets on start', async () => {
     const { conductor, service } = makeConductor({
       policy: { check: vi.fn().mockResolvedValue({ ok: true, values: {}, instruction: 'Create' }) } as any,
+      fileService: {
+        getFileById: vi.fn().mockResolvedValue({ id: 'user-ref', type: 'image' }),
+      },
       brands: {
         getBrandStrict: vi.fn().mockResolvedValue({
           id: 'brand-1',
@@ -7953,7 +7956,15 @@ describe('AiDesignerConductorService document attachments', () => {
       updateSession: vi.fn().mockResolvedValue(undefined),
       appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
     };
-    const { conductor } = makeConductor({ service });
+    const { conductor } = makeConductor({
+      service,
+      fileService: {
+        getFileById: vi.fn().mockImplementation((_orgId, fileId) =>
+          Promise.resolve({ id: fileId, type: fileId.startsWith('ref-') ? 'image' : 'document' })
+        ),
+      },
+    });
+    (conductor as any)._attachments = { contextsFor: vi.fn().mockResolvedValue([]) };
     (conductor as any)._revisePlans = vi.fn().mockResolvedValue(undefined);
 
     await conductor.handleRevise(

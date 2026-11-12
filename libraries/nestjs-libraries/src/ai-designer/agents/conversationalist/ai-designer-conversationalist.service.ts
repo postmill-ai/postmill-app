@@ -18,6 +18,7 @@ import {
 import { throwIfAborted } from '../../util/throw-if-aborted';
 import { isDeliveredAccept } from '../../util/accept-phrases';
 import { FIXED_COPY_SEPARATOR } from '../../conductor/brief-values';
+import { aiDesignerFailureKind } from '../../conductor/failure-recovery';
 import {
   CONTACT_QUESTION,
   isContactDecline,
@@ -90,6 +91,7 @@ const SUMMARY_SKIP_KEYS = new Set([
   'lastPlans',
   'lastDeliveredDesignIds',
   'referenceCues',
+  'documentContexts',
   'answeredPromptIds',
   'pendingReviseTarget',
   'skillId',
@@ -274,7 +276,7 @@ export class AiDesignerConversationalistService implements OnModuleInit {
     } catch (err) {
       // An abort is a cancel, not a classification failure to degrade over.
       throwIfAborted(signal);
-      this._logger.warn(`Conversationalist classification failed: ${(err as Error).message}`);
+      this._logger.warn(`Conversationalist classification failed: ${aiDesignerFailureKind(err)}`);
       return { intent: 'general', text: text || 'How can I help?', failed: true };
     }
 

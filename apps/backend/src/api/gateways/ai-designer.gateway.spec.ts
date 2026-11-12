@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { AiDesignerGateway } from './ai-designer.gateway';
 
@@ -929,6 +930,84 @@ describe('AiDesignerGateway handleMessage idempotency', () => {
       nonce: 'n1',
     });
   });
+
+  it('forwards attachment IDs and acknowledges only through the accepted callback', async () => {
+    const conductor = {
+      handleMessage: vi.fn().mockImplementation(async (...args) => args[5]()),
+    } as any;
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({ id: 's1' }),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'm1', seq: 1 }),
+    } as any;
+    const gw = makeGatewayWithMocks({ conductor, policy, service }) as any;
+    const roomEmit = vi.fn();
+    gw.server = { to: vi.fn().mockReturnValue({ emit: roomEmit }) } as any;
+    const client = fakeSocket({
+      userId: 'u1',
+      orgId: 'o1',
+      sessionId: 's1',
+      lastAuthzAt: Date.now(),
+    });
+
+    await gw.handleMessage(client, {
+      nonce: 'n1',
+      text: 'hello',
+      referenceFileIds: ['image-1'],
+      attachmentFileIds: ['doc-1'],
+    });
+
+    expect(conductor.handleMessage).toHaveBeenCalledWith(
+      's1',
+      { orgId: 'o1', userId: 'u1', sessionId: 's1' },
+      'hello',
+      expect.anything(),
+      { referenceFileIds: ['image-1'], attachmentFileIds: ['doc-1'] },
+      expect.any(Function)
+    );
+    expect(service.appendMessage).toHaveBeenCalledOnce();
+    expect(roomEmit).toHaveBeenCalledWith('message', {
+      id: 'm1',
+      seq: 1,
+      nonce: 'n1',
+    });
+  });
+
+  it('releases the nonce without persisting when attachment validation rejects', async () => {
+    const idempotency = {
+      forSession: vi.fn().mockResolvedValue(true),
+      releaseForSession: vi.fn().mockResolvedValue(undefined),
+    } as any;
+    const conductor = {
+      handleMessage: vi.fn().mockRejectedValue(
+        new BadRequestException('Attachment belongs to another workspace')
+      ),
+    } as any;
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({ id: 's1' }),
+      appendMessage: vi.fn(),
+    } as any;
+    const gw = makeGatewayWithMocks({ idempotency, conductor, policy, service }) as any;
+    const client = fakeSocket({
+      userId: 'u1',
+      orgId: 'o1',
+      sessionId: 's1',
+      lastAuthzAt: Date.now(),
+    });
+
+    await gw.handleMessage(client, {
+      nonce: 'n1',
+      text: 'hello',
+      attachmentFileIds: ['doc-foreign'],
+    });
+
+    expect(service.appendMessage).not.toHaveBeenCalled();
+    expect(idempotency.releaseForSession).toHaveBeenCalledWith('n1', 's1');
+    expect(client.emit).toHaveBeenCalledWith('error', {
+      code: 'invalid_payload',
+      message: 'The request failed validation.',
+      nonce: 'n1',
+    });
+  });
 });
 
 describe('AiDesignerGateway handleCancel', () => {
@@ -1152,6 +1231,7 @@ describe('AiDesignerGateway input policy fast-fail', () => {
         nonce: 'n1',
       }),
       expect.anything(),
+      expect.any(Function),
     );
   });
 });

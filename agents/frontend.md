@@ -164,6 +164,15 @@ Gate composer/UI features per channel on the shared capability matrix, not on ad
   `apps/frontend/src/components/composer/providers/show.all.providers.tsx`.
 - Full walkthrough: `agents/providers/social.md`.
 
+## AI Designer chat attachments
+
+- Attach is enabled only in the resting `intake`, `awaiting_plan`, and `delivered` states, never while
+  planning/executing/revising or during an optimistic send. Intake sends optional bounded
+  `referenceFileIds`/`attachmentFileIds` through `message`; plan/design resting states use `revise`.
+- Keep image and document chips while the send is pending. Clear only the acknowledged send's chips on
+  its nonce-matched user-message echo; preserve newer selections. On rejection, disconnect, or the
+  10-second send timeout, remove the optimistic bubble and restore its text and chips for retry.
+
 ## Designer: four renderers, one document
 
 `/media/designer` draws every document **four times**:

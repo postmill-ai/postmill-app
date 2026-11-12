@@ -8,7 +8,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
@@ -31,6 +31,7 @@ import {
   AiDesignerReviseDto,
 } from '@postmill-ai/nestjs-libraries/dtos/ai-designer/start-ai-designer-session.dto';
 import { AiDesignerConductorService } from '@postmill-ai/nestjs-libraries/ai-designer/conductor/ai-designer-conductor.service';
+import { aiDesignerFailureKind } from '@postmill-ai/nestjs-libraries/ai-designer/conductor/failure-recovery';
 import { AiDesignerInputPolicyService } from '@postmill-ai/nestjs-libraries/ai-designer';
 import { resolveClientIp } from '@postmill-ai/nestjs-libraries/utils/client-ip';
 
@@ -485,22 +486,22 @@ export class AiDesignerGateway
       }
       const text = textCheck.instruction as string;
 
-      const userMsg = await this._service.appendMessage({
-        sessionId: ctx.sessionId,
-        role: 'user',
-        kind: 'text',
-        content: { kind: 'text', text },
-      });
-      this.server
-        .to(`session:${ctx.sessionId}`)
-        .emit('message', { ...userMsg, nonce: payload.nonce });
-
       const emitter = this._makeEmitter(client, ctx);
       await this._conductor.handleMessage(
         ctx.sessionId,
         { orgId: ctx.orgId, userId: ctx.userId, sessionId: ctx.sessionId },
         text,
-        emitter
+        emitter,
+        {
+          referenceFileIds: payload.referenceFileIds,
+          attachmentFileIds: payload.attachmentFileIds,
+        },
+        () =>
+          this._acknowledgeUserMessage(
+            ctx,
+            text,
+            payload.nonce
+          )
       );
     } catch (err) {
       const { sessionId } = ctx;
@@ -689,7 +690,13 @@ export class AiDesignerGateway
           attachmentFileIds: payload.attachmentFileIds,
           nonce: payload.nonce,
         },
-        emitter
+        emitter,
+        () =>
+          this._acknowledgeUserMessage(
+            ctx,
+            instruction,
+            payload.nonce
+          )
       );
     } catch (err) {
       const { sessionId } = ctx;
@@ -1085,6 +1092,22 @@ export class AiDesignerGateway
     });
   }
 
+  private async _acknowledgeUserMessage(
+    ctx: SocketContext,
+    text: string,
+    nonce: string
+  ) {
+    const userMsg = await this._service.appendMessage({
+      sessionId: ctx.sessionId,
+      role: 'user',
+      kind: 'text',
+      content: { kind: 'text', text },
+    });
+    this.server
+      .to(`session:${ctx.sessionId}`)
+      .emit('message', { ...userMsg, nonce });
+  }
+
   private _makeEmitter(client: Socket, ctx: SocketContext) {
     const room = `session:${ctx.sessionId}`;
     return {
@@ -1137,11 +1160,14 @@ export class AiDesignerGateway
     } catch {
       /* best-effort — the idempotency TTL is the backstop */
     }
+    const invalidPayload = err instanceof BadRequestException;
     this.logger.warn(
-      `${event} failed after nonce claim: ${(err as Error)?.message ?? err}`,
+      `${event} failed after nonce claim (${invalidPayload ? 'invalid_payload' : aiDesignerFailureKind(err)})`,
       AiDesignerGateway.name
     );
-    this._emitError(client, 'internal_error', { nonce });
+    this._emitError(client, invalidPayload ? 'invalid_payload' : 'internal_error', {
+      nonce,
+    });
   }
 
   private _emitError(

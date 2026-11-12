@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 
@@ -95,6 +95,10 @@ const sendChatMessage = (text: string) => {
   fireEvent.click(screen.getByText('Send'));
 };
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('AiDesignerChat thinking bubble', () => {
   beforeEach(() => {
     hoisted.socket = {
@@ -141,6 +145,106 @@ describe('AiDesignerChat thinking bubble', () => {
       ['doc-1'],
     );
     expect(hoisted.socket.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('forwards intake attachments through message and clears chips only after the accepted echo', async () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('intake');
+    });
+    fireEvent.change(screen.getByLabelText('Attach files'), {
+      target: { files: [new File(['brief'], 'brief.pdf', { type: 'application/pdf' })] },
+    });
+    expect(await screen.findByText('brief.pdf')).toBeTruthy();
+
+    sendChatMessage('Use the attached brief');
+
+    expect(hoisted.socket.sendMessage).toHaveBeenCalledWith(
+      'Use the attached brief',
+      [],
+      ['doc-1']
+    );
+    expect(hoisted.socket.revisePlan).not.toHaveBeenCalled();
+    expect(screen.getByText('brief.pdf')).toBeTruthy();
+
+    act(() => {
+      hoisted.socketCallbacks.onMessage(
+        serverMessage({ id: 'echo-1', role: 'user', nonce: 'nonce-1' })
+      );
+    });
+    expect(screen.queryByText('brief.pdf')).toBeNull();
+  });
+
+  it('restores attachment chips and text when the server rejects a send', async () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('intake');
+    });
+    fireEvent.change(screen.getByLabelText('Attach files'), {
+      target: { files: [new File(['brief'], 'brief.pdf', { type: 'application/pdf' })] },
+    });
+    expect(await screen.findByText('brief.pdf')).toBeTruthy();
+    sendChatMessage('Use the attached brief');
+
+    act(() => {
+      hoisted.socketCallbacks.onError({
+        nonce: 'nonce-1',
+        code: 'invalid_payload',
+        message: 'The request failed validation.',
+      });
+    });
+
+    expect(screen.getByText('brief.pdf')).toBeTruthy();
+    expect(screen.getByLabelText('Message')).toHaveProperty(
+      'value',
+      'Use the attached brief'
+    );
+    expect(screen.queryByTestId('msg-local-nonce-1')).toBeNull();
+  });
+
+  it('restores attachment chips when a pending send disconnects', async () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('intake');
+    });
+    fireEvent.change(screen.getByLabelText('Attach files'), {
+      target: { files: [new File(['brief'], 'brief.pdf', { type: 'application/pdf' })] },
+    });
+    expect(await screen.findByText('brief.pdf')).toBeTruthy();
+    sendChatMessage('Use the attached brief');
+
+    act(() => {
+      hoisted.socketCallbacks.onDisconnect();
+    });
+
+    expect(screen.getByText('brief.pdf')).toBeTruthy();
+    expect(screen.getByLabelText('Message')).toHaveProperty(
+      'value',
+      'Use the attached brief'
+    );
+  });
+
+  it('restores attachment chips when the delivery safety timeout expires', async () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('intake');
+    });
+    fireEvent.change(screen.getByLabelText('Attach files'), {
+      target: { files: [new File(['brief'], 'brief.pdf', { type: 'application/pdf' })] },
+    });
+    expect(await screen.findByText('brief.pdf')).toBeTruthy();
+    vi.useFakeTimers();
+    sendChatMessage('Use the attached brief');
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(screen.getByText('brief.pdf')).toBeTruthy();
+    expect(screen.getByLabelText('Message')).toHaveProperty(
+      'value',
+      'Use the attached brief'
+    );
   });
 
   it('disables attachments while an existing revision is still in progress', () => {

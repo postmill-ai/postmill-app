@@ -1,5 +1,5 @@
 import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { dispatchToAgent } from '@reaatech/agent-mesh-router';
 import { registryState } from '@reaatech/agent-mesh-registry';
 import type { AgentResponse } from '@reaatech/agent-mesh';
@@ -15,7 +15,6 @@ import type {
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
-import { GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { RagService } from '@postmill-ai/nestjs-libraries/ai/governance/rag.service';
 import { AiDesignerService } from '../ai-designer.service';
@@ -77,6 +76,10 @@ import { isCopySlot } from '../ai-designer.types';
 import { ReferenceLayoutSchema } from '../ai-designer.schemas';
 import { AiDesignerAttachmentsService } from '../attachments/ai-designer-attachments.service';
 import { MAX_AI_DESIGNER_ATTACHMENTS } from '@postmill-ai/helpers/utils/ai-designer-attachments';
+import {
+  aiDesignerFailureKind,
+  aiDesignerFailureText,
+} from './failure-recovery';
 
 export interface AiDesignerEmitter {
   toSession(event: string, payload: unknown): void;
@@ -377,6 +380,89 @@ export class AiDesignerConductorService {
     return (session.brief ?? { intent: '' }) as unknown as DesignBrief;
   }
 
+  private async _mergeAttachmentConfig(
+    sessionId: string,
+    ctx: AiDesignerAgentContext,
+    current: AiDesignerConfig,
+    incoming?: Pick<AiDesignerConfig, 'referenceFileIds' | 'attachmentFileIds'>
+  ): Promise<AiDesignerConfig> {
+    if (
+      incoming?.referenceFileIds === undefined &&
+      incoming?.attachmentFileIds === undefined
+    ) {
+      return current;
+    }
+
+    const referenceFileIds = [
+      ...new Set([
+        ...(current.referenceFileIds ?? []),
+        ...(incoming.referenceFileIds ?? []),
+      ]),
+    ];
+    const attachmentFileIds = [
+      ...new Set([
+        ...(current.attachmentFileIds ?? []),
+        ...(incoming.attachmentFileIds ?? []),
+      ]),
+    ];
+    if (
+      referenceFileIds.length > MAX_AI_DESIGNER_ATTACHMENTS ||
+      attachmentFileIds.length > MAX_AI_DESIGNER_ATTACHMENTS
+    ) {
+      throw new BadRequestException(
+        `AI Designer is limited to ${MAX_AI_DESIGNER_ATTACHMENTS} references and ${MAX_AI_DESIGNER_ATTACHMENTS} documents.`
+      );
+    }
+
+    const submittedIds = [
+      ...new Set([
+        ...(incoming.referenceFileIds ?? []),
+        ...(incoming.attachmentFileIds ?? []),
+      ]),
+    ];
+    const submittedFiles = new Map<string, { type?: string }>();
+    for (const fileId of submittedIds) {
+      const file = await this._fileService?.getFileById(ctx.orgId, fileId);
+      if (!file) {
+        throw new BadRequestException(
+          'One or more attachments could not be found in this workspace.'
+        );
+      }
+      submittedFiles.set(fileId, file);
+    }
+    for (const fileId of incoming.referenceFileIds ?? []) {
+      const file = submittedFiles.get(fileId);
+      if (
+        typeof file?.type === 'string' &&
+        file.type !== 'image' &&
+        !file.type.startsWith('image/')
+      ) {
+        throw new BadRequestException(
+          'Reference attachments must be image files.'
+        );
+      }
+    }
+    if (attachmentFileIds.length) {
+      if (!this._attachments) {
+        throw new BadRequestException('AI Designer attachments are unavailable.');
+      }
+      await this._attachments.contextsFor(ctx.orgId, attachmentFileIds);
+    }
+
+    const next = { ...current, referenceFileIds, attachmentFileIds };
+    if (
+      JSON.stringify(next.referenceFileIds) !==
+        JSON.stringify(current.referenceFileIds) ||
+      JSON.stringify(next.attachmentFileIds) !==
+        JSON.stringify(current.attachmentFileIds)
+    ) {
+      await this._service.updateSession(sessionId, ctx.orgId, ctx.userId, {
+        config: next,
+      });
+    }
+    return next;
+  }
+
   async handleStart(
     sessionId: string,
     ctx: AiDesignerAgentContext,
@@ -394,6 +480,7 @@ export class AiDesignerConductorService {
       return;
     }
     prompt = policy.instruction;
+    config = await this._mergeAttachmentConfig(sessionId, ctx, config, config);
 
     const brand = await this._brandKitForStart(ctx, config);
     if (brand) {
@@ -440,7 +527,9 @@ export class AiDesignerConductorService {
     sessionId: string,
     ctx: AiDesignerAgentContext,
     text: string,
-    emitter: AiDesignerEmitter
+    emitter: AiDesignerEmitter,
+    attachments?: Pick<AiDesignerConfig, 'referenceFileIds' | 'attachmentFileIds'>,
+    onAccepted?: () => Promise<void>
   ) {
     const policy = await this._policy.check(
       { values: {}, instruction: text },
@@ -455,14 +544,21 @@ export class AiDesignerConductorService {
     const session = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
     if (!session) return;
 
-    const config = this._config(session);
-
     if (session.state === 'intake') {
+      const config = await this._mergeAttachmentConfig(
+        sessionId,
+        ctx,
+        this._config(session),
+        attachments
+      );
       if (!this._tryAcquire(sessionId)) {
         await this._emitBusy(sessionId, ctx, emitter);
         return;
       }
+      let accepted = !onAccepted;
       try {
+        await onAccepted?.();
+        accepted = true;
         if (session.mode === 'chat') {
           await this._runChatIntake(sessionId, ctx, config, emitter, text);
         } else {
@@ -472,6 +568,7 @@ export class AiDesignerConductorService {
           await this._runPromptMode(sessionId, ctx, config, text, emitter);
         }
       } catch (err) {
+        if (!accepted) throw err;
         if (this._wasCancelled(err)) {
           this._logger.log(
             `AI Designer intake cancelled for session ${sessionId}`
@@ -492,13 +589,22 @@ export class AiDesignerConductorService {
         await this.handleRevise(sessionId, ctx, {
           instruction: text,
           targetDesignId,
+          referenceFileIds: attachments?.referenceFileIds,
+          attachmentFileIds: attachments?.attachmentFileIds,
           nonce: '',
-        }, emitter);
+        }, emitter, onAccepted);
         return;
       }
     }
 
+    if (attachments?.referenceFileIds?.length || attachments?.attachmentFileIds?.length) {
+      throw new BadRequestException(
+        'Attachments can only be used during intake or while revising a plan or design.'
+      );
+    }
+
     // Default reply for unsupported free-text mid-session.
+    await onAccepted?.();
     await this._emitText(
       sessionId,
       ctx,
@@ -866,35 +972,36 @@ export class AiDesignerConductorService {
     sessionId: string,
     ctx: AiDesignerAgentContext,
     payload: AiDesignerRevisePayload,
-    emitter: AiDesignerEmitter
+    emitter: AiDesignerEmitter,
+    onAccepted?: () => Promise<void>
   ) {
     const session = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
     if (!session) return;
 
-    if (payload.referenceFileIds || payload.attachmentFileIds) {
-      const config = this._config(session);
-      const referenceFileIds = [...new Set([
-        ...(config.referenceFileIds ?? []),
-        ...(payload.referenceFileIds ?? []),
-      ])];
-      const attachmentFileIds = [...new Set([
-        ...(config.attachmentFileIds ?? []),
-        ...(payload.attachmentFileIds ?? []),
-      ])];
-      if (referenceFileIds.length > MAX_AI_DESIGNER_ATTACHMENTS || attachmentFileIds.length > MAX_AI_DESIGNER_ATTACHMENTS) {
-        this._emitPolicyError(emitter, 'value_bounds', `AI Designer is limited to ${MAX_AI_DESIGNER_ATTACHMENTS} references and ${MAX_AI_DESIGNER_ATTACHMENTS} documents.`);
-        return;
-      }
-      const nextConfig: AiDesignerConfig = { ...config, referenceFileIds, attachmentFileIds };
-      session.config = nextConfig as any;
-      await this._service.updateSession(sessionId, ctx.orgId, ctx.userId, { config: nextConfig });
+    session.config = await this._mergeAttachmentConfig(
+      sessionId,
+      ctx,
+      this._config(session),
+      payload
+    ) as any;
+
+    // The instruction is guardrail-checked here so every entry point
+    // (websocket, HTTP, MCP, Inngest) gets the same enforcement.
+    const policy = await this._policy.check(
+      { values: {}, instruction: payload.instruction },
+      ctx.orgId
+    );
+    if (policy.ok === false) {
+      this._emitPolicyError(emitter, policy.reason, policy.message);
+      return;
     }
+    const instruction = policy.instruction as string;
 
     // Plan-stage revision: the plan message's Revise button arrives while the
     // session still awaits plan acceptance. Re-run the art director with the
     // instruction instead of rejecting the event.
     if (session.state === 'awaiting_plan') {
-      await this._revisePlans(sessionId, ctx, session, payload.instruction, emitter);
+      await this._revisePlans(sessionId, ctx, session, instruction, emitter, onAccepted);
       return;
     }
 
@@ -908,18 +1015,6 @@ export class AiDesignerConductorService {
       );
       return;
     }
-
-    // The instruction is guardrail-checked here so every entry point
-    // (websocket, HTTP, MCP, Inngest) gets the same enforcement.
-    const policy = await this._policy.check(
-      { values: {}, instruction: payload.instruction },
-      ctx.orgId
-    );
-    if (policy.ok === false) {
-      this._emitPolicyError(emitter, policy.reason, policy.message);
-      return;
-    }
-    const instruction = policy.instruction as string;
 
     const activeDesignIds = (session.activeDesignIds ?? []) as string[];
     let targetDesignId = payload.targetDesignId || activeDesignIds[0];
@@ -946,7 +1041,10 @@ export class AiDesignerConductorService {
       return;
     }
 
+    let accepted = !onAccepted;
     try {
+      await onAccepted?.();
+      accepted = true;
       // Live marker for the classification dispatch — the frontend shows its
       // own instant bubble on send; this replaces it for the silent gap
       // before the conversationalist answers.
@@ -1073,6 +1171,7 @@ export class AiDesignerConductorService {
         sourceOrdinal,
       ], (session.format as AiDesignerFormat) ?? 'image');
     } catch (err) {
+      if (!accepted) throw err;
       if (this._wasCancelled(err)) {
         this._logger.log(`AI Designer revise cancelled for session ${sessionId}`);
       } else {
@@ -1094,7 +1193,8 @@ export class AiDesignerConductorService {
     ctx: AiDesignerAgentContext,
     session: { brief?: unknown; config?: unknown; mode?: unknown },
     rawInstruction: string,
-    emitter: AiDesignerEmitter
+    emitter: AiDesignerEmitter,
+    onAccepted?: () => Promise<void>
   ) {
     // Same guardrail enforcement as the delivered/revising path below.
     const policy = await this._policy.check(
@@ -1112,7 +1212,10 @@ export class AiDesignerConductorService {
       return;
     }
 
+    let accepted = !onAccepted;
     try {
+      await onAccepted?.();
+      accepted = true;
       const config = this._config(session);
       const brief = this._brief(session);
       const documentContexts = await this._documentContextsFor(ctx, config, instruction);
@@ -1156,6 +1259,7 @@ export class AiDesignerConductorService {
       // Persists lastPlans + a fresh plan message and stays in awaiting_plan.
       await this._emitPlan(sessionId, ctx, emitter, revisionBrief, constrained);
     } catch (err) {
+      if (!accepted) throw err;
       if (this._wasCancelled(err)) {
         this._logger.log(`AI Designer plan revise cancelled for session ${sessionId}`);
       } else {
@@ -1225,7 +1329,11 @@ export class AiDesignerConductorService {
     text?: string
   ) {
     const session = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
-    const brief = ((session?.brief ?? { intent: '' }) as DesignBrief);
+    const documentContexts = await this._documentContextsFor(ctx, config, text ?? '');
+    const brief = {
+      ...((session?.brief ?? { intent: '' }) as DesignBrief),
+      ...(documentContexts.length ? { documentContexts } : {}),
+    };
     const questionsAsked = brief.questionsAsked ?? [];
 
     // Never auto-advance from intake on a merely-complete brief: extraction
@@ -1815,7 +1923,7 @@ export class AiDesignerConductorService {
           if (this._wasCancelled(err)) throw err;
           lastError = err;
           this._logger.warn(
-            `Variant ${plan.variantId} failed: ${(err as Error).message}`,
+            `Variant ${plan.variantId} failed (${aiDesignerFailureKind(err)})`,
             AiDesignerConductorService.name
           );
           notes.push(`variant ${ordinal} of ${total} failed to generate`);
@@ -2128,7 +2236,7 @@ export class AiDesignerConductorService {
           if (this._wasCancelled(err)) throw err;
           this._logger.warn(
             `Vision critique/auto-revise failed for ${result.variantId}: ${
-              (err as Error).message
+              aiDesignerFailureKind(err)
             }`,
             AiDesignerConductorService.name
           );
@@ -2408,7 +2516,7 @@ export class AiDesignerConductorService {
       } catch (err) {
         if (this._wasCancelled(err)) throw err;
         this._logger.warn(
-          `Reference comparison failed: ${(err as Error).message}`,
+          `Reference comparison failed: ${aiDesignerFailureKind(err)}`,
           AiDesignerConductorService.name
         );
         notes.push(
@@ -2479,7 +2587,7 @@ export class AiDesignerConductorService {
         results[i] = { ...results[i], outputPreviews };
       } catch (err) {
         this._logger.warn(
-          `Preview registration failed for ${results[i].variantId}: ${(err as Error).message}`,
+          `Preview registration failed for ${results[i].variantId}: ${aiDesignerFailureKind(err)}`,
           AiDesignerConductorService.name
         );
         notes.push(
@@ -2553,7 +2661,7 @@ export class AiDesignerConductorService {
         });
       } catch (err) {
         this._logger.warn(
-          `Video conversion failed for ${results[i].variantId}: ${(err as Error).message} — delivering the image design.`,
+          `Video conversion failed for ${results[i].variantId}: ${aiDesignerFailureKind(err)} — delivering the image design.`,
           AiDesignerConductorService.name
         );
         notes.push(
@@ -2651,7 +2759,7 @@ export class AiDesignerConductorService {
       } catch (err) {
         if (this._wasCancelled(err)) throw err;
         this._logger.warn(
-          `Scene video generation failed for ${results[i].variantId}: ${(err as Error).message} — delivering the animated conversion.`,
+          `Scene video generation failed for ${results[i].variantId}: ${aiDesignerFailureKind(err)} — delivering the animated conversion.`,
           AiDesignerConductorService.name
         );
         notes.push(
@@ -2697,7 +2805,7 @@ export class AiDesignerConductorService {
       } catch (err) {
         if (!(err instanceof DefaultNotConfiguredError)) {
           this._logger.warn(
-            `Scene image-to-video failed — falling back to text-to-video: ${(err as Error).message}`,
+            `Scene image-to-video failed — falling back to text-to-video: ${aiDesignerFailureKind(err)}`,
             AiDesignerConductorService.name
           );
         }
@@ -2845,7 +2953,7 @@ export class AiDesignerConductorService {
       return null;
     } catch (err) {
       this._logger.warn(
-        `Scene image resolution failed: ${(err as Error).message}`,
+        `Scene image resolution failed: ${aiDesignerFailureKind(err)}`,
         AiDesignerConductorService.name
       );
       return null;
@@ -3158,7 +3266,7 @@ export class AiDesignerConductorService {
       } catch (err) {
         if (this._wasCancelled(err)) throw err;
         this._logger.warn(
-          `Variant expansion failed for ${result.variantId}: ${(err as Error).message}`,
+          `Variant expansion failed for ${result.variantId}: ${aiDesignerFailureKind(err)}`,
           AiDesignerConductorService.name
         );
         // Roll the persisted doc back to its pre-expansion state FIRST — both
@@ -3263,7 +3371,7 @@ export class AiDesignerConductorService {
       };
     } catch (err) {
       this._logger.warn(
-        `Contrast fix over imagery failed for ${label}: ${(err as Error).message}`
+        `Contrast fix over imagery failed for ${label}: ${aiDesignerFailureKind(err)}`
       );
       return { doc, render };
     }
@@ -3410,7 +3518,7 @@ export class AiDesignerConductorService {
       // A user cancel must stop the run, not be swallowed as a soft failure.
       if (this._wasCancelled(err)) throw err;
       this._logger.warn(
-        `Reference interpretation failed: ${(err as Error).message}`,
+        `Reference interpretation failed: ${aiDesignerFailureKind(err)}`,
         AiDesignerConductorService.name
       );
     }
@@ -3865,7 +3973,7 @@ export class AiDesignerConductorService {
       } catch (err) {
         if (this._wasCancelled(err)) throw err;
         this._logger.warn(
-          `Asset regeneration failed for ${slotKey}: ${(err as Error).message}`,
+          `Asset regeneration failed for ${slotKey}: ${aiDesignerFailureKind(err)}`,
           AiDesignerConductorService.name
         );
         notes.push(failNote);
@@ -4340,7 +4448,7 @@ export class AiDesignerConductorService {
       return true;
     } catch (err) {
       this._logger.warn(
-        `Template creation failed: ${(err as Error).message}`,
+        `Template creation failed: ${aiDesignerFailureKind(err)}`,
         AiDesignerConductorService.name
       );
       return false;
@@ -4426,7 +4534,7 @@ export class AiDesignerConductorService {
         } catch (err) {
           this._logger.warn(
             `Could not read design ${designId} for the revise catalogue: ${
-              (err as Error).message
+              aiDesignerFailureKind(err)
             }`,
             AiDesignerConductorService.name
           );
@@ -4673,7 +4781,7 @@ export class AiDesignerConductorService {
     } catch (err) {
       if (!(err instanceof DefaultNotConfiguredError)) {
         this._logger.warn(
-          `Revise text-to-video failed: ${(err as Error).message}`,
+          `Revise text-to-video failed: ${aiDesignerFailureKind(err)}`,
           AiDesignerConductorService.name
         );
       }
@@ -4689,7 +4797,7 @@ export class AiDesignerConductorService {
           submitted = await this._aiDefaults.imageToVideo(ctx.orgId, prompt, still);
         } catch (err) {
           this._logger.warn(
-            `Revise image-to-video failed: ${(err as Error).message}`,
+            `Revise image-to-video failed: ${aiDesignerFailureKind(err)}`,
             AiDesignerConductorService.name
           );
         }
@@ -4734,7 +4842,7 @@ export class AiDesignerConductorService {
     } catch (err) {
       if (this._wasCancelled(err)) throw err;
       this._logger.warn(
-        `Scene video revise failed: ${(err as Error).message}`,
+        `Scene video revise failed: ${aiDesignerFailureKind(err)}`,
         AiDesignerConductorService.name
       );
       await this._emitText(
@@ -5100,7 +5208,7 @@ export class AiDesignerConductorService {
     } catch (err) {
       if (this._wasCancelled(err)) throw err;
       this._logger.warn(
-        `Background imagery revise failed for ${slotKey}: ${(err as Error).message}`,
+        `Background imagery revise failed for ${slotKey}: ${aiDesignerFailureKind(err)}`,
         AiDesignerConductorService.name
       );
       await this._emitText(
@@ -5357,7 +5465,7 @@ export class AiDesignerConductorService {
       } catch (err) {
         if (this._wasCancelled(err)) throw err;
         this._logger.warn(
-          `Revise vision re-check failed: ${(err as Error).message}`,
+          `Revise vision re-check failed: ${aiDesignerFailureKind(err)}`,
           AiDesignerConductorService.name
         );
       }
@@ -5598,7 +5706,7 @@ export class AiDesignerConductorService {
         return await this._fileService.resolveFolderPath(orgId, config.savePath);
       } catch (err) {
         this._logger.warn(
-          `AI Designer savePath resolution failed: ${(err as Error).message}`,
+          `AI Designer savePath resolution failed: ${aiDesignerFailureKind(err)}`,
           AiDesignerConductorService.name
         );
       }
@@ -5685,11 +5793,9 @@ export class AiDesignerConductorService {
   }
 
   /**
-   * Log the raw failure, put the session back into a recoverable state, and
-   * tell the user in sanitized terms (no raw provider/error bodies in chat —
-   * they persist; 3AK/3AL posture). `hint` is an optional vague-but-useful
-   * human reason (e.g. the design couldn't be rendered) that wins over the
-   * generic message — never pass raw error text as the hint.
+   * Put the session back into a recoverable state and tell the user in
+   * sanitized terms. Logs carry only the failure category, never upstream
+   * details. `hint` is an optional safe human reason, never raw error text.
    */
   private async _recoverFromFailure(
     sessionId: string,
@@ -5701,9 +5807,7 @@ export class AiDesignerConductorService {
   ) {
     const text = hint ?? this._failureText(err);
     this._logger.warn(
-      `AI Designer step failed for session ${sessionId}: ${
-        (err as Error).message
-      }`,
+      `AI Designer step failed for session ${sessionId} (${aiDesignerFailureKind(err)})`,
       AiDesignerConductorService.name
     );
     try {
@@ -5741,23 +5845,7 @@ export class AiDesignerConductorService {
   }
 
   private _failureText(err: unknown): string {
-    if (err instanceof GuardrailViolation) {
-      return "That request was blocked by this workspace's content guardrails.";
-    }
-    const message = (err as Error)?.message ?? '';
-    if (message.startsWith('No generated variant contains the requested subject:')) {
-      return message;
-    }
-    if (/budget/i.test(message)) {
-      return 'The AI budget for this workspace is exhausted — an admin can raise it under Settings → AI.';
-    }
-    if (/circuit open/i.test(message)) {
-      return 'AI Designer is briefly paused after repeated provider failures — please try again in a minute.';
-    }
-    if (/timed out/i.test(message)) {
-      return 'The AI provider took too long to respond — please try again.';
-    }
-    return 'I hit a problem while working on this — please try again.';
+    return aiDesignerFailureText(err);
   }
 
   private _safeJson(raw: string): unknown {

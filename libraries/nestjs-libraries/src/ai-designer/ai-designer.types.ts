@@ -707,6 +707,8 @@ export interface AiDesignerStartPayload {
 
 export interface AiDesignerMessagePayloadDto {
   text: string;
+  referenceFileIds?: string[];
+  attachmentFileIds?: string[];
   nonce: string;
 }
 

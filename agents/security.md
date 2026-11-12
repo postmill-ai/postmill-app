@@ -189,6 +189,12 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   `_authenticate`) skips its CSRF check under the same `NOT_SECURED && NODE_ENV ===
   'development'` gate — never on `NOT_SECURED` alone (pinned by `ai-designer.gateway.spec.ts`).
   Any new `NOT_SECURED` branch must use this dev-only form.
+- AI Designer `message` and `revise` attachment IDs are bounded DTO fields, but DTO validation is not
+  authorization. The conductor's shared attachment merge resolves every submitted File through the
+  current org, enforces count/type bounds, and validates document extraction before the gateway persists
+  or echoes the user message. Validation failures release the claimed nonce. Cross-org IDs must never be
+  merged or sent to an agent. Recovery emits fixed category-specific text and category-only logs; raw
+  provider response details, credentials, attachment contents and stacks must not enter chat, logs or Sentry.
 
 ## MCP scopes — `allowedScopes` is a ceiling
 

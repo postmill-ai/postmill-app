@@ -14,6 +14,7 @@ import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.servi
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import { z } from 'zod';
 import { AiDesignerSkillRouter } from '../../skills/ai-designer-skill-router.service';
+import { aiDesignerFailureKind } from '../../conductor/failure-recovery';
 import { DesignPlanV2FieldsSchema } from '../../ai-designer.schemas';
 import { designLanguagePrompt } from '../../design-language';
 import { compositionCatalogPrompt } from '../../layout/compositions';
@@ -141,7 +142,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       plans = await this._generatePlans(skillId, brief, sizes, variants, orgId, signal);
     } catch (err) {
       throwIfAborted(signal);
-      this._logger.warn(`Plan generation failed: ${(err as Error).message}`);
+      this._logger.warn(`Plan generation failed: ${aiDesignerFailureKind(err)}`);
       throw err;
     }
 
@@ -454,7 +455,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
         // A cancel must not be swallowed as "repair failed, keep originals".
         throwIfAborted(signal);
         this._logger.warn(
-          `Offer-token repair retry failed: ${(err as Error).message}; keeping the original plans.`
+          `Offer-token repair retry failed: ${aiDesignerFailureKind(err)}; keeping the original plans.`
         );
       }
       // Deterministic backstop, retried or not: inject whatever is still

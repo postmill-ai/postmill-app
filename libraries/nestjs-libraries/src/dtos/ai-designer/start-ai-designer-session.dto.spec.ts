@@ -4,6 +4,7 @@ import { validate } from 'class-validator';
 import {
   AiDesignerAcceptPlanDto,
   AiDesignerConfigDto,
+  AiDesignerMessageDto,
   StartAiDesignerSessionDto,
 } from './start-ai-designer-session.dto';
 
@@ -141,5 +142,27 @@ describe('AiDesignerAcceptPlanDto', () => {
     const dto = makeAcceptDto({ texts: 'not-an-object' });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'texts')).toBe(true);
+  });
+});
+
+describe('AiDesignerMessageDto', () => {
+  it('accepts optional bounded reference and document IDs', async () => {
+    const dto = plainToInstance(AiDesignerMessageDto, {
+      text: 'Use the attached brief',
+      referenceFileIds: ['image-1'],
+      attachmentFileIds: ['doc-1'],
+      nonce: 'nonce-1',
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects more than ten attachment IDs', async () => {
+    const dto = plainToInstance(AiDesignerMessageDto, {
+      text: 'Too many',
+      attachmentFileIds: Array.from({ length: 11 }, (_, index) => `doc-${index}`),
+      nonce: 'nonce-1',
+    });
+    const errors = await validate(dto);
+    expect(errors.some((error) => error.property === 'attachmentFileIds')).toBe(true);
   });
 });
