@@ -13,6 +13,7 @@ vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
 }));
 
 import { DesignRenderService } from './design-render.service';
+import { DesignerDocService } from '../designer-doc/designer-doc.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 
 class FakeFontLoaderService {
@@ -1817,5 +1818,32 @@ describe('DesignRenderService.assertVisualAssets', () => {
     doc.outputs[0].children[0].hidden = true;
 
     await expect(service.assertVisualAssets(doc, 0)).resolves.toBeUndefined();
+  });
+});
+
+
+describe('frozen carousel save/reopen and export', () => {
+  it('validates a frozen two-slide document and renders each slide without unfreezing', async () => {
+    const reopened = new DesignerDocService().validateStrict({
+      version: 13,
+      mode: 'image',
+      outputs: [{
+        id: 'carousel', formatId: 'ig-post', name: 'Carousel', frozen: true,
+        width: 100, height: 100, background: '#112233',
+        bg: { type: 'color', color: '#112233' }, children: [],
+        pages: [{
+          id: 'slide-2', background: { type: 'color', color: '#ff0000' }, children: [],
+        }],
+      }],
+    });
+    const service = makeService();
+    const first = await service.renderPage(reopened, 0, { pixelRatio: 1 }, 0);
+    const second = await service.renderPage(reopened, 0, { pixelRatio: 1 }, 1);
+    const firstPixel = await sharp(first).ensureAlpha().raw().toBuffer();
+    const secondPixel = await sharp(second).ensureAlpha().raw().toBuffer();
+
+    expect([...firstPixel.subarray(0, 3)]).toEqual([0x11, 0x22, 0x33]);
+    expect([...secondPixel.subarray(0, 3)]).toEqual([0xff, 0x00, 0x00]);
+    expect(reopened.outputs[0].frozen).toBe(true);
   });
 });

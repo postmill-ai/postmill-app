@@ -39,6 +39,10 @@ import {
   reflowBackground,
 } from './reflow';
 import { applyLinked } from './apply-linked';
+import {
+  hasFrozenOutputMutation,
+  withOutputFrozen,
+} from './output-freeze';
 
 const isImageOutput = (
   out: DesignerOutput | VideoOutput
@@ -140,7 +144,18 @@ export class DesignerDocService {
         }
       }
 
-      current = this._applyOp(current, op);
+      const next = this._applyOp(current, op);
+      if (
+        op.op !== 'setOutputFrozen' &&
+        hasFrozenOutputMutation(current, next)
+      ) {
+        throw new DesignerDocOpError(
+          'DESIGNER_OP_OUTPUT_FROZEN',
+          op.op,
+          `op ${op.op} cannot mutate a frozen output; unfreeze it first`
+        );
+      }
+      current = next;
     }
 
     current = this.assignIdsAndNormalize(current);
@@ -160,6 +175,23 @@ export class DesignerDocService {
         return { ...doc, outputs } as DesignerDoc;
       }
 
+      case 'setOutputFrozen': {
+        const target = doc.outputs[op.outputIndex];
+        if (!target) {
+          throw new DesignerDocOpError(
+            'DESIGNER_OP_INDEX_OOB',
+            op.op,
+            `outputIndex ${op.outputIndex} out of range`
+          );
+        }
+        return {
+          ...doc,
+          outputs: doc.outputs.map((out, i) =>
+            i === op.outputIndex ? withOutputFrozen(out, op.frozen) : out
+          ),
+        } as DesignerDoc;
+      }
+
       case 'addPage':
       case 'removePage':
       case 'duplicatePage':
@@ -175,10 +207,10 @@ export class DesignerDocService {
                 name: op.name,
                 background: op.background,
                 children: [],
-              });
+              }, op.afterPageNumber);
               break;
             case 'removePage':
-              next = removePageAt(out, op.pageNumber);
+              next = removePageAt(out, op.pageNumber, op.allowFirst);
               break;
             case 'duplicatePage':
               next = duplicatePageAt(out, op.pageNumber, `pg-${randomUUID()}`);

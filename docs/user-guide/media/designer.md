@@ -24,16 +24,27 @@ saved.
 ## Formats, pages and versions
 
 - **Output tabs** — a design can carry several formats (sizes) at once. **Add format** adds another
-  size; linked elements stay in sync across formats unless you choose **Edit Format Only**. Choose
-  **Independent copies** when adding repeated dimensions for carousel or multi-page content that
-  should be edited separately. Linked formats remain the default.
+  size; linked elements stay in sync across formats unless you choose **Unlink** beside the tabs.
+  **Link** resumes shared edits without changing any existing element links. Choose **Independent
+  copies** when adding repeated dimensions that should be edited separately. Linked formats remain
+  the default. Grouped presets include 1080×1350 portraits for Instagram, Facebook, LinkedIn, and
+  Threads, plus Facebook and LinkedIn squares; their safe zones are available through **View → Safe
+  Zones**, and custom dimensions remain available.
+- **Freeze a format** — select the snowflake on an output tab to prevent canvas, Inspector, page,
+  timeline, resize, and incoming linked edits to that output. Other formats remain editable. You can
+  still switch to a frozen output and export it. Select the snowflake again to unfreeze; this is
+  separate from locking an individual layer or timeline track.
 - **Pathfinder** — select two or more unlocked shapes, paths, or icons to Unite, Minus Front,
   Intersect, Exclude, Divide, or Outline them in selection order. The whole operation is one undo
   step. Disjoint regions are preserved as separate paths, and a region enclosed by another (a hole,
   such as Minus Front cutting through the middle of a shape) becomes one compound path with that hole.
   If the shapes cannot be combined, a warning appears and the design is left unchanged.
-- **Pages** — image outputs can hold multiple pages (up to 20 per output), managed in the **Pages**
-  panel (add, duplicate, rename, delete). PDF export combines an output's pages into one file.
+- **Pages and Carousel** — image outputs can hold multiple pages (up to 20 per output). Open **View
+  → Pages / Carousel** and choose a view. Both use the same slides, with selection, reorder,
+  duplicate, delete, and one Undo per operation. **Carousel** shows a side-by-side filmstrip with an
+  Add button after every slide; deleting slide 1 promotes the next slide. Page selection is preserved
+  in the export dialog, raster exports create one file per selected slide, and PDF export combines
+  an output's pages into one file.
 - **Versions** — **File ▸ Save Version…** snapshots the design; the **Versions** panel lists manual
   and automatic snapshots. **Preview** compares the current design with a saved version before you
   restore it; missing thumbnails are rendered on demand for both image and video designs. Restoring

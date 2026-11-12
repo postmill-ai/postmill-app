@@ -78,25 +78,54 @@ export const withPageChildren = (
   return { ...output, pages };
 };
 
-/** Append a page. Returns null when the output is already at the cap. */
+/**
+ * Append a page, or insert immediately after `afterPageNumber`. Returns null at
+ * the cap or when the requested insertion point does not exist.
+ */
 export const appendPage = (
   output: DesignerOutput,
-  page: DesignerPageContent
+  page: DesignerPageContent,
+  afterPageNumber?: number
 ): DesignerOutput | null => {
-  if (pageCount(output) >= MAX_PAGES_PER_OUTPUT) return null;
-  return { ...output, pages: [...(output.pages ?? []), page] };
+  if (
+    pageCount(output) >= MAX_PAGES_PER_OUTPUT ||
+    (afterPageNumber !== undefined && !isValidPage(output, afterPageNumber))
+  ) {
+    return null;
+  }
+  const pages = [...(output.pages ?? [])];
+  pages.splice(afterPageNumber ?? pages.length, 0, page);
+  return { ...output, pages };
 };
 
 /**
- * Remove page `pageNumber` (0-based). Page 1 (pageNumber 0) cannot be removed —
- * it is the output itself; returns null in that case.
+ * Remove page `pageNumber` (0-based). Ordinary Pages keep page 1 because it is
+ * the output itself. Carousel passes `allowFirst`, promoting the next slide's
+ * content and effective background into that base slot; the last slide can
+ * never be removed.
  */
 export const removePageAt = (
   output: DesignerOutput,
-  pageNumber: number
+  pageNumber: number,
+  allowFirst = false
 ): DesignerOutput | null => {
-  if (pageNumber <= 0 || !output.pages?.[pageNumber - 1]) return null;
-  const pages = output.pages.filter((_, i) => i !== pageNumber - 1);
+  if (!isValidPage(output, pageNumber) || pageCount(output) <= 1) return null;
+  if (pageNumber === 0) {
+    if (!allowFirst || !output.pages?.length) return null;
+    const [first, ...pages] = output.pages;
+    const promotedBg = first.background ?? output.bg;
+    return {
+      ...output,
+      children: first.children,
+      bg: promotedBg,
+      background:
+        promotedBg?.type === 'color' && promotedBg.color
+          ? promotedBg.color
+          : output.background,
+      pages: pages.length ? pages : undefined,
+    };
+  }
+  const pages = (output.pages ?? []).filter((_, i) => i !== pageNumber - 1);
   return { ...output, pages: pages.length ? pages : undefined };
 };
 

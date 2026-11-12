@@ -1,33 +1,22 @@
 'use client';
 
-import React, { FC, useEffect, useMemo, useRef, useState } from 'react';
+import React, { FC, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import {
-  pageChildren,
-  pageBackground,
-  pageCount,
-} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import { pageCount } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { MAX_PAGES_PER_OUTPUT } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import type { DesignerOutput } from '../designer.store';
-import { renderOutputThumbnail } from '../export-dialog';
+import { FormatThumbnail } from '../format-thumbnail';
 
 /**
- * Multi-page strip (doc v8, image mode only): one thumbnail per page of the
- * CURRENT output — add / duplicate / rename / reorder / delete. Page 1 is the
- * output's own `children` and can be renamed only via the output tab (and
- * never deleted). Thumbnails render off the shared Konva stage into an
- * off-screen host (renderOutputThumbnail), so the strip never steals the main
- * stage. Full-resolution static exports use the server renderer instead.
+ * Pages and Carousel are two views of the same image-output pages. Carousel
+ * adds after any slide and may promote the next slide when slide 1 is deleted.
+ * Lazy, bounded thumbnails never allocate a full-resolution offscreen stage.
  */
 
 interface PagesPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;
-  /** View ▸ Pages visibility (image mode only) — hidden by default, toggled
-   *  per org, auto-visible when the active output has extra pages. */
   visible: boolean;
 }
-
-const THUMB_H = 64;
 
 export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
   const t = useT();
@@ -37,55 +26,13 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
   const output = doc.outputs[currentOutput] as DesignerOutput | undefined;
 
   const count = output && 'children' in output ? pageCount(output) : 1;
-
-  const [thumbs, setThumbs] = useState<Record<number, string>>({});
+  const [view, setView] = useState<'pages' | 'carousel'>('pages');
   const [editingPage, setEditingPage] = useState<number | null>(null);
   const [editingName, setEditingName] = useState('');
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
-  const renderSeq = useRef(0);
-
-  // A doc fingerprint per page so an unrelated edit (another output, a video
-  // tick) doesn't re-render every thumbnail.
-  const pageKeys = useMemo(() => {
-    if (!output || !('children' in output)) return [] as string[];
-    return Array.from({ length: count }, (_, i) =>
-      JSON.stringify({
-        c: pageChildren(output, i),
-        b: pageBackground(output, i),
-        w: output.width,
-        h: output.height,
-      }).length
-    );
-  }, [output, count]);
-  const pageKey = pageKeys.join('|');
-
-  useEffect(() => {
-    if (!output || !('children' in output)) return;
-    const seq = ++renderSeq.current;
-    const out = output;
-    let cancelled = false;
-    (async () => {
-      const next: Record<number, string> = {};
-      for (let i = 0; i < count; i++) {
-        if (cancelled || renderSeq.current !== seq) return;
-        const view: DesignerOutput = {
-          ...out,
-          bg: pageBackground(out, i),
-          children: pageChildren(out, i),
-        };
-        const dataUrl = await renderOutputThumbnail(view, doc.symbols as never).catch(
-          () => undefined
-        );
-        if (dataUrl) next[i] = dataUrl;
-      }
-      if (!cancelled && renderSeq.current === seq) setThumbs(next);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pageKey IS the doc-derived dep; output/doc are read for the render inputs it summarizes.
-  }, [pageKey, currentOutput, count]);
+  const carousel = view === 'carousel';
+  const thumbH = carousel ? 96 : 64;
 
   if (!visible || !output || doc.mode !== 'image' || !('children' in output)) return null;
 
@@ -104,12 +51,28 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
       className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-t border-studioBorder bg-newBgColorInner overflow-x-auto"
       aria-label={t('designer_pages', 'Pages')}
     >
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-textColor/40 shrink-0">
-        {t('designer_pages', 'Pages')}
-      </span>
+      <div className="flex shrink-0 items-center rounded-md border border-studioBorder p-0.5" role="group" aria-label={t('designer_page_view', 'Page view')}>
+        {(['pages', 'carousel'] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setView(option)}
+            aria-pressed={view === option}
+            className={`rounded-sm px-2 py-1 text-[10px] font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
+              view === option
+                ? 'bg-designerAccent/10 text-btnPrimaryAccent'
+                : 'text-textColor/50 hover:text-textColor'
+            }`}
+          >
+            {option === 'pages'
+              ? t('designer_pages', 'Pages')
+              : t('designer_carousel', 'Carousel')}
+          </button>
+        ))}
+      </div>
       {Array.from({ length: count }, (_, i) => (
+        <React.Fragment key={i === 0 ? `${output.id}-base` : output.pages?.[i - 1]?.id ?? i}>
         <div
-          key={i === 0 ? `${output.id}-base` : output.pages?.[i - 1]?.id ?? i}
           className={`relative group shrink-0 rounded-md border-2 ${
             i === currentPage
               ? 'border-designerAccent'
@@ -117,7 +80,7 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
                 ? 'border-designerAccent/50'
                 : 'border-studioBorder'
           }`}
-          draggable={editingPage !== i}
+          draggable={editingPage !== i && !output.frozen}
           onDragStart={() => setDragFrom(i)}
           onDragOver={(e) => {
             e.preventDefault();
@@ -150,17 +113,13 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
             aria-current={i === currentPage}
             title={t('designer_page_double_click_rename', 'Double-click to rename')}
           >
-            <span
-              className="block rounded-sm bg-white overflow-hidden flex items-center justify-center"
-              style={{ height: THUMB_H, aspectRatio: `${output.width} / ${output.height}` }}
-            >
-              {thumbs[i] ? (
-                // eslint-disable-next-line @next/next/no-img-element -- data URL thumb rendered off the Konva stage
-                <img src={thumbs[i]} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <span className="w-full h-full bg-studioBorder/20" />
-              )}
-            </span>
+            <FormatThumbnail
+              output={output}
+              symbols={doc.symbols}
+              pageNumber={i}
+              maxDim={112}
+              className={`${carousel ? 'h-[96px]' : 'h-[64px]'} flex items-center justify-center`}
+            />
             {editingPage === i ? (
               <input
                 autoFocus
@@ -188,41 +147,58 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
                 e.stopPropagation();
                 store.getState().duplicatePage(i);
               }}
-              disabled={count >= MAX_PAGES_PER_OUTPUT}
+              disabled={output.frozen || count >= MAX_PAGES_PER_OUTPUT}
               title={t('designer_duplicate_page', 'Duplicate page')}
               aria-label={t('designer_duplicate_page', 'Duplicate page')}
-              className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[8px] text-textColor/60 hover:text-textColor"
+              className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[8px] text-textColor/60 hover:text-textColor disabled:opacity-30"
             >
               ⧉
             </button>
-            {i > 0 && (
+            {(i > 0 || carousel) && count > 1 && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  store.getState().removePage(i);
+                  store.getState().removePage(i, carousel);
                 }}
+                disabled={output.frozen}
                 title={t('designer_delete_page', 'Delete page')}
                 aria-label={t('designer_delete_page', 'Delete page')}
-                className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[9px] text-dangerText hover:bg-red-500/20"
+                className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[9px] text-dangerText hover:bg-red-500/20 disabled:opacity-30"
               >
                 ×
               </button>
             )}
           </div>
         </div>
+        {carousel && (
+          <button
+            type="button"
+            onClick={() => store.getState().addPage(undefined, i)}
+            disabled={output.frozen || count >= MAX_PAGES_PER_OUTPUT}
+            aria-label={t('designer_add_slide_after', 'Add slide after {{number}}', { number: i + 1 })}
+            title={t('designer_add_slide_after', 'Add slide after {{number}}', { number: i + 1 })}
+            className="shrink-0 flex items-center justify-center rounded-md border-2 border-dashed border-studioBorder text-textColor/50 hover:border-designerAccent hover:text-btnPrimaryAccent text-[16px] disabled:opacity-30 disabled:hover:border-studioBorder focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+            style={{ width: 32, height: thumbH + 18 }}
+          >
+            +
+          </button>
+        )}
+        </React.Fragment>
       ))}
-      <button
-        type="button"
-        onClick={() => store.getState().addPage()}
-        disabled={count >= MAX_PAGES_PER_OUTPUT}
-        aria-label={t('designer_add_page', 'Add page')}
-        title={t('designer_add_page', 'Add page')}
-        className="shrink-0 flex items-center justify-center rounded-md border-2 border-dashed border-studioBorder text-textColor/50 hover:border-designerAccent hover:text-btnPrimaryAccent text-[16px] disabled:opacity-30 disabled:hover:border-studioBorder focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
-        style={{ width: 32, height: THUMB_H + 18 }}
-      >
-        +
-      </button>
+      {!carousel && (
+        <button
+          type="button"
+          onClick={() => store.getState().addPage()}
+          disabled={output.frozen || count >= MAX_PAGES_PER_OUTPUT}
+          aria-label={t('designer_add_page', 'Add page')}
+          title={t('designer_add_page', 'Add page')}
+          className="shrink-0 flex items-center justify-center rounded-md border-2 border-dashed border-studioBorder text-textColor/50 hover:border-designerAccent hover:text-btnPrimaryAccent text-[16px] disabled:opacity-30 disabled:hover:border-studioBorder focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+          style={{ width: 32, height: thumbH + 18 }}
+        >
+          +
+        </button>
+      )}
     </div>
   );
 };

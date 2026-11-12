@@ -473,7 +473,7 @@ export const useDesignerActions = (
       { id: 'view-touchpad-mode', label: 'Touchpad mode', menu: 'view', group: 'zoom', keywords: ['touchpad', 'trackpad', 'swipe', 'pan', 'pinch'], checked: () => ctx.touchpadMode, run: ctx.onToggleTouchpadMode },
       { id: 'view-safe-zones', label: 'Safe Zones', menu: 'view', group: 'overlay', keywords: ['safe zones'], checked: () => ctx.showSafeZones, run: ctx.onToggleSafeZones },
       { id: 'view-rulers', label: 'Rulers', menu: 'view', group: 'overlay', keywords: ['rulers'], checked: () => ctx.showRulers, run: ctx.onToggleRulers },
-      { id: 'view-pages', label: 'Pages', menu: 'view', group: 'overlay', keywords: ['pages'], checked: () => ctx.showPagesBar, enabled: () => !isVideoDoc(), run: ctx.onTogglePagesBar },
+      { id: 'view-pages', label: 'Pages / Carousel', menu: 'view', group: 'overlay', keywords: ['pages', 'carousel', 'slides'], checked: () => ctx.showPagesBar, enabled: () => !isVideoDoc(), run: ctx.onTogglePagesBar },
       // The rulers you could read but never pull a guide out of, and the grid
       // that didn't exist.
       { id: 'view-grid', label: 'Grid', menu: 'view', group: 'overlay', keywords: ['grid'], checked: () => store.getState().showGrid, run: () => { const st = store.getState(); st.setShowGrid(!st.showGrid); } },

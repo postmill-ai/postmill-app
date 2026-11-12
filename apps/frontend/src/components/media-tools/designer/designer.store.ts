@@ -36,6 +36,11 @@ import { canSplitClipAt } from './timeline-split';
 import { TEXT_ANIMATION_PRESETS, buildTextAnimationUpdate, matchTextAnimationPreset } from './text-animation-presets';
 import { applyLinked, applyElementPatch, applyLinkedVideoClip, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
 import {
+  hasFrozenOutputMutation,
+  isOutputFrozen,
+  withOutputFrozen,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/output-freeze';
+import {
   seedVideoOutput,
   reflowVideoOutputInPlace,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-reflow';
@@ -306,14 +311,15 @@ export interface DesignerActions {
   ) => void;
   removeOutput: (index: number) => void;
   resizeOutput: (index: number, width: number, height: number, formatId?: string, name?: string) => void;
+  setOutputFrozen: (index: number, frozen: boolean) => void;
   // pages within an image output (doc v8). pageNumber is 0-based; 0 = page 1.
   setCurrentPage: (pageNumber: number) => void;
-  /** Append a blank page to the current output. No-op at MAX_PAGES_PER_OUTPUT. */
-  addPage: (name?: string) => void;
+  /** Append a blank page, or insert it after a slide. No-op at the page cap. */
+  addPage: (name?: string, afterPageNumber?: number) => void;
   /** Deep-clone page `pageNumber` of the current output (fresh ids/originIds). */
   duplicatePage: (pageNumber: number) => void;
-  /** Remove page `pageNumber` of the current output; page 1 cannot be removed. */
-  removePage: (pageNumber: number) => void;
+  /** Carousel may remove page 1 and promote the next slide into the base slot. */
+  removePage: (pageNumber: number, allowFirst?: boolean) => void;
   renamePage: (pageNumber: number, name: string) => void;
   /** Move a page within the current output's full page range [0..pageCount). */
   reorderPage: (from: number, to: number) => void;
@@ -499,6 +505,18 @@ export const createDesignerStore = (
   fetch?: FetchLike,
 ) =>
   create<DesignerStore>((set, get) => {
+    const rawSet = set;
+    set = ((partial: any, replace?: boolean) => {
+      rawSet((state) => {
+        const update = typeof partial === 'function' ? partial(state) : partial;
+        const nextDoc = update && typeof update === 'object'
+          ? (update as Partial<DesignerStore>).doc
+          : undefined;
+        if (nextDoc && hasFrozenOutputMutation(state.doc, nextDoc)) return {};
+        return update;
+      }, replace);
+    }) as typeof set;
+
     const initialDoc = createEmptyDoc(width, height, attribution);
     const active = () => get().doc.outputs[get().currentOutput] as DesignerOutput | VideoOutput;
     const activeImage = () => get().doc.outputs[get().currentOutput] as DesignerOutput;
@@ -626,9 +644,9 @@ export const createDesignerStore = (
         const nextDoc = migrateDoc(persistedDoc);
         if (state.history[state.historyIndex] === sentDoc) {
           state.history[state.historyIndex] = nextDoc;
-          set({ doc: nextDoc, history: state.history });
+          rawSet({ doc: nextDoc, history: state.history });
         } else {
-          set({ doc: nextDoc });
+          rawSet({ doc: nextDoc });
         }
         reconcileBuffersWithDoc(nextDoc);
         return true;
@@ -693,15 +711,16 @@ export const createDesignerStore = (
           return;
         }
         const copyIds = new Map<number, string>();
-        const outs = doc.outputs.map((out, i) =>
-          i === currentOutput
+        const outs = doc.outputs.map((out, i) => {
+          if (i !== currentOutput && isOutputFrozen(out)) return out;
+          return i === currentOutput
             ? { ...out, children: insert((out as DesignerOutput).children, baseEl) }
             : (() => {
                 const copy = seedCopy(baseEl, sourceOutput, out as DesignerOutput, originId);
                 copyIds.set(i, copy.id);
                 return { ...out, children: insert((out as DesignerOutput).children, copy) };
-              })()
-        );
+              })();
+        });
         set({ doc: { ...doc, outputs: outs }, isDirty: true, selectedIds: [baseEl.id] });
         get().pushHistory();
 
@@ -911,7 +930,7 @@ export const createDesignerStore = (
       },
 
       applyMagicGrab: (id, background, subject) => {
-        if (isVideoMode()) return false;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return false;
         const children = activePageChildren();
         const index = children.findIndex((element) => element.id === id);
         if (index < 0) return false;
@@ -1361,18 +1380,17 @@ export const createDesignerStore = (
         set({ currentPage: pageNumber, selectedIds: [] });
       },
 
-      addPage: (name) => {
+      addPage: (name, afterPageNumber) => {
         if (isVideoMode()) return;
         const { doc, currentOutput } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput;
-        const next = appendPage(out, { id: genId(), name, children: [] });
-        // appendPage returns null at MAX_PAGES_PER_OUTPUT.
+        const next = appendPage(out, { id: genId(), name, children: [] }, afterPageNumber);
         if (!next) return;
         const outs = [...doc.outputs];
         outs[currentOutput] = next;
         set({
           doc: { ...doc, outputs: outs },
-          currentPage: pageCount(next) - 1,
+          currentPage: afterPageNumber === undefined ? pageCount(next) - 1 : afterPageNumber + 1,
           selectedIds: [],
           isDirty: true,
         });
@@ -1396,18 +1414,22 @@ export const createDesignerStore = (
         get().pushHistory('Duplicate page');
       },
 
-      removePage: (pageNumber) => {
+      removePage: (pageNumber, allowFirst = false) => {
         if (isVideoMode()) return;
         const { doc, currentOutput, currentPage } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput;
-        const next = removePageAt(out, pageNumber);
-        // removePageAt refuses page 1 — it IS the output.
+        const next = removePageAt(out, pageNumber, allowFirst);
         if (!next) return;
         const outs = [...doc.outputs];
         outs[currentOutput] = next;
+        const selectedPage = currentPage === pageNumber
+          ? Math.min(pageNumber, pageCount(next) - 1)
+          : currentPage > pageNumber
+            ? currentPage - 1
+            : currentPage;
         set({
           doc: { ...doc, outputs: outs },
-          currentPage: Math.max(0, Math.min(currentPage, pageCount(next) - 1)),
+          currentPage: selectedPage,
           selectedIds: [],
           isDirty: true,
         });
@@ -1452,7 +1474,7 @@ export const createDesignerStore = (
 
       addOutput: (preset, opts) => {
         const { doc, currentOutput } = get();
-        if (doc.outputs.length >= MAX_OUTPUTS) return;
+        if (doc.outputs.length >= MAX_OUTPUTS || isOutputFrozen(doc.outputs[currentOutput])) return;
         const linkContent = opts?.linkContent ?? true;
         let name = preset.name;
         for (let suffix = 2; doc.outputs.some((out) => out.name === name); suffix++) {
@@ -1603,6 +1625,17 @@ export const createDesignerStore = (
         get().pushHistory();
       },
 
+      setOutputFrozen: (index, frozen) => {
+        const { doc } = get();
+        const out = doc.outputs[index];
+        if (!out || isOutputFrozen(out) === frozen) return;
+        const outs = doc.outputs.map((output, i) =>
+          i === index ? withOutputFrozen(output, frozen) : output
+        ) as DesignerDoc['outputs'];
+        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        get().pushHistory(frozen ? 'Freeze format' : 'Unfreeze format');
+      },
+
       setEditFormatOnly: (v) => set({ editFormatOnly: v }),
 
       setBrandProfileId: (brandProfileId) => {
@@ -1632,16 +1665,20 @@ export const createDesignerStore = (
         delete (style as any).id;
         delete (style as any).originId;
         delete (style as any).groupId;
-        const outs = doc.outputs.map((out, i) => ({
-          ...out,
-          children: (out as DesignerOutput).children.map((c) =>
-            i === currentOutput && c.id === id
-              ? { ...c, originId }
-              : c.originId === originId
-              ? { ...c, ...style }
-              : c
-          ),
-        }));
+        const outs = doc.outputs.map((out, i) =>
+          i !== currentOutput && isOutputFrozen(out)
+            ? out
+            : {
+                ...out,
+                children: (out as DesignerOutput).children.map((c) =>
+                  i === currentOutput && c.id === id
+                    ? { ...c, originId }
+                    : c.originId === originId
+                    ? { ...c, ...style }
+                    : c
+                ),
+              }
+        );
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
       },
@@ -1829,7 +1866,7 @@ export const createDesignerStore = (
         const newDoc = createEmptyDoc(w, h);
         // Every live paint buffer belongs to the document being discarded.
         disposeAllBuffers();
-        set({
+        rawSet({
           doc: newDoc, selectedIds: [], currentOutput: 0, currentPage: 0, zoom: 1, viewportX: 0, viewportY: 0,
           // Ask the canvas to fit. Bumped here rather than at the call sites so
           // every route into a new document gets it — there are four.
@@ -1855,8 +1892,13 @@ export const createDesignerStore = (
         // Buffers from the previously open design would otherwise live (and
         // paint over matching ids) for the tab's lifetime.
         disposeAllBuffers();
+<<<<<<< HEAD
         set({
           doc: migrated, designId: id, designSession: get().designSession + 1, designName: name,
+=======
+        rawSet({
+          doc: migrated, designId: id, designName: name,
+>>>>>>> 6d4b0658 (feat: add designer format workflows)
           templateId, designTemplateId: templateId,
           selectedIds: [], currentOutput: 0, currentPage: 0,
           // The zoom and viewport belonged to whatever was open before. Reset
@@ -1882,7 +1924,7 @@ export const createDesignerStore = (
       addTrack: (outputIndex, type) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         if (vo.tracks.length >= MAX_TRACKS) return;
         const updated: VideoOutput = {
           ...vo,
@@ -1897,7 +1939,7 @@ export const createDesignerStore = (
       removeTrack: (outputIndex, trackId) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const updated: VideoOutput = {
           ...vo,
           tracks: vo.tracks.filter((t) => t.id !== trackId),
@@ -1911,7 +1953,7 @@ export const createDesignerStore = (
       applyMagicGrabClip: (target, background, subject) => {
         const { doc } = get();
         const vo = doc.outputs[target.outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return false;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return false;
         const trackIndex = vo.tracks.findIndex((track) => track.id === target.trackId);
         if (trackIndex < 0 || vo.tracks.length >= MAX_TRACKS) return false;
         const track = vo.tracks[trackIndex];
@@ -1944,7 +1986,7 @@ export const createDesignerStore = (
       addClip: (outputIndex, trackId, clip) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         // Explicit duration cap: reject clips that would exceed the output duration.
         const startMs = Math.max(0, clip.startMs ?? 0);
         const endMs = Math.max(startMs + 100, clip.endMs ?? startMs + 1000);
@@ -1971,7 +2013,7 @@ export const createDesignerStore = (
       moveClips: (outputIndex, moves, opts) => {
         const { doc, selectedClip, selectedClips } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video' || !moves.length) return false;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo) || !moves.length) return false;
 
         let tracks = vo.tracks;
         let newTrackId: string | null = null;
@@ -2075,7 +2117,7 @@ export const createDesignerStore = (
       updateClipSilent: (outputIndex, trackId, clipId, updates) => {
         const { doc, editFormatOnly, linkedUpdateFlash } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return false;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return false;
         const track = vo.tracks.find((t) => t.id === trackId);
         const clip = track?.clips.find((c) => c.id === clipId);
         if (!clip) return false;
@@ -2153,7 +2195,7 @@ export const createDesignerStore = (
       setVideoDuration: (outputIndex, durationMs) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const clamped = Math.max(1000, Math.min(MAX_VIDEO_DURATION_MS, durationMs));
         const updated: VideoOutput = { ...vo, durationMs: clamped };
         const outs = [...doc.outputs];
@@ -2310,7 +2352,7 @@ export const createDesignerStore = (
       setTrackGain: (outputIndex, trackId, gain, commit = true) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const updated: VideoOutput = {
           ...vo,
           tracks: vo.tracks.map((t) => t.id === trackId ? { ...t, gain: Math.max(0, Math.min(2, gain)) } : t),
@@ -2326,7 +2368,7 @@ export const createDesignerStore = (
       setTrackAutoDuck: (outputIndex, trackId, autoDuck) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const updated: VideoOutput = {
           ...vo,
           tracks: vo.tracks.map((t) => t.id === trackId ? { ...t, autoDuck } : t),
@@ -2340,7 +2382,7 @@ export const createDesignerStore = (
       renameTrack: (outputIndex, trackId, name) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const trimmed = name.trim();
         const updated: VideoOutput = {
           ...vo,
@@ -2357,7 +2399,7 @@ export const createDesignerStore = (
       setTrackMuted: (outputIndex, trackId, muted) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const updated: VideoOutput = {
           ...vo,
           tracks: vo.tracks.map((t) => t.id === trackId ? { ...t, muted } : t),
@@ -2371,7 +2413,7 @@ export const createDesignerStore = (
       setTrackLocked: (outputIndex, trackId, locked) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const updated: VideoOutput = {
           ...vo,
           tracks: vo.tracks.map((t) => t.id === trackId ? { ...t, locked } : t),
@@ -2385,7 +2427,7 @@ export const createDesignerStore = (
       setTrackHidden: (outputIndex, trackId, hidden) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const updated: VideoOutput = {
           ...vo,
           tracks: vo.tracks.map((t) => t.id === trackId ? { ...t, hidden } : t),
@@ -2399,7 +2441,7 @@ export const createDesignerStore = (
       addMarker: (outputIndex, tMs, name) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return null;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return null;
         const marker = {
           id: genId(),
           tMs: Math.max(0, Math.min(vo.durationMs, Math.round(tMs))),
@@ -2441,7 +2483,7 @@ export const createDesignerStore = (
       duplicateClip: (outputIndex, trackId, clipId) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return null;
         const track = vo.tracks.find((t) => t.id === trackId);
         const source = track?.clips.find((c) => c.id === clipId);
         if (!track || !source || track.locked) return null;
@@ -2485,7 +2527,7 @@ export const createDesignerStore = (
       rippleDeleteClip: (outputIndex, trackId, clipId) => {
         const { doc, selectedClip, selectedClips } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const track = vo.tracks.find((t) => t.id === trackId);
         const clip = track?.clips.find((c) => c.id === clipId);
         // A locked track refuses deletion, same as removeClips/splitClip.
@@ -2584,7 +2626,7 @@ export const createDesignerStore = (
       copySelectedClips: () => {
         const { doc, currentOutput, selectedClips, selectedClip } = get();
         const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const refs = selectedClips.length
           ? selectedClips
           : selectedClip && selectedClip.outputIndex === currentOutput
@@ -2669,7 +2711,7 @@ export const createDesignerStore = (
       copyClipKeyframes: (outputIndex, trackId, clipId) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
         const clip = vo.tracks
           .find((t) => t.id === trackId)
           ?.clips.find((c) => c.id === clipId);

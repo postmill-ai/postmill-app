@@ -32,7 +32,6 @@ import {
   pageBackground,
   pageCount,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
-import { getThumbnailDataUrl } from './designer';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 import { variantProviders, groupFilesByProvider } from './export-channels';
@@ -417,97 +416,7 @@ const outputPageView = (output: DesignerOutput, page: number): DesignerOutput =>
         children: pageChildren(output, page),
       };
 
-// --- Thumbnail renderer ---
-
-// Exported for the pages panel's thumbnail strip. Export-dialog previews use
-// the server renderer instead, so opening a multi-output export stays responsive.
-export const renderOutputThumbnail = async (
-  output: DesignerOutput,
-  symbols?: SymbolDefinition[]
-): Promise<string | undefined> => {
-  await preloadImages(output);
-
-  const host = document.createElement('div');
-  host.style.position = 'fixed';
-  host.style.left = '-100000px';
-  host.style.top = '0';
-  host.style.pointerEvents = 'none';
-  document.body.appendChild(host);
-
-  const root = createRoot(host);
-  const stageRef = React.createRef<Konva.Stage>();
-  const bg = output.bg;
-  const bgGrad =
-    bg?.type === 'gradient' ? gradientFillProps(bg.gradient, output.width, output.height) : {};
-  const solidBg =
-    bg?.type === 'gradient' ? undefined : bg?.color || output.background || '#ffffff';
-  const bgImageSrc = bg?.type === 'image' ? bg.src : undefined;
-  const bgImageEl = (() => {
-    if (!bgImageSrc) return null;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = bgImageSrc;
-    return img;
-  })();
-  const bgTexture = bg?.texture ? textureFillProps(bg.texture) : null;
-  if (bgImageEl && !bgImageEl.complete) {
-    await new Promise<void>((resolve) => {
-      const done = () => resolve();
-      bgImageEl.addEventListener('load', done, { once: true });
-      bgImageEl.addEventListener('error', done, { once: true });
-      setTimeout(done, 5000);
-    });
-  }
-
-  try {
-    await new Promise<void>((resolve) => {
-      root.render(
-        <Stage ref={stageRef} width={output.width} height={output.height}>
-          <Layer>
-            <Rect
-              x={0}
-              y={0}
-              width={output.width}
-              height={output.height}
-              fill={solidBg}
-              {...bgGrad}
-            />
-            {bg?.type === 'image' && bgImageEl && (
-              <ExportBackgroundImage
-                image={bgImageEl}
-                width={output.width}
-                height={output.height}
-                focalPoint={bg.focalPoint}
-              />
-            )}
-            {bgTexture && (
-              <Rect
-                x={0}
-                y={0}
-                width={output.width}
-                height={output.height}
-                {...bgTexture}
-                listening={false}
-              />
-            )}
-            <CanvasElements elements={output.children} symbols={symbols} onSelect={() => {}} />
-          </Layer>
-        </Stage>
-      );
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    });
-
-    const stage = stageRef.current;
-    if (!stage) return undefined;
-    stage.draw();
-
-    const canvas = stage.toCanvas();
-    return getThumbnailDataUrl(canvas, 300);
-  } finally {
-    root.unmount();
-    host.remove();
-  }
-};
+export { renderOutputThumbnail } from './output-thumbnail';
 
 // --- Main component ---
 

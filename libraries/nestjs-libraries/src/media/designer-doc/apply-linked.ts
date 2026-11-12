@@ -8,6 +8,7 @@ import type {
 } from './designer-doc.schema';
 import { scalePx, typeScaleRatio } from './reflow';
 import { scalePathNodes } from './path-geometry';
+import { isOutputFrozen } from './output-freeze';
 
 // Geometry is per-format and never propagates; everything else (style/content)
 // syncs to same-originId copies in the other outputs.
@@ -160,7 +161,7 @@ export const applyLinked = (
         ),
       };
     }
-    if (!propagate || !isImageOutput(out)) return out;
+    if (!propagate || !isImageOutput(out) || isOutputFrozen(out)) return out;
 
     let changed = false;
     const scaled = scaledForOutput(shared, current, out as DesignerOutput);
@@ -276,7 +277,7 @@ export const applyLinkedVideoClip = (
         ),
       };
     }
-    if (!propagate) return out;
+    if (!propagate || isOutputFrozen(out)) return out;
 
     // A px fontSize authored against one canvas is wrong on another — re-fit
     // through the shared type basis, same rule as image-mode linked text.

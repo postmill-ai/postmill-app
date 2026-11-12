@@ -2322,3 +2322,102 @@ describe('preset preview isolation', () => {
     expect(store.getState().previewPatches).toBeNull();
   });
 });
+
+describe('output freeze and carousel workflows', () => {
+  const addTextEl = (store: ReturnType<typeof createDesignerStore>, text: string) =>
+    store.getState().addElement({
+      id: '', type: 'text', x: 0, y: 0, width: 100, height: 30,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text,
+    });
+
+  it('rejects frozen-source edits but lets mutable linked sources update without touching frozen targets', () => {
+    const store = createDesignerStore();
+    addTextEl(store, 'Before');
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
+    store.getState().setOutputFrozen(1, true);
+    const sourceId = store.getState().doc.outputs[0].children[0].id;
+
+    store.getState().updateElement(sourceId, { text: 'After' });
+    expect(store.getState().doc.outputs[0].children[0].text).toBe('After');
+    expect(store.getState().doc.outputs[1].children[0].text).toBe('Before');
+
+    store.getState().setOutputFrozen(0, true);
+    store.getState().updateElementEphemeral(sourceId, { text: 'Rejected', x: 99 });
+    store.getState().addPage();
+    store.getState().resizeOutput(0, 500, 500);
+    expect(store.getState().doc.outputs[0]).toMatchObject({ width: 1080, height: 1080 });
+    expect(store.getState().doc.outputs[0].children[0]).toMatchObject({ text: 'After', x: 0 });
+    expect(store.getState().currentPage).toBe(0);
+
+    store.getState().setCurrentOutput(1);
+    expect(store.getState().currentOutput).toBe(1);
+    store.getState().setOutputFrozen(0, false);
+    store.getState().setCurrentOutput(0);
+    store.getState().updateElement(sourceId, { text: 'Allowed' });
+    expect(store.getState().doc.outputs[0].children[0].text).toBe('Allowed');
+  });
+
+  it('rejects frozen timeline edits and incoming linked clip edits', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'clip', startMs: 0, endMs: 1000, text: 'Before',
+    });
+    store.getState().addOutput({ formatId: 'short', name: 'Short', width: 1080, height: 1920 });
+    store.getState().setCurrentOutput(0);
+    store.getState().setOutputFrozen(1, true);
+
+    expect(store.getState().updateClipSilent(0, trackId, 'clip', { text: 'Source edit' })).toBe(true);
+    expect(store.getState().doc.outputs[1].tracks[0].clips[0].text).toBe('Before');
+
+    store.getState().setOutputFrozen(0, true);
+    expect(store.getState().updateClipSilent(0, trackId, 'clip', { text: 'Rejected' })).toBe(false);
+    store.getState().setVideoDuration(0, 5000);
+    store.getState().resizeOutput(0, 720, 1280);
+    expect(store.getState().doc.outputs[0]).toMatchObject({ durationMs: 10000, width: 1080, height: 1080 });
+  });
+
+  it('inserts after slides, promotes on first-slide delete, and survives save/reopen with one Undo per action', () => {
+    const store = createDesignerStore();
+    addTextEl(store, 'First');
+    store.getState().addPage();
+    addTextEl(store, 'Last');
+    store.getState().setCurrentPage(0);
+
+    let historyLength = store.getState().history.length;
+    store.getState().addPage('Middle', 0);
+    expect(store.getState().history).toHaveLength(historyLength + 1);
+    expect(store.getState().currentPage).toBe(1);
+    expect((store.getState().doc.outputs[0] as any).pages.map((page: any) => page.name)).toEqual(['Middle', undefined]);
+
+    historyLength = store.getState().history.length;
+    store.getState().duplicatePage(0);
+    expect(store.getState().history).toHaveLength(historyLength + 1);
+    expect((store.getState().doc.outputs[0] as any).pages).toHaveLength(3);
+
+    historyLength = store.getState().history.length;
+    store.getState().removePage(0, true);
+    expect(store.getState().history).toHaveLength(historyLength + 1);
+    expect(store.getState().doc.outputs[0].children[0].text).toBe('First');
+    expect(store.getState().doc.outputs[0].children[0].id).not.toBe('el-1');
+    expect(store.getState().currentPage).toBe(0);
+
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].pages).toHaveLength(3);
+    store.getState().redo();
+    expect(store.getState().doc.outputs[0].pages).toHaveLength(2);
+
+    const saved = structuredClone(store.getState().doc);
+    store.getState().loadDesign(saved, 'carousel', 'Carousel');
+    expect(store.getState().doc.outputs[0].pages).toHaveLength(2);
+
+    store.getState().loadDesign({
+      version: 8,
+      mode: 'image',
+      outputs: [{ id: 'old', formatId: 'ig-post', name: 'Old', width: 1080, height: 1080, background: '#fff', children: [] }],
+    }, 'older', 'Older');
+    expect(store.getState().doc.outputs[0].frozen).toBeUndefined();
+  });
+});
