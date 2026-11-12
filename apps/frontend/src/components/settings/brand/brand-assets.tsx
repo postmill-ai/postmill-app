@@ -62,10 +62,9 @@ export const BrandAssets = ({
 
   const referencedFileIds = useMemo(() => [...new Set([
     ...logoFileIds,
-    ...assets.map((asset) => asset.fileId).filter((id): id is string => !!id),
     introFileId,
     outroFileId,
-  ].filter((id): id is string => !!id))].sort(), [logoFileIds, assets, introFileId, outroFileId]);
+  ].filter((id): id is string => !!id))].sort(), [logoFileIds, introFileId, outroFileId]);
   const { data: files } = useSWR(
     `brand-studio-files-${brandId}-${referencedFileIds.join(',')}`,
     async () => {

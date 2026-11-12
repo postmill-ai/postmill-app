@@ -160,6 +160,7 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
     if (method === 'GET' && pathname === '/files/by-ids') {
       state.fileRequests.push(`${pathname}${url.search}`);
       const ids = (url.searchParams.get('ids') || '').split(',');
+      if (ids.length > 100) return json(route, { message: 'At most 100 file ids may be requested' }, 400);
       const files = [
         { id: 'logo-a', path: PIXEL, name: 'logo-a.png' },
         { id: 'logo-b', path: PIXEL, name: 'logo-b.png' },
@@ -240,6 +241,11 @@ test('editor uses two Brand Kits, Knowledge, and persistent Designer modes', asy
   });
   const state = await installMocks(page);
   page.on('framenavigated', (frame) => console.log('BRAND_STUDIO_NAVIGATE', frame.url()));
+  Object.assign(state.brands.find((brand) => brand.id === 'brand-b')!, {
+    assets: Array.from({ length: 150 }, (_, index) => ({ fileId: `bulk-asset-${index}`, url: PIXEL })),
+    introFileId: 'ref-a',
+    outroFileId: 'ref-a',
+  });
 
   await page.goto('/brands/brand-b/kit');
   console.log('BRAND_STUDIO_CURRENT_URL', page.url());
@@ -250,6 +256,12 @@ test('editor uses two Brand Kits, Knowledge, and persistent Designer modes', asy
   expect(state.templateRequests.filter((request) => request.includes('scope=org'))).toHaveLength(1);
   expect(state.fileRequests.some((request) => request.startsWith('/files/by-ids'))).toBe(true);
   expect(state.fileRequests.filter((request) => /[?&]page=[2-9]/.test(request))).toHaveLength(0);
+  const lookedUpIds = state.fileRequests
+    .filter((request) => request.startsWith('/files/by-ids'))
+    .flatMap((request) => (new URL(request, 'https://app.postmill.ai').searchParams.get('ids') || '').split(','))
+    .sort();
+  expect(lookedUpIds).toEqual(['logo-b', 'ref-a']);
+  await expect(page.getByRole('img', { name: 'logo-b.png', exact: true })).toBeVisible();
 
   await page.goto('/brands/brand-b/knowledge');
   await page.getByRole('button', { name: 'Enable Knowledge', exact: true }).click();
