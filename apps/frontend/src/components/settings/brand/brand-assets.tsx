@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
@@ -60,21 +60,19 @@ export const BrandAssets = ({
   const { fonts: customFonts, mutate: mutateCustomFonts } = useCustomFonts(brandId);
   const { uploadMany: uploadCustomFonts, uploading } = useUploadCustomFont(brandId);
 
+  const referencedFileIds = useMemo(() => [...new Set([
+    ...logoFileIds,
+    ...assets.map((asset) => asset.fileId).filter((id): id is string => !!id),
+    introFileId,
+    outroFileId,
+  ].filter((id): id is string => !!id))].sort(), [logoFileIds, assets, introFileId, outroFileId]);
   const { data: files } = useSWR(
-    `brand-studio-files-${brandId}`,
+    `brand-studio-files-${brandId}-${referencedFileIds.join(',')}`,
     async () => {
-      const results: FileItem[] = [];
-      let page = 1;
-      let pages = 1;
-      do {
-        const res = await fetch(`/files?page=${page}&limit=100`);
-        if (!res.ok) throw new Error('Failed to load brand files');
-        const body = await res.json() as { results: FileItem[]; pages?: number };
-        results.push(...(body.results || []));
-        pages = body.pages ?? page;
-        page += 1;
-      } while (page <= pages);
-      return { results };
+      if (!referencedFileIds.length) return { results: [] };
+      const res = await fetch(`/files/by-ids?ids=${encodeURIComponent(referencedFileIds.join(','))}`);
+      if (!res.ok) throw new Error('Failed to load brand files');
+      return res.json() as Promise<{ results: FileItem[] }>;
     },
     { revalidateOnFocus: false },
   );
@@ -85,26 +83,37 @@ export const BrandAssets = ({
   const { data: templateData, mutate: mutateTemplates } = useSWR(
     `brand-studio-templates-${brandId}`,
     async () => {
-      const templates: BrandTemplate[] = [];
-      let page = 1;
-      let total = 0;
-      do {
-        const res = await fetch(`/media/design-templates?page=${page}&limit=100&brandId=${encodeURIComponent(brandId)}`);
-        if (!res.ok) throw new Error('Failed to load brand templates');
-        const body = await res.json() as { templates: BrandTemplate[]; total: number };
-        if (!body.templates?.length) break;
-        templates.push(...body.templates);
-        total = body.total;
-        page += 1;
-      } while (templates.length < total);
-      return { templates };
+      const res = await fetch(`/media/design-templates?page=1&limit=24&scope=org&brandId=${encodeURIComponent(brandId)}`);
+      if (!res.ok) throw new Error('Failed to load brand templates');
+      return res.json() as Promise<{ templates: BrandTemplate[]; total: number }>;
     },
     { revalidateOnFocus: false },
   );
+  const [extraTemplates, setExtraTemplates] = useState<BrandTemplate[]>([]);
+  const [templatePage, setTemplatePage] = useState(1);
+  const [loadingMoreTemplates, setLoadingMoreTemplates] = useState(false);
+  useEffect(() => {
+    setExtraTemplates([]);
+    setTemplatePage(1);
+  }, [brandId]);
   const orgTemplates = useMemo(
-    () => (templateData?.templates || []).filter((template) => !template.isSystem),
-    [templateData],
+    () => [...(templateData?.templates || []), ...extraTemplates].filter((template) => !template.isSystem),
+    [templateData, extraTemplates],
   );
+  const hasMoreTemplates = orgTemplates.length < (templateData?.total || 0);
+  const loadMoreTemplates = useCallback(async () => {
+    setLoadingMoreTemplates(true);
+    try {
+      const next = templatePage + 1;
+      const res = await fetch(`/media/design-templates?page=${next}&limit=24&scope=org&brandId=${encodeURIComponent(brandId)}`);
+      if (!res.ok) return;
+      const body = await res.json() as { templates: BrandTemplate[] };
+      setExtraTemplates((current) => [...current, ...(body.templates || [])]);
+      setTemplatePage(next);
+    } finally {
+      setLoadingMoreTemplates(false);
+    }
+  }, [brandId, fetch, templatePage]);
   const assignTemplate = useCallback(async (template: BrandTemplate, assign: boolean) => {
     if (!canEdit) return;
     const res = await fetch(`/media/design-templates/${template.id}`, {
@@ -115,6 +124,8 @@ export const BrandAssets = ({
       toaster.show(t('brand_template_assignment_failed', 'Failed to update brand template'), 'warning');
       return;
     }
+    setExtraTemplates([]);
+    setTemplatePage(1);
     await mutateTemplates();
     toaster.show(t('brand_template_updated', 'Brand template updated'), 'success');
   }, [brandId, canEdit, fetch, mutateTemplates, toaster, t]);
@@ -361,6 +372,16 @@ export const BrandAssets = ({
               </button>
             ))}
           </div>
+        )}
+        {hasMoreTemplates && (
+          <button
+            type="button"
+            onClick={loadMoreTemplates}
+            disabled={loadingMoreTemplates}
+            className="self-start border border-newTableBorder rounded-[6px] px-[10px] py-[6px] text-[12px] hover:bg-boxHover disabled:opacity-60"
+          >
+            {loadingMoreTemplates ? t('loading', 'Loading...') : t('templates_panel_load_more', 'Load more')}
+          </button>
         )}
       </section>
 

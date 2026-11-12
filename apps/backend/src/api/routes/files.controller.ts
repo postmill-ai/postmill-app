@@ -40,7 +40,7 @@ import { UpdateMediaDescriptionDto } from '@postmill-ai/nestjs-libraries/dtos/fi
 import { BulkDeleteMediaDto } from '@postmill-ai/nestjs-libraries/dtos/file/bulk.delete.media.dto';
 import { BulkMoveMediaDto } from '@postmill-ai/nestjs-libraries/dtos/file/bulk.move.media.dto';
 import { BulkSaveMediaDto } from '@postmill-ai/nestjs-libraries/dtos/file/bulk.save.media.dto';
-import { GetFilesQueryDto } from '@postmill-ai/nestjs-libraries/dtos/file/get.files.query.dto';
+import { GetFilesByIdsQueryDto, GetFilesQueryDto } from '@postmill-ai/nestjs-libraries/dtos/file/get.files.query.dto';
 import { SaveMediaDto } from '@postmill-ai/nestjs-libraries/dtos/file/save.media.dto';
 import { UploadServerBodyDto } from '@postmill-ai/nestjs-libraries/dtos/file/upload.server.dto';
 import { UploadSimpleBodyDto } from '@postmill-ai/nestjs-libraries/dtos/file/upload.simple.dto';
@@ -77,6 +77,15 @@ export class FilesController {
   }
 
   // ── File CRUD ────────────────────────────────────────────
+
+  @Get('/by-ids')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async getFilesByIds(@GetOrgFromRequest() org: Organization, @Query() query: GetFilesByIdsQueryDto) {
+    const ids = [...new Set((query.ids || '').split(',').map((id) => id.trim()).filter(Boolean))];
+    if (ids.length > 100) throw new BadRequestException('At most 100 file ids may be requested');
+    return { results: ids.length ? await this._fileService.getByIds(org.id, ids) : [] };
+  }
 
   @Get('/')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])

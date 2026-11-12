@@ -36,4 +36,15 @@ describe('PineconeVectorStoreAdapter Brand Kit metadata', () => {
       organizationId: 'org-1', sourceId: 'source-1', brandProfileId: 'brand-1',
     });
   });
+
+  it('omits the brand metadata key for unbranded vectors', async () => {
+    await adapter().upsertBatch('org-1', [{
+      id: 'chunk-2', vector: [0.1, 0.2, 0.3], text: 'Org fact', sourceType: 'post', sourceId: 'post-1',
+    }]);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.vectors[0].metadata).toEqual({
+      organizationId: 'org-1', text: 'Org fact', sourceType: 'post', sourceId: 'post-1',
+    });
+    expect(body.vectors[0].metadata).not.toHaveProperty('brandProfileId');
+  });
 });

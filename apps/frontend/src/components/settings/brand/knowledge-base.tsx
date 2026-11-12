@@ -389,7 +389,7 @@ export const KnowledgeBase = ({ brandId, legacy = false }: { brandId?: string; l
             <div className="text-[14px]">{legacy ? t('legacy_knowledge', 'Unassigned Knowledge') : t('knowledge_base', 'What the AI knows about you')}</div>
             <div className="text-[12px] text-newTableText max-w-[560px] leading-relaxed">
               {legacy
-                ? t('legacy_knowledge_description', 'Content added before Brand Kits remains available to org-wide AI searches. Review or delete it here; re-add it to a Brand Kit for brand-scoped retrieval.')
+                ? t('legacy_knowledge_description', 'Content not assigned to a Brand Kit, including legacy and org-wide auto-indexed content. Review or delete it here; re-add it to a Brand Kit for brand-scoped retrieval.')
                 : t('knowledge_base_description_v2', "Give the AI examples and facts about your business — your best posts, web pages, or notes. It'll use them to sound more like you and get the details right. Nothing here is required to start.")}
             </div>
           </div>

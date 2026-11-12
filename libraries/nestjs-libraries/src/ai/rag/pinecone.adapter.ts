@@ -114,7 +114,7 @@ export class PineconeVectorStoreAdapter implements VectorStoreAdapter {
           text: p.text,
           sourceType: p.sourceType,
           sourceId: p.sourceId,
-          brandProfileId: p.brandProfileId ?? null,
+          ...(p.brandProfileId ? { brandProfileId: p.brandProfileId } : {}),
         },
       })),
     });

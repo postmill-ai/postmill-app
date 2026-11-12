@@ -147,14 +147,14 @@ export class DesignRepository {
   // No page/limit = the historical full list (callers that group/bucket the
   // whole gallery in memory). Both present = one page plus a count via
   // countTemplatesByOrg.
-  async findTemplatesByOrg(orgId: string, page?: number, limit?: number, brandProfileId?: string) {
+  async findTemplatesByOrg(orgId: string, page?: number, limit?: number, brandProfileId?: string, scope?: 'org') {
     if (brandProfileId) {
       const paginated = page !== undefined && limit !== undefined;
       const ordered = await (this._designTemplate.model as any).$queryRawUnsafe(
         `SELECT "id"
          FROM "DesignTemplate"
          WHERE "deletedAt" IS NULL
-           AND ("organizationId" = $1 OR "isSystem" = true)
+           AND ${scope === 'org' ? '"organizationId" = $1' : '("organizationId" = $1 OR "isSystem" = true)'}
          ORDER BY CASE WHEN "brandProfileId" = $2 THEN 0 ELSE 1 END,
                   "isSystem" DESC, "name" ASC, "id" ASC
          ${paginated ? 'LIMIT $3 OFFSET $4' : ''}`,
@@ -173,7 +173,9 @@ export class DesignRepository {
     return this._designTemplate.model.designTemplate.findMany({
       where: {
         deletedAt: null,
-        OR: [{ organizationId: orgId }, { isSystem: true }],
+        ...(scope === 'org'
+          ? { organizationId: orgId }
+          : { OR: [{ organizationId: orgId }, { isSystem: true }] }),
       },
       orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
       ...(page !== undefined && limit !== undefined
@@ -183,11 +185,13 @@ export class DesignRepository {
     });
   }
 
-  countTemplatesByOrg(orgId: string) {
+  countTemplatesByOrg(orgId: string, scope?: 'org') {
     return this._designTemplate.model.designTemplate.count({
       where: {
         deletedAt: null,
-        OR: [{ organizationId: orgId }, { isSystem: true }],
+        ...(scope === 'org'
+          ? { organizationId: orgId }
+          : { OR: [{ organizationId: orgId }, { isSystem: true }] }),
       },
     });
   }

@@ -28,6 +28,8 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
     ragGlobalEnabled: true,
     platformSettingsRequests: 0,
     fontRequests: [] as (string | null)[],
+    fileRequests: [] as string[],
+    templateRequests: [] as string[],
     knowledge: [] as { sourceId: string; sourceType: string; content: string; brandId?: string }[],
     doc: {
       version: 13,
@@ -155,7 +157,18 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
       state.platformSettingsRequests += 1;
       return json(route, { message: 'Super admin access required' }, 403);
     }
+    if (method === 'GET' && pathname === '/files/by-ids') {
+      state.fileRequests.push(`${pathname}${url.search}`);
+      const ids = (url.searchParams.get('ids') || '').split(',');
+      const files = [
+        { id: 'logo-a', path: PIXEL, name: 'logo-a.png' },
+        { id: 'logo-b', path: PIXEL, name: 'logo-b.png' },
+        { id: 'ref-a', path: PIXEL, name: 'ref-a.png' },
+      ];
+      return json(route, { results: files.filter((file) => ids.includes(file.id)) });
+    }
     if (method === 'GET' && pathname === '/files') {
+      state.fileRequests.push(`${pathname}${url.search}`);
       return json(route, {
         pages: 1,
         results: [
@@ -166,6 +179,7 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
       });
     }
     if (method === 'GET' && pathname === '/media/design-templates') {
+      state.templateRequests.push(`${pathname}${url.search}`);
       const templates = [
         { id: 'template-shared', name: 'Shared template', isSystem: false, brandProfileId: null, doc: { mode: 'image' } },
         { id: 'template-b', name: 'B template', isSystem: false, brandProfileId: 'brand-b', doc: { mode: 'image' } },
@@ -233,6 +247,9 @@ test('editor uses two Brand Kits, Knowledge, and persistent Designer modes', asy
   await expect(page.getByRole('button', { name: 'Remove B Sans', exact: true })).toBeVisible();
   await expect(page.getByText('B template', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Assign Shared template', exact: true })).toBeVisible();
+  expect(state.templateRequests.filter((request) => request.includes('scope=org'))).toHaveLength(1);
+  expect(state.fileRequests.some((request) => request.startsWith('/files/by-ids'))).toBe(true);
+  expect(state.fileRequests.filter((request) => /[?&]page=[2-9]/.test(request))).toHaveLength(0);
 
   await page.goto('/brands/brand-b/knowledge');
   await page.getByRole('button', { name: 'Enable Knowledge', exact: true }).click();

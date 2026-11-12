@@ -245,9 +245,10 @@ cannot override an operator-wide off-switch. Org administrators control the org 
 manage brand content. Indexing, searching, listing, and deleting items are scoped to the brand you
 opened; another brand's knowledge is not returned.
 
-**Unassigned Knowledge** on the Brand Studio home page preserves content added before Brand Kits.
-Those items remain available to intentionally org-wide AI searches and can be reviewed or deleted
-there. Re-add an item to a Brand Kit when you want it used for brand-scoped retrieval. **Learn from
+**Unassigned Knowledge** on the Brand Studio home page holds content not assigned to a Brand Kit,
+including legacy items and org-wide auto-indexed content. Those items remain available to intentionally
+org-wide AI searches and can be reviewed or deleted there. Re-add an item to a Brand Kit when you want
+it used for brand-scoped retrieval. **Learn from
 my posts** adds only posts assigned to the selected brand; unbranded posts and media are not copied
 into every kit.
 

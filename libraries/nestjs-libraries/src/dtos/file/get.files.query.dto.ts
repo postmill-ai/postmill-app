@@ -46,3 +46,9 @@ export class GetFilesQueryDto {
   @IsString()
   highlight?: string;
 }
+
+export class GetFilesByIdsQueryDto {
+  @IsOptional()
+  @IsString()
+  ids?: string;
+}

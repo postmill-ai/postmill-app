@@ -82,13 +82,19 @@ Docker Compose environment, or deployment config, then redeploy if needed.
 
 - **Apply the additive migration.** `20261112020000_brand_studio_knowledge` adds nullable org RAG,
   brand Knowledge, preferred-format and template-association columns. Existing Knowledge rows retain
-  `brandProfileId = NULL`; they are not assigned to an arbitrary brand. They remain available to
-  intentionally org-wide AI searches and under **Brand Studio → Unassigned Knowledge**, where they can
-  be reviewed and deleted. Re-add content to a Brand Kit for brand-scoped retrieval.
+  `brandProfileId = NULL`; they are not assigned to an arbitrary brand. **Unassigned Knowledge** holds
+  content not assigned to a Brand Kit, including these legacy rows and org-wide auto-indexed content.
+  It remains available to intentionally org-wide AI searches and can be reviewed or deleted in Brand
+  Studio. Re-add content to a Brand Kit for brand-scoped retrieval.
 - **Knowledge enablement is two-level.** Effective access requires the platform RAG flag and the org
   not being disabled (`globalEnabled && Organization.ragEnabled !== false`). Existing NULL org values
   inherit the platform setting. Platform vector-store read/write/test routes are super-admin only;
-  org admins need `ai-config:update` to change the org switch.
+  org admins need `ai-config:update` to change the org switch. This repo ships no admin UI, so a
+  self-hosted operator grants the flag directly in Postgres, then signs in again:
+  ```sql
+  UPDATE "User" SET "isSuperAdmin" = true WHERE email = 'operator@example.com';
+  ```
+  Run it with `docker exec postmill-postgres psql -U postmill-user postmill-db-local -c '<sql>'`.
 - **Brand permissions affect custom roles.** Fonts, the legacy `/ai/brand-profile` read, and `/rag`
   routes now require `brands:read`; mutations require the corresponding brand write permission. The
   editor system role receives these grants on boot. Review custom roles that previously relied on

@@ -3674,6 +3674,20 @@ paths:
           description: ""
       tags:
         - Media
+  /files/by-ids:
+    get:
+      operationId: FilesController_getFilesByIds
+      parameters:
+        - name: ids
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Files
   /files:
     get:
       operationId: FilesController_getFiles
@@ -8095,6 +8109,11 @@ paths:
           schema:
             type: string
         - name: brandId
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: scope
           required: false
           in: query
           schema:
