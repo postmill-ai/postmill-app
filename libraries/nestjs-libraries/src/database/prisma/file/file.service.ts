@@ -23,6 +23,8 @@ export interface ImportFromPathResult {
 // client-side (SVG → PNG on a canvas) before hitting /files/import, or ingested
 // through a dedicated server-side SVG sanitizer. Do NOT "fix" the dead save by
 // adding 'image/svg+xml' here without one of those in place.
+// The one server-side exception is `rasterizeSvg` on importFromUrl (licensed
+// content-pack downloads): the SVG is rendered to a PNG and only the PNG is stored.
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif',
   'image/bmp', 'image/tiff', 'video/mp4',
@@ -34,6 +36,67 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 
 const MAX_IMPORT_SIZE = 512 * 1024 * 1024; // 512 MB
+
+const SVG_RASTER_MAX_EDGE = 2048;
+
+// Canonical display extension per stored MIME (only types with one obvious extension).
+const MIME_EXTENSIONS: Record<string, string[]> = {
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/png': ['png'],
+  'image/gif': ['gif'],
+  'image/webp': ['webp'],
+  'image/avif': ['avif'],
+  'video/mp4': ['mp4'],
+  'video/webm': ['webm'],
+  'video/quicktime': ['mov'],
+  'audio/mpeg': ['mp3'],
+  'audio/wav': ['wav'],
+  'audio/x-wav': ['wav'],
+  'audio/ogg': ['ogg'],
+  'application/pdf': ['pdf'],
+};
+const KNOWN_EXTENSIONS = new Set([...Object.values(MIME_EXTENSIONS).flat(), 'svg']);
+
+/**
+ * Keep the display name's extension truthful about what was stored: when the
+ * name ends in a known media extension that disagrees with the stored MIME
+ * (e.g. `x.jpg` for a rasterized SVG stored as PNG), swap it. Unknown or
+ * absent extensions are left alone.
+ */
+export function nameMatchingMime(name: string, mime: string): string {
+  const exts = MIME_EXTENSIONS[mime];
+  const match = /\.([a-z0-9]{2,5})$/i.exec(name);
+  if (!exts || !match) return name;
+  const ext = match[1].toLowerCase();
+  if (!KNOWN_EXTENSIONS.has(ext) || exts.includes(ext)) return name;
+  return `${name.slice(0, -ext.length)}${exts[0]}`;
+}
+
+/**
+ * Render an SVG download to PNG (never store the active SVG document). Returns
+ * null when the bytes are not an SVG. The header can be wrong, so sharp's own
+ * format detection is the authority.
+ */
+async function rasterizeSvgBuffer(buffer: Buffer, contentType: string): Promise<Buffer | null> {
+  if (contentType !== 'image/svg+xml' && !buffer.subarray(0, 4096).toString('utf8').includes('<svg')) {
+    return null;
+  }
+  const sharp = (await import('sharp')).default;
+  const meta = await sharp(buffer).metadata().catch(() => null);
+  if (meta?.format !== 'svg') return null;
+  // Render at a density that puts the longest edge near SVG_RASTER_MAX_EDGE
+  // (sharp rasterizes SVG at 72 dpi by default — tiny for icon-sized viewBoxes).
+  const longest = Math.max(meta.width || 0, meta.height || 0) || SVG_RASTER_MAX_EDGE;
+  const density = Math.min(100000, Math.max(1, (72 * SVG_RASTER_MAX_EDGE) / longest)); // sharp caps density at 1e5
+  try {
+    return await sharp(buffer, { density })
+      .resize({ width: SVG_RASTER_MAX_EDGE, height: SVG_RASTER_MAX_EDGE, fit: 'inside', withoutEnlargement: true })
+      .png()
+      .toBuffer();
+  } catch {
+    throw new HttpException('Could not convert the SVG download to an image', 415);
+  }
+}
 
 @Injectable()
 export class FileService {
@@ -675,6 +738,12 @@ export class FileService {
        */
       aiDesigner?: 'asset' | 'reference';
       aiDesignerSessionId?: string;
+      /**
+       * Backend-internal (not on ImportFromUrlDto): render an SVG download to PNG
+       * instead of rejecting it. Set only for licensed content-pack downloads,
+       * whose format the provider decides.
+       */
+      rasterizeSvg?: boolean;
     }
   ) {
     // 1.3: never trust a client folderId — attach only to a folder the caller's
@@ -720,13 +789,6 @@ export class FileService {
       );
     }
 
-    await this._storageService.assertWithinProviderQuota(
-      adapter,
-      orgId,
-      buffer.length,
-      configId
-    );
-
     // Validate the ACTUAL downloaded MIME, not the caller's category hint
     // (`data.type` is 'photo'/'audio'/… — not a MIME — and would never match).
     let contentType =
@@ -738,16 +800,35 @@ export class FileService {
       const sniffed = await fromBuffer(buffer);
       if (sniffed?.mime) contentType = sniffed.mime;
     }
+    if (data.rasterizeSvg && !ALLOWED_MIME_TYPES.has(contentType)) {
+      const png = await rasterizeSvgBuffer(buffer, contentType);
+      if (png) {
+        buffer = png;
+        contentType = 'image/png';
+      }
+    }
     if (!ALLOWED_MIME_TYPES.has(contentType)) {
       throw new HttpException(`File type not allowed: ${contentType}`, 415);
     }
+    if (buffer.length > MAX_IMPORT_SIZE) {
+      throw new HttpException('File too large (max 512 MB)', 413);
+    }
+
+    // Quota is checked once, against the bytes actually written — a converted
+    // SVG→PNG can be much larger than the download.
+    await this._storageService.assertWithinProviderQuota(
+      adapter,
+      orgId,
+      buffer.length,
+      configId
+    );
 
     const path = await adapter.writeBuffer(buffer, contentType);
 
     const fileSize = buffer.length;
 
     return this._fileRepository.saveGeneratedMedia(orgId, {
-      name: data.name,
+      name: nameMatchingMime(data.name, contentType),
       path,
       type: mediaCategoryFromMime(contentType),
       folderId: ownedFolderId,

@@ -7,6 +7,7 @@ import { tmpdir } from 'os';
 import { createInterface } from 'readline';
 import { inflateRawSync } from 'zlib';
 import { UnzipInflate, Unzip } from 'fflate';
+import { ensureOrgSpoolDir } from './org-portability.archive';
 import {
   ORG_EXPORT_SCHEMA,
   ORG_EXPORT_SCHEMAS,
@@ -290,7 +291,7 @@ export async function extractOrgArchive(
   archivePath: string,
   spoolRoot = path.join(tmpdir(), 'postmill-org-archives'),
 ): Promise<OrgArchiveExtraction> {
-  mkdirSync(spoolRoot, { recursive: true, mode: 0o700 });
+  ensureOrgSpoolDir(spoolRoot);
   const directory = mkdtempSync(path.join(spoolRoot, 'import-'));
   mkdirSync(path.join(directory, 'domains'), { mode: 0o700 });
   mkdirSync(path.join(directory, 'assets'), { mode: 0o700 });

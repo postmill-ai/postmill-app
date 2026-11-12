@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { checkUploadLimit, UPLOAD_ALLOWED_MIME_TYPES } from './upload-limits';
+import { uploadMaxBytesFor } from '@postmill-ai/helpers/upload-limits.client';
 
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
@@ -71,6 +72,16 @@ describe('checkUploadLimit', () => {
       expect(result.ok, mimetype).toBe(false);
       expect(result.reason).toContain('Unsupported');
     }
+  });
+
+  it('caps text and JSON documents at the document limit, not the audio limit', () => {
+    const split = { ...limits, audio: { maxBytes: 5 * MB }, document: { maxBytes: 20 * MB } };
+    for (const mimetype of ['text/plain', 'text/markdown', 'text/csv', 'text/tab-separated-values', 'application/json']) {
+      expect(checkUploadLimit({ size: 10 * MB, mimetype }, split).ok, mimetype).toBe(true);
+      expect(checkUploadLimit({ size: 21 * MB, mimetype }, split).ok, mimetype).toBe(false);
+      expect(uploadMaxBytesFor(mimetype, split), mimetype).toBe(20 * MB);
+    }
+    expect(uploadMaxBytesFor('audio/mpeg', split)).toBe(5 * MB);
   });
 
   it('rejects a 25 MB image from both client and server paths', () => {

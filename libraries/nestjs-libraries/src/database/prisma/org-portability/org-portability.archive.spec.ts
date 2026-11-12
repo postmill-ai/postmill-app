@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { Readable } from 'stream';
 import { strFromU8, unzipSync } from 'fflate';
-import { OrgArchiveWriter } from './org-portability.archive';
+import { ensureOrgSpoolDir, OrgArchiveWriter } from './org-portability.archive';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -30,5 +30,21 @@ describe('OrgArchiveWriter', () => {
     expect(strFromU8(entries['assets/abc'])).toBe('hello world');
     expect(JSON.parse(strFromU8(entries['manifest.json'])).schema).toBe('postmill.org-export.v1');
     expect(statSync(file).mode & 0o777).toBe(0o600);
+  });
+});
+
+describe('ensureOrgSpoolDir', () => {
+  it('creates a missing spool as 0700 and tightens an existing permissive one', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'org-spool-'));
+    dirs.push(dir);
+    const created = path.join(dir, 'nested', 'spool');
+    ensureOrgSpoolDir(created);
+    expect(statSync(created).mode & 0o777).toBe(0o700);
+
+    const existing = path.join(dir, 'existing');
+    mkdirSync(existing, { mode: 0o755 });
+    chmodSync(existing, 0o755);
+    ensureOrgSpoolDir(existing);
+    expect(statSync(existing).mode & 0o777).toBe(0o700);
   });
 });

@@ -12,7 +12,6 @@ import {
   appendFileSync,
   chmodSync,
   createReadStream,
-  mkdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -36,6 +35,7 @@ import {
   validateOrgArchiveWithKey,
   type OrgArchiveExtraction,
 } from './org-import-archive';
+import { ensureOrgSpoolDir } from './org-portability.archive';
 import {
   decryptOrgSecretRefs,
   unwrapOrgArchiveKey,
@@ -181,7 +181,7 @@ export class OrgImportService {
     await this._assertOwner(orgId, ownerId);
     await this._assertDestination(orgId);
     const root = this._spoolRoot();
-    mkdirSync(root, { recursive: true, mode: 0o700 });
+    ensureOrgSpoolDir(root);
     const id = randomUUID();
     const spoolPath = path.join(root, `${id}.zip`);
     writeFileSync(spoolPath, new Uint8Array(), { flag: 'wx', mode: 0o600 });
@@ -390,13 +390,16 @@ export class OrgImportService {
         }
         await this._importRelations(tx, extraction!, maps);
         await this._repository.updateOrganization(tx, job.organizationId, { setupCompletedAt: new Date() });
-        await this._repository.completeJobInTransaction(tx, jobId, {
+        const completed = await this._repository.completeJobInTransaction(tx, jobId, {
           counts: (job.progress as any)?.counts || {},
           source: extraction!.manifest.source,
           createdAt: extraction!.manifest.createdAt,
           missingAssets: extraction!.manifest.counts.missingAssets || 0,
           completedAt: new Date().toISOString(),
         });
+        if (completed.count !== 1) {
+          throw new Error('Organization import claim was lost before commit (job expired or failed).');
+        }
         return { invites, videoFileIds: maps.videoFileIds, ownerEmail: maps.ownerEmail };
       });
       committed = true;
