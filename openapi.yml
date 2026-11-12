@@ -10093,7 +10093,7 @@ paths:
 info:
   title: Postmill API
   description: OpenAPI description of the Postmill backend (NestJS). Generated from the controllers — do not hand-edit; run `pnpm run openapi:generate`.
-  version: 1.4.0
+  version: 1.5.0
   contact: {}
 tags: []
 servers: []
