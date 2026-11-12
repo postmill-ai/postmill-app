@@ -72,7 +72,7 @@ Without this, the analytics dashboard, comment inbox, media render queue, and wa
 | `digest-email-weekly` | Mondays at 09:00 America/New_York | Fans out one `digest/send-one` event per target for weekly digests |
 | `agent-digest` | Mondays at 07:00 America/New_York | Fans out one `agent/digest-org` event per org (disabled unless `AGENT_DIGEST_ENABLED=true`) |
 | `comms-matrix-sync` | Every minute | Fans out one `comms/matrix.sync-one` event per enabled Matrix comms config (Matrix has no webhooks) |
-| `org-portability-expiry` | Hourly at minute 17 (`17 * * * *`) | Marks organization export/import jobs past their 24-hour `expiresAt` as expired and deletes their spooled archives |
+| `org-portability-expiry` | Hourly at minute 17 (`17 * * * *`) | Marks organization export/import jobs expired and deletes their spooled archives. Finished and waiting jobs expire at `expiresAt` (a completed export gets a fresh 24 h from completion); active jobs are kept until they have also been idle for 24 h |
 
 ### Event-triggered functions
 

@@ -45,7 +45,7 @@ These secrets encrypt OAuth tokens, AI provider credentials, storage credentials
 
 - **Redis** — cache only; data is rebuilt on restart. AOF/RDB persistence is useful for avoiding cold-cache latency but is not a backup.
 - **node_modules** or build artifacts.
-- **The organization-archive spool** (`ORG_PORTABILITY_SPOOL_DIR`, default `${TMPDIR}/postmill-org-archives`). It holds encrypted export and import archives for at most 24 hours. The hourly `org-portability-expiry` function then marks the job expired and deletes the file. The spool is ephemeral by design. An owner who loses an in-flight archive just requests a new export. Do not copy it into backups, where an encrypted archive would outlive its 24-hour expiry.
+- **The organization-archive spool** (`ORG_PORTABILITY_SPOOL_DIR`, default `${TMPDIR}/postmill-org-archives`). It holds encrypted export and import archives only briefly: a completed export is kept for 24 hours after it finishes, and a running job is cleaned up only after 24 hours with no progress. The hourly `org-portability-expiry` function then marks the job expired and deletes the file. The spool is ephemeral by design. An owner who loses an in-flight archive just requests a new export. Do not copy it into backups, where an encrypted archive would outlive its expiry.
 
 ## Automated data retention
 
@@ -66,7 +66,7 @@ Postmill prunes and rolls up data through Inngest scheduled functions. You do no
 | Blank canvases | 1 day | Soft-deleted by the retention-purge function: never-customized `Untitled Design` rows whose doc is content-free, with their preview files | `BLANK_DESIGN_RETENTION_DAYS` |
 | Designer version history | Newest 10 automatic + 20 named snapshots per design | Older snapshots trimmed when a new one is saved | `DESIGN_VERSIONS_KEEP_AUTO` / `DESIGN_VERSIONS_KEEP_NAMED` |
 | User/Session IP and agent | 90 days | Nulled by the retention-purge function | `IP_RETENTION_DAYS` |
-| Organization export/import archives | 24 hours | Job marked `expired` and spooled archive deleted by the hourly `org-portability-expiry` function | — (fixed) |
+| Organization export/import archives | 24 hours after a completed export finishes; running jobs after 24 hours with no progress | Job marked `expired` and spooled archive deleted by the hourly `org-portability-expiry` function | — (fixed) |
 
 See [Inngest & Cron](./inngest-and-cron.md) for how the functions operate.
 

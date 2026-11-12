@@ -36,7 +36,7 @@ Every environment variable Postmill recognises, sourced from `.env.example`. All
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `ORG_PORTABILITY_SPOOL_DIR` | `${TMPDIR}/postmill-org-archives` | Private, mode-0600 archive spool. Keep it outside the upload root, public buckets, and repository; archives expire after 24 hours |
+| `ORG_PORTABILITY_SPOOL_DIR` | `${TMPDIR}/postmill-org-archives` | Private, mode-0600 archive spool. Keep it outside the upload root, public buckets, and repository; completed exports expire 24 hours after they finish |
 | `ORG_PORTABILITY_MAX_ARCHIVE_BYTES` | `4293918720` | Maximum archive size: 4 GiB minus 1 MiB. Larger overrides are capped because the streaming writer does not emit ZIP64 |
 | `ORG_PORTABILITY_MAX_ASSET_BYTES` | `2147483647` | Maximum source size for each exported file |
 

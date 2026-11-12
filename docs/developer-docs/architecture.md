@@ -154,7 +154,7 @@ All scheduled and async work runs on Inngest. The backend serves the handler at 
 | `media-video-thumbnail` | Event `media/video-thumbnail.generate` | Generate a poster thumbnail for a video file. |
 | `org-portability-export` | Event `org/portability.export` | Stream an owner-requested organization export archive into a private spool. |
 | `org-portability-import` | Event `org/portability.import` | Validate and then import an uploaded organization archive (Setup → Import); concurrency 1 per org. |
-| `org-portability-expiry` | Cron (hourly) | Expire old export/import jobs and delete their spool archives and temporary archive keys. |
+| `org-portability-expiry` | Cron (hourly) | Expire export/import jobs (completed exports 24 h after completion; active jobs only after a 24 h idle TTL) and delete their spool archives and temporary archive keys. |
 | `missing-post-finder` | Cron (hourly) | Recover posts that should have published. |
 | `streak-tracker` | Event `streak/start` | Streak notifications. |
 | `campaign-tag-purge` | Cron | Purge tagged campaign items for ended campaigns. |

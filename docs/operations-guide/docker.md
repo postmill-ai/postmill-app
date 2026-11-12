@@ -99,8 +99,8 @@ unset, the spool is `${TMPDIR}/postmill-org-archives`, which is `/tmp/postmill-o
 image. `docker-compose.yaml` declares no volume for it, so the spool lives in the container's
 writable layer. A plain `docker restart` keeps it. Recreating the container discards it, and that
 happens on an image upgrade, a `docker compose up` after a config change, or `docker compose down`.
-Any export waiting for download, or import being validated, is then lost. Archives expire after
-24 hours anyway, so this is usually acceptable: the owner requests a new export or uploads the
+Any export waiting for download, or import being validated, is then lost. Completed exports expire
+24 hours after they finish anyway, so this is usually acceptable: the owner requests a new export or uploads the
 archive again.
 
 To keep in-flight archives across container recreation, mount a private volume and point the spool
@@ -169,7 +169,7 @@ The main scheduled functions are:
 - **Analytics collection** — daily sweep per org (channel snapshots, post snapshots, rollup/prune, watchlist probes)
 - **Comments collection** — per-org comment sync (fetch, reply, prune, notify)
 - **Missing post scanner** — hourly scan for stuck posts
-- **Organization archive expiry** — hourly purge of export/import archives older than 24 hours
+- **Organization archive expiry** — hourly purge of expired export/import archives (completed exports 24 hours after they finish; stalled jobs after 24 hours idle)
 
 See [Inngest & Cron](./inngest-and-cron.md) for details.
 

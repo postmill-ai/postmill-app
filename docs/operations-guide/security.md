@@ -342,8 +342,10 @@ carries every tenant secret in the archive, so it is locked down:
   webhook tokens and connect codes are not exported; import regenerates them.
 - **One-time download.** A download link is a 32-byte random token held in Redis for 5 minutes and
   consumed on first use. Requests and download issuance are recorded in the audit log.
-- **24-hour expiry.** Jobs expire 24 hours after creation. The hourly `org-portability-expiry`
-  function marks them expired and deletes the spooled file.
+- **24-hour expiry.** A completed export expires 24 hours after it finishes; other finished or
+  waiting jobs at their `expiresAt`. A running job is never expired while active, only after 24
+  hours with no progress, and completion only succeeds while the job is still running. The hourly
+  `org-portability-expiry` function marks jobs expired and deletes the spooled file.
 - **Private spool.** Archives are written under `ORG_PORTABILITY_SPOOL_DIR` with directories
   created `0700` and files `0600`. Keep the spool outside `UPLOAD_DIRECTORY`, public buckets and the
   repository (see [Docker → Organization archive spool](./docker.md#organization-archive-spool)).
