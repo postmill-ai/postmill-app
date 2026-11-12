@@ -505,7 +505,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   keys, continues after individual failures, retries only failed outputs on demand, and reuses the
   cached blob for an upload retry so it neither rerenders nor duplicates completed Files. Partial
   exports stay visible with per-output retry and an explicit Use completed exports action; draft
-  creation still requires that explicit action when any output failed.
+  creation still requires that explicit action when any output failed. Every user-facing reliability
+  string, including oversize fallback and retry UI, must have an entry in all 16 locale catalogs.
 - **Video poster state distinguishes effective and generated images.** The export dialog sends
   only an uploaded File path as `posterUrl` and may send the paused playhead as `posterTimeMs`.
   Polling reads `thumbnailUrl` (effective), `generatedPosterUrl` (rendered alternative), `fileId`,

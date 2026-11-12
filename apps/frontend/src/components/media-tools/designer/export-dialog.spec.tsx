@@ -8,6 +8,7 @@ import { ExportDialog } from './export-dialog';
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   render: vi.fn(),
+  upload: vi.fn(),
   toast: vi.fn(),
 }));
 
@@ -55,6 +56,7 @@ vi.mock('react-konva', () => ({
 vi.mock('./export-format', async (importOriginal) => ({
   ...await importOriginal<typeof import('./export-format')>(),
   renderOutputWithFallback: mocks.render,
+  uploadExportBlob: mocks.upload,
 }));
 vi.mock('./panels/use-brand-colors', () => ({ useBrandColors: () => [] }));
 vi.mock('./panels/use-brand-fonts', () => ({ useBrandFonts: () => [] }));
@@ -102,7 +104,13 @@ beforeEach(() => {
     usedQuality: quality,
     usedScale: scale,
   }));
+  mocks.upload.mockReset();
   mocks.toast.mockReset();
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  Object.assign(URL, {
+    createObjectURL: vi.fn((blob: Blob) => `blob:${blob.size}`),
+    revokeObjectURL: vi.fn(),
+  });
 });
 
 afterEach(() => {
@@ -128,5 +136,39 @@ describe('ExportDialog previews', () => {
 
     rerender(dialog());
     await waitFor(() => expect(mocks.render).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('ExportDialog static export recovery', () => {
+  it('preserves a completed output and retries only the failed upload through the UI', async () => {
+    mocks.upload
+      .mockResolvedValueOnce({ id: 'file-a', path: '/files/a.png' })
+      .mockRejectedValueOnce(new Error('Failed to fetch (api.postmill.ai)'));
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ExportDialog store={makeStore()} initialAction="save" onClose={vi.fn()} />
+      </SWRConfig>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Choose Folder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Export 2 file' }));
+    await waitFor(() => expect(mocks.render).toHaveBeenCalledTimes(2));
+    mocks.render.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export 2 file' }));
+    expect(await screen.findByText('Some exports need attention')).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'Test - A.jpg' })).toBeTruthy();
+    expect(screen.getByText('Completed exports')).toBeTruthy();
+    expect(mocks.render).toHaveBeenCalledTimes(2);
+    expect(mocks.upload).toHaveBeenCalledTimes(2);
+
+    mocks.upload.mockResolvedValueOnce({ id: 'file-b', path: '/files/b.jpg' });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry output' }));
+
+    expect(await screen.findByText('Saved to /files')).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'Test - B.jpg' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Test - A.jpg' })).toBeTruthy();
+    expect(mocks.render).toHaveBeenCalledTimes(2);
+    expect(mocks.upload).toHaveBeenCalledTimes(3);
   });
 });
