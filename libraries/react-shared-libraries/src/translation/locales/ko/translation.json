@@ -3574,6 +3574,8 @@
   "designer_clip_editing": "클립 편집",
   "designer_split_clip": "클립 분할",
   "designer_split_clip_hint": "재생 헤드에서 선택한 클립 분할 (S)",
+  "designer_split": "분할",
+  "designer_edit_transition_hint": "{{label}} 전환 편집",
   "designer_duplicate_clip": "클립 복제",
   "designer_duplicate_clip_hint": "선택한 클립 복제",
   "designer_delete_clip": "클립 삭제",

@@ -3575,6 +3575,8 @@
   "designer_clip_editing": "Редактирование клипа",
   "designer_split_clip": "Разделить клип",
   "designer_split_clip_hint": "Разделить выбранный клип на позиции воспроизведения (S)",
+  "designer_split": "Разделить",
+  "designer_edit_transition_hint": "Изменить переход {{label}}",
   "designer_duplicate_clip": "Дублировать клип",
   "designer_duplicate_clip_hint": "Дублировать выбранный клип",
   "designer_delete_clip": "Удалить клип",

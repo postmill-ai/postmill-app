@@ -785,7 +785,7 @@ export const TrackRow = React.memo(function TrackRow({
                     y: rect.top,
                   });
                 }}
-                title={translate('edit_transition_hint', 'Edit {{label}} transition', { label: transitionLabel(tType) })}
+                title={translate('designer_edit_transition_hint', 'Edit {{label}} transition', { label: transitionLabel(tType) })}
                 aria-label={translate('transition_hint', '{{label}} transition', { label: transitionLabel(tType) })}
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">

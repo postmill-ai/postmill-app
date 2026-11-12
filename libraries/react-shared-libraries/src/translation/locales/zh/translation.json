@@ -3573,6 +3573,8 @@
   "designer_clip_editing": "片段编辑",
   "designer_split_clip": "分割片段",
   "designer_split_clip_hint": "在播放头处分割所选片段 (S)",
+  "designer_split": "分割",
+  "designer_edit_transition_hint": "编辑{{label}}过渡",
   "designer_duplicate_clip": "复制片段",
   "designer_duplicate_clip_hint": "复制所选片段",
   "designer_delete_clip": "删除片段",

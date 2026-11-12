@@ -3573,6 +3573,8 @@
   "designer_clip_editing": "Édition du clip",
   "designer_split_clip": "Diviser le clip",
   "designer_split_clip_hint": "Diviser le clip sélectionné à la tête de lecture (S)",
+  "designer_split": "Diviser",
+  "designer_edit_transition_hint": "Modifier la transition {{label}}",
   "designer_duplicate_clip": "Dupliquer le clip",
   "designer_duplicate_clip_hint": "Dupliquer le clip sélectionné",
   "designer_delete_clip": "Supprimer le clip",

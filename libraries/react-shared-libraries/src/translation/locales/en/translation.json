@@ -3586,6 +3586,8 @@
   "designer_clip_editing": "Clip editing",
   "designer_split_clip": "Split clip",
   "designer_split_clip_hint": "Split the selected clip at the playhead (S)",
+  "designer_split": "Split",
+  "designer_edit_transition_hint": "Edit {{label}} transition",
   "designer_duplicate_clip": "Duplicate clip",
   "designer_duplicate_clip_hint": "Duplicate the selected clip",
   "designer_delete_clip": "Delete clip",

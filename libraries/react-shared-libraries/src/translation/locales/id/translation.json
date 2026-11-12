@@ -3586,6 +3586,8 @@
   "designer_clip_editing": "Pengeditan klip",
   "designer_split_clip": "Pisahkan klip",
   "designer_split_clip_hint": "Pisahkan klip terpilih di playhead (S)",
+  "designer_split": "Pisahkan",
+  "designer_edit_transition_hint": "Edit transisi {{label}}",
   "designer_duplicate_clip": "Duplikat klip",
   "designer_duplicate_clip_hint": "Duplikat klip terpilih",
   "designer_delete_clip": "Hapus klip",

@@ -3573,6 +3573,8 @@
   "designer_clip_editing": "クリップ編集",
   "designer_split_clip": "クリップを分割",
   "designer_split_clip_hint": "再生ヘッドで選択クリップを分割 (S)",
+  "designer_split": "分割",
+  "designer_edit_transition_hint": "{{label}}トランジションを編集",
   "designer_duplicate_clip": "クリップを複製",
   "designer_duplicate_clip_hint": "選択クリップを複製",
   "designer_delete_clip": "クリップを削除",
