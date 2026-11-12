@@ -80,7 +80,7 @@ Docker Compose environment, or deployment config, then redeploy if needed.
 
 ## v1.5.0
 
-- **Migrations.** v1.5.0 adds two additive migrations. Neither needs `ALLOW_DESTRUCTIVE_SCHEMA`.
+- **Migrations.** v1.5.0 adds two additive migrations. Neither needs `ALLOW_DESTRUCTIVE_SCHEMA`. The container does not apply them on boot; run `prisma migrate deploy` as in [Apply migrations](#_5-apply-migrations).
   - `20261102160000_add_user_preferred_language_and_email_campaigns` adds a nullable `UserProfile.preferredLanguage` and a nullable `EmailLog.campaignId`, with a unique index on `(campaignId, toAddress)` and an index on `(campaignId, status)`. Existing email-log rows keep `campaignId = NULL`, so the unique index cannot conflict with them.
   - `20261108001500_add_org_portability_jobs` adds the `OrgPortabilityJob` table for organization export and setup import.
 - **No new required env vars.** The new variables are all optional. See [Configuration](./configuration.md):
