@@ -54,6 +54,16 @@ describe('reflowVideoClip', () => {
     expect(out.endMs).toBe(4000);
   });
 
+  it('scales a text outline with the same style factor as image text', () => {
+    const c = clip({
+      x: 100, y: 100, width: 400, height: 120, fontSize: 48, text: 'Hi',
+      textStroke: { color: '#000000', width: 6 },
+    });
+    const out = reflowVideoClip(c, 'text', LANDSCAPE, { width: 960, height: 540 });
+    expect(out.height).toBe(60);
+    expect(out.textStroke).toEqual({ color: '#000000', width: 3 });
+  });
+
   it('scales cover video clips per-axis and sets a focal estimate', () => {
     const c = clip({
       x: 0, y: 0, width: 1920, height: 1080,

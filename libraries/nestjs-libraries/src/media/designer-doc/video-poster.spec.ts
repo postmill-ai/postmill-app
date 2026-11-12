@@ -240,11 +240,20 @@ describe('videoOutputToPosterOutput', () => {
     expect(poster.children.some((el) => el.id === 'clip-headline')).toBe(false);
   });
 
-  it('projects text alignment, fontStyle, and shape gradients', () => {
+  it('projects text alignment, fontStyle, text gradients, and outlines', () => {
     const out = makeVideoOutput();
     const text = out.tracks[1].clips[0];
     text.align = 'justify';
     text.fontStyle = 'italic';
+    text.fillGradient = {
+      type: 'linear',
+      stops: [
+        { offset: 0, color: '#000000' },
+        { offset: 0.4, color: '#ff0000' },
+        { offset: 1, color: '#ffffff' },
+      ],
+    };
+    text.textStroke = { color: '#123456', width: 4 };
     const shape = out.tracks[2].clips[0];
     shape.fillGradient = {
       type: 'linear',
@@ -253,6 +262,8 @@ describe('videoOutputToPosterOutput', () => {
     const poster = videoOutputToPosterOutput(out);
     expect(poster.children.find((el) => el.id === text.id)?.align).toBe('justify');
     expect(poster.children.find((el) => el.id === text.id)?.fontStyle).toBe('italic');
+    expect(poster.children.find((el) => el.id === text.id)?.fillGradient).toEqual(text.fillGradient);
+    expect(poster.children.find((el) => el.id === text.id)?.textStroke).toEqual(text.textStroke);
     expect(poster.children.find((el) => el.id === shape.id)?.fillGradient).toEqual(shape.fillGradient);
   });
 

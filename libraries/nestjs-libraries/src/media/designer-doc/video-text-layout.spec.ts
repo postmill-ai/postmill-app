@@ -88,6 +88,36 @@ describe('drawVideoText', () => {
     ]);
   });
 
+  it('paints a solid outline before a multi-stop gradient fill at the aligned position', () => {
+    const calls: { kind: string; text: string; x: number; y: number }[] = [];
+    const gradient = { stops: [0, 0.4, 1] };
+    const ctx = {
+      font: '',
+      fillStyle: '' as unknown,
+      strokeStyle: '' as unknown,
+      lineWidth: 0,
+      textBaseline: '',
+      textAlign: '',
+      measureText: (text: string) => ({ width: tenPx(text) }),
+      strokeText: (text: string, x: number, y: number) => calls.push({ kind: 'stroke', text, x, y }),
+      fillText: (text: string, x: number, y: number) => calls.push({ kind: 'fill', text, x, y }),
+    };
+    drawVideoText(ctx, {
+      text: 'ab', width: 50, height: 10, fontSize: 10, align: 'right',
+      fontFamily: 'Inter', fontWeight: 700, fontStyle: 'italic',
+      fill: gradient,
+      textStroke: { color: '#123456', width: 3 },
+    });
+    expect(calls).toEqual([
+      { kind: 'stroke', text: 'ab', x: 30, y: 5 },
+      { kind: 'fill', text: 'ab', x: 30, y: 5 },
+    ]);
+    expect(ctx.fillStyle).toBe(gradient);
+    expect(ctx.strokeStyle).toBe('#123456');
+    expect(ctx.lineWidth).toBe(3);
+    expect(ctx.font).toBe('italic 700 10px "Inter"');
+  });
+
   it('lays out the revealed prefix independently at each typewriter frame', () => {
     const text = 'ab cd';
     const revealed = applyTextReveal(text, { mode: 'chars', durationMs: 1000 }, 500, 1000);

@@ -141,6 +141,14 @@ interface AddMediaToTimelineOptions {
   durationMs?: number;
 }
 
+export const timelineMediaTypeForPick = (
+  requested: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio',
+  picked: 'image' | 'video' | 'audio'
+): 'image' | 'video' | 'audio' => {
+  if (requested === 'video' || requested === 'audio') return requested;
+  return picked === 'video' ? 'video' : 'image';
+};
+
 export interface AddImageClipOptions {
   url: string;
   fileId?: string;

@@ -220,6 +220,108 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     expect(state.font).toBe('italic 700 10px "Arial"');
   });
 
+  it('paints revealed keyframed text with shared multi-stop gradients and an outline', async () => {
+    const calls: { kind: string; text: string; x: number; y: number }[] = [];
+    const stops: [number, string][] = [];
+    const gradient = { addColorStop: (offset: number, color: string) => stops.push([offset, color]) };
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      createLinearGradient: () => gradient,
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
+      strokeText: (text: string, x: number, y: number) => calls.push({ kind: 'stroke', text, x, y }),
+      fillText: (text: string, x: number, y: number) => calls.push({ kind: 'fill', text, x, y }),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      tracks: [{
+        id: 'text-track', type: 'text',
+        clips: [{
+          id: 'styled-text', startMs: 0, endMs: 1000, text: 'ab cd',
+          x: 0, y: 0, width: 45, height: 30, fontSize: 20,
+          fontWeight: 700, fontStyle: 'italic', align: 'right',
+          textReveal: { mode: 'chars', durationMs: 1000 },
+          keyframes: [{ tMs: 0, props: { fontSize: 10 } }],
+          textStroke: { color: '#123456', width: 3 },
+          fillGradient: {
+            type: 'linear', angle: 0,
+            stops: [
+              { offset: 0, color: '#000000' },
+              { offset: 0.4, color: '#ff0000' },
+              { offset: 1, color: '#ffffff' },
+            ],
+          },
+        }],
+      }],
+    }, context as never);
+    await api.renderFrame(500);
+
+    expect(state.font).toBe('italic 700 10px "Arial"');
+    expect(state.fillStyle).toBe(gradient);
+    expect(state.strokeStyle).toBe('#123456');
+    expect(state.lineWidth).toBe(3);
+    expect(stops).toEqual([
+      [0, '#000000'],
+      [0.4, '#ff0000'],
+      [1, '#ffffff'],
+    ]);
+    expect(calls).toEqual([
+      { kind: 'stroke', text: 'ab ', x: 15, y: 5 },
+      { kind: 'fill', text: 'ab ', x: 15, y: 5 },
+    ]);
+  });
+
+  it('outlines caption words while preserving active-word solid colors', async () => {
+    const calls: { kind: string; text: string }[] = [];
+    const gradient = { addColorStop: () => undefined };
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      createLinearGradient: () => gradient,
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
+      strokeText: (text: string) => calls.push({ kind: 'stroke', text }),
+      fillText: (text: string) => calls.push({ kind: 'fill', text }),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      tracks: [{
+        id: 'caption-track', type: 'caption',
+        clips: [{
+          id: 'caption', startMs: 0, endMs: 1000,
+          x: 0, y: 0, width: 100, height: 30, fontSize: 10,
+          words: [
+            { word: 'hello', startMs: 0, endMs: 500 },
+            { word: 'world', startMs: 500, endMs: 1000 },
+          ],
+          captionStyle: { preset: 'karaoke', activeColor: '#ff0000' },
+          fill: '#ffffff',
+          textStroke: { color: '#123456', width: 2 },
+          fillGradient: {
+            type: 'linear', angle: 0,
+            stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }],
+          },
+        }],
+      }],
+    }, context as never);
+    await api.renderFrame(750);
+
+    expect(calls).toEqual([
+      { kind: 'stroke', text: 'hello' },
+      { kind: 'fill', text: 'hello' },
+      { kind: 'stroke', text: 'world' },
+      { kind: 'fill', text: 'world' },
+    ]);
+    expect(state.strokeStyle).toBe('#123456');
+    expect(state.lineWidth).toBe(2);
+    expect(state.fillStyle).toBe('#ff0000');
+  });
+
   it('passes scalar and per-corner radii to roundRect without scalar coercion', async () => {
     const state: Record<string, unknown> = {
       canvas: { width: 100, height: 100 },

@@ -269,6 +269,32 @@ describe('DesignerDoc schema', () => {
     expect(DesignerDocLenientSchema.safeParse(migrateDoc(doc)).success).toBe(false);
   });
 
+  it('accepts bounded v14 text strokes and multi-stop gradients in both parsers', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.version = 14;
+    Object.assign(doc.outputs[0].tracks[0].clips[0], {
+      textStroke: { color: '#12345680', width: 4 },
+      fillGradient: {
+        type: 'linear',
+        stops: [
+          { offset: 0, color: '#000000' },
+          { offset: 0.45, color: '#ff0000' },
+          { offset: 1, color: '#ffffff' },
+        ],
+      },
+    });
+    for (const schema of [DesignerDocLenientSchema, DesignerDocStrictSchema]) {
+      const clip = schema.parse(migrateDoc(doc)).outputs[0].tracks[0].clips[0];
+      expect(clip.textStroke).toEqual({ color: '#12345680', width: 4 });
+      expect(clip.fillGradient?.stops).toHaveLength(3);
+    }
+
+    const invalid = JSON.parse(JSON.stringify(doc));
+    invalid.outputs[0].tracks[0].clips[0].textStroke = 'not-a-stroke';
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(invalid)).success).toBe(false);
+    expect(DesignerDocLenientSchema.safeParse(migrateDoc(invalid)).success).toBe(false);
+  });
+
   it('keeps v9 clips valid without the optional v10 fontStyle', () => {
     const doc = { ...JSON.parse(JSON.stringify(videoDocFixture)), version: 9 };
     expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(true);

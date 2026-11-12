@@ -506,7 +506,12 @@ ${stripExportsNamespace(mediaGeometrySource())}
       fontFamily: clip.fontFamily || 'Arial',
       fontWeight: clip.fontWeight || 400,
       fontStyle: clip.fontStyle || 'normal',
-      fill: clip.fill || '#000000',
+      fill: clip.fillGradient && clip.fillGradient.stops && clip.fillGradient.stops.length
+        ? buildStyleGradient(ctx, clip.fillGradient, props.width, props.height)
+        : clip.fill || '#000000',
+      textStroke: clip.textStroke
+        ? { ...clip.textStroke, color: canvasColor(clip.textStroke.color) }
+        : undefined,
       align: clip.align || 'left',
     };
     if (clip.textExtrusion?.depth) {
@@ -514,7 +519,11 @@ ${stripExportsNamespace(mediaGeometrySource())}
         ctx.save();
         ctx.globalAlpha = props.opacity * (clip.textExtrusion.opacity ?? 0.85);
         ctx.translate(offset.x, offset.y);
-        drawVideoText(ctx, { ...textOptions, fill: clip.textExtrusion.color || '#000000' });
+        drawVideoText(ctx, {
+          ...textOptions,
+          fill: clip.textExtrusion.color || '#000000',
+          textStroke: undefined,
+        });
         ctx.restore();
       }
     }
@@ -539,7 +548,11 @@ ${stripExportsNamespace(mediaGeometrySource())}
     const relativeMs = Math.max(0, playheadMs - clip.startMs);
     // Per-word styling comes from the shared module (see captionStylesSource),
     // so a karaoke caption looks the same here as in the editor.
-    const states = captionWordStates(words, relativeMs, clip.captionStyle, clip.fill || '#ffffff');
+    const baseFill = clip.fill || '#ffffff';
+    const states = captionWordStates(words, relativeMs, clip.captionStyle, baseFill);
+    const fillGradient = clip.fillGradient && clip.fillGradient.stops && clip.fillGradient.stops.length
+      ? buildStyleGradient(ctx, clip.fillGradient, props.width, props.height)
+      : null;
     let x = 0;
     let y = 0;
     for (let i = 0; i < words.length; i++) {
@@ -555,7 +568,12 @@ ${stripExportsNamespace(mediaGeometrySource())}
         ctx.fillStyle = state.background;
         ctx.fillRect(x - 2, y - 2, wordWidth + 4, scaled + 4);
       }
-      ctx.fillStyle = state.color;
+      ctx.fillStyle = fillGradient && state.color === baseFill ? fillGradient : state.color;
+      if (clip.textStroke && clip.textStroke.width > 0) {
+        ctx.strokeStyle = canvasColor(clip.textStroke.color);
+        ctx.lineWidth = clip.textStroke.width * state.scale;
+        ctx.strokeText(words[i].word, x, y + (fontSize - scaled));
+      }
       // A scaled word grows from its own baseline, not its top, or the line
       // visibly jumps as the highlight moves along it.
       ctx.fillText(words[i].word, x, y + (fontSize - scaled));

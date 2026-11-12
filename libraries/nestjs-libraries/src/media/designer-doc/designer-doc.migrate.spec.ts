@@ -57,6 +57,15 @@ describe('video character references', () => {
   });
 });
 
+describe('v14 forward-compatible output fields', () => {
+  it('preserves an optional output frozen flag for the coordinated v14 follow-up', () => {
+    const outputs = [{ id: 'video', frozen: true, tracks: [] }];
+    const migrated = migrateDoc({ version: 14, mode: 'video', outputs });
+    expect(migrated.outputs).toBe(outputs);
+    expect((migrated.outputs[0] as any).frozen).toBe(true);
+  });
+});
+
 describe('zero legacy support', () => {
   it('does not rewrite a legacy root shape — it passes through for the schema to reject', () => {
     const legacy = { version: 1, width: 1080, height: 1080, pages: [] };

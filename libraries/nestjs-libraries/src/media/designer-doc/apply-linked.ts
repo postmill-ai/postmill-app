@@ -94,10 +94,11 @@ const resizePathNodes = (
 };
 
 /**
- * Non-geometry updates propagate raw — except `fontSize`: a px value authored
- * against one canvas is wrong on another, so linked copies get it re-fit
- * through the shared aspect-aware basis (`typeScaleRatio`, the same rule as
- * smartReflow and the conductor's variant re-fit), floored at 10px. The old
+ * Non-geometry updates propagate raw — except `fontSize` and `textStroke.width`:
+ * px values authored against one canvas are wrong on another, so linked copies
+ * get them re-fit through the shared aspect-aware basis (`typeScaleRatio`, the
+ * same rule as smartReflow and the conductor's variant re-fit), with font size
+ * floored at 10px. The old
  * `min(scaleX, scaleY)` here silently re-imposed short-edge typography on
  * every linked edit — undoing the per-format type of every wider output.
  */
@@ -106,15 +107,22 @@ const scaledForOutput = (
   source: { width: number; height: number },
   target: { width: number; height: number }
 ): Partial<DesignerElement> => {
-  if (typeof shared.fontSize !== 'number' || !Number.isFinite(shared.fontSize)) {
-    return shared;
-  }
+  const hasFontSize = typeof shared.fontSize === 'number' && Number.isFinite(shared.fontSize);
+  if (!hasFontSize && !shared.textStroke) return shared;
+  const ratio = typeScaleRatio(source, target);
   return {
     ...shared,
-    fontSize: Math.max(
-      10,
-      Math.round(shared.fontSize * typeScaleRatio(source, target))
-    ),
+    ...(hasFontSize
+      ? { fontSize: Math.max(10, Math.round(shared.fontSize! * ratio)) }
+      : {}),
+    ...(shared.textStroke
+      ? {
+          textStroke: {
+            ...shared.textStroke,
+            width: Math.max(0, Math.round(shared.textStroke.width * ratio)),
+          },
+        }
+      : {}),
   };
 };
 

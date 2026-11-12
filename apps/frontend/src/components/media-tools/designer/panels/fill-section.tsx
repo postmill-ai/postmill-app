@@ -1,21 +1,18 @@
 'use client';
 
 import React, { FC } from 'react';
-import { ColorSwatch, SegmentedControl } from '../controls';
+import { ColorSwatch, SegmentedControl, Stepper } from '../controls';
 import { GradientEditor } from '../controls/gradient-editor';
-import type { DesignerElement } from '../designer.store';
-import type { DesignerGradient } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import type {
+  DesignerGradient,
+  DesignerTextStroke,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
-/**
- * Solid-or-gradient fill, for any element type that has a fill.
- *
- * `fillGradient` was in the schema and honoured by both renderers for shapes
- * and paths, but the only thing that could ever WRITE it was the Gradient tool
- * — which hardcoded two stops — so the inspector offered a flat colour and
- * nothing else. Text ignored the field entirely until this round.
- */
-type FillFields = Pick<DesignerElement, 'fill' | 'fillGradient'>;
+type FillFields = {
+  fill?: string;
+  fillGradient?: DesignerGradient;
+};
 
 export const FillSection: FC<{
   element: FillFields;
@@ -37,8 +34,6 @@ export const FillSection: FC<{
         ]}
         onChange={(v) =>
           set({
-            // Switching back to solid clears the ramp rather than hiding it, so
-            // what the inspector shows is what the renderers read.
             fillGradient:
               v === 'gradient'
                 ? {
@@ -50,14 +45,14 @@ export const FillSection: FC<{
                     ],
                   }
                 : undefined,
-          } as Partial<DesignerElement>)
+          })
         }
       />
 
       {isGradient ? (
         <GradientEditor
           value={element.fillGradient as DesignerGradient}
-          onChange={(g) => set({ fillGradient: g } as Partial<DesignerElement>)}
+          onChange={(fillGradient) => set({ fillGradient })}
           brandColors={brandColors}
           brandEnforcement={brandEnforcement}
         />
@@ -69,6 +64,62 @@ export const FillSection: FC<{
           brandColors={brandColors}
           brandEnforcement={brandEnforcement}
         />
+      )}
+    </div>
+  );
+};
+
+export const TextStrokeSection: FC<{
+  element: { textStroke?: DesignerTextStroke };
+  set: (patch: { textStroke?: DesignerTextStroke }) => void;
+  brandColors?: string[];
+  brandEnforcement?: boolean;
+}> = ({ element, set, brandColors, brandEnforcement }) => {
+  const t = useT();
+  const outline = element.textStroke;
+  return (
+    <div className="flex flex-col gap-2 pt-1 border-t border-studioBorder">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
+          {t('designer_label_outline', 'Outline')}
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-label={t('designer_label_outline', 'Outline')}
+          aria-checked={!!outline}
+          onClick={() =>
+            set({ textStroke: outline ? undefined : { color: '#000000', width: 2 } })
+          }
+          className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
+            outline ? 'bg-designerAccent' : 'bg-studioBorder'
+          }`}
+        >
+          <span
+            className={`absolute top-[2px] start-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
+              outline ? 'translate-x-[18px]' : ''
+            }`}
+          />
+        </button>
+      </div>
+      {outline && (
+        <div className="flex flex-col gap-3">
+          <ColorSwatch
+            label={t('designer_label_outline_color', 'Outline color')}
+            value={outline.color || '#000000'}
+            onChange={(color) => set({ textStroke: { ...outline, color } })}
+            brandColors={brandColors}
+            brandEnforcement={brandEnforcement}
+          />
+          <Stepper
+            label={t('designer_label_width', 'Width')}
+            min={0}
+            max={20}
+            step={1}
+            value={outline.width}
+            onChange={(width) => set({ textStroke: { ...outline, width } })}
+          />
+        </div>
       )}
     </div>
   );

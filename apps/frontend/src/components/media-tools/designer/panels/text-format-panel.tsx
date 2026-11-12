@@ -6,7 +6,7 @@ import type {
   DesignerTextShadow,
   TextRun,
 } from '../designer.store';
-import { FillSection } from './fill-section';
+import { FillSection, TextStrokeSection } from './fill-section';
 import { FontFamilyPicker } from './font-family-picker';
 import {
   ColorSwatch,
@@ -351,7 +351,6 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
   const isLineThrough = !!runs?.length && runs.every((r) => r.lineThrough);
 
   const shadow = element.textShadow;
-  const outline = element.textStroke;
 
   return (
     <div
@@ -745,54 +744,12 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
         )}
       </div>
 
-      {/* Text effects: outline (C2) */}
-      <div className="flex flex-col gap-2 pt-1 border-t border-studioBorder">
-        <div className="flex items-center justify-between">
-          <span className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
-            {t('designer_label_outline', 'Outline')}
-          </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={!!outline}
-            onClick={() =>
-              update({
-                textStroke: outline ? undefined : { color: '#000000', width: 2 },
-              })
-            }
-            className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
-              outline ? 'bg-designerAccent' : 'bg-studioBorder'
-            }`}
-          >
-            <span
-              className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
-                outline ? 'translate-x-[18px]' : ''
-              }`}
-            />
-          </button>
-        </div>
-        {outline && (
-          <div className="flex flex-col gap-3">
-            <ColorSwatch
-              label={t('designer_label_outline_color', 'Outline color')}
-              value={isValidHex(outline.color) ? outline.color : '#000000'}
-              onChange={(hex) =>
-                update({ textStroke: { ...outline, color: hex } })
-              }
-              brandColors={brandColors}
-              brandEnforcement={brandEnforcement}
-            />
-            <Stepper
-              label={t('designer_label_width', 'Width')}
-              min={0}
-              max={20}
-              step={1}
-              value={outline.width}
-              onChange={(n) => update({ textStroke: { ...outline, width: n } })}
-            />
-          </div>
-        )}
-      </div>
+      <TextStrokeSection
+        element={element}
+        set={update}
+        brandColors={brandColors}
+        brandEnforcement={brandEnforcement}
+      />
     </div>
   );
 };

@@ -772,8 +772,10 @@ export interface VideoClip {
   fontStyle?: 'normal' | 'italic';
   /** Optional-additive doc v12: non-destructive 3D text extrusion. */
   textExtrusion?: VideoTextExtrusion;
+  /** Optional-additive doc v14: solid text outline, shared with image text. */
+  textStroke?: DesignerTextStroke;
   fill?: string;
-  /** Optional-additive doc v9: solid/gradient shape fills and text alignment. */
+  /** Optional-additive doc v9: solid/gradient shape/text fills and text alignment. */
   fillGradient?: DesignerGradient;
   align?: 'left' | 'center' | 'right' | 'justify';
   volume?: number;
@@ -1877,6 +1879,7 @@ const clipStrictNested = {
   crop: StrictDesignerCropSchema.optional(),
   focalPoint: StrictFocalPointSchema.optional(),
   fillGradient: StrictDesignerGradientSchema.optional(),
+  textStroke: StrictDesignerTextStrokeSchema.optional(),
   keyframes: z.array(StrictKeyframeSchema).max(1000).optional(),
   // Speed ramp points (doc v7) — additive, so earlier clips keep validating.
   speedCurve: z.array(StrictSpeedCurvePointSchema).max(100).optional(),
@@ -1893,6 +1896,7 @@ const clipLenientNested = {
   crop: LenientDesignerCropSchema.optional(),
   focalPoint: LenientFocalPointSchema.optional(),
   fillGradient: LenientDesignerGradientSchema.optional(),
+  textStroke: LenientDesignerTextStrokeSchema.optional(),
   keyframes: z.array(LenientKeyframeSchema).max(1000).optional(),
   speedCurve: z.array(LenientSpeedCurvePointSchema).max(100).optional(),
   transitionIn: LenientTransitionSchema.optional(),

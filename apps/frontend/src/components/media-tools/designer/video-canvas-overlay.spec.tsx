@@ -248,6 +248,16 @@ describe('video overlay styles and keyframed text', () => {
       fontWeight: 700,
       fontStyle: 'italic',
       fontSize: 20,
+      fillGradient: {
+        type: 'linear',
+        angle: 0,
+        stops: [
+          { offset: 0, color: '#000000' },
+          { offset: 0.4, color: '#ff0000' },
+          { offset: 1, color: '#ffffff' },
+        ],
+      },
+      textStroke: { color: '#123456', width: 3 },
       keyframes: [{ tMs: 0, props: { fontSize: 48 } }],
     } as never);
     vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
@@ -275,6 +285,13 @@ describe('video overlay styles and keyframed text', () => {
     expect(text.fontStyle()).toBe('italic 700');
     expect(text.fontSize()).toBe(48);
     expect(text.lineHeight()).toBe(1);
+    expect(text.fillLinearGradientColorStops()).toEqual([
+      0, '#000000', 0.4, '#ff0000', 1, '#ffffff',
+    ]);
+    expect(text.getAttr('fill')).toBeUndefined();
+    expect(text.stroke()).toBe('#123456');
+    expect(text.strokeWidth()).toBe(3);
+    expect(text.fillAfterStrokeEnabled()).toBe(true);
   });
 
   it('renders text extrusion behind the original text clip', async () => {

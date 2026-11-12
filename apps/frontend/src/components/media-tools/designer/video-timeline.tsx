@@ -646,7 +646,7 @@ interface TrackRowProps {
   >;
 }
 
-const TrackRow = React.memo(function TrackRow({
+export const TrackRow = React.memo(function TrackRow({
   track,
   label,
   pairs,
@@ -761,14 +761,18 @@ const TrackRow = React.memo(function TrackRow({
               key={`trans-${from.id}-${to.id}`}
               className="absolute top-1 z-20 group"
               style={{
-                left: handleX - 4,
+                left: handleX - 8,
                 height: TRACK_HEIGHT - 8,
               }}
             >
               <button
                 type="button"
-                className={`w-2 h-full flex items-center justify-center rounded-xs ${
-                  isTransitioning ? 'bg-yellow-500/40 hover:bg-yellow-500/60' : 'bg-transparent hover:bg-white/10'
+                data-transition-type={tType}
+                aria-haspopup="dialog"
+                className={`w-4 h-full flex items-center justify-center rounded-xs border ${
+                  isTransitioning
+                    ? 'border-designerAccent/70 bg-designerAccent/50 text-white hover:bg-designerAccent/70'
+                    : 'border-studioBorder/70 bg-studioBg/80 text-textColor/70 hover:border-designerAccent/60 hover:text-textColor'
                 }`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -781,12 +785,12 @@ const TrackRow = React.memo(function TrackRow({
                     y: rect.top,
                   });
                 }}
-                title={translate('transition_hint', '{{label}} transition', { label: transitionLabel(tType) })}
+                title={translate('edit_transition_hint', 'Edit {{label}} transition', { label: transitionLabel(tType) })}
                 aria-label={translate('transition_hint', '{{label}} transition', { label: transitionLabel(tType) })}
               >
-                {isTransitioning && (
-                  <div className="w-1 h-3 rounded-full bg-yellow-400" />
-                )}
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M4.5 3 1.5 6l3 3M7.5 3l3 3-3 3M2 6h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
             </div>
           );
@@ -4303,6 +4307,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             onClick={() => setTransitionPopover(null)}
           />
           <div
+            role="dialog"
+            aria-label={translate('transition', 'Transition')}
             className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[180px]"
             style={{
               left: transitionPopover.x,

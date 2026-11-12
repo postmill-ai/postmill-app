@@ -215,8 +215,8 @@ describe('applyLinkedVideoClip styles', () => {
         id: `video-${index}`,
         formatId: 'square',
         name: 'Square',
-        width: 1080,
-        height: 1080,
+        width: index === 0 ? 1080 : 1200,
+        height: index === 0 ? 1080 : 675,
         fps: 30,
         durationMs: 5000,
         tracks: [{
@@ -246,7 +246,14 @@ describe('applyLinkedVideoClip styles', () => {
       0,
       'track-0',
       'clip-0',
-      { fillGradient, align: 'justify', fontStyle: 'italic', groupId: 'new-group', x: 999 },
+      {
+        fillGradient,
+        align: 'justify',
+        fontStyle: 'italic',
+        textStroke: { color: '#000000', width: 6 },
+        groupId: 'new-group',
+        x: 999,
+      },
       false
     );
     const sibling = (outputs[1] as any).tracks[0].clips[0];
@@ -254,6 +261,7 @@ describe('applyLinkedVideoClip styles', () => {
     expect(sibling.fillGradient).toEqual(fillGradient);
     expect(sibling.align).toBe('justify');
     expect(sibling.fontStyle).toBe('italic');
+    expect(sibling.textStroke).toEqual({ color: '#000000', width: 5 });
     expect(sibling.groupId).toBe('group-1');
     expect(sibling.x).toBe(100);
     expect(sibling.startMs).toBe(500);

@@ -127,6 +127,44 @@ describe('buildPostmillFile / parsePostmillFile round-trip', () => {
     expect(parsed.doc).toEqual(doc);
   });
 
+  it('round-trips v14 video media, multi-stop text gradients and outlines verbatim', () => {
+    const doc = {
+      version: 14,
+      mode: 'video',
+      outputs: [{
+        id: 'video-out', width: 1080, height: 1080, fps: 30, durationMs: 2400,
+        tracks: [
+          {
+            id: 'video-track', type: 'video',
+            clips: [{
+              id: 'animated-sticker', startMs: 0, endMs: 2400,
+              src: '/uploads/org/sticker.mp4', fileId: 'sticker-file', mediaType: 'video',
+              width: 480, height: 480, naturalWidth: 480, naturalHeight: 480,
+            }],
+          },
+          {
+            id: 'text-track', type: 'text',
+            clips: [{
+              id: 'text-clip', startMs: 0, endMs: 2400, text: 'Parity',
+              textStroke: { color: '#000000', width: 4 },
+              fillGradient: {
+                type: 'radial',
+                stops: [
+                  { offset: 0, color: '#ffffff' },
+                  { offset: 0.4, color: '#ff0000' },
+                  { offset: 1, color: '#00000080' },
+                ],
+              },
+            }],
+          },
+        ],
+      }],
+    } as unknown as DesignerDoc;
+    const parsed = parsePostmillFile(buildPostmillFile(doc, 'Text parity'));
+    expect(parsed.manifest.docVersion).toBe(14);
+    expect(parsed.doc).toEqual(doc);
+  });
+
   it('round-trips v12 extrusion styles and text-clip extrusion verbatim', () => {
     const doc = {
       version: 12,

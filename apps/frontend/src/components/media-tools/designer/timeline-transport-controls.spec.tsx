@@ -27,6 +27,7 @@ describe('TimelineTransportControls', () => {
   it('shares split gating with the store and keeps selection on a resulting half', () => {
     const { store, trackId } = setup();
     const split = screen.getByRole('button', { name: 'Split clip' });
+    expect(split.textContent).toContain('Split');
     expect((split as HTMLButtonElement).disabled).toBe(true);
 
     act(() => store.getState().setPlayhead(500));

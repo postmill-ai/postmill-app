@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createDesignerStore } from './designer.store';
-import { addImageClipToTimeline, addMediaToTimeline, addVoiceoverToTimeline, regenerateVoiceoverClip, pollMediaJobArtifact } from './add-media-to-timeline';
+import { addImageClipToTimeline, addMediaToTimeline, addVoiceoverToTimeline, regenerateVoiceoverClip, pollMediaJobArtifact, timelineMediaTypeForPick } from './add-media-to-timeline';
 import { DEFAULT_CLIP_MS } from './add-text';
 import type { VideoOutput } from './designer.store';
 
@@ -235,6 +235,35 @@ describe('pollMediaJobArtifact — job-status polling resilience', () => {
 
 describe('addMediaToTimeline — clip geometry', () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it('routes animated stickers to video while static stickers stay images', async () => {
+    expect(timelineMediaTypeForPick('sticker', 'video')).toBe('video');
+    expect(timelineMediaTypeForPick('sticker', 'image')).toBe('image');
+
+    const store = createDesignerStore(1080, 1080);
+    await addMediaToTimeline(store, {
+      type: timelineMediaTypeForPick('sticker', 'video') as 'video',
+      url: '/fixtures/motion.mp4',
+      fileId: 'sticker-file',
+      durationMs: 2400,
+      width: 480,
+      height: 480,
+    });
+
+    const { vo, clip } = firstVideoClip(store);
+    expect(vo.tracks.some((track) => track.type === 'image')).toBe(false);
+    expect(clip).toMatchObject({
+      src: '/fixtures/motion.mp4',
+      fileId: 'sticker-file',
+      mediaType: 'video',
+      startMs: 0,
+      endMs: 2400,
+      width: 1080,
+      height: 1080,
+      naturalWidth: 480,
+      naturalHeight: 480,
+    });
+  });
 
   it('carries the generation fileId onto the clip (retention purge keep-list)', async () => {
     stubVideoProbe({ duration: 5, videoWidth: 1080, videoHeight: 1080 });

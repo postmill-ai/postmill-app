@@ -126,6 +126,8 @@ const clipToElement = (
           styles: [{ type: 'extrusion' as const, ...clip.textExtrusion }],
         } : {}),
         ...(clip.fill ? { fill: clip.fill } : {}),
+        ...(clip.fillGradient ? { fillGradient: clip.fillGradient } : {}),
+        ...(clip.textStroke ? { textStroke: clip.textStroke } : {}),
         ...(clip.align ? { align: clip.align } : {}),
       } as DesignerElement;
     }
