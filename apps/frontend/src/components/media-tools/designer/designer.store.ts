@@ -223,6 +223,7 @@ export interface DesignerActions {
   setDoc: (doc: DesignerDoc) => void;
   adoptPersistedDoc: (sentDoc: DesignerDoc, persistedDoc: DesignerDoc) => boolean;
   setCharacterReferences: (references: DesignerDoc['characterReferences']) => void;
+  setBrandProfileId: (brandProfileId: string | null) => void;
   setDesignName: (name: string) => void;
   setDesignId: (id: string | null) => void;
   setTemplateId: (id: string | null) => void;
@@ -1437,6 +1438,12 @@ export const createDesignerStore = (
       },
 
       setEditFormatOnly: (v) => set({ editFormatOnly: v }),
+
+      setBrandProfileId: (brandProfileId) => {
+        if (get().doc.brandProfileId === brandProfileId) return;
+        set({ doc: { ...get().doc, brandProfileId }, isDirty: true });
+        get().pushHistory(brandProfileId ? 'Switch Brand Kit' : 'Switch to General Mode');
+      },
 
       setBrandEnforcement: (v) => set({ brandEnforcement: v }),
 

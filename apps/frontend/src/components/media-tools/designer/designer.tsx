@@ -66,7 +66,8 @@ import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/f
 import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import { getBrandViolations } from './brand-compliance';
 import { useBrandColors } from './panels/use-brand-colors';
-import { useBrandFonts, useCustomFonts } from './panels/use-brand-fonts';
+import { BrandKitProvider } from './brand-kit-context';
+import { useBrandFonts } from './panels/use-brand-fonts';
 import { captureStageThumbnail } from './stage-thumbnail';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
@@ -199,7 +200,10 @@ export const dataUrlToBlob = (dataUrl: string): Blob | null => {
 // Re-exported so existing importers (export-dialog, templates-panel) keep working.
 export { getThumbnailDataUrl } from './stage-thumbnail';
 
-export const Designer: FC<DesignerProps> = ({
+const DesignerContent: FC<
+  DesignerProps & { store: ReturnType<typeof createDesignerStore> }
+> = ({
+  store,
   setMedia,
   closeModal,
   width,
@@ -303,15 +307,6 @@ export const Designer: FC<DesignerProps> = ({
   });
   const brandColors = useBrandColors();
   const brandFonts = useBrandFonts();
-  // Mounted at the Designer root (not just in the panels that list fonts) so
-  // reopening a saved design paints its custom-font glyphs immediately, before
-  // any panel is visited. The hook's FontFaceSet guard makes the panels' own
-  // mounts of it no-ops, and its effect re-runs when the font list changes.
-  useCustomFonts();
-  const storeRef = useRef<ReturnType<typeof createDesignerStore> | null>(null);
-
-  // Destructure to keep dependency arrays primitive and avoid stale closures
-  // when the parent passes a new object reference for the same asset.
   const {
     url: initialAssetUrl,
     source: initialAssetSource,
@@ -325,44 +320,6 @@ export const Designer: FC<DesignerProps> = ({
     width: captionWidth,
     height: captionHeight,
   } = initialCaptionVideo || {};
-
-  const store = useMemo(() => {
-    let w = width || 1080;
-    let h = height || 1080;
-    if (initialAssetWidth && initialAssetHeight) {
-      w = initialAssetWidth;
-      h = initialAssetHeight;
-    }
-    if (captionWidth && captionHeight) {
-      w = captionWidth;
-      h = captionHeight;
-    }
-    const attribution: DesignerAttribution | undefined = initialAssetUrl
-      ? {
-          source: initialAssetSource,
-          url: initialAssetUrl,
-          downloadLocation: initialAssetDownloadLocation,
-          author: initialAssetAuthor,
-          authorUrl: initialAssetAuthorUrl,
-        }
-      : undefined;
-    const s = createDesignerStore(w, h, attribution, fetch);
-    storeRef.current = s;
-    return s;
-  }, [
-    width,
-    height,
-    initialAssetUrl,
-    initialAssetSource,
-    initialAssetDownloadLocation,
-    initialAssetAuthor,
-    initialAssetAuthorUrl,
-    initialAssetWidth,
-    initialAssetHeight,
-    captionWidth,
-    captionHeight,
-    fetch,
-  ]);
 
   // Select / Fill / Stroke / Filter — they need the stage and the modals, which
   // the action layer can't reach, so they are built here and passed in.
@@ -1972,6 +1929,64 @@ export const Designer: FC<DesignerProps> = ({
         onChange={handleImportDesignFile}
       />
     </div>
+  );
+};
+
+export const Designer: FC<DesignerProps> = (props) => {
+  const fetch = useFetch();
+  const {
+    url: initialAssetUrl,
+    source: initialAssetSource,
+    downloadLocation: initialAssetDownloadLocation,
+    author: initialAssetAuthor,
+    authorUrl: initialAssetAuthorUrl,
+    width: initialAssetWidth,
+    height: initialAssetHeight,
+  } = props.initialAsset || {};
+  const {
+    width: captionWidth,
+    height: captionHeight,
+  } = props.initialCaptionVideo || {};
+  const store = useMemo(() => {
+    let w = props.width || 1080;
+    let h = props.height || 1080;
+    if (initialAssetWidth && initialAssetHeight) {
+      w = initialAssetWidth;
+      h = initialAssetHeight;
+    }
+    if (captionWidth && captionHeight) {
+      w = captionWidth;
+      h = captionHeight;
+    }
+    const attribution: DesignerAttribution | undefined = initialAssetUrl
+      ? {
+          source: initialAssetSource,
+          url: initialAssetUrl,
+          downloadLocation: initialAssetDownloadLocation,
+          author: initialAssetAuthor,
+          authorUrl: initialAssetAuthorUrl,
+        }
+      : undefined;
+    return createDesignerStore(w, h, attribution, fetch);
+  }, [
+    props.width,
+    props.height,
+    initialAssetUrl,
+    initialAssetSource,
+    initialAssetDownloadLocation,
+    initialAssetAuthor,
+    initialAssetAuthorUrl,
+    initialAssetWidth,
+    initialAssetHeight,
+    captionWidth,
+    captionHeight,
+    fetch,
+  ]);
+
+  return (
+    <BrandKitProvider store={store}>
+      <DesignerContent {...props} store={store} />
+    </BrandKitProvider>
   );
 };
 

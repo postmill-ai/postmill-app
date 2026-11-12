@@ -32,6 +32,7 @@ import { TemplateFolderTree, useTemplateFolders } from './template-folder-tree';
 import { MoveTemplateModal } from './move-template-modal';
 import { SaveTemplateModal } from './save-template-modal';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useBrandKit } from '../brand-kit-context';
 
 interface DesignTemplate {
   id: string;
@@ -42,6 +43,7 @@ interface DesignTemplate {
   isSystem: boolean;
   category?: string | null;
   folderId?: string | null;
+  brandProfileId?: string | null;
   thumbnail?: string;
 }
 
@@ -71,13 +73,16 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   const modal = useModals();
   const decision = useDecisionModal();
   const t = useT();
+  const { activeBrand } = useBrandKit();
+
+  const brandQuery = activeBrand ? `&brandId=${encodeURIComponent(activeBrand.id)}` : '';
 
   // Page 1 stays on SWR (cache + revalidate-on-focus); pages 2+ accumulate in
   // local state behind "Load more" (same pattern as my-designs-panel).
   const { data, error, isLoading, mutate } = useSWR(
-    `design-templates-${user.orgId}`,
+    `design-templates-${user.orgId}-${activeBrand?.id || 'general'}`,
     async () => {
-      const res = await fetch(`/media/design-templates?page=1&limit=${PAGE_LIMIT}`);
+      const res = await fetch(`/media/design-templates?page=1&limit=${PAGE_LIMIT}${brandQuery}`);
       if (!res.ok) throw new Error('Failed to load templates');
       return res.json() as Promise<TemplatePage>;
     },
@@ -88,12 +93,11 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   const [page, setPage] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // A paged list is only meaningful for the org it was fetched under — a
-  // different org starts back at page 1.
+  // A paged list is only meaningful for the org and brand it was fetched under.
   useEffect(() => {
     setExtraTemplates([]);
     setPage(1);
-  }, [user.orgId]);
+  }, [user.orgId, activeBrand?.id]);
 
   const templates: DesignTemplate[] = useMemo(() => {
     const seen = new Map<string, DesignTemplate>();
@@ -109,7 +113,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     setLoadingMore(true);
     try {
       const next = page + 1;
-      const res = await fetch(`/media/design-templates?page=${next}&limit=${PAGE_LIMIT}`);
+      const res = await fetch(`/media/design-templates?page=${next}&limit=${PAGE_LIMIT}${brandQuery}`);
       if (!res.ok) return;
       const json = (await res.json()) as TemplatePage;
       setExtraTemplates((cur) => [...cur, ...((json?.templates || []) as DesignTemplate[])]);
@@ -117,7 +121,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     } finally {
       setLoadingMore(false);
     }
-  }, [fetch, page]);
+  }, [fetch, page, brandQuery]);
 
   const { data: folders, mutate: mutateFolders } = useTemplateFolders(user?.orgId);
   const [selection, setSelection] = useState<FolderSelection>(null);
@@ -231,11 +235,15 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       });
       if (!ok) return;
     } else if (guard && !(await guard())) return;
+    const doc = {
+      ...full.doc,
+      brandProfileId: full.brandProfileId ?? store.getState().doc.brandProfileId ?? activeBrand?.id ?? null,
+    } as DesignerDoc;
     const res = await fetch('/media/designs', {
       method: 'POST',
       body: JSON.stringify({
         name: full.name,
-        doc: full.doc,
+        doc,
       }),
     });
     if (!res.ok) {
@@ -243,9 +251,9 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       return;
     }
     const data = await res.json();
-    store.getState().loadDesign(full.doc as DesignerDoc, data.id, full.name, full.id);
+    store.getState().loadDesign(doc, data.id, full.name, full.id);
     onClose?.();
-  }, [store, onClose, fetch, toaster, guard, decision, t]);
+  }, [activeBrand?.id, store, onClose, fetch, toaster, guard, decision, t]);
 
   const persistTemplate = useCallback(async (category: string): Promise<boolean> => {
     const state = store.getState();
@@ -269,6 +277,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       name: `${name} (template)`,
       category,
       doc: state.doc,
+      brandProfileId: activeBrand?.id || null,
     };
     if (thumbnailFileId) payload.thumbnailFileId = thumbnailFileId;
     // The thumbnail upload already minted a File row — if the template save
@@ -324,7 +333,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       toaster.show(t('template_save_failed', 'Failed to save template'), 'warning');
       return false;
     }
-  }, [store, fetch, mutate, toaster, selection, t]);
+  }, [activeBrand?.id, store, fetch, mutate, toaster, selection, t]);
 
   const saveAsTemplate = useCallback(() => {
     const state = store.getState();

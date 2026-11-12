@@ -262,7 +262,7 @@ export const TaggedItemsPanels: FC<{
   const openBrand = useCallback(
     (item: ResolvedCampaignItem) => {
       if (canReadBrands) {
-        router.push(`/settings/ai/brands/${item.id}`);
+        router.push(`/brands/${item.id}/voice`);
         return;
       }
       modal.openModal({

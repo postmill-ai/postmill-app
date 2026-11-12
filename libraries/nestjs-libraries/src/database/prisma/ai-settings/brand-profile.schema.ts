@@ -21,14 +21,15 @@ export const PaletteEntrySchema = z.object({
   hex: z.string().optional(),
 });
 
-export const PaletteSchema = z.array(PaletteEntrySchema).default([]);
+export const PaletteSchema = z.array(z.union([z.string(), PaletteEntrySchema])).default([]);
 
 export const FontFamilySchema = z.object({
   name: z.string().optional(),
   fallback: z.string().optional(),
 });
 
-export const FontFamiliesSchema = z.array(FontFamilySchema).default([]);
+export const FontFamiliesSchema = z.array(z.union([z.string(), FontFamilySchema])).default([]);
+export const PreferredFormatsSchema = z.array(z.string()).default([]);
 
 export const CustomFontSchema = z.object({
   fileId: z.string(),
@@ -39,6 +40,7 @@ export const CustomFontSchema = z.object({
   path: z.string().optional(),
   weights: z.array(z.number()).optional(),
   italic: z.boolean().optional(),
+  serverRender: z.boolean().optional(),
 });
 
 export const CustomFontsSchema = z.array(CustomFontSchema).default([]);
@@ -73,6 +75,7 @@ export const UpsertBrandProfileDataSchema = z.object({
   logoFileIds: LogoFileIdsSchema.unwrap().optional(),
   palette: PaletteSchema.unwrap().optional(),
   fontFamilies: FontFamiliesSchema.unwrap().optional(),
+  preferredFormats: PreferredFormatsSchema.unwrap().optional(),
   customFonts: CustomFontsSchema.unwrap().optional(),
   enforcement: EnforcementSchema.unwrap().optional(),
   assets: BrandAssetsSchema.unwrap().optional(),

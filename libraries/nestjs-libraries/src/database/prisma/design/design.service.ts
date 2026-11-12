@@ -394,17 +394,17 @@ export class DesignService {
     return { success: true };
   }
 
-  async listTemplates(orgId: string, page?: number, limit?: number) {
+  async listTemplates(orgId: string, page?: number, limit?: number, brandProfileId?: string, scope?: 'org') {
     // Backward compatible: no pagination params = the historical plain array
     // (other callers depend on the shape). Both present = one page wrapped in
     // { templates, total, page, limit }.
     const paginated = page !== undefined && limit !== undefined;
     const [templates, total] = paginated
       ? await Promise.all([
-          this._designRepository.findTemplatesByOrg(orgId, page, limit),
-          this._designRepository.countTemplatesByOrg(orgId),
+          this._designRepository.findTemplatesByOrg(orgId, page, limit, brandProfileId, scope),
+          this._designRepository.countTemplatesByOrg(orgId, scope),
         ])
-      : ([await this._designRepository.findTemplatesByOrg(orgId), undefined] as const);
+      : ([await this._designRepository.findTemplatesByOrg(orgId, undefined, undefined, brandProfileId, scope), undefined] as const);
     const mapped = templates.map((t) => ({
       ...t,
       // The gallery list is chrome: it reads the mode (badge, uncategorized
@@ -431,6 +431,7 @@ export class DesignService {
     isSystem?: boolean;
     thumbnailFileId?: string;
     folderId?: string;
+    brandProfileId?: string | null;
   }) {
     if (!data.organizationId) return this.createTemplatePersisted(data);
     const orgId = data.organizationId;
@@ -456,7 +457,11 @@ export class DesignService {
     isSystem?: boolean;
     thumbnailFileId?: string;
     folderId?: string;
+    brandProfileId?: string | null;
   }) {
+    if (data.brandProfileId && data.organizationId) {
+      await this._brandsService.getBrandStrict(data.organizationId, data.brandProfileId);
+    }
     if (data.thumbnailFileId) {
       // System templates have no organizationId; running the ownership check
       // with `undefined` would let Prisma ignore it and pass any org's file.
@@ -504,7 +509,9 @@ export class DesignService {
     category?: string;
     doc?: any;
     thumbnailFileId?: string;
+    brandProfileId?: string | null;
   }) {
+    if (data.brandProfileId) await this._brandsService.getBrandStrict(orgId, data.brandProfileId);
     const { doc, createdFileIds } = await materializeDesignerInlineAssets(
       orgId,
       data.doc,
@@ -524,6 +531,7 @@ export class DesignService {
     category?: string;
     doc?: any;
     thumbnailFileId?: string;
+    brandProfileId?: string | null;
   }) {
     let payload: any = { ...data };
     if (data.thumbnailFileId) {

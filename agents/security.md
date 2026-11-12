@@ -239,6 +239,24 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   `REQUIRE_PERMISSION` metadata. `POST /copilot/agent` requires `posts:create` because its
   Mastra tools run in `access.mode: 'user'`, which permits writes.
 
+## Brand Kits and Knowledge isolation
+
+- Brand reads require `brands:read`; brand, font, template, and Knowledge mutations require the
+  corresponding brand write action (`create`/`update`/`delete`), which the editor system role has.
+  Members/viewers are read-only. The legacy `/ai/brand-profile` route uses the same permissions;
+  it is not an `ai-config` bypass. Explicit brand ids are always resolved by `BrandsService` in the
+  current org. Missing/disabled brands fail new writes/sessions, while existing Knowledge list/delete
+  and in-flight visual runs degrade safely. Brand-kit quotas limit only creation, never existing reads.
+- Org Knowledge enablement is not deployment enablement. Effective access is
+  `globalEnabled && Organization.ragEnabled !== false`; an org cannot override an operator off-switch.
+  Only `ai-config:update` may change the current org's setting. Platform vector settings and their
+  read/write/test endpoints require `SuperAdminGuard` plus the explicit super-admin check.
+  Brand-owned chunks carry `brandProfileId`; every brand-scoped index/search/list/delete path filters
+  by org + brand, including native external-vector metadata filters. Legacy NULL rows require the
+  explicit unassigned scope; omitted scope intentionally means org-wide and public IDs are stripped
+  of internal prefixes. Disabled Knowledge is a typed client error and optional for visual generation,
+  not an internal server error.
+
 ## Channel credentials — org config wins, env fallback is channels-only
 
 - Resolution funnels through `IntegrationManager.getClientInformation(integration,

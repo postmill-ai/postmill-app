@@ -458,7 +458,7 @@ export class DesignExportService {
     // names. Font bytes live on the org LOCAL adapter (fonts are
     // local-adapter-only — see MediaService.uploadFont).
     const families = collectDocFontFamilies(doc);
-    const customFonts = (await this._brandsService.getCustomFonts(orgId)).filter((f: any) =>
+    const customFonts = (await this._brandsService.getCustomFonts(orgId, doc.brandProfileId)).filter((f: any) =>
       families.has(f?.family)
     );
     const manifestFonts: PostmillFontEntry[] = [];

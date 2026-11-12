@@ -478,4 +478,24 @@ describe('FilesController', () => {
       );
     });
   });
+
+  describe('getFilesByIds', () => {
+    it('returns only the requested org-owned records and deduplicates ids', async () => {
+      const controller = makeController();
+      mockGetByIds.mockResolvedValue([{ id: 'file-1', organizationId: 'org-1' }]);
+      await expect(controller.getFilesByIds(org, { ids: 'file-1,file-1,file-2' })).resolves.toEqual({
+        results: [{ id: 'file-1', organizationId: 'org-1' }],
+      });
+      expect(mockGetByIds).toHaveBeenCalledWith('org-1', ['file-1', 'file-2']);
+    });
+
+    it('returns no records for empty input and rejects oversized requests', async () => {
+      const controller = makeController();
+      await expect(controller.getFilesByIds(org, { ids: '' })).resolves.toEqual({ results: [] });
+      expect(mockGetByIds).not.toHaveBeenCalled();
+      await expect(controller.getFilesByIds(org, {
+        ids: Array.from({ length: 101 }, (_, index) => `file-${index}`).join(','),
+      })).rejects.toThrow('At most 100 file ids may be requested');
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import { escapeIdentifier } from 'pg';
-import { VectorStoreAdapter, RagHit } from './vector-store.adapter';
+import { VectorStoreAdapter, RagHit, VectorStorePoint } from './vector-store.adapter';
 
 interface RemotePgConfig {
   connectionString: string;
@@ -71,9 +71,14 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
          "organizationId" text NOT NULL,
          "sourceType" text NOT NULL,
          "sourceId" text NOT NULL,
+         "brandProfileId" text,
          "text" text,
          "embedding" vector(${dimension}) NOT NULL
        )`
+    );
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS "brandProfileId" text`);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS ${this._ident(`${this._table}_brand_idx`)} ON ${table} ("organizationId", "brandProfileId")`
     );
     await pool.query(
       `CREATE INDEX IF NOT EXISTS ${this._ident(`${this._table}_hnsw_idx`)} ON ${table}
@@ -97,18 +102,21 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
   async search(
     organizationId: string,
     vector: number[],
-    limit: number
+    limit: number,
+    filter?: Record<string, any>
   ): Promise<RagHit[]> {
     await this._ensureTable();
     const pool = await this._getPool();
+    const brandProfileId = filter?.brandProfileId;
     const res = await pool.query(
       `SELECT "text", "sourceType", "sourceId",
               (1 - ("embedding" <=> $1::vector)) AS score
        FROM ${this._ident(this._table)}
        WHERE "organizationId" = $2
+         ${brandProfileId ? 'AND "brandProfileId" = $4' : ''}
        ORDER BY "embedding" <=> $1::vector
        LIMIT $3`,
-      [formatVector(vector), organizationId, limit]
+      [formatVector(vector), organizationId, limit, ...(brandProfileId ? [brandProfileId] : [])]
     );
     return (res.rows || []).map((r: any) => ({
       text: String(r.text ?? ''),
@@ -120,7 +128,7 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
 
   async upsertBatch(
     organizationId: string,
-    points: Array<{ id: string; vector: number[]; text: string; sourceType: string; sourceId: string }>
+    points: VectorStorePoint[]
   ): Promise<void> {
     if (points.length === 0) return;
     await this._ensureTable();
@@ -131,15 +139,16 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
       for (const p of points) {
         await client.query(
           `INSERT INTO ${this._ident(this._table)}
-             ("id", "organizationId", "sourceType", "sourceId", "text", "embedding")
-           VALUES ($1, $2, $3, $4, $5, $6::vector)
+             ("id", "organizationId", "sourceType", "sourceId", "brandProfileId", "text", "embedding")
+           VALUES ($1, $2, $3, $4, $5, $6, $7::vector)
            ON CONFLICT ("id") DO UPDATE SET
              "organizationId" = EXCLUDED."organizationId",
              "sourceType" = EXCLUDED."sourceType",
              "sourceId" = EXCLUDED."sourceId",
+             "brandProfileId" = EXCLUDED."brandProfileId",
              "text" = EXCLUDED."text",
              "embedding" = EXCLUDED."embedding"`,
-          [p.id, organizationId, p.sourceType, p.sourceId, p.text, formatVector(p.vector)]
+          [p.id, organizationId, p.sourceType, p.sourceId, p.brandProfileId ?? null, p.text, formatVector(p.vector)]
         );
       }
       await client.query('COMMIT');

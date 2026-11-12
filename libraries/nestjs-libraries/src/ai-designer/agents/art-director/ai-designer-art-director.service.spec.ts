@@ -49,6 +49,29 @@ describe('AiDesignerArtDirectorService', () => {
       metadata: orgId ? { orgId } : {},
     });
 
+  it('uses named and uploaded custom fonts from the selected Brand Kit', async () => {
+    brands.getBrand.mockResolvedValue({
+      enabled: true,
+      instructions: 'Warm and direct',
+      palette: ['#112233'],
+      fontFamilies: ['Named Sans'],
+      customFonts: [{ family: 'Uploaded Sans' }, { family: 'Named Sans' }],
+    });
+    await expect((service as any)._enrichBrief({ intent: 'Launch' }, 'org1', 'brand1'))
+      .resolves.toMatchObject({
+        brandInstructions: 'Warm and direct',
+        brandPalette: ['#112233'],
+        brandFontFamilies: ['Named Sans', 'Uploaded Sans'],
+      });
+    expect(brands.getBrand).toHaveBeenCalledWith('org1', 'brand1');
+  });
+
+  it('keeps the original brief when a brand disappears after session start', async () => {
+    brands.getBrand.mockResolvedValue(null);
+    await expect((service as any)._enrichBrief({ intent: 'Launch' }, 'org1', 'brand1'))
+      .resolves.toEqual({ intent: 'Launch' });
+  });
+
   it('does no billable work when the dispatch signal is already aborted', async () => {
     await expect(
       (service as any)._handler({

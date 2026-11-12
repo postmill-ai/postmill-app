@@ -20,4 +20,8 @@ export class UpdateTemplateDto {
   @IsOptional()
   @IsString()
   thumbnailFileId?: string;
+
+  @IsOptional()
+  @IsString()
+  brandProfileId?: string | null;
 }

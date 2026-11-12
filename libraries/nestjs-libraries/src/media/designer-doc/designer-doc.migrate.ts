@@ -80,6 +80,7 @@ export const migrateDoc = (raw: any): DesignerDoc => {
     version: raw.version || DESIGNER_DOC_VERSION,
     mode: raw.mode || 'image',
     outputs: raw.outputs,
+    ...('brandProfileId' in raw ? { brandProfileId: raw.brandProfileId } : {}),
     attribution: raw.attribution,
     // Symbol definitions live on the doc; omitting them here would drop every
     // symbol instance in the document on the next load.

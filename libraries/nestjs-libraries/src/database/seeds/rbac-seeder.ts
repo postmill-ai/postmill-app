@@ -33,11 +33,10 @@ const ROLE_PERMISSIONS: Record<string, { resource: string; action: string }[]> =
       .map(a => ({ resource: r, action: a }))
   ),
   editor: [
-    ...(['posts', 'media', 'channels', 'comments'] as const).flatMap(r =>
+    ...(['posts', 'media', 'channels', 'comments', 'brands'] as const).flatMap(r =>
       ACTIONS.map(a => ({ resource: r, action: a }))
     ),
     { resource: 'analytics', action: 'read' },
-    { resource: 'brands', action: 'read' },
   ],
   member: [
     { resource: 'posts', action: 'create' },

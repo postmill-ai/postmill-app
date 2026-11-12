@@ -108,6 +108,7 @@ export class AiRagRepository {
     chunks: string[];
     embeddings: number[][];
     pgvectorAvailable: boolean;
+    brandProfileId?: string;
     formatVector: (arr: number[]) => string;
   }): Promise<Array<{ id: string; chunkIndex: number; chunk: string }>> {
     const {
@@ -118,6 +119,7 @@ export class AiRagRepository {
       chunks,
       embeddings,
       pgvectorAvailable,
+      brandProfileId,
       formatVector,
     } = params;
 
@@ -147,6 +149,7 @@ export class AiRagRepository {
             chunkIndex: i,
             contentHash,
             chunk,
+            brandProfileId,
           },
         });
         indices.push({ id: record.id, chunkIndex: i, chunk });
@@ -177,9 +180,10 @@ export class AiRagRepository {
    */
   findChunksForBm25(
     organizationId: string,
+    brandProfileId?: string,
   ): Promise<Array<{ id: string; chunk: string | null; sourceType: string; sourceId: string }>> {
     return this._aiContentIndex.model.aIContentIndex.findMany({
-      where: { organizationId, chunk: { not: null } },
+      where: { organizationId, chunk: { not: null }, ...(brandProfileId ? { brandProfileId } : {}) },
       select: { id: true, chunk: true, sourceType: true, sourceId: true },
       take: 500,
     }) as any;
@@ -193,6 +197,7 @@ export class AiRagRepository {
     organizationId: string,
     queryVector: string,
     limit: number,
+    brandProfileId?: string,
   ): Promise<RagRow[]> {
     const rows = (await this._raw.$queryRawUnsafe(
       `SELECT
@@ -205,11 +210,13 @@ export class AiRagRepository {
         WHERE e."organizationId" = $2
           AND ci.chunk IS NOT NULL
           AND ci.chunk != ''
+          ${brandProfileId ? 'AND ci."brandProfileId" = $4' : ''}
         ORDER BY e.embedding <=> $1::vector
         LIMIT $3`,
       queryVector,
       organizationId,
       limit,
+      ...(brandProfileId ? [brandProfileId] : []),
     )) as RagRow[];
 
     return rows.map((r) => ({
@@ -224,11 +231,12 @@ export class AiRagRepository {
    * Fallback text search when there are no usable query terms — returns the most
    * recent chunks for the org with score 0.
    */
-  async textSearchRecent(organizationId: string, limit: number): Promise<RagRow[]> {
+  async textSearchRecent(organizationId: string, limit: number, brandProfileId?: string): Promise<RagRow[]> {
     const rows = await this._aiContentIndex.model.aIContentIndex.findMany({
       where: {
         organizationId,
         chunk: { not: null },
+        ...(brandProfileId ? { brandProfileId } : {}),
       },
       select: {
         chunk: true,
@@ -259,6 +267,7 @@ export class AiRagRepository {
     organizationId: string,
     terms: string[],
     limit: number,
+    brandProfileId?: string,
   ): Promise<RagRow[]> {
     // SAFETY: terms.length is interpolated into SQL (`${terms.length}::float`,
     // `${terms.length + 1}`, `${terms.length + 2}`). Assert it's a non-negative
@@ -267,6 +276,7 @@ export class AiRagRepository {
       throw new Error(`Invalid terms length: ${terms.length} — must be a non-negative integer`);
     }
     const likeClauses = terms.map((t, i) => `ci.chunk ILIKE '%' || $${i + 1} || '%'`).join(' OR ');
+    const brandClause = brandProfileId ? `AND ci."brandProfileId" = $${terms.length + 3}` : '';
 
     const rows = (await this._raw.$queryRawUnsafe(
       `SELECT
@@ -279,12 +289,14 @@ export class AiRagRepository {
         AND ci.chunk IS NOT NULL
         AND ci.chunk != ''
         AND (${likeClauses})
+        ${brandClause}
       GROUP BY ci.id, ci.chunk, ci."sourceType", ci."sourceId"
       ORDER BY score DESC
       LIMIT $${terms.length + 2}`,
       ...terms,
       organizationId,
       limit,
+      ...(brandProfileId ? [brandProfileId] : []),
     )) as RagRow[];
 
     return rows.map((r) => ({
@@ -300,20 +312,51 @@ export class AiRagRepository {
    */
   getOrgContentIndexEntries(
     organizationId: string,
-  ): Promise<Array<{ id: string; sourceType: string; sourceId: string; chunk: string | null; createdAt: Date; updatedAt: Date }>> {
+    brandProfileId?: string,
+    unassigned = false,
+  ): Promise<Array<{ id: string; sourceType: string; sourceId: string; brandProfileId: string | null; chunk: string | null; createdAt: Date; updatedAt: Date }>> {
     return this._aiContentIndex.model.aIContentIndex.findMany({
-      where: { organizationId },
-      select: { id: true, sourceType: true, sourceId: true, chunk: true, createdAt: true, updatedAt: true },
+      where: {
+        organizationId,
+        ...(brandProfileId ? { brandProfileId } : unassigned ? { brandProfileId: null } : {}),
+      },
+      select: { id: true, sourceType: true, sourceId: true, brandProfileId: true, chunk: true, createdAt: true, updatedAt: true },
     }) as any;
+  }
+
+  getOrgRagEnabled(organizationId: string): Promise<{ ragEnabled: boolean | null } | null> {
+    return this._raw.organization.findUnique({
+      where: { id: organizationId },
+      select: { ragEnabled: true },
+    });
+  }
+
+  setOrgRagEnabled(organizationId: string, enabled: boolean | null) {
+    return this._raw.organization.update({
+      where: { id: organizationId },
+      data: { ragEnabled: enabled },
+      select: { ragEnabled: true },
+    });
   }
 
   /**
    * Deletes all content index entries for a given source, org-scoped.
    * Embedding side table rows are cascade-deleted by the FK constraint.
    */
-  deleteContentIndexEntries(organizationId: string, sourceType: string, sourceId: string) {
+  deleteContentIndexEntries(
+    organizationId: string,
+    sourceType: string,
+    sourceId: string,
+    brandProfileId?: string,
+    unassigned = false,
+  ) {
     return this._aiContentIndex.model.aIContentIndex.deleteMany({
-      where: { organizationId, sourceType, sourceId },
+      where: {
+        organizationId,
+        sourceType,
+        sourceId,
+        ...(brandProfileId ? { brandProfileId } : unassigned ? { brandProfileId: null } : {}),
+      },
     });
   }
 
@@ -322,9 +365,10 @@ export class AiRagRepository {
    */
   findPostsForBackfill(
     organizationId: string,
+    brandProfileId?: string,
   ): Promise<Array<{ id: string; content: string | null; title: string | null; description: string | null }>> {
     return this._raw.post.findMany({
-      where: { organizationId, deletedAt: null },
+      where: { organizationId, deletedAt: null, ...(brandProfileId ? { brandId: brandProfileId } : {}) },
       select: { id: true, content: true, title: true, description: true },
     });
   }

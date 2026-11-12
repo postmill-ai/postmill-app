@@ -23,6 +23,8 @@ vi.mock('@postmill-ai/frontend/components/layout/user.context', () => ({
   useUser: () => ({ orgId: 'org-1' }),
 }));
 
+vi.mock('./panels/use-brand-colors', () => ({ useBrandColors: () => [] }));
+
 afterEach(cleanup);
 
 const withAdjustment = (adjustment: DesignerAdjustment) => {

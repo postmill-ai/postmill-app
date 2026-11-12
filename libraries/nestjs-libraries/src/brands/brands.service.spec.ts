@@ -33,24 +33,26 @@ describe('BrandsService', () => {
   });
 
   describe('reads (org-scoped delegation)', () => {
-    it('getBrands delegates with the org id', () => {
-      const brands = [{ id: 'b1' }];
+    it('getBrands delegates with the org id and normalizes every brand', async () => {
+      const brands = [{ id: 'b1', palette: [{ hex: '#aabbcc' }], fontFamilies: [{ name: 'Inter' }] }];
       repository.getBrands.mockReturnValue(brands);
-      expect(service.getBrands('org-1')).toBe(brands);
+      await expect(service.getBrands('org-1')).resolves.toEqual([
+        { id: 'b1', palette: ['#aabbcc'], fontFamilies: ['Inter'], preferredFormats: [], logoFileIds: [], customFonts: [], assets: [] },
+      ]);
       expect(repository.getBrands).toHaveBeenCalledWith('org-1');
     });
 
-    it('getBrand delegates with org and brand id', () => {
+    it('getBrand delegates with org and brand id', async () => {
       const brand = { id: 'b1' };
       repository.getBrand.mockReturnValue(brand);
-      expect(service.getBrand('org-1', 'b1')).toBe(brand);
+      await expect(service.getBrand('org-1', 'b1')).resolves.toMatchObject(brand);
       expect(repository.getBrand).toHaveBeenCalledWith('org-1', 'b1');
     });
 
-    it('getDefaultBrand delegates with the org id', () => {
+    it('getDefaultBrand delegates with the org id', async () => {
       const brand = { id: 'b1', isDefault: true };
       repository.getDefaultBrand.mockReturnValue(brand);
-      expect(service.getDefaultBrand('org-1')).toBe(brand);
+      await expect(service.getDefaultBrand('org-1')).resolves.toMatchObject(brand);
       expect(repository.getDefaultBrand).toHaveBeenCalledWith('org-1');
     });
   });
@@ -125,7 +127,7 @@ describe('BrandsService', () => {
       expect(repository.updateBrand).toHaveBeenCalledWith('org-1', 'b1', {
         name: 'New',
       });
-      expect(result).toEqual({ id: 'b1', name: 'New' });
+      expect(result).toMatchObject({ id: 'b1', name: 'New' });
     });
 
     it('returns null for a brand outside the org (repository contract)', async () => {
@@ -214,7 +216,7 @@ describe('BrandsService', () => {
       const result = await service.setDefaultBrand('org-1', 'b2');
 
       expect(repository.setBrandAsDefault).toHaveBeenCalledWith('org-1', 'b2');
-      expect(result).toEqual({ id: 'b2', isDefault: true });
+      expect(result).toMatchObject({ id: 'b2', isDefault: true });
     });
   });
 });

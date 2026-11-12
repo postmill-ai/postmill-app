@@ -1,5 +1,6 @@
 import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { BrandProfileWrite, pickBrandProfileWrite } from '@postmill-ai/nestjs-libraries/brands/brand-kit';
 
 @Injectable()
 export class BrandsRepository {
@@ -39,40 +40,22 @@ export class BrandsRepository {
     });
   }
 
-  createBrand(
-    organizationId: string,
-    data: {
-      name: string;
-      instructions?: string;
-      language?: string;
-      platformInstructions?: Record<string, string>;
-      languageProfiles?: Record<string, any>;
-      enabled?: boolean;
-      isDefault?: boolean;
-      slug?: string;
-      logoFileIds?: string[];
-      palette?: string[];
-      fontFamilies?: string[];
-      assets?: { fileId?: string; url: string; caption?: string }[];
-      enforcement?: Record<string, any>;
-    },
-  ) {
+  createBrand(organizationId: string, data: BrandProfileWrite & { name: string }) {
+    const values = pickBrandProfileWrite(data);
     return this._aiBrandProfile.model.aIBrandProfile.create({
       data: {
+        ...values,
         organizationId,
-        name: data.name,
-        instructions: data.instructions,
-        language: data.language,
-        platformInstructions: data.platformInstructions || {},
-        languageProfiles: data.languageProfiles ?? {},
-        enabled: data.enabled ?? true,
-        isDefault: data.isDefault ?? false,
-        slug: data.slug,
-        logoFileIds: data.logoFileIds ?? [],
-        palette: data.palette ?? [],
-        fontFamilies: data.fontFamilies ?? [],
-        assets: data.assets ?? [],
-        enforcement: data.enforcement ?? {},
+        platformInstructions: values.platformInstructions || {},
+        languageProfiles: values.languageProfiles ?? {},
+        enabled: values.enabled ?? true,
+        isDefault: values.isDefault ?? false,
+        logoFileIds: values.logoFileIds ?? [],
+        palette: values.palette ?? [],
+        fontFamilies: values.fontFamilies ?? [],
+        preferredFormats: values.preferredFormats ?? [],
+        assets: values.assets ?? [],
+        enforcement: values.enforcement ?? {},
       },
     });
   }
@@ -80,21 +63,7 @@ export class BrandsRepository {
   async updateBrand(
     organizationId: string,
     brandId: string,
-    data: {
-      name?: string;
-      instructions?: string;
-      language?: string;
-      platformInstructions?: Record<string, string>;
-      languageProfiles?: Record<string, any>;
-      enabled?: boolean;
-      logoFileIds?: string[];
-      palette?: string[];
-      fontFamilies?: string[];
-      introFileId?: string | null;
-      outroFileId?: string | null;
-      assets?: { fileId?: string; url: string; caption?: string }[];
-      enforcement?: Record<string, any>;
-    },
+    data: BrandProfileWrite,
   ) {
     const brand = await this._aiBrandProfile.model.aIBrandProfile.findFirst({
       where: { id: brandId, organizationId },
@@ -102,7 +71,7 @@ export class BrandsRepository {
     if (!brand) return null;
     return this._aiBrandProfile.model.aIBrandProfile.update({
       where: { id: brandId, organizationId },
-      data,
+      data: pickBrandProfileWrite(data),
     });
   }
 
@@ -138,8 +107,28 @@ export class BrandsRepository {
     });
   }
 
-  async getCustomFonts(organizationId: string) {
-    const brand = await this.getDefaultBrand(organizationId) || await this.getFirstBrand(organizationId);
+  private async _brandForFonts(organizationId: string, brandId?: string | null) {
+    if (brandId) return this.getBrand(organizationId, brandId);
+    if (brandId === null) return null;
+    return (await this.getDefaultBrand(organizationId)) || (await this.getFirstBrand(organizationId));
+  }
+
+  async getCustomFonts(organizationId: string, brandId?: string | null) {
+    if (brandId === null) {
+      const brands = await this.getBrands(organizationId);
+      const faces = new Map<string, any>();
+      for (const brand of brands) {
+        const fonts = Array.isArray(brand.customFonts) ? brand.customFonts as any[] : [];
+        for (const font of fonts) {
+          for (const weight of font.weights?.length ? font.weights : [400]) {
+            const key = `${(font.family || '').toLowerCase()}|${weight}|${font.italic ? 'i' : 'n'}`;
+            if (!faces.has(key)) faces.set(key, { ...font, weights: [weight] });
+          }
+        }
+      }
+      return [...faces.values()];
+    }
+    const brand = await this._brandForFonts(organizationId, brandId);
     if (!brand) return [];
     const fonts = brand.customFonts as any[] | null;
     return Array.isArray(fonts) ? fonts : [];
@@ -147,10 +136,12 @@ export class BrandsRepository {
 
   async addCustomFont(
     organizationId: string,
-    font: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean; serverRender?: boolean }
+    font: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean; serverRender?: boolean },
+    brandId?: string,
   ) {
-    let brand = await this.getDefaultBrand(organizationId) || await this.getFirstBrand(organizationId);
+    let brand = await this._brandForFonts(organizationId, brandId);
     if (!brand) {
+      if (brandId) throw new NotFoundException('Brand not found');
       // Fonts live on the org's default profile — an org with zero profiles
       // used to get a silent no-op here (the upload "succeeded" and vanished).
       // Create the default profile, named like the AI-settings upsert does.
@@ -174,8 +165,8 @@ export class BrandsRepository {
     return existing;
   }
 
-  async removeCustomFont(organizationId: string, fileId: string) {
-    const brand = await this.getDefaultBrand(organizationId) || await this.getFirstBrand(organizationId);
+  async removeCustomFont(organizationId: string, fileId: string, brandId?: string) {
+    const brand = await this._brandForFonts(organizationId, brandId);
     if (!brand) return [];
     const existing = (brand.customFonts as any[]) || [];
     const next = existing.filter((f: any) => f.fileId !== fileId);

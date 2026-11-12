@@ -583,33 +583,36 @@ export class MediaController {
   }
 
   @Get('/fonts')
-  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
-  async listFonts(@GetOrgFromRequest() org: Organization) {
-    return this._brandsService.getCustomFonts(org.id);
+  @CheckPolicies([AuthorizationActions.Read, Sections.BRANDS])
+  @RequirePermission('brands', 'read')
+  async listFonts(@GetOrgFromRequest() org: Organization, @Query('brandId') brandId?: string) {
+    return this._brandsService.getCustomFonts(org.id, brandId === 'null' ? null : brandId);
   }
 
   @Post('/fonts/upload')
-  @CheckPolicies([AuthorizationActions.Update, Sections.MEDIA])
-  @RequirePermission('media', 'update')
+  @CheckPolicies([AuthorizationActions.Update, Sections.BRANDS])
+  @RequirePermission('brands', 'update')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
   async uploadFont(
     @GetOrgFromRequest() org: Organization,
-    @UploadedFile() file: Express.Multer.File
+    @UploadedFile() file: Express.Multer.File,
+    @Body('brandId') brandId?: string,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this._aiMediaService.uploadFont(org.id, file);
+    return this._aiMediaService.uploadFont(org.id, file, brandId);
   }
 
   @Delete('/fonts/:fileId')
-  @CheckPolicies([AuthorizationActions.Update, Sections.MEDIA])
-  @RequirePermission('media', 'delete')
+  @CheckPolicies([AuthorizationActions.Update, Sections.BRANDS])
+  @RequirePermission('brands', 'update')
   async deleteFont(
     @GetOrgFromRequest() org: Organization,
-    @Param('fileId') fileId: string
+    @Param('fileId') fileId: string,
+    @Query('brandId') brandId?: string,
   ) {
-    return this._brandsService.removeCustomFont(org.id, fileId);
+    return this._brandsService.removeCustomFont(org.id, fileId, brandId);
   }
 
   @Get('/voices')

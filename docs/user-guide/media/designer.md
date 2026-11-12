@@ -139,6 +139,16 @@ The Brand panel works on video designs too: palette colors apply to the selected
 shape clip, brand fonts apply to the selected text or caption clip, and a logo is added to the
 timeline as an image clip.
 
+Choose a Brand Kit in **Brand Mode** to prioritize its colors, fonts, logos, reference images,
+preferred formats, and associated templates, with optional enforcement against that kit. Associated
+templates are prioritized before pagination, including libraries larger than one page. **General
+Mode** leaves the design unrestricted and disables enforcement without changing any layers. Its custom
+font list includes all kits, with duplicate family/weight/style faces resolved in the same default-first
+order in the editor and exported files. The choice is saved in the design and survives versions,
+exports, and `.pdesign` reimports. Saving a logo to the Brand Kit and adding it to the canvas are
+separate actions; removing a logo from a kit does not delete the File or existing canvas layers.
+Manage kits in **Brand Studio** (`/brands`).
+
 ## Canvas tools
 
 The mouse wheel zooms by default. Laptop users can enable **View → Touchpad mode** to pan with a

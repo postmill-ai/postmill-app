@@ -1,74 +1,73 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { BrandsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/brands/brands.repository';
+import {
+  BrandCustomFont,
+  BrandProfileInput,
+  normalizeBrandProfile,
+  normalizeBrandProfilePatch,
+} from './brand-kit';
 
 @Injectable()
 export class BrandsService {
   constructor(private _repository: BrandsRepository) {}
 
-  getBrands(orgId: string) {
-    return this._repository.getBrands(orgId);
+  async getBrands(orgId: string) {
+    return (await this._repository.getBrands(orgId)).map(normalizeBrandProfile);
   }
 
-  getBrand(orgId: string, brandId: string) {
-    return this._repository.getBrand(orgId, brandId);
+  async getBrand(orgId: string, brandId: string) {
+    const brand = await this._repository.getBrand(orgId, brandId);
+    return brand ? normalizeBrandProfile(brand) : null;
   }
 
-  getDefaultBrand(orgId: string) {
-    return this._repository.getDefaultBrand(orgId);
+  async getBrandOwnedStrict(orgId: string, brandId: string) {
+    const brand = await this.getBrand(orgId, brandId);
+    if (!brand) throw new NotFoundException('Brand not found');
+    return brand;
   }
 
-  async createBrand(
-    orgId: string,
-    data: {
-      name: string;
-      instructions?: string;
-      language?: string;
-      platformInstructions?: Record<string, string>;
-      languageProfiles?: Record<string, any>;
-      enabled?: boolean;
-      logoFileIds?: string[];
-      palette?: string[];
-      fontFamilies?: string[];
-      introFileId?: string | null;
-      outroFileId?: string | null;
-      assets?: { fileId?: string; url: string; caption?: string }[];
-      enforcement?: Record<string, any>;
-    },
-  ) {
+  async getBrandStrict(orgId: string, brandId: string) {
+    const brand = await this.getBrandOwnedStrict(orgId, brandId);
+    if (!brand.enabled) throw new BadRequestException('Brand is disabled');
+    return brand;
+  }
+
+  async getDefaultBrand(orgId: string) {
+    const brand = await this._repository.getDefaultBrand(orgId);
+    return brand ? normalizeBrandProfile(brand) : null;
+  }
+
+  async createBrand(orgId: string, data: BrandProfileInput & { name: string }) {
     const count = await this._repository.countBrands(orgId);
+    const normalized = normalizeBrandProfilePatch(data);
     const slug = data.name
       .toLowerCase()
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9-]/g, '')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '');
-    return this._repository.createBrand(orgId, {
-      ...data,
+    const brand = await this._repository.createBrand(orgId, {
+      ...normalized,
+      name: data.name,
       slug,
       isDefault: count === 0,
     });
+    return normalizeBrandProfile(brand);
   }
 
-  async updateBrand(
-    orgId: string,
-    brandId: string,
-    data: {
-      name?: string;
-      instructions?: string;
-      language?: string;
-      platformInstructions?: Record<string, string>;
-      languageProfiles?: Record<string, any>;
-      enabled?: boolean;
-      logoFileIds?: string[];
-      palette?: string[];
-      fontFamilies?: string[];
-      introFileId?: string | null;
-      outroFileId?: string | null;
-      assets?: { fileId?: string; url: string; caption?: string }[];
-      enforcement?: Record<string, any>;
-    },
-  ) {
-    return this._repository.updateBrand(orgId, brandId, data);
+  async updateBrand(orgId: string, brandId: string, data: BrandProfileInput) {
+    const brand = await this._repository.updateBrand(
+      orgId,
+      brandId,
+      normalizeBrandProfilePatch(data),
+    );
+    return brand ? normalizeBrandProfile(brand) : null;
+  }
+
+  async upsertDefaultBrand(orgId: string, data: BrandProfileInput) {
+    const existing = await this._repository.getDefaultBrand(orgId);
+    if (existing) return this.updateBrand(orgId, existing.id, data);
+    return this.createBrand(orgId, { ...data, name: 'Default Brand' });
   }
 
   async deleteBrand(orgId: string, brandId: string) {
@@ -94,18 +93,19 @@ export class BrandsService {
   async setDefaultBrand(orgId: string, brandId: string) {
     const brand = await this._repository.getBrand(orgId, brandId);
     if (!brand) return null;
-    return this._repository.setBrandAsDefault(orgId, brandId);
+    const updated = await this._repository.setBrandAsDefault(orgId, brandId);
+    return updated ? normalizeBrandProfile(updated) : null;
   }
 
-  getCustomFonts(orgId: string) {
-    return this._repository.getCustomFonts(orgId);
+  getCustomFonts(orgId: string, brandId?: string | null) {
+    return this._repository.getCustomFonts(orgId, brandId);
   }
 
-  addCustomFont(orgId: string, font: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean; serverRender?: boolean }) {
-    return this._repository.addCustomFont(orgId, font);
+  addCustomFont(orgId: string, font: BrandCustomFont, brandId?: string) {
+    return this._repository.addCustomFont(orgId, font, brandId);
   }
 
-  removeCustomFont(orgId: string, fileId: string) {
-    return this._repository.removeCustomFont(orgId, fileId);
+  removeCustomFont(orgId: string, fileId: string, brandId?: string) {
+    return this._repository.removeCustomFont(orgId, fileId, brandId);
   }
 }

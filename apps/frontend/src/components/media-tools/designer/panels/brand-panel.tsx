@@ -7,22 +7,15 @@ import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
-import { useCustomFonts, useUploadCustomFont, fontServerRenderable, CustomFontEntry } from './use-brand-fonts';
+import { useUploadCustomFont, fontServerRenderable, CustomFontEntry } from './use-brand-fonts';
 import { getBrandViolations } from '../brand-compliance';
 import { useMediaPicker } from '../../use-media-picker';
 import { addBrandLogo, applyBrandColor, applyBrandFont } from './brand-actions';
+import { useBrandKit } from '../brand-kit-context';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import type { Brand } from '@postmill-ai/frontend/components/settings/brand/use-brands';
 
-interface BrandProfile {
-  id: string;
-  name: string;
-  palette?: string[];
-  fontFamilies?: string[];
-  logoFileIds?: string[];
-  introFileId?: string | null;
-  outroFileId?: string | null;
-  enforcement?: { enabled?: boolean };
-  isDefault: boolean;
-}
+type BrandProfile = Brand;
 
 interface FileItem {
   id: string;
@@ -39,29 +32,26 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   const fetch = useFetch();
   const user = useUser();
   const toaster = useToaster();
+  const permissions = usePermissions();
+  const canManage = !permissions.isResolved || permissions.hasPermission('brands', 'update');
   const selectedIds = store((s: any) => s.selectedIds);
   const selectedClip = store((s: any) => s.selectedClip);
   const out = store((s: any) => s.doc.outputs[s.currentOutput]);
   const [saving, setSaving] = useState(false);
 
-  const { fonts: customFonts, mutate: mutateCustomFonts } = useCustomFonts();
-  const { uploadMany: uploadCustomFonts, uploading } = useUploadCustomFont();
+  const {
+    brands,
+    activeBrand,
+    customFonts,
+    brandUnavailable,
+    selectBrand,
+    refreshBrands,
+    refreshFonts,
+  } = useBrandKit();
+  const { uploadMany: uploadCustomFonts, uploading } = useUploadCustomFont(activeBrand?.id);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-  const { data: brands, mutate } = useSWR<BrandProfile[]>(
-    `brands-list-${user.orgId}`,
-    async () => {
-      const res = await fetch('/brands');
-      if (!res.ok) return [];
-      return res.json();
-    },
-    { revalidateOnFocus: false, keepPreviousData: true }
-  );
-
-  const activeBrand = useMemo(
-    () => brands?.find((b) => b.isDefault) || brands?.[0] || null,
-    [brands]
-  );
+  const mutate = refreshBrands;
+  const mutateCustomFonts = refreshFonts;
 
   const selectedElement = useMemo(() => {
     if (out?.tracks) {
@@ -174,7 +164,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
 
   const persist = useCallback(
     async (patch: Partial<BrandProfile>) => {
-      if (!activeBrand) return;
+      if (!activeBrand || !canManage) return;
       setSaving(true);
       try {
         const res = await fetch(`/brands/${activeBrand.id}`, {
@@ -197,7 +187,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
         setSaving(false);
       }
     },
-    [activeBrand, fetch, toaster, mutate]
+    [activeBrand, canManage, fetch, toaster, mutate, t]
   );
 
   const toggleLogo = useCallback(
@@ -225,15 +215,12 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
     height: number;
     type: 'image' | 'video' | 'audio';
   }) => {
-    if (item.type !== 'image') return;
-    addLogoToCanvas({ id: item.fileId || '', path: item.url, name: 'Logo' });
-    // Remember it as a brand logo too. Picking used to only place the image;
-    // saving one was the job of the file browser this replaced.
-    if (item.fileId && !logoFileIds.includes(item.fileId)) {
+    if (item.type !== 'image' || !item.fileId) return;
+    if (!logoFileIds.includes(item.fileId)) {
       persist({ logoFileIds: [...logoFileIds, item.fileId] });
       void mutateFiles();
     }
-  }, [addLogoToCanvas, logoFileIds, persist, mutateFiles]);
+  }, [logoFileIds, persist, mutateFiles]);
 
   const setBrandVideo = useCallback(
     (slot: 'introFileId' | 'outroFileId', fileId: string | null) => {
@@ -244,7 +231,8 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   );
 
   const mediaPicker = useMediaPicker({
-    title: t('brand_logo', 'Brand logo'),
+    title: t('save_logo_to_brand_kit', 'Save logo to Brand Kit'),
+    requireFile: true,
     onSelect: handleModalSelect,
   });
 
@@ -272,7 +260,8 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   const handleFontDelete = useCallback(
     async (font: CustomFontEntry) => {
       try {
-        const res = await fetch(`/media/fonts/${font.fileId}`, {
+        const query = activeBrand?.id ? `?brandId=${encodeURIComponent(activeBrand.id)}` : '';
+        const res = await fetch(`/media/fonts/${font.fileId}${query}`, {
           method: 'DELETE',
         });
         if (!res.ok) {
@@ -285,7 +274,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
         toaster.show(t('designer_failed_remove_font', 'Failed to remove font'), 'warning');
       }
     },
-    [fetch, toaster, mutateCustomFonts]
+    [activeBrand?.id, fetch, toaster, mutateCustomFonts, t]
   );
 
   // Distinguish loading (brands === undefined) from empty (no profiles). The
@@ -300,38 +289,38 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
       </div>
     );
   }
-  if (brands.length === 0) {
-    return (
-      <div className="text-newTextColor/60 text-[12px] text-center py-8">
-        {t('designer_no_brand_profiles', 'No brand profiles found. Create one in Settings → Brands.')}
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
           <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
-            {t('designer_brand_profile', 'Brand Profile')}
+            {t('designer_brand_profile', 'Brand / General Mode')}
           </div>
           {saving && (
             <span className="text-[11px] text-newTextColor/60">{t('designer_saving_ellipsis', 'Saving…')}</span>
           )}
         </div>
         <select
-          value={activeBrand?.id || ''}
-          onChange={() => {
-            // Brand selection is informational; palette/fonts are reactive.
-          }}
+          aria-label={t('designer_brand_profile', 'Brand / General Mode')}
+          value={brandUnavailable ? doc.brandProfileId : activeBrand?.id || ''}
+          onChange={(event) => selectBrand(event.target.value || null)}
           className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
         >
-          {brands.map((brand) => (
+          <option value="">{t('general_mode', 'General Mode')}</option>
+          {brands.filter((brand) => brand.enabled).map((brand) => (
             <option key={brand.id} value={brand.id}>
               {brand.name}
             </option>
           ))}
+          {brandUnavailable && (
+            <option value={doc.brandProfileId}>{t('brand_unavailable', 'Unavailable brand')}</option>
+          )}
         </select>
+        {brandUnavailable && (
+          <div className="text-[11px] text-dangerText">
+            {t('brand_unavailable_explanation', 'This brand no longer exists or is disabled. Choose General Mode or another Brand Kit.')}
+          </div>
+        )}
       </div>
 
       {/* Brand enforcement (T-38) */}
@@ -344,6 +333,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
             type="button"
             role="switch"
             aria-checked={enforcementEnabled}
+            disabled={!activeBrand || !canManage}
             onClick={() =>
               persist({
                 enforcement: { enabled: !enforcementEnabled },
@@ -408,10 +398,11 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
 
         <button
           type="button"
+          disabled={!activeBrand || !canManage}
           onClick={mediaPicker.open}
-          className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
+          className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80 disabled:opacity-50"
         >
-          {t('designer_add_logo_from_media', 'Add logo from media…')}
+          {t('save_logo_to_brand_kit', 'Save logo to Brand Kit…')}
         </button>
       {mediaPicker.element}
 
@@ -420,27 +411,38 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
             {logoFileIds.map((id) => {
               const file = fileById.get(id);
               return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => file && addLogoToCanvas(file)}
-                  title={file ? t('designer_add_file_to_canvas', 'Add {{name}} to canvas', { name: file.name }) : id}
-                  className="group relative aspect-square rounded-lg overflow-hidden border border-designerAccent bg-newBgColorInner"
-                >
-                  {file ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- external media file
-                    <img
-                      src={file.path}
-                      alt={file.name}
-                      className="w-full h-full object-contain p-1"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span className="flex items-center justify-center w-full h-full text-[10px] text-newTextColor/60">
-                      ?
-                    </span>
+                <div key={id} className="group relative aspect-square rounded-lg overflow-hidden border border-designerAccent bg-newBgColorInner">
+                  <button
+                    type="button"
+                    onClick={() => file && addLogoToCanvas(file)}
+                    title={file ? t('designer_add_file_to_canvas', 'Add {{name}} to canvas', { name: file.name }) : id}
+                    className="w-full h-full"
+                  >
+                    {file ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- external media file
+                      <img
+                        src={file.path}
+                        alt={file.name}
+                        className="w-full h-full object-contain p-1"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="flex items-center justify-center w-full h-full text-[10px] text-newTextColor/60">
+                        ?
+                      </span>
+                    )}
+                  </button>
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => toggleLogo(id)}
+                      aria-label={t('remove_logo', 'Remove logo')}
+                      className="absolute top-1 end-1 w-5 h-5 rounded-full bg-newBgColorInner border border-studioBorder text-dangerText opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    >
+                      ×
+                    </button>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
@@ -469,7 +471,8 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
               <button
                 type="button"
                 onClick={picker.open}
-                className="flex-1 px-3 py-2 rounded-lg text-[12px] border border-studioBorder text-textColor hover:bg-boxHover transition-colors text-start truncate"
+                disabled={!activeBrand || !canManage}
+                className="flex-1 px-3 py-2 rounded-lg text-[12px] border border-studioBorder text-textColor hover:bg-boxHover transition-colors text-start truncate disabled:opacity-50"
               >
                 {file?.name ||
                   (fileId
@@ -478,7 +481,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
                       ? t('designer_choose_intro', 'Choose intro video…')
                       : t('designer_choose_outro', 'Choose outro video…'))}
               </button>
-              {fileId && (
+              {canManage && fileId && (
                 <button
                   type="button"
                   onClick={() => setBrandVideo(key, null)}
@@ -631,7 +634,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
           <div className="flex flex-col gap-1">
             {customFonts.map((f) => (
               <div
-                key={f.fileId}
+                key={`${f.fileId}-${f.weights.join(',')}-${f.italic ? 'i' : 'n'}`}
                 className="flex items-center justify-between px-3 py-2 rounded-[6px] border border-studioBorder bg-newBgColorInner"
               >
                 <div className="flex-1 min-w-0">
@@ -654,14 +657,16 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleFontDelete(f)}
-                  className="ml-2 w-5 h-5 rounded-full border border-studioBorder text-[11px] text-textColor/60 hover:text-dangerText hover:border-red-400 flex items-center justify-center shrink-0 transition-colors"
-                  title={t('designer_remove_font', 'Remove {{name}}', { name: f.family })}
-                >
-                  ✕
-                </button>
+                {canManage && activeBrand && (
+                  <button
+                    type="button"
+                    onClick={() => handleFontDelete(f)}
+                    className="ml-2 w-5 h-5 rounded-full border border-studioBorder text-[11px] text-textColor/60 hover:text-dangerText hover:border-red-400 flex items-center justify-center shrink-0 transition-colors"
+                    title={t('designer_remove_font', 'Remove {{name}}', { name: f.family })}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -677,7 +682,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
         />
         <button
           type="button"
-          disabled={uploading}
+          disabled={uploading || !canManage}
           onClick={() => fileInputRef.current?.click()}
           className="w-full py-2 rounded-[6px] border border-dashed border-studioBorder text-[12px] text-textColor/60 hover:text-textColor hover:border-designerAccent bg-newBgColorInner transition-colors"
         >

@@ -7,14 +7,15 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 import { useBrands, type Brand } from '@postmill-ai/frontend/components/settings/brand/use-brands';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
 
-// The Brands list (former BrandTab list view). "Edit" now navigates to the brand-edit route
-// (/settings/ai/brands/[id]/voice) instead of flipping in-page state.
 export const BrandList = () => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
   const router = useRouter();
+  const permissions = usePermissions();
+  const canEdit = !permissions.isResolved || permissions.hasPermission('brands', 'update');
   const { data: brands, isLoading, mutate: refetchBrands } = useBrands();
 
   const [newName, setNewName] = useState('');
@@ -79,23 +80,33 @@ export const BrandList = () => {
     <div className="flex flex-col">
       <div className="flex items-start justify-between gap-[16px] mb-[16px]">
         <div className="flex flex-col gap-[4px]">
-          <h3 className="text-[18px] font-semibold text-textColor">{t('brands', 'Brands')}</h3>
+          <h3 className="text-[18px] font-semibold text-textColor">{t('brand_studio', 'Brand Studio')}</h3>
           <p className="text-[13px] text-newTableText max-w-[640px]">
             {t(
-              'brands_description',
-              'Create AI personalities for your brand — set how it writes, what it looks like, and what it knows — so every post sounds on-brand.'
+              'brand_studio_description',
+              'Keep each brand’s voice, visuals, formats, templates, and knowledge together — then use the same Brand Kit everywhere you create.'
             )}
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="bg-btnPrimary text-white rounded-[8px] px-[16px] py-[8px] text-[14px] hover:opacity-90 shrink-0"
-        >
-          {t('create_brand', 'Create Brand')}
-        </button>
+        <div className="flex items-center gap-[8px] shrink-0">
+          <button
+            onClick={() => router.push('/brands/knowledge')}
+            className="border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[13px] hover:bg-boxHover"
+          >
+            {t('unassigned_knowledge', 'Unassigned Knowledge')}
+          </button>
+          {canEdit && (
+            <button
+              onClick={() => setShowCreate(!showCreate)}
+              className="bg-btnPrimary text-white rounded-[8px] px-[16px] py-[8px] text-[14px] hover:opacity-90 shrink-0"
+            >
+              {t('create_brand', 'Create Brand')}
+            </button>
+          )}
+        </div>
       </div>
 
-      {showCreate && (
+      {canEdit && showCreate && (
         <div className="flex gap-[8px] mb-[16px]">
           <input
             type="text"
@@ -163,7 +174,7 @@ export const BrandList = () => {
               ) : null}
             </div>
             <div className="flex items-center gap-[8px]">
-              {!brand.isDefault && (
+              {canEdit && !brand.isDefault && (
                 <button
                   onClick={() => handleSetDefault(brand)}
                   className="text-[12px] text-newTableText hover:text-textColor"
@@ -172,17 +183,19 @@ export const BrandList = () => {
                 </button>
               )}
               <button
-                onClick={() => router.push(`/settings/ai/brands/${brand.id}/voice`)}
+                onClick={() => router.push(`/brands/${brand.id}/voice`)}
                 className="text-btnPrimaryAccent text-[12px] hover:underline"
               >
-                {t('edit', 'Edit')}
+                {canEdit ? t('edit', 'Edit') : t('view', 'View')}
               </button>
-              <button
-                onClick={() => handleDelete(brand)}
-                className="text-red-600 dark:text-red-500 text-[12px] hover:underline"
-              >
-                {t('delete', 'Delete')}
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => handleDelete(brand)}
+                  className="text-red-600 dark:text-red-500 text-[12px] hover:underline"
+                >
+                  {t('delete', 'Delete')}
+                </button>
+              )}
             </div>
           </div>
         ))}

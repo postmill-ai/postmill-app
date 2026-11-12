@@ -261,16 +261,6 @@ const INTENTIONALLY_UNGATED = new Set<string>([
   // Transient text-splitting utility for the composer — no persistence.
   'PostsController.separatePosts',
 
-  // RAG is a read/search/utility surface gated by AI provider budget and
-  // throttle. Mutations target the org's own ephemeral vector index, not
-  // governed org config; RBAC resource is not yet defined for this feature.
-  'RagController.indexContent',
-  'RagController.deleteItem',
-  'RagController.search',
-  'RagController.triggerBackfill',
-  'RagController.saveSettings',
-  'RagController.testConnection',
-
   // Stateless AI guardrail check — returns moderation result, persists nothing.
   'AiModerateController.moderate',
 

@@ -102,10 +102,13 @@ class UpsertBrandProfileDto {
   logoFileIds?: string[];
 
   @IsOptional()
-  palette?: Array<{ name?: string; hex?: string }>;
+  palette?: Array<{ name?: string; hex?: string } | string>;
 
   @IsOptional()
-  fontFamilies?: Array<{ name?: string; fallback?: string }>;
+  fontFamilies?: Array<{ name?: string; fallback?: string } | string>;
+
+  @IsOptional()
+  preferredFormats?: string[];
 
   @IsOptional()
   customFonts?: Array<{ fileId: string; family?: string }>;
@@ -270,7 +273,7 @@ export class AiUserController {
   }
 
   @Put('/brand-profile')
-  @RequirePermission('ai-config', 'update')
+  @RequirePermission('brands', 'update')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   async upsertBrandProfile(
     @GetOrgFromRequest() org: Organization,
@@ -280,6 +283,7 @@ export class AiUserController {
   }
 
   @Get('/brand-profile')
+  @RequirePermission('brands', 'read')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   async getBrandProfile(@GetOrgFromRequest() org: Organization, @Query('brandId') brandId?: string) {
     const profile = await this._aiSettingsService.getBrandProfile(org.id, brandId);

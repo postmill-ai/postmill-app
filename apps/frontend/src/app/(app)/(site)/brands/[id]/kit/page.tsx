@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { useParams } from 'next/navigation';
 import { BrandAssets } from '@postmill-ai/frontend/components/settings/brand/brand-assets';
 import { useBrands } from '@postmill-ai/frontend/components/settings/brand/use-brands';
@@ -11,12 +10,5 @@ export default function Page() {
   const { data: brands, mutate } = useBrands();
   const brand = brands?.find((b) => b.id === id);
   if (!brand) return null;
-  return (
-    <BrandAssets
-      key={`assets-${brand.id}`}
-      brandId={brand.id}
-      initial={brand}
-      onSaved={() => mutate()}
-    />
-  );
+  return <BrandAssets key={`assets-${brand.id}`} brandId={brand.id} initial={brand} onSaved={() => mutate()} />;
 }

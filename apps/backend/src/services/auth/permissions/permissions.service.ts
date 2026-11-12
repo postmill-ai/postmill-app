@@ -204,6 +204,10 @@ export class PermissionsService {
       }
 
       if (section === Sections.BRANDS) {
+        if (action !== AuthorizationActions.Create) {
+          can(action, section);
+          continue;
+        }
         const totalBrands = await this._brandsRepository.countBrands(orgId);
         if (totalBrands < options.brand_kits) {
           can(action, section);

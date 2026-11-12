@@ -151,8 +151,8 @@ export class FontLoaderService {
 
   constructor(private _brandsService: BrandsService) {}
 
-  async loadOrgFonts(orgId: string): Promise<void> {
-    const fonts = await this._brandsService.getCustomFonts(orgId);
+  async loadOrgFonts(orgId: string, brandProfileId?: string | null): Promise<void> {
+    const fonts = await this._brandsService.getCustomFonts(orgId, brandProfileId);
     if (!fonts.length) return;
 
     await this._ensureTempDir();

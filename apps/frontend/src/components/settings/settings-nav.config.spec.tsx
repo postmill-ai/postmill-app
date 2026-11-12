@@ -158,7 +158,7 @@ describe('visibleSettingsNav', () => {
     const allowed = visibleSettingsNav(openCtx(), t).map((i) => i.key);
     expect(allowed).toContain('webhooks');
     expect(allowed).toContain('team');
-    expect(allowed).toContain('brands');
+    expect(allowed).not.toContain('brands');
   });
 
   it('sorts sectionless items before every labelled group', () => {

@@ -996,6 +996,8 @@ export interface DesignerDoc {
   version: number;
   mode: 'image' | 'video';
   outputs: (DesignerOutput | VideoOutput)[];
+  /** Explicit Brand Kit id, null for General Mode, absent for legacy default resolution. */
+  brandProfileId?: string | null;
   attribution?: DesignerAttribution;
   /** Video mode only. */
   characterReferences?: DesignerCharacterReference[];
@@ -2096,6 +2098,7 @@ const { strict: StrictCharacterReferenceSchema, lenient: LenientCharacterReferen
 const docCommon = {
   version: z.number().int().min(1).max(DESIGNER_DOC_VERSION),
   mode: z.literal('image'),
+  brandProfileId: z.string().max(100).nullable().optional(),
 };
 const { strict: ImageDocStrictSchema, lenient: ImageDocLenientSchema } = dualObject(
   {
@@ -2117,6 +2120,7 @@ const { strict: ImageDocStrictSchema, lenient: ImageDocLenientSchema } = dualObj
 const videoDocCommon = {
   version: z.number().int().min(1).max(DESIGNER_DOC_VERSION),
   mode: z.literal('video'),
+  brandProfileId: z.string().max(100).nullable().optional(),
 };
 
 /**

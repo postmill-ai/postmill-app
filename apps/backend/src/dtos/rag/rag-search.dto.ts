@@ -13,4 +13,8 @@ export class RagSearchDto {
   @IsInt()
   @Min(1)
   limit?: number;
+
+  @IsOptional()
+  @IsString()
+  brandId?: string;
 }

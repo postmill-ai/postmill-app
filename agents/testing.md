@@ -259,6 +259,16 @@ org cannot use those file IDs. Exercise malformed PDFs, unsupported types, size/
 malformed document text through unit tests. Paid AI acceptance is never needed for upload,
 extraction, authorization or planner-payload verification.
 
+Brand Studio acceptance uses two distinct kits in a disposable QA org: editor management and reload,
+org-scoped Knowledge enablement/add/search, General vs Brand Mode persistence, logo save-vs-canvas,
+deterministic per-brand/General fonts and server-paginated template/format priority, and AI Designer
+selection in the delivered document. Include unassigned legacy/org-wide Knowledge list/delete, the
+operator off-switch, disabled-brand cleanup, native external-vector brand filters, bounded by-ID asset
+loading, on-demand org-only template pages, and Starter/at-cap font reads. Members/viewers are read-only
+and foreign brand/file ids are rejected. Run the complete
+non-paid workflow before any optional single-variant paid visual acceptance; paid runs require separate
+explicit authorization and no automatic retries.
+
 ## Lint
 
 - **One flat config at the repo root only**: `eslint.config.mjs` — **ESLint 9** (`^9.39.4`)

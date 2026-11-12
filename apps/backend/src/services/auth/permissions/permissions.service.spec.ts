@@ -362,7 +362,7 @@ describe('PermissionsService — subscription matrix', () => {
       { tier: 'PRO', limit: 2 },
       { tier: 'TEAM', limit: 10 },
       { tier: 'AGENCY', limit: 1000000 },
-    ] as const)('$tier allows up to $limit brand kits', async ({ tier, limit }) => {
+    ] as const)('$tier limits only brand creation to $limit kits', async ({ tier, limit }) => {
       const { service, subscriptionService, brandsRepository } = buildService();
       subscriptionService.getSubscriptionByOrganizationId.mockResolvedValue(
         subscriptionFixture(tier)
@@ -373,6 +373,9 @@ describe('PermissionsService — subscription matrix', () => {
 
       brandsRepository.countBrands.mockResolvedValue(limit);
       expect(await can(service, Sections.BRANDS)).toBe(false);
+      for (const action of [AuthorizationActions.Read, AuthorizationActions.Update, AuthorizationActions.Delete]) {
+        expect(await can(service, Sections.BRANDS, action)).toBe(true);
+      }
     });
   });
 

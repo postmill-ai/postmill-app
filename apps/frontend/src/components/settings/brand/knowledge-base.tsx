@@ -7,9 +7,13 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { Slider } from '@postmill-ai/react/form/slider';
 import { DataTable } from '@postmill-ai/frontend/components/ui/data-table';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 
 interface RagStatus {
   enabled: boolean;
+  globalEnabled: boolean;
+  organizationEnabled: boolean | null;
   indexedItems: number;
   lastIndexed: string | null;
   embeddingModel: string;
@@ -38,43 +42,54 @@ interface RagSearchHit {
   score: number;
 }
 
-const useRagStatus = () => {
+const scopeQuery = (brandId?: string, legacy = false) =>
+  legacy ? 'scope=unassigned' : brandId ? `brandId=${encodeURIComponent(brandId)}` : '';
+
+const useRagStatus = (brandId?: string, legacy = false) => {
   const fetch = useFetch();
   const load = useCallback(async () => {
-    const res = await fetch('/rag/status');
-    if (!res.ok) return { enabled: false, indexedItems: 0, lastIndexed: null, embeddingModel: '', vectorStore: 'pgvector' };
+    const res = await fetch(`/rag/status?${scopeQuery(brandId, legacy)}`);
+    if (!res.ok) throw new Error('Failed to load Knowledge status');
     return res.json();
-  }, [fetch]);
-  return useSWR<RagStatus>('rag-status', load, {
+  }, [fetch, brandId, legacy]);
+  return useSWR<RagStatus>(`rag-status-${legacy ? 'legacy' : brandId || 'org'}`, load, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
   });
 };
 
-const useRagItems = (sourceType?: string, offset = 0, limit = 20) => {
+const useRagItems = (brandId: string | undefined, legacy: boolean, sourceType?: string, offset = 0, limit = 20) => {
   const fetch = useFetch();
   const paramsStr = React.useMemo(() => {
     const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    if (legacy) params.set('scope', 'unassigned');
+    else if (brandId) params.set('brandId', brandId);
     if (sourceType) params.set('sourceType', sourceType);
     return params.toString();
-  }, [sourceType, offset, limit]);
+  }, [brandId, legacy, sourceType, offset, limit]);
   const load = useCallback(async () => {
     const res = await fetch(`/rag/items?${paramsStr}`);
-    if (!res.ok) return { items: [], total: 0, offset, limit };
+    if (!res.ok) throw new Error('Failed to load Knowledge items');
     return res.json();
-  }, [fetch, paramsStr, offset, limit]);
+  }, [fetch, paramsStr]);
   return useSWR<RagItemsResponse>(`rag-items-${paramsStr}`, load, {
     revalidateOnFocus: false,
   });
 };
 
-export const KnowledgeBase = () => {
+export const KnowledgeBase = ({ brandId, legacy = false }: { brandId?: string; legacy?: boolean }) => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
-  const { data: status, isLoading: statusLoading, mutate: mutateStatus } = useRagStatus();
+  const user = useUser();
+  const permissions = usePermissions();
+  const canEdit = !permissions.isResolved || permissions.hasPermission('brands', 'update');
+  const canConfigure = !permissions.isResolved || permissions.hasPermission('ai-config', 'update');
+  const canPlatformConfigure = !!user?.isSuperAdmin;
+  const [enabling, setEnabling] = useState(false);
+  const { data: status, error: statusError, isLoading: statusLoading, mutate: mutateStatus } = useRagStatus(brandId, legacy);
   const [itemsPage, setItemsPage] = useState(0);
-  const { data: itemsData, isLoading: itemsLoading, mutate: mutateItems } = useRagItems(undefined, itemsPage * 20, 20);
+  const { data: itemsData, isLoading: itemsLoading, mutate: mutateItems } = useRagItems(brandId, legacy, undefined, itemsPage * 20, 20);
 
   const [showAddContent, setShowAddContent] = useState(false);
   const [addSourceType, setAddSourceType] = useState<'text' | 'url' | 'file'>('text');
@@ -121,10 +136,13 @@ export const KnowledgeBase = () => {
   const [vecSaving, setVecSaving] = useState(false);
   const [vecTesting, setVecTesting] = useState(false);
   const [vecTestResult, setVecTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [globalEnabled, setGlobalEnabled] = useState(false);
   const loadVecSettings = useCallback(async () => {
+    if (!canPlatformConfigure) return;
     const res = await fetch('/rag/settings');
     if (!res.ok) return;
     const data = await res.json();
+    setGlobalEnabled(!!data.enabled);
     setVectorStore(data.vectorStore || 'pgvector');
     setQdrantUrl(data.qdrantUrl || '');
     setQdrantCollection(data.qdrantCollection || 'postmill_rag');
@@ -147,7 +165,7 @@ export const KnowledgeBase = () => {
     setBm25B(data.bm25B ?? 0.75);
     setAutoIndex(!!data.autoIndex);
     setAutoIndexSources(Array.isArray(data.autoIndexSources) ? data.autoIndexSources : []);
-  }, [fetch]);
+  }, [fetch, canPlatformConfigure]);
   useEffect(() => { loadVecSettings(); }, [loadVecSettings]);
   const handleSaveVecSettings = useCallback(async () => {
     setVecSaving(true);
@@ -155,6 +173,7 @@ export const KnowledgeBase = () => {
       const res = await fetch('/rag/settings', {
         method: 'PUT',
         body: JSON.stringify({
+          enabled: globalEnabled,
           vectorStore,
           qdrantUrl: vectorStore === 'qdrant' ? qdrantUrl : undefined,
           qdrantApiKey: vectorStore === 'qdrant' && qdrantApiKey ? qdrantApiKey : undefined,
@@ -190,7 +209,7 @@ export const KnowledgeBase = () => {
     } finally {
       setVecSaving(false);
     }
-  }, [fetch, vectorStore, qdrantUrl, qdrantApiKey, qdrantCollection, distance, pgUrl, pgTable, pineconeApiKey, pineconeIndex, pineconeHost, embeddingDimension, chunkStrategy, chunkSize, chunkOverlap, fusionStrategy, rrfK, vectorWeight, bm25Weight, bm25K1, bm25B, autoIndex, autoIndexSources, toaster, t, mutateStatus]);
+  }, [fetch, globalEnabled, vectorStore, qdrantUrl, qdrantApiKey, qdrantCollection, distance, pgUrl, pgTable, pineconeApiKey, pineconeIndex, pineconeHost, embeddingDimension, chunkStrategy, chunkSize, chunkOverlap, fusionStrategy, rrfK, vectorWeight, bm25Weight, bm25K1, bm25B, autoIndex, autoIndexSources, toaster, t, mutateStatus]);
   const handleTestConnection = useCallback(async () => {
     setVecTesting(true);
     setVecTestResult(null);
@@ -218,10 +237,30 @@ export const KnowledgeBase = () => {
     } finally {
       setVecTesting(false);
     }
-  }, [fetch, vectorStore, qdrantUrl, qdrantApiKey, qdrantCollection, distance, pgUrl, pgTable, pineconeApiKey, pineconeIndex, pineconeHost, embeddingDimension]);
+  }, [fetch, vectorStore, qdrantUrl, qdrantApiKey, qdrantCollection, distance, pgUrl, pgTable, pineconeApiKey, pineconeIndex, pineconeHost, embeddingDimension, t]);
+
+  const handleEnable = useCallback(async () => {
+    if (!canConfigure || !status?.globalEnabled) return;
+    setEnabling(true);
+    try {
+      const res = await fetch('/rag/enabled', {
+        method: 'PUT',
+        body: JSON.stringify({ enabled: true }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toaster.show(err.message || t('failed_to_enable_knowledge', 'Failed to enable Knowledge'), 'warning');
+        return;
+      }
+      await mutateStatus();
+      toaster.show(t('knowledge_enabled', 'Knowledge enabled for this organization'), 'success');
+    } finally {
+      setEnabling(false);
+    }
+  }, [fetch, canConfigure, status?.globalEnabled, mutateStatus, toaster, t]);
 
   const handleAddContent = useCallback(async () => {
-    if (!addContent.trim()) return;
+    if (!addContent.trim() || !status?.enabled || !canEdit) return;
     setAdding(true);
     try {
       const res = await fetch('/rag/index', {
@@ -229,6 +268,7 @@ export const KnowledgeBase = () => {
         body: JSON.stringify({
           sourceType: addSourceType,
           content: addContent.trim(),
+          brandId,
         }),
       });
       if (!res.ok) {
@@ -246,11 +286,12 @@ export const KnowledgeBase = () => {
     } finally {
       setAdding(false);
     }
-  }, [addContent, addSourceType, fetch, toaster, t, mutateStatus, mutateItems]);
+  }, [addContent, addSourceType, brandId, canEdit, status?.enabled, fetch, toaster, t, mutateStatus, mutateItems]);
 
   const handleDelete = useCallback(async (sourceType: string, sourceId: string) => {
+    if (!canEdit) return;
     try {
-      const res = await fetch(`/rag/items/${encodeURIComponent(sourceType)}/${encodeURIComponent(sourceId)}`, {
+      const res = await fetch(`/rag/items/${encodeURIComponent(sourceType)}/${encodeURIComponent(sourceId)}?${scopeQuery(brandId, legacy)}`, {
         method: 'DELETE',
       });
       if (!res.ok) {
@@ -263,19 +304,20 @@ export const KnowledgeBase = () => {
     } catch {
       toaster.show(t('failed_to_delete_item', 'Failed to delete item'), 'warning');
     }
-  }, [fetch, toaster, t, mutateStatus, mutateItems]);
+  }, [brandId, legacy, canEdit, fetch, toaster, t, mutateStatus, mutateItems]);
 
   const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() || !status?.enabled) return;
     setSearching(true);
     setSearchResults(null);
     try {
       const res = await fetch('/rag/search', {
         method: 'POST',
-        body: JSON.stringify({ query: searchQuery.trim(), limit: 10 }),
+        body: JSON.stringify({ query: searchQuery.trim(), limit: 10, brandId }),
       });
       if (!res.ok) {
-        toaster.show(t('search_failed', 'Search failed'), 'warning');
+        const err = await res.json().catch(() => ({}));
+        toaster.show(err.message || t('search_failed', 'Search failed'), 'warning');
         return;
       }
       const data = await res.json();
@@ -285,13 +327,15 @@ export const KnowledgeBase = () => {
     } finally {
       setSearching(false);
     }
-  }, [searchQuery, fetch, toaster]);
+  }, [brandId, searchQuery, status?.enabled, fetch, toaster, t]);
 
   const handleBackfill = useCallback(async () => {
+    if (!status?.enabled || !canEdit) return;
     setBackfilling(true);
     try {
       const res = await fetch('/rag/backfill', {
         method: 'POST',
+        body: JSON.stringify({ brandId }),
       });
       if (!res.ok) {
         toaster.show(t('backfill_failed', 'Backfill failed'), 'warning');
@@ -311,12 +355,19 @@ export const KnowledgeBase = () => {
     } finally {
       setBackfilling(false);
     }
-  }, [fetch, toaster, t, mutateStatus, mutateItems]);
+  }, [brandId, canEdit, status?.enabled, fetch, toaster, t, mutateStatus, mutateItems]);
 
   if (statusLoading) {
     return (
       <div className="my-[16px] bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px]">
         <div className="animate-pulse">{t('loading', 'Loading')}</div>
+      </div>
+    );
+  }
+  if (statusError) {
+    return (
+      <div className="my-[16px] bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] text-dangerText">
+        {t('knowledge_status_failed', 'Could not load Knowledge. Please try again.')}
       </div>
     );
   }
@@ -335,19 +386,23 @@ export const KnowledgeBase = () => {
       <div className="bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] flex flex-col gap-[24px]">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <div className="text-[14px]">{t('knowledge_base', 'What the AI knows about you')}</div>
+            <div className="text-[14px]">{legacy ? t('legacy_knowledge', 'Unassigned Knowledge') : t('knowledge_base', 'What the AI knows about you')}</div>
             <div className="text-[12px] text-newTableText max-w-[560px] leading-relaxed">
-              {t('knowledge_base_description_v2', "Give the AI examples and facts about your business — your best posts, web pages, or notes. It'll use them to sound more like you and get the details right. Nothing here is required to start.")}
+              {legacy
+                ? t('legacy_knowledge_description', 'Content not assigned to a Brand Kit, including legacy and org-wide auto-indexed content. Review or delete it here; re-add it to a Brand Kit for brand-scoped retrieval.')
+                : t('knowledge_base_description_v2', "Give the AI examples and facts about your business — your best posts, web pages, or notes. It'll use them to sound more like you and get the details right. Nothing here is required to start.")}
             </div>
           </div>
-          <button
-            className="bg-btnPrimary text-white rounded-[8px] px-[12px] py-[6px] text-[13px] hover:opacity-90 disabled:opacity-50 shrink-0"
-            onClick={handleBackfill}
-            disabled={backfilling}
-            title={t('backfill_tip', 'Learn from your best-performing past posts automatically')}
-          >
-            {backfilling ? t('indexing', 'Learning...') : t('backfill', 'Learn from my posts')}
-          </button>
+          {!legacy && (
+            <button
+              className="bg-btnPrimary text-white rounded-[8px] px-[12px] py-[6px] text-[13px] hover:opacity-90 disabled:opacity-50 shrink-0"
+              onClick={handleBackfill}
+              disabled={backfilling || !status?.enabled || !canEdit}
+              title={t('backfill_tip', 'Learn from your best-performing past posts automatically')}
+            >
+              {backfilling ? t('indexing', 'Learning...') : t('backfill', 'Learn from my posts')}
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-[16px]">
@@ -390,19 +445,43 @@ export const KnowledgeBase = () => {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setKbAdvancedOpen((v) => !v)}
-        className="text-[12px] text-newTableText hover:text-textColor self-start"
-      >
-        {kbAdvancedOpen
-          ? t('hide_kb_advanced', '▾ Hide advanced settings')
-          : t('show_kb_advanced', '▸ Advanced settings (most people can skip these)')}
-      </button>
+      {!status?.enabled && (
+        <div className="bg-newBgColorInner border border-newTableBorder rounded-[12px] p-[20px] flex items-center justify-between gap-[16px]">
+          <div className="text-[13px] text-newTableText">
+            {status?.globalEnabled
+              ? t('knowledge_disabled_explanation', 'Knowledge is disabled for this organization. Enable it to add and search brand knowledge.')
+              : t('knowledge_operator_disabled', 'Knowledge is disabled by the platform operator. An administrator cannot enable it for this organization until platform-wide Knowledge is enabled.')}
+          </div>
+          <button
+            type="button"
+            onClick={handleEnable}
+            disabled={enabling || !canConfigure || !status?.globalEnabled}
+            className="bg-btnPrimary text-white rounded-[8px] px-[16px] py-[8px] text-[13px] disabled:opacity-50"
+          >
+            {enabling ? t('enabling', 'Enabling…') : t('enable_knowledge', 'Enable Knowledge')}
+          </button>
+        </div>
+      )}
 
-      {kbAdvancedOpen && (
+      {canPlatformConfigure && (
+        <button
+          type="button"
+          onClick={() => setKbAdvancedOpen((v) => !v)}
+          className="text-[12px] text-newTableText hover:text-textColor self-start"
+        >
+          {kbAdvancedOpen
+            ? t('hide_kb_advanced', '▾ Hide advanced settings')
+            : t('show_kb_advanced', '▸ Advanced settings (most people can skip these)')}
+        </button>
+      )}
+
+      {canPlatformConfigure && kbAdvancedOpen && (
         <>
       <div className="bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] flex flex-col gap-[16px]">
+        <label className="flex items-center gap-[8px] text-[13px]">
+          <input type="checkbox" checked={globalEnabled} onChange={(event) => setGlobalEnabled(event.target.checked)} />
+          {t('knowledge_platform_enabled', 'Allow Knowledge on this deployment')}
+        </label>
         <div className="text-[14px]">{t('vector_store', 'Vector Database')}</div>
         <div className="text-[12px] text-newTableText">
           {t('vector_store_description_v2', "Where your knowledge is stored. The default (Postmill) works for everyone — only change this if your team runs its own database.")}
@@ -765,18 +844,20 @@ export const KnowledgeBase = () => {
         </>
       )}
 
+      {!legacy && (
       <div className="bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] flex flex-col gap-[16px]">
         <div className="flex items-center justify-between">
           <div className="text-[14px]">{t('add_content', 'Teach the AI something')}</div>
           <button
-            className="text-[13px] text-textColor hover:underline"
+            className="text-[13px] text-textColor hover:underline disabled:opacity-50"
             onClick={() => setShowAddContent(!showAddContent)}
+            disabled={!status?.enabled || !canEdit}
           >
             {showAddContent ? t('cancel', 'Cancel') : t('add_content_button', '+ Add Content')}
           </button>
         </div>
 
-        {showAddContent && (
+        {showAddContent && status?.enabled && canEdit && (
           <div className="flex flex-col gap-[12px] bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[16px]">
             <div className="flex gap-[8px]">
               <button
@@ -865,9 +946,10 @@ export const KnowledgeBase = () => {
           </div>
         )}
       </div>
+      )}
 
       <div className="flex flex-col gap-[16px]">
-        <div className="text-[14px]">{t('indexed_content', "What you've added")}</div>
+        <div className="text-[14px]">{legacy ? t('legacy_indexed_content', 'Unassigned content') : t('indexed_content', "What you've added")}</div>
 
         <DataTable
           columns={[
@@ -884,11 +966,11 @@ export const KnowledgeBase = () => {
             { key: 'indexedDate', header: t('indexed_date', 'Indexed Date'), render: (item: RagItem) => (
               <span className="text-newTableText">{new Date(item.indexedDate).toLocaleDateString()}</span>
             )},
-            { key: 'actions', header: t('actions', 'Actions'), align: 'right', render: (item: RagItem) => (
+            { key: 'actions', header: t('actions', 'Actions'), align: 'right', render: (item: RagItem) => canEdit ? (
               <button className="text-[12px] text-red-600 dark:text-red-500 hover:underline" onClick={() => handleDelete(item.sourceType, item.sourceId)}>
                 {t('delete', 'Delete')}
               </button>
-            )},
+            ) : null},
           ]}
           data={itemsData?.items || []}
           keyExtractor={(item: RagItem) => `${item.sourceType}:${item.sourceId}`}
@@ -901,6 +983,7 @@ export const KnowledgeBase = () => {
         />
       </div>
 
+      {!legacy && (
       <div className="bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] flex flex-col gap-[16px]">
         <div className="text-[14px]">{t('search_knowledge_base', 'Try a search')}</div>
         <div className="text-[12px] text-newTableText">
@@ -917,7 +1000,7 @@ export const KnowledgeBase = () => {
           <button
             className="bg-btnPrimary text-white rounded-[8px] px-[16px] py-[8px] text-[13px] hover:opacity-90 disabled:opacity-50"
             onClick={handleSearch}
-            disabled={searching || !searchQuery.trim()}
+            disabled={searching || !searchQuery.trim() || !status?.enabled}
           >
             {searching ? t('searching', 'Searching...') : t('search', 'Search')}
           </button>
@@ -950,6 +1033,7 @@ export const KnowledgeBase = () => {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

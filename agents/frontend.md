@@ -443,13 +443,30 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `app/global.scss`, and `CURATED_FONTS` in `font-loader.service.ts`. A family missing from the
   second renders as Arial; missing from the third exports as sans-serif. `font-catalog.drift.spec.ts`
   fails the build if they disagree.
-- **Custom font batches are sequential.** Both the Brand panel and shared family picker accept
-  multiple TTF/OTF/WOFF2 files through `useUploadCustomFont.uploadMany`: validate and post each
+- **Brand Studio owns every brand.** `/brands` is the editor-facing management surface for voice,
+  colors, fonts, logos, reference imagery, preferred formats, associated templates, intro/outro,
+  enforcement, and brand-scoped Knowledge; `/settings/ai/brands` only redirects legacy links.
+  `/brands/knowledge` lists/deletes content not assigned to a Brand Kit, including legacy and
+  org-wide auto-indexed rows, without exposing brand rows. `useBrands` is the single org-aware SWR
+  cache. Editors manage kits; members/viewers are read-only. Only super-admins see deployment
+  Knowledge settings; org enablement uses `ai-config:update`.
+- **Designer Brand/General selection is one shared context.** `BrandKitProvider` resolves the
+  document's `brandProfileId`: string = Brand Mode, `null` = General Mode, absent = legacy default.
+  Never independently select the default brand in a panel or silently replace an unavailable explicit
+  id. `useBrandColors`, `useBrandFonts`, inspectors, compliance, templates, and preferred formats all
+  consume that context. Saving a logo to the kit and placing it on canvas are separate actions.
+  Selected-brand template priority is applied in the repository before pagination, not by sorting
+  the loaded page. Brand Studio fetches only referenced file IDs and loads org-scoped template pages
+  on demand (`scope=org`), never the whole library on open.
+- **Custom font batches are sequential and brand-scoped.** Both the Brand panel and shared family picker accept
+  multiple TTF/OTF/WOFF2 files through `useUploadCustomFont(brandId).uploadMany`: validate and post each
   file through the existing single-file endpoint, continue after individual failures, expose
-  per-file results, hold one uploading state, and run one final custom-fonts SWR refresh. The
+  per-file results, hold one uploading state, and run one final brand-specific custom-fonts SWR refresh. The
   `upload(file)` wrapper remains for single-file callers. Sequential posts are required because
   the endpoint read/modify/writes brand `customFonts` JSON; parallel posts lose entries. Batch
-  toasts summarize full/partial success and retain the WOFF2 server-render warning.
+  toasts summarize full/partial success and retain the WOFF2 server-render warning. General Mode
+  requests `brandId=null` and resolves one face per family/weight/style in deterministic default-first
+  order; Brand Mode resolves only the selected kit. The browser and export use that same rule.
 - **Brand actions work in both document modes.** `panels/brand-actions.ts` applies palette/font
   choices to static elements or selected video text/caption/shape clips. `addBrandLogo` preserves
   aspect ratio in static designs and uses `addImageClipToTimeline` for video; never call the

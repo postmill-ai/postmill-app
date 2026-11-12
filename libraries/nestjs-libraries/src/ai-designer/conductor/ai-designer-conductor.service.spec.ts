@@ -19,7 +19,7 @@ const makeConductor = (
     budgetGuard: { checkStartBudget: () => Promise<{ allowed: boolean; reason?: string }> };
     service: { getSessionForUser: () => Promise<any>; updateSession: () => Promise<any> };
     fileService: { getFileById: (...args: any[]) => Promise<any> };
-    brands: { getBrand: (...args: any[]) => Promise<any> };
+    brands: { getBrandStrict?: (...args: any[]) => Promise<any>; getBrand?: (...args: any[]) => Promise<any> };
   }> = {}
 ) => {
   const service = overrides.service ?? {
@@ -5322,7 +5322,7 @@ describe('AiDesignerConductorService palette constraints', () => {
   const withBrand = (palette: unknown) => {
     const { conductor } = makeConductor();
     (conductor as any)._brands = {
-      getBrand: vi.fn().mockResolvedValue({ palette }),
+      getBrand: vi.fn().mockResolvedValue({ palette, enabled: true }),
     };
     return conductor;
   };
@@ -5367,14 +5367,16 @@ describe('AiDesignerConductorService palette constraints', () => {
     expect(plan.palette).toContain('#abcdef');
   });
 
-  it('never throws when the brand lookup fails', async () => {
+  it('degrades to unbranded plans when a selected Brand Kit disappears mid-run', async () => {
     const { conductor } = makeConductor();
     (conductor as any)._brands = {
       getBrand: vi.fn().mockRejectedValue(new Error('db down')),
     };
     const plans = [{ palette: ['#111111', '#ffffff', '#123456'] }];
 
-    expect(await apply(conductor, CONFIG, BRIEF, plans)).toEqual(plans);
+    await expect(apply(conductor, CONFIG, BRIEF, plans)).resolves.toEqual(plans);
+    await expect((conductor as any)._brandPaletteOverrideNote(ctx, CONFIG, BRIEF, plans))
+      .resolves.toBeUndefined();
   });
 
   it('is inert with no brand palette or explicit prompt colors', async () => {
@@ -5382,6 +5384,97 @@ describe('AiDesignerConductorService palette constraints', () => {
     const plans = [{ palette: ['#111111', '#ffffff', '#123456'] }];
 
     expect(await apply(conductor, CONFIG, BRIEF, plans)).toEqual(plans);
+  });
+});
+
+describe('AiDesignerConductorService Brand Kit integration', () => {
+  it('applies preferred formats, original logo, and brand reference assets on start', async () => {
+    const { conductor, service } = makeConductor({
+      policy: { check: vi.fn().mockResolvedValue({ ok: true, values: {}, instruction: 'Create' }) } as any,
+      brands: {
+        getBrandStrict: vi.fn().mockResolvedValue({
+          id: 'brand-1',
+          preferredFormats: ['ig-post'],
+          logoFileIds: ['brand-logo'],
+          assets: [{ fileId: 'brand-image', url: '/brand.png' }],
+        }),
+      },
+    });
+    let started: any;
+    (conductor as any)._runPromptMode = vi.fn(async (_session, _ctx, config) => { started = config; });
+
+    await conductor.handleStart(SESSION_ID, ctx, {
+      brandProfileId: 'brand-1', channels: [], variants: 1, referenceFileIds: ['user-ref'],
+    }, 'Create', makeEmitter(), 'prompt');
+
+    expect(started.channels).toEqual(['ig-post']);
+    expect(started.referenceFileIds).toEqual(['user-ref', 'brand-image']);
+    expect(started.logoFileId).toBe('brand-logo');
+    expect(service.updateSession).toHaveBeenCalledWith(SESSION_ID, ORG_ID, USER_ID, { config: started });
+  });
+
+  it('rejects an unavailable brand before starting paid planning', async () => {
+    const { conductor } = makeConductor({
+      policy: { check: vi.fn().mockResolvedValue({ ok: true, values: {}, instruction: 'Create' }) } as any,
+      brands: { getBrandStrict: vi.fn().mockRejectedValue(new Error('Brand not found')) },
+    });
+    (conductor as any)._runPromptMode = vi.fn();
+
+    await expect(conductor.handleStart(SESSION_ID, ctx, {
+      brandProfileId: 'brand-1', channels: [], variants: 1,
+    }, 'Create', makeEmitter(), 'prompt')).rejects.toThrow('Brand not found');
+    expect((conductor as any)._runPromptMode).not.toHaveBeenCalled();
+  });
+
+  it('scopes Knowledge retrieval to the brief and ignores disabled Knowledge', async () => {
+    const { conductor } = makeConductor({
+      brands: {
+        getBrand: vi.fn().mockResolvedValue({ id: 'brand-1', name: 'Postmill', enabled: true }),
+      },
+    });
+    (conductor as any)._rag = {
+      search: vi.fn().mockResolvedValue([{ sourceId: 'fact-1', text: 'A brand fact' }]),
+    };
+
+    const contexts = await (conductor as any)._documentContextsFor(
+      ctx,
+      { brandProfileId: 'brand-1' },
+      'Create a launch announcement',
+    );
+
+    expect((conductor as any)._rag.search).toHaveBeenCalledWith({
+      organizationId: ORG_ID, query: 'Create a launch announcement', limit: 3, brandProfileId: 'brand-1',
+    });
+    expect(contexts).toEqual([
+      { fileId: 'brand-brand-1-knowledge-fact-1', name: 'Postmill Knowledge', text: 'A brand fact' },
+    ]);
+
+    (conductor as any)._rag.search.mockRejectedValue(new Error('RAG is not enabled'));
+    await expect((conductor as any)._documentContextsFor(ctx, { brandProfileId: 'brand-1' }))
+      .resolves.toEqual([]);
+  });
+
+  it('preserves user attachments before filling the remaining context budget with Knowledge', async () => {
+    const { conductor } = makeConductor({
+      brands: {
+        getBrand: vi.fn().mockResolvedValue({ id: 'brand-1', name: 'Postmill', enabled: true }),
+      },
+    });
+    (conductor as any)._attachments = {
+      contextsFor: vi.fn().mockResolvedValue([{ fileId: 'doc-1', name: 'brief.txt', text: 'A'.repeat(39_900) }]),
+    };
+    (conductor as any)._rag = {
+      search: vi.fn().mockResolvedValue([{ sourceId: 'fact-1', text: 'B'.repeat(2_000) }]),
+    };
+
+    const contexts = await (conductor as any)._documentContextsFor(ctx, {
+      brandProfileId: 'brand-1', attachmentFileIds: ['doc-1'],
+    }, 'Launch brief');
+
+    expect(contexts[0].fileId).toBe('doc-1');
+    expect(contexts[0].text).toHaveLength(39_900);
+    expect(contexts[1].text).toHaveLength(100);
+    expect(contexts.reduce((sum: number, context: any) => sum + context.text.length, 0)).toBe(40_000);
   });
 });
 
@@ -7697,7 +7790,7 @@ describe('direct logo assets', () => {
 
   it('falls back to the selected brand logo for declared logo slots', async () => {
     const fileService = { getFileById: vi.fn().mockResolvedValue(file) };
-    const brands = { getBrand: vi.fn().mockResolvedValue({ logoFileIds: ['logo-1'] }) };
+    const brands = { getBrand: vi.fn().mockResolvedValue({ logoFileIds: ['logo-1'], enabled: true }) };
     const { conductor } = makeConductor({ fileService, brands });
     const assets: Record<string, any> = {};
 
@@ -7705,6 +7798,16 @@ describe('direct logo assets', () => {
 
     expect(brands.getBrand).toHaveBeenCalledWith(ORG_ID, 'brand-1');
     expect(assets['v1:logo:square'].fileId).toBe('logo-1');
+  });
+
+  it('skips the brand logo when the brand disappears mid-run', async () => {
+    const fileService = { getFileById: vi.fn() };
+    const brands = { getBrand: vi.fn().mockResolvedValue(null) };
+    const { conductor } = makeConductor({ fileService, brands });
+
+    await expect((conductor as any)._directLogoFileId(ORG_ID, { brandProfileId: 'brand-1' }))
+      .resolves.toBeUndefined();
+    expect(fileService.getFileById).not.toHaveBeenCalled();
   });
 
   it('excludes direct-logo slots from paid asset needs', () => {
