@@ -96,6 +96,14 @@ export const StockPreviewModal: FC<StockPreviewModalProps> = ({ item: initialIte
     let name: string;
     const source = item.source;
     let downloadLocation: string | undefined;
+    const isContentPack = CONTENT_PACK_SOURCES.has(source);
+    // Free SVG sources are rasterized in the browser (`/files/import` rejects SVG).
+    // Premium content packs must go through `/files/import` so the server mints and
+    // stores the licensed asset — rasterizing would save the low-res preview instead.
+    // The server renders a licensed SVG download to PNG, so SVG never 415s there.
+    const rasterize =
+      !isContentPack &&
+      (type === 'icon' || (type === 'vector' && /\.svg(?:$|[?#])/i.test(item.url)));
 
     switch (type) {
       case 'photo':
@@ -106,13 +114,14 @@ export const StockPreviewModal: FC<StockPreviewModalProps> = ({ item: initialIte
         name = `${source}-${item.id}.mp4`;
         break;
       case 'vector':
-        name = `${source}-${item.id}.png`;
+        name = `${source}-${item.id}.${rasterize ? 'png' : 'jpg'}`;
         break;
       case 'sticker':
         name = `${source}-${item.id}.gif`;
         break;
       case 'icon': {
-        // Saved as a rasterized PNG (see uploadBlob below) — SVG is rejected by /files/import.
+        // Saved as PNG: rasterized locally for free sets, or minted as a licensed PNG
+        // server-side for content packs — SVG is rejected by /files/import.
         const icon = item as StockIconItem;
         name = `${source}-${icon.prefix}-${icon.iconName}.png`;
         break;
@@ -122,7 +131,7 @@ export const StockPreviewModal: FC<StockPreviewModalProps> = ({ item: initialIte
     }
 
     // Premium content packs mint a licensed download URL from the item id.
-    if (CONTENT_PACK_SOURCES.has(source)) {
+    if (isContentPack) {
       downloadLocation = item.id;
     }
 
@@ -141,7 +150,7 @@ export const StockPreviewModal: FC<StockPreviewModalProps> = ({ item: initialIte
           type={type}
           downloadLocation={downloadLocation}
           attribution={item.attribution}
-          uploadBlob={type === 'icon' || (type === 'vector' && /\.svg(?:$|[?#])/i.test(item.url)) ? () => rasterizeSvgUrlToPngBlob(item.url, type === 'vector' ? 2048 : 512) : undefined}
+          uploadBlob={rasterize ? () => rasterizeSvgUrlToPngBlob(item.url, type === 'vector' ? 2048 : 512) : undefined}
         />
       ),
       size: 'lg',

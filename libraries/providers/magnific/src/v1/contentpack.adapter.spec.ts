@@ -39,4 +39,11 @@ describe('MagnificContentPack', () => {
       expect(url).not.toContain('a/../b');
     }
   });
+
+  it('requests a PNG for icon downloads (the import pipeline rejects SVG)', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ data: { url: 'https://m/dl.png' } }));
+    await pack.resolveDownload('7', 'icons');
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe('https://api.magnific.com/v1/icons/7/download?format=png&png_size=512');
+  });
 });

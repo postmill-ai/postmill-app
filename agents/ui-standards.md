@@ -118,7 +118,9 @@ return <><Button onClick={picker.open} />{picker.element}</>;
   copied into six surfaces. Use it whenever you persist a reference. Don't combine it with a caller
   that imports the batch itself (the AI Designer does). SVG stock assets are rasterized client-side
   and uploaded through `/files/upload-simple` instead of sending active SVG markup to `/files/import`;
-  raster assets still use `/files/import`. Folder, attribution and AI-reference metadata are preserved.
+  raster assets still use `/files/import`. Premium content-pack items always use `/files/import` with
+  `downloadLocation` (the licensed asset is minted server-side); a licensed SVG download is rendered
+  to PNG server-side (`importFromUrl` `rasterizeSvg`), never stored as SVG. Folder, attribution and AI-reference metadata are preserved.
 - The picker opens on **My Files**, not stock. `FileManager` embedded there renders no page chrome —
   that is gated on its `standalone` prop.
 
