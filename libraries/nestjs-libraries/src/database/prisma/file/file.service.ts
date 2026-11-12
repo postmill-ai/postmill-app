@@ -39,6 +39,39 @@ const MAX_IMPORT_SIZE = 512 * 1024 * 1024; // 512 MB
 
 const SVG_RASTER_MAX_EDGE = 2048;
 
+// Canonical display extension per stored MIME (only types with one obvious extension).
+const MIME_EXTENSIONS: Record<string, string[]> = {
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/png': ['png'],
+  'image/gif': ['gif'],
+  'image/webp': ['webp'],
+  'image/avif': ['avif'],
+  'video/mp4': ['mp4'],
+  'video/webm': ['webm'],
+  'video/quicktime': ['mov'],
+  'audio/mpeg': ['mp3'],
+  'audio/wav': ['wav'],
+  'audio/x-wav': ['wav'],
+  'audio/ogg': ['ogg'],
+  'application/pdf': ['pdf'],
+};
+const KNOWN_EXTENSIONS = new Set([...Object.values(MIME_EXTENSIONS).flat(), 'svg']);
+
+/**
+ * Keep the display name's extension truthful about what was stored: when the
+ * name ends in a known media extension that disagrees with the stored MIME
+ * (e.g. `x.jpg` for a rasterized SVG stored as PNG), swap it. Unknown or
+ * absent extensions are left alone.
+ */
+export function nameMatchingMime(name: string, mime: string): string {
+  const exts = MIME_EXTENSIONS[mime];
+  const match = /\.([a-z0-9]{2,5})$/i.exec(name);
+  if (!exts || !match) return name;
+  const ext = match[1].toLowerCase();
+  if (!KNOWN_EXTENSIONS.has(ext) || exts.includes(ext)) return name;
+  return `${name.slice(0, -ext.length)}${exts[0]}`;
+}
+
 /**
  * Render an SVG download to PNG (never store the active SVG document). Returns
  * null when the bytes are not an SVG. The header can be wrong, so sharp's own
@@ -756,13 +789,6 @@ export class FileService {
       );
     }
 
-    await this._storageService.assertWithinProviderQuota(
-      adapter,
-      orgId,
-      buffer.length,
-      configId
-    );
-
     // Validate the ACTUAL downloaded MIME, not the caller's category hint
     // (`data.type` is 'photo'/'audio'/… — not a MIME — and would never match).
     let contentType =
@@ -784,13 +810,25 @@ export class FileService {
     if (!ALLOWED_MIME_TYPES.has(contentType)) {
       throw new HttpException(`File type not allowed: ${contentType}`, 415);
     }
+    if (buffer.length > MAX_IMPORT_SIZE) {
+      throw new HttpException('File too large (max 512 MB)', 413);
+    }
+
+    // Quota is checked once, against the bytes actually written — a converted
+    // SVG→PNG can be much larger than the download.
+    await this._storageService.assertWithinProviderQuota(
+      adapter,
+      orgId,
+      buffer.length,
+      configId
+    );
 
     const path = await adapter.writeBuffer(buffer, contentType);
 
     const fileSize = buffer.length;
 
     return this._fileRepository.saveGeneratedMedia(orgId, {
-      name: data.name,
+      name: nameMatchingMime(data.name, contentType),
       path,
       type: mediaCategoryFromMime(contentType),
       folderId: ownedFolderId,
