@@ -8,6 +8,7 @@ import { MyDesignsPanel } from './panels/my-designs-panel';
 import { TemplatesPanel } from './panels/templates-panel';
 import { fitWithin } from './panels/fit-within';
 import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { useBrandKit } from './brand-kit-context';
 
 type StoreApi = ReturnType<typeof import('./designer.store').createDesignerStore>;
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
@@ -36,23 +37,33 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onImportSucc
   const [ch, setCh] = useState('1080');
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const { activeBrand } = useBrandKit();
 
   const presets = useMemo(() => {
-    // `ig-reel`/`tiktok` are tagged category:'story' but are video surfaces (they
-    // have dedicated category:'video' twins `reel`/`tiktok-video`), so keep them
-    // out of the photo list.
     const isVideoSurface = (p: (typeof CHANNEL_PRESETS)[number]) =>
       p.category === 'video' || p.id === 'ig-reel' || p.id === 'tiktok';
+    const preferred = activeBrand?.preferredFormats || [];
     return CHANNEL_PRESETS.filter((p) =>
       mode === 'video'
         ? p.category === 'video'
         : !isVideoSurface(p) && p.category !== 'custom'
-    );
-  }, [mode]);
+    ).sort((a, b) => {
+      const aIndex = preferred.indexOf(a.id);
+      const bIndex = preferred.indexOf(b.id);
+      return (aIndex < 0 ? preferred.length : aIndex) - (bIndex < 0 ? preferred.length : bIndex);
+    });
+  }, [activeBrand?.preferredFormats, mode]);
 
   const startNew = (m: 'image' | 'video') => {
     setMode(m);
-    setSelected([]);
+    const preferred = (activeBrand?.preferredFormats || []).filter((id) => {
+      const preset = CHANNEL_PRESETS.find((candidate) => candidate.id === id);
+      if (!preset) return false;
+      return m === 'video'
+        ? preset.category === 'video'
+        : preset.category !== 'video' && preset.category !== 'custom' && id !== 'ig-reel' && id !== 'tiktok';
+    });
+    setSelected(preferred);
     setStep('formats');
   };
 

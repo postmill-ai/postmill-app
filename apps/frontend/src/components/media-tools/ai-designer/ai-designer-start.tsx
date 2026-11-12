@@ -101,6 +101,11 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
   const [saveFolderId, setSaveFolderId] = useState<string | null>(null);
   const saveFolderName = useFolderName(saveFolderId);
   const [brandProfileId, setBrandProfileId] = useState('');
+  const [formatsTouched, setFormatsTouched] = useState(false);
+  const activeBrand = useMemo(
+    () => brands?.find((brand) => brand.id === brandProfileId && brand.enabled) || null,
+    [brands, brandProfileId],
+  );
   const [styleId, setStyleId] = useState('');
   const [variants, setVariants] = useState(3);
   const [referenceItems, setReferenceItems] = useState<MediaSelectorItem[]>([]);
@@ -175,6 +180,19 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
     []
   );
 
+  const handleBrandChange = (nextBrandId: string) => {
+    setBrandProfileId(nextBrandId);
+    if (formatsTouched) return;
+    const nextBrand = brands?.find((brand) => brand.id === nextBrandId && brand.enabled);
+    const preferred = (nextBrand?.preferredFormats || []).filter((id) =>
+      outputType === 'video'
+        ? isVideoSurfaceId(id)
+        : !isVideoSurfaceId(id) && id !== 'ig-reel' && id !== 'tiktok'
+    );
+    setSelectedChannels(preferred);
+    setCustomSizes([]);
+  };
+
   // Switching the output type resets the format selection — a hidden stale
   // selection from the other list must not leak into the start payload.
   const selectOutputType = (next: 'image' | 'video') => {
@@ -182,12 +200,13 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
     setOutputType(next);
     setSelectedChannels([]);
     setCustomSizes([]);
-    setShowCustomSizes(false);
+    setFormatsTouched(false);
   };
 
   // Sessions are single-mode: image-only or video-only. A cross-mode toggle is
   // refused with an explanation (the server rejects mixed selections too).
   const toggleChannel = (id: string) => {
+    setFormatsTouched(true);
     setSelectedChannels((prev) => {
       if (prev.includes(id)) return prev.filter((c) => c !== id);
       const video = isVideoSurfaceId(id);
@@ -209,6 +228,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
   };
 
   const addCustomSize = () => {
+    setFormatsTouched(true);
     const w = parseInt(customW, 10);
     const h = parseInt(customH, 10);
     if (!(w > 0 && h > 0)) return;
@@ -694,16 +714,31 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
               <select
                 id="brandProfileId"
                 value={brandProfileId}
-                onChange={(e) => setBrandProfileId(e.target.value)}
+                onChange={(e) => handleBrandChange(e.target.value)}
                 className="h-[42px] rounded-[8px] border border-studioBorder bg-newBgColorInner px-[16px] text-[14px] text-textColor outline-hidden focus:border-designerAccent"
               >
                 <option value="">{t('none', 'None')}</option>
-                {brands?.map((brand) => (
+                {brands?.filter((brand) => brand.enabled).map((brand) => (
                   <option key={brand.id} value={brand.id}>
                     {brand.name}
                   </option>
                 ))}
               </select>
+              {activeBrand && (
+                <div className="text-[11px] text-newTableText">
+                  {t('brand_kit_summary', '{{colors}} colors · {{fonts}} fonts · {{logos}} logos · {{assets}} reference images · {{formats}} preferred formats', {
+                    colors: activeBrand.palette?.length || 0,
+                    fonts: (activeBrand.fontFamilies?.length || 0) + (activeBrand.customFonts?.length || 0),
+                    logos: activeBrand.logoFileIds?.length || 0,
+                    assets: activeBrand.assets?.length || 0,
+                    formats: activeBrand.preferredFormats?.length || 0,
+                  })}
+                  {' · '}
+                  <a href={`/brands/${activeBrand.id}/kit`} className="text-btnPrimaryAccent hover:underline">
+                    {t('edit_brand_kit', 'Edit Brand Kit')}
+                  </a>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-[6px]">

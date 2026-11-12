@@ -7,6 +7,7 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { Slider } from '@postmill-ai/react/form/slider';
 import { DataTable } from '@postmill-ai/frontend/components/ui/data-table';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
 
 interface RagStatus {
   enabled: boolean;
@@ -38,43 +39,51 @@ interface RagSearchHit {
   score: number;
 }
 
-const useRagStatus = () => {
+const useRagStatus = (brandId: string) => {
   const fetch = useFetch();
   const load = useCallback(async () => {
-    const res = await fetch('/rag/status');
-    if (!res.ok) return { enabled: false, indexedItems: 0, lastIndexed: null, embeddingModel: '', vectorStore: 'pgvector' };
+    const res = await fetch(`/rag/status?brandId=${encodeURIComponent(brandId)}`);
+    if (!res.ok) throw new Error('Failed to load Knowledge status');
     return res.json();
-  }, [fetch]);
-  return useSWR<RagStatus>('rag-status', load, {
+  }, [fetch, brandId]);
+  return useSWR<RagStatus>(`rag-status-${brandId}`, load, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
   });
 };
 
-const useRagItems = (sourceType?: string, offset = 0, limit = 20) => {
+const useRagItems = (brandId: string, sourceType?: string, offset = 0, limit = 20) => {
   const fetch = useFetch();
   const paramsStr = React.useMemo(() => {
-    const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    const params = new URLSearchParams({
+      offset: String(offset),
+      limit: String(limit),
+      brandId,
+    });
     if (sourceType) params.set('sourceType', sourceType);
     return params.toString();
-  }, [sourceType, offset, limit]);
+  }, [brandId, sourceType, offset, limit]);
   const load = useCallback(async () => {
     const res = await fetch(`/rag/items?${paramsStr}`);
-    if (!res.ok) return { items: [], total: 0, offset, limit };
+    if (!res.ok) throw new Error('Failed to load Knowledge items');
     return res.json();
-  }, [fetch, paramsStr, offset, limit]);
+  }, [fetch, paramsStr]);
   return useSWR<RagItemsResponse>(`rag-items-${paramsStr}`, load, {
     revalidateOnFocus: false,
   });
 };
 
-export const KnowledgeBase = () => {
+export const KnowledgeBase = ({ brandId }: { brandId: string }) => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
-  const { data: status, isLoading: statusLoading, mutate: mutateStatus } = useRagStatus();
+  const permissions = usePermissions();
+  const canEdit = !permissions.isResolved || permissions.hasPermission('brands', 'update');
+  const canConfigure = !permissions.isResolved || permissions.hasPermission('ai-config', 'update');
+  const [enabling, setEnabling] = useState(false);
+  const { data: status, error: statusError, isLoading: statusLoading, mutate: mutateStatus } = useRagStatus(brandId);
   const [itemsPage, setItemsPage] = useState(0);
-  const { data: itemsData, isLoading: itemsLoading, mutate: mutateItems } = useRagItems(undefined, itemsPage * 20, 20);
+  const { data: itemsData, isLoading: itemsLoading, mutate: mutateItems } = useRagItems(brandId, undefined, itemsPage * 20, 20);
 
   const [showAddContent, setShowAddContent] = useState(false);
   const [addSourceType, setAddSourceType] = useState<'text' | 'url' | 'file'>('text');
@@ -218,10 +227,29 @@ export const KnowledgeBase = () => {
     } finally {
       setVecTesting(false);
     }
-  }, [fetch, vectorStore, qdrantUrl, qdrantApiKey, qdrantCollection, distance, pgUrl, pgTable, pineconeApiKey, pineconeIndex, pineconeHost, embeddingDimension]);
+  }, [fetch, vectorStore, qdrantUrl, qdrantApiKey, qdrantCollection, distance, pgUrl, pgTable, pineconeApiKey, pineconeIndex, pineconeHost, embeddingDimension, t]);
+
+  const handleEnable = useCallback(async () => {
+    setEnabling(true);
+    try {
+      const res = await fetch('/rag/enabled', {
+        method: 'PUT',
+        body: JSON.stringify({ enabled: true }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toaster.show(err.message || t('failed_to_enable_knowledge', 'Failed to enable Knowledge'), 'warning');
+        return;
+      }
+      await mutateStatus();
+      toaster.show(t('knowledge_enabled', 'Knowledge enabled for this organization'), 'success');
+    } finally {
+      setEnabling(false);
+    }
+  }, [fetch, mutateStatus, toaster, t]);
 
   const handleAddContent = useCallback(async () => {
-    if (!addContent.trim()) return;
+    if (!addContent.trim() || !status?.enabled || !canEdit) return;
     setAdding(true);
     try {
       const res = await fetch('/rag/index', {
@@ -229,6 +257,7 @@ export const KnowledgeBase = () => {
         body: JSON.stringify({
           sourceType: addSourceType,
           content: addContent.trim(),
+          brandId,
         }),
       });
       if (!res.ok) {
@@ -246,11 +275,13 @@ export const KnowledgeBase = () => {
     } finally {
       setAdding(false);
     }
-  }, [addContent, addSourceType, fetch, toaster, t, mutateStatus, mutateItems]);
+  }, [addContent, addSourceType, brandId, canEdit, status?.enabled, fetch, toaster, t, mutateStatus, mutateItems]);
 
   const handleDelete = useCallback(async (sourceType: string, sourceId: string) => {
+    if (!canEdit) return;
     try {
-      const res = await fetch(`/rag/items/${encodeURIComponent(sourceType)}/${encodeURIComponent(sourceId)}`, {
+      const params = new URLSearchParams({ brandId });
+      const res = await fetch(`/rag/items/${encodeURIComponent(sourceType)}/${encodeURIComponent(sourceId)}?${params}`, {
         method: 'DELETE',
       });
       if (!res.ok) {
@@ -263,19 +294,20 @@ export const KnowledgeBase = () => {
     } catch {
       toaster.show(t('failed_to_delete_item', 'Failed to delete item'), 'warning');
     }
-  }, [fetch, toaster, t, mutateStatus, mutateItems]);
+  }, [brandId, canEdit, fetch, toaster, t, mutateStatus, mutateItems]);
 
   const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() || !status?.enabled) return;
     setSearching(true);
     setSearchResults(null);
     try {
       const res = await fetch('/rag/search', {
         method: 'POST',
-        body: JSON.stringify({ query: searchQuery.trim(), limit: 10 }),
+        body: JSON.stringify({ query: searchQuery.trim(), limit: 10, brandId }),
       });
       if (!res.ok) {
-        toaster.show(t('search_failed', 'Search failed'), 'warning');
+        const err = await res.json().catch(() => ({}));
+        toaster.show(err.message || t('search_failed', 'Search failed'), 'warning');
         return;
       }
       const data = await res.json();
@@ -285,13 +317,15 @@ export const KnowledgeBase = () => {
     } finally {
       setSearching(false);
     }
-  }, [searchQuery, fetch, toaster]);
+  }, [brandId, searchQuery, status?.enabled, fetch, toaster, t]);
 
   const handleBackfill = useCallback(async () => {
+    if (!status?.enabled || !canEdit) return;
     setBackfilling(true);
     try {
       const res = await fetch('/rag/backfill', {
         method: 'POST',
+        body: JSON.stringify({ brandId }),
       });
       if (!res.ok) {
         toaster.show(t('backfill_failed', 'Backfill failed'), 'warning');
@@ -311,12 +345,19 @@ export const KnowledgeBase = () => {
     } finally {
       setBackfilling(false);
     }
-  }, [fetch, toaster, t, mutateStatus, mutateItems]);
+  }, [brandId, canEdit, status?.enabled, fetch, toaster, t, mutateStatus, mutateItems]);
 
   if (statusLoading) {
     return (
       <div className="my-[16px] bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px]">
         <div className="animate-pulse">{t('loading', 'Loading')}</div>
+      </div>
+    );
+  }
+  if (statusError) {
+    return (
+      <div className="my-[16px] bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] text-dangerText">
+        {t('knowledge_status_failed', 'Could not load Knowledge. Please try again.')}
       </div>
     );
   }
@@ -343,7 +384,7 @@ export const KnowledgeBase = () => {
           <button
             className="bg-btnPrimary text-white rounded-[8px] px-[12px] py-[6px] text-[13px] hover:opacity-90 disabled:opacity-50 shrink-0"
             onClick={handleBackfill}
-            disabled={backfilling}
+            disabled={backfilling || !status?.enabled || !canEdit}
             title={t('backfill_tip', 'Learn from your best-performing past posts automatically')}
           >
             {backfilling ? t('indexing', 'Learning...') : t('backfill', 'Learn from my posts')}
@@ -390,17 +431,35 @@ export const KnowledgeBase = () => {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setKbAdvancedOpen((v) => !v)}
-        className="text-[12px] text-newTableText hover:text-textColor self-start"
-      >
-        {kbAdvancedOpen
-          ? t('hide_kb_advanced', '▾ Hide advanced settings')
-          : t('show_kb_advanced', '▸ Advanced settings (most people can skip these)')}
-      </button>
+      {!status?.enabled && (
+        <div className="bg-newBgColorInner border border-newTableBorder rounded-[12px] p-[20px] flex items-center justify-between gap-[16px]">
+          <div className="text-[13px] text-newTableText">
+            {t('knowledge_disabled_explanation', 'Knowledge is disabled for this organization. Enable it to add and search brand knowledge.')}
+          </div>
+          <button
+            type="button"
+            onClick={handleEnable}
+            disabled={enabling || !canEdit}
+            className="bg-btnPrimary text-white rounded-[8px] px-[16px] py-[8px] text-[13px] disabled:opacity-50"
+          >
+            {enabling ? t('enabling', 'Enabling…') : t('enable_knowledge', 'Enable Knowledge')}
+          </button>
+        </div>
+      )}
 
-      {kbAdvancedOpen && (
+      {canConfigure && (
+        <button
+          type="button"
+          onClick={() => setKbAdvancedOpen((v) => !v)}
+          className="text-[12px] text-newTableText hover:text-textColor self-start"
+        >
+          {kbAdvancedOpen
+            ? t('hide_kb_advanced', '▾ Hide advanced settings')
+            : t('show_kb_advanced', '▸ Advanced settings (most people can skip these)')}
+        </button>
+      )}
+
+      {canConfigure && kbAdvancedOpen && (
         <>
       <div className="bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] flex flex-col gap-[16px]">
         <div className="text-[14px]">{t('vector_store', 'Vector Database')}</div>
@@ -769,14 +828,15 @@ export const KnowledgeBase = () => {
         <div className="flex items-center justify-between">
           <div className="text-[14px]">{t('add_content', 'Teach the AI something')}</div>
           <button
-            className="text-[13px] text-textColor hover:underline"
+            className="text-[13px] text-textColor hover:underline disabled:opacity-50"
             onClick={() => setShowAddContent(!showAddContent)}
+            disabled={!status?.enabled || !canEdit}
           >
             {showAddContent ? t('cancel', 'Cancel') : t('add_content_button', '+ Add Content')}
           </button>
         </div>
 
-        {showAddContent && (
+        {showAddContent && status?.enabled && canEdit && (
           <div className="flex flex-col gap-[12px] bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[16px]">
             <div className="flex gap-[8px]">
               <button
@@ -884,11 +944,11 @@ export const KnowledgeBase = () => {
             { key: 'indexedDate', header: t('indexed_date', 'Indexed Date'), render: (item: RagItem) => (
               <span className="text-newTableText">{new Date(item.indexedDate).toLocaleDateString()}</span>
             )},
-            { key: 'actions', header: t('actions', 'Actions'), align: 'right', render: (item: RagItem) => (
+            { key: 'actions', header: t('actions', 'Actions'), align: 'right', render: (item: RagItem) => canEdit ? (
               <button className="text-[12px] text-red-600 dark:text-red-500 hover:underline" onClick={() => handleDelete(item.sourceType, item.sourceId)}>
                 {t('delete', 'Delete')}
               </button>
-            )},
+            ) : null},
           ]}
           data={itemsData?.items || []}
           keyExtractor={(item: RagItem) => `${item.sourceType}:${item.sourceId}`}
@@ -917,7 +977,7 @@ export const KnowledgeBase = () => {
           <button
             className="bg-btnPrimary text-white rounded-[8px] px-[16px] py-[8px] text-[13px] hover:opacity-90 disabled:opacity-50"
             onClick={handleSearch}
-            disabled={searching || !searchQuery.trim()}
+            disabled={searching || !searchQuery.trim() || !status?.enabled}
           >
             {searching ? t('searching', 'Searching...') : t('search', 'Search')}
           </button>

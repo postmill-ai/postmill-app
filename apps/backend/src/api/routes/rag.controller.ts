@@ -21,6 +21,7 @@ import { RagService, RagSettings } from '@postmill-ai/nestjs-libraries/ai/govern
 import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { RagSearchDto } from '@postmill-ai/backend/dtos/rag/rag-search.dto';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 
 // 'pgvector' = built-in Postmill default; the rest are remote stores.
 const VECTOR_STORES = ['pgvector', 'pgvector-remote', 'qdrant', 'pinecone'];
@@ -37,12 +38,14 @@ export class RagController {
   ) {}
 
   @Get('/status')
+  @RequirePermission('brands', 'read')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async getStatus(@GetOrgFromRequest() org: Organization) {
-    return this._ragService.getStatus(org.id);
+  async getStatus(@GetOrgFromRequest() org: Organization, @Query('brandId') brandId?: string) {
+    return this._ragService.getStatus(org.id, brandId);
   }
 
   @Post('/index')
+  @RequirePermission('brands', 'update')
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   async indexContent(
     @GetOrgFromRequest() org: Organization,
@@ -52,6 +55,7 @@ export class RagController {
       sourceType: string;
       content: string;
       sourceId?: string;
+      brandId?: string;
     },
   ) {
     if (!body.sourceType || !body.content) {
@@ -69,27 +73,26 @@ export class RagController {
         sourceType: body.sourceType,
         sourceId,
         content: body.content,
+        brandProfileId: body.brandId,
       });
 
       return { success: true, sourceType: body.sourceType, sourceId };
     } catch (err) {
-      this._logger.error(
-        `RAG index failed for org ${org.id}: ${(err as Error).message}`,
-      );
-      throw new HttpException(
-        (err as Error).message || 'Indexing failed',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      if (err instanceof HttpException) throw err;
+      this._logger.error(`RAG index failed: ${(err as Error).message}`);
+      throw new HttpException('Indexing failed', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   @Get('/items')
+  @RequirePermission('brands', 'read')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   async listItems(
     @GetOrgFromRequest() org: Organization,
     @Query('offset') offset?: string,
     @Query('limit') limit?: string,
     @Query('sourceType') sourceType?: string,
+    @Query('brandId') brandId?: string,
   ) {
     const parsedOffset = offset ? Math.max(0, parseInt(offset, 10)) : 0;
     const parsedLimit = limit
@@ -100,31 +103,31 @@ export class RagController {
       sourceType,
       offset: parsedOffset,
       limit: parsedLimit,
+      brandProfileId: brandId,
     });
   }
 
   @Delete('/items/:sourceType/:sourceId')
+  @RequirePermission('brands', 'update')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   async deleteItem(
     @GetOrgFromRequest() org: Organization,
     @Param('sourceType') sourceType: string,
     @Param('sourceId') sourceId: string,
+    @Query('brandId') brandId?: string,
   ) {
     try {
-      await this._ragService.deleteItem(org.id, sourceType, sourceId);
+      await this._ragService.deleteItem(org.id, sourceType, sourceId, brandId);
       return { success: true };
     } catch (err) {
-      this._logger.error(
-        `RAG delete failed for org ${org.id}: ${(err as Error).message}`,
-      );
-      throw new HttpException(
-        (err as Error).message || 'Delete failed',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      if (err instanceof HttpException) throw err;
+      this._logger.error(`RAG delete failed: ${(err as Error).message}`);
+      throw new HttpException('Delete failed', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   @Post('/search')
+  @RequirePermission('brands', 'read')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   async search(
     @GetOrgFromRequest() org: Organization,
@@ -135,47 +138,44 @@ export class RagController {
         organizationId: org.id,
         query: body.query,
         limit: body.limit || 10,
+        brandProfileId: body.brandId,
       });
       return { results };
     } catch (err) {
-      this._logger.error(
-        `RAG search failed for org ${org.id}: ${(err as Error).message}`,
-      );
-      throw new HttpException(
-        (err as Error).message || 'Search failed',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
+      if (err instanceof HttpException) throw err;
+      this._logger.error(`RAG search failed: ${(err as Error).message}`);
+      throw new HttpException('Search failed', HttpStatus.SERVICE_UNAVAILABLE);
     }
   }
 
   @Post('/backfill')
+  @RequirePermission('brands', 'update')
   @Throttle({ default: { limit: 3, ttl: 60000 } })
   async triggerBackfill(
     @GetOrgFromRequest() org: Organization,
     @GetUserFromRequest() user: User,
+    @Body() body: { brandId?: string },
   ) {
     try {
-      const result = await this._ragService.backfill(org.id, user?.id);
+      const result = await this._ragService.backfill(org.id, user?.id, body.brandId);
       return { status: 'completed', ...result };
     } catch (err) {
-      this._logger.error(
-        `RAG backfill failed for org ${org.id}: ${(err as Error).message}`,
-      );
-      throw new HttpException(
-        (err as Error).message || 'Backfill failed',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      if (err instanceof HttpException) throw err;
+      this._logger.error(`RAG backfill failed: ${(err as Error).message}`);
+      throw new HttpException('Backfill failed', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   @Get('/settings')
+  @RequirePermission('brands', 'read')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async getSettings() {
+  async getSettings(@GetOrgFromRequest() org: Organization) {
     const settings = await this._aiSettingsManager.getSettings();
     const rag = (settings?.ragSettings || {}) as Record<string, any>;
     const secret = (settings as any)?.secretSettings || {};
+    const status = await this._ragService.getStatus(org.id);
     return {
-      enabled: !!rag.enabled,
+      enabled: status.enabled,
       vectorStore: rag.vectorStore || 'pgvector',
       // Qdrant (remote)
       qdrantUrl: rag.qdrantUrl || '',
@@ -197,12 +197,28 @@ export class RagController {
     };
   }
 
+  @Put('/enabled')
+  @RequirePermission('brands', 'update')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  async setEnabled(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: { enabled?: boolean | null },
+  ) {
+    if (body.enabled !== undefined && body.enabled !== null && typeof body.enabled !== 'boolean') {
+      throw new BadRequestException('enabled must be a boolean or null');
+    }
+    return this._ragService.setOrgRagEnabled(
+      org.id,
+      body.enabled === undefined ? null : body.enabled,
+    );
+  }
+
   @Put('/settings')
+  @RequirePermission('ai-config', 'update')
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   async saveSettings(
     @Body()
     body: {
-      enabled?: boolean;
       vectorStore?: string;
       qdrantUrl?: string;
       qdrantApiKey?: string;
@@ -235,7 +251,6 @@ export class RagController {
     delete rag.pgUrl;
     delete rag.pineconeApiKey;
 
-    if (body.enabled !== undefined) rag.enabled = body.enabled;
     if (body.vectorStore !== undefined) rag.vectorStore = body.vectorStore;
     if (body.qdrantUrl !== undefined) rag.qdrantUrl = body.qdrantUrl;
     if (body.qdrantCollection !== undefined) rag.qdrantCollection = body.qdrantCollection;
@@ -266,6 +281,7 @@ export class RagController {
   }
 
   @Post('/settings/test-connection')
+  @RequirePermission('ai-config', 'update')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async testConnection(
     @Body()

@@ -3547,7 +3547,12 @@ paths:
   /media/fonts:
     get:
       operationId: MediaController_listFonts
-      parameters: []
+      parameters:
+        - name: brandId
+          required: false
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: ""
@@ -3575,6 +3580,11 @@ paths:
         - name: fileId
           required: true
           in: path
+          schema:
+            type: string
+        - name: brandId
+          required: false
+          in: query
           schema:
             type: string
       responses:
@@ -5316,6 +5326,10 @@ paths:
       responses:
         "200":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - AI User
     get:
@@ -6122,7 +6136,12 @@ paths:
   /rag/status:
     get:
       operationId: RagController_getStatus
-      parameters: []
+      parameters:
+        - name: brandId
+          required: false
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: ""
@@ -6156,6 +6175,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: brandId
+          required: false
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: ""
@@ -6173,6 +6197,11 @@ paths:
         - name: sourceId
           required: true
           in: path
+          schema:
+            type: string
+        - name: brandId
+          required: false
+          in: query
           schema:
             type: string
       responses:
@@ -6219,6 +6248,19 @@ paths:
       responses:
         "200":
           description: ""
+      tags:
+        - RAG
+  /rag/enabled:
+    put:
+      operationId: RagController_setEnabled
+      parameters: []
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - RAG
   /rag/settings/test-connection:
@@ -7100,6 +7142,12 @@ paths:
       responses:
         "200":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
       tags:
         - Brands
     post:
@@ -7114,6 +7162,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Brands
   /brands/{id}:
@@ -7134,6 +7186,10 @@ paths:
       responses:
         "200":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Brands
     delete:
@@ -7161,6 +7217,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Brands
   /settings/roles:
@@ -12519,6 +12579,8 @@ components:
         limit:
           type: number
           minimum: 1
+        brandId:
+          type: string
       required:
         - query
     UpsertShortlinkConfigDto:
@@ -12938,6 +13000,9 @@ components:
           type: object
         thumbnailFileId:
           type: string
+        brandProfileId:
+          type: string
+          nullable: true
     CreateTemplateDto:
       type: object
       properties:
@@ -12950,6 +13015,8 @@ components:
         thumbnailFileId:
           type: string
         folderId:
+          type: string
+        brandProfileId:
           type: string
       required:
         - name

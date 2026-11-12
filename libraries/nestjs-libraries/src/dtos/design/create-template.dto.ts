@@ -21,4 +21,8 @@ export class CreateTemplateDto {
   @IsOptional()
   @IsString()
   folderId?: string;
+
+  @IsOptional()
+  @IsString()
+  brandProfileId?: string;
 }

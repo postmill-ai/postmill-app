@@ -37,7 +37,7 @@ describe('BrandsController', () => {
   });
 
   describe('RBAC metadata', () => {
-    it('gates reads on brands:read and mutations on brands:manage', () => {
+    it('gates reads on brands:read and each mutation on its brand action', () => {
       expect(
         Reflect.getMetadata(
           REQUIRE_PERMISSION_KEY,
@@ -45,15 +45,16 @@ describe('BrandsController', () => {
         )
       ).toEqual({ resource: 'brands', action: 'read' });
 
-      for (const handler of [
-        BrandsController.prototype.create,
-        BrandsController.prototype.update,
-        BrandsController.prototype.delete,
-        BrandsController.prototype.setDefault,
-      ]) {
+      const cases = [
+        [BrandsController.prototype.create, 'create'],
+        [BrandsController.prototype.update, 'update'],
+        [BrandsController.prototype.delete, 'delete'],
+        [BrandsController.prototype.setDefault, 'update'],
+      ] as const;
+      for (const [handler, action] of cases) {
         expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, handler)).toEqual({
           resource: 'brands',
-          action: 'manage',
+          action,
         });
       }
     });

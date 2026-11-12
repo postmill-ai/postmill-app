@@ -214,11 +214,12 @@ export class DesignRepository {
     isSystem?: boolean;
     thumbnailFileId?: string;
     folderId?: string | null;
+    brandProfileId?: string | null;
   }) {
     return this._designTemplate.model.designTemplate.create({ data });
   }
 
-  updateTemplate(id: string, orgId: string, data: { name?: string; category?: string; doc?: any; thumbnailFileId?: string }) {
+  updateTemplate(id: string, orgId: string, data: { name?: string; category?: string; doc?: any; thumbnailFileId?: string; brandProfileId?: string | null }) {
     return this._designTemplate.model.designTemplate.update({
       where: { id, organizationId: orgId },
       data,

@@ -70,7 +70,7 @@ describe('useUploadCustomFont batch uploads', () => {
 
     expect(result.current.uploading).toBe(false);
     expect(mocks.mutate).toHaveBeenCalledTimes(1);
-    expect(mocks.mutate).toHaveBeenCalledWith('custom-fonts-org-1');
+    expect(mocks.mutate).toHaveBeenCalledWith('custom-fonts-org-1-default');
     expect(mocks.show).toHaveBeenCalledWith('2 fonts uploaded', 'success');
   });
 
@@ -133,5 +133,15 @@ describe('useUploadCustomFont batch uploads', () => {
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
     expect(mocks.mutate).toHaveBeenCalledTimes(1);
     expect(mocks.show).toHaveBeenCalledWith('Font uploaded', 'success');
+  });
+
+  it('uploads and refreshes the explicitly selected Brand Kit', async () => {
+    mocks.fetch.mockResolvedValue(response(true, { uploaded: { serverRender: true } }));
+    const { result } = renderHook(() => useUploadCustomFont('brand-2'));
+    await act(async () => result.current.upload(font('brand.ttf')));
+
+    const [, request] = mocks.fetch.mock.calls[0];
+    expect(request.body.get('brandId')).toBe('brand-2');
+    expect(mocks.mutate).toHaveBeenCalledWith('custom-fonts-org-1-brand-2');
   });
 });

@@ -9,7 +9,7 @@ export default function Page(): null {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   useEffect(() => {
-    if (params?.id) router.replace(`/settings/ai/brands/${params.id}/voice`);
+    if (params?.id) router.replace(`/brands/${params.id}/voice`);
   }, [router, params?.id]);
   return null;
 }

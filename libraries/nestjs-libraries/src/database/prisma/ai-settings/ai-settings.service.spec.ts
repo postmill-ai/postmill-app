@@ -51,6 +51,12 @@ const mockResolution = {
   resolveAI: vi.fn(),
 };
 
+const mockBrands = {
+  getBrand: vi.fn(),
+  getDefaultBrand: vi.fn(),
+  upsertDefaultBrand: vi.fn(),
+};
+
 vi.mock('./ai-settings.repository', () => ({
   AiSettingsRepository: vi.fn(() => mockRepo),
 }));
@@ -81,6 +87,7 @@ describe('AiSettingsService', () => {
       mockEncryption as any,
       mockKernel as any,
       mockResolution as any,
+      mockBrands as any,
     );
   });
 
@@ -643,35 +650,35 @@ describe('AiSettingsService', () => {
   // ── AIBrandProfile ──
 
   describe('getBrandProfile', () => {
-    it('delegates to repository', () => {
+    it('delegates to the default Brand Kit', () => {
       const profile = { organizationId: 'org1', instructions: 'Be concise' };
-      mockRepo.getBrandProfile.mockReturnValue(profile);
+      mockBrands.getDefaultBrand.mockReturnValue(profile);
 
       const result = service.getBrandProfile('org1');
 
-      expect(mockRepo.getBrandProfile).toHaveBeenCalledWith('org1', undefined);
+      expect(mockBrands.getDefaultBrand).toHaveBeenCalledWith('org1');
       expect(result).toBe(profile);
     });
 
-    it('delegates to repository with brandId', () => {
+    it('delegates to an explicitly selected Brand Kit', () => {
       const profile = { id: 'brand-2', organizationId: 'org1', instructions: 'Be funny' };
-      mockRepo.getBrandProfile.mockReturnValue(profile);
+      mockBrands.getBrand.mockReturnValue(profile);
 
       const result = service.getBrandProfile('org1', 'brand-2');
 
-      expect(mockRepo.getBrandProfile).toHaveBeenCalledWith('org1', 'brand-2');
+      expect(mockBrands.getBrand).toHaveBeenCalledWith('org1', 'brand-2');
       expect(result).toBe(profile);
     });
   });
 
   describe('upsertBrandProfile', () => {
-    it('delegates valid data to repository', async () => {
+    it('delegates valid data to the default Brand Kit', async () => {
       const data = { instructions: 'Be helpful', language: 'en' };
-      mockRepo.upsertBrandProfile.mockReturnValue({ organizationId: 'org1', ...data });
+      mockBrands.upsertDefaultBrand.mockReturnValue({ organizationId: 'org1', ...data });
 
       const result = await service.upsertBrandProfile('org1', data);
 
-      expect(mockRepo.upsertBrandProfile).toHaveBeenCalledWith('org1', data);
+      expect(mockBrands.upsertDefaultBrand).toHaveBeenCalledWith('org1', data);
       expect(result.instructions).toBe('Be helpful');
     });
 
@@ -682,7 +689,7 @@ describe('AiSettingsService', () => {
       };
 
       await expect(service.upsertBrandProfile('org1', data)).rejects.toThrow();
-      expect(mockRepo.upsertBrandProfile).not.toHaveBeenCalled();
+      expect(mockBrands.upsertDefaultBrand).not.toHaveBeenCalled();
     });
 
     it('accepts full brand profile JSON shapes', async () => {
@@ -697,11 +704,11 @@ describe('AiSettingsService', () => {
         enforcement: { tone: 'friendly' },
         assets: [{ fileId: 'asset-1', url: 'https://example.com/a.png', caption: 'Logo' }],
       };
-      mockRepo.upsertBrandProfile.mockReturnValue({ organizationId: 'org1', ...data });
+      mockBrands.upsertDefaultBrand.mockReturnValue({ organizationId: 'org1', ...data });
 
       const result = await service.upsertBrandProfile('org1', data);
 
-      expect(mockRepo.upsertBrandProfile).toHaveBeenCalledWith('org1', data);
+      expect(mockBrands.upsertDefaultBrand).toHaveBeenCalledWith('org1', data);
       expect(result.platformInstructions).toEqual({ x: 'short' });
     });
   });

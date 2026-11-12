@@ -775,10 +775,12 @@ export class AiMediaService {
   async uploadFont(
     orgId: string,
     file: Express.Multer.File,
+    brandId?: string,
   ): Promise<{ fonts: any[]; uploaded: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean; serverRender: boolean } }> {
     if (!this._storageService || !this._brandsService) {
       throw new Error('Storage/brands services are not available');
     }
+    if (brandId) await this._brandsService.getBrandStrict(orgId, brandId);
 
     const ext = file.originalname.split('.').pop()?.toLowerCase();
     const allowedExts = new Set(['ttf', 'otf', 'woff2']);
@@ -807,7 +809,7 @@ export class AiMediaService {
       serverRender: ext !== 'woff2',
     };
 
-    const fonts = await this._brandsService.addCustomFont(orgId, fontEntry);
+    const fonts = await this._brandsService.addCustomFont(orgId, fontEntry, brandId);
     return { fonts, uploaded: fontEntry };
   }
 

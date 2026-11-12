@@ -5,7 +5,8 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useBrandKit } from '../brand-kit-context';
 
 export interface CustomFontEntry {
   family: string;
@@ -27,44 +28,32 @@ export const fontServerRenderable = (font: CustomFontEntry): boolean =>
   font.serverRender ?? !/\.woff2(\?|#|$)/i.test(font.path || '');
 
 export const useBrandFonts = () => {
-  const user = useUser();
-  const fetch = useFetch();
-  const { data } = useSWR(
-    user?.orgId ? `brands-list-${user.orgId}-fonts` : null,
-    async () => {
-      const res = await fetch('/brands');
-      if (!res.ok) return [];
-      const brands = await res.json();
-      const fonts: string[] = [];
-      brands.forEach((b: any) => {
-        if (Array.isArray(b.fontFamilies)) {
-          b.fontFamilies.forEach((f: string) => fonts.push(f));
-        }
-        if (b.fontFamily) fonts.push(b.fontFamily);
-        if (b.headingFont) fonts.push(b.headingFont);
-      });
-      return [...new Set(fonts)];
-    }
-  );
-  return data || [];
+  const { activeBrand, customFonts } = useBrandKit();
+  return useMemo(() => [
+    ...new Set([
+      ...(activeBrand?.fontFamilies || []),
+      ...customFonts.map((font) => font.family),
+    ]),
+  ], [activeBrand?.fontFamilies, customFonts]);
 };
 
-export const useCustomFonts = (): {
+export const useCustomFonts = (brandId?: string | null): {
   fonts: CustomFontEntry[];
   mutate: () => void;
 } => {
   const user = useUser();
   const fetch = useFetch();
   const { data, mutate } = useSWR<CustomFontEntry[]>(
-    user?.orgId ? `custom-fonts-${user.orgId}` : null,
+    user?.orgId && brandId !== null ? `custom-fonts-${user.orgId}-${brandId || 'default'}` : null,
     async () => {
-      const res = await fetch('/media/fonts');
+      const query = brandId ? `?brandId=${encodeURIComponent(brandId)}` : '';
+      const res = await fetch(`/media/fonts${query}`);
       if (!res.ok) return [];
       return res.json();
     }
   );
 
-  const fonts = data || [];
+  const fonts = useMemo(() => data || [], [data]);
 
   useEffect(() => {
     if (typeof document === 'undefined' || !('fonts' in document)) return;
@@ -113,7 +102,7 @@ export interface CustomFontUploadResult {
  * Sequential uploads avoid concurrent read/modify/write updates to the brand's
  * customFonts JSON. A batch has one pending state and one final cache refresh.
  */
-export const useUploadCustomFont = (): {
+export const useUploadCustomFont = (brandId?: string): {
   upload: (file: File) => Promise<boolean>;
   uploadMany: (files: File[]) => Promise<CustomFontUploadResult[]>;
   uploading: boolean;
@@ -153,6 +142,7 @@ export const useUploadCustomFont = (): {
           try {
             const form = new FormData();
             form.append('file', file);
+            if (brandId) form.append('brandId', brandId);
             const res = await fetch('/media/fonts/upload', {
               method: 'POST',
               body: form,
@@ -186,7 +176,7 @@ export const useUploadCustomFont = (): {
         const woff2Count = succeeded.filter((result) => result.serverRender === false).length;
         if (succeeded.length && user?.orgId) {
           try {
-            await mutate(`custom-fonts-${user.orgId}`);
+            await mutate(`custom-fonts-${user.orgId}-${brandId || 'default'}`);
           } catch {
             toaster.show(
               t('designer_fonts_refresh_failed', 'Fonts uploaded, but the font list could not be refreshed.'),
@@ -228,7 +218,7 @@ export const useUploadCustomFont = (): {
         setUploading(false);
       }
     },
-    [fetch, toaster, t, mutate, user?.orgId]
+    [brandId, fetch, toaster, t, mutate, user?.orgId]
   );
 
   const upload = useCallback(

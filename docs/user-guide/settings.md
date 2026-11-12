@@ -46,7 +46,7 @@ organisation:
   |------|----------------|
   | **Owner** | Everything in the org, including billing and member management. The user who created the org is the owner. |
   | **Admin** | Everything except billing management and deleting the organisation. |
-  | **Editor** | Full control of posts, media, channels, and comments; read access to analytics and brands. |
+  | **Editor** | Full control of posts, media, channels, comments, and brands; read access to analytics. |
   | **Member** | Create, read, and update posts; create, view, edit, and delete media; read analytics, comments, and brands. |
   | **Viewer** | Read-only access to all resources. |
 
@@ -219,64 +219,36 @@ Manage `AIPromptLibraryItem` records — user-created reusable prompts:
 - Browse, edit, and delete your library items.
 - Use library items as starting points when composing AI prompts in the text editor.
 
-## Brands tab
+## Brand Studio
 
-An organisation can manage **multiple brands** instead of a single brand profile. The tab shows a
-brand list with create, edit, and delete, plus a **Default** badge:
+Open **Brand Studio** from the main navigation (`/brands`) to keep each brand's voice, visuals,
+formats, templates, and knowledge in one place. Editors can create and manage brands; members and
+viewers can read them. The old Settings → AI → Brands links redirect here.
 
-- **Create / delete brands** — add as many brands as you need, each with a name. Deleting the
-  default brand reassigns the default to another brand.
-- **Default brand** — one brand is the default; it behaves like the old single brand profile
-  (applied to all AI generations unless a post selects a different brand).
-- **Per-post brand selection** — the composer includes a brand picker; the selected brand's voice
-  is used when generating content for that post.
-- Brand management requires the `brands:manage` permission (owner/admin by default); all members
-  can read brands so the composer picker works.
+- **Default brand** — one brand is the default and behaves like the old single brand profile for
+  legacy documents and AI generations that do not select another brand.
+- **Per-post and per-design selection** — the composer includes a brand picker. Designer has
+  **Brand Mode** for an explicit kit and **General Mode** for unrestricted editing; the choice is
+  saved with the design.
+- **Voice & Tone** — enable/disable a brand, choose its language, define instructions, and add
+  per-channel overrides for each language.
+- **Brand Kit** — manage the palette, logos, reference images, font families and custom font files,
+  preferred formats, associated templates, intro/outro, and enforcement. Preferred formats appear
+  first but are not restrictions. Removing an asset does not delete its File or existing canvas
+  layers. Brand Studio and Designer read and update the same kit.
 
-### Brand Voice (per brand, per language)
+### Brand Knowledge
 
-- **Enable/disable** — toggle whether the brand profile is applied to AI generations.
-- **Language** — at the top of the editor; it selects which language's dataset you are editing. The
-  active language is the one used for AI generation. Switching the language shows a fresh dataset
-  (its own instructions and channel overrides) for that brand/language — so a brand can carry a
-  distinct voice per language.
-- **Instructions** — freeform text defining the brand's writing style, tone, and voice **for the
-  selected language**. This is injected into AI-generated content.
-- **Channel overrides** — optional, per language: override the instructions for a specific connected
-  channel (pick a channel from the dropdown to add one). Channels without an override use the
-  language's instructions above.
+Enable **Knowledge** for your organization to add and search brand-specific facts, examples, web
+pages, or notes. This is an organization-level switch and does not change the deployment-wide
+vector-store configuration. Indexing, searching, listing, and deleting items are scoped to the
+brand you opened; another brand's knowledge is not returned. Existing shared post/media memory
+stays separate.
 
-### Brand Assets (per brand)
-
-Each brand carries a brand kit, surfaced both in Settings → Brands and in the Designer:
-
-- **Colour palette** — define the brand's colours; the Designer uses these and (when enforcement is
-  on) warns on off-palette exports.
-- **Attached assets** — attach logos and reference imagery (picked from your Files or the stock
-  library; stock picks are imported into Files so they persist), each with an optional caption.
-- **Brand enforcement** — toggle whether the Designer warns when an export uses off-palette colours
-  or non-brand fonts.
-
-### Knowledge Base
-
-- **Index content** — trigger indexing of your top-performing posts into the RAG vector store.
-  The system selects the posts with the highest engagement metrics.
-- **Search brand memory** — semantic search across your indexed top-performing content. Use this
-  to find past posts that performed well for a given topic.
-- **RAG status** — shows whether the vector store is enabled, which backend is in use, and index
-  statistics.
-- **Vector database** — choose where embeddings are stored:
-  - **Postmill (Default)** — the built-in PostgreSQL + pgvector store; no configuration.
-  - **PG Vector (Remote)** — an external Postgres + pgvector (connection string + table).
-  - **Qdrant (Remote)** — a Qdrant cluster (URL, API key, collection, distance).
-  - **Pinecone (Remote)** — a Pinecone serverless index (API key, index name, optional host).
-
-  The three remote options require connection settings and offer a **Test Connection** button.
-  Secrets are encrypted at rest in `AISystemSettings.secretSettings` and never returned to the
-  client. When a remote store is unreachable, indexing/search fall back to the built-in pgvector/text
-  path.
-- **Manual index** — index custom content items (text, URLs, files) into the RAG store.
-- **Backfill** — trigger a full re-index of all historical content.
+The built-in **Postmill (PostgreSQL + pgvector)** store needs no configuration. AI administrators
+can configure PG Vector Remote, Qdrant, or Pinecone, including connection tests and encrypted
+secrets. When a remote store is unreachable, indexing/search fall back to the built-in text path.
+**Learn from my posts** adds historical posts and media to the selected brand's Knowledge.
 
 ## Shortlinks tab
 

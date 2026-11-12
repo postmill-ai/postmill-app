@@ -39,38 +39,19 @@ export class BrandsRepository {
     });
   }
 
-  createBrand(
-    organizationId: string,
-    data: {
-      name: string;
-      instructions?: string;
-      language?: string;
-      platformInstructions?: Record<string, string>;
-      languageProfiles?: Record<string, any>;
-      enabled?: boolean;
-      isDefault?: boolean;
-      slug?: string;
-      logoFileIds?: string[];
-      palette?: string[];
-      fontFamilies?: string[];
-      assets?: { fileId?: string; url: string; caption?: string }[];
-      enforcement?: Record<string, any>;
-    },
-  ) {
+  createBrand(organizationId: string, data: Record<string, any> & { name: string }) {
     return this._aiBrandProfile.model.aIBrandProfile.create({
       data: {
+        ...data,
         organizationId,
-        name: data.name,
-        instructions: data.instructions,
-        language: data.language,
         platformInstructions: data.platformInstructions || {},
         languageProfiles: data.languageProfiles ?? {},
         enabled: data.enabled ?? true,
         isDefault: data.isDefault ?? false,
-        slug: data.slug,
         logoFileIds: data.logoFileIds ?? [],
         palette: data.palette ?? [],
         fontFamilies: data.fontFamilies ?? [],
+        preferredFormats: data.preferredFormats ?? [],
         assets: data.assets ?? [],
         enforcement: data.enforcement ?? {},
       },
@@ -80,21 +61,7 @@ export class BrandsRepository {
   async updateBrand(
     organizationId: string,
     brandId: string,
-    data: {
-      name?: string;
-      instructions?: string;
-      language?: string;
-      platformInstructions?: Record<string, string>;
-      languageProfiles?: Record<string, any>;
-      enabled?: boolean;
-      logoFileIds?: string[];
-      palette?: string[];
-      fontFamilies?: string[];
-      introFileId?: string | null;
-      outroFileId?: string | null;
-      assets?: { fileId?: string; url: string; caption?: string }[];
-      enforcement?: Record<string, any>;
-    },
+    data: Record<string, any>,
   ) {
     const brand = await this._aiBrandProfile.model.aIBrandProfile.findFirst({
       where: { id: brandId, organizationId },
@@ -138,8 +105,18 @@ export class BrandsRepository {
     });
   }
 
-  async getCustomFonts(organizationId: string) {
-    const brand = await this.getDefaultBrand(organizationId) || await this.getFirstBrand(organizationId);
+  private async _brandForFonts(organizationId: string, brandId?: string | null) {
+    if (brandId) return this.getBrand(organizationId, brandId);
+    if (brandId === null) return null;
+    return (await this.getDefaultBrand(organizationId)) || (await this.getFirstBrand(organizationId));
+  }
+
+  async getCustomFonts(organizationId: string, brandId?: string | null) {
+    if (brandId === null) {
+      const brands = await this.getBrands(organizationId);
+      return brands.flatMap((brand) => Array.isArray(brand.customFonts) ? brand.customFonts : []);
+    }
+    const brand = await this._brandForFonts(organizationId, brandId);
     if (!brand) return [];
     const fonts = brand.customFonts as any[] | null;
     return Array.isArray(fonts) ? fonts : [];
@@ -147,20 +124,16 @@ export class BrandsRepository {
 
   async addCustomFont(
     organizationId: string,
-    font: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean; serverRender?: boolean }
+    font: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean; serverRender?: boolean },
+    brandId?: string,
   ) {
-    let brand = await this.getDefaultBrand(organizationId) || await this.getFirstBrand(organizationId);
+    let brand = await this._brandForFonts(organizationId, brandId);
     if (!brand) {
-      // Fonts live on the org's default profile — an org with zero profiles
-      // used to get a silent no-op here (the upload "succeeded" and vanished).
-      // Create the default profile, named like the AI-settings upsert does.
+      if (brandId) return [];
       brand = await this._aiBrandProfile.model.aIBrandProfile.create({
         data: { organizationId, name: 'Default Brand', isDefault: true },
       });
     }
-    // Identity is (family, weight, italic), not the row. Re-uploading a weight
-    // used to append a second entry for it, and which of the two the renderers
-    // picked depended on iteration order — the new file replaces the old one.
     const key = (f: { family?: string; weights?: number[]; italic?: boolean }) =>
       `${(f.family || '').toLowerCase()}|${f.weights?.[0] ?? 400}|${f.italic ? 'i' : 'n'}`;
     const existing = ((brand.customFonts as any[]) || []).filter(
@@ -174,8 +147,8 @@ export class BrandsRepository {
     return existing;
   }
 
-  async removeCustomFont(organizationId: string, fileId: string) {
-    const brand = await this.getDefaultBrand(organizationId) || await this.getFirstBrand(organizationId);
+  async removeCustomFont(organizationId: string, fileId: string, brandId?: string) {
+    const brand = await this._brandForFonts(organizationId, brandId);
     if (!brand) return [];
     const existing = (brand.customFonts as any[]) || [];
     const next = existing.filter((f: any) => f.fileId !== fileId);

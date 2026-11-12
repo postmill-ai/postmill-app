@@ -6,11 +6,8 @@ import { AIProviderAdapter } from '@postmill-ai/nestjs-libraries/ai/ai-provider.
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/provider-kernel.token';
 import { ProviderKernel, DEFAULT_VERSION } from '@postmill-ai/provider-kernel';
-import {
-  UpsertBrandProfileData,
-  validateBrandProfileData,
-} from './brand-profile.schema';
-
+import { validateBrandProfileData } from './brand-profile.schema';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 
 export interface OrgAiBudget {
   monthlyCap: number | null;
@@ -36,6 +33,7 @@ export class AiSettingsService {
     private _encryption: EncryptionService,
     @Inject(PROVIDER_KERNEL) private _kernel: ProviderKernel,
     private _resolution: ProviderResolutionService,
+    private _brands: BrandsService,
   ) {}
 
   // ── Provider catalog helpers (A-07) ──
@@ -494,14 +492,15 @@ export class AiSettingsService {
   // ── AIBrandProfile ──
 
   getBrandProfile(organizationId: string, brandId?: string) {
-    return this._repository.getBrandProfile(organizationId, brandId);
+    return brandId
+      ? this._brands.getBrand(organizationId, brandId)
+      : this._brands.getDefaultBrand(organizationId);
   }
 
   async upsertBrandProfile(organizationId: string, data: unknown) {
-    const validated = validateBrandProfileData(data);
-    return this._repository.upsertBrandProfile(
+    return this._brands.upsertDefaultBrand(
       organizationId,
-      validated as UpsertBrandProfileData,
+      validateBrandProfileData(data),
     );
   }
 

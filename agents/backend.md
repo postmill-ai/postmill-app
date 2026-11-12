@@ -200,6 +200,27 @@ Invariants:
 
 ---
 
+## Brand Kits and Knowledge
+
+- `AIBrandProfile` is the only Brand Kit store. `BrandsService` and `brands/brand-kit.ts`
+  normalize current and legacy palette/font JSON, validate preferred channel formats, and resolve
+  explicit ids strictly by organization. `/ai/brand-profile` is a compatibility adapter over the
+  same service, not a second schema or permission bypass. Editors have brand CRUD; members/viewers
+  read only. Custom fonts and template associations always carry an explicit brand id.
+- Designer documents carry `brandProfileId`: string = Brand Mode, `null` = General Mode, absent =
+  legacy default. Preserve it in schemas, migration, version restore, and `.pdesign` round trips.
+- `Organization.ragEnabled` is a nullable org override: null inherits the deployment RAG setting,
+  true/false overrides it. `PUT /rag/enabled` changes only the current org and requires
+  `brands:update`; deployment vector configuration and its secrets require `ai-config:update`.
+- `AIContentIndex.brandProfileId` associates brand-owned Knowledge. Indexing, replacement, vector
+  and text search, item lists, delete, and backfill all scope by org + requested brand; legacy null
+  rows stay shared. Brand-owned source ids are namespaced internally so identical public source ids
+  cannot replace another brand's chunks. Manual Knowledge mutations require `brands:update`, reads
+  require `brands:read`, and the expected disabled state is a 4xx, not a Sentry-worthy 500. Brand
+  deletion cascades its chunks; template associations use `SetNull`.
+
+---
+
 ## 6. Error handling
 
 - Throw Nest `HttpException`s (`BadRequestException`, …) or the domain exceptions below.

@@ -753,7 +753,7 @@ export class DesignRenderService {
     const children = expandSymbols(output.children ?? [], doc.symbols);
 
     if (opts?.orgId) {
-      await this._fontLoaderService.loadOrgFonts(opts.orgId);
+      await this._fontLoaderService.loadOrgFonts(opts.orgId, doc.brandProfileId);
     }
     await this._fontLoaderService.loadCuratedFonts(children);
 

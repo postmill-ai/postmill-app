@@ -66,6 +66,7 @@ model Organization {
   aiBudgetMonthlyCap        Float?
   aiBudgetDailyCap          Float?
   aiBudgetAlertThresholdPct Float? // 0–1 fraction; null = global default
+  ragEnabled               Boolean? // null inherits AISystemSettings.ragSettings.enabled
   auditLogs           AuditLog[]
   orgShortLinkConfigs  OrgShortLinkConfig[]
   shortLinks           ShortLink[]
@@ -1491,6 +1492,7 @@ model AIBrandProfile {
   palette           Json?        @default("[]")
   fontFamilies      Json?        @default("[]")
   customFonts       Json?        @default("[]")
+  preferredFormats  Json?        @default("[]")
   introFileId       String?
   outroFileId       String?
   enforcement       Json?        @default("{}")
@@ -1501,6 +1503,8 @@ model AIBrandProfile {
 
   organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   posts             Post[]
+  knowledgeItems    AIContentIndex[]
+  designTemplates   DesignTemplate[]
 
   @@index([organizationId])
 }
@@ -1601,15 +1605,18 @@ model AIContentIndex {
   chunkIndex     Int          @default(0)
   contentHash    String
   chunk          String?
+  brandProfileId String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  brandProfile   AIBrandProfile? @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, sourceType, sourceId, chunkIndex])
   @@index([organizationId])
   @@index([organizationId, updatedAt])
   @@index([organizationId, sourceType, sourceId])
+  @@index([organizationId, brandProfileId])
   @@index([contentHash])
 }
 
@@ -1889,6 +1896,7 @@ model DesignTemplate {
   thumbnailFileId String?
   isSystem        Boolean       @default(false)
   folderId        String?
+  brandProfileId  String?
   deletedAt       DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -1896,10 +1904,12 @@ model DesignTemplate {
   organization    Organization? @relation(fields: [organizationId], references: [id])
   thumbnailFile   File?         @relation(fields: [thumbnailFileId], references: [id])
   folder          DesignTemplateFolder? @relation(fields: [folderId], references: [id])
+  brandProfile    AIBrandProfile? @relation(fields: [brandProfileId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([category])
   @@index([folderId])
+  @@index([brandProfileId])
   @@index([deletedAt])
 }
 

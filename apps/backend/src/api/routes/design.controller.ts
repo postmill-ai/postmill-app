@@ -1003,7 +1003,7 @@ export class DesignRenderFrameController {
     // caption set in an uploaded brand font otherwise painted in Chromium's
     // default sans. The orgId came from the signed render payload, so this
     // read stays inside the rendering org's own font list.
-    const customFonts = await this._brandsService.getCustomFonts(orgId).catch(() => []);
+    const customFonts = await this._brandsService.getCustomFonts(orgId, null).catch(() => []);
 
     const html = buildFramePage({
       outputLiteral: escapeForScriptTag(output),

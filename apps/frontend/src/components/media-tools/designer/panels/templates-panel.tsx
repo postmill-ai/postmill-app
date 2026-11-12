@@ -32,6 +32,7 @@ import { TemplateFolderTree, useTemplateFolders } from './template-folder-tree';
 import { MoveTemplateModal } from './move-template-modal';
 import { SaveTemplateModal } from './save-template-modal';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useBrandKit } from '../brand-kit-context';
 
 interface DesignTemplate {
   id: string;
@@ -42,6 +43,7 @@ interface DesignTemplate {
   isSystem: boolean;
   category?: string | null;
   folderId?: string | null;
+  brandProfileId?: string | null;
   thumbnail?: string;
 }
 
@@ -71,6 +73,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   const modal = useModals();
   const decision = useDecisionModal();
   const t = useT();
+  const { activeBrand } = useBrandKit();
 
   // Page 1 stays on SWR (cache + revalidate-on-focus); pages 2+ accumulate in
   // local state behind "Load more" (same pattern as my-designs-panel).
@@ -100,8 +103,11 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     for (const template of [...(data?.templates || []), ...extraTemplates]) {
       seen.set(template.id, template);
     }
-    return [...seen.values()];
-  }, [data, extraTemplates]);
+    return [...seen.values()].sort((a, b) => {
+      if (!activeBrand) return 0;
+      return Number(b.brandProfileId === activeBrand.id) - Number(a.brandProfileId === activeBrand.id);
+    });
+  }, [activeBrand, data, extraTemplates]);
   const total: number = data?.total ?? templates.length;
   const hasMore = templates.length < total;
 
@@ -231,11 +237,15 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       });
       if (!ok) return;
     } else if (guard && !(await guard())) return;
+    const doc = {
+      ...full.doc,
+      brandProfileId: full.brandProfileId ?? store.getState().doc.brandProfileId ?? activeBrand?.id ?? null,
+    } as DesignerDoc;
     const res = await fetch('/media/designs', {
       method: 'POST',
       body: JSON.stringify({
         name: full.name,
-        doc: full.doc,
+        doc,
       }),
     });
     if (!res.ok) {
@@ -243,9 +253,9 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       return;
     }
     const data = await res.json();
-    store.getState().loadDesign(full.doc as DesignerDoc, data.id, full.name, full.id);
+    store.getState().loadDesign(doc, data.id, full.name, full.id);
     onClose?.();
-  }, [store, onClose, fetch, toaster, guard, decision, t]);
+  }, [activeBrand?.id, store, onClose, fetch, toaster, guard, decision, t]);
 
   const persistTemplate = useCallback(async (category: string): Promise<boolean> => {
     const state = store.getState();
@@ -269,6 +279,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       name: `${name} (template)`,
       category,
       doc: state.doc,
+      brandProfileId: activeBrand?.id || null,
     };
     if (thumbnailFileId) payload.thumbnailFileId = thumbnailFileId;
     // The thumbnail upload already minted a File row — if the template save
@@ -324,7 +335,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       toaster.show(t('template_save_failed', 'Failed to save template'), 'warning');
       return false;
     }
-  }, [store, fetch, mutate, toaster, selection, t]);
+  }, [activeBrand?.id, store, fetch, mutate, toaster, selection, t]);
 
   const saveAsTemplate = useCallback(() => {
     const state = store.getState();

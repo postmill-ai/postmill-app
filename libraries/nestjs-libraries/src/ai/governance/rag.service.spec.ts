@@ -41,6 +41,10 @@ const mockRepo = {
   textSearchTerms: vi.fn().mockResolvedValue([]),
   findPostsForBackfill: vi.fn().mockResolvedValue([]),
   findMediaForBackfill: vi.fn().mockResolvedValue([]),
+  getOrgRagEnabled: vi.fn().mockResolvedValue(null),
+  setOrgRagEnabled: vi.fn(),
+  getOrgContentIndexEntries: vi.fn().mockResolvedValue([]),
+  deleteContentIndexEntries: vi.fn(),
 };
 
 const mockCreateSpendLog = vi.fn().mockResolvedValue(undefined);
@@ -99,6 +103,10 @@ const mockOrgDefaultModels = {
   get: vi.fn().mockResolvedValue(null),
 };
 
+const mockBrands = {
+  getBrandStrict: vi.fn().mockResolvedValue({ id: 'brand-1', enabled: true }),
+};
+
 // Default replaceSourceChunks behaviour: mirror the real transaction's return —
 // one chunk row per input chunk, with a deterministic id. Also exercises the
 // pgvectorAvailable branch by invoking the supplied formatVector callback so the
@@ -127,6 +135,7 @@ function createService() {
     {} as any,
     mockBudgetService as any,
     mockOrgDefaultModels as any,
+    mockBrands as any,
   );
 }
 
@@ -148,6 +157,9 @@ describe('RagService', () => {
     mockRepo.textSearchTerms.mockResolvedValue([]);
     mockRepo.findPostsForBackfill.mockResolvedValue([]);
     mockRepo.findMediaForBackfill.mockResolvedValue([]);
+    mockRepo.getOrgRagEnabled.mockResolvedValue(null);
+    mockRepo.getOrgContentIndexEntries.mockResolvedValue([]);
+    mockBrands.getBrandStrict.mockResolvedValue({ id: 'brand-1', enabled: true });
     defaultReplace();
     mockAiSettings.getDecryptedSystemSettings.mockResolvedValue(null);
     mockCreateSpendLog.mockResolvedValue(undefined);
@@ -342,7 +354,7 @@ describe('RagService', () => {
       });
 
       expect(Array.isArray(results)).toBe(true);
-      expect(mockRepo.textSearchTerms).toHaveBeenCalledWith('org-1', expect.any(Array), 3);
+      expect(mockRepo.textSearchTerms).toHaveBeenCalledWith('org-1', expect.any(Array), 3, undefined);
     });
   });
 
@@ -375,6 +387,25 @@ describe('RagService', () => {
       const service = createService();
       await service.backfill('org-1');
       expect(mockRepo.findPostsForBackfill).toHaveBeenCalledWith('org-1');
+    });
+
+    it('attributes backfilled posts and media to the selected Brand Kit', async () => {
+      enableRag();
+      mockRepo.findPostsForBackfill.mockResolvedValue([
+        { id: 'post-1', title: 'Launch', description: '', content: 'Brand fact' },
+      ]);
+      mockRepo.findMediaForBackfill.mockResolvedValue([
+        { id: 'media-1', name: 'Product', originalName: '', alt: 'Brand image' },
+      ]);
+      const service = createService();
+      await expect(service.backfill('org-1', 'user-1', 'brand-1')).resolves.toEqual({ indexed: 2 });
+      expect(mockBrands.getBrandStrict).toHaveBeenCalledWith('org-1', 'brand-1');
+      expect(mockRepo.replaceSourceChunks).toHaveBeenCalledWith(expect.objectContaining({
+        sourceType: 'post', sourceId: 'brand:brand-1:post-1', brandProfileId: 'brand-1',
+      }));
+      expect(mockRepo.replaceSourceChunks).toHaveBeenCalledWith(expect.objectContaining({
+        sourceType: 'media', sourceId: 'brand:brand-1:media-1', brandProfileId: 'brand-1',
+      }));
     });
   });
 
@@ -527,7 +558,7 @@ describe('RagService', () => {
       expect(results[0].text).toBe('result chunk');
       expect(results[0].score).toBe(0.95);
       // org-scoped vector search with formatted vector + limit
-      expect(mockRepo.vectorSearch).toHaveBeenCalledWith('org-1', '[0.1,0.2,0.3]', 5);
+      expect(mockRepo.vectorSearch).toHaveBeenCalledWith('org-1', '[0.1,0.2,0.3]', 5, undefined);
     });
 
     it('falls back to text search when embedding is empty', async () => {
@@ -577,7 +608,7 @@ describe('RagService', () => {
       expect(results).toHaveLength(1);
       expect(results[0].text).toBe('recent content');
       expect(results[0].score).toBe(0);
-      expect(mockRepo.textSearchRecent).toHaveBeenCalledWith('org-1', 5);
+      expect(mockRepo.textSearchRecent).toHaveBeenCalledWith('org-1', 5, undefined);
     });
 
     it('performs ILIKE search with query terms', async () => {
@@ -597,6 +628,7 @@ describe('RagService', () => {
         'org-1',
         ['matched', 'search', 'term', 'here'],
         5,
+        undefined,
       );
     });
 

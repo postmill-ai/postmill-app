@@ -17,6 +17,7 @@ import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
+import { RagService } from '@postmill-ai/nestjs-libraries/ai/governance/rag.service';
 import { AiDesignerService } from '../ai-designer.service';
 import {
   MAX_INTENT_LENGTH,
@@ -319,8 +320,14 @@ export class AiDesignerConductorService {
     // without them video sessions keep the static-conversion behavior.
     @Optional() private readonly _aiDefaults?: AiDefaultsService,
     @Optional() private readonly _mediaJobs?: MediaJobLifecycleService,
-    @Optional() private readonly _attachments?: AiDesignerAttachmentsService
+    @Optional() private readonly _attachments?: AiDesignerAttachmentsService,
+    @Optional() private readonly _rag?: RagService
   ) {}
+
+  private async _brandKitFor(ctx: AiDesignerAgentContext, config: AiDesignerConfig) {
+    if (!config.brandProfileId || !this._brands) return null;
+    return this._brands.getBrandStrict(ctx.orgId, config.brandProfileId);
+  }
 
   private async _brandPaletteOverrideNote(
     ctx: AiDesignerAgentContext,
@@ -328,27 +335,18 @@ export class AiDesignerConductorService {
     brief: DesignBrief,
     plans: DesignPlan[]
   ): Promise<string | undefined> {
-    if (!this._brands || !config.brandProfileId || !brief.styleId) return undefined;
-    try {
-      const brand = await this._brands.getBrand(ctx.orgId, config.brandProfileId);
-      const brandPalette = (Array.isArray(brand?.palette) ? brand.palette as unknown[] : [])
-        .filter((color): color is string => typeof color === 'string' && !!color.trim())
-        .map((color) => color.trim().toLowerCase());
-      if (!brandPalette.length) return undefined;
-      const planned = new Set(
-        plans.flatMap((plan) => plan.palette ?? [])
-          .filter((color): color is string => typeof color === 'string')
-          .map((color) => color.trim().toLowerCase())
-      );
-      if (!planned.size || brandPalette.some((color) => planned.has(color))) return undefined;
-      return `the "${brief.styleId}" style you pinned set the colours, so your brand palette wasn't used — clear the style to design on brand`;
-    } catch (err) {
-      this._logger.warn(
-        `Brand-palette override check skipped: ${(err as Error).message}`,
-        AiDesignerConductorService.name
-      );
-      return undefined;
-    }
+    if (!config.brandProfileId || !brief.styleId) return undefined;
+    const brand = await this._brandKitFor(ctx, config);
+    const brandPalette = (brand?.palette || [])
+      .map((color) => color.trim().toLowerCase());
+    if (!brandPalette.length) return undefined;
+    const planned = new Set(
+      plans.flatMap((plan) => plan.palette ?? [])
+        .filter((color): color is string => typeof color === 'string')
+        .map((color) => color.trim().toLowerCase())
+    );
+    if (!planned.size || brandPalette.some((color) => planned.has(color))) return undefined;
+    return `the "${brief.styleId}" style you pinned set the colours, so your brand palette wasn't used — clear the style to design on brand`;
   }
 
   private async _applyPaletteConstraints(
@@ -357,20 +355,9 @@ export class AiDesignerConductorService {
     brief: DesignBrief,
     plans: DesignPlan[]
   ): Promise<DesignPlan[]> {
-    let brandPalette: unknown;
-    if (this._brands && config.brandProfileId) {
-      try {
-        const brand = await this._brands.getBrand(ctx.orgId, config.brandProfileId);
-        brandPalette = brand?.palette;
-      } catch (err) {
-        this._logger.warn(
-          `Brand palette lookup skipped: ${(err as Error).message}`,
-          AiDesignerConductorService.name
-        );
-      }
-    }
+    const brand = await this._brandKitFor(ctx, config);
     return constrainPlanPalettes(plans, {
-      brandPalette: brandPalette as string[] | undefined,
+      brandPalette: brand?.palette,
       intent: brief.intent,
       pinnedStyle: !!brief.styleId,
     });
@@ -401,6 +388,21 @@ export class AiDesignerConductorService {
       return;
     }
     prompt = policy.instruction;
+
+    const brand = await this._brandKitFor(ctx, config);
+    if (brand) {
+      const referenceFileIds = [...new Set([
+        ...(config.referenceFileIds ?? []),
+        ...brand.assets.map((asset) => asset.fileId).filter((id): id is string => !!id),
+      ])].slice(0, MAX_AI_DESIGNER_ATTACHMENTS);
+      config = {
+        ...config,
+        channels: config.channels.length ? config.channels : brand.preferredFormats,
+        referenceFileIds,
+        logoFileId: config.logoFileId ?? brand.logoFileIds[0],
+      };
+      await this._service.updateSession(sessionId, ctx.orgId, ctx.userId, { config });
+    }
 
     // Intake/planning is mutex- and abort-guarded like accept/revise: a
     // concurrent start/message for the same session must not double the
@@ -1760,6 +1762,7 @@ export class AiDesignerConductorService {
           // The composer returns the doc without persisting — the saver is the
           // single Design writer (one row per variant, no orphans).
           const composedDoc = this._parseDesignDoc(composerResponse);
+          composedDoc.brandProfileId = config.brandProfileId ?? null;
           composedDocs.set(plan.variantId, composedDoc);
           // The composer's total-fallback doc means the planned layout failed
           // doc validation — the variant ships simplified and the user should
@@ -3300,10 +3303,38 @@ export class AiDesignerConductorService {
     ctx: AiDesignerAgentContext,
     config: AiDesignerConfig,
   ) {
+    const contexts: { fileId: string; name: string; text: string }[] = [];
+    const brand = await this._brandKitFor(ctx, config);
+    if (brand && this._rag) {
+      try {
+        const hits = await this._rag.search({
+          organizationId: ctx.orgId,
+          query: brand.name,
+          limit: 3,
+          brandProfileId: brand.id,
+        });
+        contexts.push(...hits.map((hit) => ({
+          fileId: `brand-${brand.id}-knowledge-${hit.sourceId}`,
+          name: `${brand.name} Knowledge`,
+          text: hit.text.slice(0, 2000),
+        })));
+      } catch {
+        // Knowledge is optional: disabled or unavailable retrieval never blocks visual Brand Mode.
+      }
+    }
+
     const ids = config.attachmentFileIds ?? [];
-    if (!ids.length) return [];
-    if (!this._attachments) throw new Error('AI Designer attachments are unavailable');
-    return this._attachments.contextsFor(ctx.orgId, ids);
+    if (ids.length) {
+      if (!this._attachments) throw new Error('AI Designer attachments are unavailable');
+      contexts.push(...await this._attachments.contextsFor(ctx.orgId, ids));
+    }
+
+    let remaining = 40_000;
+    return contexts.map((context) => {
+      const text = context.text.slice(0, remaining);
+      remaining -= text.length;
+      return { ...context, text };
+    }).filter((context) => context.text.length > 0);
   }
 
   private async _referenceCuesFor(
@@ -3406,17 +3437,8 @@ export class AiDesignerConductorService {
   ): Promise<string | undefined> {
     if (config.logoFileId) return config.logoFileId;
     if (!config.brandProfileId || !this._brands) return undefined;
-    try {
-      const brand = await this._brands.getBrand(orgId, config.brandProfileId);
-      const ids = Array.isArray(brand?.logoFileIds) ? brand.logoFileIds : [];
-      return ids.find((id): id is string => typeof id === 'string' && !!id.trim());
-    } catch (err) {
-      this._logger.warn(
-        `Brand logo lookup skipped: ${(err as Error).message}`,
-        AiDesignerConductorService.name
-      );
-      return undefined;
-    }
+    const brand = await this._brands.getBrandStrict(orgId, config.brandProfileId);
+    return brand.logoFileIds.find((id) => !!id.trim());
   }
 
   private async _attachDirectLogo(

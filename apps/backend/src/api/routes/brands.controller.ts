@@ -62,6 +62,11 @@ class CreateBrandDto {
   @IsString({ each: true })
   fontFamilies?: string[];
 
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  preferredFormats?: string[];
+
   // Attached brand assets — [{ fileId?, url, caption? }].
   @IsOptional()
   @IsArray()
@@ -113,6 +118,11 @@ class UpdateBrandDto {
   fontFamilies?: string[];
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  preferredFormats?: string[];
+
+  @IsOptional()
   @IsString()
   introFileId?: string;
 
@@ -144,7 +154,7 @@ export class BrandsController {
   }
 
   @Post('/')
-  @RequirePermission('brands', 'manage')
+  @RequirePermission('brands', 'create')
   @CheckPolicies([AuthorizationActions.Create, Sections.BRANDS])
   async create(
     @GetOrgFromRequest() org: Organization,
@@ -154,7 +164,7 @@ export class BrandsController {
   }
 
   @Put('/:id')
-  @RequirePermission('brands', 'manage')
+  @RequirePermission('brands', 'update')
   @CheckPolicies([AuthorizationActions.Update, Sections.BRANDS])
   async update(
     @GetOrgFromRequest() org: Organization,
@@ -169,7 +179,7 @@ export class BrandsController {
   }
 
   @Delete('/:id')
-  @RequirePermission('brands', 'manage')
+  @RequirePermission('brands', 'delete')
   @CheckPolicies([AuthorizationActions.Delete, Sections.BRANDS])
   async delete(
     @GetOrgFromRequest() org: Organization,
@@ -183,7 +193,7 @@ export class BrandsController {
   }
 
   @Post('/:id/default')
-  @RequirePermission('brands', 'manage')
+  @RequirePermission('brands', 'update')
   @CheckPolicies([AuthorizationActions.Update, Sections.BRANDS])
   async setDefault(
     @GetOrgFromRequest() org: Organization,

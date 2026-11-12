@@ -27,6 +27,12 @@ vi.mock('@postmill-ai/frontend/components/layout/user.context', () => ({
   useUser: () => ({ orgId: 'org-1' }),
 }));
 
+vi.mock('./use-brand-colors', () => ({ useBrandColors: () => [] }));
+vi.mock('./use-brand-fonts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useBrandFonts: () => [],
+}));
+
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => mockFetch,
 }));
