@@ -68,7 +68,7 @@ function getEnvConfig(): ResolvedOidcConfig | null {
     clientSecret,
     tokenUrl,
     userInfoUrl,
-    scopes: 'openid profile email',
+    scopes: process.env.POSTMILL_OAUTH_SCOPE?.trim() || 'openid profile email',
     displayName: 'OIDC',
     frontendUrl,
   };
