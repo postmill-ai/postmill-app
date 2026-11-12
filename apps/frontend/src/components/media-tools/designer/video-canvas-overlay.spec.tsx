@@ -525,12 +525,18 @@ describe('video overlay selection and gesture commits', () => {
     second.scale({ x: 0.5, y: 2 });
     const depth = store.getState().history.length;
     await act(async () => {
+      first.fire('transformstart');
+      second.fire('transformstart');
+    });
+    expect(store.getState().gestureDepth).toBe(1);
+    await act(async () => {
       first.fire('transformend');
       second.fire('transformend');
     });
     let clips = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips;
     expect(clips.map((clip) => [clip.width, clip.height])).toEqual([[160, 90], [50, 100]]);
     expect(store.getState().history.length).toBe(depth + 1);
+    expect(store.getState().gestureDepth).toBe(0);
 
     await act(async () => store.getState().setTrackLocked(0, trackId, true));
     const lockedDepth = store.getState().history.length;

@@ -33,6 +33,7 @@ import { VideoCanvasOverlay } from './video-canvas-overlay';
 import { sharedStageRef } from './stage-ref';
 import { bakeElementTransform, buildResizePatch } from './transform-resize';
 import { useGeometryNonce } from './use-geometry-nonce';
+import { runGestureCommit } from './gesture-lifecycle';
 import { getTool, resolveToolShortcut } from './tools';
 import { rectFromDrag, rectFromTap, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
 import { addText } from './add-text';
@@ -1353,77 +1354,72 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const handleTransformEnd = useCallback(
     async (e: Konva.KonvaEventObject<Event>) => {
       if (isVideo) return;
-      setHud(null);
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      const patches = bakeTransform(e);
-      if (!patches.length) {
-        noteGestureEnd();
-        store.getState().endGesture();
-        return;
-      }
-      const originals = new Map(transformOriginalsRef.current);
-      transformOriginalsRef.current.clear();
-      const history = store.getState().history;
-      patches.forEach(({ id, patch }) => updateElement(id, patch));
-      noteGestureEnd();
-
-      const remapped: { id: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
-      for (const { id, patch } of patches) {
-        const original = originals.get(id);
-        if (
-          original?.type !== 'image' || !original.maskSrc || original.maskEnabled === false ||
-          !original.naturalWidth || !original.naturalHeight ||
-          original.fitMode === 'fill' ||
-          !maskFrameAspectChanged(original, patch)
-        ) continue;
-        try {
-          const uploaded = await remapBackgroundRemovalMask({
-            fetch,
-            maskSrc: original.maskSrc,
-            source: { naturalWidth: original.naturalWidth, naturalHeight: original.naturalHeight },
-            previousFrame: original,
-            nextFrame: {
-              width: patch.width,
-              height: patch.height,
-              crop: original.crop,
-              fitMode: original.fitMode,
-              focalPoint: original.focalPoint,
-            },
-            id,
-          });
-          remapped.push({ id, src: uploaded.src, fileId: uploaded.fileId, canvas: uploaded.canvas });
-        } catch {
-          // Keep the existing mask if its pixels cannot be read or saved.
+      return runGestureCommit(store, async () => {
+        setHud(null);
+        if (rafIdRef.current) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
         }
-      }
+        const patches = bakeTransform(e);
+        if (!patches.length) return;
+        const originals = new Map(transformOriginalsRef.current);
+        transformOriginalsRef.current.clear();
+        const history = store.getState().history;
+        patches.forEach(({ id, patch }) => updateElement(id, patch));
 
-      const children = (store.getState().doc.outputs[store.getState().currentOutput] as DesignerOutput | undefined)?.children || [];
-      const stale = store.getState().history !== history || patches.some(({ id, patch }) => {
-        const current = children.find((child) => child.id === id);
-        return !current || current.x !== patch.x || current.y !== patch.y ||
-          current.width !== patch.width || current.height !== patch.height ||
-          current.rotation !== patch.rotation;
-      });
-      if (stale) {
-        await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetch, mask)));
-        store.getState().endGesture();
-        return;
-      }
-      remapped.forEach(({ id, src, fileId, canvas }) => {
-        seedBufferFromCanvas(`${id}:mask`, canvas);
-        updateElement(id, {
-          maskSrc: src,
-          maskFileId: fileId,
-          maskEnabled: true,
+        const remapped: { id: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
+        for (const { id, patch } of patches) {
+          const original = originals.get(id);
+          if (
+            original?.type !== 'image' || !original.maskSrc || original.maskEnabled === false ||
+            !original.naturalWidth || !original.naturalHeight ||
+            original.fitMode === 'fill' ||
+            !maskFrameAspectChanged(original, patch)
+          ) continue;
+          try {
+            const uploaded = await remapBackgroundRemovalMask({
+              fetch,
+              maskSrc: original.maskSrc,
+              source: { naturalWidth: original.naturalWidth, naturalHeight: original.naturalHeight },
+              previousFrame: original,
+              nextFrame: {
+                width: patch.width,
+                height: patch.height,
+                crop: original.crop,
+                fitMode: original.fitMode,
+                focalPoint: original.focalPoint,
+              },
+              id,
+            });
+            remapped.push({ id, src: uploaded.src, fileId: uploaded.fileId, canvas: uploaded.canvas });
+          } catch {
+            // Keep the existing mask if its pixels cannot be read or saved.
+          }
+        }
+
+        const children = (store.getState().doc.outputs[store.getState().currentOutput] as DesignerOutput | undefined)?.children || [];
+        const stale = store.getState().history !== history || patches.some(({ id, patch }) => {
+          const current = children.find((child) => child.id === id);
+          return !current || current.x !== patch.x || current.y !== patch.y ||
+            current.width !== patch.width || current.height !== patch.height ||
+            current.rotation !== patch.rotation;
         });
-      });
-      pushHistory();
-      store.getState().endGesture();
-      // Same commit-time cache rebuild as dragEnd (see useGeometryNonce).
-      bumpGeometryNow();
+        if (stale) {
+          await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetch, mask)));
+          return;
+        }
+        remapped.forEach(({ id, src, fileId, canvas }) => {
+          seedBufferFromCanvas(`${id}:mask`, canvas);
+          updateElement(id, {
+            maskSrc: src,
+            maskFileId: fileId,
+            maskEnabled: true,
+          });
+        });
+        pushHistory();
+        // Same commit-time cache rebuild as dragEnd (see useGeometryNonce).
+        bumpGeometryNow();
+      }, noteGestureEnd);
     },
     [bakeTransform, pushHistory, updateElement, isVideo, noteGestureEnd, bumpGeometryNow, fetch, store]
   );

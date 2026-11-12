@@ -44,6 +44,7 @@ import {
   maskFrameAspectChanged,
   remapBackgroundRemovalMask,
 } from './background-removal-mask';
+import { runGestureCommit } from './gesture-lifecycle';
 import { seedBufferFromCanvas } from './raster-layers';
 
 interface VideoCanvasOverlayProps {
@@ -706,111 +707,105 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     requestAnimationFrame(() => {
       gestureCommitPending.current = false;
     });
-    const transformer = target.getLayer()?.findOne('Transformer') as
-      | Konva.Transformer
-      | undefined;
-    const attached = transformer?.nodes() || [];
-    const nodes = attached.some((node) => node === target) || !attached.length
-      ? attached.length ? attached : [target]
-      : [...attached, target];
-    const state = store.getState();
-    const output = state.doc.outputs[currentOutput] as VideoOutput | undefined;
-    if (!output) {
-      store.getState().endGesture();
-      return;
-    }
-    const anchor = getTransformAnchor?.();
-    const history = state.history;
-    const updates: {
-      clip: VideoClip;
-      trackId: string;
-      trackType: string;
-      before: ClipBox;
-      after: ClipBox;
-      update: ReturnType<typeof clipGeometryUpdate>;
-    }[] = [];
+    return runGestureCommit(store, async () => {
+      const transformer = target.getLayer()?.findOne('Transformer') as
+        | Konva.Transformer
+        | undefined;
+      const attached = transformer?.nodes() || [];
+      const nodes = attached.some((node) => node === target) || !attached.length
+        ? attached.length ? attached : [target]
+        : [...attached, target];
+      const state = store.getState();
+      const output = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+      if (!output) return;
+      const anchor = getTransformAnchor?.();
+      const history = state.history;
+      const updates: {
+        clip: VideoClip;
+        trackId: string;
+        trackType: string;
+        before: ClipBox;
+        after: ClipBox;
+        update: ReturnType<typeof clipGeometryUpdate>;
+      }[] = [];
 
-    for (const node of nodes) {
-      const composed = clipsAtPlayhead.find(({ clip }) => clip.id === node.id());
-      if (!composed || output.tracks.find((track) => track.id === composed.trackId)?.locked) {
-        continue;
-      }
-      const { clip, trackId, trackType, props } = composed;
-      const before: ClipBox = {
-        x: props.x,
-        y: props.y,
-        width: props.width,
-        height: props.height,
-        rotation: props.rotation,
-      };
-      const after: ClipBox = {
-        x: node.x(),
-        y: node.y(),
-        width: Math.max(1, before.width * node.scaleX()),
-        height: Math.max(1, before.height * node.scaleY()),
-        rotation: node.rotation(),
-      };
-      node.scaleX(1);
-      node.scaleY(1);
-      const update = clipGeometryUpdate(clip, before, after, playheadRef.current, {
-        trackType,
-        anchor,
-        fontSize: props.fontSize,
-      });
-      if (update && state.updateClipSilent(currentOutput, trackId, clip.id, update)) {
-        updates.push({ clip, trackId, trackType, before, after, update });
-      }
-    }
-    if (!updates.length) {
-      store.getState().endGesture();
-      return;
-    }
-
-    const remapped: { trackId: string; clipId: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
-    if (fetchFn) {
-      for (const { clip, trackId, trackType, before, after } of updates) {
-        if (
-          trackType !== 'image' || !clip.maskSrc || clip.maskEnabled === false ||
-          !clip.naturalWidth || !clip.naturalHeight ||
-          clip.fitMode === 'fill' || !maskFrameAspectChanged(before, after)
-        ) continue;
-        try {
-          const uploaded = await remapBackgroundRemovalMask({
-            fetch: fetchFn,
-            maskSrc: clip.maskSrc,
-            source: { naturalWidth: clip.naturalWidth, naturalHeight: clip.naturalHeight },
-            previousFrame: { ...before, crop: clip.crop, fitMode: clip.fitMode, focalPoint: clip.focalPoint },
-            nextFrame: { ...after, crop: clip.crop, fitMode: clip.fitMode, focalPoint: clip.focalPoint },
-            id: clip.id,
-          });
-          remapped.push({ trackId, clipId: clip.id, src: uploaded.src, fileId: uploaded.fileId, canvas: uploaded.canvas });
-        } catch {
-          // Keep the existing mask if its pixels cannot be read or saved.
+      for (const node of nodes) {
+        const composed = clipsAtPlayhead.find(({ clip }) => clip.id === node.id());
+        if (!composed || output.tracks.find((track) => track.id === composed.trackId)?.locked) {
+          continue;
+        }
+        const { clip, trackId, trackType, props } = composed;
+        const before: ClipBox = {
+          x: props.x,
+          y: props.y,
+          width: props.width,
+          height: props.height,
+          rotation: props.rotation,
+        };
+        const after: ClipBox = {
+          x: node.x(),
+          y: node.y(),
+          width: Math.max(1, before.width * node.scaleX()),
+          height: Math.max(1, before.height * node.scaleY()),
+          rotation: node.rotation(),
+        };
+        node.scaleX(1);
+        node.scaleY(1);
+        const update = clipGeometryUpdate(clip, before, after, playheadRef.current, {
+          trackType,
+          anchor,
+          fontSize: props.fontSize,
+        });
+        if (update && state.updateClipSilent(currentOutput, trackId, clip.id, update)) {
+          updates.push({ clip, trackId, trackType, before, after, update });
         }
       }
-    }
+      if (!updates.length) return;
 
-    const latest = store.getState();
-    const stale = latest.history !== history || remapped.some(({ trackId, clipId }) => {
-      const current = (latest.doc.outputs[currentOutput] as VideoOutput).tracks
-        .find((track) => track.id === trackId)?.clips.find((clip) => clip.id === clipId);
-      return !current?.maskSrc;
-    });
-    if (stale) {
-      if (fetchFn) await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetchFn, mask)));
-      store.getState().endGesture();
-      return;
-    }
-    remapped.forEach(({ trackId, clipId, src, fileId, canvas }) => {
-      seedBufferFromCanvas(`${clipId}:mask`, canvas);
-      store.getState().updateClipSilent(currentOutput, trackId, clipId, {
-        maskSrc: src,
-        maskFileId: fileId,
-        maskEnabled: true,
+      const remapped: { trackId: string; clipId: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
+      if (fetchFn) {
+        for (const { clip, trackId, trackType, before, after } of updates) {
+          if (
+            trackType !== 'image' || !clip.maskSrc || clip.maskEnabled === false ||
+            !clip.naturalWidth || !clip.naturalHeight ||
+            clip.fitMode === 'fill' || !maskFrameAspectChanged(before, after)
+          ) continue;
+          try {
+            const uploaded = await remapBackgroundRemovalMask({
+              fetch: fetchFn,
+              maskSrc: clip.maskSrc,
+              source: { naturalWidth: clip.naturalWidth, naturalHeight: clip.naturalHeight },
+              previousFrame: { ...before, crop: clip.crop, fitMode: clip.fitMode, focalPoint: clip.focalPoint },
+              nextFrame: { ...after, crop: clip.crop, fitMode: clip.fitMode, focalPoint: clip.focalPoint },
+              id: clip.id,
+            });
+            remapped.push({ trackId, clipId: clip.id, src: uploaded.src, fileId: uploaded.fileId, canvas: uploaded.canvas });
+          } catch {
+            // Keep the existing mask if its pixels cannot be read or saved.
+          }
+        }
+      }
+
+      const latest = store.getState();
+      const stale = latest.history !== history || remapped.some(({ trackId, clipId }) => {
+        const current = (latest.doc.outputs[currentOutput] as VideoOutput).tracks
+          .find((track) => track.id === trackId)?.clips.find((clip) => clip.id === clipId);
+        return !current?.maskSrc;
       });
+      if (stale) {
+        if (fetchFn) await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetchFn, mask)));
+        return;
+      }
+      remapped.forEach(({ trackId, clipId, src, fileId, canvas }) => {
+        seedBufferFromCanvas(`${clipId}:mask`, canvas);
+        store.getState().updateClipSilent(currentOutput, trackId, clipId, {
+          maskSrc: src,
+          maskFileId: fileId,
+          maskEnabled: true,
+        });
+      });
+      store.getState().pushHistory('Edit clip geometry');
     });
-    store.getState().pushHistory('Edit clip geometry');
-    store.getState().endGesture();
   };
 
   if (!isVideo) return null;
@@ -841,6 +836,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
             onClipContextMenu?.(clip.id, e.evt.clientX, e.evt.clientY);
           },
           onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => commitGesture(e.target),
+          onTransformStart: () => store.getState().beginGesture(),
           onTransformEnd: (e: Konva.KonvaEventObject<Event>) => commitGesture(e.target),
           // Text and caption clips both open the inline text editor on
           // double-click; a caption commit re-derives clip.words (canvas.tsx).
