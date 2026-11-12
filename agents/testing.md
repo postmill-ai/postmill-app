@@ -226,6 +226,12 @@ screencast recording active. Export every output at 1× and 3×, assert the page
 and the formats/dimensions/transparency are correct, and cold-reopen a shadow-heavy design to check
 both time-to-stable-frame and zero position drift. Static raster previews/exports use the server
 renderer sequentially; do not reintroduce full-resolution off-screen Konva stages for this flow.
+Reliability acceptance additionally covers a network-throw-then-success render, no blind 4xx/5xx
+retry, JPEG 3× without unnecessary reduction, >10 MiB fallback, and upload failure. Completed
+output/pages must survive a partial failure; per-output retry must not rerender or duplicate them,
+and an upload retry must reuse its cached blob. Diagnostics are limited to stage/output/page/format/
+scale/status/kind. Automatic retry is limited to one transient static-render attempt — never upload,
+paid video, or provider retries.
 
 Run from `e2e/` after `pnpm install --ignore-workspace`, supplying the appropriate deployment and
 design ID. Example for one authorized background-removal operation on a QA deployment:

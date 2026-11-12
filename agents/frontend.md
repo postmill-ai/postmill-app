@@ -495,6 +495,17 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   reasons with counts; finding and reason clicks navigate to the target and close export.
   Brand enforcement and its admin override retain their existing blocking semantics, while these
   new warnings never block export.
+- **Static export failures are staged and resumable.** `export-format.ts` classifies preview, final
+  render, and upload failures as HTTP, network, timeout, or abort, and logs only numeric output/page
+  coordinates plus format, scale, and status/kind — never document contents, asset URLs, prompts, or
+  credentials. Only the idempotent `/media/designs/render` POST gets at most one retry after 750 ms,
+  for network/timeout or HTTP 502/503/504; uploads, paid video jobs, and provider calls never retry
+  automatically. Requests have a 120 s budget covering response-body reads. Quality/scale fallbacks
+  run only after an actual blob exceeds 10 MiB. `runStaticExportBatch` keeps completed output/page
+  keys, continues after individual failures, retries only failed outputs on demand, and reuses the
+  cached blob for an upload retry so it neither rerenders nor duplicates completed Files. Partial
+  exports stay visible with per-output retry and an explicit Use completed exports action; draft
+  creation still requires that explicit action when any output failed.
 - **Video poster state distinguishes effective and generated images.** The export dialog sends
   only an uploaded File path as `posterUrl` and may send the paused playhead as `posterTimeMs`.
   Polling reads `thumbnailUrl` (effective), `generatedPosterUrl` (rendered alternative), `fileId`,

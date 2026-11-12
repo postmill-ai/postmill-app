@@ -43,9 +43,17 @@ import { analyzeDesignerPreflight } from './design-preflight';
 import { ExportPreflight } from './export-preflight';
 import { openDesignerPreflightFinding } from './preflight-navigation';
 import {
+  emptyStaticExportBatch,
   MAX_UPLOAD_BYTES,
   renderOutputWithFallback,
+  renderPdfWithDiagnostics,
+  runStaticExportBatch,
+  uploadExportBlob,
   type ExportFallbackFormat,
+  type StaticExportCompleted,
+  type StaticExportFailure,
+  type StaticExportPendingUpload,
+  type StaticExportTask,
 } from './export-format';
 
 const useFocusTrap = (containerRef: React.RefObject<HTMLElement | null>) => {
@@ -172,12 +180,7 @@ const extFor = (format: FormatValue): string => {
   return extMap[format] || format;
 };
 
-interface ExportedFile {
-  id: string;
-  path: string;
-  name: string;
-  outputId: string;
-  alt?: string;
+interface ExportedFile extends StaticExportCompleted {
   thumbnailPath?: string;
   thumbnailTimestamp?: number;
 }
@@ -552,6 +555,8 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ done: 0, total: 0 });
   const [savedFiles, setSavedFiles] = useState<ExportedFile[]>([]);
+  const [staticExportFailures, setStaticExportFailures] = useState<StaticExportFailure[]>([]);
+  const staticPendingUploadsRef = useRef<StaticExportPendingUpload[]>([]);
   const [previews, setPreviews] = useState<{ idx: number; dataUrl: string }[]>([]);
   const [loadingPreviews, setLoadingPreviews] = useState(false);
   const previewDoneRef = useRef(false);
@@ -1096,7 +1101,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     } finally {
       setIsEnqueuing(false);
     }
-  }, [doc, store, exportAll, forceAllOutputs, outputFormats, videoFormat, videoQuality, videoBitrateKbps, videoFps, videoScale, normalizeLoudness, posterUrl, posterTimeMs, selectedFolderId, fetch, toaster]);
+  }, [doc, store, exportAll, forceAllOutputs, outputFormats, videoFormat, videoQuality, videoBitrateKbps, videoFps, videoScale, normalizeLoudness, posterUrl, posterTimeMs, selectedFolderId, fetch, toaster, t]);
 
   const retryFailedRenders = useCallback(() => {
     const candidates = exportAll || forceAllOutputs
@@ -1169,7 +1174,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
         pollRef.current = null;
       }
     };
-  }, [step, fetch]);
+  }, [step, fetch, t]);
 
   // Pre-fill alt from the output's alt when exporting
   const getOutputAlt = useCallback(
@@ -1299,12 +1304,15 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     const files: ExportedFile[] = renderJobs
       .filter((j) => j.status === 'completed' && j.artifactUrl)
       .map((j) => ({
+        key: `video:${j.id}`,
         id: j.fileId || j.id,
         path: j.artifactUrl || '',
         thumbnailPath: j.thumbnailUrl || posterUrl || undefined,
         thumbnailTimestamp: j.thumbnailTimestamp ?? 0,
         name: `${j.outputName}.${extFor(j.format)}`,
         outputId: j.outputId,
+        outputIndex: doc.outputs.findIndex((output) => output.id === j.outputId),
+        pageNumber: 0,
       }));
     setSavedFiles(files.length ? files : []);
     if (isCreatePost) {
@@ -1314,7 +1322,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
       return;
     }
     setStep('done');
-  }, [renderJobs, posterUrl, isCreatePost, createDraftPosts]);
+  }, [renderJobs, posterUrl, isCreatePost, createDraftPosts, doc.outputs]);
 
   // --- Upload ---
 
@@ -1331,12 +1339,9 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   }, [store, fetch]);
 
   const uploadBlob = useCallback(
-    async (
-      blob: Blob,
-      fileName: string
-    ): Promise<{ id: string; path: string } | null> => {
+    async (blob: Blob, task: StaticExportTask): Promise<{ id: string; path: string }> => {
       const formData = new FormData();
-      formData.append('file', blob, fileName);
+      formData.append('file', blob, task.fileName);
       // Attribution fields are deliberately not sent: the upload DTOs don't
       // declare them, so the global validation pipe (forbidNonWhitelisted)
       // rejected the whole request — and saveFile has no metadata parameter, so
@@ -1346,17 +1351,18 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
 
       // upload-simple is capped at 10 MB; fall back to the server-side endpoint for larger files.
       const endpoint = blob.size > MAX_UPLOAD_BYTES ? '/files/upload-server' : '/files/upload-simple';
-      const res = await fetch(endpoint, { method: 'POST', body: formData });
-      if (!res.ok) {
-        throw new Error(await readErrorMessage(res, t('designer_file_upload_failed', 'File upload failed')));
-      }
-      const saved = (await res.json()) as { id: string; path: string };
+      const saved = await uploadExportBlob(endpoint, formData, fetch, {
+        outputIndex: task.outputIndex,
+        pageNumber: task.pageNumber,
+        format: task.format,
+        scale: task.scale,
+      });
       try {
         downloadUrlsRef.current.set(saved.id, URL.createObjectURL(blob));
       } catch {}
       return saved;
     },
-    [fetch, selectedFolderId, t]
+    [fetch, selectedFolderId]
   );
 
   // --- Thumbnail generation (for step 3) ---
@@ -1366,16 +1372,26 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     previewDoneRef.current = true;
     setLoadingPreviews(true);
     const result: { idx: number; dataUrl: string }[] = [];
+    let previewError = '';
     try {
       for (let i = 0; i < selectedOutputs.length; i++) {
         const out = selectedOutputs[i];
         if (!('children' in out)) continue;
-        const { blob } = await renderOutputWithFallback(doc, out as DesignerOutput, 'png', 1, 0.25, fetch);
-        result.push({ idx: i, dataUrl: await blobDataUrl(blob) });
+        try {
+          const { blob } = await renderOutputWithFallback(doc, out as DesignerOutput, 'png', 1, 0.25, fetch, {
+            stage: 'preview',
+            outputIndex: doc.outputs.indexOf(out),
+            pageNumber: 0,
+          });
+          result.push({ idx: i, dataUrl: await blobDataUrl(blob) });
+        } catch (error) {
+          previewError ||= error instanceof Error
+            ? error.message
+            : t('designer_preview_failed', 'Preview could not be rendered. You can still try the final export.');
+        }
       }
       setPreviews(result);
-    } catch (error) {
-      toaster.show((error as Error).message || t('designer_export_failed', 'Export failed'), 'warning');
+      if (previewError) toaster.show(previewError, 'warning');
     } finally {
       setLoadingPreviews(false);
     }
@@ -1396,152 +1412,211 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
 
   // --- Server-side PDF render ---
 
-  const renderPdfOnServer = useCallback(async (outputs?: DesignerOutput[]): Promise<Blob | null> => {
+  const renderPdfOnServer = useCallback(async (outputs?: DesignerOutput[]): Promise<Blob> => {
     const pdfOutputs = (outputs ?? (selectedOutputs as DesignerOutput[]));
     const pdfDoc: DesignerDoc = { ...doc, outputs: pdfOutputs };
-    const res = await fetch('/media/designs/render', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ doc: pdfDoc, format: 'pdf' }),
+    return renderPdfWithDiagnostics(pdfDoc, fetch, {
+      stage: 'render',
+      outputIndex: Math.max(0, doc.outputs.findIndex((output) => output.id === pdfOutputs[0]?.id)),
+      pageNumber: 0,
     });
-    if (!res.ok) return null;
-    return res.blob();
   }, [doc, selectedOutputs, fetch]);
+
+  const localizeStaticExportFailure = useCallback((failure: StaticExportFailure) => {
+    const diagnostic = failure.diagnostic;
+    const stage = diagnostic.stage === 'preview'
+      ? t('designer_export_stage_preview', 'Preview')
+      : diagnostic.stage === 'upload'
+        ? t('designer_export_stage_upload', 'Upload')
+        : t('designer_export_stage_render', 'Render');
+    const retry = diagnostic.stage === 'preview'
+      ? t('designer_export_preview_retry_hint', 'You can still try the final export.')
+      : t('designer_export_retry_hint', 'Retry this output; completed exports were kept.');
+    let message = failure.message;
+    if (diagnostic.kind === 'http') {
+      message = t('designer_export_http_failed', '{{stage}} failed with HTTP {{status}}. {{retry}}', {
+        stage,
+        status: diagnostic.status,
+        retry,
+      });
+    } else if (diagnostic.kind === 'network') {
+      message = t('designer_export_network_failed', '{{stage}} could not reach the server. Check your connection. {{retry}}', { stage, retry });
+    } else if (diagnostic.kind === 'timeout') {
+      message = t('designer_export_timeout_failed', '{{stage}} took too long. {{retry}}', { stage, retry });
+    } else if (diagnostic.kind === 'abort') {
+      message = t('designer_export_aborted', '{{stage}} was cancelled.', { stage });
+    } else if (diagnostic.kind === 'unknown') {
+      message = t('designer_export_unknown_failed', '{{stage}} could not be completed. {{retry}}', { stage, retry });
+    } else if (diagnostic.kind === 'oversize') {
+      const label = diagnostic.format === 'transparent'
+        ? t('designer_format_transparent_png', 'Transparent PNG')
+        : diagnostic.format.toUpperCase();
+      message = t(
+        'designer_export_reduce_failed',
+        'Could not reduce {{label}} under 10 MB. Choose a smaller scale or JPEG.',
+        { label },
+      );
+    }
+    return { ...failure, message };
+  }, [t]);
 
   // --- Export handler ---
 
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(async (retryFailedOnly = false, retryOutputId?: string) => {
     setExporting(true);
     setExportProgress({ done: 0, total: selectedOutputs.length });
     try {
-      // A re-export replaces the last batch's download URLs.
-      downloadUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      downloadUrlsRef.current.clear();
+      if (!retryFailedOnly) {
+        downloadUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+        downloadUrlsRef.current.clear();
+        staticPendingUploadsRef.current = [];
+        setSavedFiles([]);
+        setStaticExportFailures([]);
+        await pingDownload();
+      }
+
       const state = store.getState();
       const baseName = (state.designName || 'design').replace(/[^a-zA-Z0-9]/g, '_');
-
-      await pingDownload();
-
-      const results: ExportedFile[] = [];
-
+      const tasks: StaticExportTask[] = [];
       const allPdf = selectedOutputs.every((o) => (outputFormats[o.id] || 'png') === 'pdf');
 
       if (allPdf) {
-        const pdfBlob = await renderPdfOnServer();
-        if (!pdfBlob) {
-          toaster.show(t('designer_pdf_render_failed', 'PDF render failed'), 'warning');
-          return;
-        }
-        const pdfName =
-          selectedOutputs.length === 1
-            ? `${baseName} - ${(selectedOutputs[0].name || selectedOutputs[0].formatId || 'output').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
-            : `${baseName} - Combined.pdf`;
-        const saved = await uploadBlob(pdfBlob, pdfName);
-        if (saved) {
-          results.push({
-            id: saved.id,
-            path: saved.path,
-            name: pdfName,
-            outputId: selectedOutputs[0].id,
-          });
-          setExportProgress({ done: selectedOutputs.length, total: selectedOutputs.length });
-        }
+        const output = selectedOutputs[0];
+        const pdfName = selectedOutputs.length === 1
+          ? `${baseName} - ${(output.name || output.formatId || 'output').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+          : `${baseName} - Combined.pdf`;
+        tasks.push({
+          key: 'combined-pdf',
+          outputId: output.id,
+          outputIndex: doc.outputs.indexOf(output),
+          pageNumber: 0,
+          format: 'pdf',
+          scale: 1,
+          fileName: pdfName,
+          render: () => renderPdfOnServer(),
+        });
       } else {
         for (let i = 0; i < selectedOutputs.length; i++) {
           const output = selectedOutputs[i];
           const fmt = outputFormats[output.id] || 'png';
-          try {
-            const outputName = (output.name || output.formatId || `output_${i + 1}`).replace(
-              /[^a-zA-Z0-9]/g,
-              '_'
-            );
-            // A per-output PDF (in a mixed selection) must go through the server
-            // renderer — Konva's toBlob can't emit PDF and would otherwise write a
-            // PNG named ".pdf". The server flattens ALL of the output's pages
-            // sequentially (renderPdf), so no page selection applies here.
-            if (fmt === 'pdf') {
-              const pdfBlob = await renderPdfOnServer([output as DesignerOutput]);
-              if (!pdfBlob) throw new Error('PDF render failed');
-              const fileName = `${baseName} - ${outputName}.pdf`;
-              const saved = await uploadBlob(pdfBlob, fileName);
-              if (saved) {
-                results.push({ id: saved.id, path: saved.path, name: fileName, outputId: output.id });
-              }
+          const outputName = (output.name || output.formatId || `output_${i + 1}`).replace(
+            /[^a-zA-Z0-9]/g,
+            '_'
+          );
+          if (fmt === 'pdf') {
+            tasks.push({
+              key: `${output.id}:pdf`,
+              outputId: output.id,
+              outputIndex: doc.outputs.indexOf(output),
+              pageNumber: 0,
+              format: 'pdf',
+              scale: 1,
+              fileName: `${baseName} - ${outputName}.pdf`,
+              render: () => renderPdfOnServer([output as DesignerOutput]),
+            });
+            continue;
+          }
+
+          const pageList = 'children' in output ? pagesForOutput(output as DesignerOutput) : [0];
+          const suffixPages = 'children' in output && pageCount(output as DesignerOutput) > 1;
+          for (const p of pageList) {
+            const pageView = outputPageView(output as DesignerOutput, p);
+            const pageSuffix = suffixPages ? ` - Page ${p + 1}` : '';
+            const taskBase = {
+              key: `${output.id}:page:${p}`,
+              outputId: output.id,
+              outputIndex: doc.outputs.indexOf(output),
+              pageNumber: p,
+              format: fmt,
+              scale,
+              alt: getOutputAlt(output.id),
+            };
+            if (fmt === 'svg') {
+              tasks.push({
+                ...taskBase,
+                fileName: `${baseName} - ${outputName}${pageSuffix}.svg`,
+                render: async () => new Blob([await renderOutputAsSvg(pageView, doc.symbols)], {
+                  type: 'image/svg+xml',
+                }),
+              });
               continue;
             }
-            // PNG/JPEG/WebP/SVG: one File per selected page × output. Pages
-            // render through outputPageView, so a page is just "an output"
-            // to the renderers. The page suffix appears only when the output
-            // actually has multiple pages.
-            const pageList =
-              'children' in output ? pagesForOutput(output as DesignerOutput) : [0];
-            const suffixPages = 'children' in output && pageCount(output as DesignerOutput) > 1;
-            for (const p of pageList) {
-              const pageView = outputPageView(output as DesignerOutput, p);
-              const pageSuffix = suffixPages ? ` - Page ${p + 1}` : '';
-              if (fmt === 'svg') {
-                const svg = await renderOutputAsSvg(pageView, doc.symbols);
-                const fileName = `${baseName} - ${outputName}${pageSuffix}.svg`;
-                const saved = await uploadBlob(
-                  new Blob([svg], { type: 'image/svg+xml' }),
-                  fileName
+            tasks.push({
+              ...taskBase,
+              fileName: `${baseName} - ${outputName}${pageSuffix}.${extFor(fmt)}`,
+              render: async () => {
+                const { blob, usedFormat, usedQuality, usedScale } = await renderOutputWithFallback(
+                  doc,
+                  pageView,
+                  fmt as ExportFallbackFormat,
+                  quality,
+                  scale,
+                  fetch,
+                  {
+                    stage: 'render',
+                    outputIndex: doc.outputs.indexOf(output),
+                    pageNumber: p,
+                  },
                 );
-                if (saved) {
-                  results.push({ id: saved.id, path: saved.path, name: fileName, outputId: output.id });
+                if (usedScale !== scale || usedQuality !== quality) {
+                  const reduction = [
+                    usedScale !== scale ? `${usedScale}x` : '',
+                    usedQuality !== quality ? `${Math.round(usedQuality * 100)}% quality` : '',
+                  ].filter(Boolean).join(', ');
+                  toaster.show(
+                    t(
+                      'designer_export_reduced_to_fit',
+                      'Export reduced to {{reduction}} to stay under 10 MB; the selected format was preserved.',
+                      { reduction }
+                    ),
+                    'warning'
+                  );
                 }
-                continue;
-              }
-              const { blob, usedFormat, usedQuality, usedScale } = await renderOutputWithFallback(
-                doc,
-                pageView,
-                fmt as ExportFallbackFormat,
-                quality,
-                scale,
-                fetch,
-              );
-              if (usedScale !== scale || usedQuality !== quality) {
-                const reduction = [
-                  usedScale !== scale ? `${usedScale}x` : '',
-                  usedQuality !== quality ? `${Math.round(usedQuality * 100)}% quality` : '',
-                ].filter(Boolean).join(', ');
-                toaster.show(
-                  t(
-                    'designer_export_reduced_to_fit',
-                    'Export reduced to {{reduction}} to stay under 10 MB; the selected format was preserved.',
-                    { reduction }
-                  ),
-                  'warning'
-                );
-              }
-              const ext = extFor(usedFormat);
-              const fileName = `${baseName} - ${outputName}${pageSuffix}.${ext}`;
-              const saved = await uploadBlob(blob, fileName);
-              if (saved) {
-                const alt = getOutputAlt(output.id);
-                results.push({
-                  id: saved.id,
-                  path: saved.path,
-                  name: fileName,
-                  outputId: output.id,
-                  alt,
-                });
-              }
-            }
-            setExportProgress({ done: i + 1, total: selectedOutputs.length });
-          } catch (err) {
-            toaster.show((err as Error).message || t('designer_export_failed', 'Export failed'), 'warning');
-            setExporting(false);
-            return;
+                return blob;
+              },
+            });
           }
         }
       }
 
+      const previous = retryFailedOnly
+        ? {
+            completed: savedFiles,
+            failures: staticExportFailures,
+            pendingUploads: staticPendingUploadsRef.current,
+          }
+        : emptyStaticExportBatch();
+      const batch = await runStaticExportBatch(tasks, uploadBlob, previous, {
+        retryFailedOnly,
+        outputId: retryOutputId,
+      });
+      const results: ExportedFile[] = batch.completed;
+      const failures = batch.failures.map(localizeStaticExportFailure);
+      setSavedFiles(results);
+      setStaticExportFailures(failures);
+      staticPendingUploadsRef.current = batch.pendingUploads;
+      const failedOutputs = new Set(failures.map((failure) => failure.outputId));
+      setExportProgress({
+        done: Math.max(0, selectedOutputs.length - failedOutputs.size),
+        total: selectedOutputs.length,
+      });
+
+      if (failures.length) {
+        toaster.show(
+          t(
+            'designer_export_incomplete',
+            '{{count}} export needs attention. Completed exports were kept.',
+            { count: failures.length }
+          ),
+          'warning'
+        );
+        return;
+      }
       if (!results.length) {
         toaster.show(t('designer_export_failed', 'Export failed'), 'warning');
         return;
       }
 
-      setSavedFiles(results);
       toaster.show(
         t('designer_exported_n_files', 'Exported {{count}} file', {
           count: results.length,
@@ -1549,8 +1624,6 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
         'success'
       );
       if (isCreatePost) {
-        // Variants are in /files now — attach them to one draft per picked
-        // channel and redirect into the first draft's composer.
         await createDraftPosts(results);
         return;
       }
@@ -1577,7 +1650,19 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     getOutputAlt,
     isCreatePost,
     createDraftPosts,
+    savedFiles,
+    staticExportFailures,
+    localizeStaticExportFailure,
   ]);
+
+  const handleUseCompletedExports = useCallback(async () => {
+    if (!savedFiles.length) return;
+    if (isCreatePost) {
+      await createDraftPosts(savedFiles);
+      return;
+    }
+    setStep('done');
+  }, [savedFiles, isCreatePost, createDraftPosts]);
 
   // --- Render ---
 
@@ -1971,26 +2056,101 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
               ))}
           </div>
 
+          {staticExportFailures.length > 0 && (
+            <div role="alert" className="flex flex-col gap-2 rounded-[6px] border border-red-400/30 bg-red-400/10 p-2">
+              <div className="text-[12px] text-dangerText font-medium">
+                {t('designer_some_exports_need_attention', 'Some exports need attention')}
+              </div>
+              {staticExportFailures.map((failure) => {
+                const output = doc.outputs[failure.outputIndex];
+                return (
+                  <div key={failure.key} className="flex items-start justify-between gap-2 text-[11px]">
+                    <span className="text-newTextColor/70">
+                      {output?.name || output?.formatId || t('designer_output_n_alt', 'Output {{n}}', { n: failure.outputIndex + 1 })}
+                      {failure.pageNumber > 0 ? ` · ${t('designer_page_number', 'Page {{number}}', { number: failure.pageNumber + 1 })}` : ''}
+                      {' — '}{failure.message}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={exporting || creatingDrafts}
+                      onClick={() => void handleExport(true, failure.outputId)}
+                      className="shrink-0 text-btnPrimaryAccent hover:underline disabled:opacity-50"
+                    >
+                      {t('designer_retry_output', 'Retry output')}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {savedFiles.length > 0 && (
+            <div className="flex flex-col gap-1 rounded-[6px] border border-studioBorder p-2">
+              <div className="text-[12px] text-textColor font-medium">
+                {t('designer_completed_exports', 'Completed exports')}
+              </div>
+              {savedFiles.map((file) => {
+                const url = downloadUrlsRef.current.get(file.id);
+                return url ? (
+                  <a
+                    key={file.key}
+                    href={url}
+                    download={file.name}
+                    className="text-[11px] text-btnPrimaryAccent hover:underline truncate"
+                  >
+                    {file.name}
+                  </a>
+                ) : null;
+              })}
+            </div>
+          )}
+
           <div className="flex justify-between gap-2 mt-2">
             <button
               onClick={isCreatePost ? () => setStep('channels') : goToFolder}
-              className="px-4 h-[38px] rounded-[6px] border border-studioBorder text-[13px] text-textColor hover:bg-boxHover transition-all"
+              disabled={exporting || creatingDrafts}
+              className="px-4 h-[38px] rounded-[6px] border border-studioBorder text-[13px] text-textColor hover:bg-boxHover disabled:opacity-50 transition-all"
             >
               {t('back', 'Back')}
             </button>
-            <button
-              onClick={handleExport}
-              disabled={exporting || creatingDrafts}
-              className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
-            >
-              {exporting
-                ? t('designer_exporting_progress', 'Exporting {{done}}/{{total}}…', exportProgress)
-                : creatingDrafts
-                  ? t('designer_creating_drafts_ellipsis', 'Creating drafts...')
-                  : isCreatePost
-                    ? t('designer_save_and_create_post', 'Save & Create Post')
-                    : t('designer_export_n_files', 'Export {{count}} file', { count: outputCount })}
-            </button>
+            {staticExportFailures.length > 0 ? (
+              <div className="flex gap-2">
+                {savedFiles.length > 0 && (
+                  <button
+                    onClick={handleUseCompletedExports}
+                    disabled={exporting || creatingDrafts}
+                    className="px-4 h-[38px] rounded-[6px] bg-designerAccent text-white text-[13px] font-medium hover:bg-designerAccent/80 disabled:opacity-50 transition-all"
+                  >
+                    {creatingDrafts
+                      ? t('designer_creating_drafts_ellipsis', 'Creating drafts...')
+                      : t('designer_use_completed_exports', 'Use completed exports')}
+                  </button>
+                )}
+                <button
+                  onClick={() => void handleExport(true)}
+                  disabled={exporting || creatingDrafts}
+                  className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
+                >
+                  {exporting
+                    ? t('designer_exporting_progress', 'Exporting {{done}}/{{total}}…', exportProgress)
+                    : t('designer_retry_failed_exports', 'Retry failed')}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => void handleExport()}
+                disabled={exporting || creatingDrafts}
+                className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
+              >
+                {exporting
+                  ? t('designer_exporting_progress', 'Exporting {{done}}/{{total}}…', exportProgress)
+                  : creatingDrafts
+                    ? t('designer_creating_drafts_ellipsis', 'Creating drafts...')
+                    : isCreatePost
+                      ? t('designer_save_and_create_post', 'Save & Create Post')
+                      : t('designer_export_n_files', 'Export {{count}} file', { count: outputCount })}
+              </button>
+            )}
           </div>
         </>
       )}
