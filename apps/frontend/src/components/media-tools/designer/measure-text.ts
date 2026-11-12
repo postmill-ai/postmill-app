@@ -1,5 +1,8 @@
 import {
+  applyTextTransform,
   fitTextToBox,
+  measureLineWidth,
+  wrapTextLines,
   type FittedText,
   type MeasureText,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
@@ -86,6 +89,49 @@ export const measureForElement = (el: DesignerElement): MeasureText | undefined 
     ctx.font = fontShorthand(el, size);
     return ctx.measureText(line).width;
   };
+};
+
+/**
+ * Grow a flat text box enough for its authored size. Width changes only when
+ * one unwrapped word cannot fit; ordinary wrapping affects height alone.
+ */
+export const growBoxFor = (
+  element: DesignerElement | null,
+  fontSize: number,
+  measure?: MeasureText | null
+): Partial<DesignerElement> => {
+  if (!element || element.type !== 'text') return {};
+  if (element.richText?.length || element.textPath || (element.curve || 0) !== 0) {
+    return {};
+  }
+  const m = measure === undefined ? measureForElement(element) : measure;
+  if (!m) return {};
+
+  const text = applyTextTransform(element.text ?? '', element.textTransform);
+  const indent = element.firstLineIndent || 0;
+  const letterSpacing = element.letterSpacing || 0;
+  const scaleX = element.textScaleX || 1;
+  const lines = wrapTextLines(
+    text,
+    Math.max(1, element.width - indent),
+    fontSize,
+    letterSpacing,
+    m,
+    scaleX
+  );
+  const paragraphs = text.split('\n').length;
+  const needed =
+    Math.ceil(Math.max(1, lines.length) * (element.lineHeight || 1.2) * fontSize) +
+    Math.max(0, paragraphs - 1) * (element.paragraphSpacing || 0);
+
+  const patch: Partial<DesignerElement> = {};
+  if (needed > element.height) patch.height = needed;
+  if (lines.length === 1 && paragraphs === 1) {
+    const lineWidth =
+      measureLineWidth(lines[0], fontSize, letterSpacing, m, scaleX) + indent;
+    if (lineWidth > element.width) patch.width = Math.ceil(lineWidth);
+  }
+  return patch;
 };
 
 /**

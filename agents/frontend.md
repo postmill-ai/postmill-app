@@ -350,13 +350,20 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   Combined text is capped at `MAX_TEXT_LEN` with a visible toaster warning; runs beyond `MAX_RICH_TEXT_RUNS`
   are coalesced into the final run with a formatting-simplification warning so text is not lost.
   Enter-to-edit prevents the key's default action so selection/focus cannot replace the text with a newline.
-- **Mobile workspace uses the same store and tool registry.** `mobile-designer-tools.tsx` provides
-  prominent quick actions and inline, non-modal Tools/Brand sheets; it never forks editing behavior.
-  The Inspector participates in layout at half or expanded height instead of covering the canvas,
-  with collapse, accessible snap buttons, and a pointer/keyboard drag handle. The main mobile column
-  scrolls when expanded panels exceed the viewport, and Brand mounts only in its active layout.
-  Mobile keeps design rename and timeline collapse/zoom-to-fit available; desktop adds a direct rail
-  Brand button through the same `brandPanel.toggle()` action as the Window menu.
+  `measure-text.ts` owns shared browser box growth: text commits and font-size edits grow height for
+  wrapping, and width only for one unwrapped overflow word; they never shrink a manual box. Canvas
+  Ctrl/Cmd+Shift+> and < run `text-shortcuts.ts`, ignore text-entry focus, cover every selected static
+  text or video text/caption clip, use linked store updates and shared font bounds, and commit once.
+- **Desktop/mobile workspace shares one store and tool registry.** Desktop docks Inspector, Layers,
+  Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; only the active heavy panel mounts.
+  The rail Brand action and Tools ▸ Workspace commands select those tabs, History/Versions sit beside
+  Undo/Redo, Templates sits beside Save, and View remains display-only. History, Versions, and Template
+  Fields keep their persisted floating-panel positions. `mobile-designer-tools.tsx` keeps prominent
+  quick actions and inline, non-modal Tools/Brand sheets; it never forks editing behavior. The mobile
+  Inspector participates in layout at half or expanded height with collapse, accessible snap buttons,
+  and a pointer/keyboard drag handle. The main mobile column scrolls when expanded panels exceed the
+  viewport, and Brand mounts only in its active layout. Mobile keeps design rename and timeline
+  collapse/zoom-to-fit available.
 - **Timeline gestures and exact timing.** Clip move/trim and ruler scrub use `trySetPointerCapture`
   from `pointer-capture.ts` (an inactive pointer returns false instead of throwing; every Designer
   capture call goes through it), with pointer-id checks, cancellation/lost-capture handling, and
@@ -375,10 +382,14 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `from.endMs <= to.startMs` transition rule, including gaps and fractional flush cuts. A 24×16 badge
   sits in a dedicated top lane clear of the ruler and both full-height trim edges; tiny cut-only pairs
   omit it, but every pair with an existing transition keeps its control. The badge opens the existing
-  transition popover; do not add another timeline model. The transport's duration stepper uses `setVideoDuration` and the shared 1–180 s cap. Image
-  replacement/background removal lives in `clip-media.ts`: preserve editing semantics, update media
-  identity/intrinsics, and clear crop/original/smart-filter state. Generation returns a review
-  candidate and does not edit the doc; Apply commits once after the before/after dialog. Static
+  transition popover; do not add another timeline model. The transport's duration stepper uses `setVideoDuration` and the shared 1–180 s cap. Clip
+  replacement/background removal lives in `clip-media.ts`; static replacement shares
+  `image-replacement.ts`. Replacement preserves frame, fit, and focal intent, remaps source-pixel
+  crop to the new intrinsic dimensions, adopts the new owned File, clears original/smart-filter and
+  painted-mask state, propagates linked content, and commits one Undo. Dropping an image file onto an
+  existing static image or image/sticker clip uses those same actions; empty-canvas static drops keep
+  the existing insertion behavior, and video/audio clips are never replacement targets. Generation
+  returns a review candidate and does not edit the doc; Apply commits once after the before/after dialog. Static
   (`ai-image-actions.ts`) and clip paths share `background-removal.ts` geometry: preserve the existing
   crop/fit/focal geometry by default, with preserve-frame contain and aspect-correct canvas fitting
   as options. Apply keeps original pixels as `src`, rasterizes the reviewed alpha into the final

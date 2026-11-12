@@ -6,6 +6,7 @@ import type { DesignerElement } from './designer.store';
 
 vi.mock('./measure-text', () => ({
   fittedFontSize: (el: DesignerElement) => el.fontSize ?? 16,
+  growBoxFor: () => ({}),
 }));
 
 const element = {

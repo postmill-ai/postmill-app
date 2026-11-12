@@ -13,7 +13,8 @@ import {
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { resolveTextEditTarget } from './symbol-edit';
-import { fittedFontSize } from './measure-text';
+import { fittedFontSize, growBoxFor } from './measure-text';
+import type { MeasureText } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 
 interface TextEditingProps {
   element: DesignerElement;
@@ -257,7 +258,8 @@ const mergeRuns = (runs: TextRun[], el: DesignerElement): TextRun[] => {
 
 export const buildTextEditCommit = (
   runs: TextRun[],
-  element: DesignerElement
+  element: DesignerElement,
+  measure?: MeasureText
 ): Partial<DesignerElement> => {
   const flat = runs.map((r) => r.text).join('');
   const hasStyle = runs.some(
@@ -274,10 +276,12 @@ export const buildTextEditCommit = (
   // base-styled run (e.g. the one bold word was deleted), the runs MUST be
   // cleared — the canvas prefers richText over text, so leaving the old runs
   // in place keeps rendering the deleted words.
-  return {
+  const commit = {
     text: flat,
     richText: runs.length > 1 || hasStyle ? runs : undefined,
   };
+  const next = { ...element, ...commit };
+  return { ...commit, ...growBoxFor(next, next.fontSize || 16, measure) };
 };
 
 /**

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildTextElementPatch, growBoxFor } from './text-format-panel';
+import { buildTextElementPatch } from './text-format-panel';
+import { growBoxFor } from '../measure-text';
 import type { DesignerElement, TextRun } from '../designer.store';
 import type { MeasureText } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 
@@ -11,7 +12,8 @@ vi.mock('../fonts', () => ({
 // The no-measure branch only exists where no canvas backend does, and this
 // jsdom build HAS one — so the module's own measure has to be mocked away to
 // see it.
-vi.mock('../measure-text', () => ({
+vi.mock('../measure-text', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../measure-text')>()),
   fittedFontSize: (el: { fontSize?: number }) => el.fontSize ?? 16,
   measureForElement: () => undefined,
 }));
@@ -95,7 +97,7 @@ describe('growBoxFor', () => {
     ).toEqual({});
     // jsdom has no canvas backend, so the panel's own measure is unavailable —
     // the box is left exactly as authored rather than grown on a guess.
-    expect(growBoxFor(baseText(), 40)).toEqual({});
+    expect(growBoxFor(baseText(), 40, null)).toEqual({});
   });
 });
 

@@ -14,13 +14,7 @@ import {
   SegmentedControl,
   Stepper,
 } from '../controls';
-import { fittedFontSize, measureForElement } from '../measure-text';
-import {
-  applyTextTransform,
-  measureLineWidth,
-  wrapTextLines,
-  type MeasureText,
-} from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
+import { fittedFontSize, growBoxFor } from '../measure-text';
 import { useBrandColors } from './use-brand-colors';
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -44,79 +38,6 @@ const DECORATION_KEYS = new Set(['underline', 'lineThrough']);
 /** Panel updates: element fields plus the run-only decoration flags. */
 export type TextElementUpdates = Partial<DesignerElement> &
   Partial<Pick<TextRun, 'underline' | 'lineThrough'>>;
-
-/**
- * Height (and, when a lone word overflows, width) the box needs so a typed
- * font size is actually the size that paints.
- *
- * The fitter is shrink-only by design, which means the Size field could be set
- * to anything and the canvas would quietly paint something smaller. Growing the
- * box makes the number honest. Style changes may later shrink feature-added
- * height, but only to the height remembered before the first style growth. The
- * wrap is computed AT THE REQUESTED size: measuring the line count at the
- * current size grew the box for the old wrap, which the fitter then immediately
- * shrank the font back into.
- */
-const boxPatchFor = (
-  element: DesignerElement | null,
-  fontSize: number,
-  shrinkHeight: boolean,
-  measure?: MeasureText
-): Partial<DesignerElement> => {
-  if (!element || element.type !== 'text') return {};
-  // Rich, on-path and curved text lay out differently and are never shrunk by
-  // the fitter, so the authored size already renders — no box to grow.
-  if (element.richText?.length || element.textPath || (element.curve || 0) !== 0) {
-    return {};
-  }
-  const m = measure ?? measureForElement(element);
-  if (!m) return {};
-
-  const text = applyTextTransform(element.text ?? '', element.textTransform);
-  const indent = element.firstLineIndent || 0;
-  const letterSpacing = element.letterSpacing || 0;
-  const scaleX = element.textScaleX || 1;
-  // Same wrap rule the fitter applies: the box narrows by the first-line indent.
-  const lines = wrapTextLines(
-    text,
-    Math.max(1, element.width - indent),
-    fontSize,
-    letterSpacing,
-    m,
-    scaleX
-  );
-  const paragraphs = text.split('\n').length;
-  const needed =
-    Math.ceil(Math.max(1, lines.length) * (element.lineHeight || 1.2) * fontSize) +
-    Math.max(0, paragraphs - 1) * (element.paragraphSpacing || 0);
-
-  const patch: Partial<DesignerElement> = {};
-  if (needed > element.height || (shrinkHeight && needed < element.height)) {
-    patch.height = needed;
-  }
-  // A single word wider than the box never wraps — it overflows — so growing
-  // height can't make the size honest there; the box has to widen. Style changes
-  // may shrink only a height the style feature grew, never an authored layout box.
-  if (lines.length === 1 && paragraphs === 1) {
-    const lineWidth =
-      measureLineWidth(lines[0], fontSize, letterSpacing, m, scaleX) + indent;
-    if (lineWidth > element.width) patch.width = Math.ceil(lineWidth);
-  }
-  return patch;
-};
-
-export const growBoxFor = (
-  element: DesignerElement | null,
-  fontSize: number,
-  measure?: MeasureText
-): Partial<DesignerElement> => boxPatchFor(element, fontSize, false, measure);
-
-export const fitStyleBoxFor = (
-  element: DesignerElement | null,
-  fontSize: number,
-  measure?: MeasureText,
-  shrinkHeight = false
-): Partial<DesignerElement> => boxPatchFor(element, fontSize, shrinkHeight, measure);
 
 /**
  * The patch one `update()` call writes to an element.

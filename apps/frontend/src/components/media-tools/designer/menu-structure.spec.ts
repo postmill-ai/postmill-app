@@ -26,7 +26,7 @@ describe('the menu bar', () => {
   });
 
   it('no longer has Format, Options or Window as top-level menus', () => {
-    // They became File ▸ Format, File ▸ Options and a group inside View.
+    // They became File ▸ Format, File ▸ Options and Tools ▸ Workspace.
     for (const gone of ['format', 'options', 'window']) {
       expect(MENU_ORDER).not.toContain(gone as DesignerMenu);
     }

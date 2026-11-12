@@ -51,4 +51,40 @@ describe('buildTextEditCommit', () => {
     const commit = buildTextEditCommit(runs, el);
     expect(commit.richText).toEqual(runs);
   });
+
+  it('auto-fits height after a flat text edit without shrinking a manual box', () => {
+    const flat = {
+      ...el,
+      text: '',
+      richText: undefined,
+      width: 100,
+      height: 20,
+      fontSize: 20,
+    } as DesignerElement;
+    const measure = (text: string, size: number) => text.length * size * 0.5;
+    expect(buildTextEditCommit([{ text: 'hello world' } as TextRun], flat, measure).height).toBe(48);
+    expect(buildTextEditCommit(
+      [{ text: 'hello world' } as TextRun],
+      { ...flat, height: 200 },
+      measure
+    ).height).toBeUndefined();
+  });
+
+  it('widens only for one unwrapped overflow word', () => {
+    const flat = {
+      ...el,
+      text: '',
+      richText: undefined,
+      width: 100,
+      height: 20,
+      fontSize: 20,
+    } as DesignerElement;
+    const measure = (text: string, size: number) => text.length * size * 0.5;
+    expect(buildTextEditCommit(
+      [{ text: 'supercalifragilistic' } as TextRun],
+      flat,
+      measure
+    ).width).toBe(200);
+    expect(buildTextEditCommit([{ text: 'hello world' } as TextRun], flat, measure).width).toBeUndefined();
+  });
 });

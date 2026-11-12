@@ -17,6 +17,7 @@ import {
   refitSymbolToText,
 } from './symbol-edit';
 import { measureForElement } from './measure-text';
+import { adjustSelectedTextFontSize } from './text-shortcuts';
 import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
 import { SafeZoneOverlay } from './safe-zones';
 import { Rulers } from './rulers';
@@ -41,6 +42,7 @@ import { CropOverlay } from './crop-overlay';
 import { ensureFontsUsed } from './fonts';
 import { getImageNaturalSize } from './elements';
 import { computeCoverCrop } from './reflow';
+import { imageDropTargetById, replaceImageAtDropTarget, uploadDroppedImage, type ImageDropTarget } from './image-drop';
 import { textureFillProps } from './textures';
 import { svgToPathElements } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-import';
 import {
@@ -1686,6 +1688,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         } else {
           st.duplicateElements(selectedIds);
         }
+      } else if (mod && e.shiftKey && (e.key === '>' || e.key === '<')) {
+        e.preventDefault();
+        adjustSelectedTextFontSize(store, e.key === '>' ? 1 : -1);
       } else if (mod && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
         st.setZoom(st.zoom * 1.2);
@@ -1835,6 +1840,32 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
       const file = files[0];
       if (!file.type.startsWith('image/')) return;
+
+      let node = stageRef.current?.getIntersection({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      }) as Konva.Node | null | undefined;
+      let replacementTarget: ImageDropTarget | null = null;
+      while (node && !replacementTarget) {
+        const id = node.id();
+        if (id) replacementTarget = imageDropTargetById(store, id);
+        node = node.getParent();
+      }
+      if (replacementTarget) {
+        setUploadingFile(true);
+        void uploadDroppedImage(fetch, file)
+          .then((item) => replaceImageAtDropTarget(store, replacementTarget, item))
+          .then((replaced) => {
+            if (!replaced) {
+              toaster.show(t('failed_to_upload_file', 'Failed to upload file'), 'warning');
+            }
+          })
+          .catch(() => {
+            toaster.show(t('failed_to_upload_file', 'Failed to upload file'), 'warning');
+          })
+          .finally(() => setUploadingFile(false));
+        return;
+      }
 
       if (isVideo) return;
 

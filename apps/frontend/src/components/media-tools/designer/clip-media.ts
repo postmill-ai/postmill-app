@@ -1,6 +1,7 @@
 import type { VideoClip } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { probeImageNaturalSize } from './elements';
 import { readErrorMessage } from './read-error-message';
+import { replacementCrop } from './image-replacement';
 import {
   backgroundRemovalPatch,
   flattenedBackgroundRemovalPatch,
@@ -63,15 +64,16 @@ export const imageReplacementPatch = (item: {
   fileId?: string;
   width?: number | null;
   height?: number | null;
-}): Partial<VideoClip> => ({
+}, before?: Pick<VideoClip, 'naturalWidth' | 'naturalHeight' | 'crop' | 'fitMode' | 'focalPoint'>): Partial<VideoClip> => ({
   src: item.url,
   fileId: item.fileId,
   qr: undefined,
   mediaType: 'image',
   naturalWidth: item.width || undefined,
   naturalHeight: item.height || undefined,
-  crop: undefined,
-  focalPoint: undefined,
+  crop: replacementCrop(before, item),
+  fitMode: before?.fitMode,
+  focalPoint: before?.focalPoint,
   originalSrc: undefined,
   originalFileId: undefined,
   smartFilters: undefined,
@@ -103,7 +105,7 @@ export const replaceClipImage = async ({
     target.outputIndex,
     target.trackId,
     target.clipId,
-    imageReplacementPatch({ ...item, width: natural?.width, height: natural?.height })
+    imageReplacementPatch({ ...item, width: natural?.width, height: natural?.height }, before)
   );
   if (updated) store.getState().pushHistory();
   return updated;

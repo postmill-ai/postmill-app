@@ -2,6 +2,8 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const DESIGN_ID = 'designer-editing-ux-e2e';
 
+const PNG_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg==';
+
 const initialDoc = {
   version: 13,
   mode: 'image',
@@ -17,7 +19,7 @@ const initialDoc = {
       x: 40,
       y: 40,
       width: 300,
-      height: 100,
+      height: 20,
       rotation: 0,
       opacity: 1,
       locked: false,
@@ -25,6 +27,52 @@ const initialDoc = {
       fontFamily: 'Arial',
       fontSize: 32,
       fill: '#111111',
+    }, {
+      id: 'drop-target',
+      type: 'image',
+      src: PNG_DATA_URL,
+      fileId: 'old-image-file',
+      x: 40,
+      y: 200,
+      width: 160,
+      height: 120,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      naturalWidth: 1,
+      naturalHeight: 1,
+      crop: { x: 0, y: 0, width: 1, height: 1 },
+      fitMode: 'cover',
+      focalPoint: { x: 0.25, y: 0.75 },
+    }],
+  }],
+};
+
+const initialVideoDoc = {
+  version: 13,
+  mode: 'video',
+  outputs: [{
+    id: 'editing-video-output',
+    width: 400,
+    height: 400,
+    durationMs: 5000,
+    tracks: [{
+      id: 'video-track',
+      type: 'video',
+      clips: [{
+        id: 'video-clip', startMs: 0, endMs: 5000, src: '/video.mp4', mediaType: 'video',
+        x: 220, y: 40, width: 140, height: 100, opacity: 1,
+      }],
+    }, {
+      id: 'image-track',
+      type: 'image',
+      clips: [{
+        id: 'still-clip', startMs: 0, endMs: 5000, src: PNG_DATA_URL, mediaType: 'image',
+        fileId: 'old-still-file', x: 40, y: 200, width: 160, height: 120, opacity: 1,
+        naturalWidth: 1, naturalHeight: 1,
+        crop: { x: 0, y: 0, width: 1, height: 1 }, fitMode: 'cover', focalPoint: { x: 0.25, y: 0.75 },
+      }],
     }],
   }],
 };
@@ -32,7 +80,7 @@ const initialDoc = {
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
-async function installMocks(page: Page) {
+async function installMocks(page: Page, doc: any = initialDoc) {
   if (process.env.E2E_SKIP_AUTH_SETUP === '1') {
     await page.context().addCookies([{
       name: 'auth',
@@ -41,10 +89,11 @@ async function installMocks(page: Page) {
     }]);
   }
   const state = {
-    doc: structuredClone(initialDoc),
+    doc: structuredClone(doc),
     suggestionCalls: 0,
     saveDocs: [] as unknown[],
     renderDocs: [] as unknown[],
+    uploads: 0,
   };
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -99,7 +148,8 @@ async function installMocks(page: Page) {
       });
     }
     if (method === 'POST' && pathname === '/files/upload-simple') {
-      return json(route, { id: 'exported-file', path: '/mock-export/editing.png' }, 201);
+      state.uploads++;
+      return json(route, { id: `dropped-file-${state.uploads}`, path: PNG_DATA_URL });
     }
     if (method === 'GET' && pathname === '/mock-export/editing.png') {
       return route.fulfill({
@@ -359,4 +409,145 @@ test('Smart suggestions restore for the same layer without another request', asy
   await editText(page);
   await expect(page.getByText('Use the saved accent')).toBeVisible();
   expect(state.suggestionCalls).toBe(1);
+});
+
+async function dropPng(page: Page, x: number, y: number) {
+  const stage = page.locator('.konva-stage').first();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('Canvas has no bounding box');
+  const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
+  const outputX = (box.width - 400 * scale) / 2;
+  const outputY = (box.height - 400 * scale) / 2;
+  const clientX = box.x + outputX + x * scale;
+  const clientY = box.y + outputY + y * scale;
+  await page.getByRole('application', { name: 'Design canvas' }).evaluate((container, point) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['replacement'], 'replacement.png', { type: 'image/png' }));
+    container.dispatchEvent(new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: transfer,
+      clientX: point.clientX,
+      clientY: point.clientY,
+    }));
+  }, { clientX, clientY });
+}
+
+test('desktop workspace tabs mount one panel and keep View display-only', async ({ page }) => {
+  await installMocks(page);
+  await openDesigner(page);
+  await expect(page.locator('[data-workspace-panel="inspector"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'History', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Versions', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Templates', exact: true })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="layers"]')).toBeVisible();
+  await expect(page.locator('[data-workspace-panel="brand"]')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Brand', exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="brand"]')).toBeVisible();
+  await expect(page.locator('[data-workspace-panel="layers"]')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'AI', exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="ai"]')).toBeVisible();
+  await expect(page.locator('[data-workspace-panel="brand"]')).toHaveCount(0);
+
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'Layers', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: 'History', exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  const panel = page.locator('[data-workspace-panel="ai"]');
+  const dark = await panel.evaluate((element) => getComputedStyle(element).backgroundColor);
+  await page.evaluate(() => {
+    document.querySelectorAll('.dark').forEach((element) => element.classList.remove('dark'));
+    document.body.classList.add('light');
+  });
+  const light = await panel.evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(light).not.toBe(dark);
+
+  await page.evaluate(() => { document.dir = 'rtl'; });
+  const rtl = await panel.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { panelLeft: rect.left, parentLeft: element.parentElement!.getBoundingClientRect().left };
+  });
+  expect(Math.abs(rtl.panelLeft - rtl.parentLeft)).toBeLessThan(2);
+});
+
+test('mobile keeps Inspector and Brand in sheets instead of desktop tabs', async ({ page }) => {
+  await installMocks(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openDesigner(page);
+  await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Canvas', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Layers', exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Tools', exact: true }).click();
+  await page.getByRole('button', { name: 'Brand', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Brand', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'AI', exact: true })).toHaveCount(0);
+});
+
+test('font-size shortcuts respect selection, text focus, bounds and help', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+  await editText(page);
+  await page.locator('[data-text-editor-id="body-copy"]').press('Escape');
+  await page.getByRole('application', { name: 'Design canvas' }).press('Control+Shift+>');
+  await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(33);
+  await expect.poll(() => state.doc.outputs[0].children[0].height).toBeGreaterThan(20);
+
+  await page.getByRole('textbox', { name: 'Design name' }).press('Control+Shift+>');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(state.doc.outputs[0].children[0].fontSize).toBe(33);
+  await page.getByRole('application', { name: 'Design canvas' }).press('Control+Shift+<');
+  await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(32);
+
+  await page.getByRole('menuitem', { name: 'Help', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Keyboard Shortcuts', exact: true }).click();
+  await expect(page.getByText('Increase font size', { exact: true })).toBeVisible();
+  await expect(page.getByText('Decrease font size', { exact: true })).toBeVisible();
+});
+
+test('dropping onto a static image replaces it once; empty canvas still inserts', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+  await dropPng(page, 120, 260);
+  await expect.poll(() => state.uploads).toBe(1);
+  await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('dropped-file-1');
+  expect(state.doc.outputs[0].children[1]).toMatchObject({
+    x: 40, y: 200, width: 160, height: 120,
+    naturalWidth: 1, naturalHeight: 1,
+    crop: { x: 0, y: 0, width: 1, height: 1 },
+    fitMode: 'cover', focalPoint: { x: 0.25, y: 0.75 },
+  });
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
+
+  await dropPng(page, 350, 350);
+  await expect.poll(() => state.uploads).toBe(2);
+  await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
+  expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
+});
+
+test('dropping replaces a still clip but never a video clip', async ({ page }) => {
+  const state = await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+  await dropPng(page, 120, 260);
+  await expect.poll(() => state.uploads).toBe(1);
+  await expect.poll(() => state.doc.outputs[0].tracks[1].clips[0].fileId).toBe('dropped-file-1');
+  expect(state.doc.outputs[0].tracks[1].clips[0]).toMatchObject({
+    x: 40, y: 200, width: 160, height: 120,
+    naturalWidth: 1, naturalHeight: 1,
+    crop: { x: 0, y: 0, width: 1, height: 1 },
+    fitMode: 'cover', focalPoint: { x: 0.25, y: 0.75 },
+  });
+
+  await dropPng(page, 290, 90);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  expect(state.uploads).toBe(1);
+  expect(state.doc.outputs[0].tracks[0].clips[0].src).toBe('/video.mp4');
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].tracks[1].clips[0].fileId).toBe('old-still-file');
 });

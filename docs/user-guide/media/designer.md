@@ -60,6 +60,14 @@ saved.
   for the document's fonts before laying out text. Preview thumbnails are generated for image and
   video designs, including designs that use remote stock videos.
 
+## Workspace panels
+
+On desktop, the right panel has **Inspector**, **Layers**, **Brand**, and **AI** tabs. They use the
+current selection and Brand Kit, and only the active panel is mounted. The tool rail's Brand button
+and **Tools ▸ Workspace** open the same surfaces. **History** and **Versions** are beside Undo/Redo,
+**Templates** is beside Save, and the View menu is reserved for zoom and display settings. History,
+Versions, and Template Fields retain their movable floating panels.
+
 ## Video timeline
 
 The timeline supports eight track types: **video, image, text, shape, paint, caption, audio, and
@@ -145,7 +153,7 @@ available directly below its tracks as well as in the Inspector.
 Tools, Brand, and the Inspector open as inline bottom sheets rather than covering the canvas. Use
 **Half** or **Expand**, drag the sheet handle, or collapse the sheet to restore the full canvas. The
 design name remains editable beside the logo. On desktop, **Brand** is available directly from the
-tool rail as well as the Window menu.
+tool rail, the right-panel tabs, and **Tools ▸ Workspace**.
 
 The Brand panel works on video designs too: palette colors apply to the selected text, caption, or
 shape clip, brand fonts apply to the selected text or caption clip, and a logo is added to the
@@ -166,7 +174,16 @@ Manage kits in **Brand Studio** (`/brands`).
 The mouse wheel zooms by default. Laptop users can enable **View → Touchpad mode** to pan with a
 two-finger swipe and zoom with a pinch (or **Ctrl/Cmd+scroll**). The preference is remembered per
 organization. While editing text, the color control above the text box colors only the selected
-characters, so one text box can contain multiple colors.
+characters, so one text box can contain multiple colors. Text boxes grow vertically to fit their
+content; width grows only when a single unwrapped word overflows, and manual resizing remains
+available. With text selected, **Ctrl/Cmd+Shift+>** and **Ctrl/Cmd+Shift+<** increase or decrease
+font size across the selection as one undoable edit. These shortcuts do not run while typing in a
+field or the inline text editor.
+
+Drop an image file directly onto an existing static image or still-image clip to replace it. The
+frame, crop, fit mode, and focal point are retained, the new file's intrinsic dimensions are adopted,
+and linked formats update in one Undo step. Dropping elsewhere on a static canvas keeps the existing
+insert behavior. Video and audio clips are never treated as image replacement targets.
 
 With a text element selected, the Inspector's **Text Effects** presets apply **Arc text**, **Wave
 text**, **Circle text**, **Gradient text**, **Text outline**, **Text shadow**, or **3D Extrusion** in
