@@ -26,8 +26,9 @@ Video jobs submit to MiniMax and appear in the **Render Queue**. When a job comp
 
 - All three tabs produce **video**; generations are asynchronous. Postmill deliberately sends **no** `callback_url` (MiniMax validates it with a challenge handshake the webhook endpoint does not implement), so completion always comes from the media-jobs poll cron.
 - The **Subject Reference** tab's `subject_image` field is folded into MiniMax's `subject_reference` array by the adapter; `S2V-01` is rejected up front if no subject image is supplied.
+- When the studio is opened from the [Designer](./designer)'s AI Video dialog with saved character references, the **Subject Reference** tab uses the first reference as its subject image and hides the field.
 - MiniMax returns a `task_id`, then a separate `file_id` once rendering succeeds; the adapter handles the extra retrieve step before the final download URL is available.
 - Native parameters such as `prompt_optimizer` ride straight through to the provider request body.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

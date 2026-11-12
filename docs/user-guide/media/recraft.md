@@ -28,4 +28,4 @@ Image generation is synchronous, so results usually appear immediately.
 - **Test connection is free** — Settings → Content → AI Media → **Test connection** reads your Recraft profile (`/users/me`); no image is billed.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

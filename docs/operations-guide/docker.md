@@ -34,8 +34,8 @@ environment.
 | Docker Hub | `postmillai/postmill-app` | The same image, copied over manually at release time — it may lag GHCR briefly. Anonymous pulls are subject to Docker Hub's rate limits |
 
 ```bash
-docker pull ghcr.io/postmill-ai/postmill-app:v1.4.0   # GitHub Container Registry
-docker pull postmillai/postmill-app:v1.4.0            # Docker Hub
+docker pull ghcr.io/postmill-ai/postmill-app:v1.5.0   # GitHub Container Registry
+docker pull postmillai/postmill-app:v1.5.0            # Docker Hub
 ```
 
 Each release is available on both as `:vX.Y.Z` and `:latest`, built for `linux/amd64` only.
@@ -52,7 +52,7 @@ digest from the registry you actually pull from.
 
 | Service              | Image                                   | Port            | Purpose |
 |----------------------|-----------------------------------------|-----------------|---------|
-| `postmill`           | `ghcr.io/postmill-ai/postmill-app:latest` (or `postmillai/postmill-app:latest` — see [Container images](#container-images))  | `4007:5000`     | All-in-one app: nginx on :5000 routes `/api/*` → NestJS backend (:3000) and everything else → Next.js frontend (:4200); backend and frontend are internal-only |
+| `postmill`           | `ghcr.io/postmill-ai/postmill-app:latest` (or `postmillai/postmill-app:latest` — see [Container images](#container-images))  | `4007:5000`     | All-in-one app: nginx on :5000 routes `/api/*` → NestJS backend (:3000), serves `/uploads/*` from the uploads volume (missing files fall through to the frontend), and sends everything else → Next.js frontend (:4200); backend and frontend are internal-only |
 | `postmill-postgres`  | `postgres:17-alpine`                    | —               | Application database |
 | `spotlight`          | `ghcr.io/getsentry/spotlight:latest`    | `8969:8969`     | Sentry debug proxy (dev/monitoring) |
 
@@ -86,11 +86,62 @@ API_LIMIT: 600
 |----------------------|---------------------------|---------|
 | `postgres-volume`    | `/var/lib/postgresql/data` | Application Postgres data |
 | `postmill-config`    | `/config/`                | Application runtime config |
-| `postmill-uploads`   | `/uploads/`               | Uploaded media (always local) |
+| `postmill-uploads`   | `/uploads/`               | Uploaded media in local platform mode (the default). With `STORAGE_PROVIDER=s3`, it remains the migration source and rollback target, and nginx still serves legacy `/uploads/...` URLs from it, passing files no longer on disk to the frontend's S3 redirect |
 
 The `:latest` tag shown above is suitable for quick-start only. In production, pin a specific
-version tag (for example, `ghcr.io/postmill-ai/postmill-app:v1.4.0`, or `postmillai/postmill-app:v1.4.0`
+version tag (for example, `ghcr.io/postmill-ai/postmill-app:v1.5.0`, or `postmillai/postmill-app:v1.5.0`
 on Docker Hub) to get a known rollback target.
+
+### Organization archive spool
+
+Organization exports and setup imports are spooled under `ORG_PORTABILITY_SPOOL_DIR`. When it is
+unset, the spool is `${TMPDIR}/postmill-org-archives`, which is `/tmp/postmill-org-archives` in the
+image. `docker-compose.yaml` declares no volume for it, so the spool lives in the container's
+writable layer. A plain `docker restart` keeps it. Recreating the container discards it, and that
+happens on an image upgrade, a `docker compose up` after a config change, or `docker compose down`.
+Any export waiting for download, or import being validated, is then lost. Completed exports expire
+24 hours after they finish anyway, so this is usually acceptable: the owner requests a new export or uploads the
+archive again.
+
+To keep in-flight archives across container recreation, mount a private volume and point the spool
+at it. Keep it outside `/uploads` and never inside a public bucket:
+
+```yaml
+services:
+  postmill:
+    environment:
+      ORG_PORTABILITY_SPOOL_DIR: '/var/lib/postmill/org-archives'
+    volumes:
+      - postmill-org-archives:/var/lib/postmill/org-archives
+
+volumes:
+  postmill-org-archives:
+    external: false
+```
+
+The container runs as the unprivileged `app` user, and a new named volume mounted at a path the
+image does not contain starts out owned by root. Give it to `app` once and keep it private:
+
+```bash
+APP_UID=$(docker exec postmill id -u)
+docker run --rm -v postmill-app_postmill-org-archives:/d alpine sh -c "chown $APP_UID /d && chmod 700 /d"
+```
+
+Size the volume for the largest archive you allow (`ORG_PORTABILITY_MAX_ARCHIVE_BYTES`, default
+about 4 GiB). An import also needs room for one extraction and its staged assets. Do not include
+this volume in backups; see [Backup & Retention](./backup-and-retention.md#what-not-to-back-up).
+
+### Stop grace period
+
+On `SIGTERM` the backend drains HTTP for up to 5 seconds before closing Redis and Prisma (see
+[Scaling → Graceful shutdown](./scaling.md#graceful-shutdown)). The shipped compose file sets no
+`stop_grace_period`, so Docker's 10-second default applies. Add headroom in production:
+
+```yaml
+services:
+  postmill:
+    stop_grace_period: 30s
+```
 
 ## Background jobs
 
@@ -118,6 +169,7 @@ The main scheduled functions are:
 - **Analytics collection** — daily sweep per org (channel snapshots, post snapshots, rollup/prune, watchlist probes)
 - **Comments collection** — per-org comment sync (fetch, reply, prune, notify)
 - **Missing post scanner** — hourly scan for stuck posts
+- **Organization archive expiry** — hourly purge of expired export/import archives (completed exports 24 hours after they finish; stalled jobs after 24 hours idle)
 
 See [Inngest & Cron](./inngest-and-cron.md) for details.
 
@@ -150,7 +202,8 @@ permissions, or your orchestration platform's secret store.
 
 ### Backups
 
-At minimum, back up the `postgres-volume` volume and the `postmill-uploads` volume. See
+At minimum, back up the `postgres-volume` volume and the `postmill-uploads` volume. With
+`STORAGE_PROVIDER=s3`, also back up the platform bucket. See
 [Backup & Retention](./backup-and-retention.md).
 
 ### Resource limits
@@ -185,4 +238,4 @@ docker exec -w /app postmill node_modules/.bin/prisma migrate deploy \
 For local prototyping or reset only, `pnpm run prisma-db-push` is available; never use it against a
 shared or production database.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

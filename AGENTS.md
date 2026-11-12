@@ -24,7 +24,7 @@ convention, contract, or invariant, update the matching `agents/` doc in the sam
 
 ## Version
 
-The current release version is tracked in [`version.txt`](./version.txt) (now `v1.4.0`). **Bump it on
+The current release version is tracked in [`version.txt`](./version.txt) (now `v1.5.0`). **Bump it on
 every release.** Root docs speak only of `v1.0.0` as the first public release; the inherited 3.x/4.x
 numbering was pre-release internal development. An app release is a `vX.Y.Z` tag: `build-containers.yml`
 refuses to publish a container image whose tag does not match `version.txt`, then creates the GitHub
@@ -165,7 +165,8 @@ Flags: `DEV_DISABLE_AI`, `DEV_DISABLE_MCP`, `DEV_DISABLE_MEDIA`, `DEV_DISABLE_SH
 `DEV_DISABLE_SENTRY`, `DEV_DISABLE_OPENTELEMETRY`, `DEV_DISABLE_COMMS`.
 
 The backend dev script sets `--max-old-space-size=6144`. Frontend dev variants: `pnpm run
-dev:frontend` (Turbopack), `pnpm run dev:webpack` (fallback), `pnpm run analyze` (bundle report).
+dev:frontend` (Turbopack), `pnpm --filter ./apps/frontend run dev:webpack` (fallback),
+`pnpm --filter ./apps/frontend run analyze` (bundle report).
 
 ## Golden rules
 

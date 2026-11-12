@@ -45,4 +45,4 @@ both the player and the import; no separate download URL is minted from the item
 
 ---
 
-> Verified against v1.4.0
+> Verified against v1.5.0

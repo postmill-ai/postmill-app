@@ -1,6 +1,6 @@
 # Adding a social channel provider
 
-> Verified against v1.4.0
+> Verified against v1.5.0
 
 Social channel providers are now package-per-provider like every other domain. This guide walks through adding a new social provider to Postmill. The system currently supports 45 social providers. Recent reference implementations include **Tumblr**, **Pixelfed**, and **PeerTube**.
 
@@ -341,6 +341,8 @@ async replyToComment(/* ... */): Promise<SocialCommentDTO> { /* ... */ }
 
 async likeComment(/* ... */): Promise<{ liked: boolean; likeCount?: number }> { /* ... */ }
 ```
+
+Return an empty `comments` list only after a successful provider response. Fetch, authentication, parsing and malformed-response failures must **throw**: the comment sync reconciles stored `SocialComment` rows against the returned list, so returning `[]` on failure would be treated as "the platform has no comments" (contract comment on `ISocialMediaComments.fetchComments` in `libraries/providers/kernel/src/domains/social-provider.ts`).
 
 ## Step 8: Frontend composer component
 

@@ -31,4 +31,4 @@ Images are delegated to the matching AI-SDK provider and complete synchronously.
 - [Settings](../settings) — configuring AI providers.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

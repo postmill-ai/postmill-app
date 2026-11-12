@@ -72,6 +72,7 @@ Without this, the analytics dashboard, comment inbox, media render queue, and wa
 | `digest-email-weekly` | Mondays at 09:00 America/New_York | Fans out one `digest/send-one` event per target for weekly digests |
 | `agent-digest` | Mondays at 07:00 America/New_York | Fans out one `agent/digest-org` event per org (disabled unless `AGENT_DIGEST_ENABLED=true`) |
 | `comms-matrix-sync` | Every minute | Fans out one `comms/matrix.sync-one` event per enabled Matrix comms config (Matrix has no webhooks) |
+| `org-portability-expiry` | Hourly at minute 17 (`17 * * * *`) | Marks organization export/import jobs expired and deletes their spooled archives. Finished and waiting jobs expire at `expiresAt` (a completed export gets a fresh 24 h from completion); active jobs are kept until they have also been idle for 24 h |
 
 ### Event-triggered functions
 
@@ -94,6 +95,8 @@ Without this, the analytics dashboard, comment inbox, media render queue, and wa
 | `media-jobs-poll-job` | `media/poll-job` | Poll a single external media job |
 | `comms-inbound` | `comms/inbound.message` | Process one inbound chat message (connect-code claim or agent turn + reply); serialized per comms config |
 | `comms-matrix-sync-one` | `comms/matrix.sync-one` | One Matrix `/sync` round for one comms config |
+| `org-portability-export` | `org/portability.export` | Build one owner-requested, passphrase-encrypted organization export archive in the spool (concurrency 1) |
+| `org-portability-import` | `org/portability.import` | Validate or commit one setup-import archive into the destination organization (serialized per organization) |
 
 ## Retention and data lifecycle
 
@@ -157,7 +160,7 @@ The dev server UI is available at `http://localhost:8288`. Run the backend with 
 In the Inngest dashboard (Cloud or local dev server) you should see scheduled runs for:
 
 - `analytics-collection` — daily
-- `comments-collection` — every minute (then sleeps 30 minutes)
+- `comments-collection` — every minute (the rate limit lets one run through per `COMMENTS_SWEEP_INTERVAL_MINUTES`, default 30)
 - `missing-post-finder` — hourly
 - `media-jobs-poll` — every minute
 - `campaign-tag-purge` — daily
@@ -167,8 +170,9 @@ In the Inngest dashboard (Cloud or local dev server) you should see scheduled ru
 - `digest-email-weekly` — weekly
 - `agent-digest` — weekly (only when enabled)
 - `comms-matrix-sync` — every minute
+- `org-portability-expiry` — hourly (minute 17)
 
-Event-triggered functions (`post-publish-*`, `autopost-process`, `refresh-token`, `streak-tracker`, `send-email`, `digest-send-one`, `analytics-backfill`, `media-render`, `media-design-export`, `media-video-thumbnail`, `media-jobs-poll-job`, `agent-digest-org`, `analytics-sync-org`, `analytics-sync-integration`, `comments-sync-org`, `comms-inbound`, `comms-matrix-sync-one`) appear as they are triggered.
+Event-triggered functions (`post-publish-*`, `autopost-process`, `refresh-token`, `streak-tracker`, `send-email`, `digest-send-one`, `analytics-backfill`, `media-render`, `media-design-export`, `media-video-thumbnail`, `media-jobs-poll-job`, `agent-digest-org`, `analytics-sync-org`, `analytics-sync-integration`, `comments-sync-org`, `comms-inbound`, `comms-matrix-sync-one`, `org-portability-export`, `org-portability-import`) appear as they are triggered.
 
 If scheduled functions are not running, check that `USE_INNGEST=true` is set and that the backend `/api/inngest` endpoint returns HTTP 200.
 
@@ -194,4 +198,4 @@ Enable in `.env`:
 AGENT_DIGEST_ENABLED=true
 ```
 
-> Verified against v1.4.0
+> Verified against v1.5.0

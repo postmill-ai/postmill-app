@@ -25,4 +25,4 @@ Video jobs are submitted to the fal.ai queue and tracked in the **Render Queue**
 - The `model` field is lifted out of `input` by the shared Studio Kit backend. Pika 2.2 durations are converted from the studio's string values to the numeric seconds required by fal; other native fal/Pika parameters ride through unchanged.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

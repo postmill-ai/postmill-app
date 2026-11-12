@@ -29,6 +29,10 @@ docker run --rm -v postmill-app_postmill-uploads:/data -v $(pwd):/backup alpine 
 
 If using cloud object storage (R2, S3, B2, IDrive e2, or another S3-compatible provider), enable versioning and/or cross-region replication on the bucket.
 
+**Platform S3 base (`STORAGE_PROVIDER=s3`).** The platform bucket named by `S3_BUCKET` then holds avatars, generated media and every organization's root and unmounted uploads, partitioned as `<tenantId>/...`. Back it up the same way: turn on bucket versioning and replicate or snapshot it with your provider's tooling. The uploads volume still matters in S3 mode. It is the source for `storage:local-to-s3` and the destination for `copy-back`. In the published image, nginx also serves legacy `/uploads/...` URLs from it. Keep backing it up until you have deliberately retired the local copies.
+
+**Storage-migration manifests.** `storage:local-to-s3` keeps a resumable SHA-256 manifest (`manifest.json`) in `STORAGE_MIGRATION_DIRECTORY`. Without that variable, the manifest goes in the system temp directory (`postmill-storage-migration`). Point it at a persistent directory outside the upload root and the repository, and keep the manifest with your backups. Any later manual cleanup of local files should be checked against it. See [Storage → Platform local-to-S3 migration](./storage.md#platform-local-to-s3-migration).
+
 ### 3. JWT_SECRET and ENCRYPTION_KEY
 
 These secrets encrypt OAuth tokens, AI provider credentials, storage credentials, and other secrets at rest. **If you lose them, every encrypted value in the database becomes unrecoverable.** Store them:
@@ -41,6 +45,7 @@ These secrets encrypt OAuth tokens, AI provider credentials, storage credentials
 
 - **Redis** — cache only; data is rebuilt on restart. AOF/RDB persistence is useful for avoiding cold-cache latency but is not a backup.
 - **node_modules** or build artifacts.
+- **The organization-archive spool** (`ORG_PORTABILITY_SPOOL_DIR`, default `${TMPDIR}/postmill-org-archives`). It holds encrypted export and import archives only briefly: a completed export is kept for 24 hours after it finishes, and a running job is cleaned up only after 24 hours with no progress. The hourly `org-portability-expiry` function then marks the job expired and deletes the file. The spool is ephemeral by design. An owner who loses an in-flight archive just requests a new export. Do not copy it into backups, where an encrypted archive would outlive its expiry.
 
 ## Automated data retention
 
@@ -61,6 +66,7 @@ Postmill prunes and rolls up data through Inngest scheduled functions. You do no
 | Blank canvases | 1 day | Soft-deleted by the retention-purge function: never-customized `Untitled Design` rows whose doc is content-free, with their preview files | `BLANK_DESIGN_RETENTION_DAYS` |
 | Designer version history | Newest 10 automatic + 20 named snapshots per design | Older snapshots trimmed when a new one is saved | `DESIGN_VERSIONS_KEEP_AUTO` / `DESIGN_VERSIONS_KEEP_NAMED` |
 | User/Session IP and agent | 90 days | Nulled by the retention-purge function | `IP_RETENTION_DAYS` |
+| Organization export/import archives | 24 hours after a completed export finishes; running jobs after 24 hours with no progress | Job marked `expired` and spooled archive deleted by the hourly `org-portability-expiry` function | — (fixed) |
 
 See [Inngest & Cron](./inngest-and-cron.md) for how the functions operate.
 
@@ -114,4 +120,4 @@ find "$BACKUP_DIR" -name '*.sql' -mtime +7 -delete
 find "$BACKUP_DIR" -name '*.tar.gz' -mtime +7 -delete
 ```
 
-> Verified against v1.4.0
+> Verified against v1.5.0

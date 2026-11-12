@@ -225,6 +225,8 @@ The `/agents` page (and `/agents/<thread>` for a saved thread) is the conversati
 
 When your own provider account refuses a call (bad key, quota or billing exhausted, upstream outage), the API answers **HTTP 502** with a structured envelope instead of a generic 500: `provider`, `providerName`, `domain`, `operation`, `kind` (`auth`, `quota`, `rate_limit`, `invalid_request`, `timeout`, `unavailable`, or `unknown`), `upstreamStatus`, `retryable`, `message`, and a `settingsUrl` pointing at the settings page where the key is managed. Account-side errors are not reported to Sentry.
 
+When a background media job (video, audio, avatar) fails because your media provider's quota or billing is exhausted, the organisation's active owners also receive a **media** notification linking to **Settings → Content → AI Media** — at most once per provider every 24 hours, and subject to each owner's notification preferences. Failed jobs show the provider's sanitised error message rather than raw provider output.
+
 ## Usage dashboard
 
 `GET /ai/usage` returns spend metrics across all AI operations:
@@ -267,4 +269,4 @@ All AI operations are subject to three governance layers:
 
 All AI operations log to the spend ledger (`AISpendLog`) for audit and cost tracking.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

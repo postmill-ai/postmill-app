@@ -7,12 +7,20 @@ for triage, reply, and assignment.
 ## Comment Sync
 
 Comments are collected by a background Inngest function (`commentsCollection`). The backend must
-have `USE_INNGEST=true` and valid Inngest Cloud credentials (or `INNGEST_DEV=1` for local
-development). The function periodically fetches comments from each connected channel that supports
+have `USE_INNGEST=true` and valid Inngest Cloud credentials or a production self-hosted Inngest
+engine (or `INNGEST_DEV=1` for local development). The function periodically fetches comments from each connected channel that supports
 the comments capability and syncs them into the `SocialComment` table.
 
 Comment data includes the comment text, author information, timestamp, and platform-specific
-metadata. Per-user read state is tracked in the `PostCommentRead` table so each team member sees
+metadata. Sweeps are rate-limited to one per configured interval (`COMMENTS_SWEEP_INTERVAL_MINUTES`).
+
+Sync is non-destructive: a comment that disappears from a platform is removed from Postmill only
+when the platform returns a successful response without it. If a fetch fails (network, parsing, or
+an authentication error), the comments already stored are kept. When a channel's token needs
+repair, the channel is marked as needing reconnection and its comment sync pauses until you
+reconnect the channel.
+
+Per-user read state is tracked in the `PostCommentRead` table so each team member sees
 their own unread count.
 
 For operational setup details, see [Inngest and Cron](../operations-guide/inngest-and-cron.md).
@@ -139,4 +147,4 @@ the post detail modal with the comments section.
 
 See [Schedule](./calendar.md) for details on post cards and the post detail modal.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

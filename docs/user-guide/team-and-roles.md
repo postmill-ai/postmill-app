@@ -11,6 +11,20 @@ The Team page is available when your subscription tier includes team members. Fr
 - **Remove a member** (`DELETE /settings/team/:id`) — removes the membership; the user's account itself is untouched. Bulk remove is available from the data table selection.
 - **Change a member's role** via the per-row selector or `PUT /settings/roles/team/:userId/role`.
 
+### Accepting an invitation
+
+- **Already have an account?** Opening the invitation link while signed in adds you to the
+  inviting organisation and switches you to it.
+- **New to Postmill?** Registering through the invitation link creates your account directly
+  inside the inviting organisation with the invited role — no separate personal organisation is
+  created. Account creation and membership succeed or fail together.
+- **Expired or invalid link** — registration is refused with **Invitation is invalid or expired**;
+  ask an owner or admin to send a new invitation. A stale invitation does not block a normal
+  sign-in.
+- **No active workspace** — if your account no longer belongs to any active organisation (for
+  example, you were removed), you see a **No active workspace** page with a sign-out button. Ask a
+  workspace owner for a new invitation, or sign in with a different account.
+
 On the API, inviting, creating, and removing members (`/settings/team/*`) and role assignment (`/settings/roles/*`) all require `members:manage`. Only an **Owner** can change or remove another Owner.
 
 If a former member later deletes their account, the designs they created are deleted with it, but the design versions they saved on teammates' designs are kept — anonymized, with no creator attached.
@@ -69,4 +83,4 @@ Role creates/updates/deletes and member role assignments are written to the orga
 
 > See also [Settings](./settings.md) for the settings layout, [Subscription & Billing](./subscription-and-billing.md) for team-member limits, and [Operations Guide → Security](../operations-guide/security.md) for access-control invariants.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

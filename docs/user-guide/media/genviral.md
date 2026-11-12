@@ -29,4 +29,4 @@ Genviral video generation is **async**. The studio submits the job to Genviral's
 - [Settings](../settings) — configuring media providers.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

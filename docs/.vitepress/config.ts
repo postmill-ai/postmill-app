@@ -129,6 +129,7 @@ export default defineConfig({
             { text: 'AI Agent', link: '/user-guide/agent' },
             { text: 'Notifications', link: '/user-guide/notifications' },
             { text: 'Settings', link: '/user-guide/settings' },
+            { text: 'Organization Export', link: '/user-guide/organization-export' },
             { text: 'Team & Roles', link: '/user-guide/team-and-roles' },
             { text: 'Sessions & Devices', link: '/user-guide/sessions' },
             { text: 'Subscription & Billing', link: '/user-guide/subscription-and-billing' },

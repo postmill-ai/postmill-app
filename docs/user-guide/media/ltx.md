@@ -38,4 +38,4 @@ All LTX jobs are async: `POST /v2/<op>` returns an id, then Postmill polls `GET 
 - [Settings](../settings) — configuring the LTX Studio media provider.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

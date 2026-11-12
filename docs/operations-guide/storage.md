@@ -58,7 +58,11 @@ MEDIA_UPLOAD_MAX_BYTES: '1073741824'
 
 ### S3-compatible platform storage
 
-Set `STORAGE_PROVIDER=s3` plus `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_REGION`, and `S3_PUBLIC_URL`. Set `S3_ENDPOINT` for Hetzner and other non-AWS services. Avatars, generated media, and root/unmounted org uploads all use the same tenant-partitioned bucket. Existing `/uploads/...` URLs return a 307 redirect to the identical key under `S3_PUBLIC_URL`, cacheable for five minutes; no database or Designer-document URL rewrite is required.
+Set `STORAGE_PROVIDER=s3` plus `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_REGION`, and `S3_PUBLIC_URL`. Set `S3_ENDPOINT` for Hetzner and other non-AWS services. Avatars, generated media, and root/unmounted org uploads all use the same tenant-partitioned bucket. When an existing `/uploads/...` request reaches the frontend, it gets a 307 redirect to the identical key under `S3_PUBLIC_URL`, cacheable for five minutes. No database or Designer-document URL rewrite is required.
+
+::: info Published all-in-one image
+The image's bundled nginx still serves any `/uploads/...` file that remains on the uploads volume. A request for a file that is no longer on disk is passed to the frontend, which (with `STORAGE_PROVIDER=s3`) returns the 307 redirect. Legacy URLs therefore keep working whether or not you remove the local files after cutover.
+:::
 
 The backend and migration command require the complete S3 configuration. The frontend needs only `STORAGE_PROVIDER=s3` and `S3_PUBLIC_URL` to issue legacy redirects; it does not need the bucket credentials. Cached redirects remain safe during rollback because `copy-back` never deletes bucket objects.
 
@@ -217,7 +221,7 @@ pnpm exec dotenv -e ../../.env -- node -r ./register-paths.cjs \
 - `verify` hashes both source and streamed destination bytes. Do not cut over unless it reports zero missing/mismatched files. Unexpected destination objects are reported separately.
 - Repeat `copy` and `verify` immediately before cutover to catch files written during the first pass.
 
-Set `STORAGE_PROVIDER=s3` and restart both backend and frontend. Verify old `/uploads` redirects, new tenant-prefixed uploads, video range requests, Designer exports, deletion, and any existing BYO mounts. Run the delta `copy`/`verify` once more.
+Set `STORAGE_PROVIDER=s3` and restart both backend and frontend. Verify that old `/uploads` URLs still resolve (the local copy while it exists in the published image, otherwise a 307 redirect), new tenant-prefixed uploads, video range requests, Designer exports, deletion, and any existing BYO mounts. Run the delta `copy`/`verify` once more.
 
 For rollback, run `storage:local-to-s3 copy-back` to copy post-cutover objects into the local tree, then set `STORAGE_PROVIDER=local` and restart both services. The command refuses to overwrite a divergent local file and never deletes bucket objects.
 
@@ -269,4 +273,4 @@ size-capped. `LOCAL` storage is same-origin and needs no CORS.
 - [Requirements](./requirements.md) — object storage options
 - [Designer](../developer-docs/designer.md) — editor architecture & endpoints
 
-> Verified against v1.4.0
+> Verified against v1.5.0

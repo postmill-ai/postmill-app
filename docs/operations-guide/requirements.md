@@ -17,8 +17,9 @@ The heavy pieces:
 - **PostgreSQL 17** — the application database is typically modest (< 5 GB for small instances),
   but grows with analytics snapshots, media metadata, and campaign data.
 - **Redis 7** — negligible memory (< 100 MB) unless analytics cache loads many orgs.
-- **Inngest Cloud** — background jobs run outside the cluster; no local Temporal/Elasticsearch
-  services are required.
+- **Inngest** — background jobs run on Inngest Cloud or a self-hosted Inngest engine (see
+  [Inngest & Cron](./inngest-and-cron.md#for-production-self-hosted)); no local
+  Temporal/Elasticsearch services are required.
 
 ## Software prerequisites
 
@@ -37,7 +38,7 @@ The heavy pieces:
 |---------------------------|---------|------|
 | PostgreSQL                | 17      | Application data |
 | Redis                     | 7.2     | Session cache, throttle store, analytics cache |
-| Inngest Cloud             | —       | Durable background jobs (analytics, comments, publish, token refresh) |
+| Inngest (Cloud or self-hosted) | —  | Durable background jobs (analytics, comments, publish, token refresh) |
 | Email provider (optional) | —       | 6-provider adapter system (Resend, SendGrid, Mailgun, Postmark, Amazon SES, SMTP). Configure with `EMAIL_PROVIDER` + standardized env vars. See [Configuration](./configuration.md#email). |
 
 ### Object storage
@@ -94,9 +95,19 @@ pnpm --filter ./apps/commands run start announcement:open-beta-end status
 
 # Full send requires the exact operator confirmation token
 pnpm --filter ./apps/commands run start announcement:open-beta-end send <confirmation>
+
+# Repair missing design / .pdesign thumbnails (count first, then scope to one org)
+pnpm --filter ./apps/commands run start backfill:design-thumbnails dry-run
+
+# Copy platform storage from local disk to S3 (see Storage Setup)
+pnpm --filter ./apps/commands run start storage:local-to-s3 inventory
 ```
 
-Run these inside the application container or with the same environment variables as the backend. The announcement command requires the active Resend provider, selects each eligible active owner mailbox once, and uses campaign log claims plus Resend idempotency keys to prevent duplicate sends on rerun. Failed sends are re-claimed with the same log id on rerun; queued or otherwise ambiguous claims remain skipped for inspection. Full sends wait 600 ms between recipients to stay below Resend's default rate limit. Preview mode performs reads only.
+Run these from a source checkout, with the same environment variables as the backend. The `start`
+script does not load `.env` itself, so export the variables or wrap the command with
+`pnpm exec dotenv -e .env --`. The published container image includes neither the commands app nor `pnpm`.
+`storage:local-to-s3` takes `inventory`, `copy`, `verify` or `copy-back`. The full procedure is in
+[Storage Setup → Platform local-to-S3 migration](./storage.md#platform-local-to-s3-migration). The announcement command requires the active Resend provider, selects each eligible active owner mailbox once, and uses campaign log claims plus Resend idempotency keys to prevent duplicate sends on rerun. Failed sends are re-claimed with the same log id on rerun; queued or otherwise ambiguous claims remain skipped for inspection. Full sends wait 600 ms between recipients to stay below Resend's default rate limit. Preview mode performs reads only.
 
 ## Native dependency notes
 
@@ -115,4 +126,4 @@ This is a benign, macOS-only conflict between the native modules `sharp` and `ca
 packages register the same macOS notification-delegate class independently; the warning does not
 affect Linux production images or runtime correctness. No operator action is required.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

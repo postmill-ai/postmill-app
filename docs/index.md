@@ -42,6 +42,7 @@ features:
 - [User Guide](/user-guide/) — learn the product end to end
 - [Developer Docs](/developer-docs/) — architecture, APIs, contributing
 - [Operations Guide](/operations-guide/) — self-host, configure, and operate
+- [Organization export](/user-guide/organization-export) — back up or move a whole organization with an encrypted archive
 :::
 
-> Verified against v1.4.0
+> Verified against v1.5.0

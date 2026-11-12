@@ -15,12 +15,13 @@ first. Otherwise Postmill falls back to Pixabay. A Content Pack daily-cap error 
 
 ## Search and filters
 
-- **Search** — debounced text search.
+- **Search** — debounced text search. An empty query browses Pixabay's vector catalog.
 - **Orientation** — `horizontal` or `vertical`.
 - **Color** — Pixabay's palette, including `grayscale`, `transparent`, black, white, gray, red,
   orange, yellow, green, turquoise, blue, lilac, pink, and brown.
 
-Results are shown in a masonry grid, 20 items per page, with infinite scroll.
+Results are shown in a masonry grid, 20 items per page, with infinite scroll. Successful Pixabay
+vector searches are cached for 24 hours; a failed request is cached for only 60 seconds.
 
 ## Result cards and preview
 
@@ -31,11 +32,15 @@ larger view, dimensions, author, and a "Powered by Pixabay" attribution line for
 
 - **Open in Designer** — opens the vector on the [Designer](./designer) static canvas as an image
   layer.
-- **Save to Files** — imports the preview file into `/files`. For Content Pack assets, a licensed
-  download URL is minted from the item id before import. The Save to Files dialog lets you rename
-  the file, pick or create a destination folder, and choose **Save File** or **Save & Post**.
+- **Save to Files** — imports the preview file into `/files`. When Pixabay supplies the original
+  SVG, the result points at that SVG; because `/files/import` rejects raw SVG, it is rasterized
+  client-side to a 2048×2048 PNG and uploaded instead, so the saved file is a PNG. Content Pack
+  assets always go through `/files/import`, which mints a licensed download URL from the item id;
+  a licensed SVG is rasterized to PNG on the server, while ZIP/EPS/AI downloads are not supported. The Save to Files dialog
+  lets you rename the file, pick or create a destination folder, and choose **Save File** or
+  **Save & Post**.
 
-Saved files carry `source` and `attribution` metadata.
+Saved files carry `source` and `attribution` metadata, including rasterized SVG saves.
 
 ## Related docs
 
@@ -46,4 +51,4 @@ Saved files carry `source` and `attribution` metadata.
 
 ---
 
-> Verified against v1.4.0
+> Verified against v1.5.0

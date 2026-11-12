@@ -91,8 +91,8 @@ export class EmailLogService {
   }
 
   async prune(days: number) {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
+    // Fixed 24h days: local-calendar setDate() shifts by an hour across DST.
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const result = await this._repository.deleteOlderThan(cutoff);
     this._logger.log(`Pruned ${result.count} email log rows older than ${days} days`);
     return result;

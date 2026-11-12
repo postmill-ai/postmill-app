@@ -37,10 +37,11 @@ Misskey, Sharkey, LINE, Matrix, Discourse, Odysee.
 | [AI Tools](./ai-tools.md) | Text generation, hashtags, comment replies, content compliance, brand voice, RAG search, image/video/TTS/STT, and AI spend. |
 | [AI Agent](./agent.md) | Conversational agent versus AI Designer; routing when AI is off. |
 | [Notifications](./notifications.md) | Per-category notification preferences across email, push, and in-app channels. |
-| [Settings](./settings.md) | Profile, subscription, channels, comms, team & roles, sessions, notifications, AI, brands, media, storage, shortlinks, VPN, content packs, webhooks, auto post, developers, and approved apps. |
+| [Settings](./settings.md) | Profile, language, subscription, organization export, channels, comms, team & roles, sessions, notifications, AI, brands, media, storage, shortlinks, VPN, content packs, webhooks, auto post, developers, and approved apps. |
+| [Organization export](./organization-export.md) | Owner-only encrypted archive of an organization, and importing it into a new organization from setup. |
 | [Team & Roles](./team-and-roles.md) | RBAC system, system roles, custom roles, and permissions. |
 | [Sessions & Devices](./sessions.md) | Active session list, per-session revoke, and log-out-all-other-sessions. |
 | [Subscription & Billing](./subscription-and-billing.md) | Plans, trials, metered caps, add-ons, payment providers, payment methods, and invoices. |
 | [Supported Channels](./supported-channels.md) | Capability matrix for every provider — analytics, comments, first comment, polls, video, carousel, alt text, and more. |
 
-> Verified against v1.4.0
+> Verified against v1.5.0

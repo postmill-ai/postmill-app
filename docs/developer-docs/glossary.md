@@ -1,6 +1,6 @@
 # Glossary
 
-> Verified against v1.4.0
+> Verified against v1.5.0
 
 Terminology reference for the Postmill platform.
 
@@ -19,7 +19,7 @@ A social media platform or chat service integration (e.g., X, LinkedIn, Discord,
 A single connected channel instance — credentials and settings for one account on one platform. Stored as an `Integration` row, encrypted at rest via `EncryptionService`.
 
 **Inngest**
-The durable job engine that schedules and executes background work. Postmill uses Inngest Cloud (or the local Inngest dev server) for event-driven and cron-triggered functions: post publishing, analytics collection, comment syncing, email delivery, autopost processing, and token refresh. Functions are served by the backend at `/api/inngest`.
+The durable job engine that schedules and executes background work. Postmill uses Inngest Cloud, a production self-hosted Inngest engine (`INNGEST_BASE_URL` plus event/signing keys), or the local Inngest dev server for event-driven and cron-triggered functions: post publishing, analytics collection, comment syncing, email delivery, autopost processing, token refresh, and organization export/import. Functions are served by the backend at `/api/inngest`.
 
 **Durable Execution**
 An execution model where job state is persisted on every step. Inngest provides retries, concurrency controls, and idempotency so that background work resumes reliably after restarts or failures.
@@ -177,6 +177,9 @@ A billing backend in the `payments` kernel domain (`payments/stripe@v1`, PayPal,
 
 **Postmill ID**
 First-party SSO federation ("Sign in with Postmill"): first-party apps authenticate a Postmill instance's users via public-client PKCE and receive scope-gated identity claims. Grants are stored as `FederationGrant` rows. See [Postmill ID](./postmill-id.md).
+
+**Organization portability**
+Owner-only move of an organization between instances. An owner exports a passphrase-protected `postmill.org-export` archive from `/settings/data` (`POST /org-portability/exports`); on the destination, a new owner imports it from the `/setup` **Import** step before setup is completed. Jobs are `OrgPortabilityJob` rows processed by the `org-portability-export` / `org-portability-import` Inngest functions; archives expire and are purged hourly by `org-portability-expiry`. See [Organization export](../user-guide/organization-export.md).
 
 **Content Pack**
 A premium, BYOK stock-media provider (Adobe Stock, Envato Elements, Magnific, Vecteezy) configured per organization. Resolved per capability; falls back to the free stock provider for any capability the active pack does not cover.

@@ -1,8 +1,8 @@
 # Adding an AI Provider Adapter
 
-Postmill's AI layer supports 30 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
+Postmill's AI layer supports 31 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
 
-> Verified against v1.4.0
+> Verified against v1.5.0
 
 ---
 
@@ -315,6 +315,8 @@ export const providerModules = [
 
 > **Base URL visibility:** the Settings → AI form renders every credential field the adapter declares (`credentialFieldsFromMeta` in `apps/frontend/src/components/settings/shared/kit/descriptors/ai.descriptor.ts`), so a `baseURL` field is shown whenever your adapter lists one — optional for hosted providers that offer a regional or MaaS endpoint override (Qwen Cloud, MiniMax China), required only where the adapter marks it so (`openai-compatible`). Non-secret stored values such as `baseURL` are prefilled when editing. Saved `baseURL` values must be public HTTPS URLs — `OrgAiSettingsService._assertBaseURLSafe` rejects private/loopback/non-HTTPS hosts.
 
+> **Beta badge:** if the adapter was built without a live API key (as `demonroute` was), add `'ai/<id>'` to `BETA_PROVIDER_KEYS` in `libraries/providers/kernel/src/verification.ts`. Settings shows a "Beta" badge until the entry is removed after a live-key smoke test.
+
 ---
 
 ## Step 5: Credential encryption
@@ -342,8 +344,8 @@ Mock the underlying AI SDK or the injected `SafeFetchPort` rather than making re
 
 `openai`, `anthropic`, `google`, `bedrock`, `vertex`, `azure`, `groq`, `fireworks`, `togetherai`, `deepseek`, `mistral`, `cohere`, `perplexity`, `xai`, `gateway`, `openrouter`
 
-### OpenAI-compatible adapters (14)
+### OpenAI-compatible adapters (15)
 
-`siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`, `apertus`, `nvidia`, `openai-compatible`
+`siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`, `apertus`, `nvidia`, `demonroute`, `openai-compatible`
 
-**Total: 30 providers.**
+**Total: 31 providers.**

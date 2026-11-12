@@ -28,4 +28,4 @@ The studio follows the standard Studio Kit flow: pick inputs, click **Generate**
 - **Test connection is free** — Settings → Content → AI Media → **Test connection** reads your organization's credit/tier info; no task is billed.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

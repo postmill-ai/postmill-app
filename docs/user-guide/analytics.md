@@ -6,8 +6,8 @@ snapshots collected from all connected channels and presented in a unified, filt
 ## Data Population
 
 Analytics data is collected by a background Inngest function (`analyticsCollection`).
-The backend must have `USE_INNGEST=true` and valid Inngest Cloud credentials (or `INNGEST_DEV=1`
-for local development). The sweep runs once per day, gathering metrics for all connected channels
+The backend must have `USE_INNGEST=true` and valid Inngest Cloud credentials or a production self-hosted Inngest engine (or
+`INNGEST_DEV=1` for local development). The sweep runs once per day, gathering metrics for all connected channels
 and storing them as `AnalyticsSnapshot` and `PostAnalyticsSnapshot` records.
 
 Snapshot freshness follows a 24-hour cycle. Data for "today" may be incomplete until the next
@@ -160,4 +160,4 @@ Competitor tracking integrates with the analytics dashboard. Watched accounts ar
 the analytics collection sweep, and their follower metrics appear on the **Watchlist** tab, charted
 against your own. See [Watchlist](watchlist.md) for setup and configuration.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

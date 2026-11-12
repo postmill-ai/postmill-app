@@ -33,4 +33,4 @@ Flux images use fal.ai's synchronous generation endpoint. Kling, Pika, and Stabl
 - [Settings](../settings) — provider credential setup.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

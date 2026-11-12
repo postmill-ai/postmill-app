@@ -28,4 +28,4 @@ Image generations complete synchronously via bounded internal polling (the adapt
 - **Test** on the settings card calls the free DashScope `compatible-mode/v1/models` list — no generation is billed.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

@@ -23,4 +23,4 @@ Jobs follow the standard [Media Studios flow](./index.md): submit the form, trac
 - Only one tab/operation is exposed: character video from a keyframe.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

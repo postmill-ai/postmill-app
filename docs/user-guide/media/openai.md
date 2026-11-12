@@ -28,4 +28,4 @@ Image and audio generations complete synchronously and land directly in `/files`
 - **Test connection is free:** Settings → Content → AI Media → **Test connection** lists your available models (`/v1/models`); no image or audio is billed.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

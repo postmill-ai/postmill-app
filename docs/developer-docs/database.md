@@ -170,6 +170,7 @@ See [Backend Conventions](./backend-conventions.md) for the full layering rules 
 | `migration-ledger/` | Internal migration bookkeeping (`MigrationLedger`) |
 | `notifications/` | Notification delivery |
 | `oauth/` | OAuth app and authorization management |
+| `org-portability/` | Owner-only organization export/import jobs (`OrgPortabilityJob`), archive writer/reader, cross-domain import transaction |
 | `organizations/` | Organization and user-org relationship |
 | `posts/` | Post CRUD, state transitions, recursive queries |
 | `provider-configs/` | `OrgProviderConfiguration` |
@@ -203,6 +204,8 @@ Models with encrypted fields:
 - `StorageProviderConfig` — `credentials`
 - `OrgShortLinkConfig` — `credentials`
 - `MediaProviderConfig` — `credentials`
+- `CommsProviderConfig`, `OrgVpnConfig`, `ContentPackConfig` — `credentials`
+- `OrgPortabilityJob` — `archiveKeyCiphertext` (the temporary per-archive key; cleared on completion, failure or expiry)
 - `AuthProviderConfig` — `clientId`, `clientSecret`
 - `OAuthApp` — `clientSecret`
 - `OAuthAuthorization` — `accessToken`, `refreshToken`
@@ -237,4 +240,4 @@ total_connections ≈ (backend_replicas + inngest_workers) × DATABASE_CONNECTIO
 
 A reasonable start for a small/medium deployment: `DATABASE_CONNECTION_LIMIT=10`, `DATABASE_POOL_TIMEOUT=20`. Raise the limit only after confirming Postgres `max_connections` (or the pgBouncer pool) has room across **all** backend replicas plus the Inngest worker. When fronted by pgBouncer in transaction mode, set a low per-process limit and let the bouncer pool.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

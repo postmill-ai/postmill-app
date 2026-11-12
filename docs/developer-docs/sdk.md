@@ -1,6 +1,6 @@
 # SDK
 
-> Verified against v1.4.0
+> Verified against v1.5.0
 
 The `@postmill-ai/postmill-sdk` is the official Node.js SDK for the Postmill Public API. It provides typed methods for creating posts, uploading media, listing integrations, and more.
 

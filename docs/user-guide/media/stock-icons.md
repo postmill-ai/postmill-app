@@ -30,13 +30,13 @@ with **Attribution required**.
 ## Preview actions
 
 - **Open in Designer** — opens the SVG on the [Designer](./designer) static canvas.
-- **Save to Files** — `/files/import` rejects raw SVG for security reasons, so the icon is
-  rasterized client-side to a 512×512 PNG before being uploaded. The saved file is a PNG, not an
-  SVG. The dialog lets you rename the file and pick or create a destination folder.
+- **Save to Files** — `/files/import` rejects raw SVG for security reasons, so an Iconify icon is
+  rasterized client-side to a 512×512 PNG before being uploaded. A Magnific icon is instead
+  imported from its licensed 512 px PNG download. Either way the saved file is a PNG, not an SVG.
+  The dialog lets you rename the file and pick or create a destination folder.
 
-Because the icon is uploaded as a local PNG (not imported from a URL), the saved file does **not**
-carry `source`/`attribution` metadata — the set and license are shown in the save dialog only, so
-note any required attribution yourself.
+The rasterized upload still carries `source` and `attribution` metadata (icon set and license), so
+CC-BY attribution is persisted on the saved file.
 
 ## Related docs
 
@@ -47,4 +47,4 @@ note any required attribution yourself.
 
 ---
 
-> Verified against v1.4.0
+> Verified against v1.5.0

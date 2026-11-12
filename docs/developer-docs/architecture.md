@@ -152,6 +152,9 @@ All scheduled and async work runs on Inngest. The backend serves the handler at 
 | `media-render` | Event `media/render` | Local video render (Designer timeline + clip merge). |
 | `media-design-export` | Event `media/design-export` | Build a `.pdesign` bundle export in the background (shares the render concurrency cap). |
 | `media-video-thumbnail` | Event `media/video-thumbnail.generate` | Generate a poster thumbnail for a video file. |
+| `org-portability-export` | Event `org/portability.export` | Stream an owner-requested organization export archive into a private spool. |
+| `org-portability-import` | Event `org/portability.import` | Validate and then import an uploaded organization archive (Setup → Import); concurrency 1 per org. |
+| `org-portability-expiry` | Cron (hourly) | Expire export/import jobs (completed exports 24 h after completion; active jobs only after a 24 h idle TTL) and delete their spool archives and temporary archive keys. |
 | `missing-post-finder` | Cron (hourly) | Recover posts that should have published. |
 | `streak-tracker` | Event `streak/start` | Streak notifications. |
 | `campaign-tag-purge` | Cron | Purge tagged campaign items for ended campaigns. |
@@ -170,7 +173,7 @@ The full inventory with schedules is in [Inngest & Cron](../operations-guide/inn
 | **CSRF** | CSRF middleware on cookie-authenticated mutating routes. Bypassed under `NOT_SECURED` (dev only). Header/API-key clients are unaffected. |
 | **Helmet** | HSTS (1 year, includeSubDomains, preload), `noSniff`, `referrerPolicy`, `frameguard: deny`, conservative CSP. Gated by `NOT_SECURED`. |
 | **Throttling** | `ThrottlerBehindProxyGuard` applies default per-route limits. Global default: `API_LIMIT` env var (600/hour). |
-| **Sentry** | `beforeSend`/`beforeBreadcrumb` scrubs auth headers, tokens, PII. OpenAI capture disabled (`recordInputs: false`). `SentryReportFilter` (the first `APP_FILTER`, i.e. the last-match catch-all) captures uncaught controller 500s; typed filters win first, so a `ProviderUpstreamError` becomes a structured **502** (`provider`, `kind`, `upstreamStatus`, `retryable`, `settingsUrl`) and only outage-class kinds reach Sentry. |
+| **Sentry** | `beforeSend`/`beforeBreadcrumb` scrubs auth headers, tokens, PII. OpenAI capture disabled (`recordInputs: false`). Optional Epure mirroring (`EPURE_DSN` / `NEXT_PUBLIC_EPURE_DSN`) rides the Sentry multiplexed transport and receives only scrubbed error events. `SentryReportFilter` (the first `APP_FILTER`, i.e. the last-match catch-all) captures uncaught controller 500s; typed filters win first, so a `ProviderUpstreamError` becomes a structured **502** (`provider`, `kind`, `upstreamStatus`, `retryable`, `settingsUrl`) and only outage-class kinds reach Sentry. |
 | **JWT** | Algorithm pinned to `HS256`. New tokens carry `exp` with sliding renewal. |
 | **Validation** | Global `ValidationPipe` rejects unknown fields (`whitelist` + `forbidNonWhitelisted`). |
 
@@ -189,7 +192,7 @@ The email layer is a pluggable adapter system:
 
 The `User` table keeps identity/auth columns only: `email`, `password`, `providerName`, `providerId`, `isSuperAdmin`, `activated`, `lastOnline`, `ip`, `agent`, `lastReadNotifications`. The `@@unique([email, providerName])` key is preserved — the same email may exist once per login provider.
 
-- **`UserProfile`** (1:1, cascade) carries profile fields: `name`, `lastName`, `bio`, `avatarUrl` (external avatar with Gravatar fallback), `pictureId` (user-uploaded image), IANA `timezone`, and notification preferences.
+- **`UserProfile`** (1:1, cascade) carries profile fields: `name`, `lastName`, `bio`, `avatarUrl` (external avatar with Gravatar fallback), `pictureId` (user-uploaded image), IANA `timezone`, `preferredLanguage` (the persisted UI language), and notification preferences.
 - **`Session`** backs refresh-token rotation: login creates a session storing `tokenHash = sha256(refreshToken)`; `POST /auth/refresh` rotates the hash; **reuse of a rotated hash revokes the session**; logout revokes all sessions. The JWT access token is unchanged (HS256, sliding renewal).
 
 See [Data Model](./data-model.md) for the full schema breakdown.
@@ -229,4 +232,4 @@ The AI, Media, Storage, and Shortlinks settings surfaces share one foundation:
 
 The post composer lives on dedicated routes: `/posts/post` (create — accepts `date`/`channel`/`content` query params) and `/posts/post/:id` (edit). Both render the shared `PostComposer` component; the time picker displays in the user's IANA timezone and saves UTC.
 
-> Verified against v1.4.0
+> Verified against v1.5.0

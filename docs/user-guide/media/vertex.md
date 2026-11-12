@@ -37,4 +37,4 @@ Postmill mints a short-lived OAuth token from the service-account JSON on every 
 - [Settings](../settings)
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

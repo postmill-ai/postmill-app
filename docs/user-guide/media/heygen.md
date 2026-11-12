@@ -62,4 +62,4 @@ See [Media Studios](./index) for the render-queue/hand-off flow shared across st
 - [Settings](../settings) — configuring the HeyGen media provider and its storage destination.
 
 ---
-> Verified against v1.4.0
+> Verified against v1.5.0

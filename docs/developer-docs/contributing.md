@@ -100,6 +100,7 @@ Renames/drops are destructive — provide an expand-contract plan.
 3. Run `pnpm run test` to verify your package's tests pass
 4. Run `pnpm exec eslint .` from the repo root to check lint
 5. If you changed the schema, run `pnpm run prisma-generate`
+6. If you changed a route or DTO, regenerate the committed `openapi.yml` with `pnpm run build:backend && pnpm run openapi:generate` (never hand-edit it; CI fails on drift)
 
 ### Commit Messages
 
@@ -147,4 +148,4 @@ every page you change.
 Contributors must sign the Contributor License Agreement before a PR can be merged: email your
 acceptance to legal@postmill.ai (`ICLA.md` for individuals, `CCLA.md` for entities).
 
-> Verified against v1.4.0
+> Verified against v1.5.0
