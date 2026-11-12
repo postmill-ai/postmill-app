@@ -6,6 +6,9 @@ import {
   ORG_PORTABILITY_JOB_TTL_HOURS,
 } from './org-portability.types';
 
+const ORG_PORTABILITY_IDLE_STATUSES = ['ready', 'completed', 'failed'];
+const ORG_PORTABILITY_ACTIVE_STATUSES = ['uploading', 'validating', 'pending', 'processing'];
+
 @Injectable()
 export class OrgPortabilityRepository {
   constructor(private readonly _prisma: PrismaService) {}
@@ -72,9 +75,11 @@ export class OrgPortabilityRepository {
     });
   }
 
+  // Conditional on the worker still holding the claim: a job expired or failed meanwhile
+  // reports count 0 and the caller must discard its archive.
   completeExportJob(id: string, data: { spoolPath: string; archiveSha256: string; progress: Prisma.InputJsonValue }) {
-    return this._prisma.orgPortabilityJob.update({
-      where: { id },
+    return this._prisma.orgPortabilityJob.updateMany({
+      where: { id, kind: 'export', status: 'processing' },
       data: {
         status: 'completed',
         spoolPath: data.spoolPath,
@@ -82,6 +87,7 @@ export class OrgPortabilityRepository {
         archiveKeyCiphertext: null,
         progress: data.progress,
         error: null,
+        expiresAt: new Date(Date.now() + ORG_PORTABILITY_JOB_TTL_HOURS * 3_600_000),
       },
     });
   }
@@ -93,19 +99,32 @@ export class OrgPortabilityRepository {
     });
   }
 
+  // A job in an active status keeps its spool and key past `expiresAt` while its worker or
+  // uploader is still touching it; only once it has also been idle for a full TTL is it
+  // treated as orphaned and expired. Each row is re-checked in its own guarded update so a
+  // job that moves (e.g. ready -> pending) between the read and the write is left alone; the
+  // update also pins the spoolPath that was read, so the caller only removes the file the row
+  // held at the moment it became `expired`. Every completion is itself conditional on an
+  // active status, so a row can never be both expired here and completed by a worker.
   async expireJobs(now: Date) {
-    const jobs = await this._prisma.orgPortabilityJob.findMany({
-      where: {
-        expiresAt: { lt: now },
-        status: { in: ['uploading', 'validating', 'ready', 'pending', 'processing', 'completed', 'failed'] },
-      },
-    });
-    if (!jobs.length) return [];
-    await this._prisma.orgPortabilityJob.updateMany({
-      where: { id: { in: jobs.map((job) => job.id) } },
-      data: { status: 'expired', archiveKeyCiphertext: null },
-    });
-    return jobs;
+    const staleBefore = new Date(now.getTime() - ORG_PORTABILITY_JOB_TTL_HOURS * 3_600_000);
+    const where: Prisma.OrgPortabilityJobWhereInput = {
+      expiresAt: { lt: now },
+      OR: [
+        { status: { in: ORG_PORTABILITY_IDLE_STATUSES } },
+        { status: { in: ORG_PORTABILITY_ACTIVE_STATUSES }, updatedAt: { lt: staleBefore } },
+      ],
+    };
+    const jobs = await this._prisma.orgPortabilityJob.findMany({ where });
+    const expired = [];
+    for (const job of jobs) {
+      const result = await this._prisma.orgPortabilityJob.updateMany({
+        where: { ...where, id: job.id, spoolPath: job.spoolPath },
+        data: { status: 'expired', archiveKeyCiphertext: null },
+      });
+      if (result.count === 1) expired.push(job);
+    }
+    return expired;
   }
 
   organization(orgId: string) {

@@ -10,7 +10,6 @@ import { createHash, randomBytes } from 'crypto';
 import {
   createReadStream,
   createWriteStream,
-  mkdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -25,7 +24,7 @@ import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audi
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { OrgPortabilityRepository } from './org-portability.repository';
-import { OrgArchiveWriter } from './org-portability.archive';
+import { ensureOrgSpoolDir, OrgArchiveWriter } from './org-portability.archive';
 import {
   lowerFirst,
   orgPortabilityModelNames,
@@ -407,7 +406,7 @@ export class OrgPortabilityService {
     let writer: OrgArchiveWriter | undefined;
     try {
       archiveKey = Buffer.from(this._encryption.decrypt(job.archiveKeyCiphertext), 'base64');
-      mkdirSync(spoolRoot, { recursive: true, mode: 0o700 });
+      ensureOrgSpoolDir(spoolRoot);
       rmSync(spoolPath, { force: true });
       rmSync(assetTemp, { force: true });
       writer = await OrgArchiveWriter.create(spoolPath);
@@ -494,11 +493,17 @@ export class OrgPortabilityService {
         throw new Error('Organization export exceeds the archive size limit');
       }
       const archiveSha256 = await sha256File(spoolPath);
-      await this._repository.completeExportJob(job.id, {
+      const completed = await this._repository.completeExportJob(job.id, {
         spoolPath,
         archiveSha256,
         progress: { counts, uniqueAssetBytes: uniqueAssetBytes.toString(), archiveBytes: statSync(spoolPath).size },
       });
+      if (completed.count !== 1) {
+        // The claim was lost (expired or failed meanwhile): nothing references this archive.
+        rmSync(spoolPath, { force: true });
+        this._logger.warn(`Organization export ${jobId} lost its claim before completion; archive discarded`);
+        return;
+      }
       await this._audit.record({
         orgId: job.organizationId,
         userId: job.ownerId,
