@@ -64,7 +64,8 @@ const preserveGestureGeometry = <T extends DesignerElement | VideoClip>(local: T
   for (const key of GESTURE_GEOMETRY_KEYS) {
     if (local[key] !== undefined || remote[key] !== undefined) next[key] = local[key];
   }
-  if ('keyframes' in local || 'keyframes' in remote) next.keyframes = local.keyframes;
+  if ('keyframes' in local) next.keyframes = local.keyframes;
+  else if ('keyframes' in remote) next.keyframes = undefined;
   return next as T;
 };
 
