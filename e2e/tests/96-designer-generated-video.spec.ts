@@ -394,6 +394,10 @@ class DesignerMocks {
         });
         return;
       }
+      if (method === 'POST' && pathname === '/user/preferred-language') {
+        await json(route, {});
+        return;
+      }
       if (method === 'GET' && pathname === '/settings/roles/me') {
         await json(route, { role: 'owner', permissions: [], isSuperAdmin: true });
         return;
@@ -1391,6 +1395,7 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await expect(review.getByRole('img', { name: 'Before', exact: true })).toBeVisible();
     await expect(review.getByRole('img', { name: 'After', exact: true })).toBeVisible();
     expect(mocks.doc.outputs[0].tracks[0].clips[1]?.src).toBe(REPLACEMENT_IMAGE_URL);
+    await review.getByRole('radio', { name: 'Preserve frame', exact: true }).click();
     await review.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[1]?.maskSrc).toContain('/mock-masks/');
     expect(mocks.backgroundRemovalPosts).toHaveLength(1);

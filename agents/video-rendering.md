@@ -465,6 +465,9 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
   served to the in-container Chromium by request interception from `/work/assets`
   (token-gated `render-asset` route as fallback) — never hand the container a remote
   clip URL to stream.
+- Composition media URLs are same-origin/relative, inert, or public HTTPS by default. Private HTTP
+  stays blocked unless its literal IP is explicitly included in `SSRF_ALLOWED_PRIVATE_CIDRS`; the
+  GitHub render acceptance uses only `127.0.0.1/32` for its local fixture server.
 - `VIDEO_RENDER_NETWORK=host` weakens container network isolation; treat as a security
   decision, not a convenience flag.
 - When touching the container contract (`render-job-spec.ts`, worker CLI), rebuild the

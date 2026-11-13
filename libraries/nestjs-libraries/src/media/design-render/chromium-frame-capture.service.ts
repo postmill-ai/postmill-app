@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { FRAME_RENDERER_SCRIPT, escapeForScriptTag } from './frame-renderer-script';
 import { buildFramePage, fontLinksForOutput, fontPreloadsForOutput } from './frame-page';
-import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
+import { isAllowedPrivateIp, isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { getCapturePageCount, getFrameTimeoutMs } from './render-config';
 import type { VideoOutput } from './design-render.types';
 import { renderWorkDir } from './render-job-spec';
@@ -67,8 +67,8 @@ export function collectCompositionMediaUrls(output: VideoOutput): string[] {
 
 /**
  * A render media URL is safe to hand the headless browser when it is inert (`data:`/`blob:`),
- * same-origin/relative (served by our own backend), or a validated public HTTPS URL. A
- * private-IP / metadata / non-public host (e.g. `http://169.254.169.254/…`) is rejected
+ * same-origin/relative (served by our own backend), a validated public HTTPS URL, or an explicitly
+ * allowlisted private HTTP IP. Every other private-IP / metadata / non-public host is rejected
  * host-side BEFORE the browser (which runs `--no-sandbox` with host network on the in-process
  * path) can fetch it — closing the blind-SSRF hole in the frame renderer.
  */
@@ -80,6 +80,9 @@ export async function isRenderMediaUrlAllowed(src: string): Promise<boolean> {
   const absolute = src.startsWith('//') ? `https:${src}` : src;
   try {
     const u = new URL(absolute);
+    if (u.protocol === 'http:' && isAllowedPrivateIp(u.hostname.replace(/^\[|\]$/g, ''))) {
+      return true;
+    }
     const base = new URL(renderBaseUrl());
     if (u.host === base.host) return true; // same-origin storage / dev host
   } catch {

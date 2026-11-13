@@ -84,3 +84,4 @@ jobs:
           GITHUB_ACTIONS: 'true'
           NODE_ENV: production
           RUN_RENDER_INTEGRATION: '1'
+          SSRF_ALLOWED_PRIVATE_CIDRS: 127.0.0.1/32
