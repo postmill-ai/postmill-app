@@ -18,7 +18,7 @@ export const imageDropTargetById = (store: Store, id: string): ImageDropTarget |
   const output = state.doc.outputs[state.currentOutput];
   if (state.doc.mode === 'video') {
     for (const track of (output as VideoOutput | undefined)?.tracks || []) {
-      if (track.type !== 'image' && track.type !== 'sticker') continue;
+      if (track.locked || (track.type !== 'image' && track.type !== 'sticker')) continue;
       const clip = track.clips.find((item) => item.id === id);
       if (clip?.src && clip.mediaType !== 'video') {
         return {
@@ -33,14 +33,15 @@ export const imageDropTargetById = (store: Store, id: string): ImageDropTarget |
   const element = (output as DesignerOutput | undefined) && 'children' in output
     ? pageChildren(output as DesignerOutput, state.currentPage).find((item) => item.id === id)
     : undefined;
-  return element?.type === 'image' && element.src
+  return element?.type === 'image' && element.src && !element.locked && !element.hidden
     ? { kind: 'element', elementId: element.id }
     : null;
 };
 
 export const uploadDroppedImage = async (
   fetch: Fetch,
-  file: File
+  file: File,
+  probe = probeImageNaturalSize
 ): Promise<MediaImageItem> => {
   const formData = new FormData();
   formData.append('file', file);
@@ -48,12 +49,13 @@ export const uploadDroppedImage = async (
   const response = await fetch(endpoint, { method: 'POST', body: formData });
   if (!response.ok) throw new Error('Upload failed');
   const data = await response.json() as { id: string; path: string };
-  const natural = await probeImageNaturalSize(data.path);
+  const natural = await probe(data.path);
+  if (!natural) throw new Error('Image decode failed');
   return {
     url: data.path,
     fileId: data.id,
-    width: natural?.width,
-    height: natural?.height,
+    width: natural.width,
+    height: natural.height,
   };
 };
 

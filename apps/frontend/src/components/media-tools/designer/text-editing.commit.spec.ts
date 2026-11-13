@@ -55,40 +55,19 @@ describe('buildTextEditCommit', () => {
     expect(commit.richText).toEqual(runs);
   });
 
-  it('auto-fits height after a flat text edit without shrinking a manual box', () => {
+  it('preserves shrink-to-fit geometry after an ordinary flat text edit', () => {
     const flat = {
       ...el,
       text: '',
       richText: undefined,
       width: 100,
       height: 20,
-      fontSize: 20,
+      fontSize: 48,
     } as DesignerElement;
-    const measure = (text: string, size: number) => text.length * size * 0.5;
-    expect(buildTextEditCommit([{ text: 'hello world' } as TextRun], flat, measure).height).toBe(48);
-    expect(buildTextEditCommit(
-      [{ text: 'hello world' } as TextRun],
-      { ...flat, height: 200 },
-      measure
-    ).height).toBeUndefined();
-  });
-
-  it('widens only for one unwrapped overflow word', () => {
-    const flat = {
-      ...el,
-      text: '',
+    expect(buildTextEditCommit([{ text: 'a much longer line of copy' } as TextRun], flat)).toEqual({
+      text: 'a much longer line of copy',
       richText: undefined,
-      width: 100,
-      height: 20,
-      fontSize: 20,
-    } as DesignerElement;
-    const measure = (text: string, size: number) => text.length * size * 0.5;
-    expect(buildTextEditCommit(
-      [{ text: 'supercalifragilistic' } as TextRun],
-      flat,
-      measure
-    ).width).toBe(200);
-    expect(buildTextEditCommit([{ text: 'hello world' } as TextRun], flat, measure).width).toBeUndefined();
+    });
   });
 });
 
@@ -127,5 +106,51 @@ describe('TextEditingOverlay font-size shortcuts', () => {
     expect(onParentKeyDown).not.toHaveBeenCalled();
     expect(store.getState().history).toHaveLength(history + 2);
     expect(store.getState().doc.outputs[0]).toMatchObject({ children: [{ fontSize: 16 }] });
+  });
+
+  it('supports ISO decrease and does not restore stale rich-run sizes on blur', () => {
+    const store = createDesignerStore();
+    const rich = {
+      ...el,
+      locked: false,
+      hidden: false,
+      richText: [{ text: 'Big', fontSize: 20 }, { text: ' sale today', fontSize: 40 }],
+    } as DesignerElement;
+    store.getState().addElement(rich);
+    const onUpdate = vi.fn();
+    const onAdjustFontSize = (delta: number) => adjustSelectedTextFontSize(store, delta);
+    const view = render(
+      React.createElement(TextEditingOverlay, {
+        element: rich,
+        stageRect: { x: 0, y: 0, scale: 1 },
+        onUpdate,
+        onAdjustFontSize,
+        onComplete: vi.fn(),
+      })
+    );
+    const editor = view.container.querySelector<HTMLElement>('[data-text-editor-id="t1"]')!;
+    fireEvent.keyDown(editor, { key: '<', code: 'IntlBackslash', ctrlKey: true, shiftKey: false });
+
+    const adjusted = (store.getState().doc.outputs[0] as import('./designer.store').DesignerOutput).children[0];
+    expect(adjusted.fontSize).toBe(15);
+    expect(adjusted.richText?.map((run) => run.fontSize)).toEqual([19, 39]);
+    view.rerender(
+      React.createElement(TextEditingOverlay, {
+        element: adjusted,
+        stageRect: { x: 0, y: 0, scale: 1 },
+        onUpdate,
+        onAdjustFontSize,
+        onComplete: vi.fn(),
+      })
+    );
+    editor.innerHTML = '<span style="font-size:20px">Big!</span><span style="font-size:40px"> sale today</span>';
+    fireEvent.blur(editor);
+
+    expect(onUpdate).toHaveBeenCalledWith('t1', expect.objectContaining({
+      richText: [
+        expect.objectContaining({ fontSize: 19 }),
+        expect.objectContaining({ fontSize: 39 }),
+      ],
+    }));
   });
 });

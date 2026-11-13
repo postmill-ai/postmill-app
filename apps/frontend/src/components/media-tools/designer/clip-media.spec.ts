@@ -94,7 +94,7 @@ describe('replaceClipImage', () => {
       naturalWidth: 1600,
       naturalHeight: 900,
     });
-    expect(clip(store, trackId).crop).toEqual({ x: 40, y: 90, width: 800, height: 900 });
+    expect(clip(store, trackId).crop).toEqual({ x: 0, y: 100, width: 1600, height: 800 });
     expect(clip(store, trackId).fitMode).toBe('cover');
     expect(clip(store, trackId).focalPoint).toEqual({ x: 0.25, y: 0.75 });
   });

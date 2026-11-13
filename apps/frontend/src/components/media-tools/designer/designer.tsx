@@ -51,7 +51,12 @@ import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/d
 import { useDesignerActions, type DesignerActionCtx } from './actions';
 import { NewDesignDialog } from './new-design-dialog';
 import { CanvasInspector } from './panels/canvas-inspector';
-import { DesktopWorkspacePanel, type WorkspaceTab } from './workspace-panel';
+import {
+  DesktopWorkspacePanel,
+  readDesktopWorkspacePreference,
+  writeDesktopWorkspacePreference,
+  type WorkspaceTab,
+} from './workspace-panel';
 import { HistoryIcon, VersionsIcon } from '@postmill-ai/frontend/components/ui/icons/designer-tools';
 import { useMediaPicker } from '../use-media-picker';
 import { StartDialog } from './start-dialog';
@@ -239,6 +244,7 @@ const DesignerContent: FC<
   const [inspectorSnap, setInspectorSnap] = useState<MobileSheetSnap>('half');
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('inspector');
+  const [workspacePreferenceReady, setWorkspacePreferenceReady] = useState(false);
   const mobileLayout = useMediaQuery('(max-width: 1025px)');
   // Required startup picker on a fresh editor (no deep-linked asset/design and
   // no caller-supplied size) — forces an explicit format choice instead of the
@@ -285,6 +291,21 @@ const DesignerContent: FC<
     height: 420,
     open: false,
   });
+  useEffect(() => {
+    setWorkspacePreferenceReady(false);
+    if (mobileLayout) return;
+    const preference = readDesktopWorkspacePreference(localStorage, user?.orgId);
+    setWorkspaceTab(preference.activeTab);
+    setInspectorCollapsed(preference.collapsed);
+    setWorkspacePreferenceReady(true);
+  }, [mobileLayout, user?.orgId]);
+  useEffect(() => {
+    if (!workspacePreferenceReady || mobileLayout) return;
+    writeDesktopWorkspacePreference(localStorage, user?.orgId, {
+      activeTab: workspaceTab,
+      collapsed: inspectorCollapsed,
+    });
+  }, [inspectorCollapsed, mobileLayout, user?.orgId, workspacePreferenceReady, workspaceTab]);
   // History floats as well: it is a navigation surface you keep open while
   // experimenting, and it needs the room a rail cannot give it.
   const historyPanel = useFloatingPanelState('history', user?.orgId, {
@@ -316,7 +337,8 @@ const DesignerContent: FC<
         brandPanel.setOpen(false);
         setInspectorCollapsed(false);
       } else if (tab === 'layers') {
-        layersPanel.setOpen(true);
+        setMobileToolsOpen(false);
+        layersPanel.toggle();
       } else if (tab === 'brand') {
         setMobileToolsOpen(false);
         setInspectorCollapsed(true);
@@ -443,6 +465,12 @@ const DesignerContent: FC<
   }, [showPagesBar, user?.orgId]);
   const selectedIds = store((s) => s.selectedIds);
   const selectedClip = store((s) => s.selectedClip);
+  useEffect(() => {
+    if (mobileLayout || (!selectedIds.length && !selectedClip)) return;
+    setWorkspaceTab('inspector');
+    setInspectorCollapsed(false);
+    setMobileToolsOpen(false);
+  }, [mobileLayout, selectedClip, selectedIds]);
   const brandEnforcement = store((s) => s.brandEnforcement);
   const brandAdminOverride = store((s) => s.brandAdminOverride);
   const undo = store((s) => s.undo);
@@ -1834,7 +1862,7 @@ const DesignerContent: FC<
 
             {/* Desktop docks over the canvas edge; mobile is an inline sheet so
                 its height participates in layout and leaves the canvas visible. */}
-            {!inspectorCollapsed && !mobileLayout && (
+            {!mobileLayout && (
               <DesktopWorkspacePanel
                 store={store}
                 activeTab={workspaceTab}
@@ -1843,6 +1871,7 @@ const DesignerContent: FC<
                 hasInspectorTarget={hasInspectorTarget}
                 currentOutput={currentOutput}
                 currentOutputSizeKey={currentOutputSizeKey}
+                collapsed={inspectorCollapsed}
               />
             )}
 
@@ -1876,11 +1905,11 @@ const DesignerContent: FC<
             {inspectorCollapsed && (
               <button
                 onClick={() => openWorkspaceTab('inspector')}
-                className="absolute end-0 top-2 z-20 px-1.5 py-3 rounded-e-md border border-e-0 border-studioBorder bg-newBgColorInner text-textColor/60 hover:text-textColor shadow-xl text-[14px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset mobile:hidden"
+                className="absolute end-0 top-2 z-20 px-1.5 py-3 rounded-s-md border border-e-0 border-studioBorder bg-newBgColorInner text-textColor/60 hover:text-textColor shadow-xl text-[14px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset mobile:hidden"
                 title={translate('show_properties', 'Show properties')}
                 aria-label={translate('expand_properties_panel', 'Expand properties panel')}
               >
-                <span className="rtl:rotate-180">‹</span>
+                <span className="inline-block rtl:rotate-180">‹</span>
               </button>
             )}
           </div>

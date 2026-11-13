@@ -17,7 +17,7 @@ import {
   refitSymbolToText,
 } from './symbol-edit';
 import { measureForElement } from './measure-text';
-import { adjustSelectedTextFontSize } from './text-shortcuts';
+import { adjustSelectedTextFontSize, fontSizeShortcutDelta } from './text-shortcuts';
 import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
 import { SafeZoneOverlay } from './safe-zones';
 import { Rulers } from './rulers';
@@ -216,6 +216,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetType: 'element' | 'canvas' | 'clip'; elementId?: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [dragReplace, setDragReplace] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [uploadingFile, setUploadingFile] = useState(false);
   const rafIdRef = useRef<number | null>(null);
@@ -1688,9 +1689,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         } else {
           st.duplicateElements(selectedIds);
         }
-      } else if (mod && e.shiftKey && (e.key === '>' || e.key === '<')) {
+      } else if (fontSizeShortcutDelta(e)) {
         e.preventDefault();
-        adjustSelectedTextFontSize(store, e.key === '>' ? 1 : -1);
+        adjustSelectedTextFontSize(store, fontSizeShortcutDelta(e));
       } else if (mod && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
         st.setZoom(st.zoom * 1.2);
@@ -1794,11 +1795,26 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     [pageOutput, doc, effectiveTool, paint, store]
   );
 
+  const findImageDropTarget = useCallback((clientX: number, clientY: number, rect: DOMRect) => {
+    let node = stageRef.current?.getIntersection({
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    }) as Konva.Node | null | undefined;
+    let target: ImageDropTarget | null = null;
+    while (node && !target) {
+      const id = node.id();
+      if (id) target = imageDropTargetById(store, id);
+      node = node.getParent();
+    }
+    return target;
+  }, [store]);
+
   // Drop from panels (designer elements) and OS file drops.
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragOver(false);
+      setDragReplace(false);
       containerRef.current?.classList.remove('designer-drop-active');
       if (outputFrozen) return;
 
@@ -1841,27 +1857,25 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       const file = files[0];
       if (!file.type.startsWith('image/')) return;
 
-      let node = stageRef.current?.getIntersection({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      }) as Konva.Node | null | undefined;
-      let replacementTarget: ImageDropTarget | null = null;
-      while (node && !replacementTarget) {
-        const id = node.id();
-        if (id) replacementTarget = imageDropTargetById(store, id);
-        node = node.getParent();
-      }
+      const replacementTarget = e.altKey && file.type !== 'image/svg+xml'
+        ? findImageDropTarget(e.clientX, e.clientY, rect)
+        : null;
       if (replacementTarget) {
         setUploadingFile(true);
         void uploadDroppedImage(fetch, file)
           .then((item) => replaceImageAtDropTarget(store, replacementTarget, item))
           .then((replaced) => {
             if (!replaced) {
-              toaster.show(t('failed_to_upload_file', 'Failed to upload file'), 'warning');
+              toaster.show(t('designer_image_replace_failed', 'That image replacement could not be applied'), 'warning');
             }
           })
-          .catch(() => {
-            toaster.show(t('failed_to_upload_file', 'Failed to upload file'), 'warning');
+          .catch((error) => {
+            toaster.show(
+              error instanceof Error && error.message === 'Image decode failed'
+                ? t('failed_to_load_dropped_image', 'Failed to load dropped image')
+                : t('failed_to_upload_file', 'Failed to upload file'),
+              'warning'
+            );
           })
           .finally(() => setUploadingFile(false));
         return;
@@ -1955,7 +1969,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           toaster.show(t('failed_to_upload_file', 'Failed to upload file'), 'warning');
         });
     },
-    [addElement, viewportX, viewportY, zoom, store, output, outputFrozen, toaster, fetch, isVideo, t]
+    [addElement, viewportX, viewportY, zoom, store, output, outputFrozen, toaster, fetch, isVideo, t, findImageDropTarget]
   );
 
   const bg = pageOutput?.bg;
@@ -2013,6 +2027,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         }
         e.dataTransfer.dropEffect = 'copy';
         const rect = containerRef.current?.getBoundingClientRect();
+        const fileTypes = e.dataTransfer.files.length
+          ? Array.from(e.dataTransfer.files, (file) => file.type)
+          : Array.from(e.dataTransfer.items, (item) => item.kind === 'file' ? item.type : '');
+        const replacing = !!(rect && e.altKey && fileTypes.some(
+          (type) => type.startsWith('image/') && type !== 'image/svg+xml'
+        ) && findImageDropTarget(e.clientX, e.clientY, rect));
+        e.dataTransfer.dropEffect = replacing ? 'move' : 'copy';
+        setDragReplace(replacing);
         if (rect) {
           setDragPosition({
             x: (e.clientX - rect.left - viewportX) / zoom,
@@ -2025,6 +2047,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       onDragLeave={(e) => {
         if (e.currentTarget.contains(e.relatedTarget as Node)) return;
         setDragOver(false);
+        setDragReplace(false);
         containerRef.current?.classList.remove('designer-drop-active');
       }}
       onDrop={handleDrop}
@@ -2553,12 +2576,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
       {dragOver && !uploadingFile && (
         <div
-          className="absolute pointer-events-none z-40 w-12 h-12 -translate-x-1/2 -translate-y-1/2 border-2 border-dashed border-designerAccent rounded-lg bg-designerAccent/10"
+          data-drop-mode={dragReplace ? 'replace' : 'insert'}
+          className={`absolute pointer-events-none z-40 flex h-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center border-2 border-designerAccent rounded-lg bg-designerAccent/10 ${dragReplace ? 'border-solid px-3 text-[12px] font-medium text-btnPrimaryAccent' : 'w-12 border-dashed'}`}
           style={{
             left: dragPosition.x * zoom + viewportX,
             top: dragPosition.y * zoom + viewportY,
           }}
-        />
+        >
+          {dragReplace && t('designer_replace_image', 'Replace image…')}
+        </div>
       )}
 
       {uploadingFile && (

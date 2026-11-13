@@ -22,6 +22,11 @@ describe('imageDropTargetById', () => {
     expect(imageDropTargetById(store, 'image')).toEqual({ kind: 'element', elementId: 'image' });
     expect(imageDropTargetById(store, 'text')).toBeNull();
     expect(imageDropTargetById(store, 'missing')).toBeNull();
+
+    store.getState().updateElement('image', { locked: true });
+    expect(imageDropTargetById(store, 'image')).toBeNull();
+    store.getState().updateElement('image', { locked: false, hidden: true });
+    expect(imageDropTargetById(store, 'image')).toBeNull();
   });
 
   it('accepts image and sticker clips but never video or audio', () => {
@@ -64,6 +69,8 @@ describe('imageDropTargetById', () => {
     });
     expect(imageDropTargetById(store, 'video')).toBeNull();
     expect(imageDropTargetById(store, 'audio')).toBeNull();
+    store.getState().setTrackLocked(0, image.id, true);
+    expect(imageDropTargetById(store, 'still')).toBeNull();
   });
 });
 
@@ -93,5 +100,13 @@ describe('uploadDroppedImage', () => {
 
     await uploadDroppedImage(fetch, file);
     expect(fetch).toHaveBeenCalledWith('/files/upload-server', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('rejects an uploaded file that the browser cannot decode', async () => {
+    const fetch = vi.fn().mockResolvedValue(response);
+    const file = new File(['not an image'], 'broken.png', { type: 'image/png' });
+
+    await expect(uploadDroppedImage(fetch, file, async () => null))
+      .rejects.toThrow('Image decode failed');
   });
 });

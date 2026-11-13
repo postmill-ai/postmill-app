@@ -64,7 +64,7 @@ export const imageReplacementPatch = (item: {
   fileId?: string;
   width?: number | null;
   height?: number | null;
-}, before?: Pick<VideoClip, 'naturalWidth' | 'naturalHeight' | 'crop' | 'fitMode' | 'focalPoint'>): Partial<VideoClip> => ({
+}, before?: Pick<VideoClip, 'naturalWidth' | 'naturalHeight' | 'crop' | 'fitMode' | 'focalPoint' | 'width' | 'height'>): Partial<VideoClip> => ({
   src: item.url,
   fileId: item.fileId,
   qr: undefined,

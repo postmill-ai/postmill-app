@@ -1,19 +1,29 @@
 import { MAX_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
-import type { MeasureText } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import type { DesignerOutput, VideoOutput } from './designer.store';
-import { growBoxFor } from './measure-text';
-import { buildTextElementPatch } from './panels/text-format-panel';
+import { fittedFontSize } from './measure-text';
 
 type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
 
-const boundedFontSize = (current: number | undefined, delta: number): number =>
+export const boundedFontSize = (current: number | undefined, delta: number): number =>
   Math.max(1, Math.min(MAX_FONT_SIZE, Math.round((current || 16) + delta)));
+
+export const fontSizeShortcutDelta = (event: {
+  key: string;
+  code?: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey?: boolean;
+}): -1 | 0 | 1 => {
+  if ((!event.ctrlKey && !event.metaKey) || event.altKey) return 0;
+  if (event.code === 'Comma' || event.key === '<') return -1;
+  if (event.code === 'Period' || event.key === '>') return 1;
+  return 0;
+};
 
 export const adjustSelectedTextFontSize = (
   store: Store,
-  delta: number,
-  measure?: MeasureText
+  delta: number
 ): boolean => {
   const state = store.getState();
   let changed = false;
@@ -31,8 +41,9 @@ export const adjustSelectedTextFontSize = (
       if (!track || track.locked || (track.type !== 'text' && track.type !== 'caption')) continue;
       const clip = track.clips.find((item) => item.id === ref.clipId);
       if (!clip) continue;
-      const fontSize = boundedFontSize(clip.fontSize, delta);
-      if (fontSize === (clip.fontSize || 16)) continue;
+      const fallback = track.type === 'caption' ? 28 : 16;
+      const fontSize = boundedFontSize(clip.fontSize ?? fallback, delta);
+      if (fontSize === (clip.fontSize ?? fallback)) continue;
       changed = state.updateClipSilent(state.currentOutput, track.id, clip.id, { fontSize }) || changed;
     }
   } else {
@@ -42,14 +53,17 @@ export const adjustSelectedTextFontSize = (
       if (!state.selectedIds.includes(element.id) || element.type !== 'text' || element.locked || element.hidden) {
         continue;
       }
-      const fontSize = boundedFontSize(element.fontSize, delta);
-      if (fontSize === (element.fontSize || 16)) continue;
-      const patch = buildTextElementPatch(element, { fontSize }, null);
-      const next = { ...element, ...patch };
-      state.updateElement(element.id, {
-        ...patch,
-        ...growBoxFor(next, fontSize, measure),
-      });
+      const effectiveSize = fittedFontSize(element);
+      const fontSize = boundedFontSize(effectiveSize, delta);
+      const richText = element.richText?.map((run) => ({
+        ...run,
+        fontSize: boundedFontSize(run.fontSize ?? element.fontSize ?? 16, delta),
+      }));
+      const runsChanged = richText?.some((run, index) =>
+        run.fontSize !== (element.richText?.[index].fontSize ?? element.fontSize ?? 16)
+      );
+      if (fontSize === effectiveSize && !runsChanged) continue;
+      state.updateElementsSilent([element.id], { fontSize, richText });
       changed = true;
     }
   }

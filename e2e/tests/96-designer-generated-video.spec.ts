@@ -2443,11 +2443,11 @@ test.describe('Designer desktop Brand rail', () => {
     await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
 
     await page.getByRole('button', { name: 'Brand', exact: true }).click();
-    const panel = page.getByRole('dialog', { name: 'Brand', exact: true });
+    const panel = page.getByRole('region', { name: 'Brand', exact: true });
     await expect(panel).toBeVisible();
     await expect(panel.getByRole('button', { name: '#123456', exact: true })).toBeVisible();
-    await panel.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(panel).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+    await expect(panel).toBeHidden();
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

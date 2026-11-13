@@ -84,14 +84,51 @@ describe('replaceStaticImage', () => {
     });
   });
 
-  it('keeps the crop when replacement dimensions are not measurable', () => {
+  it('clears an incompatible crop when replacement dimensions are not measurable', () => {
     const store = setup();
     const patch = staticImageReplacementPatch(image(store), {
       url: '/new.png',
       fileId: 'new-file',
     });
-    expect(patch.crop).toEqual(image(store).crop);
+    expect(patch.crop).toBeUndefined();
     expect(patch.naturalWidth).toBeUndefined();
     expect(patch.naturalHeight).toBeUndefined();
+  });
+
+  it('derives a bounded frame-aspect cover crop around the old relative center', () => {
+    const store = setup();
+    store.getState().updateElement('image', {
+      width: 400,
+      height: 200,
+      naturalWidth: 1000,
+      naturalHeight: 1000,
+      crop: { x: 0, y: 0, width: 1000, height: 500 },
+    });
+
+    const patch = staticImageReplacementPatch(image(store), {
+      url: '/new.png',
+      fileId: 'new-file',
+      width: 2000,
+      height: 1000,
+    });
+
+    expect(patch.crop).toEqual({ x: 0, y: 0, width: 2000, height: 1000 });
+    expect(patch.crop!.width / patch.crop!.height).toBe(2);
+  });
+
+  it('clamps a cover crop at the source edge without distorting it', () => {
+    const store = setup();
+    store.getState().updateElement('image', {
+      width: 200,
+      height: 100,
+      naturalWidth: 1000,
+      naturalHeight: 1000,
+      crop: { x: 0, y: 0, width: 500, height: 500 },
+    });
+
+    const patch = staticImageReplacementPatch(image(store), {
+      url: '/new.png', fileId: 'new-file', width: 1000, height: 2000,
+    });
+    expect(patch.crop).toEqual({ x: 0, y: 250, width: 1000, height: 500 });
   });
 });

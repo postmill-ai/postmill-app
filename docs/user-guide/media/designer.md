@@ -62,11 +62,12 @@ saved.
 
 ## Workspace panels
 
-On desktop, the right panel has **Inspector**, **Layers**, **Brand**, and **AI** tabs. They use the
-current selection and Brand Kit, and only the active panel is mounted. The tool rail's Brand button
-and **Tools ▸ Workspace** open the same surfaces. **History** and **Versions** are beside Undo/Redo,
-**Templates** is beside Save, and the View menu is reserved for zoom and display settings. History,
-Versions, and Template Fields retain their movable floating panels.
+On desktop, the right panel has **Inspector**, **Layers**, **Brand**, and **AI** tabs. Selecting an
+element opens Inspector. AI and Brand stay mounted while hidden, so generated results and in-flight work
+survive tab changes and collapsing the panel. Your active tab and collapsed state are remembered per
+organization. The tool rail's Brand button and **Tools ▸ Workspace** open the same surfaces. **History**
+and **Versions** are beside Undo/Redo, **Templates** is beside Save, and View is reserved for zoom and
+display settings. History, Versions, and Template Fields retain their movable floating panels.
 
 ## Video timeline
 
@@ -174,16 +175,21 @@ Manage kits in **Brand Studio** (`/brands`).
 The mouse wheel zooms by default. Laptop users can enable **View → Touchpad mode** to pan with a
 two-finger swipe and zoom with a pinch (or **Ctrl/Cmd+scroll**). The preference is remembered per
 organization. While editing text, the color control above the text box colors only the selected
-characters, so one text box can contain multiple colors. Text boxes grow vertically to fit their
-content; width grows only when a single unwrapped word overflows, and manual resizing remains
-available. With text selected, **Ctrl/Cmd+Shift+>** and **Ctrl/Cmd+Shift+<** increase or decrease
-font size across the selection as one undoable edit, including while the inline text editor has
-focus. These shortcuts do not run while typing in an ordinary field.
+characters, so one text box can contain multiple colors. Ordinary text edits retain the box's existing
+shrink-to-fit behavior. The Inspector's **Size** control can grow the box for wrapping or one long word,
+within the output bounds and without shrinking a manually resized box. With text selected,
+**Ctrl/Cmd+>** and **Ctrl/Cmd+<** (with or without Shift, including ISO keyboard layouts) increase or
+decrease font size across the selection as one undoable edit, starting from the size painted on canvas.
+Mixed rich-text sizes adjust independently, and the shortcuts also work in the inline editor without
+running in ordinary fields.
 
-Drop an image file directly onto an existing static image or still-image clip to replace it. The
-frame, crop, fit mode, and focal point are retained, the new file's intrinsic dimensions are adopted,
-and linked formats update in one Undo step. Dropping elsewhere on a static canvas keeps the existing
-insert behavior. Video and audio clips are never treated as image replacement targets.
+A normal image-file drop always inserts a new image, and an SVG drop imports editable paths. Hold
+**Alt/Option** while dropping onto an unlocked static image or still-image clip to show the distinct
+**Replace image** indicator and replace that target. The frame, fit mode, and focal point are retained;
+a cross-aspect source gets a cover crop centered on the old crop's relative center, so the frame never
+gains empty bands. The new file's intrinsic dimensions are adopted and linked formats update in one
+Undo step. Locked targets, video clips, and audio clips are not replacement targets, and files that the
+browser cannot decode are rejected.
 
 With a text element selected, the Inspector's **Text Effects** presets apply **Arc text**, **Wave
 text**, **Circle text**, **Gradient text**, **Text outline**, **Text shadow**, or **3D Extrusion** in

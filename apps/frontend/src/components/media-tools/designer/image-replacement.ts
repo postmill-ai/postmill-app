@@ -9,7 +9,7 @@ type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
 
 type MediaFrame = Pick<
   DesignerElement,
-  'src' | 'naturalWidth' | 'naturalHeight' | 'crop' | 'fitMode' | 'focalPoint'
+  'src' | 'naturalWidth' | 'naturalHeight' | 'crop' | 'fitMode' | 'focalPoint' | 'width' | 'height'
 >;
 
 const elementAt = (store: Store, elementId: string): DesignerElement | undefined => {
@@ -21,19 +21,38 @@ const elementAt = (store: Store, elementId: string): DesignerElement | undefined
 };
 
 export const replacementCrop = (
-  before: Pick<MediaFrame, 'naturalWidth' | 'naturalHeight' | 'crop'> | undefined,
+  before: Pick<MediaFrame, 'naturalWidth' | 'naturalHeight' | 'crop' | 'width' | 'height'> | undefined,
   item: { width?: number | null; height?: number | null }
 ): DesignerCrop | undefined => {
   if (!before?.crop) return undefined;
   if (
     !before.naturalWidth || !before.naturalHeight ||
     !item.width || !item.height
-  ) return before.crop;
+  ) return undefined;
+
+  const oldAspect = before.naturalWidth / before.naturalHeight;
+  const newAspect = item.width / item.height;
+  if (Math.abs(oldAspect - newAspect) < 0.0001) {
+    return {
+      x: before.crop.x * item.width / before.naturalWidth,
+      y: before.crop.y * item.height / before.naturalHeight,
+      width: before.crop.width * item.width / before.naturalWidth,
+      height: before.crop.height * item.height / before.naturalHeight,
+    };
+  }
+
+  const frameAspect = before.width > 0 && before.height > 0
+    ? before.width / before.height
+    : before.crop.width / before.crop.height;
+  const width = newAspect > frameAspect ? item.height * frameAspect : item.width;
+  const height = newAspect > frameAspect ? item.height : item.width / frameAspect;
+  const centerX = (before.crop.x + before.crop.width / 2) / before.naturalWidth;
+  const centerY = (before.crop.y + before.crop.height / 2) / before.naturalHeight;
   return {
-    x: before.crop.x * item.width / before.naturalWidth,
-    y: before.crop.y * item.height / before.naturalHeight,
-    width: before.crop.width * item.width / before.naturalWidth,
-    height: before.crop.height * item.height / before.naturalHeight,
+    x: Math.max(0, Math.min(item.width - width, centerX * item.width - width / 2)),
+    y: Math.max(0, Math.min(item.height - height, centerY * item.height - height / 2)),
+    width,
+    height,
   };
 };
 

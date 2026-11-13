@@ -354,7 +354,10 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
                 // The fitter only ever shrinks, so a size larger than the box
                 // used to be accepted, stored, echoed back by this field — and
                 // then silently painted smaller. Grow the box to honour it.
-                update({ fontSize: value, ...growBoxFor(element, value) });
+                update({
+                  fontSize: value,
+                  ...growBoxFor(element, value, undefined, { width: out.width, height: out.height }),
+                });
               }
             }}
             className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"

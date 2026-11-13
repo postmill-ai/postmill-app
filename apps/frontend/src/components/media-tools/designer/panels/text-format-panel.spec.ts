@@ -76,6 +76,31 @@ describe('growBoxFor', () => {
     expect(patch.height).toBe(Math.ceil(2 * 1.2 * 20) + 10);
   });
 
+  it('clamps explicit growth to the output and preserves alignment anchors', () => {
+    const patch = growBoxFor(
+      baseText({
+        x: 50, y: 50, align: 'center', verticalAlign: 'middle',
+        text: 'supercalifragilistic',
+      }),
+      40,
+      measure,
+      { width: 300, height: 100 }
+    );
+    expect(patch).toEqual({ width: 300, height: 48, x: 0, y: 38 });
+  });
+
+  it('does not move an oversized manual box when bounds prevent further growth', () => {
+    expect(growBoxFor(
+      baseText({
+        x: 50, y: 50, width: 400, height: 200,
+        align: 'center', verticalAlign: 'middle', text: 'supercalifragilistic',
+      }),
+      80,
+      measure,
+      { width: 300, height: 100 }
+    )).toEqual({});
+  });
+
   it('leaves rich, curved and on-path text alone — they render the authored size', () => {
     expect(
       growBoxFor(

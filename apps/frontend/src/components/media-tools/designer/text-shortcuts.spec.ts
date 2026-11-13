@@ -1,15 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MAX_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
-import type { MeasureText } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
-import { adjustSelectedTextFontSize } from './text-shortcuts';
+import { adjustSelectedTextFontSize, fontSizeShortcutDelta } from './text-shortcuts';
 import { createDesignerStore, type DesignerElement, type DesignerOutput, type VideoOutput } from './designer.store';
 
 vi.mock('./fonts', () => ({
   DESIGNER_FONTS: [],
   ensureFontLoaded: () => Promise.resolve(),
 }));
-
-const measure: MeasureText = (text, size) => text.length * size * 0.5;
+vi.mock('./measure-text', () => ({
+  fittedFontSize: (element: DesignerElement) =>
+    element.text === 'fitted' ? 29 : element.fontSize ?? 16,
+}));
 
 const textElement = (id: string, over: Partial<DesignerElement> = {}): DesignerElement => ({
   id,
@@ -41,13 +42,13 @@ describe('adjustSelectedTextFontSize', () => {
     store.getState().setSelectedIds(['one', 'two']);
     const history = store.getState().history.length;
 
-    expect(adjustSelectedTextFontSize(store, 1, measure)).toBe(true);
+    expect(adjustSelectedTextFontSize(store, 1)).toBe(true);
     expect(store.getState().history).toHaveLength(history + 1);
     for (const output of [0, 1]) {
       expect(children(store, output).map((element) => element.fontSize)).toEqual([33, 33]);
       expect(children(store, output).map((element) => element.width)).toEqual([100, 100]);
     }
-    expect(children(store, 0).map((element) => element.height)).toEqual([80, 80]);
+    expect(children(store, 0).map((element) => element.height)).toEqual([20, 20]);
     // Box geometry remains format-local when the font edit propagates.
     expect(children(store, 1).map((element) => element.height)).toEqual([20, 20]);
 
@@ -67,7 +68,7 @@ describe('adjustSelectedTextFontSize', () => {
     });
     store.getState().setSelectedIds(['editable', 'locked', 'shape']);
 
-    adjustSelectedTextFontSize(store, -1, measure);
+    adjustSelectedTextFontSize(store, -1);
     expect(children(store)[0]).toMatchObject({ fontSize: 31, height: 200 });
     expect(children(store)[1].fontSize).toBe(32);
     expect(children(store)[2].fontSize).toBe(32);
@@ -80,10 +81,34 @@ describe('adjustSelectedTextFontSize', () => {
     const history = store.getState().history.length;
 
     store.getState().setSelectedIds(['minimum']);
-    expect(adjustSelectedTextFontSize(store, -1, measure)).toBe(false);
+    expect(adjustSelectedTextFontSize(store, -1)).toBe(false);
     store.getState().setSelectedIds(['maximum']);
-    expect(adjustSelectedTextFontSize(store, 1, measure)).toBe(false);
+    expect(adjustSelectedTextFontSize(store, 1)).toBe(false);
     expect(store.getState().history).toHaveLength(history);
+  });
+
+  it('starts from the fitted size and leaves the existing box unchanged', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(textElement('fit', {
+      text: 'fitted', fontSize: 48, width: 200, height: 40,
+    }));
+    store.getState().setSelectedIds(['fit']);
+
+    expect(adjustSelectedTextFontSize(store, -1)).toBe(true);
+    expect(children(store)[0]).toMatchObject({ fontSize: 28, width: 200, height: 40 });
+  });
+
+  it('adjusts mixed rich-text runs independently without flattening them', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(textElement('rich', {
+      fontSize: 16,
+      richText: [{ text: 'small', fontSize: 20 }, { text: ' large', fontSize: 40 }],
+    }));
+    store.getState().setSelectedIds(['rich']);
+
+    expect(adjustSelectedTextFontSize(store, 1)).toBe(true);
+    expect(children(store)[0].fontSize).toBe(17);
+    expect(children(store)[0].richText?.map((run) => run.fontSize)).toEqual([21, 41]);
   });
 
   it('updates selected video text and caption clips together with one Undo', () => {
@@ -116,5 +141,37 @@ describe('adjustSelectedTextFontSize', () => {
     const restored = store.getState().doc.outputs[0] as VideoOutput;
     expect(restored.tracks.find((track) => track.id === textTrack.id)?.clips[0].fontSize).toBe(20);
     expect(restored.tracks.find((track) => track.id === captionTrack.id)?.clips[0].fontSize).toBe(40);
+  });
+
+  it('uses the caption renderer fallback of 28 for an unset size', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'caption');
+    const output = store.getState().doc.outputs[0] as VideoOutput;
+    const track = output.tracks.find((item) => item.type === 'caption')!;
+    store.getState().addClip(0, track.id, {
+      id: 'caption', startMs: 0, endMs: 1000, text: 'Caption',
+    });
+    store.getState().setSelectedClip({ outputIndex: 0, trackId: track.id, clipId: 'caption' });
+
+    expect(adjustSelectedTextFontSize(store, 1)).toBe(true);
+    const next = store.getState().doc.outputs[0] as VideoOutput;
+    expect(next.tracks.find((item) => item.id === track.id)?.clips[0].fontSize).toBe(29);
+  });
+});
+
+describe('fontSizeShortcutDelta', () => {
+  const modifiers = { ctrlKey: true, metaKey: false, altKey: false };
+
+  it('retains US punctuation shortcuts and accepts physical Comma/Period codes', () => {
+    expect(fontSizeShortcutDelta({ ...modifiers, key: '>', code: 'Period' })).toBe(1);
+    expect(fontSizeShortcutDelta({ ...modifiers, key: '<', code: 'Comma' })).toBe(-1);
+    expect(fontSizeShortcutDelta({ ...modifiers, key: '.', code: 'Period' })).toBe(1);
+    expect(fontSizeShortcutDelta({ ...modifiers, key: ',', code: 'Comma' })).toBe(-1);
+  });
+
+  it('supports an unshifted ISO less-than key and ignores unmodified keys', () => {
+    expect(fontSizeShortcutDelta({ ...modifiers, key: '<', code: 'IntlBackslash' })).toBe(-1);
+    expect(fontSizeShortcutDelta({ ...modifiers, ctrlKey: false, key: '<', code: 'IntlBackslash' })).toBe(0);
   });
 });

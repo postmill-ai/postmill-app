@@ -19,7 +19,7 @@ const initialDoc = {
       x: 40,
       y: 40,
       width: 300,
-      height: 20,
+      height: 40,
       rotation: 0,
       opacity: 1,
       locked: false,
@@ -93,7 +93,9 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     suggestionCalls: 0,
     saveDocs: [] as unknown[],
     renderDocs: [] as unknown[],
+    generationCalls: 0,
     uploads: 0,
+    uploadPath: PNG_DATA_URL,
   };
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -122,7 +124,7 @@ async function installMocks(page: Page, doc: any = initialDoc) {
       return json(route, {});
     }
     if (method === 'GET' && pathname === '/media/tools/status') {
-      return json(route, { operations: {}, tools: {} });
+      return json(route, { operations: {}, tools: { 'text-to-image': { available: true } } });
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}`) {
       return json(route, { id: DESIGN_ID, name: 'Editing UX', doc: state.doc });
@@ -149,7 +151,13 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     }
     if (method === 'POST' && pathname === '/files/upload-simple') {
       state.uploads++;
-      return json(route, { id: `dropped-file-${state.uploads}`, path: PNG_DATA_URL });
+      return json(route, { id: `dropped-file-${state.uploads}`, path: state.uploadPath });
+    }
+    if (method === 'POST' && pathname === '/media/generate-image-with-prompt') {
+      state.generationCalls++;
+      return json(route, {
+        id: 'paid-generation', path: PNG_DATA_URL, name: 'Paid generation result',
+      });
     }
     if (method === 'GET' && pathname === '/mock-export/editing.png') {
       return route.fulfill({
@@ -411,7 +419,17 @@ test('Smart suggestions restore for the same layer without another request', asy
   expect(state.suggestionCalls).toBe(1);
 });
 
-async function dropPng(page: Page, x: number, y: number) {
+async function dragImageFile(
+  page: Page,
+  x: number,
+  y: number,
+  options: {
+    altKey?: boolean;
+    eventName?: 'dragover' | 'drop';
+    type?: string;
+    contents?: string;
+  } = {}
+) {
   const stage = page.locator('.konva-stage').first();
   const box = await stage.boundingBox();
   if (!box) throw new Error('Canvas has no bounding box');
@@ -422,18 +440,30 @@ async function dropPng(page: Page, x: number, y: number) {
   const clientY = box.y + outputY + y * scale;
   await page.getByRole('application', { name: 'Design canvas' }).evaluate((container, point) => {
     const transfer = new DataTransfer();
-    transfer.items.add(new File(['replacement'], 'replacement.png', { type: 'image/png' }));
-    container.dispatchEvent(new DragEvent('drop', {
+    transfer.items.add(new File([point.contents], 'replacement', { type: point.type }));
+    container.dispatchEvent(new DragEvent(point.eventName, {
       bubbles: true,
       cancelable: true,
       dataTransfer: transfer,
       clientX: point.clientX,
       clientY: point.clientY,
+      altKey: point.altKey,
     }));
-  }, { clientX, clientY });
+  }, {
+    clientX,
+    clientY,
+    altKey: !!options.altKey,
+    eventName: options.eventName || 'drop',
+    type: options.type || 'image/png',
+    contents: options.contents || 'replacement',
+  });
 }
 
-test('desktop workspace tabs mount one panel and keep View display-only', async ({ page }) => {
+async function dropPng(page: Page, x: number, y: number, altKey = false) {
+  await dragImageFile(page, x, y, { altKey });
+}
+
+test('desktop workspace tabs switch the visible panel and keep View display-only', async ({ page }) => {
   await installMocks(page);
   await openDesigner(page);
   await expect(page.locator('[data-workspace-panel="inspector"]')).toBeVisible();
@@ -471,6 +501,56 @@ test('desktop workspace tabs mount one panel and keep View display-only', async 
     return { panelLeft: rect.left, parentLeft: element.parentElement!.getBoundingClientRect().left };
   });
   expect(Math.abs(rtl.panelLeft - rtl.parentLeft)).toBeLessThan(2);
+
+  await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+  const expand = page.getByRole('button', { name: 'Expand properties panel', exact: true });
+  await expect(expand).toHaveClass(/rounded-s-md/);
+  const arrowTransform = await expand.locator('span').evaluate((element) =>
+    getComputedStyle(element).transform
+  );
+  expect(arrowTransform).not.toBe('none');
+});
+
+test('selection opens Inspector and desktop workspace preferences survive reload', async ({ page }) => {
+  await installMocks(page);
+  await openDesigner(page);
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+  await page.locator('[data-element-id="body-copy"]').click();
+  await expect(page.getByRole('region', { name: 'Inspector', exact: true })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'AI', exact: true }).click();
+  await expect.poll(() => page.evaluate(() =>
+    JSON.parse(localStorage.getItem('designer-workspace-panel-e2e-org') || '{}').activeTab
+  )).toBe('ai');
+  await page.reload();
+  await expect(page.locator('[data-workspace-panel="ai"]')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+  await expect.poll(() => page.evaluate(() =>
+    JSON.parse(localStorage.getItem('designer-workspace-panel-e2e-org') || '{}').collapsed
+  )).toBe(true);
+  await page.reload();
+  await expect(page.locator('[data-workspace-panel="ai"]')).toBeHidden();
+  await page.getByRole('button', { name: 'Expand properties panel', exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="inspector"]')).toBeVisible();
+});
+
+test('AI results survive tab, collapse and Inspector changes without another request', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+  await page.getByRole('tab', { name: 'AI', exact: true }).click();
+  await page.getByPlaceholder('Describe the image...').fill('A non-paid mocked result');
+  await page.getByRole('button', { name: 'Generate', exact: true }).click();
+  await expect(page.getByAltText('Paid generation result')).toBeVisible();
+  expect(state.generationCalls).toBe(1);
+
+  await page.getByRole('tab', { name: 'Brand', exact: true }).click();
+  await expect(page.getByAltText('Paid generation result')).toBeHidden();
+  await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand properties panel', exact: true }).click();
+  await page.getByRole('tab', { name: 'AI', exact: true }).click();
+  await expect(page.getByAltText('Paid generation result')).toBeVisible();
+  expect(state.generationCalls).toBe(1);
 });
 
 test('mobile keeps Inspector and Brand in sheets instead of desktop tabs', async ({ page }) => {
@@ -485,6 +565,15 @@ test('mobile keeps Inspector and Brand in sheets instead of desktop tabs', async
   await page.getByRole('button', { name: 'Brand', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Brand', exact: true })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'AI', exact: true })).toHaveCount(0);
+  await page.getByRole('region', { name: 'Brand', exact: true })
+    .getByRole('button', { name: 'Collapse panel', exact: true }).click();
+
+  await page.getByRole('menuitem', { name: 'More menus', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Layers', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Layers', exact: true })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'More menus', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Layers', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Layers', exact: true })).toHaveCount(0);
 });
 
 test('font-size shortcuts respect selection, text focus, bounds and help', async ({ page }) => {
@@ -494,11 +583,25 @@ test('font-size shortcuts respect selection, text focus, bounds and help', async
   await page.locator('[data-text-editor-id="body-copy"]').press('Escape');
   await page.getByRole('application', { name: 'Design canvas' }).press('Control+Shift+>');
   await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(33);
-  await expect.poll(() => state.doc.outputs[0].children[0].height).toBeGreaterThan(20);
+  await expect.poll(() => state.doc.outputs[0].children[0].height).toBe(40);
 
   await page.getByRole('textbox', { name: 'Design name' }).press('Control+Shift+>');
   await new Promise((resolve) => setTimeout(resolve, 100));
   expect(state.doc.outputs[0].children[0].fontSize).toBe(33);
+  await page.getByRole('application', { name: 'Design canvas' }).evaluate((canvas) => {
+    canvas.dispatchEvent(new KeyboardEvent('keydown', {
+      key: '<', code: 'IntlBackslash', ctrlKey: true, shiftKey: false,
+      bubbles: true, cancelable: true,
+    }));
+  });
+  await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(32);
+  await page.getByRole('application', { name: 'Design canvas' }).evaluate((canvas) => {
+    canvas.dispatchEvent(new KeyboardEvent('keydown', {
+      key: '.', code: 'Period', ctrlKey: true, shiftKey: false,
+      bubbles: true, cancelable: true,
+    }));
+  });
+  await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(33);
   await page.getByRole('application', { name: 'Design canvas' }).press('Control+Shift+<');
   await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(32);
 
@@ -508,12 +611,21 @@ test('font-size shortcuts respect selection, text focus, bounds and help', async
   await expect(page.getByText('Decrease font size', { exact: true })).toBeVisible();
 });
 
-test('dropping onto a static image replaces it once; empty canvas still inserts', async ({ page }) => {
+test('ordinary drops insert while Alt-drop shows Replace and replaces once', async ({ page }) => {
   const state = await installMocks(page);
   await openDesigner(page);
   await dropPng(page, 120, 260);
   await expect.poll(() => state.uploads).toBe(1);
-  await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('dropped-file-1');
+  await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
+  expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].children.length).toBe(2);
+
+  await dragImageFile(page, 120, 260, { eventName: 'dragover', altKey: true });
+  await expect(page.locator('[data-drop-mode="replace"]')).toHaveText('Replace image…');
+  await dropPng(page, 120, 260, true);
+  await expect.poll(() => state.uploads).toBe(2);
+  await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('dropped-file-2');
   expect(state.doc.outputs[0].children[1]).toMatchObject({
     x: 40, y: 200, width: 160, height: 120,
     naturalWidth: 1, naturalHeight: 1,
@@ -523,17 +635,16 @@ test('dropping onto a static image replaces it once; empty canvas still inserts'
 
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
   await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
-
   await dropPng(page, 350, 350);
-  await expect.poll(() => state.uploads).toBe(2);
+  await expect.poll(() => state.uploads).toBe(3);
   await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
   expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
 });
 
-test('dropping replaces a still clip but never a video clip', async ({ page }) => {
+test('Alt-drop replaces a still clip but never a video clip', async ({ page }) => {
   const state = await installMocks(page, initialVideoDoc);
   await openDesigner(page);
-  await dropPng(page, 120, 260);
+  await dropPng(page, 120, 260, true);
   await expect.poll(() => state.uploads).toBe(1);
   await expect.poll(() => state.doc.outputs[0].tracks[1].clips[0].fileId).toBe('dropped-file-1');
   expect(state.doc.outputs[0].tracks[1].clips[0]).toMatchObject({
@@ -543,11 +654,52 @@ test('dropping replaces a still clip but never a video clip', async ({ page }) =
     fitMode: 'cover', focalPoint: { x: 0.25, y: 0.75 },
   });
 
-  await dropPng(page, 290, 90);
+  await dropPng(page, 290, 90, true);
   await new Promise((resolve) => setTimeout(resolve, 200));
   expect(state.uploads).toBe(1);
   expect(state.doc.outputs[0].tracks[0].clips[0].src).toBe('/video.mp4');
 
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
   await expect.poll(() => state.doc.outputs[0].tracks[1].clips[0].fileId).toBe('old-still-file');
+});
+
+test('Alt-drop does not modify a locked target', async ({ page }) => {
+  const doc = structuredClone(initialDoc);
+  doc.outputs[0].children[1].locked = true;
+  const state = await installMocks(page, doc);
+  await openDesigner(page);
+  await dropPng(page, 120, 260, true);
+
+  await expect.poll(() => state.uploads).toBe(1);
+  await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
+  expect(state.doc.outputs[0].children[1]).toMatchObject({
+    fileId: 'old-image-file', locked: true,
+  });
+});
+
+test('Alt-drop over an image retains editable SVG import routing', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+  await dragImageFile(page, 120, 260, {
+    altKey: true,
+    type: 'image/svg+xml',
+    contents: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#ff0000"/></svg>',
+  });
+
+  await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
+  expect(state.uploads).toBe(0);
+  expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
+  expect(state.doc.outputs[0].children[2].type).toBe('path');
+});
+
+test('an undecodable Alt-drop keeps the old target and reports decode failure', async ({ page }) => {
+  const state = await installMocks(page);
+  state.uploadPath = '/broken-image.png';
+  await openDesigner(page);
+  await dropPng(page, 120, 260, true);
+
+  await expect.poll(() => state.uploads).toBe(1);
+  await expect(page.getByText('Failed to load dropped image', { exact: true })).toBeVisible();
+  expect(state.doc.outputs[0].children).toHaveLength(2);
+  expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
 });
