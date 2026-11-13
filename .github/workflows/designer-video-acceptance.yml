@@ -43,6 +43,7 @@ jobs:
           CI: '1'
           GITHUB_ACTIONS: 'true'
           NODE_ENV: production
+          NEXT_PUBLIC_BACKEND_URL: http://127.0.0.1:3000
       - name: Upload failure evidence
         if: failure()
         uses: actions/upload-artifact@v7
@@ -56,6 +57,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    env:
+      PUPPETEER_CACHE_DIR: ${{ github.workspace }}/.cache/puppeteer
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -69,7 +72,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
           pnpm install --frozen-lockfile
-          pnpm exec puppeteer browsers install chrome --install-deps
+          sudo --preserve-env=PUPPETEER_CACHE_DIR pnpm exec puppeteer browsers install chrome --install-deps
       - name: Build production backend
         run: pnpm run build:backend
         env:
