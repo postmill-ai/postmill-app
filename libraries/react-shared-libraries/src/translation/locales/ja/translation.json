@@ -2953,6 +2953,8 @@
   "vertical": "縦",
   "ai_designer_error": "AI Designerエラー",
   "message_not_delivered_retry": "メッセージが送信されませんでした。もう一度お試しください。",
+  "image_attachment": "画像添付",
+  "ai_designer_attachment_state": "添付ファイルは、チャット中またはプランやデザインの修正中に使用できます。",
   "ai_designer": "AI Designer",
   "status_connected": "接続済み",
   "status_disconnected": "切断済み",

@@ -2966,6 +2966,8 @@
   "vertical": "Verticaal",
   "ai_designer_error": "Fout in AI Designer",
   "message_not_delivered_retry": "Je bericht is niet afgeleverd. Probeer het opnieuw.",
+  "image_attachment": "Afbeeldingsbijlage",
+  "ai_designer_attachment_state": "Bijlagen zijn beschikbaar tijdens het chatten of bij het reviseren van een plan of ontwerp.",
   "ai_designer": "AI Designer",
   "status_connected": "Verbonden",
   "status_disconnected": "Niet verbonden",

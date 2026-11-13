@@ -2953,6 +2953,8 @@
   "vertical": "Вертикально",
   "ai_designer_error": "Ошибка ИИ-дизайнера",
   "message_not_delivered_retry": "Ваше сообщение не было доставлено. Попробуйте ещё раз.",
+  "image_attachment": "Вложение-изображение",
+  "ai_designer_attachment_state": "Вложения доступны во время чата или при изменении плана или дизайна.",
   "ai_designer": "ИИ-дизайнер",
   "status_connected": "Подключено",
   "status_disconnected": "Отключено",

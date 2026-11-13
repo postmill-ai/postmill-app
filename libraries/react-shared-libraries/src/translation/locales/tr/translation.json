@@ -2953,6 +2953,8 @@
   "vertical": "Dikey",
   "ai_designer_error": "AI Designer hatası",
   "message_not_delivered_retry": "Mesajınız iletilemedi. Lütfen tekrar deneyin.",
+  "image_attachment": "Görsel eki",
+  "ai_designer_attachment_state": "Ekler, sohbet ederken veya bir planı ya da tasarımı revize ederken kullanılabilir.",
   "ai_designer": "AI Designer",
   "status_connected": "Bağlı",
   "status_disconnected": "Bağlantı kesildi",

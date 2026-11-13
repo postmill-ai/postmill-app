@@ -128,6 +128,38 @@ describe('AI Designer attachment intake and revision', () => {
     expect((conductor as any)._dispatchAgent).not.toHaveBeenCalled();
   });
 
+  it('does not merge new attachment config in an unsupported state without acceptance', async () => {
+    const fileService = ownedFiles();
+    const { conductor, service } = makeConductor(
+      {
+        ...intakeSession(),
+        state: 'executing',
+        config: {
+          channels: ['ig-post'],
+          variants: 1,
+          referenceFileIds: ['image-old'],
+        },
+      },
+      fileService
+    );
+    const onAccepted = vi.fn();
+
+    await conductor.handleRevise(
+      SESSION_ID,
+      { orgId: ORG_ID, userId: USER_ID, sessionId: SESSION_ID },
+      {
+        instruction: 'Use a new reference',
+        referenceFileIds: ['image-new'],
+        nonce: 'nonce-1',
+      },
+      emitter(),
+      onAccepted
+    );
+
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(service.updateSession).not.toHaveBeenCalled();
+  });
+
   it('forwards both ID lists through delivered free-text revision', async () => {
     const { conductor } = makeConductor(
       {

@@ -2953,6 +2953,8 @@
   "vertical": "垂直",
   "ai_designer_error": "AI 设计器错误",
   "message_not_delivered_retry": "消息未能送达，请重试。",
+  "image_attachment": "图片附件",
+  "ai_designer_attachment_state": "在聊天或修改计划或设计时，可以添加附件。",
   "ai_designer": "AI 设计器",
   "status_connected": "已连接",
   "status_disconnected": "已断开连接",

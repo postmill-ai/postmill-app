@@ -978,6 +978,21 @@ export class AiDesignerConductorService {
     const session = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
     if (!session) return;
 
+    if (
+      session.state !== 'awaiting_plan' &&
+      session.state !== 'delivered' &&
+      session.state !== 'revising'
+    ) {
+      await this._emitText(
+        sessionId,
+        ctx,
+        emitter,
+        'conversationalist',
+        'This design is not available for revision right now.'
+      );
+      return;
+    }
+
     session.config = await this._mergeAttachmentConfig(
       sessionId,
       ctx,
@@ -1002,17 +1017,6 @@ export class AiDesignerConductorService {
     // instruction instead of rejecting the event.
     if (session.state === 'awaiting_plan') {
       await this._revisePlans(sessionId, ctx, session, instruction, emitter, onAccepted);
-      return;
-    }
-
-    if (session.state !== 'delivered' && session.state !== 'revising') {
-      await this._emitText(
-        sessionId,
-        ctx,
-        emitter,
-        'conversationalist',
-        'This design is not available for revision right now.'
-      );
       return;
     }
 
