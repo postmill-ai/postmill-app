@@ -79,7 +79,7 @@ import {
 import { TimelineTransportControls } from './timeline-transport-controls';
 import { canSplitClipAt } from './timeline-split';
 import { ClipTimingControls } from './panels/clip-timing-controls';
-import { CLIP_TOP_PX, touchingTransitionPairs, transitionBadgeGeometry } from './timeline-transitions';
+import { CLIP_TOP_PX, transitionPairs, transitionBadgeGeometry } from './timeline-transitions';
 
 interface VideoTimelineProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -753,7 +753,7 @@ export const TrackRow = React.memo(function TrackRow({
           />
         ))}
 
-        {/* Transition handles between adjacent clips */}
+        {/* Transition handles for sequential clips, including across gaps */}
         {pairs.map(({ from, to }) => {
           const handleX = from.endMs * pixelsPerMs;
           const tType = from.transitionOut?.type || to.transitionIn?.type || 'cut';
@@ -1558,7 +1558,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     if (!isVideo || !vo) return {};
     const pairs: Record<string, { from: VideoClip; to: VideoClip }[]> = {};
     for (const track of vo.tracks) {
-      pairs[track.id] = touchingTransitionPairs(
+      pairs[track.id] = transitionPairs(
         sortedTrackClips[track.id] || [],
         pixelsPerMs
       );

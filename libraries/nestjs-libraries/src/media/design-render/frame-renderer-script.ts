@@ -490,8 +490,8 @@ ${stripExportsNamespace(mediaGeometrySource())}
   let textScratch;
   let textScratchCtx;
 
-  function textBufferFor(props, strokeWidth) {
-    if (!(strokeWidth > 0) || props.opacity >= 1) return null;
+  function textBufferFor(props, strokeWidth, force = false) {
+    if (props.opacity >= 1 || (!force && !(strokeWidth > 0))) return null;
     if (!textScratch) {
       textScratch = document.createElement('canvas');
       textScratchCtx = textScratch.getContext('2d');
@@ -579,7 +579,7 @@ ${stripExportsNamespace(mediaGeometrySource())}
     if (!words || words.length === 0) return;
     ctx.save();
     ctx.globalAlpha = props.opacity;
-    const buffer = textBufferFor(props, clip.textStroke?.width || 0);
+    const buffer = textBufferFor(props, clip.textStroke?.width || 0, props.opacity < 1);
     const drawCtx = buffer ? textScratchCtx : ctx;
     drawCtx.miterLimit = 2;
     const fontSize = clip.fontSize || 28;

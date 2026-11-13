@@ -1,12 +1,13 @@
 import type { VideoClip } from './designer.store';
 
 export const MIN_TRANSITION_CLIP_WIDTH_PX = 24;
+// Clips begin at CLIP_TOP_PX inside TRACK_HEIGHT; the badge owns rows 0..16.
 export const TRANSITION_BADGE_WIDTH_PX = 24;
 export const TRANSITION_BADGE_HEIGHT_PX = 16;
 export const TRANSITION_BADGE_TOP_PX = 0;
 export const CLIP_TOP_PX = 20;
 
-export const touchingTransitionPairs = (
+export const transitionPairs = (
   clips: VideoClip[],
   pixelsPerMs: number
 ): { from: VideoClip; to: VideoClip }[] => {

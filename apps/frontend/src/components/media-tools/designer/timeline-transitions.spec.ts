@@ -3,7 +3,7 @@ import type { VideoClip } from './designer.store';
 import {
   CLIP_TOP_PX,
   MIN_TRANSITION_CLIP_WIDTH_PX,
-  touchingTransitionPairs,
+  transitionPairs,
   transitionBadgeGeometry,
 } from './timeline-transitions';
 
@@ -36,7 +36,7 @@ describe('timeline transition geometry', () => {
       clip('overlap-b', 8500, 9500),
     ];
 
-    expect(touchingTransitionPairs(clips, 0.1).map(({ from, to }) => [from.id, to.id]))
+    expect(transitionPairs(clips, 0.1).map(({ from, to }) => [from.id, to.id]))
       .toEqual([
         ['touching-a', 'touching-b'],
         ['touching-b', 'gap-a'],
@@ -50,10 +50,10 @@ describe('timeline transition geometry', () => {
 
   it('omits tiny cut-only pairs while retaining tiny pairs with an existing transition', () => {
     const clips = [clip('tiny-a', 0, 100), clip('tiny-b', 100, 200)];
-    expect(touchingTransitionPairs(clips, 0.1)).toEqual([]);
+    expect(transitionPairs(clips, 0.1)).toEqual([]);
 
     clips[0].transitionOut = { type: 'fade', durationMs: 50 };
-    expect(touchingTransitionPairs(clips, 0.1)).toHaveLength(1);
+    expect(transitionPairs(clips, 0.1)).toHaveLength(1);
   });
 
   it('anchors the pointer badge in a top lane clear of the ruler and trim edges', () => {

@@ -388,6 +388,49 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     }
   );
 
+  it('flattens a faded caption background and glyph before compositing once', async () => {
+    const created: { width: number; height: number }[] = [];
+    const mainState: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      fillRect: vi.fn(),
+      fillText: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    const bufferState: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      globalAlpha: 1,
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
+      fillRect: vi.fn(),
+      fillText: vi.fn(),
+    };
+    const context = (state: Record<string, unknown>) => new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      tracks: [{
+        id: 'caption-track', type: 'caption',
+        clips: [{
+          id: 'faded-caption', startMs: 0, endMs: 1000, opacity: 0.5,
+          x: 0, y: 0, width: 100, height: 30, fontSize: 10,
+          words: [{ word: 'hello', startMs: 0, endMs: 1000 }],
+          captionStyle: { preset: 'box-highlight', highlightColor: '#123456' },
+          fill: '#ffffff',
+        }],
+      }],
+    }, context(mainState) as never, context(bufferState) as never, created);
+    await api.renderFrame(0);
+
+    expect(created).toHaveLength(1);
+    expect(bufferState.fillRect).toHaveBeenCalledOnce();
+    expect(bufferState.fillText).toHaveBeenCalledOnce();
+    expect(bufferState.globalAlpha).toBe(1);
+    expect(mainState.fillText).not.toHaveBeenCalled();
+    expect(mainState.drawImage).toHaveBeenCalledOnce();
+    expect(mainState.globalAlpha).toBe(0.5);
+  });
+
   it.each([
     { opacity: 1, textStroke: { color: '#123456', width: 2 } },
     { opacity: 0.5, textStroke: undefined },
