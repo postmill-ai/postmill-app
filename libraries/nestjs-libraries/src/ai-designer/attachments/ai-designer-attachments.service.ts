@@ -51,12 +51,22 @@ export class AiDesignerAttachmentsService {
       if (file.fileSize > MAX_AI_DESIGNER_ATTACHMENT_BYTES) {
         throw new BadRequestException('AI Designer attachments are limited to 20 MB each.');
       }
-      const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, orgId);
-      const bytes = await adapter.readFile(file.path);
+      let bytes: Buffer;
+      try {
+        const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, orgId);
+        bytes = await adapter.readFile(file.path);
+      } catch {
+        throw new BadRequestException('An attachment could not be read from storage.');
+      }
       if (bytes.length > MAX_AI_DESIGNER_ATTACHMENT_BYTES) {
         throw new BadRequestException('AI Designer attachments are limited to 20 MB each.');
       }
-      const detected = await fromBuffer(bytes);
+      let detected: Awaited<ReturnType<typeof fromBuffer>>;
+      try {
+        detected = await fromBuffer(bytes);
+      } catch {
+        throw new BadRequestException('An attachment could not be read as a document.');
+      }
       const extension = file.originalName?.split('.').pop()?.toLowerCase() || file.name.split('.').pop()?.toLowerCase() || '';
       const isPdf = detected?.mime === 'application/pdf';
       const isText = detected?.mime?.startsWith('text/') || detected?.mime === 'application/json' || TEXT_EXTENSIONS.has(extension);

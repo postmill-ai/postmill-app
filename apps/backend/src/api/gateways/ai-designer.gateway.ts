@@ -31,7 +31,10 @@ import {
   AiDesignerReviseDto,
 } from '@postmill-ai/nestjs-libraries/dtos/ai-designer/start-ai-designer-session.dto';
 import { AiDesignerConductorService } from '@postmill-ai/nestjs-libraries/ai-designer/conductor/ai-designer-conductor.service';
-import { aiDesignerFailureKind } from '@postmill-ai/nestjs-libraries/ai-designer/conductor/failure-recovery';
+import {
+  AiDesignerBusyError,
+  aiDesignerFailureLog,
+} from '@postmill-ai/nestjs-libraries/ai-designer/conductor/failure-recovery';
 import { AiDesignerInputPolicyService } from '@postmill-ai/nestjs-libraries/ai-designer';
 import { resolveClientIp } from '@postmill-ai/nestjs-libraries/utils/client-ip';
 
@@ -105,6 +108,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   billing_ai: 'Your plan does not include AI features.',
   invalid_payload: 'The request failed validation.',
   duplicate_nonce: 'Duplicate request ignored.',
+  busy: "I'm still working on the previous request for this design — give me a moment.",
   budget_exceeded: 'The AI budget for this workspace is exhausted.',
   guardrail_blocked:
     "Your message was blocked by this workspace's content guardrails.",
@@ -213,7 +217,7 @@ export class AiDesignerGateway
       }
     } catch (err) {
       this.logger.warn(
-        `Connection error: ${(err as Error).message}`,
+        `Connection error: ${aiDesignerFailureLog(err)}`,
         AiDesignerGateway.name
       );
       this._disconnect(client, 'internal_error');
@@ -352,13 +356,31 @@ export class AiDesignerGateway
         return;
       }
       const prompt = promptCheck.instruction;
+      const attachmentPreparation =
+        await this._conductor.validateAttachmentConfig(
+          { orgId: ctx.orgId, userId: ctx.userId, sessionId: '' },
+          payload.config,
+          payload.config,
+          { intent: prompt ?? '' }
+        );
 
       session = await this._service.createSession({
         organizationId: ctx.orgId,
         userId: ctx.userId,
         mode: payload.mode,
-        config: payload.config,
-        brief: prompt ? { intent: prompt } : undefined,
+        config: attachmentPreparation.config,
+        brief:
+          prompt || attachmentPreparation.documentContexts.length
+            ? {
+                intent: prompt ?? '',
+                ...(attachmentPreparation.documentContexts.length
+                  ? {
+                      documentContexts:
+                        attachmentPreparation.documentContexts,
+                    }
+                  : {}),
+              }
+            : undefined,
       });
 
       if (ctx.sessionId && ctx.sessionId !== session.id) {
@@ -385,16 +407,17 @@ export class AiDesignerGateway
       await this._conductor.handleStart(
         session.id,
         { orgId: ctx.orgId, userId: ctx.userId, sessionId: session.id },
-        payload.config,
+        attachmentPreparation.config,
         prompt,
         emitter,
-        session.mode as 'chat' | 'prompt'
+        session.mode as 'chat' | 'prompt',
+        attachmentPreparation
       );
     } catch (err) {
       // Unexpected throw after the claim (the reject paths above return
       // normally and have already released). Best-effort delete the row we may
       // have just created so it does not count toward the 100-session cap.
-      if (session) {
+      if (session && !(err instanceof AiDesignerBusyError)) {
         try {
           await this._service.deleteSession(
             session.id,
@@ -403,9 +426,7 @@ export class AiDesignerGateway
           );
         } catch (delErr) {
           this.logger.warn(
-            `Failed to clean up orphaned session ${session.id}: ${
-              (delErr as Error)?.message ?? delErr
-            }`,
+            `Failed to clean up orphaned session ${session.id}: ${aiDesignerFailureLog(delErr)}`,
             AiDesignerGateway.name
           );
         }
@@ -735,7 +756,7 @@ export class AiDesignerGateway
       }
     } catch (err) {
       this.logger.warn(
-        `cancel failed: ${(err as Error)?.message ?? err}`,
+        `cancel failed: ${aiDesignerFailureLog(err)}`,
         AiDesignerGateway.name
       );
       this._emitError(client, 'internal_error');
@@ -1161,12 +1182,24 @@ export class AiDesignerGateway
       /* best-effort — the idempotency TTL is the backstop */
     }
     const invalidPayload = err instanceof BadRequestException;
+    const busy = err instanceof AiDesignerBusyError;
+    const code = invalidPayload
+      ? 'invalid_payload'
+      : busy
+        ? 'busy'
+        : 'internal_error';
     this.logger.warn(
-      `${event} failed after nonce claim (${invalidPayload ? 'invalid_payload' : aiDesignerFailureKind(err)})`,
+      `${event} failed after nonce claim (${aiDesignerFailureLog(
+        err,
+        invalidPayload ? 'invalid_payload' : busy ? 'busy' : 'unknown'
+      )})`,
       AiDesignerGateway.name
     );
-    this._emitError(client, invalidPayload ? 'invalid_payload' : 'internal_error', {
+    this._emitError(client, code, {
       nonce,
+      ...(invalidPayload && typeof err.message === 'string'
+        ? { message: err.message }
+        : {}),
     });
   }
 

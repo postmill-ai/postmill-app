@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { AiDesignerGateway } from './ai-designer.gateway';
+import { AiDesignerBusyError } from '@postmill-ai/nestjs-libraries/ai-designer/conductor/failure-recovery';
 
 // Unit-tests the gateway helpers plus the security-critical connect/authz/join paths.
 // Socket-specific methods are accessed via `(gateway as any)`.
@@ -1004,7 +1005,7 @@ describe('AiDesignerGateway handleMessage idempotency', () => {
     expect(idempotency.releaseForSession).toHaveBeenCalledWith('n1', 's1');
     expect(client.emit).toHaveBeenCalledWith('error', {
       code: 'invalid_payload',
-      message: 'The request failed validation.',
+      message: 'Attachment belongs to another workspace',
       nonce: 'n1',
     });
   });
@@ -1085,6 +1086,10 @@ describe('AiDesignerGateway handleStart cleanup', () => {
       releaseStart: vi.fn().mockResolvedValue(undefined),
     } as any;
     const conductor = {
+      validateAttachmentConfig: vi.fn().mockResolvedValue({
+        config: session.config,
+        documentContexts: [],
+      }),
       handleStart: vi.fn().mockRejectedValue(new Error('conductor boom')),
     } as any;
     const gw = makeGateway({
@@ -1119,6 +1124,162 @@ describe('AiDesignerGateway handleStart cleanup', () => {
       code: 'internal_error',
       message: expect.any(String),
       nonce: 'n1',
+    });
+  });
+});
+
+describe('AiDesignerGateway handleStart attachment validation', () => {
+  const makeStartFixture = () => {
+    const session: any = {
+      id: 'new-session',
+      organizationId: 'o1',
+      userId: 'u1',
+      mode: 'prompt',
+      format: 'image',
+      config: {
+        channels: ['x-post'],
+        variants: 1,
+        referenceFileIds: ['image-1'],
+        attachmentFileIds: ['doc-1'],
+      },
+      brief: null,
+      state: 'intake',
+      activeDesignIds: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const service = {
+      atSessionCap: vi.fn().mockResolvedValue(false),
+      createSession: vi.fn().mockResolvedValue(session),
+      deleteSession: vi.fn().mockResolvedValue(session),
+      getSessionForUser: vi.fn().mockResolvedValue(session),
+      getMessagesAfterSeq: vi.fn().mockResolvedValue([]),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'm1', seq: 1 }),
+    } as any;
+    const idempotency = {
+      start: vi.fn().mockResolvedValue(true),
+      releaseStart: vi.fn().mockResolvedValue(undefined),
+    } as any;
+    const conductor = {
+      validateAttachmentConfig: vi.fn().mockResolvedValue({
+        config: session.config,
+        documentContexts: [],
+      }),
+      handleStart: vi.fn().mockResolvedValue(undefined),
+    } as any;
+    const gw = makeGateway({
+      authContext: { resolve: vi.fn() },
+      roles: {
+        getEffectivePermissions: vi.fn().mockResolvedValue({
+          permissions: ['media:create'],
+        }),
+      },
+      permissions: { check: vi.fn().mockResolvedValue(abilityThatCan()) },
+      budgetGuard: {
+        checkStartBudget: vi.fn().mockResolvedValue({ allowed: true }),
+      },
+      defaultsGate: {
+        missingDefaults: vi.fn().mockResolvedValue({ blocked: false }),
+      },
+      idempotency,
+      conductor,
+      policy: {
+        check: vi.fn().mockImplementation((input) => Promise.resolve({
+          ok: true,
+          values: input.values,
+          instruction: input.instruction,
+        })),
+      },
+      service,
+    }) as any;
+    gw.server = { to: vi.fn().mockReturnValue({ emit: vi.fn() }) } as any;
+    const client = fakeSocket({
+      userId: 'u1',
+      orgId: 'o1',
+      lastAuthzAt: Date.now(),
+    });
+    const payload = {
+      nonce: 'n-start',
+      mode: 'prompt',
+      prompt: 'Launch',
+      config: session.config,
+    };
+    return { gw, client, payload, service, idempotency, conductor };
+  };
+
+  it('rejects an invalid attachment before create, echo, join, or session deletion', async () => {
+    const { gw, client, payload, service, idempotency, conductor } = makeStartFixture();
+    conductor.validateAttachmentConfig.mockRejectedValue(
+      new BadRequestException('An attachment contains no readable text.')
+    );
+
+    await gw.handleStart(client, payload);
+
+    expect(service.createSession).not.toHaveBeenCalled();
+    expect(service.appendMessage).not.toHaveBeenCalled();
+    expect(service.deleteSession).not.toHaveBeenCalled();
+    expect(client.join).not.toHaveBeenCalled();
+    expect(conductor.handleStart).not.toHaveBeenCalled();
+    expect(idempotency.releaseStart).toHaveBeenCalledWith('n-start', 'u1', 'o1');
+    expect(client.emit).toHaveBeenCalledWith('error', {
+      code: 'invalid_payload',
+      message: 'An attachment contains no readable text.',
+      nonce: 'n-start',
+    });
+  });
+
+  it('rejects cross-org start attachments with a nonce recovery error', async () => {
+    const { gw, client, payload, service, idempotency, conductor } = makeStartFixture();
+    conductor.validateAttachmentConfig.mockRejectedValue(
+      new BadRequestException('One or more attachments could not be found in this workspace.')
+    );
+
+    await gw.handleStart(client, payload);
+
+    expect(service.createSession).not.toHaveBeenCalled();
+    expect(idempotency.releaseStart).toHaveBeenCalledWith('n-start', 'u1', 'o1');
+    expect(client.emit).toHaveBeenCalledWith('error', {
+      code: 'invalid_payload',
+      message: 'One or more attachments could not be found in this workspace.',
+      nonce: 'n-start',
+    });
+  });
+
+  it('passes validated reference chips into the new session before starting work', async () => {
+    const { gw, client, payload, service, conductor } = makeStartFixture();
+
+    await gw.handleStart(client, payload);
+
+    expect(conductor.validateAttachmentConfig).toHaveBeenCalledWith(
+      { orgId: 'o1', userId: 'u1', sessionId: '' },
+      payload.config,
+      payload.config,
+      { intent: 'Launch' }
+    );
+    expect(service.createSession.mock.calls[0][0].config.referenceFileIds).toEqual(['image-1']);
+    expect(conductor.handleStart).toHaveBeenCalledWith(
+      'new-session',
+      { orgId: 'o1', userId: 'u1', sessionId: 'new-session' },
+      payload.config,
+      'Launch',
+      expect.anything(),
+      'prompt',
+      expect.objectContaining({ config: payload.config })
+    );
+  });
+
+  it('emits a typed busy error with the original nonce and keeps the session', async () => {
+    const { gw, client, payload, service, idempotency, conductor } = makeStartFixture();
+    conductor.handleStart.mockRejectedValue(new AiDesignerBusyError());
+
+    await gw.handleStart(client, payload);
+
+    expect(service.deleteSession).not.toHaveBeenCalled();
+    expect(idempotency.releaseStart).toHaveBeenCalledWith('n-start', 'u1', 'o1');
+    expect(client.emit).toHaveBeenCalledWith('error', {
+      code: 'busy',
+      message: "I'm still working on the previous request for this design — give me a moment.",
+      nonce: 'n-start',
     });
   });
 });

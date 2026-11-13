@@ -240,6 +240,7 @@ export class FileRepository {
       where: {
         id,
         organizationId: org,
+        deletedAt: null,
       },
       include: {
         folder: {

@@ -3,6 +3,7 @@ import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
 import { AiDesignerConductorService } from './ai-designer-conductor.service';
 import {
   aiDesignerFailureKind,
+  aiDesignerFailureLog,
   aiDesignerFailureText,
 } from './failure-recovery';
 
@@ -48,6 +49,24 @@ describe('AI Designer sanitized failure recovery', () => {
     expect(aiDesignerFailureText(new Error('Agent composer timed out after 120000ms'))).toBe(
       'The AI provider took too long to respond — please try again.'
     );
+  });
+
+  it('logs provider metadata without detail and redacts non-provider messages', () => {
+    const providerLog = aiDesignerFailureLog(upstream('unavailable'));
+    expect(providerLog).toContain('kind=outage');
+    expect(providerLog).toContain('name=ProviderUpstreamError');
+    expect(providerLog).toContain('provider=openai');
+    expect(providerLog).toContain('upstreamStatus=503');
+    expect(providerLog).not.toContain('sk-live-secret');
+    expect(providerLog).not.toContain('secret upstream response');
+
+    const localLog = aiDesignerFailureLog(
+      new TypeError('GET https://cdn.example.com/file.png?token=secret-value failed')
+    );
+    expect(localLog).toContain('kind=unknown');
+    expect(localLog).toContain('name=TypeError');
+    expect(localLog).toContain('token=[REDACTED]');
+    expect(localLog).not.toContain('secret-value');
   });
 
   it('keeps upstream details out of recovery chat and logs', async () => {

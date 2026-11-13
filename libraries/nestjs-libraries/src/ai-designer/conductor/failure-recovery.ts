@@ -1,8 +1,15 @@
-import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
+import { ProviderUpstreamError, redactError } from '@postmill-ai/provider-kernel';
 import {
   BudgetExceeded,
   GuardrailViolation,
 } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+
+export class AiDesignerBusyError extends Error {
+  constructor() {
+    super('AI Designer is still working on the previous request.');
+    this.name = 'AiDesignerBusyError';
+  }
+}
 
 export type AiDesignerFailureKind =
   | 'guardrail'
@@ -54,6 +61,31 @@ export const aiDesignerFailureKind = (
     return 'outage';
   }
   return 'unknown';
+};
+
+export const aiDesignerFailureLog = (
+  err: unknown,
+  category: AiDesignerFailureKind | 'invalid_payload' | 'busy' = aiDesignerFailureKind(err)
+): string => {
+  const name = redactError(
+    err instanceof Error && err.name ? err.name : 'UnknownError',
+    100
+  );
+  if (err instanceof ProviderUpstreamError) {
+    return [
+      `kind=${category}`,
+      `name=${name}`,
+      `provider=${redactError(err.ctx.providerId, 100)}`,
+      ...(err.upstreamStatus !== undefined
+        ? [`upstreamStatus=${err.upstreamStatus}`]
+        : []),
+    ].join(' ');
+  }
+  const message = redactError(
+    err instanceof Error ? err.message : String(err ?? ''),
+    500
+  );
+  return `kind=${category} name=${name} message=${message}`;
 };
 
 export const aiDesignerFailureText = (err: unknown): string => {

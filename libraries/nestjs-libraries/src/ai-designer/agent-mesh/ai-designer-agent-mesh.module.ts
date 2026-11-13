@@ -13,6 +13,7 @@ import {
   registryState,
 } from '@reaatech/agent-mesh-registry';
 import { AI_DESIGNER_AGENTS } from './agent-registry.data';
+import { aiDesignerFailureLog } from '../conductor/failure-recovery';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import {
   RedisSessionStore,
@@ -64,7 +65,7 @@ export class AiDesignerAgentMeshModule
     } catch (err) {
       this._logger.error(
         `AI Designer agent-mesh ${name} setup failed: ${
-          (err as Error).message
+          aiDesignerFailureLog(err)
         } — AI Designer will be degraded until this is resolved`
       );
     }
@@ -85,7 +86,7 @@ export class AiDesignerAgentMeshModule
       } catch (err) {
         this._logger.warn(
           `AI Designer agent registry override (${overrideDir}) failed to load: ${
-            (err as Error).message
+            aiDesignerFailureLog(err)
           } — falling back to the bundled registry`
         );
       }

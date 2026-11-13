@@ -784,10 +784,10 @@ describe('AiDesignerAssetService degradation hardening (workstream 5)', () => {
     const parsed = JSON.parse(response.content);
     expect(parsed.assets).toEqual({});
     expect(errorSpy).toHaveBeenCalledWith(
-      'Gradient fallback failed for slot s1 (unknown)',
+      'Gradient fallback failed for slot s1 (kind=unknown name=Error message=storage exploded)',
       'AiDesignerAssetService'
     );
-    expect(errorSpy.mock.calls[0][0]).not.toContain('storage exploded');
+    expect(errorSpy.mock.calls[0][0]).toContain('storage exploded');
   });
 });
 
@@ -956,7 +956,7 @@ describe('AiDesignerAssetService intrinsic size analysis (round 7 workstream D)'
 
     expect(result.subjectPoint).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith(
-      'Asset size analysis skipped for http://localhost:4200/uploads/../../../etc/passwd (unknown)'
+      'Asset size analysis skipped for http://localhost:4200/uploads/../../../etc/passwd (kind=unknown name=Error message=upload path escapes storage root: http://localhost:4200/uploads/../../../etc/passwd)'
     );
   });
 

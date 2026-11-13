@@ -65,7 +65,8 @@ Before chatting, you configure the brief:
 - **Attach files** (Prompt mode) — attach up to 10 files, 20 MB each: images, PDF, TXT, Markdown,
   CSV, TSV, or JSON. Images join the reference images; documents are read as background context for
   planning (PDFs up to 5 MB, first 10 pages; extracted text is capped per file and per session).
-  Files from another workspace or of an unsupported type are rejected before any paid planning.
+  Files from another workspace, trashed files, unreadable documents, and unsupported types are rejected
+  with a specific reason before the session is created or any paid planning begins.
 
 ## In the session
 

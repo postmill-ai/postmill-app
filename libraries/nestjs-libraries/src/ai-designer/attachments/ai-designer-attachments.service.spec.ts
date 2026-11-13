@@ -70,6 +70,19 @@ describe('AiDesignerAttachmentsService', () => {
     );
   });
 
+  it('returns a safe validation reason for storage read failures', async () => {
+    const { service, storageService } = makeService({
+      'doc-1': textFile('doc-1', 'Launch'),
+    });
+    storageService.resolveAdapterForFolder.mockRejectedValueOnce(
+      new Error('upstream storage secret')
+    );
+
+    await expect(service.contextsFor('org-1', ['doc-1'])).rejects.toMatchObject({
+      message: 'An attachment could not be read from storage.',
+    });
+  });
+
   it('rejects more than ten attachments before reading storage', async () => {
     const { service, storageService } = makeService({});
     await expect(service.contextsFor('org-1', Array.from({ length: 11 }, (_, i) => `doc-${i}`))).rejects.toThrow(

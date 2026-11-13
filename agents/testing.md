@@ -255,12 +255,14 @@ disposable QA organization and no paid retries. `E2E_LIVE_BRAND_HEX` optionally 
 
 Attachment acceptance does not require paid generation: upload an image, a small PDF and CSV content
 through the prompt, intake, awaiting-plan and delivered composers, verify the chips and planner/intake
-payloads, and prove a second org cannot use those file IDs. Component and gateway/conductor specs must
-cover accepted-echo chip clearing, rejection/disconnect/timeout restoration, nonce release without an
-accepted echo, and sanitized typed provider recovery (quota/billing, auth, rate limit, circuit breaker,
-timeout and outage) with sentinel upstream details absent from chat and logs. Exercise malformed PDFs,
-unsupported types, size/count caps and malformed document text through unit tests. Paid AI acceptance
-is never needed for upload, extraction, authorization, recovery mapping or planner-payload verification.
+payloads, and prove a second org cannot use those file IDs on start, message, or revise. Component and
+gateway/conductor specs must cover accepted-echo chip clearing, rejection/disconnect/timeout restoration,
+pre-create invalid start, busy nonce recovery without attachment writes, reference chips, soft-deleted files,
+repository org filtering, cached extraction, and sanitized typed provider recovery (quota/billing, auth,
+rate limit, circuit breaker, timeout and outage) with sentinel upstream details absent from chat and logs.
+Exercise malformed PDFs, unsupported types, size/count caps, storage failures, and malformed document text
+through unit tests. Paid AI acceptance is never needed for upload, extraction, authorization, recovery
+mapping or planner-payload verification.
 
 Brand Studio acceptance uses two distinct kits in a disposable QA org: editor management and reload,
 org-scoped Knowledge enablement/add/search, General vs Brand Mode persistence, logo save-vs-canvas,

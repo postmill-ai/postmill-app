@@ -8,7 +8,7 @@ import {
 import type { AgentResponse } from '@reaatech/agent-mesh';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
-import { aiDesignerFailureKind } from '../../conductor/failure-recovery';
+import { aiDesignerFailureLog } from '../../conductor/failure-recovery';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type {
@@ -577,7 +577,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       };
     } catch (err) {
       this._logger.warn(
-        `Composition failed, using fallback: ${aiDesignerFailureKind(err)}`,
+        `Composition failed, using fallback: ${aiDesignerFailureLog(err)}`,
         AiDesignerComposerService.name
       );
       return {
@@ -634,7 +634,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       };
     } catch (err) {
       this._logger.warn(
-        `Doc validator failed (degraded, doc unchanged): ${aiDesignerFailureKind(err)}`,
+        `Doc validator failed (degraded, doc unchanged): ${aiDesignerFailureLog(err)}`,
         AiDesignerComposerService.name
       );
       return { doc: this._clampTextToFit(guarded), violations: [] };
@@ -677,7 +677,7 @@ export class AiDesignerComposerService implements OnModuleInit {
         return refit;
       } catch (err) {
         this._logger.warn(
-          `Seeded-output re-fit skipped for output ${i}: ${aiDesignerFailureKind(err)}`,
+          `Seeded-output re-fit skipped for output ${i}: ${aiDesignerFailureLog(err)}`,
           AiDesignerComposerService.name
         );
         return out;
@@ -1464,7 +1464,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       return { doc: this._docService.applyOps(doc, ops), notes };
     } catch (err) {
       this._logger.warn(
-        `fixContrast could not apply its ops (doc unchanged): ${aiDesignerFailureKind(err)}`,
+        `fixContrast could not apply its ops (doc unchanged): ${aiDesignerFailureLog(err)}`,
         AiDesignerComposerService.name
       );
       return { doc, notes: [] };
@@ -1907,7 +1907,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       } catch (err) {
         this._logger.warn(
           `Skipping this round of critic fixes — an op failed validation: ${
-            aiDesignerFailureKind(err)
+            aiDesignerFailureLog(err)
           }`,
           AiDesignerComposerService.name
         );
@@ -2708,7 +2708,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       return changed ? ({ ...doc, outputs } as DesignerDoc) : doc;
     } catch (err) {
       this._logger.warn(
-        `Overlap guard failed (degraded, doc unchanged): ${aiDesignerFailureKind(err)}`,
+        `Overlap guard failed (degraded, doc unchanged): ${aiDesignerFailureLog(err)}`,
         AiDesignerComposerService.name
       );
       return doc;
@@ -2995,7 +2995,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       raw = await this._generateWithLimits(prompt, orgId, signal);
     } catch (err) {
       this._logger.warn(
-        `LLM revise failed: ${aiDesignerFailureKind(err)}`,
+        `LLM revise failed: ${aiDesignerFailureLog(err)}`,
         AiDesignerComposerService.name
       );
       return doc;
@@ -3010,7 +3010,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       repaired = await parseOrRepair(DesignerDocOpsSchema, raw);
     } catch (err) {
       this._logger.warn(
-        `Revise ops unrepairable: ${aiDesignerFailureKind(err)}`,
+        `Revise ops unrepairable: ${aiDesignerFailureLog(err)}`,
         AiDesignerComposerService.name
       );
       return doc;
@@ -3039,7 +3039,7 @@ export class AiDesignerComposerService implements OnModuleInit {
           } as DesignerDoc;
         } catch (err) {
           this._logger.warn(
-            `Revise ops failed applyOps: ${aiDesignerFailureKind(err)}`,
+            `Revise ops failed applyOps: ${aiDesignerFailureLog(err)}`,
             AiDesignerComposerService.name
           );
         }
@@ -3731,7 +3731,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       repaired = await parseOrRepair(DesignerDocOpsSchema, rawOps);
     } catch (err) {
       this._logger.warn(
-        `Raw ops unrepairable: ${aiDesignerFailureKind(err)}`,
+        `Raw ops unrepairable: ${aiDesignerFailureLog(err)}`,
         AiDesignerComposerService.name
       );
     }
@@ -3743,7 +3743,7 @@ export class AiDesignerComposerService implements OnModuleInit {
         );
       } catch (err) {
         this._logger.warn(
-          `Repaired ops failed applyOps: ${aiDesignerFailureKind(err)}`,
+          `Repaired ops failed applyOps: ${aiDesignerFailureLog(err)}`,
           AiDesignerComposerService.name
         );
       }
@@ -7692,7 +7692,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       // No vision provider (imageFocalPoint throws through the defaults gate),
       // budget/policy refusal, or a timeout — the crop stays centred.
       this._logger.warn(
-        `Subject focal-point lookup skipped: ${aiDesignerFailureKind(err)}`,
+        `Subject focal-point lookup skipped: ${aiDesignerFailureLog(err)}`,
         AiDesignerComposerService.name
       );
       return undefined;
