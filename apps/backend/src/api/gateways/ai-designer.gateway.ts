@@ -1193,7 +1193,7 @@ export class AiDesignerGateway
     this.logger.warn(
       `${event} failed after nonce claim (${aiDesignerFailureLog(
         err,
-        code
+        invalidPayload ? 'invalid_payload' : busy ? 'busy' : 'unknown'
       )})`,
       AiDesignerGateway.name
     );
