@@ -378,7 +378,7 @@ describe.skipIf(process.env.GITHUB_ACTIONS !== 'true' || process.env.RUN_RENDER_
     const fs = await import('fs');
     const http = await import('http');
     const { execFileSync } = await import('child_process');
-    const fixture = fs.readFileSync(path.resolve(__dirname, '../../../../../e2e/fixtures/motion.mp4'));
+    const fixture = fs.readFileSync(path.resolve(__dirname, '../../../../../e2e/fixtures/motion-animated.mp4'));
     const server = http.createServer((request, response) => {
       response.setHeader('accept-ranges', 'bytes');
       response.setHeader('access-control-allow-origin', '*');
