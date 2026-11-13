@@ -195,10 +195,12 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   config. Message/revise turns acquire the session turn before committing that preparation; busy or invalid
   requests release the claimed nonce with a typed, nonce'd error and never persist rejected attachments.
   Cross-org and soft-deleted IDs must never be merged or sent to an agent. Validated contexts are cached in the
-  server-owned brief rather than re-extracted on every turn. Recovery emits fixed category-specific text. Logs
-  include the category and error name; typed provider failures add provider id/upstream status without detail,
-  while other messages pass through kernel `redactError`. Raw provider response details, credentials,
-  attachment contents and stacks must not enter chat, logs or Sentry.
+  server-owned brief rather than re-extracted on every turn; Brand Knowledge is retrieved at planning with
+  the actual intent, not during every intake turn. Recovery emits fixed category-specific text. Logs include
+  the category and error name; typed provider failures add provider id/upstream status but omit response
+  detail. Other error messages may appear in logs only after kernel `redactError` truncation and signed-URL
+  masking. Raw errors never reach chat; credentials, attachment contents and stacks must not be logged or
+  sent to Sentry.
 
 ## MCP scopes — `allowedScopes` is a ceiling
 

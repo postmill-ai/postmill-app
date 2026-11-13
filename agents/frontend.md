@@ -172,7 +172,10 @@ Gate composer/UI features per channel on the shared capability matrix, not on ad
 - Keep image and document chips while the send is pending. Clear only the acknowledged send's chips on
   its nonce-matched user-message echo; preserve newer selections. On invalid/busy rejection, disconnect,
   or the 10-second send timeout, remove the optimistic bubble and restore its text and chips for retry.
-  Busy is a typed error carrying the original nonce, not an accepted transcript message.
+  Busy is a typed error carrying the original nonce, not an accepted transcript message; it restores only
+  the rejected send and leaves the active run's progress and Cancel visible. Start uses a 60-second safety
+  timeout when image/document IDs are present (10 seconds otherwise) so pre-session extraction cannot enable
+  a duplicate Start click while validation is still running.
 
 ## Designer: four renderers, one document
 

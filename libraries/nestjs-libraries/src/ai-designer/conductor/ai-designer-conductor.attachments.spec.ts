@@ -357,4 +357,133 @@ describe('AI Designer attachment intake and revision', () => {
     expect((conductor as any)._brands.getBrand).not.toHaveBeenCalled();
     expect((conductor as any)._rag.search).not.toHaveBeenCalled();
   });
+
+  it('rejects cross-org and trashed files through the real start validator', async () => {
+    const fileService = {
+      getFileById: vi.fn().mockImplementation((_orgId, fileId) => Promise.resolve(
+        fileId === 'doc-deleted'
+          ? { id: fileId, type: 'document', deletedAt: new Date('2026-01-01') }
+          : null
+      )),
+    };
+    const { conductor, service } = makeConductor(intakeSession(), fileService);
+    const config = {
+      ...intakeSession().config,
+      attachmentFileIds: ['doc-foreign'],
+    } as any;
+    const context = { orgId: 'org-2', userId: USER_ID, sessionId: '' };
+
+    await expect(conductor.validateAttachmentConfig(context, config, config))
+      .rejects.toBeInstanceOf(BadRequestException);
+    config.attachmentFileIds = ['doc-deleted'];
+    await expect(conductor.validateAttachmentConfig(context, config, config))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(service.updateSession).not.toHaveBeenCalled();
+  });
+
+  it.each(['awaiting_plan', 'delivered'])(
+    'rejects busy %s revision before attachment reads or writes',
+    async (state) => {
+      const fileService = ownedFiles();
+      const { conductor, service } = makeConductor(
+        {
+          ...intakeSession(),
+          state,
+          activeDesignIds: state === 'delivered' ? ['design-1'] : null,
+        },
+        fileService
+      );
+      (conductor as any)._inFlight.add(SESSION_ID);
+      const onAccepted = vi.fn();
+
+      await expect(conductor.handleRevise(
+        SESSION_ID,
+        { orgId: ORG_ID, userId: USER_ID, sessionId: SESSION_ID },
+        {
+          instruction: 'Use this reference',
+          referenceFileIds: ['image-1'],
+          nonce: 'nonce-busy',
+        },
+        emitter(),
+        onAccepted
+      )).rejects.toMatchObject({ name: 'AiDesignerBusyError' });
+
+      expect(fileService.getFileById).not.toHaveBeenCalled();
+      expect(service.updateSession).not.toHaveBeenCalled();
+      expect(onAccepted).not.toHaveBeenCalled();
+    }
+  );
+
+  it('records truncated files as processed and does not extract them again', async () => {
+    const { conductor } = makeConductor(intakeSession(), ownedFiles());
+    const documentContexts = [
+      { fileId: 'doc-1', name: 'brief.txt', text: 'x'.repeat(40_000) },
+    ];
+    (conductor as any)._attachments = {
+      contextsFor: vi.fn().mockResolvedValue(documentContexts),
+    };
+    const config = {
+      ...intakeSession().config,
+      attachmentFileIds: ['doc-1', 'doc-2', 'doc-3', 'doc-4'],
+    } as any;
+    const context = { orgId: ORG_ID, userId: USER_ID, sessionId: SESSION_ID };
+
+    const prepared = await conductor.validateAttachmentConfig(
+      context,
+      config,
+      config,
+      { intent: 'Launch' }
+    );
+    expect(prepared.documentContextFileIds).toEqual(config.attachmentFileIds);
+
+    const reused = await conductor.validateAttachmentConfig(
+      context,
+      prepared.config,
+      config,
+      {
+        intent: 'Launch',
+        documentContexts: prepared.documentContexts,
+        documentContextFileIds: prepared.documentContextFileIds,
+      }
+    );
+
+    expect(reused.documentContexts).toEqual(documentContexts);
+    expect((conductor as any)._attachments.contextsFor).toHaveBeenCalledTimes(1);
+  });
+
+  it('extracts legacy intake attachments at plan presentation when the cache is absent', async () => {
+    const documentContexts = [
+      { fileId: 'doc-1', name: 'brief.txt', text: 'Launch next Friday' },
+    ];
+    const session = {
+      ...intakeSession(),
+      config: { ...intakeSession().config, attachmentFileIds: ['doc-1'] },
+      brief: { intent: 'Launch announcement' },
+    };
+    const { conductor } = makeConductor(session, ownedFiles());
+    (conductor as any)._attachments = {
+      contextsFor: vi.fn().mockResolvedValue(documentContexts),
+    };
+    (conductor as any)._dispatchAgent = vi.fn().mockResolvedValue({
+      content: JSON.stringify({ type: 'plans', plans: [] }),
+    });
+    (conductor as any)._emitPlan = vi.fn();
+
+    await (conductor as any)._runPlanPresentation(
+      SESSION_ID,
+      { orgId: ORG_ID, userId: USER_ID, sessionId: SESSION_ID },
+      session.config,
+      session.brief,
+      emitter()
+    );
+
+    expect((conductor as any)._attachments.contextsFor).toHaveBeenCalledTimes(1);
+    expect((conductor as any)._dispatchAgent).toHaveBeenCalledWith(
+      { orgId: ORG_ID, userId: USER_ID, sessionId: SESSION_ID },
+      'art-director',
+      expect.objectContaining({
+        brief: expect.objectContaining({ documentContexts }),
+      })
+    );
+  });
 });

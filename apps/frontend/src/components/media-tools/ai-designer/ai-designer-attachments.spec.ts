@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { uploadAiDesignerAttachments } from './ai-designer-attachments';
+import {
+  aiDesignerStartSafetyTimeoutMs,
+  uploadAiDesignerAttachments,
+} from './ai-designer-attachments';
 
 const uploadResponse = (id: string) => new Response(JSON.stringify({ id, path: `/uploads/${id}.png` }), {
   headers: { 'Content-Type': 'application/json' },
@@ -47,5 +50,13 @@ describe('uploadAiDesignerAttachments', () => {
     await expect(uploadAiDesignerAttachments(fetchFn as any, [
       new File(['brief'], 'brief.txt', { type: 'text/plain' }),
     ])).rejects.toThrow('quota exceeded');
+  });
+});
+
+describe('aiDesignerStartSafetyTimeoutMs', () => {
+  it('allows slower pre-session validation only when attachments are present', () => {
+    expect(aiDesignerStartSafetyTimeoutMs({})).toBe(10_000);
+    expect(aiDesignerStartSafetyTimeoutMs({ referenceFileIds: ['image-1'] })).toBe(60_000);
+    expect(aiDesignerStartSafetyTimeoutMs({ attachmentFileIds: ['doc-1'] })).toBe(60_000);
   });
 });

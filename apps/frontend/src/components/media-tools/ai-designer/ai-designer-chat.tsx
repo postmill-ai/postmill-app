@@ -250,6 +250,13 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
       if (!err.nonce || pendingSendRef.current?.nonce === err.nonce) {
         failPendingSend();
       }
+      if (err.code === 'busy') {
+        toaster.show(
+          err.message || err.code,
+          'warning'
+        );
+        return;
+      }
       setSending(false);
       setOptimisticBusy(false);
       setErrorHalted(true);

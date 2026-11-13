@@ -1,5 +1,5 @@
 import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
-import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { dispatchToAgent } from '@reaatech/agent-mesh-router';
 import { registryState } from '@reaatech/agent-mesh-registry';
 import type { AgentResponse } from '@reaatech/agent-mesh';
@@ -81,6 +81,7 @@ import {
 import { MAX_AI_DESIGNER_ATTACHMENTS } from '@postmill-ai/helpers/utils/ai-designer-attachments';
 import {
   AiDesignerBusyError,
+  AiDesignerValidationException,
   aiDesignerFailureLog,
   aiDesignerFailureText,
 } from './failure-recovery';
@@ -95,6 +96,7 @@ export interface AiDesignerEmitter {
 export interface AiDesignerAttachmentPreparation {
   config: AiDesignerConfig;
   documentContexts: AiDesignerDocumentContext[];
+  documentContextFileIds: string[];
 }
 
 interface PreparedAttachmentConfig extends AiDesignerAttachmentPreparation {
@@ -402,7 +404,12 @@ export class AiDesignerConductorService {
     incoming?: Pick<AiDesignerConfig, 'referenceFileIds' | 'attachmentFileIds'>,
     prior: DesignBrief = { intent: '' }
   ): Promise<PreparedAttachmentConfig> {
-    const cachedContexts = prior.documentContexts ?? [];
+    const cachedContexts = (prior.documentContexts ?? []).filter((context) =>
+      (current.attachmentFileIds ?? []).includes(context.fileId)
+    );
+    const cachedDocumentContextFileIds =
+      prior.documentContextFileIds ??
+      cachedContexts.map((context) => context.fileId);
     if (
       incoming?.referenceFileIds === undefined &&
       incoming?.attachmentFileIds === undefined
@@ -410,6 +417,7 @@ export class AiDesignerConductorService {
       return {
         config: current,
         documentContexts: cachedContexts,
+        documentContextFileIds: cachedDocumentContextFileIds,
         configChanged: false,
         contextsChanged: false,
       };
@@ -431,7 +439,7 @@ export class AiDesignerConductorService {
       referenceFileIds.length > MAX_AI_DESIGNER_ATTACHMENTS ||
       attachmentFileIds.length > MAX_AI_DESIGNER_ATTACHMENTS
     ) {
-      throw new BadRequestException(
+      throw new AiDesignerValidationException(
         `AI Designer is limited to ${MAX_AI_DESIGNER_ATTACHMENTS} references and ${MAX_AI_DESIGNER_ATTACHMENTS} documents.`
       );
     }
@@ -445,8 +453,8 @@ export class AiDesignerConductorService {
     const submittedFiles = new Map<string, { type?: string }>();
     for (const fileId of submittedIds) {
       const file = await this._fileService?.getFileById(ctx.orgId, fileId);
-      if (!file) {
-        throw new BadRequestException(
+      if (!file || file.deletedAt) {
+        throw new AiDesignerValidationException(
           'One or more attachments could not be found in this workspace.'
         );
       }
@@ -459,14 +467,14 @@ export class AiDesignerConductorService {
         file.type !== 'image' &&
         !file.type.startsWith('image/')
       ) {
-        throw new BadRequestException(
+        throw new AiDesignerValidationException(
           'Reference attachments must be image files.'
         );
       }
     }
 
     const cachedContextsComplete = attachmentFileIds.every((fileId) =>
-      cachedContexts.some((context) => context.fileId === fileId)
+      cachedDocumentContextFileIds.includes(fileId)
     );
     const hasNewDocument = (incoming.attachmentFileIds ?? []).some(
       (fileId) => !(current.attachmentFileIds ?? []).includes(fileId)
@@ -478,8 +486,7 @@ export class AiDesignerConductorService {
     const documentContexts = contextsChanged
       ? await this._documentContextsFor(
           ctx,
-          { ...current, attachmentFileIds },
-          prior.intent
+          { ...current, attachmentFileIds }
         )
       : cachedContexts;
 
@@ -487,6 +494,9 @@ export class AiDesignerConductorService {
     return {
       config,
       documentContexts,
+      documentContextFileIds: contextsChanged
+        ? attachmentFileIds
+        : cachedDocumentContextFileIds,
       configChanged:
         JSON.stringify(referenceFileIds) !==
           JSON.stringify(current.referenceFileIds) ||
@@ -526,6 +536,7 @@ export class AiDesignerConductorService {
               brief: {
                 ...prior,
                 documentContexts: prepared.documentContexts,
+                documentContextFileIds: prepared.documentContextFileIds,
               },
             }
           : {}),
@@ -709,7 +720,7 @@ export class AiDesignerConductorService {
     }
 
     if (attachments?.referenceFileIds?.length || attachments?.attachmentFileIds?.length) {
-      throw new BadRequestException(
+      throw new AiDesignerValidationException(
         'Attachments can only be used during intake or while revising a plan or design.'
       );
     }
@@ -1350,10 +1361,17 @@ export class AiDesignerConductorService {
       );
       await onAccepted?.();
       accepted = true;
+      const documentContexts = await this._planningDocumentContextsFor(
+        ctx,
+        prepared.config,
+        instruction,
+        prepared.documentContexts
+      );
       const revisionBrief: DesignBrief = {
         ...brief,
         revisionInstruction: instruction,
-        documentContexts: prepared.documentContexts,
+        documentContexts,
+        documentContextFileIds: prepared.documentContextFileIds,
       };
 
       await this._emitText(
@@ -1426,12 +1444,21 @@ export class AiDesignerConductorService {
     );
     const priorBrief = this._brief(priorSession ?? {});
     const reference = await this._referenceCuesFor(ctx, config, priorBrief);
-    const documentContexts =
-      preparedDocumentContexts ?? priorBrief.documentContexts ?? [];
+    const cachedDocumentContexts = preparedDocumentContexts ??
+      (priorBrief.documentContexts ?? []).filter((context) =>
+        (config.attachmentFileIds ?? []).includes(context.fileId)
+      );
+    const documentContexts = await this._planningDocumentContextsFor(
+      ctx,
+      config,
+      prompt,
+      cachedDocumentContexts
+    );
     const brief: DesignBrief = {
       intent: prompt,
       ...reference,
-      ...(documentContexts.length ? { documentContexts } : {}),
+      documentContexts,
+      documentContextFileIds: config.attachmentFileIds ?? [],
       styleId: config.styleId,
     };
     await this._service.updateSession(sessionId, ctx.orgId, ctx.userId, { brief });
@@ -1461,8 +1488,10 @@ export class AiDesignerConductorService {
   ) {
     const session = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
     const persistedBrief = (session?.brief ?? { intent: '' }) as DesignBrief;
-    const documentContexts =
-      preparedDocumentContexts ?? persistedBrief.documentContexts ?? [];
+    const documentContexts = preparedDocumentContexts ??
+      (persistedBrief.documentContexts ?? []).filter((context) =>
+        (config.attachmentFileIds ?? []).includes(context.fileId)
+      );
     const brief = { ...persistedBrief, documentContexts };
     let remainingIntakeChars = MAX_AI_DESIGNER_INTAKE_CONTEXT_CHARS;
     const intakeDocumentContexts = documentContexts.map((context) => {
@@ -1725,9 +1754,29 @@ export class AiDesignerConductorService {
     await this._setState(sessionId, ctx, emitter, 'planning');
 
     const reference = await this._referenceCuesFor(ctx, config, brief);
+    const attachmentFileIds = config.attachmentFileIds ?? [];
+    const cachedDocumentContexts = (brief.documentContexts ?? []).filter(
+      (context) => attachmentFileIds.includes(context.fileId)
+    );
+    const processedFileIds =
+      brief.documentContextFileIds ??
+      cachedDocumentContexts.map((context) => context.fileId);
+    const extractedDocumentContexts = attachmentFileIds.some(
+      (fileId) => !processedFileIds.includes(fileId)
+    )
+      ? await this._documentContextsFor(ctx, config)
+      : cachedDocumentContexts;
+    const documentContexts = await this._planningDocumentContextsFor(
+      ctx,
+      config,
+      brief.intent,
+      extractedDocumentContexts
+    );
     const enriched: DesignBrief = {
       ...brief,
       ...reference,
+      documentContexts,
+      documentContextFileIds: attachmentFileIds,
       styleId: brief.styleId ?? config.styleId,
     };
     await this._service.updateSession(sessionId, ctx.orgId, ctx.userId, { brief: enriched });
@@ -3537,28 +3586,41 @@ export class AiDesignerConductorService {
   }
 
   /**
-   * Reference cues for this run — reusing the persisted interpretation when
-   * the session's reference files haven't changed. The interpretation IS the
-   * run's spec: re-rolling it on every plan presentation made the spec drift
-   * between otherwise-identical runs (and paid a vision call each time).
-   * Returns the brief fields to merge (never a partial stamp: a failed
-   * interpretation leaves `referenceCueFileIds` unset so the next run
-   * retries).
+   * Attached document excerpts are cached and bounded independently of Brand
+   * Knowledge, which is retrieved with the real intent only at planning time.
    */
+  private _boundDocumentContexts(
+    contexts: AiDesignerDocumentContext[]
+  ): AiDesignerDocumentContext[] {
+    let remaining = 40_000;
+    return contexts.map((context) => {
+      const text = context.text.slice(0, remaining);
+      remaining -= text.length;
+      return { ...context, text };
+    }).filter((context) => context.text.length > 0);
+  }
+
   private async _documentContextsFor(
     ctx: AiDesignerAgentContext,
-    config: AiDesignerConfig,
-    intent = '',
-  ) {
-    const contexts: { fileId: string; name: string; text: string }[] = [];
+    config: AiDesignerConfig
+  ): Promise<AiDesignerDocumentContext[]> {
     const ids = config.attachmentFileIds ?? [];
-    if (ids.length) {
-      if (!this._attachments) {
-        throw new BadRequestException('AI Designer attachments are unavailable.');
-      }
-      contexts.push(...await this._attachments.contextsFor(ctx.orgId, ids));
+    if (!ids.length) return [];
+    if (!this._attachments) {
+      throw new AiDesignerValidationException('AI Designer attachments are unavailable.');
     }
+    return this._boundDocumentContexts(
+      await this._attachments.contextsFor(ctx.orgId, ids)
+    );
+  }
 
+  private async _planningDocumentContextsFor(
+    ctx: AiDesignerAgentContext,
+    config: AiDesignerConfig,
+    intent: string,
+    documentContexts: AiDesignerDocumentContext[]
+  ): Promise<AiDesignerDocumentContext[]> {
+    const contexts = [...documentContexts];
     const brand = await this._brandKitFor(ctx, config);
     if (brand && this._rag) {
       try {
@@ -3577,13 +3639,7 @@ export class AiDesignerConductorService {
         // Knowledge is optional: disabled or unavailable retrieval never blocks visual Brand Mode.
       }
     }
-
-    let remaining = 40_000;
-    return contexts.map((context) => {
-      const text = context.text.slice(0, remaining);
-      remaining -= text.length;
-      return { ...context, text };
-    }).filter((context) => context.text.length > 0);
+    return this._boundDocumentContexts(contexts);
   }
 
   private async _referenceCuesFor(
@@ -5373,9 +5429,31 @@ export class AiDesignerConductorService {
     const sessionForPlans = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
     const config = this._config(sessionForPlans ?? {});
     const persistedBrief = this._brief(sessionForPlans ?? {});
-    const documentContexts =
-      preparedDocumentContexts ?? persistedBrief.documentContexts ?? [];
-    const briefForPlans = { ...persistedBrief, documentContexts };
+    const attachmentFileIds = config.attachmentFileIds ?? [];
+    const cachedDocumentContexts = preparedDocumentContexts ??
+      (persistedBrief.documentContexts ?? []).filter((context) =>
+        attachmentFileIds.includes(context.fileId)
+      );
+    const processedFileIds =
+      persistedBrief.documentContextFileIds ??
+      cachedDocumentContexts.map((context) => context.fileId);
+    const extractedDocumentContexts =
+      !preparedDocumentContexts && attachmentFileIds.some(
+        (fileId) => !processedFileIds.includes(fileId)
+      )
+        ? await this._documentContextsFor(ctx, config)
+        : cachedDocumentContexts;
+    const documentContexts = await this._planningDocumentContextsFor(
+      ctx,
+      config,
+      persistedBrief.intent,
+      extractedDocumentContexts
+    );
+    const briefForPlans = {
+      ...persistedBrief,
+      documentContexts,
+      documentContextFileIds: attachmentFileIds,
+    };
     const plansForSanitize = (briefForPlans.lastPlans as DesignPlan[] | undefined) ?? [];
     const revisionForExecution = documentContexts.length
       ? {

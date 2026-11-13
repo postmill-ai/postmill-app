@@ -257,8 +257,9 @@ Attachment acceptance does not require paid generation: upload an image, a small
 through the prompt, intake, awaiting-plan and delivered composers, verify the chips and planner/intake
 payloads, and prove a second org cannot use those file IDs on start, message, or revise. Component and
 gateway/conductor specs must cover accepted-echo chip clearing, rejection/disconnect/timeout restoration,
-pre-create invalid start, busy nonce recovery without attachment writes, reference chips, soft-deleted files,
-repository org filtering, cached extraction, and sanitized typed provider recovery (quota/billing, auth,
+pre-create invalid start, busy nonce recovery without attachment writes on intake and both revise branches,
+reference chips, soft-deleted files, trashed-file restore/permanent delete, repository org filtering, cached
+and truncated extraction, legacy-intake recovery, Brand Knowledge without document attachments, and sanitized typed provider recovery (quota/billing, auth,
 rate limit, circuit breaker, timeout and outage) with sentinel upstream details absent from chat and logs.
 Exercise malformed PDFs, unsupported types, size/count caps, storage failures, and malformed document text
 through unit tests. Paid AI acceptance is never needed for upload, extraction, authorization, recovery

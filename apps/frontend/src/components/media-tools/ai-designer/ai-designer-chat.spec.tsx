@@ -28,9 +28,19 @@ vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
 }));
 vi.mock('./ai-designer-attachments', async (importOriginal) => ({
   ...await importOriginal<typeof import('./ai-designer-attachments')>(),
-  uploadAiDesignerAttachments: vi.fn(async () => ({
-    references: [],
-    documents: [{ fileId: 'doc-1', name: 'brief.pdf' }],
+  uploadAiDesignerAttachments: vi.fn(async (_fetch: unknown, files: File[]) => ({
+    references: files.filter((file) => file.type.startsWith('image/')).map((file) => ({
+      source: 'file',
+      fileId: 'image-1',
+      url: '/uploads/image-1.png',
+      thumbnail: '/uploads/image-1.png',
+      name: file.name,
+      type: 'image',
+    })),
+    documents: files.filter((file) => !file.type.startsWith('image/')).map((file) => ({
+      fileId: 'doc-1',
+      name: file.name,
+    })),
   })),
 }));
 
@@ -147,6 +157,33 @@ describe('AiDesignerChat thinking bubble', () => {
     expect(hoisted.socket.sendMessage).not.toHaveBeenCalled();
   });
 
+  it('forwards reference-image chips and clears them on the accepted revision echo', async () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('delivered');
+    });
+    fireEvent.change(screen.getByLabelText('Attach files'), {
+      target: { files: [new File(['image'], 'reference.png', { type: 'image/png' })] },
+    });
+    expect(await screen.findByText('reference.png')).toBeTruthy();
+
+    sendChatMessage('Match this reference');
+
+    expect(hoisted.socket.revisePlan).toHaveBeenCalledWith(
+      'Match this reference',
+      undefined,
+      ['image-1'],
+      [],
+    );
+    expect(screen.getByText('reference.png')).toBeTruthy();
+    act(() => {
+      hoisted.socketCallbacks.onMessage(
+        serverMessage({ id: 'echo-image', role: 'user', nonce: 'nonce-4' })
+      );
+    });
+    expect(screen.queryByText('reference.png')).toBeNull();
+  });
+
   it('forwards intake attachments through message and clears chips only after the accepted echo', async () => {
     render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
     act(() => {
@@ -200,6 +237,29 @@ describe('AiDesignerChat thinking bubble', () => {
       'Use the attached brief'
     );
     expect(screen.queryByTestId('msg-local-nonce-1')).toBeNull();
+  });
+
+  it('keeps the active run progress and Cancel visible after a busy rejection', () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('revising');
+    });
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    sendChatMessage('Another change');
+
+    act(() => {
+      hoisted.socketCallbacks.onError({
+        nonce: 'nonce-1',
+        code: 'busy',
+        message: 'Still working on the previous request.',
+      });
+    });
+
+    expect(screen.queryByTestId('msg-local-nonce-1')).toBeNull();
+    expect(screen.getByLabelText('Message')).toHaveProperty('value', 'Another change');
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
   });
 
   it('restores attachment chips when a pending send disconnects', async () => {

@@ -1,7 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { AiDesignerGateway } from './ai-designer.gateway';
-import { AiDesignerBusyError } from '@postmill-ai/nestjs-libraries/ai-designer/conductor/failure-recovery';
+import {
+  AiDesignerBusyError,
+  AiDesignerValidationException,
+} from '@postmill-ai/nestjs-libraries/ai-designer/conductor/failure-recovery';
 
 // Unit-tests the gateway helpers plus the security-critical connect/authz/join paths.
 // Socket-specific methods are accessed via `(gateway as any)`.
@@ -980,7 +983,7 @@ describe('AiDesignerGateway handleMessage idempotency', () => {
     } as any;
     const conductor = {
       handleMessage: vi.fn().mockRejectedValue(
-        new BadRequestException('Attachment belongs to another workspace')
+        new AiDesignerValidationException('Attachment belongs to another workspace')
       ),
     } as any;
     const service = {
@@ -1006,6 +1009,33 @@ describe('AiDesignerGateway handleMessage idempotency', () => {
     expect(client.emit).toHaveBeenCalledWith('error', {
       code: 'invalid_payload',
       message: 'Attachment belongs to another workspace',
+      nonce: 'n1',
+    });
+  });
+
+  it('does not forward arbitrary BadRequestException messages', async () => {
+    const conductor = {
+      handleMessage: vi.fn().mockRejectedValue(
+        new BadRequestException('untrusted internal detail')
+      ),
+    } as any;
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({ id: 's1' }),
+      appendMessage: vi.fn(),
+    } as any;
+    const gw = makeGatewayWithMocks({ conductor, policy, service }) as any;
+    const client = fakeSocket({
+      userId: 'u1',
+      orgId: 'o1',
+      sessionId: 's1',
+      lastAuthzAt: Date.now(),
+    });
+
+    await gw.handleMessage(client, { nonce: 'n1', text: 'hello' });
+
+    expect(client.emit).toHaveBeenCalledWith('error', {
+      code: 'invalid_payload',
+      message: 'The request failed validation.',
       nonce: 'n1',
     });
   });
@@ -1089,6 +1119,7 @@ describe('AiDesignerGateway handleStart cleanup', () => {
       validateAttachmentConfig: vi.fn().mockResolvedValue({
         config: session.config,
         documentContexts: [],
+        documentContextFileIds: [],
       }),
       handleStart: vi.fn().mockRejectedValue(new Error('conductor boom')),
     } as any;
@@ -1164,6 +1195,7 @@ describe('AiDesignerGateway handleStart attachment validation', () => {
       validateAttachmentConfig: vi.fn().mockResolvedValue({
         config: session.config,
         documentContexts: [],
+        documentContextFileIds: [],
       }),
       handleStart: vi.fn().mockResolvedValue(undefined),
     } as any;
@@ -1210,7 +1242,7 @@ describe('AiDesignerGateway handleStart attachment validation', () => {
   it('rejects an invalid attachment before create, echo, join, or session deletion', async () => {
     const { gw, client, payload, service, idempotency, conductor } = makeStartFixture();
     conductor.validateAttachmentConfig.mockRejectedValue(
-      new BadRequestException('An attachment contains no readable text.')
+      new AiDesignerValidationException('An attachment contains no readable text.')
     );
 
     await gw.handleStart(client, payload);
@@ -1231,7 +1263,7 @@ describe('AiDesignerGateway handleStart attachment validation', () => {
   it('rejects cross-org start attachments with a nonce recovery error', async () => {
     const { gw, client, payload, service, idempotency, conductor } = makeStartFixture();
     conductor.validateAttachmentConfig.mockRejectedValue(
-      new BadRequestException('One or more attachments could not be found in this workspace.')
+      new AiDesignerValidationException('One or more attachments could not be found in this workspace.')
     );
 
     await gw.handleStart(client, payload);

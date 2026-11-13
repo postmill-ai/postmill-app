@@ -33,6 +33,7 @@ import {
 import { AiDesignerConductorService } from '@postmill-ai/nestjs-libraries/ai-designer/conductor/ai-designer-conductor.service';
 import {
   AiDesignerBusyError,
+  AiDesignerValidationException,
   aiDesignerFailureLog,
 } from '@postmill-ai/nestjs-libraries/ai-designer/conductor/failure-recovery';
 import { AiDesignerInputPolicyService } from '@postmill-ai/nestjs-libraries/ai-designer';
@@ -370,15 +371,12 @@ export class AiDesignerGateway
         mode: payload.mode,
         config: attachmentPreparation.config,
         brief:
-          prompt || attachmentPreparation.documentContexts.length
+          prompt || attachmentPreparation.documentContextFileIds.length
             ? {
                 intent: prompt ?? '',
-                ...(attachmentPreparation.documentContexts.length
-                  ? {
-                      documentContexts:
-                        attachmentPreparation.documentContexts,
-                    }
-                  : {}),
+                documentContexts: attachmentPreparation.documentContexts,
+                documentContextFileIds:
+                  attachmentPreparation.documentContextFileIds,
               }
             : undefined,
       });
@@ -1182,6 +1180,7 @@ export class AiDesignerGateway
       /* best-effort — the idempotency TTL is the backstop */
     }
     const invalidPayload = err instanceof BadRequestException;
+    const safeValidation = err instanceof AiDesignerValidationException;
     const busy = err instanceof AiDesignerBusyError;
     const code = invalidPayload
       ? 'invalid_payload'
@@ -1197,9 +1196,7 @@ export class AiDesignerGateway
     );
     this._emitError(client, code, {
       nonce,
-      ...(invalidPayload && typeof err.message === 'string'
-        ? { message: err.message }
-        : {}),
+      ...(safeValidation ? { message: err.message } : {}),
     });
   }
 

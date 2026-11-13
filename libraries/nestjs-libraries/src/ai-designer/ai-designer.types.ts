@@ -101,6 +101,8 @@ export interface DesignBrief {
   referenceCueFileIds?: string[];
   /** Bounded, untrusted document excerpts used as supporting brief context. */
   documentContexts?: { fileId: string; name: string; text: string }[];
+  /** Server-owned ids already processed into documentContexts, including truncated files. */
+  documentContextFileIds?: string[];
   /**
    * Server-owned: the first reference's measured spatial spec, cached next to
    * the cues (same file-id key). Fail-soft — absent when the measurement call

@@ -1,8 +1,16 @@
+import { BadRequestException } from '@nestjs/common';
 import { ProviderUpstreamError, redactError } from '@postmill-ai/provider-kernel';
 import {
   BudgetExceeded,
   GuardrailViolation,
 } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+
+export class AiDesignerValidationException extends BadRequestException {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AiDesignerValidationException';
+  }
+}
 
 export class AiDesignerBusyError extends Error {
   constructor() {

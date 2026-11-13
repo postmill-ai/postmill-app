@@ -38,8 +38,8 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('FileRepository — getFileById attachment resolution', () => {
-  it('scopes lookup to the organization and excludes soft-deleted files', async () => {
+describe('FileRepository — getFileById', () => {
+  it('scopes lookup to the organization without hiding trashed lifecycle rows', async () => {
     const { repo, model } = makeRepo();
     model.file.findUnique.mockResolvedValue(null);
 
@@ -49,7 +49,6 @@ describe('FileRepository — getFileById attachment resolution', () => {
       where: {
         id: 'file-from-org-2',
         organizationId: 'org-1',
-        deletedAt: null,
       },
       include: {
         folder: {

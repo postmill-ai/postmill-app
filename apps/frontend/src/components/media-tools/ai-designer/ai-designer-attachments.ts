@@ -22,6 +22,14 @@ export {
   MAX_AI_DESIGNER_ATTACHMENT_BYTES,
 } from '@postmill-ai/helpers/utils/ai-designer-attachments';
 
+export const aiDesignerStartSafetyTimeoutMs = (config: {
+  referenceFileIds?: string[];
+  attachmentFileIds?: string[];
+}): number =>
+  config.referenceFileIds?.length || config.attachmentFileIds?.length
+    ? 60_000
+    : 10_000;
+
 const DOCUMENT_EXTENSIONS = new Set(['pdf', 'txt', 'md', 'csv', 'tsv', 'json']);
 
 const extensionFor = (file: File): string =>

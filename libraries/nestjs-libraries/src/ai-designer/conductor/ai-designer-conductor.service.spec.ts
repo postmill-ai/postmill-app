@@ -5439,10 +5439,11 @@ describe('AiDesignerConductorService Brand Kit integration', () => {
       search: vi.fn().mockResolvedValue([{ sourceId: 'fact-1', text: 'A brand fact' }]),
     };
 
-    const contexts = await (conductor as any)._documentContextsFor(
+    const contexts = await (conductor as any)._planningDocumentContextsFor(
       ctx,
       { brandProfileId: 'brand-1' },
       'Create a launch announcement',
+      []
     );
 
     expect((conductor as any)._rag.search).toHaveBeenCalledWith({
@@ -5453,8 +5454,53 @@ describe('AiDesignerConductorService Brand Kit integration', () => {
     ]);
 
     (conductor as any)._rag.search.mockRejectedValue(new Error('RAG is not enabled'));
-    await expect((conductor as any)._documentContextsFor(ctx, { brandProfileId: 'brand-1' }))
-      .resolves.toEqual([]);
+    await expect((conductor as any)._planningDocumentContextsFor(
+      ctx,
+      { brandProfileId: 'brand-1' },
+      '',
+      []
+    )).resolves.toEqual([]);
+  });
+
+  it('adds Brand Knowledge to prompt planning without a document attachment', async () => {
+    const { conductor } = makeConductor({
+      brands: {
+        getBrand: vi.fn().mockResolvedValue({ id: 'brand-1', name: 'Postmill', enabled: true }),
+      },
+    });
+    (conductor as any)._rag = {
+      search: vi.fn().mockResolvedValue([{ sourceId: 'fact-1', text: 'A brand fact' }]),
+    };
+    (conductor as any)._dispatchAgent = vi.fn().mockResolvedValue({
+      content: JSON.stringify({ type: 'plans', plans: [] }),
+    });
+    (conductor as any)._emitPlan = vi.fn();
+
+    await (conductor as any)._runPromptMode(
+      SESSION_ID,
+      ctx,
+      { brandProfileId: 'brand-1', channels: ['ig-post'], variants: 1 },
+      'Create a launch announcement',
+      makeEmitter()
+    );
+
+    expect((conductor as any)._rag.search).toHaveBeenCalledWith({
+      organizationId: ORG_ID,
+      query: 'Create a launch announcement',
+      limit: 3,
+      brandProfileId: 'brand-1',
+    });
+    expect((conductor as any)._dispatchAgent).toHaveBeenCalledWith(
+      ctx,
+      'art-director',
+      expect.objectContaining({
+        brief: expect.objectContaining({
+          documentContexts: [
+            { fileId: 'brand-brand-1-knowledge-fact-1', name: 'Postmill Knowledge', text: 'A brand fact' },
+          ],
+        }),
+      })
+    );
   });
 
   it('preserves user attachments before filling the remaining context budget with Knowledge', async () => {
@@ -5470,9 +5516,12 @@ describe('AiDesignerConductorService Brand Kit integration', () => {
       search: vi.fn().mockResolvedValue([{ sourceId: 'fact-1', text: 'B'.repeat(2_000) }]),
     };
 
-    const contexts = await (conductor as any)._documentContextsFor(ctx, {
-      brandProfileId: 'brand-1', attachmentFileIds: ['doc-1'],
-    }, 'Launch brief');
+    const contexts = await (conductor as any)._planningDocumentContextsFor(
+      ctx,
+      { brandProfileId: 'brand-1', attachmentFileIds: ['doc-1'] },
+      'Launch brief',
+      [{ fileId: 'doc-1', name: 'brief.txt', text: 'A'.repeat(39_900) }]
+    );
 
     expect(contexts[0].fileId).toBe('doc-1');
     expect(contexts[0].text).toHaveLength(39_900);

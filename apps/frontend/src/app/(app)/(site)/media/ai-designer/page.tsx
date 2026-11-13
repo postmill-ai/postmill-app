@@ -13,6 +13,7 @@ import {
 import { AiDesignerStart } from '@postmill-ai/frontend/components/media-tools/ai-designer/ai-designer-start';
 import { useAiDesignerSession } from '@postmill-ai/frontend/components/media-tools/ai-designer/ai-designer.hooks';
 import { AiDesignerSessionsDrawer } from '@postmill-ai/frontend/components/media-tools/ai-designer/sessions-drawer';
+import { aiDesignerStartSafetyTimeoutMs } from '@postmill-ai/frontend/components/media-tools/ai-designer/ai-designer-attachments';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import {
   useAiDesignerSocket,
@@ -31,8 +32,6 @@ const AiDesignerChat = dynamic(
     ),
   { ssr: false }
 );
-
-const START_SAFETY_TIMEOUT_MS = 10_000;
 
 function AiDesignerPageInner() {
   const toaster = useToaster();
@@ -129,7 +128,7 @@ function AiDesignerPageInner() {
           'The AI Designer did not respond. Please try again.',
           'warning'
         );
-      }, START_SAFETY_TIMEOUT_MS);
+      }, aiDesignerStartSafetyTimeoutMs(payload.config));
     },
     [socket, toaster]
   );

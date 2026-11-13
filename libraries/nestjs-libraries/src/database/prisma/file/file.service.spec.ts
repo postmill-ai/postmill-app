@@ -69,6 +69,44 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+describe('FileService — trashed file lifecycle', () => {
+  it('restores a trashed file through the real repository lookup', async () => {
+    const { fileRepo, model } = makeRepo();
+    model.file.findUnique.mockResolvedValue({
+      id: 'file-1',
+      deletedAt: new Date('2026-01-01'),
+    });
+    model.file.update.mockResolvedValue({ id: 'file-1', deletedAt: null });
+    const service = makeService(fileRepo);
+
+    await expect(service.restore('file-1', 'org-1')).resolves.toEqual({
+      id: 'file-1',
+      deletedAt: null,
+    });
+    expect(model.file.update).toHaveBeenCalledWith({
+      where: { id: 'file-1', organizationId: 'org-1' },
+      data: { deletedAt: null },
+    });
+  });
+
+  it('permanently deletes a trashed file through the real repository lookup', async () => {
+    const { fileRepo, model } = makeRepo();
+    model.file.findUnique.mockResolvedValue({
+      id: 'file-1',
+      folderId: null,
+      path: '/uploads/org/file-1.png',
+      deletedAt: new Date('2026-01-01'),
+    });
+    model.file.delete.mockResolvedValue({ id: 'file-1' });
+    const service = makeService(fileRepo);
+
+    await expect(service.deleteFile('org-1', 'file-1')).resolves.toEqual({ id: 'file-1' });
+    expect(model.file.delete).toHaveBeenCalledWith({
+      where: { id: 'file-1', organizationId: 'org-1' },
+    });
+  });
+});
+
 describe('FileService — rendered video posters', () => {
   it('preserves the generated poster in metadata and saves the effective thumbnail', async () => {
     const { fileRepo, model } = makeRepo();
