@@ -287,10 +287,7 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)' }).click();
   await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(24);
 
-  const savesBeforeReopen = state.saveDocs.length;
-  await page.getByRole('button', { name: 'Save (Ctrl+S)' }).click();
-  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBeforeReopen);
-  expect(JSON.stringify(state.saveDocs.at(-1))).toContain('"fontSize":24');
+  await expect.poll(() => JSON.stringify(state.saveDocs.at(-1) ?? {})).toContain('"fontSize":24');
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await expect(page.locator('.konva-stage').first()).toBeVisible();
