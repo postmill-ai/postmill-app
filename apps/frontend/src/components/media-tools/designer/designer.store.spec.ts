@@ -2421,3 +2421,29 @@ describe('output freeze and carousel workflows', () => {
     expect(store.getState().doc.outputs[0].frozen).toBeUndefined();
   });
 });
+
+
+describe('frozen output read-only clipboard actions', () => {
+  it('copies clips and keyframes while still rejecting paste mutations', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'clip', startMs: 0, endMs: 1000,
+      keyframes: [{ tMs: 0, props: { x: 25 } }],
+    } as never);
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'clip' });
+    store.getState().setOutputFrozen(0, true);
+    const before = store.getState().doc;
+
+    store.getState().copySelectedClips();
+    store.getState().copyClipKeyframes(0, trackId, 'clip');
+    expect(store.getState().clipClipboard).toHaveLength(1);
+    expect(store.getState().clipClipboard[0].clip.id).toBe('clip');
+    expect(store.getState().keyframeClipboard).toHaveLength(1);
+
+    store.getState().pasteClips(2000);
+    store.getState().pasteClipKeyframes();
+    expect(store.getState().doc).toBe(before);
+  });
+});

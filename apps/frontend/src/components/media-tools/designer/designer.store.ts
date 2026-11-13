@@ -506,16 +506,22 @@ export const createDesignerStore = (
 ) =>
   create<DesignerStore>((set, get) => {
     const rawSet = set;
-    set = ((partial: any, replace?: boolean) => {
-      rawSet((state) => {
+    const setWithFreezeGuard: typeof set = (partial, replace) => {
+      const updater = (state: DesignerStore) => {
         const update = typeof partial === 'function' ? partial(state) : partial;
         const nextDoc = update && typeof update === 'object'
           ? (update as Partial<DesignerStore>).doc
           : undefined;
         if (nextDoc && hasFrozenOutputMutation(state.doc, nextDoc)) return {};
         return update;
-      }, replace);
-    }) as typeof set;
+      };
+      if (replace === true) {
+        rawSet(updater as (state: DesignerStore) => DesignerStore, true);
+      } else {
+        rawSet(updater, false);
+      }
+    };
+    set = setWithFreezeGuard;
 
     const initialDoc = createEmptyDoc(width, height, attribution);
     const active = () => get().doc.outputs[get().currentOutput] as DesignerOutput | VideoOutput;
@@ -1892,13 +1898,8 @@ export const createDesignerStore = (
         // Buffers from the previously open design would otherwise live (and
         // paint over matching ids) for the tab's lifetime.
         disposeAllBuffers();
-<<<<<<< HEAD
-        set({
-          doc: migrated, designId: id, designSession: get().designSession + 1, designName: name,
-=======
         rawSet({
-          doc: migrated, designId: id, designName: name,
->>>>>>> 6d4b0658 (feat: add designer format workflows)
+          doc: migrated, designId: id, designSession: get().designSession + 1, designName: name,
           templateId, designTemplateId: templateId,
           selectedIds: [], currentOutput: 0, currentPage: 0,
           // The zoom and viewport belonged to whatever was open before. Reset
@@ -2626,7 +2627,7 @@ export const createDesignerStore = (
       copySelectedClips: () => {
         const { doc, currentOutput, selectedClips, selectedClip } = get();
         const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
+        if (!vo || doc.mode !== 'video') return;
         const refs = selectedClips.length
           ? selectedClips
           : selectedClip && selectedClip.outputIndex === currentOutput
@@ -2711,7 +2712,7 @@ export const createDesignerStore = (
       copyClipKeyframes: (outputIndex, trackId, clipId) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo)) return;
+        if (!vo || doc.mode !== 'video') return;
         const clip = vo.tracks
           .find((t) => t.id === trackId)
           ?.clips.find((c) => c.id === clipId);

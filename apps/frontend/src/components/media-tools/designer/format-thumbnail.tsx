@@ -14,7 +14,50 @@ import type {
 import { renderOutputThumbnail } from './output-thumbnail';
 import { DesignPreviewImage } from './panels/design-preview-image';
 
-const thumbnailCache = new Map<string, string>();
+interface ThumbnailCacheEntry {
+  output: DesignerOutput | VideoOutput;
+  pageNumber: number;
+  symbols?: SymbolDefinition[];
+  maxDim: number;
+  dataUrl: string;
+}
+
+const thumbnailCache: ThumbnailCacheEntry[] = [];
+const matchesCacheEntry = (
+  entry: ThumbnailCacheEntry,
+  output: DesignerOutput | VideoOutput,
+  symbols: SymbolDefinition[] | undefined,
+  pageNumber: number,
+  maxDim: number
+) =>
+  entry.output === output &&
+  entry.symbols === symbols &&
+  entry.pageNumber === pageNumber &&
+  entry.maxDim === maxDim;
+
+const readThumbnailCache = (
+  output: DesignerOutput | VideoOutput,
+  symbols: SymbolDefinition[] | undefined,
+  pageNumber: number,
+  maxDim: number
+) => {
+  const index = thumbnailCache.findIndex((entry) =>
+    matchesCacheEntry(entry, output, symbols, pageNumber, maxDim)
+  );
+  if (index < 0) return undefined;
+  const [entry] = thumbnailCache.splice(index, 1);
+  thumbnailCache.push(entry);
+  return entry.dataUrl;
+};
+
+const writeThumbnailCache = (entry: ThumbnailCacheEntry) => {
+  const index = thumbnailCache.findIndex((candidate) =>
+    matchesCacheEntry(candidate, entry.output, entry.symbols, entry.pageNumber, entry.maxDim)
+  );
+  if (index >= 0) thumbnailCache.splice(index, 1);
+  thumbnailCache.push(entry);
+  if (thumbnailCache.length > 100) thumbnailCache.shift();
+};
 
 export const FormatThumbnail = React.memo(function FormatThumbnail({
   output,
@@ -45,10 +88,7 @@ export const FormatThumbnail = React.memo(function FormatThumbnail({
           },
     [output, pageNumber]
   );
-  const cacheKey = useMemo(
-    () => JSON.stringify({ view, symbols, maxDim }),
-    [view, symbols, maxDim]
-  );
+  const cacheHit = readThumbnailCache(output, symbols, pageNumber, maxDim);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -67,18 +107,13 @@ export const FormatThumbnail = React.memo(function FormatThumbnail({
   }, []);
 
   useEffect(() => {
-    if (!nearViewport) return;
-    if (thumbnailCache.has(cacheKey)) return;
+    if (!nearViewport || cacheHit) return;
     const seq = ++renderSeq.current;
     const timer = window.setTimeout(() => {
       void renderOutputThumbnail(view, symbols, maxDim)
         .then((dataUrl) => {
           if (!dataUrl || renderSeq.current !== seq) return;
-          if (thumbnailCache.size >= 100) {
-            const oldest = thumbnailCache.keys().next().value;
-            if (oldest) thumbnailCache.delete(oldest);
-          }
-          thumbnailCache.set(cacheKey, dataUrl);
+          writeThumbnailCache({ output, symbols, pageNumber, maxDim, dataUrl });
           setThumbnail(dataUrl);
         })
         .catch(() => undefined);
@@ -87,7 +122,7 @@ export const FormatThumbnail = React.memo(function FormatThumbnail({
       window.clearTimeout(timer);
       renderSeq.current += 1;
     };
-  }, [cacheKey, maxDim, nearViewport, symbols, view]);
+  }, [cacheHit, maxDim, nearViewport, output, pageNumber, symbols, view]);
 
   return (
     <span
@@ -97,7 +132,7 @@ export const FormatThumbnail = React.memo(function FormatThumbnail({
       aria-hidden="true"
     >
       <DesignPreviewImage
-        src={thumbnailCache.get(cacheKey) ?? thumbnail}
+        src={cacheHit ?? thumbnail}
         alt=""
         className="h-full w-full object-cover"
         fallback={<span className="block h-full w-full bg-studioBorder/20" />}

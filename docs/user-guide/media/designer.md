@@ -32,8 +32,9 @@ saved.
   Zones**, and custom dimensions remain available.
 - **Freeze a format** — select the snowflake on an output tab to prevent canvas, Inspector, page,
   timeline, resize, and incoming linked edits to that output. Other formats remain editable. You can
-  still switch to a frozen output and export it. Select the snowflake again to unfreeze; this is
-  separate from locking an individual layer or timeline track.
+  still switch to a frozen output, export it, and copy clips or keyframes for use elsewhere; pasting
+  into the frozen output remains blocked. Select the snowflake again to unfreeze; this is separate
+  from locking an individual layer or timeline track.
 - **Pathfinder** — select two or more unlocked shapes, paths, or icons to Unite, Minus Front,
   Intersect, Exclude, Divide, or Outline them in selection order. The whole operation is one undo
   step. Disjoint regions are preserved as separate paths, and a region enclosed by another (a hole,

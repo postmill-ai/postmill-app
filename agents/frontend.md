@@ -274,12 +274,15 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   toggles `editFormatOnly`; it never rewrites existing element/clip links. Presets include grouped
   1080×1350 Instagram/Facebook/LinkedIn/Threads portraits and Facebook/LinkedIn squares with safe
   zones. `FormatThumbnail` lazily renders near-visible output/page previews through the bounded
-  `output-thumbnail` stage and the existing video-poster projection, memoizes content keys, and
-  debounces edits; never allocate full-resolution offscreen stages or capture on every drag frame.
+  `output-thumbnail` stage and the existing video-poster projection, using a 100-entry LRU keyed by
+  output/page/symbols object identity and size. It debounces edits without stringifying output or
+  symbol content during render; never allocate full-resolution offscreen stages, serialize documents
+  per drag frame, or capture on every drag frame.
 - **Output freeze is distinct from layer/track lock.** Optional-additive `output.frozen` is valid on
   v13 without a version bump (and remains additive when a later version lands). Snowflakes switch
-  the flag through `setOutputFrozen` (store and headless op); switching output and exporting remain
-  available. `output-freeze.ts` is the shared mutation guard used by the Zustand write boundary and
+  the flag through `setOutputFrozen` (store and headless op); switching output, exporting, and
+  read-only clip/keyframe clipboard copies remain available. `output-freeze.ts` is the shared
+  mutation guard used by the Zustand write boundary and
   `DesignerDocService.applyOps`: canvas/Inspector/page/timeline/resize/remove/`setDoc` changes to a
   frozen output are rejected until unfreeze, while linked propagation skips frozen targets. Headless
   rejection uses `DESIGNER_OP_OUTPUT_FROZEN`. Save adoption and explicit load/reset bypass only the

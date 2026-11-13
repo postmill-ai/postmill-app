@@ -57,3 +57,55 @@ describe('FormatThumbnail scheduling', () => {
     expect(renderThumbnail.mock.calls[0][2]).toBe(72);
   });
 });
+
+
+describe('FormatThumbnail identity cache', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    renderThumbnail.mockClear();
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(private callback: (entries: { isIntersecting: boolean }[]) => void) {}
+      observe() {
+        this.callback([{ isIntersecting: true }]);
+      }
+      disconnect() {}
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('reuses matching object references, invalidates new symbols, and never stringifies output content', async () => {
+    const stringify = vi.spyOn(JSON, 'stringify');
+    const stableOutput = output('stable');
+    const stableSymbols: never[] = [];
+    const first = render(
+      <FormatThumbnail output={stableOutput} symbols={stableSymbols} maxDim={72} />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(180);
+    });
+    expect(renderThumbnail).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    const second = render(
+      <FormatThumbnail output={stableOutput} symbols={stableSymbols} maxDim={72} />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(180);
+    });
+    expect(renderThumbnail).toHaveBeenCalledTimes(1);
+
+    second.rerender(
+      <FormatThumbnail output={stableOutput} symbols={[]} maxDim={72} />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(180);
+    });
+    expect(renderThumbnail).toHaveBeenCalledTimes(2);
+    expect(stringify).not.toHaveBeenCalled();
+    stringify.mockRestore();
+  });
+});
