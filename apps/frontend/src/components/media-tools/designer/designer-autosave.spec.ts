@@ -132,7 +132,7 @@ describe('createDesignAutosave', () => {
     expect(uploadPreview).not.toHaveBeenCalled();
   });
 
-  it('persists a rename through the autosave PUT (name read at send time)', async () => {
+  it('persists a rename through the autosave PUT', async () => {
     const store = createDesignerStore(1080, 1080);
     const fetchMock = vi.fn((url: string) => {
       if (url === '/media/designs') return Promise.resolve(okJson({ id: 'design-1' }));
@@ -225,6 +225,7 @@ describe('createDesignAutosave', () => {
     // Let the create reach the POST (the preview await is a microtask) so the
     // deferred resolver is captured before we settle it.
     await flush();
+    expect(store.getState().isSaving).toBe(true);
 
     resolvePost(okJson({ id: 'design-9' }));
     await expect(manualSave).resolves.toBe('design-9');
@@ -233,6 +234,7 @@ describe('createDesignAutosave', () => {
     expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(1);
     expect(store.getState().designId).toBe('design-9');
     expect(autosave.createInFlight()).toBeNull();
+    expect(store.getState().isSaving).toBe(false);
   });
 
   it('does not create for a pristine blank doc', async () => {
@@ -632,6 +634,73 @@ describe('createDesignAutosave retry bound', () => {
     expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(1);
   });
 
+  it('manual Save bypasses retry pause and reports a real persisted write', async () => {
+    vi.useFakeTimers();
+    const store = dirtyStore();
+    let down = true;
+    const fetchMock = vi.fn(() =>
+      down ? Promise.reject(new Error('backend down')) : Promise.resolve(okJson({}))
+    );
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({ previewFileId: 'file-1' } as PreviewUpload),
+    });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(store.getState().saveRetryPaused).toBe(true);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(5);
+
+    down = false;
+    await expect(autosave.saveNow(store.getState().doc)).resolves.toBe('persisted');
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(6);
+    expect(store.getState().saveRetryPaused).toBe(false);
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('reports failed and superseded manual writes instead of treating them as saved', async () => {
+    const store = dirtyStore();
+    const fetchMock = vi.fn().mockRejectedValue(new Error('backend down'));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    await expect(autosave.saveNow(store.getState().doc)).resolves.toBe('failed');
+    expect(store.getState().isDirty).toBe(true);
+
+    const staleDoc = store.getState().doc;
+    addText(store, 'Newer edit');
+    await expect(autosave.saveNow(staleDoc)).resolves.toBe('skipped');
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(1);
+    expect(store.getState().isDirty).toBe(true);
+  });
+
+  it('reports a manual write superseded while its request is in flight as skipped', async () => {
+    const store = dirtyStore();
+    let resolvePut!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
+      resolvePut = resolve;
+    }));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    const manual = autosave.saveNow(store.getState().doc);
+    await flush();
+    addText(store, 'Edit while manual Save is in flight');
+    const latestDoc = store.getState().doc;
+    resolvePut(okJson({}));
+
+    await expect(manual).resolves.toBe('skipped');
+    expect(store.getState().doc).toBe(latestDoc);
+    expect(store.getState().isDirty).toBe(true);
+  });
+
   it('adopts materialized assets from the save response without adding history', async () => {
     const store = createDesignerStore();
     store.getState().setDesignId('design-inline');
@@ -819,6 +888,123 @@ describe('createDesignAutosave scheduling', () => {
     await flush();
     expect(store.getState().doc).toBe(latestDoc);
     expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('does not let one stalled design write block another design or its queued save', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-a');
+    store.getState().setDesignName('Design A');
+    const pending: { url: string; resolve: (response: Response) => void }[] = [];
+    const fetchMock = vi.fn((url: string) => new Promise<Response>((resolve) => {
+      pending.push({ url, resolve });
+    }));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    addText(store, 'A first');
+    autosave.save(store.getState().doc);
+    await flush();
+    addText(store, 'A second');
+    const secondA = store.getState().doc;
+    autosave.save(secondA);
+    await flush();
+    expect(pending.map((request) => request.url)).toEqual(['/media/designs/design-a']);
+
+    const other = createDesignerStore();
+    store.getState().loadDesign(other.getState().doc, 'design-b', 'Design B');
+    addText(store, 'B edit');
+    autosave.save(store.getState().doc);
+    await flush();
+    expect(pending.map((request) => request.url)).toEqual([
+      '/media/designs/design-a',
+      '/media/designs/design-b',
+    ]);
+
+    pending[0].resolve(okJson({}));
+    await flush();
+    expect(pending.map((request) => request.url)).toHaveLength(3);
+    const secondPut = fetchMock.mock.calls[2];
+    expect(JSON.parse((secondPut[1] as RequestInit).body as string)).toMatchObject({
+      name: 'Design A',
+      doc: JSON.parse(JSON.stringify(secondA)),
+    });
+    pending[1].resolve(okJson({}));
+    pending[2].resolve(okJson({}));
+    await flush();
+  });
+
+  it('manual Save proceeds while an older same-design write is unsettled', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-stalled');
+    const resolvers: Array<(response: Response) => void> = [];
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => resolvers.push(resolve)));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    addText(store, 'First');
+    autosave.save(store.getState().doc);
+    await flush();
+    addText(store, 'Manual latest');
+    const latestDoc = store.getState().doc;
+    const manual = autosave.saveNow(latestDoc);
+    await flush();
+
+    const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-stalled');
+    expect(puts).toHaveLength(2);
+    expect(JSON.parse((puts[1][1] as RequestInit).body as string).doc).toEqual(latestDoc);
+    resolvers[1](okJson({}));
+    await expect(manual).resolves.toBe('persisted');
+    expect(store.getState().isDirty).toBe(false);
+    resolvers[0](okJson({}));
+    await flush();
+    const repairedPuts = callsTo(fetchMock, 'PUT', '/media/designs/design-stalled');
+    expect(repairedPuts).toHaveLength(3);
+    expect(JSON.parse((repairedPuts[2][1] as RequestInit).body as string).doc).toEqual(latestDoc);
+    resolvers[2](okJson({}));
+    await flush();
+    expect(store.getState().doc).toBe(latestDoc);
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('captures the original design and document for an idle preview', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-original');
+    store.getState().setDesignName('Original name');
+    addText(store, 'Original doc');
+    const originalDoc = store.getState().doc;
+    let idle: (() => void) | null = null;
+    vi.stubGlobal('requestIdleCallback', vi.fn((work: () => void) => {
+      idle = work;
+      return 19;
+    }));
+    vi.stubGlobal('cancelIdleCallback', vi.fn());
+    const uploadPreview = vi.fn().mockResolvedValue({ previewFileId: 'original-preview' });
+    const fetchMock = vi.fn(() => Promise.resolve(okJson({})));
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
+
+    autosave.save(originalDoc);
+    await Promise.resolve();
+    await Promise.resolve();
+    const other = createDesignerStore();
+    store.getState().loadDesign(other.getState().doc, 'design-other', 'Other design');
+    idle!();
+    await flush();
+
+    expect(uploadPreview).toHaveBeenCalledWith(originalDoc);
+    const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-original');
+    expect(puts).toHaveLength(1);
+    expect(JSON.parse((puts[0][1] as RequestInit).body as string)).toMatchObject({
+      name: 'Original name',
+      doc: JSON.parse(JSON.stringify(originalDoc)),
+      previewFileId: 'original-preview',
+    });
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-other')).toHaveLength(0);
   });
 
   it('trashes a stale preview upload and omits it from the older PUT', async () => {

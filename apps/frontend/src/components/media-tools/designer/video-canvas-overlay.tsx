@@ -699,6 +699,29 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   };
 
   const gestureCommitPending = useRef(false);
+  const gestureClipRef = useRef<string | null>(null);
+  const endClipGesture = useCallback(() => {
+    if (!gestureClipRef.current) return;
+    gestureClipRef.current = null;
+    store.getState().endGesture();
+  }, [store]);
+  const beginClipGesture = (clipId: string) => {
+    if (!gestureClipRef.current) gestureClipRef.current = clipId;
+    store.getState().beginGesture();
+  };
+  useEffect(() => {
+    const activeId = gestureClipRef.current;
+    if (activeId && !clipsAtPlayhead.some(({ clip }) => clip.id === activeId)) {
+      endClipGesture();
+    }
+  }, [clipsAtPlayhead, endClipGesture]);
+  useEffect(() => () => {
+    if (gestureClipRef.current) {
+      gestureClipRef.current = null;
+      store.getState().endGesture();
+    }
+  }, [store]);
+
   const commitGesture = async (target: Konva.Node) => {
     // Konva broadcasts transformend/dragend for every attached node. Commit the
     // gesture once; a second event would restore the stale pre-gesture sizes.
@@ -707,7 +730,9 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     requestAnimationFrame(() => {
       gestureCommitPending.current = false;
     });
+    const clipId = target.id();
     return runGestureCommit(store, async () => {
+      if (gestureClipRef.current !== clipId) return;
       const transformer = target.getLayer()?.findOne('Transformer') as
         | Konva.Transformer
         | undefined;
@@ -787,7 +812,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
       }
 
       const latest = store.getState();
-      const stale = latest.history !== history || remapped.some(({ trackId, clipId }) => {
+      const stale = gestureClipRef.current !== clipId || latest.history !== history || remapped.some(({ trackId, clipId }) => {
         const current = (latest.doc.outputs[currentOutput] as VideoOutput).tracks
           .find((track) => track.id === trackId)?.clips.find((clip) => clip.id === clipId);
         return !current?.maskSrc;
@@ -805,6 +830,8 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
         });
       });
       store.getState().pushHistory('Edit clip geometry');
+    }).finally(() => {
+      if (gestureClipRef.current === clipId) gestureClipRef.current = null;
     });
   };
 
@@ -828,7 +855,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           onTap: (e: Konva.KonvaEventObject<TouchEvent>) => selectClip(trackId, clip.id, e),
           onDragStart: () => {
             selectClip(trackId, clip.id, undefined, true);
-            store.getState().beginGesture();
+            beginClipGesture(clip.id);
           },
           onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => {
             e.evt.preventDefault();
@@ -836,7 +863,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
             onClipContextMenu?.(clip.id, e.evt.clientX, e.evt.clientY);
           },
           onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => commitGesture(e.target),
-          onTransformStart: () => store.getState().beginGesture(),
+          onTransformStart: () => beginClipGesture(clip.id),
           onTransformEnd: (e: Konva.KonvaEventObject<Event>) => commitGesture(e.target),
           // Text and caption clips both open the inline text editor on
           // double-click; a caption commit re-derives clip.words (canvas.tsx).

@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as Y from 'yjs';
+import {
+  pageChildren,
+  withPageChildren,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import type {
+  createDesignerStore,
   DesignerAttribution,
   DesignerDoc,
+  DesignerElement,
   VideoClip,
   VideoOutput,
   VideoTrack,
@@ -50,6 +56,76 @@ export function deepClone<T>(obj: T): T {
 export function deepEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
+
+const GESTURE_GEOMETRY_KEYS = ['x', 'y', 'width', 'height', 'rotation', 'fontSize'] as const;
+
+const preserveGestureGeometry = <T extends DesignerElement | VideoClip>(local: T, remote: T): T => {
+  const next = { ...remote } as any;
+  for (const key of GESTURE_GEOMETRY_KEYS) {
+    if (local[key] !== undefined || remote[key] !== undefined) next[key] = local[key];
+  }
+  if ('keyframes' in local || 'keyframes' in remote) next.keyframes = local.keyframes;
+  return next as T;
+};
+
+export const mergeRemoteDocForGesture = (
+  localDoc: DesignerDoc,
+  remoteDoc: DesignerDoc,
+  selection: {
+    currentOutput: number;
+    currentPage: number;
+    selectedIds: string[];
+    selectedClips: { trackId: string; clipId: string }[];
+  }
+): DesignerDoc => {
+  if (localDoc.mode !== remoteDoc.mode) return remoteDoc;
+  const localOutput = localDoc.outputs[selection.currentOutput];
+  if (!localOutput) return remoteDoc;
+  let changed = false;
+  const outputs = remoteDoc.outputs.map((output, index) => {
+    if (index !== selection.currentOutput) return output;
+    if (localDoc.mode === 'image' && 'children' in localOutput && 'children' in output) {
+      const localChildren = pageChildren(localOutput, selection.currentPage);
+      const selected = new Set(selection.selectedIds);
+      const children = pageChildren(output, selection.currentPage).map((remoteElement) => {
+        if (!selected.has(remoteElement.id)) return remoteElement;
+        const localElement = localChildren.find((element) => element.id === remoteElement.id);
+        if (!localElement) return remoteElement;
+        changed = true;
+        return preserveGestureGeometry(localElement, remoteElement);
+      });
+      return changed ? withPageChildren(output, selection.currentPage, children) : output;
+    }
+    if (localDoc.mode === 'video' && 'tracks' in localOutput && 'tracks' in output) {
+      const selected = new Set(
+        selection.selectedClips.map((ref) => `${ref.trackId}:${ref.clipId}`)
+      );
+      const tracks = output.tracks.map((remoteTrack) => {
+        const localTrack = localOutput.tracks.find((track) => track.id === remoteTrack.id);
+        const clips = remoteTrack.clips.map((remoteClip) => {
+          if (!selected.has(`${remoteTrack.id}:${remoteClip.id}`)) return remoteClip;
+          const localClip = localTrack?.clips.find((clip) => clip.id === remoteClip.id);
+          if (!localClip) return remoteClip;
+          changed = true;
+          return preserveGestureGeometry(localClip, remoteClip);
+        });
+        return { ...remoteTrack, clips };
+      });
+      return { ...output, tracks };
+    }
+    return output;
+  });
+  return changed ? { ...remoteDoc, outputs } : remoteDoc;
+};
+
+type DesignerStoreApi = ReturnType<typeof createDesignerStore>;
+
+export const applyRemoteDoc = (store: DesignerStoreApi, remoteDoc: DesignerDoc) => {
+  const state = store.getState();
+  state.setDoc(state.gestureDepth > 0
+    ? mergeRemoteDocForGesture(state.doc, remoteDoc, state)
+    : remoteDoc);
+};
 
 function setIfChanged(m: Y.Map<any>, key: string, value: any) {
   if (m.get(key) !== value) {

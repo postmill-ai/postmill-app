@@ -127,6 +127,12 @@ const GUIDE_DELETE_SLACK = 24;
 /** Upper bound on grid lines per axis, so a tiny grid can't stall the stage. */
 const MAX_GRID_LINES = 200;
 
+type SnapFeedback = {
+  guides: { points: number[] }[];
+  spacingGuide: (SpacingGuide & { cross: number }) | null;
+  hud: { x: number; y: number; text: string } | null;
+};
+
 export const DesignerCanvas: FC<CanvasProps> = ({
   store,
   showSafeZones,
@@ -211,6 +217,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [uploadingFile, setUploadingFile] = useState(false);
   const rafIdRef = useRef<number | null>(null);
+  const snapFeedbackRef = useRef<SnapFeedback | null>(null);
   const transformOriginalsRef = useRef(new Map<string, DesignerElement>());
   const pinchRef = useRef<{
     startDistance: number;
@@ -1098,9 +1105,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
   // Snapping during drag: align edges/centers to other elements + output guides (B3).
   const computeSnap = useCallback(
-    (node: Konva.Node) => {
-      if (!output || isVideo) return;
-      if (!snapEnabled) { setGuides([]); setSpacingGuide(null); return; }
+    (node: Konva.Node): SnapFeedback | null => {
+      if (!output || isVideo) return null;
+      if (!snapEnabled) return { guides: [], spacingGuide: null, hud: null };
       const children = (pageOutput as DesignerOutput | undefined)?.children || [];
       const others = children.filter(
         (el) => !selectedIds.includes(el.id) && el.id !== node.id() && !el.hidden
@@ -1160,8 +1167,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         others.map((el) => ({ id: el.id, x: el.x, y: el.y, width: el.width, height: el.height })),
         EQUAL_SPACING_DOCUMENT_PX
       );
-      setSpacingGuide(
-        spacing
+      return {
+        guides: lines,
+        spacingGuide: spacing
           ? {
               ...spacing,
               // The badge sits on the axis the gap runs along, centred in it.
@@ -1169,11 +1177,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
                 ? placed.y + placed.height / 2
                 : placed.x + placed.width / 2,
             }
-          : null
-      );
-
-      setGuides(lines);
-      setHud({ x: node.x(), y: node.y() - 22, text: `${Math.round(node.x())}, ${Math.round(node.y())}` });
+          : null,
+        hud: { x: node.x(), y: node.y() - 22, text: `${Math.round(node.x())}, ${Math.round(node.y())}` },
+      };
     },
     [output, pageOutput, selectedIds, snapEnabled, isVideo, docGuides, snapToGrid, gridSize, zoom]
   );
@@ -1199,9 +1205,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     (e: Konva.KonvaEventObject<DragEvent>) => {
       if (isVideo) return;
       if (e.target === e.target.getStage()) return;
+      snapFeedbackRef.current = computeSnap(e.target);
       if (rafIdRef.current) return;
       rafIdRef.current = requestAnimationFrame(() => {
-        computeSnap(e.target);
+        const feedback = snapFeedbackRef.current;
+        if (feedback) {
+          setGuides(feedback.guides);
+          setSpacingGuide(feedback.spacingGuide);
+          setHud(feedback.hud);
+        }
         const trNodes = transformerRef.current?.nodes() || [];
         const nodes = trNodes.length > 1 ? trNodes : [e.target];
         const patches = nodes.flatMap((node) => {
@@ -1222,6 +1234,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         setGuides([]);
         setSpacingGuide(null);
         setHud(null);
+        snapFeedbackRef.current = null;
         if (rafIdRef.current) {
           cancelAnimationFrame(rafIdRef.current);
           rafIdRef.current = null;
@@ -2445,7 +2458,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               anchorCornerRadius={coarsePointer ? 8 : 5}
               rotateAnchorOffset={coarsePointer ? 40 : 24}
               onTransformStart={() => {
-                if (!isVideo) noteGestureStart();
+                if (isVideo) return;
+                noteGestureStart();
                 store.getState().beginGesture();
               }}
               onTransform={handleTransform}

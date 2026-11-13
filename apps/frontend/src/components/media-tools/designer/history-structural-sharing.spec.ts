@@ -107,10 +107,11 @@ describe('structurally shared history', () => {
     expect(store.getState().isDirty).toBe(true);
   });
 
-  it('replaces the current history snapshot when persisted assets are adopted', () => {
+  it('replaces the current history snapshot without changing history identity', () => {
     const store = createDesignerStore();
     store.getState().addElement(rect('shape-1'));
     const sentDoc = store.getState().doc;
+    const history = store.getState().history;
     const persistedDoc = {
       ...sentDoc,
       outputs: sentDoc.outputs.map((output, index) =>
@@ -121,6 +122,7 @@ describe('structurally shared history', () => {
     expect(store.getState().adoptPersistedDoc(sentDoc, persistedDoc)).toBe(true);
     store.getState().markSaved();
     const adopted = store.getState().doc;
+    expect(store.getState().history).toBe(history);
     expect(store.getState().history[store.getState().historyIndex]).toBe(adopted);
 
     store.getState().updateElement('shape-1', { x: 100 });
@@ -128,6 +130,37 @@ describe('structurally shared history', () => {
     store.getState().undo();
     expect(store.getState().doc).toBe(adopted);
     expect(store.getState().doc.outputs[0].name).toBe('Materialized');
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('preserves the pre-edit snapshot when adoption lands during a silent edit', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(rect('shape-1'));
+    const beforeEdit = store.getState().doc;
+    const history = store.getState().history;
+    store.getState().updateElementsSilent(['shape-1'], { x: 40 });
+    const sentDoc = store.getState().doc;
+    const persistedDoc = {
+      ...sentDoc,
+      outputs: sentDoc.outputs.map((output, index) =>
+        index === 0 ? { ...output, name: 'Materialized during edit' } : output
+      ),
+    } as DesignerDoc;
+
+    expect(store.getState().adoptPersistedDoc(sentDoc, persistedDoc)).toBe(true);
+    expect(store.getState().history).toBe(history);
+    expect(store.getState().history[store.getState().historyIndex]).toBe(beforeEdit);
+    store.getState().markSaved();
+    expect(store.getState().savedHistoryIndex).toBe(-1);
+    store.getState().pushHistory('Finish silent edit');
+    expect(store.getState().savedHistoryIndex).toBe(store.getState().historyIndex);
+    store.getState().undo();
+
+    expect(store.getState().doc).toBe(beforeEdit);
+    expect(store.getState().doc.outputs[0].children[0].x).toBe(10);
+    expect(store.getState().doc.outputs[0].name).not.toBe('Materialized during edit');
+    expect(store.getState().isDirty).toBe(true);
+    store.getState().redo();
     expect(store.getState().isDirty).toBe(false);
   });
 

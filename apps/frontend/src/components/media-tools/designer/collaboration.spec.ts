@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as Y from 'yjs';
-import type { DesignerDoc, VideoOutput } from './designer.store';
+import { createDesignerStore, type DesignerDoc, type VideoOutput } from './designer.store';
 import {
+  applyRemoteDoc,
+  deepClone,
   deepEqual,
   rebuildDocFromY,
   syncVideoDocToY,
@@ -167,6 +169,68 @@ describe('collaboration Yjs contract', () => {
     const clip = (rebuilt!.outputs[0] as VideoOutput).tracks[0].clips[0];
     expect(clip.keyframes).toHaveLength(2);
     expect(clip.keyframes?.[1].props).toEqual({ x: 100, opacity: 0.5 });
+  });
+
+  it('preserves active static geometry while reconciling a remote document on release', () => {
+    const store = createDesignerStore();
+    const shape = (id: string, x: number) => ({
+      id,
+      type: 'shape' as const,
+      shape: 'rect' as const,
+      x,
+      y: 20,
+      width: 100,
+      height: 80,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+    });
+    store.getState().addElement(shape('moving', 10));
+    store.getState().addElement(shape('remote-edit', 300));
+    const before = store.getState().doc;
+    store.getState().setSelectedIds(['moving']);
+    store.getState().beginGesture();
+    store.getState().updateElementsEphemeral([{ id: 'moving', updates: { x: 65 } }]);
+    const remote = deepClone(before);
+    remote.outputs[0].children[1].x = 350;
+    remote.outputs[0].name = 'Remote output name';
+
+    applyRemoteDoc(store, remote);
+    expect(store.getState().doc.outputs[0].children[0].x).toBe(65);
+    expect(store.getState().doc.outputs[0].children[1].x).toBe(350);
+    expect(store.getState().doc.outputs[0].name).toBe('Remote output name');
+    expect(before.outputs[0].children[0].x).toBe(10);
+
+    store.getState().commitElementGesture([{ id: 'moving', updates: { x: 65 } }]);
+    store.getState().endGesture();
+    expect(store.getState().doc.outputs[0].children[0].x).toBe(65);
+    expect(store.getState().doc.outputs[0].children[1].x).toBe(350);
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].children[0].x).toBe(10);
+  });
+
+  it('holds selected clip geometry and keyframes without discarding other remote clip edits', () => {
+    const store = createDesignerStore();
+    store.getState().loadDesign(makeVideoDoc(), 'video-hold', 'Video hold');
+    const before = store.getState().doc;
+    store.getState().setSelectedClips([{ trackId: 'track-1', clipId: 'clip-a' }]);
+    store.getState().beginGesture();
+    store.getState().updateClipSilent(0, 'track-1', 'clip-a', {
+      x: 75,
+      keyframes: [{ tMs: 0, props: { x: 75 }, ease: 'linear' }],
+    });
+    const remote = deepClone(before);
+    (remote.outputs[0] as VideoOutput).tracks[0].clips[1].opacity = 0.25;
+
+    applyRemoteDoc(store, remote);
+    const clips = (store.getState().doc.outputs[0] as VideoOutput).tracks[0].clips;
+    expect(clips[0].x).toBe(75);
+    expect(clips[0].keyframes?.[0].props.x).toBe(75);
+    expect(clips[1].opacity).toBe(0.25);
+    store.getState().pushHistory('Edit clip geometry');
+    store.getState().endGesture();
+    expect(store.getState().gestureDepth).toBe(0);
   });
 
   it('does not notify when the rebuilt doc is unchanged', () => {

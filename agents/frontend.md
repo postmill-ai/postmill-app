@@ -386,23 +386,39 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   create a second hidden video for canvas drawing, and never let one consumer's teardown destroy the
   other's element. Same-id `src` changes must reload the shared element.
 
-- **Gesture commits and history stay immutable.** Static canvas frames batch every moved node into one
+- **Gesture commits and history stay immutable.** Static drag frames batch every moved node into one
   current-output-only write through `updateElementsEphemeral`; `commitElementGesture` then applies
-  linked edits once and pushes one Undo. Static and video gestures bracket their work with
+  linked edits once and pushes one Undo. Transform frames synchronously bake Konva scale into geometry,
+  throttle only their ephemeral store writes, and commit through `updateElement` plus ONE `pushHistory`.
+  Node snapping is likewise synchronous during `dragmove`; rAF is only for guides/HUD and store writes,
+  so same-frame release commits the snapped position. Static and video gestures bracket their work with
   `beginGesture`/`endGesture`, which suppresses autosave and collaboration broadcast until the final
-  write. History stores immutable document references with structural sharing, never JSON-cloned
-  snapshots: every edit must replace the affected document/output/element/clip objects and must never
-  mutate an object reachable from an earlier snapshot. Materialized-save adoption replaces the current
-  snapshot in place, and saved indices become `-1` when branching or eviction discards the saved doc.
+  write. The shared video Transformer does not open a second hold: the clip overlay owns it and releases
+  it when the target is deleted, leaves the playhead, unmounts, or finishes. Remote documents received
+  during a hold preserve the active elements'/clips' local geometry and keyframes while accepting all
+  other remote changes; normal release then reconciles and broadcasts the merged document. History stores
+  immutable document references with structural sharing, never JSON-cloned snapshots: every edit must
+  replace the affected document/output/element/clip objects and must never mutate an object reachable
+  from an earlier snapshot. Materialized-save adoption keeps the `history` ARRAY identity for paid async
+  result guards, replacing its current snapshot only when that snapshot is exactly `sentDoc`; a silent
+  edit therefore keeps its pre-edit Undo snapshot. Saved indices become `-1` when branching or eviction
+  discards the saved doc.
 
 - **Autosave adopts materialized assets.** Create/update responses carry the validated document with
   large inline rasters replaced by stored URLs. `designer-autosave.ts` adopts that document only when
-  the sent document reference and name are still current, without a history entry; an in-flight edit
-  always wins and is materialized by the next save. Writes are serialized and coalesced by document
-  reference AND name so an older response cannot overwrite newer server state. Static preview capture
-  and upload share one task per doc, run after idle for autosave, and are promoted to immediate work by
-  manual Save; stale uploaded File rows are trashed, and name-only saves reuse the persisted preview.
-  Video saves still omit client snapshots. This prevents repeated base64 uploads and hashing.
+  the captured design id, sent document reference, and name are still current, without a history entry;
+  an in-flight edit always wins and is materialized by the next save. Every request captures its design
+  id, document, and name. Automatic writes are serialized per design and coalesced by document reference
+  AND name; a stalled design never blocks another design, and switching designs does not discard queued
+  work. Manual Save bypasses retry pause, idle capture, and queued writes (joining only an already-started
+  identical write), and returns `persisted`/`skipped`/`failed` so the UI cannot toast a skipped or failed
+  write as saved. Stale responses never adopt or mark clean a newer live document; if an older same-design
+  request settles after a newer successful write, the newest successful document is sent again to restore
+  server ordering. Static preview capture
+  receives the exact captured doc, shares one task per doc, runs after idle for autosave, and is promoted
+  to immediate work by manual Save; stale uploaded File rows are trashed, and name-only saves reuse the
+  persisted preview. Video saves still omit client snapshots. Create and update saves drive the Saving
+  indicator, including the first create.
 
 - **Stock vectors and icons.** Pixabay vector searches omit blank `q`, cache for 24 hours, and
   prefer `vectorURL` with the documented raster fallback. Only actual SVG URLs are rasterized into an

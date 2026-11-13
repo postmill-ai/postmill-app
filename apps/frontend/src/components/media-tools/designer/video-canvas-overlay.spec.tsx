@@ -548,6 +548,31 @@ describe('video overlay selection and gesture commits', () => {
     expect(store.getState().history.length).toBe(lockedDepth);
     expect(first.draggable()).toBe(false);
   });
+
+  it.each(['delete', 'playhead'] as const)('releases a held transform when the clip leaves the stage (%s)', async (reason) => {
+    const { store, trackId } = gestureStore();
+    const stage = await renderGestureStore(store);
+    const first = stage.findOne('#first')!;
+    await act(async () => first.fire('transformstart'));
+    expect(store.getState().gestureDepth).toBe(1);
+
+    await act(async () => {
+      if (reason === 'delete') store.getState().removeClip(0, trackId, 'first');
+      else store.getState().setPlayhead(5000);
+    });
+    expect(store.getState().gestureDepth).toBe(0);
+  });
+
+  it('releases a held drag when the overlay unmounts', async () => {
+    const { store } = gestureStore();
+    const stage = await renderGestureStore(store);
+    await act(async () => stage.findOne('#first')!.fire('dragstart'));
+    expect(store.getState().gestureDepth).toBe(1);
+
+    await act(async () => root?.unmount());
+    root = null;
+    expect(store.getState().gestureDepth).toBe(0);
+  });
 });
 
 describe('paintable media frames', () => {

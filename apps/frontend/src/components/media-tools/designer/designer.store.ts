@@ -622,10 +622,12 @@ export const createDesignerStore = (
         const state = get();
         if (state.doc !== sentDoc || !persistedDoc || typeof persistedDoc !== 'object') return false;
         const nextDoc = migrateDoc(persistedDoc);
-        const history = state.history.map((doc, index) =>
-          index === state.historyIndex ? nextDoc : doc
-        );
-        set({ doc: nextDoc, history });
+        if (state.history[state.historyIndex] === sentDoc) {
+          state.history[state.historyIndex] = nextDoc;
+          set({ doc: nextDoc, history: state.history });
+        } else {
+          set({ doc: nextDoc });
+        }
         reconcileBuffersWithDoc(nextDoc);
         return true;
       },
@@ -1727,7 +1729,7 @@ export const createDesignerStore = (
 
       pushHistory: (label) => {
         get().clearElementPreview();
-        const { doc, history, historyLabels, historyIndex, savedHistoryIndex } = get();
+        const { doc, history, historyLabels, historyIndex, savedHistoryIndex, isDirty } = get();
         // Documents are immutable snapshots: every store edit replaces the
         // affected doc/output/element objects, so unchanged branches are shared.
         const newHistory = history.slice(0, historyIndex + 1);
@@ -1740,6 +1742,7 @@ export const createDesignerStore = (
           newLabels.shift();
           savedIdx = savedIdx >= 0 ? savedIdx - 1 : -1;
         }
+        if (!isDirty && history[historyIndex] !== doc) savedIdx = newHistory.length - 1;
         set({
           history: newHistory,
           historyLabels: newLabels,
@@ -1804,7 +1807,17 @@ export const createDesignerStore = (
         reconcileBuffersWithDoc(nextDoc);
       },
 
-      markSaved: () => set({ isDirty: false, isSaving: false, saveFailed: false, saveRetryPaused: false, lastSaved: new Date(), savedHistoryIndex: get().historyIndex }),
+      markSaved: () => {
+        const { doc, history, historyIndex } = get();
+        set({
+          isDirty: false,
+          isSaving: false,
+          saveFailed: false,
+          saveRetryPaused: false,
+          lastSaved: new Date(),
+          savedHistoryIndex: history[historyIndex] === doc ? historyIndex : -1,
+        });
+      },
       setSaving: (saving) => set({ isSaving: saving }),
       setSaveFailed: (failed) => set({ saveFailed: failed }),
       setSaveRetryPaused: (paused) => set({ saveRetryPaused: paused }),
