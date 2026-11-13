@@ -254,11 +254,16 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   await expect(page.getByRole('spinbutton', { name: 'Size', exact: true })).toHaveValue('32');
   await page.waitForTimeout(2300);
   expect(state.doc.outputs[0].children[0].fontSize).toBe(32);
+  const designName = page.getByRole('textbox', { name: 'Design name' });
+  // A rename dirties the real design without cancelling the render-only preview.
+  await designName.fill('Editing UX preview save');
+  expect(await heading.evaluate((button) => button.matches(':hover'))).toBe(true);
   const savesBeforePreview = state.saveDocs.length;
   await page.keyboard.press('Control+s');
   await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBeforePreview);
   expect(JSON.stringify(state.saveDocs.at(-1))).toContain('"fontSize":32');
   expect(JSON.stringify(state.saveDocs.at(-1))).not.toContain('"fontSize":24');
+  await designName.fill('Editing UX');
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
   await expect.poll(() => state.renderDocs.length).toBe(1);
