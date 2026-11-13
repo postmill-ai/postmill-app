@@ -53,6 +53,7 @@ export const staticImageReplacementPatch = (
   originalSrc: undefined,
   originalFileId: undefined,
   smartFilters: undefined,
+  mask: undefined,
   maskSrc: undefined,
   maskFileId: undefined,
   maskEnabled: undefined,

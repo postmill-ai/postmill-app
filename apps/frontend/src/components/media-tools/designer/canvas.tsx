@@ -2654,6 +2654,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               }
               updateElement(id, updates);
             }}
+            onAdjustFontSize={(delta) => adjustSelectedTextFontSize(store, delta)}
             onComplete={() => setEditingTextId(null)}
           />
         );
@@ -2709,6 +2710,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
                   : null),
               })
             }
+            onAdjustFontSize={(delta) => adjustSelectedTextFontSize(store, delta)}
             onComplete={() => setEditingTextId(null)}
           />
         );

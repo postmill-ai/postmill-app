@@ -352,8 +352,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   Enter-to-edit prevents the key's default action so selection/focus cannot replace the text with a newline.
   `measure-text.ts` owns shared browser box growth: text commits and font-size edits grow height for
   wrapping, and width only for one unwrapped overflow word; they never shrink a manual box. Canvas
-  Ctrl/Cmd+Shift+> and < run `text-shortcuts.ts`, ignore text-entry focus, cover every selected static
-  text or video text/caption clip, use linked store updates and shared font bounds, and commit once.
+  Ctrl/Cmd+Shift+> and < run `text-shortcuts.ts`, ignore ordinary text-entry focus but remain available
+  in the inline contenteditable (which stops propagation), cover every selected static text or video
+  text/caption clip, use linked store updates and shared font bounds, and commit once.
 - **Desktop/mobile workspace shares one store and tool registry.** Desktop docks Inspector, Layers,
   Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; only the active heavy panel mounts.
   The rail Brand action and Tools ▸ Workspace commands select those tabs, History/Versions sit beside

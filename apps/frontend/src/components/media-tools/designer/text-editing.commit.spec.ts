@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { buildTextEditCommit } from './text-editing';
-import type { DesignerElement, TextRun } from './designer.store';
+import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render } from '@testing-library/react';
+import { buildTextEditCommit, TextEditingOverlay } from './text-editing';
+import { createDesignerStore, type DesignerElement, type TextRun } from './designer.store';
+import { adjustSelectedTextFontSize } from './text-shortcuts';
 
 const el = {
   id: 't1',
@@ -86,5 +89,43 @@ describe('buildTextEditCommit', () => {
       measure
     ).width).toBe(200);
     expect(buildTextEditCommit([{ text: 'hello world' } as TextRun], flat, measure).width).toBeUndefined();
+  });
+});
+
+describe('TextEditingOverlay font-size shortcuts', () => {
+  it('handles a focused contenteditable once without bubbling a duplicate history commit', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({ ...el, locked: false, hidden: false });
+    const history = store.getState().history.length;
+    const onAdjustFontSize = vi.fn((delta: number) => {
+      adjustSelectedTextFontSize(store, delta);
+    });
+    const onParentKeyDown = vi.fn((event: React.KeyboardEvent) => {
+      adjustSelectedTextFontSize(store, event.key === '>' ? 1 : -1);
+    });
+    const { container } = render(
+      React.createElement(
+        'div',
+        { onKeyDown: onParentKeyDown },
+        React.createElement(TextEditingOverlay, {
+          element: el,
+          stageRect: { x: 0, y: 0, scale: 1 },
+          onUpdate: vi.fn(),
+          onAdjustFontSize,
+          onComplete: vi.fn(),
+        })
+      )
+    );
+    const editor = container.querySelector<HTMLElement>('[data-text-editor-id="t1"]')!;
+    editor.focus();
+    expect(document.activeElement).toBe(editor);
+
+    fireEvent.keyDown(editor, { key: '>', ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(editor, { key: '<', metaKey: true, shiftKey: true });
+
+    expect(onAdjustFontSize.mock.calls).toEqual([[1], [-1]]);
+    expect(onParentKeyDown).not.toHaveBeenCalled();
+    expect(store.getState().history).toHaveLength(history + 2);
+    expect(store.getState().doc.outputs[0]).toMatchObject({ children: [{ fontSize: 16 }] });
   });
 });

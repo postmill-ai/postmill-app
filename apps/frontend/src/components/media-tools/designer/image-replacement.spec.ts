@@ -26,6 +26,7 @@ const setup = () => {
     crop: { x: 40, y: 45, width: 400, height: 225 },
     fitMode: 'cover',
     focalPoint: { x: 0.25, y: 0.75 },
+    mask: { type: 'shape', shape: 'ellipse' },
     maskSrc: '/mask.png',
     maskFileId: 'mask-file',
     maskEnabled: true,
@@ -68,6 +69,7 @@ describe('replaceStaticImage', () => {
     expect(image(store).originalSrc).toBeUndefined();
     expect(image(store).originalFileId).toBeUndefined();
     expect(image(store).smartFilters).toBeUndefined();
+    expect(image(store).mask).toBeUndefined();
     expect(image(store).maskSrc).toBeUndefined();
     expect(image(store).maskFileId).toBeUndefined();
     expect(store.getState().history).toHaveLength(history + 1);

@@ -20,6 +20,7 @@ interface TextEditingProps {
   element: DesignerElement;
   stageRect: { x: number; y: number; scale: number };
   onUpdate: (id: string, updates: Partial<DesignerElement>) => void;
+  onAdjustFontSize?: (delta: number) => void;
   onComplete: () => void;
 }
 
@@ -329,6 +330,7 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
   element,
   stageRect,
   onUpdate,
+  onAdjustFontSize,
   onComplete,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -449,6 +451,12 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
       // overlay that stayed mounted would keep the Konva text hidden.
       settledRef.current = true;
       onComplete();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '>' || e.key === '<')) {
+      e.preventDefault();
+      e.stopPropagation();
+      onAdjustFontSize?.(e.key === '>' ? 1 : -1);
       return;
     }
     // Inline style toggles, straight on the contentEditable DOM: the blur

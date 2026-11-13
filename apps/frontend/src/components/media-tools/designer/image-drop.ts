@@ -3,6 +3,7 @@ import type { DesignerOutput, VideoOutput } from './designer.store';
 import { probeImageNaturalSize } from './elements';
 import { replaceStaticImage } from './image-replacement';
 import { replaceClipImage, type ClipMediaTarget } from './clip-media';
+import { MAX_UPLOAD_BYTES } from './export-format';
 import type { MediaImageItem } from './insert-image';
 
 type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -43,7 +44,8 @@ export const uploadDroppedImage = async (
 ): Promise<MediaImageItem> => {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch('/files/upload-simple', { method: 'POST', body: formData });
+  const endpoint = file.size > MAX_UPLOAD_BYTES ? '/files/upload-server' : '/files/upload-simple';
+  const response = await fetch(endpoint, { method: 'POST', body: formData });
   if (!response.ok) throw new Error('Upload failed');
   const data = await response.json() as { id: string; path: string };
   const natural = await probeImageNaturalSize(data.path);

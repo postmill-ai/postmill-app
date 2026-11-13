@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { imageDropTargetById } from './image-drop';
+import { describe, expect, it, vi } from 'vitest';
+import { imageDropTargetById, uploadDroppedImage } from './image-drop';
+import { MAX_UPLOAD_BYTES } from './export-format';
 import { createDesignerStore, type VideoOutput, type VideoTrack } from './designer.store';
+
+vi.mock('./elements', () => ({
+  probeImageNaturalSize: vi.fn(async () => ({ width: 100, height: 50 })),
+}));
 
 describe('imageDropTargetById', () => {
   it('accepts static image elements only', () => {
@@ -59,5 +64,34 @@ describe('imageDropTargetById', () => {
     });
     expect(imageDropTargetById(store, 'video')).toBeNull();
     expect(imageDropTargetById(store, 'audio')).toBeNull();
+  });
+});
+
+describe('uploadDroppedImage', () => {
+  const response = {
+    ok: true,
+    json: async () => ({ id: 'file-1', path: '/uploads/new.png' }),
+  } as Response;
+
+  it('uses upload-simple for small images', async () => {
+    const fetch = vi.fn().mockResolvedValue(response);
+    const file = new File(['small'], 'small.png', { type: 'image/png' });
+
+    await expect(uploadDroppedImage(fetch, file)).resolves.toMatchObject({
+      url: '/uploads/new.png',
+      fileId: 'file-1',
+      width: 100,
+      height: 50,
+    });
+    expect(fetch).toHaveBeenCalledWith('/files/upload-simple', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('uses upload-server above the simple-upload cap', async () => {
+    const fetch = vi.fn().mockResolvedValue(response);
+    const file = new File(['large'], 'large.png', { type: 'image/png' });
+    vi.spyOn(file, 'size', 'get').mockReturnValue(MAX_UPLOAD_BYTES + 1);
+
+    await uploadDroppedImage(fetch, file);
+    expect(fetch).toHaveBeenCalledWith('/files/upload-server', expect.objectContaining({ method: 'POST' }));
   });
 });

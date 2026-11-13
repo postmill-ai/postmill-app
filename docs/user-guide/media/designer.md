@@ -177,8 +177,8 @@ organization. While editing text, the color control above the text box colors on
 characters, so one text box can contain multiple colors. Text boxes grow vertically to fit their
 content; width grows only when a single unwrapped word overflows, and manual resizing remains
 available. With text selected, **Ctrl/Cmd+Shift+>** and **Ctrl/Cmd+Shift+<** increase or decrease
-font size across the selection as one undoable edit. These shortcuts do not run while typing in a
-field or the inline text editor.
+font size across the selection as one undoable edit, including while the inline text editor has
+focus. These shortcuts do not run while typing in an ordinary field.
 
 Drop an image file directly onto an existing static image or still-image clip to replace it. The
 frame, crop, fit mode, and focal point are retained, the new file's intrinsic dimensions are adopted,

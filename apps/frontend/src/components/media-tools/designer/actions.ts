@@ -563,6 +563,8 @@ export const useDesignerActions = (
       { id: 'win-brand', label: 'Brand', menu: 'tools', submenu: 'Workspace', group: 'workspace', keywords: ['brand', 'panel'], run: () => ctx.onTogglePanel('brand') },
       { id: 'win-inspector', label: 'Properties / Inspector', menu: 'tools', submenu: 'Workspace', group: 'workspace', keywords: ['inspector', 'properties'], run: ctx.onToggleInspector },
       ...(ctx.aiActive ? [{ id: 'win-ai', label: 'AI', menu: 'tools' as const, submenu: 'Workspace', group: 'workspace', keywords: ['ai', 'panel'], run: () => ctx.onTogglePanel('ai') }] : []),
+      { id: 'win-icons', label: 'Icons', menu: 'tools', submenu: 'Workspace', group: 'workspace2', keywords: ['icons'], run: () => ctx.onTogglePanel('icons') },
+      ...(ctx.canShare ? [{ id: 'win-share', label: () => (ctx.collabEnabled ? 'Stop Sharing' : 'Share / Collaborate'), menu: 'tools' as const, submenu: 'Workspace', group: 'workspace2', keywords: ['share', 'collaborate'], checked: () => ctx.collabEnabled, run: ctx.onToggleShare }] : []),
 
       // ---------------- Help ----------------
       { id: 'help-shortcuts', label: 'Keyboard Shortcuts', menu: 'help', shortcut: '?', keywords: ['shortcuts', 'keys', 'help'], run: ctx.onShortcuts },
