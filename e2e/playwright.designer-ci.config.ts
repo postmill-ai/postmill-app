@@ -23,7 +23,19 @@ export default defineConfig({
   },
   use: {
     baseURL: 'http://127.0.0.1:4200',
-    storageState: { cookies: [], origins: [] },
+    storageState: {
+      cookies: [{
+        name: 'auth',
+        value: 'designer-ci-mocked-session',
+        domain: '127.0.0.1',
+        path: '/',
+        expires: -1,
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+      }],
+      origins: [],
+    },
     viewport: { width: 1440, height: 1000 },
     ignoreHTTPSErrors: true,
     screenshot: 'only-on-failure',

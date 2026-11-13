@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TextInspector } from './text-inspector';
 import { ensureFontLoaded } from '../fonts';
 import {
@@ -9,15 +9,6 @@ import {
   type DesignerElement,
   type DesignerOutput,
 } from '../designer.store';
-
-vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
-  useT:
-    () =>
-    (key: string, fallback: string, vars?: Record<string, unknown>) =>
-      vars
-        ? fallback.replace(/\{\{(\w+)\}\}/g, (_match, name) => String(vars[name]))
-        : fallback,
-}));
 
 vi.mock('@postmill-ai/frontend/components/layout/user.context', () => ({
   useUser: () => ({ orgId: 'org-1' }),
@@ -102,10 +93,6 @@ const createSecondOutputPageTwoSelection = () => {
   store.getState().setSelectedIds(['page-two']);
   return store;
 };
-
-afterEach(() => {
-  vi.clearAllMocks();
-});
 
 describe('TextInspector paged text', () => {
   it('keeps page 1 controls and linked-output edits unchanged', async () => {
