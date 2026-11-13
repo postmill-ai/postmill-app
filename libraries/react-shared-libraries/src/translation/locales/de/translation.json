@@ -3322,6 +3322,7 @@
   "designer_export_incomplete_one": "{{count}} Export erfordert Aufmerksamkeit. Abgeschlossene Exporte wurden beibehalten.",
   "designer_export_incomplete_other": "{{count}} Exporte erfordern Aufmerksamkeit. Abgeschlossene Exporte wurden beibehalten.",
   "designer_export_upload_uncertain": "Das Ergebnis des Uploads ist ungewiss. Prüfen Sie Dateien, bevor Sie erneut hochladen.",
+  "designer_upload_again": "Erneut hochladen",
   "designer_preview_failed": "Die Vorschau konnte nicht gerendert werden. Sie können den finalen Export weiterhin versuchen.",
   "designer_some_exports_need_attention": "Einige Exporte erfordern Aufmerksamkeit",
   "designer_completed_exports": "Abgeschlossene Exporte",

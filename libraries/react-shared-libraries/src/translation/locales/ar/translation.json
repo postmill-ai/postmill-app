@@ -3326,6 +3326,7 @@
   "designer_export_incomplete_many": "يحتاج {{count}} تصديرًا إلى الانتباه. تم الاحتفاظ بالتصديرات المكتملة.",
   "designer_export_incomplete_other": "يحتاج {{count}} تصدير إلى الانتباه. تم الاحتفاظ بالتصديرات المكتملة.",
   "designer_export_upload_uncertain": "نتيجة الرفع غير مؤكدة. تحقق من الملفات قبل الرفع مرة أخرى.",
+  "designer_upload_again": "إعادة الرفع",
   "designer_preview_failed": "تعذر عرض المعاينة. لا يزال بإمكانك تجربة التصدير النهائي.",
   "designer_some_exports_need_attention": "بعض التصديرات تحتاج إلى الانتباه",
   "designer_completed_exports": "التصديرات المكتملة",

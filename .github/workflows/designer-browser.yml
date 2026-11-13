@@ -1,8 +1,10 @@
 ---
 name: Designer Browser
 
+# Path-filtered checks must remain optional in branch protection.
 on:
   push:
+    branches: [main]
     paths:
       - 'apps/frontend/src/components/media-tools/designer/**'
       - 'e2e/**'
@@ -84,8 +86,6 @@ jobs:
       - name: Run production Designer browser specs
         run: pnpm --dir e2e exec playwright test --config playwright.designer-ci.config.ts
         env:
-          GITHUB_ACTIONS: 'true'
-          RUNNER_ENVIRONMENT: 'github-hosted'
           NEXT_TELEMETRY_DISABLED: '1'
 
       - name: Upload Playwright failure artifacts

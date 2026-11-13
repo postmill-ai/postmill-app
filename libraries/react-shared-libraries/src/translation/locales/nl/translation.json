@@ -3335,6 +3335,7 @@
   "designer_export_incomplete_one": "{{count}} export vraagt aandacht. Voltooide exports zijn behouden.",
   "designer_export_incomplete_other": "{{count}} exports vragen aandacht. Voltooide exports zijn behouden.",
   "designer_export_upload_uncertain": "Het resultaat van de upload is onzeker. Controleer Bestanden voordat je opnieuw uploadt.",
+  "designer_upload_again": "Opnieuw uploaden",
   "designer_preview_failed": "Het voorbeeld kon niet worden gerenderd. Je kunt de definitieve export nog steeds proberen.",
   "designer_some_exports_need_attention": "Enkele exports vragen aandacht",
   "designer_completed_exports": "Voltooide exports",

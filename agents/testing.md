@@ -126,8 +126,10 @@ proxied by this setting. `E2E_BACKEND_ORIGIN` remains the separate opt-in loopba
 Designer browser path. The workflow builds the frontend before Playwright starts `next start` on a
 GitHub-hosted runner; the config refuses to load anywhere else. The export spec stubs identity, API,
 render, upload, and media traffic and fails unexpected mutations, so it needs no backend, credentials,
-or paid providers. Add later Designer specs to this config only after making them equally self-contained.
-Never run this config, its `webServer`, or `next start` on a production host.
+or paid providers. It skips outside the `chromium-production` project so broader legacy configs do
+not run it against another origin. The workflow runs PRs and `main` pushes only; its path filters mean
+it must never become a required check. Add later Designer specs to this config only after making them
+equally self-contained. Never run this config, its `webServer`, or `next start` on a production host.
 
 ### Opt-in live provider playback (never default CI)
 

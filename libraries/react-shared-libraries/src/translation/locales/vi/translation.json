@@ -3322,6 +3322,7 @@
   "designer_export_incomplete_one": "{{count}} bản xuất cần chú ý. Các bản xuất đã hoàn tất được giữ lại.",
   "designer_export_incomplete_other": "{{count}} bản xuất cần chú ý. Các bản xuất đã hoàn tất được giữ lại.",
   "designer_export_upload_uncertain": "Kết quả tải lên chưa rõ ràng. Hãy kiểm tra Tệp trước khi tải lên lại.",
+  "designer_upload_again": "Tải lên lại",
   "designer_preview_failed": "Không thể kết xuất bản xem trước. Bạn vẫn có thể thử bản xuất cuối cùng.",
   "designer_some_exports_need_attention": "Một số bản xuất cần chú ý",
   "designer_completed_exports": "Bản xuất đã hoàn tất",

@@ -3322,6 +3322,7 @@
   "designer_export_incomplete_one": "{{count}} dışa aktarma ilgilenmenizi gerektiriyor. Tamamlanan dışa aktarmalar korundu.",
   "designer_export_incomplete_other": "{{count}} dışa aktarma ilgilenmenizi gerektiriyor. Tamamlanan dışa aktarmalar korundu.",
   "designer_export_upload_uncertain": "Yükleme sonucu belirsiz. Tekrar yüklemeden önce Dosyalar'ı kontrol edin.",
+  "designer_upload_again": "Tekrar yükle",
   "designer_preview_failed": "Önizleme oluşturulamadı. Son dışa aktarmayı yine de deneyebilirsiniz.",
   "designer_some_exports_need_attention": "Bazı dışa aktarmalar ilgilenmenizi gerektiriyor",
   "designer_completed_exports": "Tamamlanan dışa aktarmalar",

@@ -3322,6 +3322,7 @@
   "designer_export_incomplete_one": "{{count}}件の書き出しで対応が必要です。完了した書き出しは保持されています。",
   "designer_export_incomplete_other": "{{count}}件の書き出しで対応が必要です。完了した書き出しは保持されています。",
   "designer_export_upload_uncertain": "アップロード結果が不明です。再度アップロードする前にファイルを確認してください。",
+  "designer_upload_again": "再アップロード",
   "designer_preview_failed": "プレビューをレンダリングできませんでした。最終書き出しは引き続き試行できます。",
   "designer_some_exports_need_attention": "一部の書き出しで対応が必要です",
   "designer_completed_exports": "完了した書き出し",

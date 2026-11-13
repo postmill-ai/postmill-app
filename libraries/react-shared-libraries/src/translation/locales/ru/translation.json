@@ -3324,6 +3324,7 @@
   "designer_export_incomplete_many": "{{count}} экспортов требуют внимания. Завершённые экспорты сохранены.",
   "designer_export_incomplete_other": "{{count}} экспорта требуют внимания. Завершённые экспорты сохранены.",
   "designer_export_upload_uncertain": "Результат загрузки неизвестен. Проверьте «Файлы», прежде чем загружать снова.",
+  "designer_upload_again": "Загрузить снова",
   "designer_preview_failed": "Не удалось отобразить предпросмотр. Вы всё ещё можете попробовать окончательный экспорт.",
   "designer_some_exports_need_attention": "Некоторые экспорты требуют внимания",
   "designer_completed_exports": "Завершённые экспорты",

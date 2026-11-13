@@ -46,6 +46,7 @@ import {
   canRetryExport,
   DesignerExportError,
   emptyStaticExportBatch,
+  isUncertainUpload,
   MAX_UPLOAD_BYTES,
   renderOutputWithFallback,
   renderPdfWithDiagnostics,
@@ -535,6 +536,8 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const isCreatePost = initialAction === 'create-post';
 
   const [step, setStep] = useState<Step>('options');
+  const stepRef = useRef(step);
+  stepRef.current = step;
   const [outputFormats, setOutputFormats] = useState<Record<string, FormatValue>>({});
   const [quality, setQuality] = useState(0.92);
   const [scale, setScale] = useState(1);
@@ -680,8 +683,10 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     }
     return [doc.outputs[state.currentOutput]];
   }, [doc.outputs, exportAll, multiOutput, store, forceAllOutputs]);
+  const selectedOutputIds = JSON.stringify(selectedOutputs.map((output) => output.id));
 
   useEffect(() => {
+    if (stepRef.current === 'done') return;
     staticConfigurationVersionRef.current += 1;
     cancelStaticRender();
     staticPendingUploadsRef.current = [];
@@ -690,7 +695,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     setExportProgress({ done: 0, total: 0 });
     downloadUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     downloadUrlsRef.current.clear();
-  }, [doc, selectedOutputs, outputFormats, quality, scale, pageSelection, cancelStaticRender]);
+  }, [selectedOutputIds, outputFormats, quality, scale, pageSelection, cancelStaticRender]);
 
   const outputCount = selectedOutputs.length;
 
@@ -1422,7 +1427,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
       ? diagnostic.stage === 'preview'
         ? t('designer_export_preview_retry_hint', 'You can still try the final export.')
         : t('designer_export_retry_hint', 'Retry this output; completed exports were kept.')
-      : diagnostic.stage === 'upload' && ['network', 'timeout', 'unknown'].includes(diagnostic.kind)
+      : isUncertainUpload(diagnostic)
         ? t('designer_export_upload_uncertain', 'The upload outcome is uncertain. Check Files before uploading again.')
         : '';
     let message = failure.message;
@@ -1450,7 +1455,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
         { label },
       );
     }
-    return { ...failure, message };
+    return { ...failure, message: message.trim() };
   }, [t]);
 
   // --- Thumbnail generation (for step 3) ---
@@ -1516,7 +1521,6 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   // --- Export handler ---
 
   const handleExport = useCallback(async (retryFailedOnly = false, retryOutputId?: string) => {
-    if (retryFailedOnly && !staticExportFailures.some((failure) => canRetryExport(failure.diagnostic))) return;
     const run = ++staticExportRunRef.current;
     const configurationVersion = staticConfigurationVersionRef.current;
     if (staticRequestPhaseRef.current !== 'upload') staticRenderAbortRef.current?.abort();
@@ -1525,7 +1529,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     staticAbortAfterUploadRef.current = false;
     staticRequestPhaseRef.current = 'render';
     setExporting(true);
-    setExportProgress({ done: 0, total: 0 });
+    setExportProgress({ done: retryFailedOnly ? savedFiles.length : 0, total: selectedOutputs.length });
     try {
       if (!retryFailedOnly) {
         downloadUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -1671,6 +1675,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
           setExportProgress({ done: settled, total: tasks.length });
         },
       });
+      if (controller.signal.aborted) return;
       if (staticConfigurationVersionRef.current !== configurationVersion || staticExportRunRef.current !== run) return;
       const results: ExportedFile[] = batch.completed;
       const failures = batch.failures.map(localizeStaticExportFailure);
@@ -2154,16 +2159,16 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                       {failure.pageNumber > 0 ? ` · ${t('designer_page_number', 'Page {{number}}', { number: failure.pageNumber + 1 })}` : ''}
                       {' — '}{failure.message}
                     </span>
-                    {canRetryExport(failure.diagnostic) && (
-                      <button
-                        type="button"
-                        disabled={exporting || creatingDrafts}
-                        onClick={() => void handleExport(true, failure.outputId)}
-                        className="shrink-0 text-btnPrimaryAccent hover:underline disabled:opacity-50"
-                      >
-                        {t('designer_retry_output', 'Retry output')}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      disabled={exporting || creatingDrafts}
+                      onClick={() => void handleExport(true, failure.outputId)}
+                      className="shrink-0 text-btnPrimaryAccent hover:underline disabled:opacity-50"
+                    >
+                      {isUncertainUpload(failure.diagnostic)
+                        ? t('designer_upload_again', 'Upload again')
+                        : t('designer_retry_output', 'Retry output')}
+                    </button>
                   </div>
                 );
               })}
@@ -2212,17 +2217,15 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                       : t('designer_use_completed_exports', 'Use completed exports')}
                   </button>
                 )}
-                {staticExportFailures.some((failure) => canRetryExport(failure.diagnostic)) && (
-                  <button
-                    onClick={() => void handleExport(true)}
-                    disabled={exporting || creatingDrafts}
-                    className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
-                  >
-                    {exporting
-                      ? t('designer_exporting_progress', 'Exporting {{done}}/{{total}}…', exportProgress)
-                      : t('designer_retry_failed_exports', 'Retry failed')}
-                  </button>
-                )}
+                <button
+                  onClick={() => void handleExport(true)}
+                  disabled={exporting || creatingDrafts}
+                  className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
+                >
+                  {exporting
+                    ? t('designer_exporting_progress', 'Exporting {{done}}/{{total}}…', exportProgress)
+                    : t('designer_retry_failed_exports', 'Retry failed')}
+                </button>
               </div>
             ) : (
               <button

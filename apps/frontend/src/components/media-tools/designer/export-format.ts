@@ -52,11 +52,19 @@ interface FallbackRenderResult {
 const stageLabel = (stage: ExportStage) =>
   stage === 'preview' ? 'Preview' : stage === 'upload' ? 'Upload' : 'Render';
 
+export const isUncertainUpload = (diagnostic: ExportDiagnostic) =>
+  diagnostic.stage === 'upload' &&
+  (['network', 'timeout', 'unknown'].includes(diagnostic.kind) ||
+    (diagnostic.kind === 'http' &&
+      typeof diagnostic.status === 'number' &&
+      [502, 503, 504].includes(diagnostic.status)));
+
 export const canRetryExport = (diagnostic: ExportDiagnostic) => {
   if (diagnostic.stage === 'upload') {
     return diagnostic.kind === 'http' &&
       typeof diagnostic.status === 'number' &&
-      diagnostic.status >= 500;
+      diagnostic.status >= 500 &&
+      !isUncertainUpload(diagnostic);
   }
   return diagnostic.kind === 'network' ||
     diagnostic.kind === 'timeout' ||
@@ -72,7 +80,7 @@ const safeExportMessage = (stage: ExportStage, kind: ExportFailureKind, status?:
     ? stage === 'preview'
       ? ' You can still try the final export.'
       : ' Retry this output; completed exports were kept.'
-    : stage === 'upload' && (kind === 'network' || kind === 'timeout' || kind === 'unknown')
+    : isUncertainUpload(diagnostic)
       ? ' The upload outcome is uncertain. Check Files before uploading again.'
       : '';
   if (kind === 'http') return `${label} failed with HTTP ${status ?? 'error'}.${retry}`;
@@ -116,7 +124,7 @@ export class DesignerExportError extends Error {
 }
 
 const reportExportFailure = (error: DesignerExportError) => {
-  if (error.reported) return error;
+  if (error.reported || error.diagnostic.kind === 'abort') return error;
   console.warn('[designer-export]', error.diagnostic);
   return new DesignerExportError(error.diagnostic, error.message, true, error.serverReason);
 };
@@ -416,13 +424,11 @@ export const runStaticExportBatch = async (
   const completed = new Map(previous.completed.filter((file) => currentKeys.has(file.key)).map((file) => [file.key, file]));
   const failures = new Map(previous.failures.filter((failure) => currentKeys.has(failure.key)).map((failure) => [failure.key, failure]));
   const pendingUploads = new Map(previous.pendingUploads.filter((pending) => currentKeys.has(pending.task.key)).map((pending) => [pending.task.key, pending]));
-  const eligible = tasks.filter((task) => {
-    if (completed.has(task.key)) return false;
-    if (!options.retryFailedOnly) return true;
-    const failure = failures.get(task.key);
-    return !!failure && canRetryExport(failure.diagnostic) &&
-      (!options.outputId || task.outputId === options.outputId);
-  });
+  const eligible = tasks.filter((task) =>
+    !completed.has(task.key) &&
+    (!options.retryFailedOnly ||
+      (failures.has(task.key) && (!options.outputId || task.outputId === options.outputId))),
+  );
 
   for (const task of eligible) {
     if (options.signal?.aborted) break;
@@ -430,6 +436,10 @@ export const runStaticExportBatch = async (
     try {
       blob = pendingUploads.get(task.key)?.blob ?? await task.render();
     } catch (error) {
+      if ((error instanceof DesignerExportError && error.diagnostic.kind === 'abort') ||
+        (error as { name?: string })?.name === 'AbortError') {
+        break;
+      }
       const failure = taskFailure(error, task, 'render');
       failures.set(task.key, {
         key: task.key,
@@ -442,7 +452,6 @@ export const runStaticExportBatch = async (
         serverReason: failure.serverReason,
       });
       options.onTaskSettled?.(task);
-      if (failure.diagnostic.kind === 'abort') break;
       continue;
     }
 

@@ -3322,6 +3322,7 @@
   "designer_export_incomplete_one": "{{count}} exportação precisa de atenção. As exportações concluídas foram mantidas.",
   "designer_export_incomplete_other": "{{count}} exportações precisam de atenção. As exportações concluídas foram mantidas.",
   "designer_export_upload_uncertain": "O resultado do envio é incerto. Verifique Arquivos antes de enviar novamente.",
+  "designer_upload_again": "Enviar novamente",
   "designer_preview_failed": "Não foi possível renderizar a pré-visualização. Você ainda pode tentar a exportação final.",
   "designer_some_exports_need_attention": "Algumas exportações precisam de atenção",
   "designer_completed_exports": "Exportações concluídas",

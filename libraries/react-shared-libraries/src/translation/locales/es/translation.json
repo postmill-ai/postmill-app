@@ -3322,6 +3322,7 @@
   "designer_export_incomplete_one": "{{count}} exportación necesita atención. Las exportaciones completadas se conservaron.",
   "designer_export_incomplete_other": "{{count}} exportaciones necesitan atención. Las exportaciones completadas se conservaron.",
   "designer_export_upload_uncertain": "El resultado de la subida es incierto. Comprueba Archivos antes de volver a subirla.",
+  "designer_upload_again": "Subir de nuevo",
   "designer_preview_failed": "No se pudo renderizar la vista previa. Aún puedes intentar la exportación final.",
   "designer_some_exports_need_attention": "Algunas exportaciones necesitan atención",
   "designer_completed_exports": "Exportaciones completadas",

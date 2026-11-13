@@ -123,6 +123,7 @@ async function installMocks(page: Page) {
 }
 
 test('production export keeps preview counts, JPEG 3x settings, and completed outputs on retry', async ({ page }) => {
+  test.skip(test.info().project.name !== 'chromium-production', 'Runs only in the production-build CI project');
   const state = await installMocks(page);
   await page.context().addCookies([{
     name: 'auth',

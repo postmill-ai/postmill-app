@@ -3339,6 +3339,7 @@
   "designer_export_incomplete_many": "{{count}} eksportów wymaga uwagi. Ukończone eksporty zachowano.",
   "designer_export_incomplete_other": "{{count}} eksportu wymaga uwagi. Ukończone eksporty zachowano.",
   "designer_export_upload_uncertain": "Wynik przesyłania jest niepewny. Przed ponownym przesłaniem sprawdź Pliki.",
+  "designer_upload_again": "Prześlij ponownie",
   "designer_preview_failed": "Nie udało się wyrenderować podglądu. Możesz nadal spróbować końcowego eksportu.",
   "designer_some_exports_need_attention": "Niektóre eksporty wymagają uwagi",
   "designer_completed_exports": "Ukończone eksporty",

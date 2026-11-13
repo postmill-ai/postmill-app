@@ -3335,6 +3335,7 @@
   "designer_export_incomplete_one": "{{count}} ekspor memerlukan perhatian. Ekspor yang selesai disimpan.",
   "designer_export_incomplete_other": "{{count}} ekspor memerlukan perhatian. Ekspor yang selesai disimpan.",
   "designer_export_upload_uncertain": "Hasil unggahan tidak pasti. Periksa File sebelum mengunggah lagi.",
+  "designer_upload_again": "Unggah lagi",
   "designer_preview_failed": "Pratinjau tidak dapat dirender. Anda masih dapat mencoba ekspor final.",
   "designer_some_exports_need_attention": "Beberapa ekspor memerlukan perhatian",
   "designer_completed_exports": "Ekspor selesai",

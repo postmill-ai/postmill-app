@@ -3335,6 +3335,7 @@
   "designer_export_incomplete_one": "{{count}} export needs attention. Completed exports were kept.",
   "designer_export_incomplete_other": "{{count}} exports need attention. Completed exports were kept.",
   "designer_export_upload_uncertain": "The upload outcome is uncertain. Check Files before uploading again.",
+  "designer_upload_again": "Upload again",
   "designer_preview_failed": "Preview could not be rendered. You can still try the final export.",
   "designer_some_exports_need_attention": "Some exports need attention",
   "designer_completed_exports": "Completed exports",

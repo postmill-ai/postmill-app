@@ -364,6 +364,20 @@ describe('upload and resumable static batches', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
+  it.each([502, 503, 504])('treats upload HTTP %i as uncertain without retry advice', async (status) => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response(null, { status }));
+
+    const promise = uploadExportBlob('/files/upload-simple', new FormData(), fetchFn, {
+      outputIndex: 0, pageNumber: 0, format: 'pdf', scale: 1,
+    });
+    await expect(promise).rejects.toMatchObject({
+      message: expect.stringContaining('The upload outcome is uncertain'),
+      diagnostic: { stage: 'upload', kind: 'http', status },
+    });
+    await expect(promise).rejects.not.toThrow('Retry this output');
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
   it('surfaces a non-OK upload reason once without retry advice or an abort signal', async () => {
     const fetchFn = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       message: 'Storage quota exceeded; remove unused files first',
@@ -462,16 +476,19 @@ describe('upload and resumable static batches', () => {
     expect(secondPage.render).toHaveBeenCalledTimes(1);
   });
 
-  it('does not blindly retry an uncertain upload or rerender its cached blob', async () => {
+  it('allows an explicit uncertain-upload retry from its cached blob without rerendering', async () => {
     const task = makeTask('out-1');
-    const upload = vi.fn().mockRejectedValue(exportError('upload', 'network'));
+    const upload = vi.fn()
+      .mockRejectedValueOnce(exportError('upload', 'network'))
+      .mockResolvedValueOnce({ id: 'file-a', path: '/files/a.jpg' });
     const first = await runStaticExportBatch([task], upload);
     const retry = await runStaticExportBatch([task], upload, first, { retryFailedOnly: true });
 
-    expect(upload).toHaveBeenCalledTimes(1);
+    expect(upload).toHaveBeenCalledTimes(2);
     expect(task.render).toHaveBeenCalledTimes(1);
-    expect(retry.failures).toEqual(first.failures);
-    expect(retry.pendingUploads).toEqual(first.pendingUploads);
+    expect(retry.completed.map((file) => file.id)).toEqual(['file-a']);
+    expect(retry.failures).toEqual([]);
+    expect(retry.pendingUploads).toEqual([]);
   });
 
   it('prunes completed, failed, and pending entries from an older task configuration', async () => {
@@ -505,7 +522,9 @@ describe('upload and resumable static batches', () => {
     });
     const aborted = makeTask('out-1', vi.fn().mockRejectedValue(abort));
     const remaining = makeTask('out-2');
-    await runStaticExportBatch([aborted, remaining], upload);
+    const result = await runStaticExportBatch([aborted, remaining], upload);
     expect(remaining.render).not.toHaveBeenCalled();
+    expect(result.failures).toEqual([]);
+    expect(console.warn).not.toHaveBeenCalled();
   });
 });

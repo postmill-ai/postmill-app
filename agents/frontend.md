@@ -500,16 +500,21 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   coordinates plus format, scale, and status/kind — never document contents, asset URLs, prompts, or
   credentials. Only the idempotent `/media/designs/render` POST gets a 120 s budget and at most one
   retry after 750 ms, for network/timeout or HTTP 502/503/504. Uploads have no render timeout or
-  abort signal and never retry automatically; an uncertain network outcome directs the user to check
-  Files rather than offering a blind retry, while a definite HTTP 5xx rejection may reuse its cached
-  blob for a manual retry. Non-retryable 4xx responses preserve sanitized server reasons without
-  retry advice. Quality/scale fallbacks run only after an actual blob exceeds 10 MiB.
+  abort signal and never retry automatically. Network/unknown outcomes and HTTP 502/503/504 are
+  uncertain: the UI warns the user to check Files and labels the explicit manual action Upload again.
+  Every failure retains a manual recovery action, independent of the automatic-retry policy, and a
+  manual upload retry reuses its cached blob rather than rerendering. Non-retryable 4xx responses
+  preserve sanitized server reasons without retry advice. Quality/scale fallbacks run only after an
+  actual blob exceeds 10 MiB.
   `runStaticExportBatch` keeps completed output/page keys, continues after individual failures, and
   reports progress as each task settles. Task identity includes the configuration generation, output,
   page, format, scale, quality, and selected pages/outputs; changing any of them clears completed,
-  failed, and pending-upload UI state so stale bytes cannot cross formats. Preview/final render
-  cancellation is AbortController-backed, but uploads are never aborted by dialog close. Partial
-  exports stay visible with per-output retry and an explicit Use completed exports action; draft
+  failed, and pending-upload UI state so stale bytes cannot cross formats. External document edits
+  do not reset an open dialog or revoke completed downloads on the done step. Preview/final render
+  cancellation is AbortController-backed, but uploads are never aborted by dialog close. Once the
+  current upload settles, the remaining queue stops and a cancelled batch returns without a success
+  toast, partial completion state, or draft creation. Partial exports stay visible with per-output
+  retry and an explicit Use completed exports action; draft
   creation still requires that explicit action when any output failed. Every user-facing reliability
   string, including oversize fallback, retry UI, and plural forms, must have an entry in all 16
   locale catalogs.

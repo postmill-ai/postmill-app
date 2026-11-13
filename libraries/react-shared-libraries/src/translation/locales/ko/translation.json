@@ -3322,6 +3322,7 @@
   "designer_export_incomplete_one": "낸 후 {{count}}개에 확인이 필요합니다. 완료된 낸 후는 유지됩니다.",
   "designer_export_incomplete_other": "낸 후 {{count}}개에 확인이 필요합니다. 완료된 낸 후는 유지됩니다.",
   "designer_export_upload_uncertain": "업로드 결과가 불확실합니다. 다시 업로드하기 전에 파일을 확인하세요.",
+  "designer_upload_again": "다시 업로드",
   "designer_preview_failed": "미리보기를 렌더링할 수 없습니다. 최종 낸 후는 계속 시도할 수 있습니다.",
   "designer_some_exports_need_attention": "일부 낸 후에 확인이 필요합니다",
   "designer_completed_exports": "완료된 낸 후",

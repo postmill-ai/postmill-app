@@ -3322,6 +3322,7 @@
   "designer_export_incomplete_one": "{{count}} export nécessite votre attention. Les exports terminés ont été conservés.",
   "designer_export_incomplete_other": "{{count}} exports nécessitent votre attention. Les exports terminés ont été conservés.",
   "designer_export_upload_uncertain": "Le résultat du téléversement est incertain. Vérifiez Fichiers avant de réessayer.",
+  "designer_upload_again": "Téléverser à nouveau",
   "designer_preview_failed": "L’aperçu n’a pas pu être généré. Vous pouvez toujours essayer l’export final.",
   "designer_some_exports_need_attention": "Certains exports nécessitent votre attention",
   "designer_completed_exports": "Exports terminés",

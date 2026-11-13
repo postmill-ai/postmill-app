@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import { createDesignerStore } from './designer.store';
 import { ExportDialog } from './export-dialog';
@@ -110,6 +110,14 @@ const makeStore = () => {
   return store;
 };
 
+const makeSingleOutputStore = () => {
+  const store = makeStore();
+  store.setState((state) => ({
+    doc: { ...state.doc, outputs: state.doc.outputs.slice(0, 1) },
+  }));
+  return store;
+};
+
 beforeEach(() => {
   mocks.fetch.mockReset().mockImplementation(async () => ({ ok: true, json: async () => [] }));
   mocks.render.mockReset().mockImplementation(async (_doc, output, format, quality, scale) => ({
@@ -183,6 +191,61 @@ describe('ExportDialog static export recovery', () => {
     expect(await screen.findByText('Saved to /files')).toBeTruthy();
     expect(await screen.findByRole('link', { name: 'Test - B.jpg' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Test - A.jpg' })).toBeTruthy();
+    expect(mocks.render).toHaveBeenCalledTimes(2);
+    expect(mocks.upload).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([429, 500])('offers manual recovery after a render HTTP %i failure', async (status) => {
+    mocks.upload.mockResolvedValue({ id: 'file-a', path: '/files/a.jpg' });
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ExportDialog store={makeSingleOutputStore()} initialAction="save" onClose={vi.fn()} />
+      </SWRConfig>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Choose Folder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Export 1 file' }));
+    await waitFor(() => expect(mocks.render).toHaveBeenCalledTimes(1));
+    mocks.render.mockClear()
+      .mockRejectedValueOnce(exportError('render', 'http', status))
+      .mockResolvedValueOnce({ blob: new Blob(['a']), usedFormat: 'jpeg', usedQuality: 0.92, usedScale: 1 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export 1 file' }));
+    expect(await screen.findByText('Some exports need attention')).toBeTruthy();
+    expect(screen.getByText(`A — Render failed with HTTP ${status}.`)).toBeTruthy();
+    expect(mocks.render).toHaveBeenCalledTimes(1);
+    expect(mocks.upload).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry output' }));
+    expect(await screen.findByText('Saved to /files')).toBeTruthy();
+    expect(mocks.render).toHaveBeenCalledTimes(2);
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers explicit Upload again recovery for an uncertain upload without duplicates', async () => {
+    mocks.upload
+      .mockResolvedValueOnce({ id: 'file-a', path: '/files/a.jpg' })
+      .mockRejectedValueOnce(exportError('upload', 'network'));
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ExportDialog store={makeStore()} initialAction="save" onClose={vi.fn()} />
+      </SWRConfig>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Choose Folder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Export 2 file' }));
+    await waitFor(() => expect(mocks.render).toHaveBeenCalledTimes(2));
+    mocks.render.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export 2 file' }));
+    expect(await screen.findByText('Some exports need attention')).toBeTruthy();
+    expect(screen.getByText(/The upload outcome is uncertain/)).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'Test - A.jpg' })).toBeTruthy();
+    expect(mocks.upload).toHaveBeenCalledTimes(2);
+
+    mocks.upload.mockResolvedValueOnce({ id: 'file-b', path: '/files/b.jpg' });
+    fireEvent.click(screen.getByRole('button', { name: 'Upload again' }));
+    expect(await screen.findByText('Saved to /files')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Test - A.jpg' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Test - B.jpg' })).toBeTruthy();
     expect(mocks.render).toHaveBeenCalledTimes(2);
     expect(mocks.upload).toHaveBeenCalledTimes(3);
   });
@@ -285,6 +348,39 @@ describe('ExportDialog static export recovery', () => {
     expect(await screen.findByText('Saved to /files')).toBeTruthy();
   });
 
+  it('keeps completed downloads when the document changes on the done step', async () => {
+    const store = makeStore();
+    mocks.upload.mockImplementation((_endpoint, formData) => {
+      const name = (formData.get('file') as File).name;
+      return Promise.resolve({ id: `file-${name}`, path: `/files/${name}` });
+    });
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ExportDialog store={store} initialAction="save" onClose={vi.fn()} />
+      </SWRConfig>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Choose Folder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Export 2 file' }));
+    await waitFor(() => expect(mocks.render).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Export 2 file' }));
+    expect(await screen.findByText('Saved to /files')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Test - A.jpg' })).toBeTruthy();
+    const revocations = vi.mocked(URL.revokeObjectURL).mock.calls.length;
+
+    act(() => {
+      store.setState((state) => ({
+        doc: {
+          ...state.doc,
+          outputs: state.doc.outputs.map((output) => ({ ...output, children: [] })),
+        },
+      }));
+    });
+
+    expect(screen.getByRole('link', { name: 'Test - A.jpg' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Test - B.jpg' })).toBeTruthy();
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(revocations);
+  });
+
   it('localizes preview stage and retry advice', async () => {
     mocks.render.mockRejectedValue(exportError('preview', 'network'));
     render(
@@ -352,5 +448,6 @@ describe('ExportDialog static export recovery', () => {
     await waitFor(() => expect(renderSignal?.aborted).toBe(true));
     expect(mocks.upload).toHaveBeenCalledTimes(1);
     expect(mocks.render).toHaveBeenCalledTimes(1);
+    expect(mocks.toast).not.toHaveBeenCalled();
   });
 });

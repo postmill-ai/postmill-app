@@ -3322,6 +3322,7 @@
   "designer_export_incomplete_one": "{{count}} 个导出需要注意。已完成的导出已保留。",
   "designer_export_incomplete_other": "{{count}} 个导出需要注意。已完成的导出已保留。",
   "designer_export_upload_uncertain": "上传结果不确定。再次上传前，请先检查文件。",
+  "designer_upload_again": "重新上传",
   "designer_preview_failed": "无法渲染预览。仍可以尝试最终导出。",
   "designer_some_exports_need_attention": "部分导出需要注意",
   "designer_completed_exports": "已完成的导出",
