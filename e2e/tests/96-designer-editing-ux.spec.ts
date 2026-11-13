@@ -216,8 +216,9 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   await editText(page);
   await page.getByRole('textbox', { name: 'Design name' }).click();
 
-  for (const name of ['Arc text', 'Wave text', 'Circle text', 'Text shadow']) {
-    await page.getByRole('button', { name, exact: true }).click();
+  const textEffects = page.getByText('Text Effects', { exact: true }).locator('..');
+  for (const name of ['Arc', 'Wave', 'Circle', 'Drop shadow']) {
+    await textEffects.getByRole('button', { name, exact: true }).click();
   }
   await expect.poll(() => JSON.stringify(state.doc.outputs[0].children[0])).toContain('textShadow');
   expect(state.doc.outputs[0].children).toHaveLength(2);
