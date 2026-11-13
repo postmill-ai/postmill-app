@@ -184,13 +184,11 @@ async function selectBodyCopy(page: Page) {
 }
 
 async function editSelectedBodyCopy(page: Page) {
-  const stage = page.locator('.konva-stage').first();
-  const box = await stage.boundingBox();
+  const canvas = page.locator('.konva-stage').first().locator('canvas').first();
+  const box = await canvas.boundingBox();
   if (!box) throw new Error('Canvas has no bounding box');
-  const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
-  const outputX = (box.width - 400 * scale) / 2;
-  const outputY = (box.height - 400 * scale) / 2;
-  await stage.dblclick({ position: { x: outputX + 190 * scale, y: outputY + 50 * scale } });
+  const scale = box.width / 400;
+  await canvas.dblclick({ position: { x: 190 * scale, y: 50 * scale } });
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
 }
 
