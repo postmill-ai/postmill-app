@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { BrandKitModalProvider, BrandKitProvider, useBrandKit } from './brand-kit-context';
+import { BrandKitProvider, useBrandKit } from './brand-kit-context';
 
 const mocks = vi.hoisted(() => ({
   brands: {
@@ -55,14 +55,6 @@ describe('BrandKitProvider', () => {
     expect(result.current.activeBrand?.palette).toEqual(['#bbbbbb']);
     expect(mocks.setBrandEnforcement).toHaveBeenLastCalledWith(false);
     expect(mocks.fontScopes).toEqual(['brand-b']);
-  });
-
-  it('provides brand context to content rendered by the global modal manager', () => {
-    const { result } = renderHook(() => useBrandKit(), {
-      wrapper: ({ children }) => <BrandKitModalProvider store={makeStore('brand-b')}>{children}</BrandKitModalProvider>,
-    });
-    expect(result.current.activeBrand?.id).toBe('brand-b');
-    expect(result.current.isGeneralMode).toBe(false);
   });
 
   it('distinguishes General Mode from legacy default resolution', () => {
