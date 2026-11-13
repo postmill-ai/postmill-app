@@ -55,6 +55,7 @@ function AiDesignerPageInner() {
   const [startNotice, setStartNotice] = useState<string | null>(null);
   const startingRef = useRef(false);
   const startTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startAttemptRef = useRef<{ signature: string; nonce: string } | null>(null);
 
   const clearStartTimer = useCallback(() => {
     if (startTimerRef.current) {
@@ -75,6 +76,7 @@ function AiDesignerPageInner() {
           clearStartTimer();
           setSessionId(session.id);
           setPendingNonce(null);
+          startAttemptRef.current = null;
           startingRef.current = false;
           setStarting(false);
           router.replace(`${pathname}?session=${session.id}`);
@@ -92,11 +94,16 @@ function AiDesignerPageInner() {
       },
       onError: (err: { code?: string; message: string; nonce?: string }) => {
         if (err.nonce && err.nonce !== pendingNonce) return;
-        toaster.show(err.message || err.code || 'AI Designer error', 'warning');
         clearStartTimer();
         startingRef.current = false;
         setStarting(false);
+        if (err.code === 'duplicate_nonce') {
+          toaster.show('Your previous start is still being processed. Please wait a moment.', 'warning');
+          return;
+        }
+        toaster.show(err.message || 'AI Designer error', 'warning');
         setPendingNonce(null);
+        startAttemptRef.current = null;
       },
     }),
     [pendingNonce, toaster, router, pathname, clearStartTimer]
@@ -114,7 +121,13 @@ function AiDesignerPageInner() {
       startingRef.current = true;
       setMode(payload.mode);
       setStartNotice(null);
-      const nonce = socket.start(payload);
+      const signature = JSON.stringify(payload);
+      const previous = startAttemptRef.current;
+      const nonce = socket.start(
+        payload,
+        previous?.signature === signature ? previous.nonce : undefined
+      );
+      startAttemptRef.current = { signature, nonce };
       setPendingNonce(nonce);
       // Safety valve: if the server never answers (dropped socket, silent
       // rejection), release the start state instead of wedging forever.
@@ -123,7 +136,6 @@ function AiDesignerPageInner() {
         startTimerRef.current = null;
         startingRef.current = false;
         setStarting(false);
-        setPendingNonce(null);
         toaster.show(
           'The AI Designer did not respond. Please try again.',
           'warning'
@@ -137,6 +149,7 @@ function AiDesignerPageInner() {
     clearStartTimer();
     setSessionId(null);
     setPendingNonce(null);
+    startAttemptRef.current = null;
     startingRef.current = false;
     setStarting(false);
     setStartNotice(null);
@@ -148,6 +161,7 @@ function AiDesignerPageInner() {
     (id: string) => {
       clearStartTimer();
       setPendingNonce(null);
+      startAttemptRef.current = null;
       startingRef.current = false;
       setStarting(false);
       setStartNotice(null);

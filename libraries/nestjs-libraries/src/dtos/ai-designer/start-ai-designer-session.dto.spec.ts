@@ -114,6 +114,20 @@ describe('StartAiDesignerSessionDto', () => {
     });
     expect(await validate(dto)).toHaveLength(0);
   });
+
+  it.each([
+    { brief: { documentContextFileIds: ['doc-1'] } },
+    { documentContextFileIds: ['doc-1'] },
+  ])('rejects client-supplied server-owned document context: %j', async (extra) => {
+    const dto = plainToInstance(StartAiDesignerSessionDto, {
+      config: { channels: ['ig-post'], variants: 1 },
+      mode: 'prompt',
+      nonce: 'nonce-1',
+      ...extra,
+    });
+    const errors = await validate(dto, { whitelist: true, forbidNonWhitelisted: true });
+    expect(errors.length).toBeGreaterThan(0);
+  });
 });
 
 describe('AiDesignerAcceptPlanDto', () => {

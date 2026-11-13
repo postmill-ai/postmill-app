@@ -192,8 +192,7 @@ export function useAiDesignerSocket(
   }, [backendUrl, sessionId, enabled]);
 
   const emit = useCallback(
-    <T extends object>(event: string, payload: T): string => {
-      const nonce = makeNonce();
+    <T extends object>(event: string, payload: T, nonce = makeNonce()): string => {
       socketRef.current?.emit(event, { ...payload, nonce });
       return nonce;
     },
@@ -218,8 +217,8 @@ export function useAiDesignerSocket(
   );
 
   const start = useCallback(
-    (payload: Omit<AiDesignerStartPayloadWithMode, 'nonce'>) => {
-      return emit('start', payload);
+    (payload: Omit<AiDesignerStartPayloadWithMode, 'nonce'>, nonce?: string) => {
+      return emit('start', payload, nonce);
     },
     [emit]
   );

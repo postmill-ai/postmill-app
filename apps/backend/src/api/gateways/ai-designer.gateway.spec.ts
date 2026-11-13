@@ -1007,7 +1007,7 @@ describe('AiDesignerGateway handleMessage idempotency', () => {
     expect(service.appendMessage).not.toHaveBeenCalled();
     expect(idempotency.releaseForSession).toHaveBeenCalledWith('n1', 's1');
     expect(client.emit).toHaveBeenCalledWith('error', {
-      code: 'invalid_payload',
+      code: 'invalid_attachment',
       message: 'Attachment belongs to another workspace',
       nonce: 'n1',
     });
@@ -1254,7 +1254,7 @@ describe('AiDesignerGateway handleStart attachment validation', () => {
     expect(conductor.handleStart).not.toHaveBeenCalled();
     expect(idempotency.releaseStart).toHaveBeenCalledWith('n-start', 'u1', 'o1');
     expect(client.emit).toHaveBeenCalledWith('error', {
-      code: 'invalid_payload',
+      code: 'invalid_attachment',
       message: 'An attachment contains no readable text.',
       nonce: 'n-start',
     });
@@ -1271,7 +1271,7 @@ describe('AiDesignerGateway handleStart attachment validation', () => {
     expect(service.createSession).not.toHaveBeenCalled();
     expect(idempotency.releaseStart).toHaveBeenCalledWith('n-start', 'u1', 'o1');
     expect(client.emit).toHaveBeenCalledWith('error', {
-      code: 'invalid_payload',
+      code: 'invalid_attachment',
       message: 'One or more attachments could not be found in this workspace.',
       nonce: 'n-start',
     });

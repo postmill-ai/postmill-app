@@ -108,7 +108,8 @@ const ERROR_MESSAGES: Record<string, string> = {
     'You need the media-create permission to use the AI Designer.',
   billing_ai: 'Your plan does not include AI features.',
   invalid_payload: 'The request failed validation.',
-  duplicate_nonce: 'Duplicate request ignored.',
+  invalid_attachment: 'The attachment failed validation.',
+  duplicate_nonce: 'Your previous request is still being processed.',
   busy: "I'm still working on the previous request for this design — give me a moment.",
   budget_exceeded: 'The AI budget for this workspace is exhausted.',
   guardrail_blocked:
@@ -1182,15 +1183,17 @@ export class AiDesignerGateway
     const invalidPayload = err instanceof BadRequestException;
     const safeValidation = err instanceof AiDesignerValidationException;
     const busy = err instanceof AiDesignerBusyError;
-    const code = invalidPayload
-      ? 'invalid_payload'
-      : busy
-        ? 'busy'
-        : 'internal_error';
+    const code = safeValidation
+      ? 'invalid_attachment'
+      : invalidPayload
+        ? 'invalid_payload'
+        : busy
+          ? 'busy'
+          : 'internal_error';
     this.logger.warn(
       `${event} failed after nonce claim (${aiDesignerFailureLog(
         err,
-        invalidPayload ? 'invalid_payload' : busy ? 'busy' : 'unknown'
+        code
       )})`,
       AiDesignerGateway.name
     );
