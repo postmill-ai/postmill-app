@@ -122,6 +122,13 @@ For Designer specs 96 and 97, optional `E2E_FRONTEND_ORIGIN` proxies only docume
 stay unchanged. It must be `http://localhost`, `127.0.0.1`, or `::1`; API/provider calls are never
 proxied by this setting. `E2E_BACKEND_ORIGIN` remains the separate opt-in loopback API proxy.
 
+`playwright.designer-ci.config.ts` and `.github/workflows/designer-browser.yml` are the production-build
+Designer browser path. The workflow builds the frontend before Playwright starts `next start` on a
+GitHub-hosted runner; the config refuses to load anywhere else. The export spec stubs identity, API,
+render, upload, and media traffic and fails unexpected mutations, so it needs no backend, credentials,
+or paid providers. Add later Designer specs to this config only after making them equally self-contained.
+Never run this config, its `webServer`, or `next start` on a production host.
+
 ### Opt-in live provider playback (never default CI)
 
 `99-provider-live-media.spec.ts` and `playwright.provider-live.config.ts` are a separate,

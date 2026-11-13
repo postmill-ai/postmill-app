@@ -1,5 +1,6 @@
 import type { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import type { DesignerDoc, DesignerOutput } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { readErrorMessage } from './read-error-message';
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const EXPORT_REQUEST_TIMEOUT_MS = 120_000;
@@ -38,16 +39,34 @@ interface FallbackRenderResult {
 const stageLabel = (stage: ExportStage) =>
   stage === 'preview' ? 'Preview' : stage === 'upload' ? 'Upload' : 'Render';
 
+export const canRetryExport = (diagnostic: ExportDiagnostic) => {
+  if (diagnostic.stage === 'upload') {
+    return diagnostic.kind === 'http' &&
+      typeof diagnostic.status === 'number' &&
+      diagnostic.status >= 500;
+  }
+  return diagnostic.kind === 'network' ||
+    diagnostic.kind === 'timeout' ||
+    (diagnostic.kind === 'http' &&
+      typeof diagnostic.status === 'number' &&
+      [502, 503, 504].includes(diagnostic.status));
+};
+
 const safeExportMessage = (stage: ExportStage, kind: ExportFailureKind, status?: number) => {
   const label = stageLabel(stage);
-  const retry = stage === 'preview'
-    ? 'You can still try the final export.'
-    : 'Retry this output; completed exports were kept.';
-  if (kind === 'http') return `${label} failed with HTTP ${status ?? 'error'}. ${retry}`;
-  if (kind === 'network') return `${label} could not reach the server. Check your connection. ${retry}`;
-  if (kind === 'timeout') return `${label} took too long. ${retry}`;
+  const diagnostic = { stage, kind, status: status ?? kind } as ExportDiagnostic;
+  const retry = canRetryExport(diagnostic)
+    ? stage === 'preview'
+      ? ' You can still try the final export.'
+      : ' Retry this output; completed exports were kept.'
+    : stage === 'upload' && (kind === 'network' || kind === 'timeout' || kind === 'unknown')
+      ? ' The upload outcome is uncertain. Check Files before uploading again.'
+      : '';
+  if (kind === 'http') return `${label} failed with HTTP ${status ?? 'error'}.${retry}`;
+  if (kind === 'network') return `${label} could not reach the server. Check your connection.${retry}`;
+  if (kind === 'timeout') return `${label} took too long.${retry}`;
   if (kind === 'abort') return `${label} was cancelled.`;
-  return `${label} could not be completed. ${retry}`;
+  return `${label} could not be completed.${retry}`;
 };
 
 const diagnosticFor = (
@@ -68,9 +87,10 @@ const diagnosticFor = (
 export class DesignerExportError extends Error {
   readonly diagnostic: ExportDiagnostic;
   readonly reported: boolean;
+  readonly serverReason?: string;
 
-  constructor(diagnostic: ExportDiagnostic, message?: string, reported = false) {
-    super(message ?? safeExportMessage(
+  constructor(diagnostic: ExportDiagnostic, message?: string, reported = false, serverReason?: string) {
+    super(message ?? serverReason ?? safeExportMessage(
       diagnostic.stage,
       diagnostic.kind,
       typeof diagnostic.status === 'number' ? diagnostic.status : undefined,
@@ -78,13 +98,14 @@ export class DesignerExportError extends Error {
     this.name = 'DesignerExportError';
     this.diagnostic = diagnostic;
     this.reported = reported;
+    this.serverReason = serverReason;
   }
 }
 
 const reportExportFailure = (error: DesignerExportError) => {
   if (error.reported) return error;
   console.warn('[designer-export]', error.diagnostic);
-  return new DesignerExportError(error.diagnostic, error.message, true);
+  return new DesignerExportError(error.diagnostic, error.message, true, error.serverReason);
 };
 
 const requestError = (
@@ -100,20 +121,29 @@ const fetchOnce = async <T>(
   context: ExportRequestContext,
   read: (response: Response) => Promise<T>,
 ): Promise<T> => {
-  const controller = new AbortController();
-  const externalSignal = context.signal;
+  const isUpload = context.stage === 'upload';
+  const controller = isUpload ? null : new AbortController();
+  const externalSignal = isUpload ? undefined : context.signal;
   let timedOut = false;
-  const abort = () => controller.abort();
+  const abort = () => controller?.abort();
   if (externalSignal?.aborted) throw requestError(context, 'abort');
   externalSignal?.addEventListener('abort', abort, { once: true });
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, EXPORT_REQUEST_TIMEOUT_MS);
+  const timeout = controller
+    ? setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, EXPORT_REQUEST_TIMEOUT_MS)
+    : null;
 
   try {
-    const response = await fetchFn(path, { ...init, signal: controller.signal });
-    if (!response.ok) throw requestError(context, 'http', response.status);
+    const response = await fetchFn(path, { ...init, signal: controller?.signal });
+    if (!response.ok) {
+      const diagnostic = diagnosticFor(context, 'http', response.status);
+      const serverReason = response.status >= 400 && response.status < 500
+        ? await readErrorMessage(response, '')
+        : '';
+      throw new DesignerExportError(diagnostic, serverReason || undefined, false, serverReason || undefined);
+    }
     return await read(response);
   } catch (error) {
     if (error instanceof DesignerExportError) throw error;
@@ -126,7 +156,7 @@ const fetchOnce = async <T>(
           : 'network';
     throw requestError(context, kind);
   } finally {
-    clearTimeout(timeout);
+    if (timeout) clearTimeout(timeout);
     externalSignal?.removeEventListener('abort', abort);
   }
 };
@@ -148,12 +178,7 @@ const waitForRenderRetry = async (context: ExportRequestContext) => {
   });
 };
 
-const canRetryRender = (error: DesignerExportError) =>
-  error.diagnostic.kind === 'network' ||
-  error.diagnostic.kind === 'timeout' ||
-  (error.diagnostic.kind === 'http' &&
-    typeof error.diagnostic.status === 'number' &&
-    [502, 503, 504].includes(error.diagnostic.status));
+const canRetryRender = (error: DesignerExportError) => canRetryExport(error.diagnostic);
 
 class ExportSizeError extends Error {}
 
@@ -270,7 +295,7 @@ export const uploadExportBlob = async (
   endpoint: string,
   formData: FormData,
   fetchFn: ReturnType<typeof useFetch>,
-  context: Omit<ExportRequestContext, 'stage'>,
+  context: Omit<ExportRequestContext, 'stage' | 'signal'>,
 ): Promise<{ id: string; path: string }> => {
   const requestContext: ExportRequestContext = { ...context, stage: 'upload' };
   try {
@@ -328,6 +353,7 @@ export interface StaticExportFailure {
   stage: ExportStage;
   diagnostic: ExportDiagnostic;
   message: string;
+  serverReason?: string;
 }
 
 export interface StaticExportPendingUpload {
@@ -366,18 +392,27 @@ export const runStaticExportBatch = async (
   tasks: StaticExportTask[],
   upload: (blob: Blob, task: StaticExportTask) => Promise<{ id: string; path: string }>,
   previous: StaticExportBatchState = emptyStaticExportBatch(),
-  options: { retryFailedOnly?: boolean; outputId?: string } = {},
+  options: {
+    retryFailedOnly?: boolean;
+    outputId?: string;
+    signal?: AbortSignal;
+    onTaskSettled?: (task: StaticExportTask) => void;
+  } = {},
 ): Promise<StaticExportBatchState> => {
-  const completed = new Map(previous.completed.map((file) => [file.key, file]));
-  const failures = new Map(previous.failures.map((failure) => [failure.key, failure]));
-  const pendingUploads = new Map(previous.pendingUploads.map((pending) => [pending.task.key, pending]));
-  const eligible = tasks.filter((task) =>
-    !completed.has(task.key) &&
-    (!options.retryFailedOnly ||
-      (failures.has(task.key) && (!options.outputId || task.outputId === options.outputId))),
-  );
+  const currentKeys = new Set(tasks.map((task) => task.key));
+  const completed = new Map(previous.completed.filter((file) => currentKeys.has(file.key)).map((file) => [file.key, file]));
+  const failures = new Map(previous.failures.filter((failure) => currentKeys.has(failure.key)).map((failure) => [failure.key, failure]));
+  const pendingUploads = new Map(previous.pendingUploads.filter((pending) => currentKeys.has(pending.task.key)).map((pending) => [pending.task.key, pending]));
+  const eligible = tasks.filter((task) => {
+    if (completed.has(task.key)) return false;
+    if (!options.retryFailedOnly) return true;
+    const failure = failures.get(task.key);
+    return !!failure && canRetryExport(failure.diagnostic) &&
+      (!options.outputId || task.outputId === options.outputId);
+  });
 
   for (const task of eligible) {
+    if (options.signal?.aborted) break;
     let blob: Blob;
     try {
       blob = pendingUploads.get(task.key)?.blob ?? await task.render();
@@ -391,10 +426,14 @@ export const runStaticExportBatch = async (
         stage: failure.diagnostic.stage,
         diagnostic: failure.diagnostic,
         message: failure.message,
+        serverReason: failure.serverReason,
       });
+      options.onTaskSettled?.(task);
+      if (failure.diagnostic.kind === 'abort') break;
       continue;
     }
 
+    if (options.signal?.aborted) break;
     try {
       const saved = await upload(blob, task);
       completed.set(task.key, {
@@ -420,8 +459,10 @@ export const runStaticExportBatch = async (
         stage: 'upload',
         diagnostic: failure.diagnostic,
         message: failure.message,
+        serverReason: failure.serverReason,
       });
     }
+    options.onTaskSettled?.(task);
   }
 
   return {

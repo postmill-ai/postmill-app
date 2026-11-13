@@ -43,6 +43,8 @@ import { analyzeDesignerPreflight } from './design-preflight';
 import { ExportPreflight } from './export-preflight';
 import { openDesignerPreflightFinding } from './preflight-navigation';
 import {
+  canRetryExport,
+  DesignerExportError,
   emptyStaticExportBatch,
   MAX_UPLOAD_BYTES,
   renderOutputWithFallback,
@@ -557,18 +559,33 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const [savedFiles, setSavedFiles] = useState<ExportedFile[]>([]);
   const [staticExportFailures, setStaticExportFailures] = useState<StaticExportFailure[]>([]);
   const staticPendingUploadsRef = useRef<StaticExportPendingUpload[]>([]);
+  const staticConfigurationVersionRef = useRef(0);
+  const staticRenderAbortRef = useRef<AbortController | null>(null);
+  const staticRequestPhaseRef = useRef<'idle' | 'render' | 'upload'>('idle');
+  const staticAbortAfterUploadRef = useRef(false);
+  const staticExportRunRef = useRef(0);
   const [previews, setPreviews] = useState<{ idx: number; dataUrl: string }[]>([]);
   const [loadingPreviews, setLoadingPreviews] = useState(false);
   const previewDoneRef = useRef(false);
+  const previewAbortRef = useRef<AbortController | null>(null);
   // Object URLs of the just-exported blobs, keyed by saved file id, so the
   // done step can offer a real browser download alongside the /files copy.
   const downloadUrlsRef = useRef(new Map<string, string>());
+  const cancelStaticRender = useCallback(() => {
+    if (staticRequestPhaseRef.current === 'upload') {
+      staticAbortAfterUploadRef.current = true;
+    } else {
+      staticRenderAbortRef.current?.abort();
+    }
+  }, []);
   useEffect(
     () => () => {
+      previewAbortRef.current?.abort();
+      cancelStaticRender();
       downloadUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
       downloadUrlsRef.current.clear();
     },
-    []
+    [cancelStaticRender]
   );
 
   const [videoFormat, setVideoFormat] = useState<'mp4' | 'webm' | 'gif' | 'webp-animated'>('mp4');
@@ -673,6 +690,17 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     }
     return [doc.outputs[state.currentOutput]];
   }, [doc.outputs, exportAll, multiOutput, store, forceAllOutputs]);
+
+  useEffect(() => {
+    staticConfigurationVersionRef.current += 1;
+    cancelStaticRender();
+    staticPendingUploadsRef.current = [];
+    setSavedFiles([]);
+    setStaticExportFailures([]);
+    setExportProgress({ done: 0, total: 0 });
+    downloadUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    downloadUrlsRef.current.clear();
+  }, [doc, selectedOutputs, outputFormats, quality, scale, pageSelection, cancelStaticRender]);
 
   const outputCount = selectedOutputs.length;
 
@@ -910,6 +938,12 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   );
 
   const [creatingDrafts, setCreatingDrafts] = useState(false);
+
+  const handleClose = useCallback(() => {
+    previewAbortRef.current?.abort();
+    cancelStaticRender();
+    onClose();
+  }, [onClose, cancelStaticRender]);
 
   // --- Step transitions ---
 
@@ -1351,74 +1385,39 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
 
       // upload-simple is capped at 10 MB; fall back to the server-side endpoint for larger files.
       const endpoint = blob.size > MAX_UPLOAD_BYTES ? '/files/upload-server' : '/files/upload-simple';
-      const saved = await uploadExportBlob(endpoint, formData, fetch, {
-        outputIndex: task.outputIndex,
-        pageNumber: task.pageNumber,
-        format: task.format,
-        scale: task.scale,
-      });
+      staticRequestPhaseRef.current = 'upload';
       try {
-        downloadUrlsRef.current.set(saved.id, URL.createObjectURL(blob));
-      } catch {}
-      return saved;
+        const saved = await uploadExportBlob(endpoint, formData, fetch, {
+          outputIndex: task.outputIndex,
+          pageNumber: task.pageNumber,
+          format: task.format,
+          scale: task.scale,
+        });
+        try {
+          downloadUrlsRef.current.set(saved.id, URL.createObjectURL(blob));
+        } catch {}
+        return saved;
+      } finally {
+        staticRequestPhaseRef.current = 'render';
+        if (staticAbortAfterUploadRef.current) {
+          staticAbortAfterUploadRef.current = false;
+          staticRenderAbortRef.current?.abort();
+        }
+      }
     },
     [fetch, selectedFolderId]
   );
 
-  // --- Thumbnail generation (for step 3) ---
-
-  const generatePreviews = useCallback(async () => {
-    if (previewDoneRef.current) return;
-    previewDoneRef.current = true;
-    setLoadingPreviews(true);
-    const result: { idx: number; dataUrl: string }[] = [];
-    let previewError = '';
-    try {
-      for (let i = 0; i < selectedOutputs.length; i++) {
-        const out = selectedOutputs[i];
-        if (!('children' in out)) continue;
-        try {
-          const { blob } = await renderOutputWithFallback(doc, out as DesignerOutput, 'png', 1, 0.25, fetch, {
-            stage: 'preview',
-            outputIndex: doc.outputs.indexOf(out),
-            pageNumber: 0,
-          });
-          result.push({ idx: i, dataUrl: await blobDataUrl(blob) });
-        } catch (error) {
-          previewError ||= error instanceof Error
-            ? error.message
-            : t('designer_preview_failed', 'Preview could not be rendered. You can still try the final export.');
-        }
-      }
-      setPreviews(result);
-      if (previewError) toaster.show(previewError, 'warning');
-    } finally {
-      setLoadingPreviews(false);
-    }
-  }, [selectedOutputs, doc, fetch, toaster, t]);
-
-  const generatePreviewsRef = useRef(generatePreviews);
-  useEffect(() => {
-    generatePreviewsRef.current = generatePreviews;
-  }, [generatePreviews]);
-
-  useEffect(() => {
-    if (step === 'export') {
-      previewDoneRef.current = false;
-      setPreviews([]);
-      generatePreviewsRef.current();
-    }
-  }, [step, doc, selectedOutputs]);
-
   // --- Server-side PDF render ---
 
-  const renderPdfOnServer = useCallback(async (outputs?: DesignerOutput[]): Promise<Blob> => {
+  const renderPdfOnServer = useCallback(async (outputs?: DesignerOutput[], signal?: AbortSignal): Promise<Blob> => {
     const pdfOutputs = (outputs ?? (selectedOutputs as DesignerOutput[]));
     const pdfDoc: DesignerDoc = { ...doc, outputs: pdfOutputs };
     return renderPdfWithDiagnostics(pdfDoc, fetch, {
       stage: 'render',
       outputIndex: Math.max(0, doc.outputs.findIndex((output) => output.id === pdfOutputs[0]?.id)),
       pageNumber: 0,
+      signal,
     });
   }, [doc, selectedOutputs, fetch]);
 
@@ -1429,12 +1428,16 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
       : diagnostic.stage === 'upload'
         ? t('designer_export_stage_upload', 'Upload')
         : t('designer_export_stage_render', 'Render');
-    const retry = diagnostic.stage === 'preview'
-      ? t('designer_export_preview_retry_hint', 'You can still try the final export.')
-      : t('designer_export_retry_hint', 'Retry this output; completed exports were kept.');
+    const retry = canRetryExport(diagnostic)
+      ? diagnostic.stage === 'preview'
+        ? t('designer_export_preview_retry_hint', 'You can still try the final export.')
+        : t('designer_export_retry_hint', 'Retry this output; completed exports were kept.')
+      : diagnostic.stage === 'upload' && ['network', 'timeout', 'unknown'].includes(diagnostic.kind)
+        ? t('designer_export_upload_uncertain', 'The upload outcome is uncertain. Check Files before uploading again.')
+        : '';
     let message = failure.message;
     if (diagnostic.kind === 'http') {
-      message = t('designer_export_http_failed', '{{stage}} failed with HTTP {{status}}. {{retry}}', {
+      message = failure.serverReason ? `${stage}: ${failure.serverReason}` : t('designer_export_http_failed', '{{stage}} failed with HTTP {{status}}. {{retry}}', {
         stage,
         status: diagnostic.status,
         retry,
@@ -1460,11 +1463,79 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     return { ...failure, message };
   }, [t]);
 
+  // --- Thumbnail generation (for step 3) ---
+
+  const generatePreviews = useCallback(async () => {
+    if (previewDoneRef.current) return;
+    previewDoneRef.current = true;
+    previewAbortRef.current?.abort();
+    const controller = new AbortController();
+    previewAbortRef.current = controller;
+    setLoadingPreviews(true);
+    const result: { idx: number; dataUrl: string }[] = [];
+    let previewError = '';
+    try {
+      for (let i = 0; i < selectedOutputs.length; i++) {
+        const out = selectedOutputs[i];
+        if (!('children' in out)) continue;
+        try {
+          const { blob } = await renderOutputWithFallback(doc, out as DesignerOutput, 'png', 1, 0.25, fetch, {
+            stage: 'preview',
+            outputIndex: doc.outputs.indexOf(out),
+            pageNumber: 0,
+            signal: controller.signal,
+          });
+          result.push({ idx: i, dataUrl: await blobDataUrl(blob) });
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          previewError ||= error instanceof DesignerExportError
+            ? localizeStaticExportFailure({
+                key: `preview:${out.id}`,
+                outputId: out.id,
+                outputIndex: doc.outputs.indexOf(out),
+                pageNumber: 0,
+                stage: 'preview',
+                diagnostic: error.diagnostic,
+                message: error.message,
+                serverReason: error.serverReason,
+              }).message
+            : t('designer_preview_failed', 'Preview could not be rendered. You can still try the final export.');
+        }
+      }
+      if (controller.signal.aborted) return;
+      setPreviews(result);
+      if (previewError) toaster.show(previewError, 'warning');
+    } finally {
+      if (previewAbortRef.current === controller) setLoadingPreviews(false);
+    }
+  }, [selectedOutputs, doc, fetch, toaster, t, localizeStaticExportFailure]);
+
+  const generatePreviewsRef = useRef(generatePreviews);
+  useEffect(() => {
+    generatePreviewsRef.current = generatePreviews;
+  }, [generatePreviews]);
+
+  useEffect(() => {
+    if (step !== 'export') return;
+    previewDoneRef.current = false;
+    setPreviews([]);
+    void generatePreviewsRef.current();
+    return () => previewAbortRef.current?.abort();
+  }, [step, doc, selectedOutputs]);
+
   // --- Export handler ---
 
   const handleExport = useCallback(async (retryFailedOnly = false, retryOutputId?: string) => {
+    if (retryFailedOnly && !staticExportFailures.some((failure) => canRetryExport(failure.diagnostic))) return;
+    const run = ++staticExportRunRef.current;
+    const configurationVersion = staticConfigurationVersionRef.current;
+    if (staticRequestPhaseRef.current !== 'upload') staticRenderAbortRef.current?.abort();
+    const controller = new AbortController();
+    staticRenderAbortRef.current = controller;
+    staticAbortAfterUploadRef.current = false;
+    staticRequestPhaseRef.current = 'render';
     setExporting(true);
-    setExportProgress({ done: 0, total: selectedOutputs.length });
+    setExportProgress({ done: 0, total: 0 });
     try {
       if (!retryFailedOnly) {
         downloadUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -1479,6 +1550,18 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
       const baseName = (state.designName || 'design').replace(/[^a-zA-Z0-9]/g, '_');
       const tasks: StaticExportTask[] = [];
       const allPdf = selectedOutputs.every((o) => (outputFormats[o.id] || 'png') === 'pdf');
+      const configurationIdentity = JSON.stringify({
+        configurationVersion,
+        outputs: selectedOutputs.map((output) => ({
+          id: output.id,
+          format: outputFormats[output.id] || 'png',
+          pages: 'children' in output ? pagesForOutput(output as DesignerOutput) : [0],
+        })),
+        quality,
+        scale,
+      });
+      const taskKey = (outputId: string, pageNumber: number) =>
+        `${configurationIdentity}:${outputId}:page:${pageNumber}`;
 
       if (allPdf) {
         const output = selectedOutputs[0];
@@ -1486,14 +1569,14 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
           ? `${baseName} - ${(output.name || output.formatId || 'output').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
           : `${baseName} - Combined.pdf`;
         tasks.push({
-          key: 'combined-pdf',
+          key: taskKey(output.id, 0),
           outputId: output.id,
           outputIndex: doc.outputs.indexOf(output),
           pageNumber: 0,
           format: 'pdf',
           scale: 1,
           fileName: pdfName,
-          render: () => renderPdfOnServer(),
+          render: () => renderPdfOnServer(undefined, controller.signal),
         });
       } else {
         for (let i = 0; i < selectedOutputs.length; i++) {
@@ -1505,14 +1588,14 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
           );
           if (fmt === 'pdf') {
             tasks.push({
-              key: `${output.id}:pdf`,
+              key: taskKey(output.id, 0),
               outputId: output.id,
               outputIndex: doc.outputs.indexOf(output),
               pageNumber: 0,
               format: 'pdf',
               scale: 1,
               fileName: `${baseName} - ${outputName}.pdf`,
-              render: () => renderPdfOnServer([output as DesignerOutput]),
+              render: () => renderPdfOnServer([output as DesignerOutput], controller.signal),
             });
             continue;
           }
@@ -1523,7 +1606,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
             const pageView = outputPageView(output as DesignerOutput, p);
             const pageSuffix = suffixPages ? ` - Page ${p + 1}` : '';
             const taskBase = {
-              key: `${output.id}:page:${p}`,
+              key: taskKey(output.id, p),
               outputId: output.id,
               outputIndex: doc.outputs.indexOf(output),
               pageNumber: p,
@@ -1556,6 +1639,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                     stage: 'render',
                     outputIndex: doc.outputs.indexOf(output),
                     pageNumber: p,
+                    signal: controller.signal,
                   },
                 );
                 if (usedScale !== scale || usedQuality !== quality) {
@@ -1586,20 +1670,24 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
             pendingUploads: staticPendingUploadsRef.current,
           }
         : emptyStaticExportBatch();
+      let settled = retryFailedOnly ? savedFiles.length : 0;
+      setExportProgress({ done: settled, total: tasks.length });
       const batch = await runStaticExportBatch(tasks, uploadBlob, previous, {
         retryFailedOnly,
         outputId: retryOutputId,
+        signal: controller.signal,
+        onTaskSettled: () => {
+          settled += 1;
+          setExportProgress({ done: settled, total: tasks.length });
+        },
       });
+      if (staticConfigurationVersionRef.current !== configurationVersion || staticExportRunRef.current !== run) return;
       const results: ExportedFile[] = batch.completed;
       const failures = batch.failures.map(localizeStaticExportFailure);
       setSavedFiles(results);
       setStaticExportFailures(failures);
       staticPendingUploadsRef.current = batch.pendingUploads;
-      const failedOutputs = new Set(failures.map((failure) => failure.outputId));
-      setExportProgress({
-        done: Math.max(0, selectedOutputs.length - failedOutputs.size),
-        total: selectedOutputs.length,
-      });
+      setExportProgress({ done: results.length + failures.length, total: tasks.length });
 
       if (failures.length) {
         toaster.show(
@@ -1628,10 +1716,16 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
         return;
       }
       setStep('done');
-    } catch {
-      toaster.show(t('designer_export_failed', 'Export failed'), 'warning');
+    } catch (error) {
+      if (staticExportRunRef.current === run && !(error instanceof DesignerExportError && error.diagnostic.kind === 'abort')) {
+        toaster.show(t('designer_export_failed', 'Export failed'), 'warning');
+      }
     } finally {
-      setExporting(false);
+      if (staticExportRunRef.current === run) {
+        setExporting(false);
+        staticRequestPhaseRef.current = 'idle';
+        staticRenderAbortRef.current = null;
+      }
     }
   }, [
     store,
@@ -1810,7 +1904,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
 
           <ExportPreflight
             result={preflight}
-            onFinding={(finding) => openDesignerPreflightFinding(store, finding, onClose)}
+            onFinding={(finding) => openDesignerPreflightFinding(store, finding, handleClose)}
           />
 
           {brandEnforcement && brandViolations.length > 0 && (
@@ -1846,7 +1940,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
 
           <div className="flex justify-between gap-2 mt-2">
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="px-4 h-[38px] rounded-[6px] border border-studioBorder text-[13px] text-textColor hover:bg-boxHover transition-all"
             >
               {t('cancel', 'Cancel')}
@@ -2070,14 +2164,16 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                       {failure.pageNumber > 0 ? ` · ${t('designer_page_number', 'Page {{number}}', { number: failure.pageNumber + 1 })}` : ''}
                       {' — '}{failure.message}
                     </span>
-                    <button
-                      type="button"
-                      disabled={exporting || creatingDrafts}
-                      onClick={() => void handleExport(true, failure.outputId)}
-                      className="shrink-0 text-btnPrimaryAccent hover:underline disabled:opacity-50"
-                    >
-                      {t('designer_retry_output', 'Retry output')}
-                    </button>
+                    {canRetryExport(failure.diagnostic) && (
+                      <button
+                        type="button"
+                        disabled={exporting || creatingDrafts}
+                        onClick={() => void handleExport(true, failure.outputId)}
+                        className="shrink-0 text-btnPrimaryAccent hover:underline disabled:opacity-50"
+                      >
+                        {t('designer_retry_output', 'Retry output')}
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -2126,15 +2222,17 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                       : t('designer_use_completed_exports', 'Use completed exports')}
                   </button>
                 )}
-                <button
-                  onClick={() => void handleExport(true)}
-                  disabled={exporting || creatingDrafts}
-                  className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
-                >
-                  {exporting
-                    ? t('designer_exporting_progress', 'Exporting {{done}}/{{total}}…', exportProgress)
-                    : t('designer_retry_failed_exports', 'Retry failed')}
-                </button>
+                {staticExportFailures.some((failure) => canRetryExport(failure.diagnostic)) && (
+                  <button
+                    onClick={() => void handleExport(true)}
+                    disabled={exporting || creatingDrafts}
+                    className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
+                  >
+                    {exporting
+                      ? t('designer_exporting_progress', 'Exporting {{done}}/{{total}}…', exportProgress)
+                      : t('designer_retry_failed_exports', 'Retry failed')}
+                  </button>
+                )}
               </div>
             ) : (
               <button
@@ -2235,7 +2333,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
 
           <div className="flex justify-end gap-2 mt-2">
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="px-4 h-[38px] rounded-[6px] border border-studioBorder text-[13px] text-textColor hover:bg-boxHover transition-all"
             >
               {t('close', 'Close')}

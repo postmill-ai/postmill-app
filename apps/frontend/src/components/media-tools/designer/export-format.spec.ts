@@ -5,6 +5,7 @@ import {
   MAX_UPLOAD_BYTES,
   RENDER_RETRY_BACKOFF_MS,
   renderOutputWithFallback,
+  renderPdfWithDiagnostics,
   renderWithFormatFallback,
   runStaticExportBatch,
   uploadExportBlob,
@@ -13,6 +14,16 @@ import {
 
 const blob = (size: number): Blob => ({ size }) as Blob;
 const responseBlob = (size: number) => new Response(new Uint8Array(size));
+const exportError = (stage: 'render' | 'upload', kind: 'http' | 'network', status?: number) =>
+  new DesignerExportError({
+    stage,
+    output: 1,
+    page: 1,
+    format: 'jpeg',
+    scale: 3,
+    kind,
+    status: status ?? kind,
+  });
 
 beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -169,7 +180,7 @@ describe('render request reliability', () => {
     expect(console.warn).not.toHaveBeenCalled();
   });
 
-  it.each([400, 500])('does not retry HTTP %i', async (status) => {
+  it.each([400, 429, 500])('does not retry HTTP %i', async (status) => {
     const fetchFn = vi.fn().mockResolvedValue(new Response(null, { status }));
 
     await expect(renderOutputWithFallback(doc, output, 'png', 0.92, 1, fetchFn)).rejects.toMatchObject({
@@ -178,16 +189,30 @@ describe('render request reliability', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
-  it('bounds a 503 to one retry', async () => {
+  it.each([502, 503, 504])('bounds HTTP %i to one retry', async (status) => {
     vi.useFakeTimers();
     const fetchFn = vi.fn()
-      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status }))
       .mockResolvedValueOnce(responseBlob(100));
 
     const promise = renderOutputWithFallback(doc, output, 'webp', 0.92, 2, fetchFn);
     await vi.advanceTimersByTimeAsync(RENDER_RETRY_BACKOFF_MS);
     await expect(promise).resolves.toMatchObject({ usedFormat: 'webp' });
     expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves a 413 server reason without retry advice', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      message: 'Storage quota exceeded; remove unused files first',
+    }), { status: 413, headers: { 'Content-Type': 'application/json' } }));
+
+    const promise = renderOutputWithFallback(doc, output, 'png', 0.92, 1, fetchFn);
+    await expect(promise).rejects.toMatchObject({
+      message: 'Storage quota exceeded; remove unused files first',
+      serverReason: 'Storage quota exceeded; remove unused files first',
+    });
+    await expect(promise).rejects.not.toThrow('Retry this output');
+    expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
   it('distinguishes a timeout from a network failure and retries it once', async () => {
@@ -260,6 +285,43 @@ describe('render request reliability', () => {
   });
 });
 
+describe('PDF render diagnostics', () => {
+  const doc = { mode: 'image', outputs: [], prompt: 'private prompt' } as any;
+
+  it('retries a transient 504 once and returns the PDF blob', async () => {
+    vi.useFakeTimers();
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 504 }))
+      .mockResolvedValueOnce(responseBlob(100));
+
+    const promise = renderPdfWithDiagnostics(doc, fetchFn, {
+      stage: 'render', outputIndex: 2, pageNumber: 0,
+    });
+    await vi.advanceTimersByTimeAsync(RENDER_RETRY_BACKOFF_MS);
+
+    await expect(promise).resolves.toBeInstanceOf(Blob);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchFn.mock.calls[0][1].body)).toMatchObject({ doc, format: 'pdf' });
+  });
+
+  it('reports PDF coordinates and a sanitized 400 server reason without retrying', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      message: 'PDF contains an unsupported page',
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } }));
+
+    await expect(renderPdfWithDiagnostics(doc, fetchFn, {
+      stage: 'render', outputIndex: 1, pageNumber: 0,
+    })).rejects.toMatchObject({
+      message: 'PDF contains an unsupported page',
+      diagnostic: {
+        stage: 'render', output: 2, page: 1, format: 'pdf', scale: 1, status: 400, kind: 'http',
+      },
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain('private prompt');
+  });
+});
+
 describe('upload and resumable static batches', () => {
   const makeTask = (outputId: string, render = vi.fn().mockResolvedValue(new Blob(['rendered']))): StaticExportTask => ({
     key: `${outputId}:page:0`,
@@ -289,13 +351,45 @@ describe('upload and resumable static batches', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps completed files and retries a failed upload from its cached blob without duplicates', async () => {
+  it('surfaces a non-OK upload reason once without retry advice or an abort signal', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      message: 'Storage quota exceeded; remove unused files first',
+    }), { status: 413, headers: { 'Content-Type': 'application/json' } }));
+
+    await expect(uploadExportBlob('/files/upload-simple', new FormData(), fetchFn, {
+      outputIndex: 0, pageNumber: 0, format: 'png', scale: 3,
+    })).rejects.toMatchObject({
+      message: 'Storage quota exceeded; remove unused files first',
+      diagnostic: { stage: 'upload', kind: 'http', status: 413 },
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(fetchFn.mock.calls[0][1].signal).toBeUndefined();
+  });
+
+  it('does not apply the render timeout to a slow upload', async () => {
+    vi.useFakeTimers();
+    let resolveFetch!: (response: Response) => void;
+    const fetchFn = vi.fn().mockImplementation(() => new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    }));
+    const promise = uploadExportBlob('/files/upload-server', new FormData(), fetchFn, {
+      outputIndex: 0, pageNumber: 0, format: 'pdf', scale: 1,
+    });
+
+    await vi.advanceTimersByTimeAsync(EXPORT_REQUEST_TIMEOUT_MS * 2);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(fetchFn.mock.calls[0][1].signal).toBeUndefined();
+    resolveFetch(new Response(JSON.stringify({ id: 'slow-file', path: '/files/slow.pdf' })));
+    await expect(promise).resolves.toEqual({ id: 'slow-file', path: '/files/slow.pdf' });
+  });
+
+  it('keeps completed files and retries a rejected upload from its cached blob without duplicates', async () => {
     const renderA = vi.fn().mockResolvedValue(new Blob(['a']));
     const renderB = vi.fn().mockResolvedValue(new Blob(['b']));
     const tasks = [makeTask('out-1', renderA), makeTask('out-2', renderB)];
     const upload = vi.fn()
       .mockResolvedValueOnce({ id: 'file-a', path: '/files/a.jpg' })
-      .mockRejectedValueOnce(new Error('upload unavailable'));
+      .mockRejectedValueOnce(exportError('upload', 'http', 500));
 
     const first = await runStaticExportBatch(tasks, upload);
     expect(first.completed.map((file) => file.id)).toEqual(['file-a']);
@@ -318,8 +412,8 @@ describe('upload and resumable static batches', () => {
     const tasks = [makeTask('out-1'), makeTask('out-2'), makeTask('out-3')];
     const upload = vi.fn()
       .mockResolvedValueOnce({ id: 'file-a', path: '/files/a.jpg' })
-      .mockRejectedValueOnce(new Error('failed b'))
-      .mockRejectedValueOnce(new Error('failed c'));
+      .mockRejectedValueOnce(exportError('upload', 'http', 500))
+      .mockRejectedValueOnce(exportError('upload', 'http', 500));
     const first = await runStaticExportBatch(tasks, upload);
 
     upload.mockResolvedValueOnce({ id: 'file-b', path: '/files/b.jpg' });
@@ -341,7 +435,7 @@ describe('upload and resumable static batches', () => {
     const secondPage = { ...makeTask('out-1'), key: 'out-1:page:1', pageNumber: 1 };
     const upload = vi.fn()
       .mockResolvedValueOnce({ id: 'page-1', path: '/files/page-1.jpg' })
-      .mockRejectedValueOnce(new Error('page 2 failed'));
+      .mockRejectedValueOnce(exportError('upload', 'http', 500));
     const first = await runStaticExportBatch([firstPage, secondPage], upload);
 
     upload.mockResolvedValueOnce({ id: 'page-2', path: '/files/page-2.jpg' });
@@ -353,5 +447,52 @@ describe('upload and resumable static batches', () => {
     expect(retry.completed.map((file) => file.id)).toEqual(['page-1', 'page-2']);
     expect(firstPage.render).toHaveBeenCalledTimes(1);
     expect(secondPage.render).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not blindly retry an uncertain upload or rerender its cached blob', async () => {
+    const task = makeTask('out-1');
+    const upload = vi.fn().mockRejectedValue(exportError('upload', 'network'));
+    const first = await runStaticExportBatch([task], upload);
+    const retry = await runStaticExportBatch([task], upload, first, { retryFailedOnly: true });
+
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(task.render).toHaveBeenCalledTimes(1);
+    expect(retry.failures).toEqual(first.failures);
+    expect(retry.pendingUploads).toEqual(first.pendingUploads);
+  });
+
+  it('prunes completed, failed, and pending entries from an older task configuration', async () => {
+    const oldTask = makeTask('out-1');
+    const upload = vi.fn().mockRejectedValue(exportError('upload', 'http', 500));
+    const previous = await runStaticExportBatch([oldTask], upload);
+    const changedTask = { ...makeTask('out-1'), key: 'jpeg:1:0.8:out-1:page:0', fileName: 'changed.jpg' };
+
+    const pruned = await runStaticExportBatch([changedTask], upload, previous, { retryFailedOnly: true });
+    expect(pruned).toEqual({ completed: [], failures: [], pendingUploads: [] });
+    expect(changedTask.render).not.toHaveBeenCalled();
+
+    upload.mockResolvedValueOnce({ id: 'new-file', path: '/files/changed.jpg' });
+    const fresh = await runStaticExportBatch([changedTask], upload, previous);
+    expect(fresh.completed.map((file) => file.id)).toEqual(['new-file']);
+    expect(changedTask.render).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports progress after every task and stops the remaining queue on abort', async () => {
+    const first = makeTask('out-1');
+    const second = makeTask('out-2');
+    const upload = vi.fn().mockResolvedValue({ id: 'file', path: '/files/file.jpg' });
+    const settled: string[] = [];
+    await runStaticExportBatch([first, second], upload, undefined, {
+      onTaskSettled: (task) => settled.push(task.outputId),
+    });
+    expect(settled).toEqual(['out-1', 'out-2']);
+
+    const abort = new DesignerExportError({
+      stage: 'render', output: 1, page: 1, format: 'jpeg', scale: 3, kind: 'abort', status: 'abort',
+    });
+    const aborted = makeTask('out-1', vi.fn().mockRejectedValue(abort));
+    const remaining = makeTask('out-2');
+    await runStaticExportBatch([aborted, remaining], upload);
+    expect(remaining.render).not.toHaveBeenCalled();
   });
 });
