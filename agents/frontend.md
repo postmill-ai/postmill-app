@@ -270,15 +270,19 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
 - **Formats can be linked or independent.** Add Formats defaults to linked content; independent
   copies use fresh ids without shared `originId`s for static pages/elements and video clips. The
   store and headless `addOutput` op both accept `linkContent: false`; omitting it preserves linked
-  behavior, and Undo adds/removes the whole format. The Link/Unlink button beside output tabs only
+  behavior, and Undo adds/removes the whole format. The store seeds from the ACTIVE output (including
+  its pages); a frozen source is allowed unless linked copying would need to backfill its missing
+  `originId`s, in which case the popover stays open with a warning and independent copies remain
+  available. The Link/Unlink button beside output tabs only
   toggles `editFormatOnly`; it never rewrites existing element/clip links. Presets include grouped
   1080×1350 Instagram/Facebook/LinkedIn/Threads portraits and Facebook/LinkedIn squares with safe
   zones. `FormatThumbnail` lazily renders near-visible output/page previews through one queued,
   shared `output-thumbnail` stage and the existing video-poster projection. Its 100-entry LRU is
-  scoped to the page view/symbols/size, with reference fast paths and structural fallback so an
-  unrelated page edit or undo does not invalidate every thumbnail. It debounces edits without
-  stringifying output or symbol content during render; never allocate full-resolution offscreen
-  stages for this path or capture on every drag frame. Saved library previews instead use
+  scoped to the page view/symbols/size, with reference-only lookups during render and structural
+  output/symbol fallback after the debounce, so unrelated page edits, undo, and save adoption do
+  not invalidate every thumbnail or deep-compare the LRU on every drag frame. Image preloads are
+  capped at five seconds so the serial queue cannot stall indefinitely. Never allocate
+  full-resolution offscreen stages for this path or capture on every drag frame. Saved library previews instead use
   `renderLibraryPreview`, which retains the original full-size stage before scaling the final JPEG.
 - **Output freeze is distinct from layer/track lock.** Optional-additive `output.frozen` is valid on
   v13 without a version bump (and remains additive when a later version lands). Snowflakes switch

@@ -50,10 +50,7 @@ import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/f
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { aspectBucketForDimensions } from '@postmill-ai/nestjs-libraries/media/slide/slide-aspect';
 import { closestAspectRatio } from '@postmill-ai/frontend/components/media-tools/replicate/aspect-ratio';
-import {
-  sourceTimeForClipTime,
-  splitSpeedCurveForClip,
-} from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
+import { commitCaptionClips as commitCaptionOutput, freezeFrameAt } from './video-output-actions';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import {
   GenerationProviderPicker,
@@ -73,7 +70,6 @@ import {
   mapTranscriptionToCaptionPhrases,
   parseSubtitles,
   serializeSrt,
-  withCaptionClips,
   type TranscribedWord,
 } from './captions';
 import { TimelineTransportControls } from './timeline-transport-controls';
@@ -2267,7 +2263,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       setDragging(null);
       setDragOverTrackId(null);
       setDragOverNewTrack(false);
-      if (!liveVo) return;
+      if (!liveVo || liveVo.frozen) return;
 
       if (dragging.edge === 'move') {
         const members = dropMembers(liveVo.tracks);
@@ -2379,7 +2375,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       setDragging(null);
       setDragOverTrackId(null);
       setDragOverNewTrack(false);
-      if (dragMovedRef.current) store.getState().pushHistory();
+      if (dragMovedRef.current && !vo.frozen) store.getState().pushHistory();
     };
     const handlePointerCancel = (e: PointerEvent) => handleCancel(e.pointerId);
     const handleBlur = () => handleCancel();
@@ -2504,79 +2500,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   const handleFreezeFrame = useCallback(
     (trackId: string, clipId: string) => {
-      const state = store.getState();
-      const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
-      if (!vo) return;
-
-      const track = vo.tracks.find((t) => t.id === trackId);
-      const idx = track?.clips.findIndex((c) => c.id === clipId);
-      if (idx == null || idx < 0 || !track) return;
-
-      const original = track.clips[idx];
-      const freezeDuration = 2000;
-      const splitPoint = Math.max(original.startMs + 100, Math.min(original.endMs - 100, state.playheadMs));
-
-      if (splitPoint <= original.startMs || splitPoint >= original.endMs) return;
-
-      (globalThis as any)._clipCounter = ((globalThis as any)._clipCounter || 0) + 1;
-      const ctr = (globalThis as any)._clipCounter;
-
-      // Source time of the frame under the playhead — the frozen frame, and the
-      // point the second half resumes from. For a ramped clip that is the
-      // INTEGRATED mapping (the legacy sum only holds at constant speed), and
-      // the two outer clips split the curve at the cut, re-based per side.
-      const curveSplit = splitSpeedCurveForClip(original, splitPoint - original.startMs);
-      const frozenSourceMs = curveSplit
-        ? sourceTimeForClipTime(original, splitPoint - original.startMs)
-        : (original.trimInMs ?? 0) + (splitPoint - original.startMs);
-
-      const first: VideoClip = {
-        ...original,
-        id: `el-${Date.now()}-${ctr}`,
-        endMs: splitPoint,
-        ...(curveSplit
-          ? { speedCurve: curveSplit.first.speedCurve, trimInMs: curveSplit.first.trimInMs }
-          : {}),
-      };
-      const freeze: VideoClip = {
-        id: `el-${Date.now()}-${ctr + 1}`,
-        startMs: splitPoint,
-        endMs: splitPoint + freezeDuration,
-        src: original.src,
-        fileId: original.fileId,
-        x: original.x,
-        y: original.y,
-        width: original.width,
-        height: original.height,
-        rotation: original.rotation,
-        opacity: original.opacity,
-        naturalWidth: original.naturalWidth,
-        naturalHeight: original.naturalHeight,
-        speed: 0,
-        // Hold the frame at the split point (a speed:0 clip resolves to this
-        // constant source time), otherwise it shows the source's first frame.
-        trimInMs: frozenSourceMs,
-      };
-      const second: VideoClip = {
-        ...original,
-        id: `el-${Date.now()}-${ctr + 2}`,
-        startMs: splitPoint + freezeDuration,
-        // Resume from the split point, not the source start (always offset, even
-        // when the original had no trimIn). For a ramped clip the curve split
-        // already carries the correct per-side trim-in (reversed clips keep the
-        // original trim-in on the second half — the freeze holds the cut frame).
-        ...(curveSplit
-          ? { speedCurve: curveSplit.second.speedCurve, trimInMs: curveSplit.second.trimInMs }
-          : { trimInMs: frozenSourceMs }),
-      };
-
-      const clips = [...track.clips];
-      clips.splice(idx, 1, first, freeze, second);
-      const updated: VideoOutput = {
-        ...vo,
-        tracks: vo.tracks.map((t) => (t.id === trackId ? { ...t, clips } : t)),
-      };
-      state.commitVideoOutput(currentOutput, updated, 'Freeze frame');
+      freezeFrameAt(store, currentOutput, trackId, clipId);
     },
     [store, currentOutput],
   );
@@ -3121,12 +3045,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   // it when absent) as ONE guarded undo step — per-clip addClip would push a
   // history entry per phrase.
   const commitCaptionClips = useCallback(
-    (clips: VideoClip[]) => {
-      const state = store.getState();
-      const currentVo = state.doc.outputs[currentOutput] as VideoOutput;
-      const updated = withCaptionClips(currentVo, clips, genId);
-      return state.commitVideoOutput(currentOutput, updated, 'Add captions');
-    },
+    (clips: VideoClip[]) => commitCaptionOutput(store, currentOutput, clips),
     [store, currentOutput],
   );
 

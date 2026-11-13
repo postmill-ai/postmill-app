@@ -314,7 +314,7 @@ export interface DesignerActions {
   addOutput: (
     preset: { formatId: string; name: string; width: number; height: number },
     opts?: { linkContent?: boolean }
-  ) => void;
+  ) => boolean;
   removeOutput: (index: number) => void;
   resizeOutput: (index: number, width: number, height: number, formatId?: string, name?: string) => void;
   setOutputFrozen: (index: number, frozen: boolean) => void;
@@ -1513,8 +1513,8 @@ export const createDesignerStore = (
       },
 
       addOutput: (preset, opts) => {
-        const { doc } = get();
-        if (doc.outputs.length >= MAX_OUTPUTS) return;
+        const { doc, currentOutput } = get();
+        if (doc.outputs.length >= MAX_OUTPUTS) return false;
         const linkContent = opts?.linkContent ?? true;
         let name = preset.name;
         for (let suffix = 2; doc.outputs.some((out) => out.name === name); suffix++) {
@@ -1522,8 +1522,12 @@ export const createDesignerStore = (
         }
         const namedPreset = { ...preset, name };
         if (isVideoMode()) {
-          const source = doc.outputs[0] as VideoOutput;
-          if (!source || !('tracks' in source)) return;
+          const source = doc.outputs[currentOutput] as VideoOutput;
+          if (!source || !('tracks' in source)) return false;
+          if (
+            linkContent && isOutputFrozen(source) &&
+            source.tracks.some((track) => track.clips.some((clip) => !clip.originId))
+          ) return false;
           const { output, sourceTracks } = seedVideoOutput(source, namedPreset);
           if (!linkContent) {
             output.tracks = output.tracks.map((track) => ({
@@ -1532,7 +1536,7 @@ export const createDesignerStore = (
             }));
           }
           const outs = doc.outputs.map((o, i) =>
-            i === 0
+            i === currentOutput
               ? { ...(o as VideoOutput), tracks: linkContent ? sourceTracks : source.tracks }
               : o
           );
@@ -1546,11 +1550,15 @@ export const createDesignerStore = (
             selectedClips: [],
             isDirty: true,
           });
-          if (!accepted) return;
+          if (!accepted) return false;
           get().pushHistory('Add format');
-          return;
+          return true;
         }
-        const source = doc.outputs[0] as DesignerOutput;
+        const source = doc.outputs[currentOutput] as DesignerOutput;
+        if (!source || !('children' in source)) return false;
+        if (linkContent && isOutputFrozen(source) && source.children.some((el) => !el.originId)) {
+          return false;
+        }
         const sourceChildren = source.children.map((el) =>
           linkContent && !el.originId ? { ...el, originId: genId() } : el
         );
@@ -1592,11 +1600,12 @@ export const createDesignerStore = (
           background: source.background, bg: source.bg, children,
           ...(pages?.length ? { pages } : {}),
         };
-        const outs = doc.outputs.map((o, i) => (i === 0 ? { ...o, children: sourceChildren } : o)) as DesignerOutput[];
+        const outs = doc.outputs.map((o, i) => (i === currentOutput ? { ...o, children: sourceChildren } : o)) as DesignerOutput[];
         outs.push(newOutput);
         const accepted = mutate({ doc: { ...doc, outputs: outs }, currentOutput: outs.length - 1, selectedIds: [], isDirty: true });
-        if (!accepted) return;
+        if (!accepted) return false;
         get().pushHistory();
+        return true;
       },
 
       removeOutput: (index) => {

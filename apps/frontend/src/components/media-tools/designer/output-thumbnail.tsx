@@ -25,9 +25,14 @@ const preloadImages = (output: DesignerOutput): Promise<void> => {
       (src) =>
         new Promise<void>((resolve) => {
           const image = new Image();
+          const done = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+          const timer = setTimeout(done, 5000);
           image.crossOrigin = 'anonymous';
-          image.onload = () => resolve();
-          image.onerror = () => resolve();
+          image.onload = done;
+          image.onerror = done;
           image.src = src;
         })
     )

@@ -1747,8 +1747,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         selectedIds.forEach((id) => {
           const el = ((pageOutput as any)?.children || []).find((c: any) => c.id === id);
           if (!el || el.locked || el.hidden) return;
-          updateElement(id, { x: el.x + dx, y: el.y + dy });
-          moved = true;
+          moved = updateElement(id, { x: el.x + dx, y: el.y + dy }) || moved;
         });
         if (moved) pushHistory();
       } else if (e.key === 'Enter') {
@@ -2479,7 +2478,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
       {outputFrozen && (
         <div
-          className="absolute inset-0 z-10 flex items-start justify-center pt-4 cursor-not-allowed"
+          className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center pt-4"
           aria-disabled="true"
           data-testid="frozen-canvas-guard"
         >

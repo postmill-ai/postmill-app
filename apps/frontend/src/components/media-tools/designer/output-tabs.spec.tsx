@@ -4,6 +4,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { computePopoverLeft, computePopoverPlacement, OutputTabs } from './output-tabs';
 import { createDesignerStore } from './designer.store';
 
+const toasterShow = vi.hoisted(() => vi.fn());
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
+  useToaster: () => ({ show: toasterShow }),
+}));
+
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
     () =>
@@ -192,12 +197,31 @@ describe('OutputTabs format workflows', () => {
     const freeze = screen.getAllByRole('button', { name: 'Freeze format' })[0];
     fireEvent.click(freeze);
     expect(store.getState().doc.outputs[0].frozen).toBe(true);
-    expect(screen.getByRole('button', { name: 'Add format' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Add format' })).toHaveProperty('disabled', false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Unfreeze format' }));
     expect(store.getState().doc.outputs[0].frozen).toBeUndefined();
     fireEvent.click(screen.getByRole('button', { name: /X 1200×675/ }));
     expect(store.getState().currentOutput).toBe(1);
+  });
+
+  it('keeps the popover open with a warning when a frozen source needs origin backfill', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Unlinked',
+    });
+    store.getState().updateElement('headline', { originId: undefined });
+    store.getState().setOutputFrozen(0, true);
+    toasterShow.mockClear();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom size' }));
+
+    expect(toasterShow).toHaveBeenCalledWith('This format is frozen. Unfreeze it to edit.', 'warning');
+    expect(screen.getByText('Add Formats')).toBeTruthy();
+    expect(store.getState().doc.outputs).toHaveLength(1);
   });
 
   it('Link/Unlink changes edit scope without rewriting element links', () => {

@@ -100,10 +100,12 @@ describe('FormatThumbnail identity cache', () => {
     vi.unstubAllGlobals();
   });
 
-  it('reuses matching object references, invalidates new symbols, and never stringifies output content', async () => {
+  it('reuses cloned symbols, invalidates changed symbol content, and never stringifies output content', async () => {
     const stringify = vi.spyOn(JSON, 'stringify');
     const stableOutput = output('stable');
-    const stableSymbols: never[] = [];
+    const stableSymbols = [{
+      id: 'sym', name: 'Symbol', width: 100, height: 100, children: [],
+    }];
     const first = render(
       <FormatThumbnail output={stableOutput} symbols={stableSymbols} maxDim={72} />
     );
@@ -114,7 +116,7 @@ describe('FormatThumbnail identity cache', () => {
     first.unmount();
 
     const second = render(
-      <FormatThumbnail output={stableOutput} symbols={stableSymbols} maxDim={72} />
+      <FormatThumbnail output={stableOutput} symbols={structuredClone(stableSymbols)} maxDim={72} />
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(180);
@@ -122,7 +124,11 @@ describe('FormatThumbnail identity cache', () => {
     expect(renderThumbnail).toHaveBeenCalledTimes(1);
 
     second.rerender(
-      <FormatThumbnail output={stableOutput} symbols={[]} maxDim={72} />
+      <FormatThumbnail
+        output={stableOutput}
+        symbols={[{ ...stableSymbols[0], name: 'Changed' }]}
+        maxDim={72}
+      />
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(180);

@@ -2483,7 +2483,7 @@ describe('freeze review regressions', () => {
     expect(store.getState().doc.outputs).toHaveLength(2);
   });
 
-  it('seeds Add format from output 0 even when the current output is frozen', () => {
+  it('seeds Add format from the active non-first frozen output, including its pages', () => {
     const store = createDesignerStore();
     addTextEl(store, 'Primary');
     store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
@@ -2492,12 +2492,34 @@ describe('freeze review regressions', () => {
     store.getState().updateElement(secondId, { text: 'Secondary' });
     store.getState().pushHistory();
     store.getState().setEditFormatOnly(false);
+    for (let page = 1; page < 5; page++) store.getState().addPage(`Slide ${page + 1}`);
     store.getState().setOutputFrozen(1, true);
 
-    store.getState().addOutput({ formatId: 'ig-story', name: 'Story', width: 1080, height: 1920 });
+    expect(store.getState().addOutput({ formatId: 'ig-story', name: 'Story', width: 1080, height: 1920 })).toBe(true);
 
     expect(store.getState().doc.outputs).toHaveLength(3);
-    expect(store.getState().doc.outputs[2].children[0].text).toBe('Primary');
+    expect(store.getState().doc.outputs[2].children[0].text).toBe('Secondary');
+    expect(store.getState().doc.outputs[0].children[0].text).toBe('Primary');
+    expect(store.getState().doc.outputs[2].pages).toHaveLength(4);
+  });
+
+  it('rejects a linked Add format that would backfill a frozen source, but allows an independent copy', () => {
+    const store = createDesignerStore();
+    addTextEl(store, 'Needs an origin');
+    const id = store.getState().doc.outputs[0].children[0].id;
+    store.getState().updateElement(id, { originId: undefined });
+    store.getState().setOutputFrozen(0, true);
+    const historyLength = store.getState().history.length;
+
+    expect(store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 })).toBe(false);
+    expect(store.getState().doc.outputs).toHaveLength(1);
+    expect(store.getState().history).toHaveLength(historyLength);
+
+    expect(store.getState().addOutput(
+      { formatId: 'x-post', name: 'X', width: 1200, height: 675 },
+      { linkContent: false }
+    )).toBe(true);
+    expect(store.getState().doc.outputs).toHaveLength(2);
   });
 
   it('guards direct video output replacements used by Freeze Frame and captions', () => {
@@ -2564,10 +2586,32 @@ describe('freeze review regressions', () => {
     store.getState().removePage(0, true);
 
     const output = store.getState().doc.outputs[0];
-    expect(output.name).toBe('Promoted');
+    expect(output.name).toBe('Original');
     expect(output.bg).toEqual({ type: 'color', color: '#0000ff' });
     expect(output.pages?.[0].background).toEqual({ type: 'color', color: '#ff0000' });
     expect(output.pages?.[1].background).toEqual({ type: 'color', color: '#00ff00' });
+  });
+
+  it('pins the legacy output color on inheriting slides when slide 1 is deleted', () => {
+    const store = createDesignerStore();
+    const doc = store.getState().doc;
+    store.getState().replaceDocTrusted({
+      ...doc,
+      outputs: [{
+        ...doc.outputs[0], name: 'Legacy format', background: '#123456', bg: undefined,
+        pages: [
+          { id: 'p2', name: 'Promoted slide', children: [] },
+          { id: 'p3', name: 'Inheriting slide', children: [] },
+        ],
+      }],
+    });
+
+    store.getState().removePage(0, true);
+
+    const output = store.getState().doc.outputs[0];
+    expect(output.name).toBe('Legacy format');
+    expect(output.bg).toEqual({ type: 'color', color: '#123456' });
+    expect(output.pages?.[0].background).toEqual({ type: 'color', color: '#123456' });
   });
 });
 

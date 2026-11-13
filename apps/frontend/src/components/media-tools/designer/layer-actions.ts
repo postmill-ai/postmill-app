@@ -141,15 +141,18 @@ export const layerActions = (
   /** Add or replace a style on every selected layer. */
   const addStyle = (type: DesignerLayerStyle['type']) => {
     const st = store.getState();
+    let changed = false;
     for (const el of live().selectedEls) {
       const styles = (el.styles || []).filter((s) => s.type !== type);
-      st.updateElement(el.id, { styles: [...styles, defaultStyle(type)] });
+      changed = st.updateElement(el.id, { styles: [...styles, defaultStyle(type)] }) || changed;
     }
-    st.pushHistory();
+    if (changed) st.pushHistory();
   };
 
   const canCombine = () => combinableElements(live().selectedEls).length >= 2;
   const isVideoDoc = () => store.getState().doc.mode === 'video';
+  const isFrozenDoc = () =>
+    store.getState().doc.outputs[store.getState().currentOutput]?.frozen === true;
 
   /**
    * Image-only by construction: every action here writes ELEMENTS, and the
@@ -160,7 +163,9 @@ export const layerActions = (
    */
   const imageOnly = (a: DesignerAction): DesignerAction => ({
     ...a,
-    enabled: () => !isVideoDoc() && (a.enabled ? a.enabled() : true),
+    enabled: () => !isVideoDoc() &&
+      (a.id === 'layer-new-artboard' || a.id === 'layer-new-artboard-group' || !isFrozenDoc()) &&
+      (a.enabled ? a.enabled() : true),
   });
 
   const actions: DesignerAction[] = [

@@ -221,6 +221,26 @@ describe('BulkCreateDialog', () => {
     expect(children.find((child) => child.id === 'second')?.slot).toBeUndefined();
   });
 
+  it('shows an error and preserves history when an assignment targets a frozen output', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'title', name: 'Headline', type: 'text', text: 'Sale',
+      x: 0, y: 0, width: 300, height: 100, rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().setSelectedIds(['title']);
+    store.getState().setOutputFrozen(0, true);
+    const before = store.getState().doc;
+    const historyLength = store.getState().history.length;
+    render(<BulkCreateDialog store={store} onClose={vi.fn()} />);
+    await upload('headline\nAda\nGrace');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply variable assignments' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain('This format is frozen');
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyLength);
+  });
+
   it('disables creation when there are no editable targets', async () => {
     render(<BulkCreateDialog store={createDesignerStore()} onClose={vi.fn()} />);
     await upload('name\nAda\nGrace');

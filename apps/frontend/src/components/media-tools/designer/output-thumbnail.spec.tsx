@@ -105,6 +105,20 @@ describe('output thumbnail render lifecycles', () => {
     expect(mocks.capture.mock.calls.map((call) => call[1])).toEqual([72, 96]);
   });
 
+  it('releases the queue when an image never finishes loading', async () => {
+    const doc = output();
+    doc.children[0].src = 'https://example.com/stalled.png';
+    const pending = renderOutputThumbnail(doc, undefined, 72);
+
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(mocks.stages).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    await flush();
+
+    await expect(pending).resolves.toBe('data:image/jpeg;base64,preview');
+    expect(mocks.stages).toHaveLength(1);
+  });
+
   it('keeps saved library previews on the original full-size effects path', async () => {
     const doc = output();
     const preview = renderLibraryPreview(doc);

@@ -426,8 +426,9 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
                 aria-label={el.hidden ? t('show_layer', 'Show layer') : t('hide_layer', 'Hide layer')}
                 onClick={(e) => {
                   e.stopPropagation();
-                  store.getState().updateElement(el.id, { hidden: !el.hidden });
-                  store.getState().pushHistory();
+                  if (store.getState().updateElement(el.id, { hidden: !el.hidden })) {
+                    store.getState().pushHistory();
+                  }
                 }}
                 className="shrink-0 w-5 h-5 flex items-center justify-center text-textColor/55 hover:text-textColor"
               >
@@ -439,8 +440,9 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
                 aria-label={el.locked ? t('unlock_layer', 'Unlock layer') : t('lock_layer', 'Lock layer')}
                 onClick={(e) => {
                   e.stopPropagation();
-                  store.getState().updateElement(el.id, { locked: !el.locked });
-                  store.getState().pushHistory();
+                  if (store.getState().updateElement(el.id, { locked: !el.locked })) {
+                    store.getState().pushHistory();
+                  }
                 }}
                 className="shrink-0 w-5 h-5 flex items-center justify-center text-textColor/55 hover:text-textColor"
               >
@@ -452,8 +454,9 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
               stack={el.smartFilters}
               depth={node.depth}
               onChange={(next) => {
-                store.getState().updateElement(el.id, { smartFilters: next });
-                store.getState().pushHistory();
+                if (store.getState().updateElement(el.id, { smartFilters: next })) {
+                  store.getState().pushHistory();
+                }
               }}
             />
             </React.Fragment>

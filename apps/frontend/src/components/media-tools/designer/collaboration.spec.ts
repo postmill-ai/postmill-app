@@ -293,6 +293,20 @@ describe('collaboration Yjs contract', () => {
     expect(peer.getMap(Y_DOC).get('outputs')?.toArray()[0].has('frozen')).toBe(false);
   });
 
+  it('applies remote documents through the trusted replacement path', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().setOutputFrozen(0, true);
+    const remote = makeVideoDoc();
+    remote.outputs[0].name = 'Remote replacement';
+    (remote.outputs[0] as VideoOutput).frozen = true;
+
+    applyRemoteDesignerDoc(store, remote);
+
+    expect(store.getState().doc.outputs[0].name).toBe('Remote replacement');
+    expect(store.getState().doc.outputs[0].frozen).toBe(true);
+  });
+
   it('does not notify when the rebuilt doc is unchanged', () => {
     const ydoc = new Y.Doc();
     const docMap = ydoc.getMap(Y_DOC);

@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import {
   CHANNEL_PRESETS,
   type ChannelPreset,
@@ -189,6 +190,7 @@ const PortalPopover: React.FC<PortalPopoverProps> = ({
 
 export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsProps) {
   const t = useT();
+  const toaster = useToaster();
   const doc = store((s: any) => s.doc);
   const currentOutput = store((s: any) => s.currentOutput);
   const currentPage = store((s: any) => s.currentPage ?? 0);
@@ -258,13 +260,15 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
     const s = store.getState();
     for (const id of pendingFormats) {
       const preset = CHANNEL_PRESETS.find((p) => p.id === id);
-      if (preset)
-        s.addOutput({
-          formatId: preset.id,
-          name: preset.name,
-          width: preset.width,
-          height: preset.height,
-        }, { linkContent });
+      if (preset && !s.addOutput({
+        formatId: preset.id,
+        name: preset.name,
+        width: preset.width,
+        height: preset.height,
+      }, { linkContent })) {
+        toaster.show(t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.'), 'warning');
+        return;
+      }
     }
     setPendingFormats(new Set());
     closePopover();
@@ -274,12 +278,16 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
     const w = parseInt(cW, 10);
     const h = parseInt(cH, 10);
     if (w > 0 && h > 0) {
-      store.getState().addOutput({
+      const added = store.getState().addOutput({
         formatId: 'custom',
         name: `${w}×${h}`,
         width: w,
         height: h,
       }, { linkContent });
+      if (!added) {
+        toaster.show(t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.'), 'warning');
+        return;
+      }
       closePopover();
       setCW('1080');
       setCH('1080');
@@ -520,7 +528,6 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
       <div className="relative shrink-0">
         <button
           ref={addBtnRef}
-          disabled={outputs[currentOutput]?.frozen === true}
           onClick={(e) => {
             if (popoverKind === 'addFormats') {
               closePopover();
@@ -568,7 +575,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
                 onChange={() => setLinkContent(false)}
                 className="accent-designerAccent"
               />
-              {t('designer_output_independent', 'Independent copies (separate edits)')}
+              {t('designer_output_independent', 'Independent copies (carousel / pages)')}
             </label>
           </fieldset>
 

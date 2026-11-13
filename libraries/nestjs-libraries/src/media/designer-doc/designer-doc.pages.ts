@@ -113,15 +113,17 @@ export const removePageAt = (
   if (pageNumber === 0) {
     if (!allowFirst || !output.pages?.length) return null;
     const [first, ...pages] = output.pages;
-    const promotedBg = first.background ?? output.bg;
+    const inheritedBg = output.bg ?? (output.background
+      ? { type: 'color' as const, color: output.background }
+      : undefined);
+    const promotedBg = first.background ?? inheritedBg;
     const remaining = pages.map((page) =>
-      page.background === undefined && output.bg !== undefined
-        ? { ...page, background: output.bg }
+      page.background === undefined && inheritedBg !== undefined
+        ? { ...page, background: inheritedBg }
         : page
     );
     return {
       ...output,
-      name: first.name ?? output.name,
       children: first.children,
       bg: promotedBg,
       background:

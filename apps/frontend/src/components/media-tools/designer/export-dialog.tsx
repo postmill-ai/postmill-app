@@ -416,8 +416,6 @@ const outputPageView = (output: DesignerOutput, page: number): DesignerOutput =>
         children: pageChildren(output, page),
       };
 
-export { renderLibraryPreview as renderOutputThumbnail } from './output-thumbnail';
-
 // --- Main component ---
 
 // Connected org channels for the create-post channel step. One hook per

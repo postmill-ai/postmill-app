@@ -29,21 +29,24 @@ const matchesCacheEntry = (
   output: DesignerOutput,
   symbols: SymbolDefinition[] | undefined,
   pageNumber: number,
-  maxDim: number
-) =>
-  (entry.output === output || structurallyEqual(entry.output, output)) &&
-  entry.symbols === symbols &&
-  entry.pageNumber === pageNumber &&
-  entry.maxDim === maxDim;
+  maxDim: number,
+  structural: boolean
+) => {
+  if (entry.pageNumber !== pageNumber || entry.maxDim !== maxDim) return false;
+  if (!structural) return entry.output === output && entry.symbols === symbols;
+  return (entry.output === output || structurallyEqual(entry.output, output)) &&
+    (entry.symbols === symbols || structurallyEqual(entry.symbols, symbols));
+};
 
 const readThumbnailCache = (
   output: DesignerOutput,
   symbols: SymbolDefinition[] | undefined,
   pageNumber: number,
-  maxDim: number
+  maxDim: number,
+  structural = false
 ) => {
   const index = thumbnailCache.findIndex((entry) =>
-    matchesCacheEntry(entry, output, symbols, pageNumber, maxDim)
+    matchesCacheEntry(entry, output, symbols, pageNumber, maxDim, structural)
   );
   if (index < 0) return undefined;
   const [entry] = thumbnailCache.splice(index, 1);
@@ -53,7 +56,7 @@ const readThumbnailCache = (
 
 const writeThumbnailCache = (entry: ThumbnailCacheEntry) => {
   const index = thumbnailCache.findIndex((candidate) =>
-    matchesCacheEntry(candidate, entry.output, entry.symbols, entry.pageNumber, entry.maxDim)
+    matchesCacheEntry(candidate, entry.output, entry.symbols, entry.pageNumber, entry.maxDim, true)
   );
   if (index >= 0) thumbnailCache.splice(index, 1);
   thumbnailCache.push(entry);
@@ -111,6 +114,11 @@ export const FormatThumbnail = React.memo(function FormatThumbnail({
     if (!nearViewport || cacheHit) return;
     const seq = ++renderSeq.current;
     const timer = window.setTimeout(() => {
+      const structuralHit = readThumbnailCache(view, symbols, pageNumber, maxDim, true);
+      if (structuralHit) {
+        setThumbnail(structuralHit);
+        return;
+      }
       void renderOutputThumbnail(view, symbols, maxDim)
         .then((dataUrl) => {
           if (!dataUrl || renderSeq.current !== seq) return;

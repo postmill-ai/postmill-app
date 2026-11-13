@@ -162,7 +162,9 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
         variable.name,
         current[variable.name] || (headers.includes(variable.name) ? variable.name : headers[0]),
       ])));
-      store.getState().setDoc(nextDoc);
+      if (!store.getState().setDoc(nextDoc)) {
+        throw new Error(t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.'));
+      }
       store.getState().pushHistory('Assign Bulk Create variables');
     } catch (cause) {
       setError((cause as Error).message);
