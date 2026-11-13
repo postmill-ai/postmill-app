@@ -66,7 +66,7 @@ import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/f
 import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import { getBrandViolations } from './brand-compliance';
 import { useBrandColors } from './panels/use-brand-colors';
-import { BrandKitProvider } from './brand-kit-context';
+import { BrandKitModalProvider, BrandKitProvider } from './brand-kit-context';
 import { useBrandFonts } from './panels/use-brand-fonts';
 import { captureStageThumbnail } from './stage-thumbnail';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
@@ -627,7 +627,11 @@ const DesignerContent: FC<
         return;
       }
       modals.openModal({
-        children: <ExportDialog store={store} initialAction={initialAction} onClose={() => modals.closeAll()} />,
+        children: (
+          <BrandKitModalProvider store={store}>
+            <ExportDialog store={store} initialAction={initialAction} onClose={() => modals.closeAll()} />
+          </BrandKitModalProvider>
+        ),
       });
     },
     [modals, store, getBrandViolationsNow, toaster, translate]
@@ -1293,7 +1297,9 @@ const DesignerContent: FC<
         modals.openModal({
           title: translate('browse_templates', 'Browse templates'),
           children: (close: () => void) => (
-            <TemplatesPanel store={store as any} onClose={close} guard={confirmDiscardIfDirty} />
+            <BrandKitModalProvider store={store}>
+              <TemplatesPanel store={store as any} onClose={close} guard={confirmDiscardIfDirty} />
+            </BrandKitModalProvider>
           ),
         }),
       onSave: handleSave,

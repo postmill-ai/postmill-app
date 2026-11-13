@@ -455,6 +455,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   Never independently select the default brand in a panel or silently replace an unavailable explicit
   id. `useBrandColors`, `useBrandFonts`, inspectors, compliance, templates, and preferred formats all
   consume that context. Saving a logo to the kit and placing it on canvas are separate actions.
+  Global-modal surfaces that consume it must wrap their children in `BrandKitModalProvider`: the
+  modal manager renders outside the Designer's React subtree, so context from the caller is not retained.
   Selected-brand template priority is applied in the repository before pagination, not by sorting
   the loaded page. Brand Studio fetches only referenced file IDs and loads org-scoped template pages
   on demand (`scope=org`), never the whole library on open.
