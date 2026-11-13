@@ -1277,6 +1277,24 @@ describe('AiDesignerGateway handleStart attachment validation', () => {
     });
   });
 
+  it('runs one paid start when the same nonce is retried', async () => {
+    const { gw, client, payload, service, idempotency, conductor } = makeStartFixture();
+    idempotency.start
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    await gw.handleStart(client, payload);
+    await gw.handleStart(client, payload);
+
+    expect(service.createSession).toHaveBeenCalledTimes(1);
+    expect(conductor.handleStart).toHaveBeenCalledTimes(1);
+    expect(client.emit).toHaveBeenCalledWith('error', {
+      code: 'duplicate_nonce',
+      message: 'Your previous request is still being processed.',
+      nonce: 'n-start',
+    });
+  });
+
   it('passes validated reference chips into the new session before starting work', async () => {
     const { gw, client, payload, service, conductor } = makeStartFixture();
 
