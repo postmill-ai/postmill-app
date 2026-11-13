@@ -101,6 +101,13 @@ async function installMocks(page: Page) {
     if (method === 'POST' && pathname === '/files/upload-simple') {
       return json(route, { id: 'exported-file', path: '/mock-export/editing.png' }, 201);
     }
+    if (method === 'GET' && pathname === '/mock-export/editing.png') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg==', 'base64'),
+      });
+    }
     if (method === 'POST' && pathname === '/media/designer-assistant/suggestions') {
       state.suggestionCalls++;
       return json(route, {
@@ -270,7 +277,7 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   expect(JSON.stringify(state.renderDocs[0])).toContain('"fontSize":32');
   expect(JSON.stringify(state.renderDocs[0])).not.toContain('"fontSize":24');
   await expect(page.getByRole('link', { name: /\.png$/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByText('Close', { exact: true }).click();
   await page.getByRole('textbox', { name: 'Design name' }).hover();
   await expect(page.getByRole('spinbutton', { name: 'Size', exact: true })).toHaveValue('32');
   await heading.click();
