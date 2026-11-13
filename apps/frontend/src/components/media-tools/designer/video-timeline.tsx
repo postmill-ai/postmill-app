@@ -4039,7 +4039,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                         onPointerUp={() => { if (!vo.frozen) store.getState().pushHistory(); }}
                         onKeyUp={() => { if (!vo.frozen) store.getState().pushHistory(); }}
                         onBlur={() => { if (!vo.frozen) store.getState().pushHistory(); }}
-                        disabled={!!vo.frozen || !!track.locked}
+                        disabled={!!vo.frozen}
                         className="w-full accent-designerAccent"
                       />
                       <label className="flex items-center gap-2 cursor-pointer">
