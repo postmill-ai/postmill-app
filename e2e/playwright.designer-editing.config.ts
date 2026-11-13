@@ -35,7 +35,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'setup', testMatch: '**/auth.setup.ts' },
+    ...(skipAuthSetup ? [] : [{ name: 'setup', testMatch: '**/auth.setup.ts' }]),
     {
       name: 'admin',
       use: {

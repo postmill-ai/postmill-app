@@ -215,6 +215,8 @@ jobs:
     timeout-minutes: 45
     env:
       NEXT_PUBLIC_BACKEND_URL: http://127.0.0.1:3000
+      E2E_SKIP_AUTH_SETUP: '1'
+      E2E_BASE: http://127.0.0.1:4201
     permissions:
       contents: read
 
@@ -251,9 +253,6 @@ jobs:
         run: pnpm --filter ./apps/frontend run build
 
       - name: Run Designer editing acceptance against the production build
-        env:
-          E2E_SKIP_AUTH_SETUP: '1'
-          E2E_BASE: http://127.0.0.1:4201
         run: |
           pnpm --filter ./apps/frontend exec next start -p 4201 > /tmp/designer-editing-next.log 2>&1 &
           server_pid=$!
