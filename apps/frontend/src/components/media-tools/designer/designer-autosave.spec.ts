@@ -800,7 +800,7 @@ describe('createAutosaveSubscription', () => {
 
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0][0].outputs[0].children).toHaveLength(1);
-    expect(JSON.stringify(save.mock.calls[0][0])).not.toContain('72');
+    expect(save.mock.calls[0][0].outputs[0].children[0].fontSize).toBeUndefined();
   });
 
   it('retries a real dirty document while a preview projection is active', async () => {
