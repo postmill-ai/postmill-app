@@ -21,7 +21,10 @@ const elementAt = (store: Store, elementId: string): DesignerElement | undefined
 };
 
 export const replacementCrop = (
-  before: Pick<MediaFrame, 'naturalWidth' | 'naturalHeight' | 'crop' | 'width' | 'height'> | undefined,
+  before: (
+    Pick<MediaFrame, 'naturalWidth' | 'naturalHeight' | 'crop'> &
+    Partial<Pick<MediaFrame, 'width' | 'height'>>
+  ) | undefined,
   item: { width?: number | null; height?: number | null }
 ): DesignerCrop | undefined => {
   if (!before?.crop) return undefined;
