@@ -381,6 +381,7 @@ describe.skipIf(process.env.GITHUB_ACTIONS !== 'true' || process.env.RUN_RENDER_
     const fixture = fs.readFileSync(path.resolve(__dirname, '../../../../../e2e/fixtures/motion.mp4'));
     const server = http.createServer((request, response) => {
       response.setHeader('accept-ranges', 'bytes');
+      response.setHeader('access-control-allow-origin', '*');
       response.setHeader('content-type', 'video/mp4');
       const match = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range || '');
       if (match) {
