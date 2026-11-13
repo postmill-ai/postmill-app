@@ -334,7 +334,10 @@ describe('FRAME_RENDERER_SCRIPT', () => {
   it.each(['text', 'caption'] as const)(
     'composites %s stroke and fill once at fade opacity with device-scale, overhang-safe bounds',
     async (type) => {
-      const mainState: Record<string, unknown> = { canvas: { width: 100, height: 100 } };
+      const mainState: Record<string, unknown> = {
+        canvas: { width: 100, height: 100 },
+        measureText: (text: string) => ({ width: [...text].length * 10 }),
+      };
       const bufferState: Record<string, unknown> = {
         canvas: { width: 100, height: 100 },
         globalAlpha: 1,
@@ -392,6 +395,7 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     const created: { width: number; height: number }[] = [];
     const mainState: Record<string, unknown> = {
       canvas: { width: 100, height: 100 },
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
       fillRect: vi.fn(),
       fillText: vi.fn(),
       drawImage: vi.fn(),
@@ -429,6 +433,45 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     expect(mainState.fillText).not.toHaveBeenCalled();
     expect(mainState.drawImage).toHaveBeenCalledOnce();
     expect(mainState.globalAlpha).toBe(0.5);
+  });
+
+  it('keeps every wrapped line when a faded caption overflows its authored box', async () => {
+    const created: { width: number; height: number }[] = [];
+    const mainState: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      measureText: (text: string) => ({ width: [...text].length * 20 }),
+      drawImage: vi.fn(),
+    };
+    const bufferState: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      measureText: (text: string) => ({ width: [...text].length * 20 }),
+      fillText: vi.fn(),
+    };
+    const context = (state: Record<string, unknown>) => new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      renderScale: 2,
+      tracks: [{
+        id: 'caption-track', type: 'caption',
+        clips: [{
+          id: 'overflow-caption', startMs: 0, endMs: 1000, opacity: 0.5,
+          x: 0, y: 0, width: 40, height: 10, fontSize: 10,
+          words: ['aa', 'bb', 'cc', 'dd'].map((word) => ({ word, startMs: 0, endMs: 1000 })),
+          captionStyle: { preset: 'box-highlight', highlightColor: '#123456' },
+          fill: '#ffffff',
+        }],
+      }],
+    }, context(mainState) as never, context(bufferState) as never, created);
+    await api.renderFrame(0);
+
+    expect(bufferState.fillText).toHaveBeenCalledTimes(4);
+    expect(created).toMatchObject([{ width: 120, height: 145 }]);
+    expect(mainState.drawImage).toHaveBeenCalledWith(
+      expect.anything(), 0, 0, 120, 145, -10, -10, 60, 72.5
+    );
   });
 
   it.each([
