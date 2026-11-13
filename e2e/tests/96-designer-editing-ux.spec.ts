@@ -184,7 +184,8 @@ async function selectBodyCopy(page: Page) {
 }
 
 async function editSelectedBodyCopy(page: Page) {
-  await page.getByRole('button', { name: 'Fit to screen' }).click();
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
   const stage = page.locator('.konva-stage').first();
   const box = await stage.boundingBox();
   if (!box) throw new Error('Canvas has no bounding box');
