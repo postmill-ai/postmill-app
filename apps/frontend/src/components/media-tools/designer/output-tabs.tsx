@@ -258,6 +258,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
 
   const handleAddFormats = () => {
     const s = store.getState();
+    const applied: string[] = [];
     for (const id of pendingFormats) {
       const preset = CHANNEL_PRESETS.find((p) => p.id === id);
       if (preset && !s.addOutput({
@@ -266,9 +267,21 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
         width: preset.width,
         height: preset.height,
       }, { linkContent })) {
-        toaster.show(t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.'), 'warning');
+        setPendingFormats((current) => {
+          const next = new Set(current);
+          applied.forEach((addedId) => next.delete(addedId));
+          return next;
+        });
+        const sourceFrozen = !!s.doc.outputs[s.currentOutput]?.frozen;
+        toaster.show(
+          sourceFrozen
+            ? t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.')
+            : t('something_went_wrong', 'Something went wrong'),
+          'warning'
+        );
         return;
       }
+      if (preset) applied.push(id);
     }
     setPendingFormats(new Set());
     closePopover();
@@ -285,7 +298,13 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
         height: h,
       }, { linkContent });
       if (!added) {
-        toaster.show(t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.'), 'warning');
+        const state = store.getState();
+        toaster.show(
+          state.doc.outputs[state.currentOutput]?.frozen
+            ? t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.')
+            : t('something_went_wrong', 'Something went wrong'),
+          'warning'
+        );
         return;
       }
       closePopover();

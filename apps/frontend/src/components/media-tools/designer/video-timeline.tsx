@@ -2676,14 +2676,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         track?.clips.find((c) => c.id === fromClipId)?.transitionOut?.durationMs ??
         track?.clips.find((c) => c.id === toClipId)?.transitionIn?.durationMs;
       const durationMs = type === 'cut' ? 0 : existing && existing > 0 ? existing : TRANSITION_DEFAULT_MS;
-      state.updateClipSilent(currentOutput, trackId, fromClipId, {
+      const fromUpdated = state.updateClipSilent(currentOutput, trackId, fromClipId, {
         transitionOut: { type, durationMs, direction },
       });
-      state.updateClipSilent(currentOutput, trackId, toClipId, {
+      const toUpdated = state.updateClipSilent(currentOutput, trackId, toClipId, {
         transitionIn: { type, durationMs, direction },
       });
       setTransitionPopover(null);
-      store.getState().pushHistory();
+      if (fromUpdated || toUpdated) store.getState().pushHistory();
     },
     [store, currentOutput],
   );
@@ -2696,17 +2696,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const track = vo?.tracks.find((t) => t.id === trackId);
       const from = track?.clips.find((c) => c.id === fromClipId);
       const to = track?.clips.find((c) => c.id === toClipId);
-      if (from?.transitionOut) {
-        state.updateClipSilent(currentOutput, trackId, fromClipId, {
+      const fromUpdated = from?.transitionOut
+        ? state.updateClipSilent(currentOutput, trackId, fromClipId, {
           transitionOut: { ...from.transitionOut, durationMs: clamped },
-        });
-      }
-      if (to?.transitionIn) {
-        state.updateClipSilent(currentOutput, trackId, toClipId, {
+        })
+        : false;
+      const toUpdated = to?.transitionIn
+        ? state.updateClipSilent(currentOutput, trackId, toClipId, {
           transitionIn: { ...to.transitionIn, durationMs: clamped },
-        });
-      }
-      store.getState().pushHistory();
+        })
+        : false;
+      if (fromUpdated || toUpdated) store.getState().pushHistory();
     },
     [store, currentOutput],
   );
@@ -3410,11 +3410,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       // swap only, timing untouched).
       if (wholeClip) {
         const cur = store.getState();
-        cur.updateClipSilent(menu.outputIndex, menu.trackId, targetClipId, {
+        if (cur.updateClipSilent(menu.outputIndex, menu.trackId, targetClipId, {
           src: artifactUrl,
           fileId: undefined,
-        });
-        cur.pushHistory();
+        })) cur.pushHistory();
         return;
       }
       // The transform output duration may differ slightly from the segment —
@@ -3430,13 +3429,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (endMs > curVo.durationMs) {
         cur.setVideoDuration(menu.outputIndex, endMs);
       }
-      cur.updateClipSilent(menu.outputIndex, menu.trackId, targetClipId, {
+      if (cur.updateClipSilent(menu.outputIndex, menu.trackId, targetClipId, {
         src: artifactUrl,
         fileId: undefined,
         trimInMs: 0,
         endMs,
-      });
-      cur.pushHistory();
+      })) cur.pushHistory();
     };
 
     try {
@@ -3984,8 +3982,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               selectedClip.clipId,
               update
             )}
-            onCommit={() => store.getState().pushHistory()}
-            disabled={!!selectedTimingTrack.locked}
+            onCommit={() => {
+              if (!vo.frozen) store.getState().pushHistory();
+            }}
+            disabled={!!selectedTimingTrack.locked || !!vo.frozen}
           />
         </div>
       )}
@@ -4036,9 +4036,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                         max={200}
                         value={Math.round((track.gain ?? 1) * 100)}
                         onChange={(e) => store.getState().setTrackGain(currentOutput, track.id, Number(e.target.value) / 100, false)}
-                        onPointerUp={() => store.getState().pushHistory()}
-                        onKeyUp={() => store.getState().pushHistory()}
-                        onBlur={() => store.getState().pushHistory()}
+                        onPointerUp={() => { if (!vo.frozen) store.getState().pushHistory(); }}
+                        onKeyUp={() => { if (!vo.frozen) store.getState().pushHistory(); }}
+                        onBlur={() => { if (!vo.frozen) store.getState().pushHistory(); }}
+                        disabled={!!vo.frozen || !!track.locked}
                         className="w-full accent-designerAccent"
                       />
                       <label className="flex items-center gap-2 cursor-pointer">

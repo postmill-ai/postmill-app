@@ -224,6 +224,26 @@ describe('OutputTabs format workflows', () => {
     expect(store.getState().doc.outputs).toHaveLength(1);
   });
 
+  it('clears already-applied selections when a later format is rejected', () => {
+    const store = createDesignerStore();
+    vi.spyOn(store.getState(), 'addOutput')
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    const first = screen.getByRole('checkbox', { name: /Instagram Post 1080×1080/ });
+    const second = screen.getByRole('checkbox', { name: /Instagram Story 1080×1920/ });
+    fireEvent.click(first);
+    fireEvent.click(second);
+    fireEvent.click(screen.getByRole('button', { name: 'Add 2 format' }));
+
+    expect(first).toHaveProperty('checked', false);
+    expect(second).toHaveProperty('checked', true);
+    expect(screen.getByText('Add Formats')).toBeTruthy();
+    expect(toasterShow).toHaveBeenCalledWith('Something went wrong', 'warning');
+  });
+
   it('Link/Unlink changes edit scope without rewriting element links', () => {
     const store = createDesignerStore();
     store.getState().addElement({
