@@ -521,7 +521,7 @@ export class AIModelProvider {
     options?: ReasoningOptions,
   ): Promise<LanguageModel> {
     const raw = await this.languageModel(scope, orgId, options);
-    const config = await this.resolveConfigForScope(scope, orgId);
+    const config = await this.resolveConfigForScope(scope, orgId, options);
     if (!config) {
       throw new Error(AI_NOT_CONFIGURED_MESSAGE);
     }
@@ -1713,9 +1713,9 @@ export class AIModelProvider {
     }
   }
 
-  async resolveConfigForScope(scope: AIScope, orgId?: string): Promise<ResolvedConfig | null> {
+  async resolveConfigForScope(scope: AIScope, orgId?: string, options?: ReasoningOptions): Promise<ResolvedConfig | null> {
     try {
-      return await this._resolveConfig(scope, orgId);
+      return await this._resolveConfig(scope, orgId, options);
     } catch (err) {
       this._logger.warn(`Failed to resolve config for scope "${scope}": ${(err as Error).message}`);
       return null;

@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""Manual, single-service image update. Never builds images or migrates a DB."""
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+REPOSITORY = 'ghcr.io/aren-876/postmill-app'
+PROJECT = 'postmill'
+CONTAINER = 'postmill-postmill-1'
+FILES = ('compose.yaml', 'compose.override.yaml', 'compose.giga.yaml', 'compose.image.yaml')
+# Executed as node, with no network/entrypoint, in each image. Read-only files only.
+MANIFEST_JS = r"""
+const fs=require('fs'),path=require('path'),crypto=require('crypto');
+const root='/app/libraries/nestjs-libraries/src/database/prisma';
+const hash=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+const files={};
+function walk(p){for(const d of fs.readdirSync(p,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))){
+ const full=path.join(p,d.name);if(d.isDirectory())walk(full);else files[path.relative(root,full)]=hash(full);
+}}
+walk(path.join(root,'migrations'));files['schema.prisma']=hash(path.join(root,'schema.prisma'));
+console.log(JSON.stringify(files));
+"""
+
+class Refused(RuntimeError):
+    pass
+
+def run(*args, cwd=None):
+    env = dict(os.environ)
+    for key in ('DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'):
+        env.pop(key, None)
+    result = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', *args],
+                            text=True, capture_output=True, env=env, cwd=cwd)
+    if result.returncode:
+        # Compose config may contain credentials; never echo its output/errors.
+        raise Refused('Docker command failed: ' + ' '.join(args[:2]) + ' (no secrets logged)')
+    return result.stdout
+
+def atomic(path, value):
+    fd, temp = tempfile.mkstemp(dir=path.parent, prefix='.' + path.name)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temp, 0o600)
+        os.replace(temp, path)
+        directory = os.open(path.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+
+def overlay(image):
+    # JSON strings are valid YAML scalars; cannot inject another YAML field.
+    return 'services:\n  postmill:\n    image: ' + json.dumps(image) + '\n'
+
+def schema_manifest(image):
+    return json.loads(run('run', '--rm', '--network', 'none', '--read-only',
+                          '--cap-drop=ALL', '--security-opt=no-new-privileges',
+                          '--entrypoint', 'node', image, '-e', MANIFEST_JS))
+
+def schema_check(old, new, reviewed):
+    fingerprint = hashlib.sha256(json.dumps(new, sort_keys=True).encode()).hexdigest()
+    if old != new and reviewed != fingerprint:
+        changed = sorted(k for k in old.keys() | new.keys() if old.get(k) != new.get(k))
+        raise Refused('Schema/migrations differ; no container was replaced. Review DB compatibility, backups and migration plan separately. '
+                      'After explicit approval and DB preparation, target acknowledgement is --reviewed-schema ' + fingerprint +
+                      '\nChanged files: ' + ', '.join(changed))
+
+def assert_overlay_only(base, merged):
+    base = json.loads(json.dumps(base))
+    merged = json.loads(json.dumps(merged))
+    for config in (base, merged):
+        config['services']['postmill'].pop('image', None)
+    if base != merged:
+        raise Refused('Fourth Compose file changes more than services.postmill.image; refusing to overwrite it.')
+
+def managed_runtime(config, container, check_networks=True):
+    service = config['services']['postmill']
+    # Manual docker network connect/mount/env mutations would be lost on recreate.
+    expected = {config['networks'][key]['name'] for key in service.get('networks', {})}
+    if check_networks and expected != set(container['NetworkSettings']['Networks']):
+        raise Refused('Running networks differ from Compose. Declare existing connections in the first three files before updating.')
+    actual_env = dict(item.split('=', 1) for item in container['Config'].get('Env', []) if '=' in item)
+    if any(str(value if value is not None else '') != actual_env.get(key, '')
+           for key, value in service.get('environment', {}).items()):
+        raise Refused('Running environment differs from resolved Compose; reconcile it before updating.')
+    actual_mounts = {m['Destination']: m for m in container.get('Mounts', [])}
+    desired = {v['target']: v for v in service.get('volumes', [])}
+    if actual_mounts.keys() != desired.keys():
+        raise Refused('Running mounts differ from Compose; reconcile them before updating.')
+    for target, value in desired.items():
+        mounted = actual_mounts[target]
+        source = value.get('source')
+        if value['type'] == 'volume' and source:
+            source = config['volumes'][source]['name']
+        actual_source = mounted.get('Name') if value['type'] == 'volume' else mounted['Source']
+        if ((source and source != actual_source) or value['type'] != mounted['Type']
+                or bool(value.get('read_only', False)) == mounted['RW']):
+            raise Refused('Running mount settings differ from Compose; certificate/data mounts must be preserved.')
+
+def pinned_current(container):
+    ref = container['Config']['Image']
+    if '@sha256:' in ref:
+        return ref
+    info = json.loads(run('image', 'inspect', container['Image']))[0]
+    # Local immutable image ID remains usable if a registry digest is unavailable.
+    return next(iter(info.get('RepoDigests') or []), container['Image'])
+
+def other_services():
+    ids = run('ps', '-aq', '--filter', 'label=com.docker.compose.project=' + PROJECT).split()
+    if not ids:
+        return {}
+    return {c['Id']: (c['State']['StartedAt'], c['RestartCount'], c['Image'])
+            for c in json.loads(run('inspect', *ids))
+            if c['Config'].get('Labels', {}).get('com.docker.compose.service') != 'postmill'}
+
+class Updater:
+    def __init__(self, directory):
+        self.root = Path(directory).resolve()
+        self.state = self.root / '.postmill-update'
+        self.state.mkdir(mode=0o700, exist_ok=True)
+        self.override = self.root / FILES[-1]
+
+    def compose(self, *args, fourth=None, base=False):
+        command = ['compose', '--project-name', PROJECT, '--project-directory', str(self.root)]
+        for file in FILES[:3]:
+            command += ['-f', str(self.root / file)]
+        if not base:
+            command += ['-f', str(fourth or self.override)]
+        return run(*command, *args, cwd=self.root)
+
+    def container(self):
+        value = json.loads(run('inspect', CONTAINER))[0]
+        labels = value['Config'].get('Labels', {})
+        if labels.get('com.docker.compose.project') != PROJECT or labels.get('com.docker.compose.service') != 'postmill':
+            raise Refused('Unexpected container project/service labels.')
+        return value
+
+    def apply(self, tag, rollback=False, reviewed=None, timeout=300):
+        for file in FILES[:3]:
+            if not (self.root / file).is_file():
+                raise Refused('Missing Compose file: ' + file)
+        pending_file = self.state / 'pending.json'
+        previous_file = self.state / 'previous.json'
+        was_pending = pending_file.exists()
+        version = re.search(r'(\d+)\.(\d+)', run('compose', 'version', '--short'))
+        if not version or tuple(map(int, version.groups())) < (2, 20):
+            raise Refused('Docker Compose >= 2.20 is required for bounded healthy waits.')
+        if was_pending and not rollback:
+            raise Refused('Interrupted/failed update recorded. Inspect state and use postmill-rollback first.')
+        current = self.container()
+        if not current['State']['Running'] and not rollback:
+            raise Refused('Current container is not running; recover it manually before updating.')
+        base = json.loads(self.compose('config', '--format', 'json', base=True))
+        if self.override.exists():
+            assert_overlay_only(base, json.loads(self.compose('config', '--format', 'json')))
+        managed_runtime(base, current, check_networks=current['State']['Running'])
+        previous_ref = pinned_current(current)
+        if rollback:
+            source = pending_file if pending_file.exists() else previous_file
+            if not source.exists():
+                raise Refused('No previous image has been recorded.')
+            saved = json.loads(source.read_text())
+            if current['Image'] not in (saved['old_id'], saved['target_id']):
+                raise Refused('Running image changed outside this updater; refusing stale rollback state.')
+            target = saved['old_ref']
+            try:
+                target_info = json.loads(run('image', 'inspect', target))[0]
+            except Refused:
+                if '@sha256:' not in target:
+                    raise Refused('Previous local image is unavailable. No tag-based rollback will be guessed.')
+                run('pull', target)
+                target_info = json.loads(run('image', 'inspect', target))[0]
+            if target_info['Id'] != saved['old_id']:
+                raise Refused('Previous image identity no longer matches recorded state.')
+        else:
+            if not re.fullmatch('[0-9a-f]{40}', tag or ''):
+                raise Refused('Expected a full lowercase 40-character Git SHA tag, not latest or an arbitrary image.')
+            requested = REPOSITORY + ':' + tag
+            run('pull', requested)
+            target_info = json.loads(run('image', 'inspect', requested))[0]
+            labels = target_info['Config'].get('Labels', {}) or {}
+            if (labels.get('org.opencontainers.image.revision') != tag or
+                    labels.get('org.opencontainers.image.source') != 'https://github.com/AREN-876/postmill-app'):
+                raise Refused('Image source/revision labels do not match this fork/SHA.')
+            target = next((r for r in target_info.get('RepoDigests', []) if r.startswith(REPOSITORY + '@sha256:')), None)
+            if not target:
+                raise Refused('No registry digest for the requested fork image.')
+        if target_info['Architecture'] != 'amd64' or target_info['Os'] != 'linux':
+            raise Refused('Target must be linux/amd64.')
+        if target_info['Id'] == current['Image'] and not was_pending:
+            if current['State'].get('Health', {}).get('Status') != 'healthy':
+                raise Refused('Requested image is already present but unhealthy.')
+            print('Already running the requested image. Nothing changed.')
+            return
+        schema_check(schema_manifest(current['Image']), schema_manifest(target_info['Id']), reviewed)
+        # Validate the proposed four-file merge before touching the real override.
+        fd, candidate = tempfile.mkstemp(dir=self.root, prefix='.compose-image-')
+        try:
+            with os.fdopen(fd, 'w') as stream:
+                stream.write(overlay(target))
+            merged = json.loads(self.compose('config', '--format', 'json', fourth=candidate))
+            assert_overlay_only(base, merged)
+            if merged['services']['postmill'].get('image') != target:
+                raise Refused('Candidate image was not selected by Compose.')
+        finally:
+            os.unlink(candidate)
+        others = other_services()
+        record = {'old_ref': previous_ref, 'old_id': current['Image'], 'target_ref': target, 'target_id': target_info['Id']}
+        # A rollback of an interrupted update retains the original recovery target
+        # until it succeeds, even if the process crashes again.
+        if not (rollback and pending_file.exists()):
+            atomic(pending_file, json.dumps(record))
+        atomic(self.override, overlay(target))
+        try:
+            self.compose('up', '-d', '--no-deps', '--no-build', '--pull', 'never',
+                         '--wait', '--wait-timeout', str(timeout), 'postmill')
+            fresh = self.container()
+            if fresh['Image'] != target_info['Id'] or fresh['State'].get('Health', {}).get('Status') != 'healthy':
+                raise Refused('Target image is not healthy.')
+            managed_runtime(merged, fresh)
+            run('exec', CONTAINER, 'curl', '-fsS', '--max-time', '10', 'http://127.0.0.1:5000/api/health/ready')
+            run('exec', CONTAINER, 'curl', '-fsS', '--max-time', '10', 'http://127.0.0.1:5000/auth/login')
+            if other_services() != others:
+                raise Refused('Another project service changed during this operation; investigate before proceeding.')
+        except (Refused, KeyboardInterrupt):
+            raise Refused('Update did not complete. Recovery state retained. Inspect logs, then use postmill-rollback; DB migrations are never rolled back.')
+        if not (rollback and was_pending):
+            atomic(previous_file, json.dumps(record))
+        pending_file.unlink()
+        print('Healthy: ' + target + '\nPrevious image recorded. Database schema/data were not rolled back or migrated by this script.')
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('tag', nargs='?')
+    parser.add_argument('--rollback', action='store_true')
+    parser.add_argument('--reviewed-schema', help='Exact target manifest hash after separately approved DB compatibility review/preparation')
+    args = parser.parse_args()
+    if args.rollback == bool(args.tag):
+        parser.error('Supply a SHA tag or --rollback, not both.')
+    updater = Updater(os.environ.get('POSTMILL_DIR', '/opt/postmill'))
+    timeout = int(os.environ.get('POSTMILL_WAIT_TIMEOUT', '300'))
+    if not 1 <= timeout <= 1800:
+        raise Refused('POSTMILL_WAIT_TIMEOUT must be between 1 and 1800 seconds.')
+    with (updater.state / 'lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Refused('Another updater/rollback is running.')
+        updater.apply(args.tag, args.rollback, args.reviewed_schema, timeout)
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (Refused, ValueError, OSError) as error:
+        print('ERROR: ' + str(error), file=sys.stderr)
+        sys.exit(1)

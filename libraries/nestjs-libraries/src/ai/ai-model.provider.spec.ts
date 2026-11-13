@@ -1216,6 +1216,20 @@ describe('AIModelProvider', () => {
   });
 
   describe('category defaults (unconditional)', () => {
+    it('keeps Luna utility and Terra agent/high-reasoning defaults separate', async () => {
+      (defaultsResolution.resolve as any).mockImplementation((_domain: string, category: string) => Promise.resolve({
+        providerId: 'openai', version: 'v1', source: 'stored',
+        model: category === 'low-reasoning' ? 'gpt-6-luna' : 'gpt-6.1-terra',
+      }));
+      expect((await provider.resolveConfigForScope('utility', 'org-123'))?.modelId).toBe('gpt-6-luna');
+      for (const scope of ['generator', 'agent', 'mcp'] as const)
+        expect((await provider.resolveConfigForScope(scope, 'org-123'))?.modelId).toBe('gpt-6.1-terra');
+      expect((await provider.resolveConfigForScope('utility', 'org-123', { reasoning: true }))?.modelId).toBe('gpt-6.1-terra');
+      const resolve = vi.spyOn(provider, 'resolveConfigForScope');
+      await provider.governedLanguageModel('utility', 'org-123', { reasoning: true });
+      expect(resolve).toHaveBeenLastCalledWith('utility', 'org-123', { reasoning: true });
+    });
+
     it('uses a stored high-reasoning default for generator/agent/mcp scopes and reasoning:true', async () => {
       (defaultsResolution.resolve as any).mockImplementation(
         (_domain: string, category: string) => {
