@@ -1195,26 +1195,32 @@ describe('createDesignAutosave scheduling', () => {
     expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(2);
   });
 
-  it('times out a hung preview upload and retries with a fresh preview task', async () => {
+  it('saves without a thumbnail after a hung preview on create and later PUT', async () => {
     vi.useFakeTimers();
     const store = createDesignerStore();
-    addText(store, 'Edit');
+    addText(store, 'Create');
     const uploadPreview = vi.fn(() => new Promise<PreviewUpload>(() => {}));
-    const autosave = createDesignAutosave({
-      store,
-      fetchFn: vi.fn(),
-      uploadPreview,
-    });
+    const fetchMock = vi.fn((url: string) => Promise.resolve(okJson(
+      url === '/media/designs' ? { id: 'design-preview-timeout' } : {}
+    )));
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
 
     autosave.save(store.getState().doc);
-    await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(120000);
-    expect(store.getState().saveFailed).toBe(true);
-    const retry = autosave.saveNow(store.getState().doc);
-    await vi.advanceTimersByTimeAsync(0);
+    const creates = callsTo(fetchMock, 'POST', '/media/designs');
+    expect(creates).toHaveLength(1);
+    expect(creates[0][1]?.body).not.toContain('previewFileId');
+    expect(store.getState().saveFailed).toBe(false);
+    expect(store.getState().isDirty).toBe(false);
+
+    addText(store, 'Existing design');
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(120000);
+    const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-preview-timeout');
+    expect(puts).toHaveLength(1);
+    expect(puts[0][1]?.body).not.toContain('previewFileId');
     expect(uploadPreview).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(120000);
-    await expect(retry).resolves.toBe('failed');
+    expect(store.getState().isDirty).toBe(false);
   });
 
   it('captures the original design and document for an idle preview', async () => {

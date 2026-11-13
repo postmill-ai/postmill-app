@@ -413,6 +413,20 @@ export const createDesignAutosave = ({
     );
   };
 
+  const previewResultFor = async (
+    doc: DesignerDoc,
+    immediate: boolean
+  ): Promise<PreviewUpload> => {
+    const preview = previewFor(doc, immediate);
+    return withTimeout(
+      preview,
+      SAVE_REQUEST_TIMEOUT_MS,
+      () => {
+        if (previewTasks.get(doc)?.promise === preview) previewTasks.delete(doc);
+      }
+    ).catch(() => ({}));
+  };
+
   const ensureCreatedFor = (request: SaveRequest): Promise<string> => {
     const { sentDoc, sentName, immediate } = request;
     const state = store.getState();
@@ -435,11 +449,7 @@ export const createDesignAutosave = ({
           ? {} as PreviewUpload
           : failed && failed.doc === sentDoc && failed.name === sentName
             ? failed.preview
-            : await withTimeout(
-              previewFor(sentDoc, immediate),
-              SAVE_REQUEST_TIMEOUT_MS,
-              () => previewTasks.delete(sentDoc)
-            );
+            : await previewResultFor(sentDoc, immediate);
         const payload: Record<string, unknown> = {
           name: sentName,
           doc: sentDoc,
@@ -530,7 +540,7 @@ export const createDesignAutosave = ({
       if (failed && failed.doc === sentDoc) {
         preview = failed.preview;
       } else {
-        preview = await previewFor(sentDoc, immediate);
+        preview = await previewResultFor(sentDoc, immediate);
         const current = store.getState();
         if (current.designSession === request.session && current.designId === designId && current.doc !== sentDoc) {
           if (preview.previewFileId) {
