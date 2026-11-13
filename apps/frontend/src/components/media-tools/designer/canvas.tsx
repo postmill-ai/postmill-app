@@ -85,7 +85,7 @@ import {
   boundsForSnapBoxes,
   EQUAL_SPACING_DOCUMENT_PX,
   nearestSnap,
-  selectionIncludesDraggedNode,
+  movingNodesForSnap,
 } from './canvas-snap';
 
 /**
@@ -564,6 +564,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       );
       if (next) {
         e.preventDefault();
+        store.getState().clearElementPreview();
         store.getState().setActiveTool(next);
       }
     };
@@ -1107,12 +1108,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       // the authoring rectangle for both: it is what the Transformer shows and
       // what the marquee hit-tests, so it is what snapping measures.
       const attached = transformerRef.current?.nodes() || [];
-      const movingNodes = selectionIncludesDraggedNode(
-        attached.map((attachedNode) => attachedNode.id()),
-        node.id()
-      )
-        ? attached
-        : [node];
+      const movingNodes = movingNodesForSnap(attached, node);
       const movingBox = boundsForSnapBoxes(movingNodes.map((movingNode) => {
         const moving = children.find((el) => el.id === movingNode.id());
         return {
@@ -1603,6 +1599,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (editingTextId) return;
+      store.getState().clearElementPreview();
       const st = store.getState();
       const mod = e.ctrlKey || e.metaKey;
       // While a pen draft is open these keys belong to the draft — the window

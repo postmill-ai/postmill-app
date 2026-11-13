@@ -184,8 +184,13 @@ async function selectBodyCopy(page: Page) {
 }
 
 async function editSelectedBodyCopy(page: Page) {
-  await page.getByRole('application', { name: 'Design canvas' }).focus();
-  await page.keyboard.press('Enter');
+  const stage = page.locator('.konva-stage').first();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('Canvas has no bounding box');
+  const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
+  const outputX = (box.width - 400 * scale) / 2;
+  const outputY = (box.height - 400 * scale) / 2;
+  await stage.dblclick({ position: { x: outputX + 190 * scale, y: outputY + 50 * scale } });
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
 }
 

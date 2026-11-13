@@ -103,4 +103,17 @@ describe('Filter menu — video clip path', () => {
     store.getState().undo();
     expect(clipFilters(store, trackId) ?? []).toEqual([]);
   });
+
+  it('clears a preset projection before dispatching any registry action', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'text', type: 'text', text: 'Preview', x: 0, y: 0, width: 100, height: 30,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().previewElements({ text: { fontSize: 72 } });
+    const { result } = renderHook(() => useDesignerActions(store, stubCtx()));
+
+    result.current.find((action) => action.id === 'view-grid')!.run();
+    expect(store.getState().previewPatches).toBeNull();
+  });
 });

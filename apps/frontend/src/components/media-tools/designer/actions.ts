@@ -571,6 +571,12 @@ export const useDesignerActions = (
       { id: 'help-docs', label: 'Designer Documentation', menu: 'help', group: 'docs', keywords: ['docs', 'documentation', 'guide', 'manual', 'help'], run: () => { window.open(DESIGNER_DOCS_URL, '_blank', 'noopener,noreferrer'); } },
     ];
 
-    return a;
+    return a.map((action) => ({
+      ...action,
+      run: () => {
+        store.getState().clearElementPreview();
+        action.run();
+      },
+    }));
   }, [store, ctx]);
 };

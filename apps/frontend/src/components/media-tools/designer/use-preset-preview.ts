@@ -26,6 +26,19 @@ export const usePresetPreview = (store: any) => {
     [store]
   );
 
+  const applyAsync = useCallback(
+    async (load: () => Promise<() => void>) => {
+      const request = ++generation.current;
+      try {
+        const commit = await load();
+        if (generation.current === request) commit();
+      } catch {
+        // A failed font load leaves the base document and history untouched.
+      }
+    },
+    []
+  );
+
   const cancel = useCallback(() => {
     generation.current += 1;
     store.getState().clearElementPreview();
@@ -33,5 +46,5 @@ export const usePresetPreview = (store: any) => {
 
   useEffect(() => cancel, [cancel]);
 
-  return { preview, previewAsync, cancel };
+  return { preview, previewAsync, applyAsync, cancel };
 };

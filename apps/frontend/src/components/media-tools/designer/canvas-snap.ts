@@ -6,6 +6,13 @@ export const selectionIncludesDraggedNode = (
   draggedId: string
 ): boolean => attachedIds.length > 1 && attachedIds.includes(draggedId);
 
+export const movingNodesForSnap = <T extends { id: () => string }>(
+  attached: T[],
+  dragged: T
+): T[] => selectionIncludesDraggedNode(attached.map((node) => node.id()), dragged.id())
+  ? attached
+  : [dragged];
+
 export interface SnapBox {
   x: number;
   y: number;

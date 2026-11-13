@@ -421,15 +421,17 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   merges them into Konva render props. Save, duplicate, history, async writes, collaboration, export,
   thumbnails and server payloads always read the base document. Mouse leave/unmount clears only the
   projection, real edits/history cancel it, clicks commit once, and ending a preview re-arms a dirty
-  autosave without suspending base-document saves or retries. Resets clear only their own effect/mask.
-  Styles scale from the canvas type basis, preserve colors and rich-run typography, await the target
-  font before measuring, and may shrink a previously grown style box. Effects never rasterize text or
-  add hit-blocking layers; a Paint layer listens when it has either `src` or a live buffer. Snap uses
-  the nearest guide at 6 screen px (`6 / zoom`), but uses multi-selection bounds only when the dragged
-  node belongs to that selection; equal-spacing classification uses a fixed document-space tolerance.
+  autosave without suspending base-document saves or retries. Command and shortcut dispatch clears
+  the projection before any live-stage read. Resets clear only their own effect/mask. Styles scale
+  from the canvas type basis, preserve colors and rich-run typography, await the target font before
+  measuring, and may shrink only a height the style feature previously grew. Effects never rasterize
+  text or add hit-blocking layers; a Paint layer listens when it has either `src` or a live buffer.
+  Snap uses the nearest guide at 6 screen px (`6 / zoom`), but uses multi-selection bounds only when
+  the dragged node belongs to that selection; equal-spacing classification uses 2 document px.
   Add-format/resize shares text-stack/panel frames: a safe-zone shift moves every member together,
-  with per-element fallback on an oversize axis. Full-canvas contain media keeps its target fit and is
-  centered, while small logos retain uniform frame scaling.
+  with per-element fallback on an oversize axis. Contain media keeps its target fit and centers only
+  axes that were centered or spanned at least 95% of the source, preserving edge origins on other axes.
+  Small logos retain uniform frame scaling.
 - **QR codes are ordinary raster media plus editable settings.** `qr-code.ts` uses the frontend's
   `qrcode` dependency to make a 1024px PNG data URL, stored in the existing `src` on an image element
   or still-image clip. Optional-additive doc v13 `qr` preserves value, six-digit colors, L/M/Q/H error

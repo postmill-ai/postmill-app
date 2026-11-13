@@ -1322,6 +1322,35 @@ describe('smartReflow full-canvas contain media', () => {
     );
     expect(result).toMatchObject({ x: 410, y: 0, width: 380, height: 675 });
   });
+
+  it.each([
+    { target: { width: 1080, height: 1920, formatId: 'ig-story' }, expectedY: 0 },
+    { target: { width: 1080, height: 1350, formatId: 'ig-portrait' }, expectedY: 0 },
+  ])('keeps a top banner at the top on $target.width×$target.height', ({ target: portrait, expectedY }) => {
+    const result = smartReflow(image({ x: 37 }), source, portrait);
+    expect(result).toMatchObject({ x: 0, y: expectedY, width: 1080, height: 608 });
+  });
+
+  it('keeps a footer strip at its scaled bottom origin rather than centering it vertically', () => {
+    const result = smartReflow(
+      image({ x: 37, y: 472 }),
+      source,
+      { width: 1080, height: 1920, formatId: 'ig-story' }
+    );
+    expect(result).toMatchObject({ x: 0, y: 839, width: 1080, height: 608 });
+  });
+
+  it.each([
+    { width: 1200, height: 675, formatId: 'x-post' },
+    { width: 1080, height: 1350, formatId: 'ig-portrait' },
+  ])('keeps a left column on the left on $width×$height', (landscape) => {
+    const result = smartReflow(
+      image({ x: 0, y: 37, width: 540, height: 1080, naturalWidth: 1080, naturalHeight: 1920 }),
+      source,
+      landscape
+    );
+    expect(result.x).toBe(0);
+  });
 });
 
 describe('smartReflow stack safe-zone shifts', () => {
@@ -1368,6 +1397,47 @@ describe('smartReflow stack safe-zone shifts', () => {
     expect(labelOut.x! + labelOut.width!).toBeLessThanOrEqual(
       pillOut.x! + pillOut.width!
     );
+  });
+
+  it.each([
+    { width: 1200, height: 675, formatId: 'x-post' },
+    { width: 1080, height: 1920, formatId: 'ig-story' },
+  ])('moves icons, underline paths and raster decorations with the stack on $width×$height', (target) => {
+    const underline: DesignerElement = {
+      id: 'underline', type: 'path', x: 110, y: 329, width: 180, height: 4,
+      nodes: [{ x: 0, y: 0 }, { x: 180, y: 0 }], stroke: '#111111', strokeWidth: 4,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+      groupId: 'cta', originId: 'cta-underline',
+    };
+    const icon = {
+      ...label, id: 'arrow', type: 'icon', icon: 'arrow-right', text: undefined,
+      x: 260, width: 30, originId: 'cta-icon',
+    } as DesignerElement;
+    const raster = {
+      ...label, id: 'raster-decoration', type: 'raster', src: '/decoration.png',
+      text: undefined, x: 110, originId: 'cta-raster',
+    } as DesignerElement;
+    const stackElements = [headline, subhead, label, underline, icon, raster];
+    const stacks = computeTextStackBoxes(stackElements, source);
+    const outputs = new Map(stackElements.map((element) => [
+      element.id,
+      smartReflow(element, source, target, stacks.get(element)),
+    ]));
+    const labelOut = outputs.get('label')!;
+    const iconOut = outputs.get('arrow')!;
+    const pathOut = outputs.get('underline')!;
+    const rasterOut = outputs.get('raster-decoration')!;
+
+    expect(stacks.get(icon)).toBe(stacks.get(label));
+    expect(stacks.get(underline)).toBe(stacks.get(label));
+    expect(stacks.get(raster)).toBe(stacks.get(label));
+    expect(iconOut.y).toBe(labelOut.y);
+    expect(rasterOut.y).toBe(labelOut.y);
+    const expectedGap = Math.max(1, Math.round(4 * typeScaleRatio(source, target)));
+    expect(Math.abs(pathOut.y! - (labelOut.y! + labelOut.height!) - expectedGap))
+      .toBeLessThanOrEqual(1);
+    expect(pathOut.nodes?.[0].x).toBe(0);
+    expect(pathOut.nodes?.[1].x).toBeCloseTo(180 * typeScaleRatio(source, target), 5);
   });
 
   it('falls back per element on an axis wider than the safe area', () => {

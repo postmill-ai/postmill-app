@@ -136,9 +136,9 @@ network-mocked canvas interaction cases. Only with `E2E_SKIP_AUTH_SETUP=1` does 
 mock-only auth cookie; real-session configs keep their saved session. It mocks identity, organization,
 design, render, and upload routes and starts no `webServer`. Set `E2E_BASE` to an already-running
 loopback worktree frontend and run `pnpm exec playwright test --config
-playwright.designer-editing.config.ts` from `e2e/`. The `designer-editing-e2e` job in
-`.github/workflows/test.yml` builds the frontend, starts that production bundle only on the GitHub
-runner, and executes this config with the skip flag and mocked routes. Never use the mock cookie or
+playwright.designer-editing.config.ts` from `e2e/`. The `production-editing` job in
+`.github/workflows/designer-browser.yml` builds the frontend, starts that production bundle only on
+the GitHub runner, and executes this config with the skip flag and mocked routes. Never use the mock cookie or
 skip flag for unmocked/live tests, and never start the server or Playwright on the production host.
 
 ### Opt-in live provider playback (never default CI)

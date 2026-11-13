@@ -705,8 +705,20 @@ export const smartReflow = (
   const fullCanvasContain =
     perAxis && el.type === 'image' && (el.fitMode || 'cover') === 'contain';
   if (fullCanvasContain) {
-    x = (target.width - newW) / 2;
-    y = (target.height - newH) / 2;
+    const centerX =
+      el.width >= source.width * 0.95 ||
+      Math.abs(el.x + el.width / 2 - source.width / 2) <= 1;
+    const centerY =
+      el.height >= source.height * 0.95 ||
+      Math.abs(el.y + el.height / 2 - source.height / 2) <= 1;
+    // A strip or column keeps its authored edge on the non-centered axis. Only
+    // an axis that spanned or was centered in the source is centered here.
+    x = centerX
+      ? Math.round((target.width - newW) / 2)
+      : Math.max(0, Math.min(Math.round(el.x * scaleX), target.width - newW));
+    y = centerY
+      ? Math.round((target.height - newH) / 2)
+      : Math.max(0, Math.min(Math.round(el.y * scaleY), target.height - newH));
   } else if (perAxis) {
     x = Math.round(el.x * scaleX);
     y = Math.round(el.y * scaleY);
@@ -766,6 +778,31 @@ export const smartReflow = (
     };
   }
 
+  const safe = getSafeZoneInset(target.formatId || '', target.width, target.height);
+  const safeW = safe.right - safe.left;
+  const safeH = safe.bottom - safe.top;
+  const sharedFrameClamp = groupBox && !groupBox.anchor && !perAxis;
+  if (sharedFrameClamp) {
+    // Every stack member takes the same frame shift, including icons, paths and
+    // raster decorations. Per-element safe-zone fallback stays type-gated below.
+    const frameLeft = container
+      ? placeInContainer(groupBox, groupFrameW)
+      : anchorX(anchor, target.width, groupFrameW);
+    const frameTop = anchorY(anchor, target.height, groupFrameH);
+    if (groupFrameW <= safeW) {
+      if (frameLeft < safe.left) x += safe.left - frameLeft;
+      else if (frameLeft + groupFrameW > safe.right) {
+        x -= frameLeft + groupFrameW - safe.right;
+      }
+    }
+    if (groupFrameH <= safeH) {
+      if (frameTop < safe.top) y += safe.top - frameTop;
+      else if (frameTop + groupFrameH > safe.bottom) {
+        y -= frameTop + groupFrameH - safe.bottom;
+      }
+    }
+  }
+
   // Keep text, images, and shapes inside the title-safe area so they remain
   // readable / uncropped by platform overlays. For images and shapes we only
   // nudge when the element actually overlaps a safe-zone edge, preserving the
@@ -778,9 +815,6 @@ export const smartReflow = (
     el.type === 'shape' ||
     el.type === 'symbol'
   ) {
-    const safe = getSafeZoneInset(target.formatId || '', target.width, target.height);
-    const safeW = safe.right - safe.left;
-    const safeH = safe.bottom - safe.top;
     if (el.type === 'text' && newW > safeW) {
       newW = Math.max(10, Math.floor(safeW));
       result.width = newW;
@@ -823,30 +857,9 @@ export const smartReflow = (
         }
       }
     };
-    if (groupBox && !groupBox.anchor && !perAxis) {
-      // Derive the shift from the shared frame, independently of member rounding,
-      // and apply that same shift to text, shapes and symbols alike. An oversize
-      // axis cannot move as one, so only that axis uses per-element fallback.
-      const frameLeft = container
-        ? placeInContainer(groupBox, groupFrameW)
-        : anchorX(anchor, target.width, groupFrameW);
-      const frameTop = anchorY(anchor, target.height, groupFrameH);
-      if (groupFrameW <= safeW) {
-        if (frameLeft < safe.left) x += safe.left - frameLeft;
-        else if (frameLeft + groupFrameW > safe.right) {
-          x -= frameLeft + groupFrameW - safe.right;
-        }
-      } else {
-        clampElementX();
-      }
-      if (groupFrameH <= safeH) {
-        if (frameTop < safe.top) y += safe.top - frameTop;
-        else if (frameTop + groupFrameH > safe.bottom) {
-          y -= frameTop + groupFrameH - safe.bottom;
-        }
-      } else {
-        clampElementY();
-      }
+    if (sharedFrameClamp) {
+      if (groupFrameW > safeW) clampElementX();
+      if (groupFrameH > safeH) clampElementY();
     } else {
       clampElementX();
       clampElementY();

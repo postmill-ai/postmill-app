@@ -4,6 +4,7 @@ import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { createDesignerStore, migrateDoc, type DesignerStore, type DesignerDoc, type DesignerAttribution, type VideoOutput, type VideoClip, type DesignerOutput, type DesignerElement } from './designer.store';
 import { createAutosaveSubscription, createDesignAutosave } from './designer-autosave';
 import { useCollaboration } from './collaboration';
+import { subscribeToBaseDocument } from './collaboration-doc';
 import type { TimelineAwareness, ImageAwareness } from './collaboration';
 import { CollaborationCursors, type PeerTimelineState } from './collaboration-cursors';
 import { DesignerCanvas } from './canvas';
@@ -490,13 +491,7 @@ const DesignerContent: FC<
 
   useEffect(() => {
     if (!collabEnabled || !currentDesignId) return;
-    sendUpdate(store.getState().doc);
-    let prev = store.getState().doc;
-    return store.subscribe((state) => {
-      if (state.doc === prev) return;
-      prev = state.doc;
-      sendUpdate(state.doc);
-    });
+    return subscribeToBaseDocument(store, sendUpdate);
   }, [collabEnabled, currentDesignId, sendUpdate, store]);
 
   // Let the canvas image loader use the authenticated proxy for cross-origin

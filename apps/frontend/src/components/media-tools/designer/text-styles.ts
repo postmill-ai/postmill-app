@@ -137,7 +137,8 @@ export const textStyleFontSize = (
 export const textStylePatch = (
   preset: TextStylePreset,
   element: DesignerElement,
-  canvas: { width: number; height: number }
+  canvas: { width: number; height: number },
+  options: { shrinkGrownHeight?: boolean } = {}
 ): Partial<DesignerElement> => {
   const scale = textStyleScale(canvas);
   const patch: Partial<DesignerElement> = {
@@ -153,6 +154,11 @@ export const textStylePatch = (
   };
   return {
     ...patch,
-    ...fitStyleBoxFor({ ...element, ...patch }, patch.fontSize as number),
+    ...fitStyleBoxFor(
+      { ...element, ...patch },
+      patch.fontSize as number,
+      undefined,
+      options.shrinkGrownHeight === true
+    ),
   };
 };

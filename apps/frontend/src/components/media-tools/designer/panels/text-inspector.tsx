@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TextFormatPanel } from './text-format-panel';
 import {
   FONT_PAIRINGS,
@@ -103,7 +103,34 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
     );
   }, [selectedIds, out, currentPage]);
 
-  const { previewAsync, cancel } = usePresetPreview(store);
+  const { previewAsync, applyAsync, cancel } = usePresetPreview(store);
+  const grownHeights = useRef(new Map<string, number>());
+  const stylePatchFor = useCallback(
+    (
+      preset: TextStylePreset,
+      element: DesignerElement,
+      canvas: { width: number; height: number }
+    ) => {
+      const grown = grownHeights.current.get(element.id);
+      if (grown !== undefined && grown !== element.height) {
+        grownHeights.current.delete(element.id);
+      }
+      return textStylePatch(preset, element, canvas, {
+        shrinkGrownHeight: grown === element.height,
+      });
+    },
+    []
+  );
+  const noteAppliedPatch = useCallback(
+    (element: DesignerElement, patch: Partial<DesignerElement>) => {
+      if (patch.height !== undefined && patch.height > element.height) {
+        grownHeights.current.set(element.id, patch.height);
+      } else if (patch.height !== undefined && patch.height < element.height) {
+        grownHeights.current.delete(element.id);
+      }
+    },
+    []
+  );
 
   const previewPreset = useCallback(
     (preset: TextStylePreset) => {
@@ -119,35 +146,41 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
         return Object.fromEntries(
           textElements.map((element) => [
             element.id,
-            textStylePatch(preset, element, out),
+            stylePatchFor(preset, element, out),
           ])
         );
       });
     },
-    [previewAsync, textElements, out, store]
+    [previewAsync, textElements, out, store, stylePatchFor]
   );
 
   const applyPreset = useCallback(
-    async (preset: TextStylePreset) => {
+    (preset: TextStylePreset) => {
       if (!textElements.length) return;
       cancel();
-      await ensureFontLoaded(
-        preset.fontFamily,
-        [preset.fontWeight],
-        preset.fontStyle === 'italic'
-      );
-      const state = store.getState();
-      const output = state.doc.outputs[state.currentOutput];
-      const selected = new Set(textElements.map((element) => element.id));
-      const current = pageChildren(output, state.currentPage).filter(
-        (element: DesignerElement) => selected.has(element.id) && element.type === 'text'
-      );
-      for (const element of current) {
-        state.updateElement(element.id, textStylePatch(preset, element, output));
-      }
-      state.pushHistory();
+      void applyAsync(async () => {
+        await ensureFontLoaded(
+          preset.fontFamily,
+          [preset.fontWeight],
+          preset.fontStyle === 'italic'
+        );
+        return () => {
+          const state = store.getState();
+          const output = state.doc.outputs[state.currentOutput];
+          const selected = new Set(textElements.map((element) => element.id));
+          const current = pageChildren(output, state.currentPage).filter(
+            (element: DesignerElement) => selected.has(element.id) && element.type === 'text'
+          );
+          for (const element of current) {
+            const patch = stylePatchFor(preset, element, output);
+            state.updateElement(element.id, patch);
+            noteAppliedPatch(element, patch);
+          }
+          state.pushHistory();
+        };
+      });
     },
-    [store, textElements, cancel]
+    [store, textElements, cancel, applyAsync, stylePatchFor, noteAppliedPatch]
   );
 
   const handleAddBackdrop = useCallback(() => {

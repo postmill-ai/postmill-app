@@ -4,6 +4,7 @@ import {
   boundsForSnapBoxes,
   EQUAL_SPACING_DOCUMENT_PX,
   nearestSnap,
+  movingNodesForSnap,
   selectionIncludesDraggedNode,
   snapToleranceForZoom,
 } from './canvas-snap';
@@ -57,6 +58,16 @@ describe('canvas snapping', () => {
     expect(selectionIncludesDraggedNode(['one', 'two'], 'unselected')).toBe(false);
     expect(selectionIncludesDraggedNode(['one'], 'one')).toBe(false);
     expect(selectionIncludesDraggedNode([], 'guide')).toBe(false);
+  });
+
+  it('uses the canvas moving-node resolver for attached and unselected drags', () => {
+    const one = { id: () => 'one' };
+    const two = { id: () => 'two' };
+    const unselected = { id: () => 'unselected' };
+
+    expect(movingNodesForSnap([one, two], one)).toEqual([one, two]);
+    expect(movingNodesForSnap([one, two], unselected)).toEqual([unselected]);
+    expect(movingNodesForSnap([], unselected)).toEqual([unselected]);
   });
 
   it('classifies equal spacing with fixed document-space tolerance at low zoom', () => {

@@ -95,7 +95,7 @@ const boxPatchFor = (
   }
   // A single word wider than the box never wraps — it overflows — so growing
   // height can't make the size honest there; the box has to widen. Style changes
-  // may shrink height, but never collapse an intentionally wide layout box.
+  // may shrink only a height the style feature grew, never an authored layout box.
   if (lines.length === 1 && paragraphs === 1) {
     const lineWidth =
       measureLineWidth(lines[0], fontSize, letterSpacing, m, scaleX) + indent;
@@ -113,8 +113,9 @@ export const growBoxFor = (
 export const fitStyleBoxFor = (
   element: DesignerElement | null,
   fontSize: number,
-  measure?: MeasureText
-): Partial<DesignerElement> => boxPatchFor(element, fontSize, true, measure);
+  measure?: MeasureText,
+  shrinkHeight = false
+): Partial<DesignerElement> => boxPatchFor(element, fontSize, shrinkHeight, measure);
 
 /**
  * The patch one `update()` call writes to an element.

@@ -224,7 +224,7 @@ describe('TextInspector paged text', () => {
 
     const current = output(store, 0).children[0];
     expect(current.fontSize).toBe(13);
-    expect(current.height).toBe(20);
+    expect(current.height).toBe(60);
     expect(store.getState().doc.outputs[0]).toMatchObject({ width: 1200, height: 675 });
   });
 
@@ -247,6 +247,42 @@ describe('TextInspector paged text', () => {
     await waitFor(() => expect(output(store, 0).children[0].fontSize).toBe(48));
     expect(ensureFontLoaded).toHaveBeenCalledWith('Inter', [700], false);
     expect(output(store, 0).children[0].height).toBe(159);
+    expect(store.getState().history).toHaveLength(depth + 1);
+  });
+
+  it('shrinks only a height previously grown by the style feature', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement(textElement('grown', 'A much longer heading'));
+    store.getState().setSelectedIds(['grown']);
+    await renderInspector(store);
+
+    await clickStyle(/Heading 1/);
+    expect(output(store, 0).children[0].height).toBe(159);
+    await clickStyle('B Body');
+    expect(output(store, 0).children[0].height).toBe(24);
+  });
+
+  it('ignores a stale slow-font apply after a newer preset wins', async () => {
+    let resolveHeading = () => {};
+    let resolveBody = () => {};
+    vi.mocked(ensureFontLoaded)
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { resolveHeading = resolve; }))
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { resolveBody = resolve; }));
+    const store = createDesignerStore();
+    store.getState().addElement(textElement('raced', 'Race'));
+    store.getState().setSelectedIds(['raced']);
+    await renderInspector(store);
+    const depth = store.getState().history.length;
+
+    fireEvent.click(screen.getByRole('button', { name: /Heading 1/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'B Body' }));
+    resolveBody();
+    await waitFor(() => expect(output(store, 0).children[0].fontSize).toBe(16));
+    expect(store.getState().history).toHaveLength(depth + 1);
+
+    resolveHeading();
+    await act(async () => { await Promise.resolve(); });
+    expect(output(store, 0).children[0].fontSize).toBe(16);
     expect(store.getState().history).toHaveLength(depth + 1);
   });
 });

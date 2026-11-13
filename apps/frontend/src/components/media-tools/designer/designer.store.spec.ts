@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { createDesignerStore, migrateDoc, MAX_TRACKS, type DesignerDoc, type DesignerStore } from './designer.store';
+import { subscribeToBaseDocument } from './collaboration-doc';
 
 /**
  * Focal detection is an async vision call; the store only consumes its
@@ -2201,24 +2202,50 @@ describe('preset preview isolation', () => {
     expect(store.getState().previewPatches).toBeNull();
   });
 
+  it('groups, cuts, pastes and removes only base elements during a preview', () => {
+    const grouped = createDesignerStore();
+    grouped.getState().addElement(text);
+    grouped.getState().previewElements({ [text.id]: { fontSize: 72 } });
+    grouped.getState().groupSelection([text.id]);
+    const groupedText = grouped.getState().doc.outputs[0].children.find(
+      (element) => element.id === text.id
+    );
+    expect(groupedText).toMatchObject({ fontSize: 32 });
+    expect(groupedText?.groupId).toBeTruthy();
+
+    const pasted = createDesignerStore();
+    pasted.getState().addElement(text);
+    pasted.getState().setSelectedIds([text.id]);
+    pasted.getState().previewElements({ [text.id]: { fontSize: 72 } });
+    pasted.getState().cutSelection();
+    expect(pasted.getState().clipboard[0].fontSize).toBe(32);
+    expect(pasted.getState().doc.outputs[0].children).toHaveLength(0);
+    pasted.getState().paste();
+    expect(pasted.getState().doc.outputs[0].children[0].fontSize).toBe(32);
+
+    const removed = createDesignerStore();
+    removed.getState().addElement(text);
+    removed.getState().previewElements({ [text.id]: { fontSize: 72 } });
+    removed.getState().removeElements([text.id]);
+    expect(removed.getState().doc.outputs[0].children).toHaveLength(0);
+    expect(removed.getState().history.at(-1)?.outputs[0].children).toHaveLength(0);
+    expect(removed.getState().previewPatches).toBeNull();
+  });
+
   it('does not broadcast a collaboration document change for preview-only transitions', () => {
     const store = createDesignerStore();
     store.getState().addElement(text);
     const sent: DesignerDoc[] = [];
-    let previous = store.getState().doc;
-    const unsubscribe = store.subscribe((state) => {
-      if (state.doc === previous) return;
-      previous = state.doc;
-      sent.push(state.doc);
-    });
+    const unsubscribe = subscribeToBaseDocument(store, (doc) => sent.push(doc));
+    expect(sent).toHaveLength(1);
 
     store.getState().previewElements({ [text.id]: { fontSize: 72 } });
     store.getState().clearElementPreview();
-    expect(sent).toEqual([]);
+    expect(sent).toHaveLength(1);
 
     store.getState().updateElement(text.id, { fill: '#abcdef' });
-    expect(sent).toHaveLength(1);
-    expect(sent[0].outputs[0].children[0]).toMatchObject({ fontSize: 32, fill: '#abcdef' });
+    expect(sent).toHaveLength(2);
+    expect(sent[1].outputs[0].children[0]).toMatchObject({ fontSize: 32, fill: '#abcdef' });
     unsubscribe();
   });
 
