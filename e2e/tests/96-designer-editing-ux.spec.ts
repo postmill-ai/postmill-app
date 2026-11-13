@@ -165,6 +165,23 @@ async function editText(page: Page) {
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
 }
 
+async function selectBodyCopy(page: Page) {
+  if (await page.getByRole('listbox', { name: 'Layers' }).count() === 0) {
+    await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Layers', exact: true }).click();
+  }
+  const row = page.locator('[data-element-id="body-copy"]');
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
+}
+
+async function editSelectedBodyCopy(page: Page) {
+  await page.getByRole('application', { name: 'Design canvas' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
+}
+
 test('selected words retain independent colors through autosave and reopen', async ({ page }) => {
   const state = await installMocks(page);
   await openDesigner(page);
@@ -223,15 +240,14 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   await expect.poll(() => JSON.stringify(state.doc.outputs[0].children[0])).toContain('textShadow');
   expect(state.doc.outputs[0].children).toHaveLength(2);
   expect(state.doc.outputs[0].children[0].type).toBe('text');
-  await page.getByRole('application', { name: 'Design canvas' }).focus();
-  await page.keyboard.press('Enter');
-  await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
+  await editSelectedBodyCopy(page);
   await page.getByRole('textbox', { name: 'Design name' }).click();
 
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)' }).click();
   await expect.poll(() => state.doc.outputs[0].children[0].textShadow).toBeUndefined();
   await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)' }).click();
   await expect.poll(() => state.doc.outputs[0].children[0].textShadow).toBeDefined();
+  await selectBodyCopy(page);
 
   const heading = page.getByRole('button', { name: /H Heading 1/ });
   await heading.hover();
@@ -259,10 +275,15 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)' }).click();
   await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(24);
 
+  const savesBeforeReopen = state.saveDocs.length;
   await page.getByRole('button', { name: 'Save (Ctrl+S)' }).click();
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBeforeReopen);
+  expect(JSON.stringify(state.saveDocs.at(-1))).toContain('"fontSize":24');
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
-  await editText(page);
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await selectBodyCopy(page);
+  await editSelectedBodyCopy(page);
   await page.getByRole('textbox', { name: 'Design name' }).click();
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
