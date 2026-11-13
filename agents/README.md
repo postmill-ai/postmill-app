@@ -34,6 +34,7 @@ Root companions:
 | [`frontend.md`](./frontend.md) | Frontend structure: routing, SWR/`useFetch`, contexts, error boundaries, dashboard widgets. |
 | [`backend.md`](./backend.md) | Any server-side change — layering rules + recipes (controller, DTO, repository, Inngest function). |
 | [`libraries.md`](./libraries.md) | Unsure where code lives — import aliases + per-directory tour + "where does new code go". |
+| [`deployment.md`](./deployment.md) | Changing fork Docker build CI or manual VPS image update/rollback helpers. |
 | [`database.md`](./database.md) | Changing `schema.prisma` — migration workflow, safety rules, enum additions. |
 | [`testing.md`](./testing.md) | Writing/running tests, provider conformance specs, lint, e2e. |
 | [`security.md`](./security.md) | Touching auth, encryption, outbound HTTP, secrets — the invariants you must not break. |

@@ -15,6 +15,8 @@ on:
 # removed because the org has no arm64 runner and only amd64 is deployed.
 jobs:
   build-containers:
+    # Forks publish through fork-image.yml; never target the upstream namespace.
+    if: github.repository == 'postmill-ai/postmill-app'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

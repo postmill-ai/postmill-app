@@ -1,0 +1,5 @@
+# Install as /opt/postmill/compose.image.yaml ONLY if no fourth file exists.
+# The updater subsequently pins the selected fork image by registry digest.
+services:
+  postmill:
+    image: ghcr.io/postmill-ai/postmill-app@sha256:9cdd31b251c8941a2eaa86f99ef1a48cc1b1dd1a282ad31b425de949d957b948

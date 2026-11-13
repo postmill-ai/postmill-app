@@ -1,15 +1,16 @@
 # Database: Prisma schema & migration workflow
 
 Prisma 6.5.0 (pinned — every script invokes `pnpm dlx prisma@6.5.0` or the workspace-pinned
-`pnpm exec prisma`). PostgreSQL. **Production is live with many users — migrations apply
-against the production DB at boot, so every schema change must be backward-compatible.**
+`pnpm exec prisma`). PostgreSQL. **Production is live with many users. Apply shared/production migrations explicitly
+with operator approval; the all-in-one docker entrypoint does not run DDL at boot.
+Application seeders/backfills may still write data on startup.**
 
 | Fact | Value |
 |---|---|
 | Schema | `libraries/nestjs-libraries/src/database/prisma/schema.prisma` (91 models) |
 | Migrations | `libraries/nestjs-libraries/src/database/prisma/migrations/` — committed, from the `0_init` baseline |
 | Client access | `PrismaService` / `PrismaRepository<T>` / `PrismaTransaction` in `libraries/nestjs-libraries/src/database/prisma/prisma.service.ts` |
-| Canonical apply path | `prisma migrate deploy` (CI, backend boot, production) |
+| Canonical apply path | `prisma migrate deploy` (explicit operator action for shared/production DBs) |
 | `db push` | **Local prototyping/reset only — never the apply path for a shared/production DB** |
 
 ## Scripts (root `package.json`)
@@ -37,7 +38,7 @@ against the production DB at boot, so every schema change must be backward-compa
 6. Commit **both** the schema edit and the new migration directory together. A schema edit committed without its migration fails the CI drift gate.
 7. Other environments pick it up via `pnpm run prisma-migrate-deploy` (or the `-safe` wrapper).
 
-## Safety rules (migrations run against the live production DB)
+## Safety rules (shared/production migrations)
 
 - New columns: **nullable or with a `DEFAULT`**. `ADD COLUMN ... NOT NULL` without a default breaks the apply on existing rows and is flagged by the guard.
 - Renames/drops are destructive. Use expand-contract:
