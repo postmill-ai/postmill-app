@@ -223,7 +223,9 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   await expect.poll(() => JSON.stringify(state.doc.outputs[0].children[0])).toContain('textShadow');
   expect(state.doc.outputs[0].children).toHaveLength(2);
   expect(state.doc.outputs[0].children[0].type).toBe('text');
-  await editText(page);
+  await page.getByRole('application', { name: 'Design canvas' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
   await page.getByRole('textbox', { name: 'Design name' }).click();
 
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)' }).click();

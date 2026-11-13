@@ -270,3 +270,12 @@ jobs:
           curl --fail --silent http://127.0.0.1:4201/ > /dev/null
           cd e2e
           pnpm exec playwright test --config playwright.designer-editing.config.ts
+
+      - name: Upload Designer editing failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: designer-editing-e2e-results
+          path: e2e/test-results
+          if-no-files-found: ignore
+          retention-days: 7
