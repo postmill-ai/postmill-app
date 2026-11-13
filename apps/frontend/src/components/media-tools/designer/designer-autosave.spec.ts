@@ -1149,13 +1149,13 @@ describe('createDesignAutosave scheduling', () => {
 
     autosave.save(store.getState().doc);
     await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(30000);
+    await vi.advanceTimersByTimeAsync(120000);
     expect(store.getState().saveFailed).toBe(true);
     await vi.advanceTimersByTimeAsync(2000);
     expect(callsTo(fetchMock, 'PUT', '/media/designs/design-timeout')).toHaveLength(2);
   });
 
-  it('does not join an identical manual Save to a request already hung on the network', async () => {
+  it('joins an identical manual Save to the in-flight write', async () => {
     vi.useFakeTimers();
     const store = createDesignerStore();
     store.getState().setDesignId('design-identical-timeout');
@@ -1171,9 +1171,50 @@ describe('createDesignAutosave scheduling', () => {
     await vi.advanceTimersByTimeAsync(0);
     const manual = autosave.saveNow(store.getState().doc);
     await vi.advanceTimersByTimeAsync(0);
-    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-identical-timeout')).toHaveLength(2);
-    await vi.advanceTimersByTimeAsync(30000);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-identical-timeout')).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(120000);
     await expect(manual).resolves.toBe('failed');
+  });
+
+  it('times out a hung create POST and allows a retry', async () => {
+    vi.useFakeTimers();
+    const store = createDesignerStore();
+    addText(store, 'Edit');
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(store.getState().saveFailed).toBe(true);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(2);
+  });
+
+  it('times out a hung preview upload and retries with a fresh preview task', async () => {
+    vi.useFakeTimers();
+    const store = createDesignerStore();
+    addText(store, 'Edit');
+    const uploadPreview = vi.fn(() => new Promise<PreviewUpload>(() => {}));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: vi.fn(),
+      uploadPreview,
+    });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(store.getState().saveFailed).toBe(true);
+    const retry = autosave.saveNow(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(uploadPreview).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(120000);
+    await expect(retry).resolves.toBe('failed');
   });
 
   it('captures the original design and document for an idle preview', async () => {

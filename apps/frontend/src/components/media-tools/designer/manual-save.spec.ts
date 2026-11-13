@@ -14,7 +14,7 @@ const autosaveStub = (overrides: Partial<DesignAutosave> = {}): DesignAutosave =
 describe('manual Save result handling', () => {
   it.each([
     ['persisted', 'success'],
-    ['skipped', 'warning'],
+    ['skipped', 'neutral'],
     ['failed', 'warning'],
   ] as const)('maps %s to a %s toast', (result, expected) => {
     expect(manualSaveToastKind(result)).toBe(expected);

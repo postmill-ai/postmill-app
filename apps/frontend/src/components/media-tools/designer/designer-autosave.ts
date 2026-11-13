@@ -209,7 +209,11 @@ export const createDesignAutosave = ({
   const retryStates = new Map<string, RetryState>();
   let activeWrites = 0;
   const MAX_CONSECUTIVE_FAILURES = 5;
-  const SAVE_REQUEST_TIMEOUT_MS = 30000;
+  const SAVE_REQUEST_TIMEOUT_MS = 120000;
+  const saveTimeoutFor = (body?: string) => Math.max(
+    SAVE_REQUEST_TIMEOUT_MS,
+    30000 + Math.ceil((body?.length ?? 0) * 0.008)
+  );
 
   const beginSaving = () => {
     activeWrites += 1;
@@ -229,7 +233,7 @@ export const createDesignAutosave = ({
     let state = retryStates.get(key);
     if (!state) {
       state = newRetryState();
-      retryStates.set(key, state);
+      setBounded(retryStates, key, state);
     }
     return state;
   };
@@ -383,24 +387,30 @@ export const createDesignAutosave = ({
     return promise;
   };
 
-  const fetchWithTimeout = async (url: string, init: RequestInit): Promise<Response> => {
-    const controller = new AbortController();
+  const withTimeout = <T,>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    onTimeout?: () => void
+  ): Promise<T> => {
     let timer: ReturnType<typeof setTimeout>;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        controller.abort();
+        onTimeout?.();
         reject(new Error('Design save timed out'));
-      }, SAVE_REQUEST_TIMEOUT_MS);
+      }, timeoutMs);
       (timer as unknown as { unref?: () => void }).unref?.();
     });
-    try {
-      return await Promise.race([
-        fetchFn(url, { ...init, signal: controller.signal }),
-        timeout,
-      ]);
-    } finally {
-      clearTimeout(timer!);
-    }
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer!));
+  };
+
+  const fetchWithTimeout = async (url: string, init: RequestInit): Promise<Response> => {
+    const controller = new AbortController();
+    const body = typeof init.body === 'string' ? init.body : undefined;
+    return withTimeout(
+      fetchFn(url, { ...init, signal: controller.signal }),
+      saveTimeoutFor(body),
+      () => controller.abort()
+    );
   };
 
   const ensureCreatedFor = (request: SaveRequest): Promise<string> => {
@@ -425,7 +435,11 @@ export const createDesignAutosave = ({
           ? {} as PreviewUpload
           : failed && failed.doc === sentDoc && failed.name === sentName
             ? failed.preview
-            : await previewFor(sentDoc, immediate);
+            : await withTimeout(
+              previewFor(sentDoc, immediate),
+              SAVE_REQUEST_TIMEOUT_MS,
+              () => previewTasks.delete(sentDoc)
+            );
         const payload: Record<string, unknown> = {
           name: sentName,
           doc: sentDoc,
@@ -437,9 +451,10 @@ export const createDesignAutosave = ({
         let res: Response;
         try {
           request.networkStarted = true;
-          res = await fetchFn('/media/designs', {
+          const body = JSON.stringify(payload);
+          res = await fetchWithTimeout('/media/designs', {
             method: 'POST',
-            body: JSON.stringify(payload),
+            body,
           });
         } catch (err) {
           retryStateFor(request).lastFailed = {
@@ -660,9 +675,7 @@ export const createDesignAutosave = ({
     const request = requestFor(sentDoc, true);
     const queue = queueFor(request);
     const pending = queue.pending.get(sentDoc) ?? [];
-    const existing = pending.find((entry) =>
-      entry.name === request.sentName && entry.started && !entry.request.networkStarted
-    );
+    const existing = pending.find((entry) => entry.name === request.sentName);
     if (existing) {
       previewTasks.get(sentDoc)?.start();
       return existing.promise;

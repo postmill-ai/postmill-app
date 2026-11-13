@@ -646,8 +646,13 @@ const DesignerContent: FC<
     }
     try {
       const result = await runManualSave(store, designAutosave);
-      if (manualSaveToastKind(result) === 'warning') {
+      const toastKind = manualSaveToastKind(result);
+      if (toastKind === 'warning') {
         toaster.show(translate('save_failed', 'Failed to save'), 'warning');
+        return;
+      }
+      if (toastKind === 'neutral') {
+        toaster.show(translate('designer_saving_ellipsis', 'Saving…'), 'warning');
         return;
       }
       toaster.show(translate('design_saved', 'Design saved'), 'success');

@@ -3,8 +3,8 @@ import type { DesignAutosave, SaveResult } from './designer-autosave';
 
 type DesignerStoreApi = ReturnType<typeof createDesignerStore>;
 
-export const manualSaveToastKind = (result: SaveResult): 'success' | 'warning' =>
-  result === 'persisted' ? 'success' : 'warning';
+export const manualSaveToastKind = (result: SaveResult): 'success' | 'neutral' | 'warning' =>
+  result === 'persisted' ? 'success' : result === 'skipped' ? 'neutral' : 'warning';
 
 export const runManualSave = async (
   store: DesignerStoreApi,
