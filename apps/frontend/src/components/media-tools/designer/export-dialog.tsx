@@ -51,6 +51,7 @@ import {
   renderPdfWithDiagnostics,
   runStaticExportBatch,
   uploadExportBlob,
+  getDefaultFormat,
   type ExportFallbackFormat,
   type StaticExportCompleted,
   type StaticExportFailure,
@@ -144,17 +145,6 @@ const SCALES = [
 const QUALITY_MIN = 0.1;
 const QUALITY_MAX = 1.0;
 const QUALITY_STEP = 0.05;
-
-const getDefaultFormat = (formatId: string): FormatValue => {
-  if (formatId.startsWith('ig-')) return 'jpeg';
-  if (formatId.startsWith('fb-')) return 'jpeg';
-  if (formatId.startsWith('x-')) return 'webp';
-  if (formatId.startsWith('linkedin-')) return 'webp';
-  if (formatId.startsWith('tiktok')) return 'jpeg';
-  if (formatId.startsWith('yt-')) return 'jpeg';
-  if (formatId.startsWith('pinterest-')) return 'png';
-  return 'png';
-};
 
 const mimeFor = (format: FormatValue): string => {
   const mimeMap: Record<string, string> = {

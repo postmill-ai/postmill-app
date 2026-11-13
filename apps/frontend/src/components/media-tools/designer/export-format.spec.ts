@@ -4,6 +4,7 @@ import {
   EXPORT_REQUEST_TIMEOUT_MS,
   MAX_UPLOAD_BYTES,
   RENDER_RETRY_BACKOFF_MS,
+  getDefaultFormat,
   renderOutputWithFallback,
   renderPdfWithDiagnostics,
   renderWithFormatFallback,
@@ -11,6 +12,18 @@ import {
   uploadExportBlob,
   type StaticExportTask,
 } from './export-format';
+
+describe('getDefaultFormat', () => {
+  it('defaults custom outputs without a formatId to png without throwing', () => {
+    expect(getDefaultFormat(undefined)).toBe('png');
+  });
+
+  it('keeps the formatId-driven defaults', () => {
+    expect(getDefaultFormat('ig-post')).toBe('jpeg');
+    expect(getDefaultFormat('x-post')).toBe('webp');
+    expect(getDefaultFormat('custom')).toBe('png');
+  });
+});
 
 const blob = (size: number): Blob => ({ size }) as Blob;
 const responseBlob = (size: number) => new Response(new Uint8Array(size));

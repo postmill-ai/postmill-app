@@ -7,6 +7,19 @@ export const EXPORT_REQUEST_TIMEOUT_MS = 120_000;
 export const RENDER_RETRY_BACKOFF_MS = 750;
 
 export type ExportFallbackFormat = 'png' | 'jpeg' | 'transparent' | 'webp';
+
+export const getDefaultFormat = (formatId?: string): 'png' | 'jpeg' | 'webp' => {
+  if (!formatId) return 'png';
+  if (formatId.startsWith('ig-')) return 'jpeg';
+  if (formatId.startsWith('fb-')) return 'jpeg';
+  if (formatId.startsWith('x-')) return 'webp';
+  if (formatId.startsWith('linkedin-')) return 'webp';
+  if (formatId.startsWith('tiktok')) return 'jpeg';
+  if (formatId.startsWith('yt-')) return 'jpeg';
+  if (formatId.startsWith('pinterest-')) return 'png';
+  return 'png';
+};
+
 export type ExportStage = 'preview' | 'render' | 'upload';
 export type ExportFailureKind = 'http' | 'network' | 'timeout' | 'abort' | 'oversize' | 'unknown';
 
