@@ -511,12 +511,24 @@ test('desktop workspace tabs switch the visible panel and keep View display-only
   expect(arrowTransform).not.toBe('none');
 });
 
-test('selection opens Inspector and desktop workspace preferences survive reload', async ({ page }) => {
-  await installMocks(page);
+test('Layers selection stays sticky and desktop workspace preferences survive reload', async ({ page }) => {
+  const state = await installMocks(page);
   await openDesigner(page);
   await page.getByRole('tab', { name: 'Layers', exact: true }).click();
   await page.locator('[data-element-id="body-copy"]').click();
-  await expect(page.getByRole('region', { name: 'Inspector', exact: true })).toBeVisible();
+  await expect(page.locator('[data-workspace-panel="layers"]')).toBeVisible();
+  await page.locator('[data-element-id="drop-target"]').click({ modifiers: ['Control'] });
+  await expect(page.locator('[data-element-id="body-copy"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('[data-element-id="drop-target"]')).toHaveAttribute('aria-selected', 'true');
+
+  await page.locator('[data-element-id="body-copy"]').dblclick();
+  const rename = page.locator('[data-element-id="body-copy"] input');
+  await expect(rename).toBeVisible();
+  await rename.fill('Renamed body copy');
+  await rename.press('Enter');
+  await expect(rename).toHaveCount(0);
+  await expect(page.locator('[data-workspace-panel="layers"]')).toBeVisible();
+  expect(state.doc.outputs[0].children[0].name).toBe('Renamed body copy');
 
   await page.getByRole('tab', { name: 'AI', exact: true }).click();
   await expect.poll(() => page.evaluate(() =>
@@ -532,10 +544,10 @@ test('selection opens Inspector and desktop workspace preferences survive reload
   await page.reload();
   await expect(page.locator('[data-workspace-panel="ai"]')).toBeHidden();
   await page.getByRole('button', { name: 'Expand properties panel', exact: true }).click();
-  await expect(page.locator('[data-workspace-panel="inspector"]')).toBeVisible();
+  await expect(page.locator('[data-workspace-panel="ai"]')).toBeVisible();
 });
 
-test('AI results survive tab, collapse and Inspector changes without another request', async ({ page }) => {
+test('AI results survive tab and collapse changes without another request', async ({ page }) => {
   const state = await installMocks(page);
   await openDesigner(page);
   await page.getByRole('tab', { name: 'AI', exact: true }).click();
@@ -557,6 +569,7 @@ test('mobile keeps Inspector and Brand in sheets instead of desktop tabs', async
   await installMocks(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await openDesigner(page);
+  await expect(page.getByRole('region', { name: 'Canvas', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Inspector', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Canvas', exact: true })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Layers', exact: true })).toHaveCount(0);

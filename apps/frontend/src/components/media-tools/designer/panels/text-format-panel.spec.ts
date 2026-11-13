@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildTextElementPatch } from './text-format-panel';
+import { buildFontSizeUpdate, buildTextElementPatch } from './text-format-panel';
 import { growBoxFor } from '../measure-text';
 import type { DesignerElement, TextRun } from '../designer.store';
 import type { MeasureText } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
@@ -9,13 +9,10 @@ vi.mock('../fonts', () => ({
   ensureFontLoaded: () => Promise.resolve(),
 }));
 
-// The no-measure branch only exists where no canvas backend does, and this
-// jsdom build HAS one — so the module's own measure has to be mocked away to
-// see it.
 vi.mock('../measure-text', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../measure-text')>()),
   fittedFontSize: (el: { fontSize?: number }) => el.fontSize ?? 16,
-  measureForElement: () => undefined,
+  measureForElement: () => (text: string, size: number) => text.length * size * 0.5,
 }));
 
 /** Fixed-width glyphs (0.5em), so every measurement below is exact. */
@@ -123,6 +120,24 @@ describe('growBoxFor', () => {
     // jsdom has no canvas backend, so the panel's own measure is unavailable —
     // the box is left exactly as authored rather than grown on a guess.
     expect(growBoxFor(baseText(), 40, null)).toEqual({});
+  });
+});
+
+describe('buildFontSizeUpdate', () => {
+  it('computes growth and position independently for each selected element', () => {
+    const first = buildFontSizeUpdate(
+      baseText({ x: 100, align: 'center', text: 'supercalifragilistic' }),
+      40,
+      { width: 1000, height: 400 }
+    );
+    const second = buildFontSizeUpdate(
+      baseText({ x: 600, align: 'center', text: 'supercalifragilistic' }),
+      40,
+      { width: 1000, height: 400 }
+    );
+
+    expect(first).toMatchObject({ fontSize: 40, width: 340, x: 0 });
+    expect(second).toMatchObject({ fontSize: 40, width: 340, x: 480 });
   });
 });
 

@@ -1,7 +1,8 @@
 import { MAX_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import type { MeasureText } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import type { DesignerOutput, VideoOutput } from './designer.store';
-import { fittedFontSize } from './measure-text';
+import { fittedFontSize, growBoxFor } from './measure-text';
 
 type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
 
@@ -14,16 +15,21 @@ export const fontSizeShortcutDelta = (event: {
   ctrlKey: boolean;
   metaKey: boolean;
   altKey?: boolean;
+  shiftKey?: boolean;
 }): -1 | 0 | 1 => {
   if ((!event.ctrlKey && !event.metaKey) || event.altKey) return 0;
-  if (event.code === 'Comma' || event.key === '<') return -1;
-  if (event.code === 'Period' || event.key === '>') return 1;
+  if (event.key === '<') return -1;
+  if (event.key === '>') return 1;
+  if (!event.shiftKey || /^[a-z]$/i.test(event.key)) return 0;
+  if (event.code === 'Comma') return -1;
+  if (event.code === 'Period') return 1;
   return 0;
 };
 
 export const adjustSelectedTextFontSize = (
   store: Store,
-  delta: number
+  delta: number,
+  measure?: MeasureText
 ): boolean => {
   const state = store.getState();
   let changed = false;
@@ -53,17 +59,26 @@ export const adjustSelectedTextFontSize = (
       if (!state.selectedIds.includes(element.id) || element.type !== 'text' || element.locked || element.hidden) {
         continue;
       }
+      const authoredSize = element.fontSize ?? 16;
       const effectiveSize = fittedFontSize(element);
       const fontSize = boundedFontSize(effectiveSize, delta);
       const richText = element.richText?.map((run) => ({
         ...run,
-        fontSize: boundedFontSize(run.fontSize ?? element.fontSize ?? 16, delta),
+        fontSize: boundedFontSize(run.fontSize ?? authoredSize, delta),
       }));
       const runsChanged = richText?.some((run, index) =>
-        run.fontSize !== (element.richText?.[index].fontSize ?? element.fontSize ?? 16)
+        run.fontSize !== (element.richText?.[index].fontSize ?? authoredSize)
       );
       if (fontSize === effectiveSize && !runsChanged) continue;
-      state.updateElementsSilent([element.id], { fontSize, richText });
+      const growth = delta > 0 && effectiveSize === authoredSize
+        ? growBoxFor(
+            { ...element, fontSize, richText },
+            fontSize,
+            measure,
+            { width: output.width, height: output.height }
+          )
+        : {};
+      state.updateElementsSilent([element.id], { fontSize, richText, ...growth });
       changed = true;
     }
   }

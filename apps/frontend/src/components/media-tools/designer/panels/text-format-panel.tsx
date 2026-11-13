@@ -205,6 +205,15 @@ const DEFAULT_SHADOW: DesignerTextShadow = {
   offsetY: 2,
 };
 
+export const buildFontSizeUpdate = (
+  element: DesignerElement,
+  fontSize: number,
+  bounds: { width: number; height: number }
+): Partial<DesignerElement> => ({
+  fontSize,
+  ...growBoxFor(element, fontSize, undefined, bounds),
+});
+
 export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
   const t = useT();
   const selectedIds = store((s) => s.selectedIds);
@@ -238,7 +247,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
   }, [element, t]);
 
   const update = useCallback(
-    (updates: TextElementUpdates, commit = true) => {
+    (updates: TextElementUpdates, commit = true, fitBox = false) => {
       if (!textElements.length) return;
 
       const selection =
@@ -247,15 +256,18 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
           : null;
 
       for (const el of textElements) {
+        const elementUpdates = fitBox && updates.fontSize
+          ? buildFontSizeUpdate(el, updates.fontSize, { width: out.width, height: out.height })
+          : updates;
         store
           .getState()
-          .updateElement(el.id, buildTextElementPatch(el, updates, selection));
+          .updateElement(el.id, buildTextElementPatch(el, elementUpdates, selection));
       }
       // Continuous controls (sliders) pass commit=false during the drag and push a
       // single history entry on release.
       if (commit) store.getState().pushHistory();
     },
-    [store, textElements, element]
+    [store, textElements, element, out.width, out.height]
   );
 
   const currentFont = element?.fontFamily || 'Arial';
@@ -354,10 +366,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
                 // The fitter only ever shrinks, so a size larger than the box
                 // used to be accepted, stored, echoed back by this field — and
                 // then silently painted smaller. Grow the box to honour it.
-                update({
-                  fontSize: value,
-                  ...growBoxFor(element, value, undefined, { width: out.width, height: out.height }),
-                });
+                update({ fontSize: value }, true, true);
               }
             }}
             className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"

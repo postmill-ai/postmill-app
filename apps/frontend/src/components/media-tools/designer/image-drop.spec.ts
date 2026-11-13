@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { imageDropTargetById, uploadDroppedImage } from './image-drop';
+import { imageDropTargetById, replaceUploadedImageAtDropTarget, uploadDroppedImage } from './image-drop';
 import { MAX_UPLOAD_BYTES } from './export-format';
 import { createDesignerStore, type VideoOutput, type VideoTrack } from './designer.store';
 
@@ -108,5 +108,39 @@ describe('uploadDroppedImage', () => {
 
     await expect(uploadDroppedImage(fetch, file, async () => null))
       .rejects.toThrow('Image decode failed');
+  });
+});
+
+describe('replaceUploadedImageAtDropTarget', () => {
+  const item = { url: '/uploads/new.png', fileId: 'new-file', width: 100, height: 50 };
+
+  it('deletes the new upload when its target disappeared', async () => {
+    const store = createDesignerStore();
+    const fetch = vi.fn().mockResolvedValue({ ok: true });
+
+    await expect(replaceUploadedImageAtDropTarget({
+      fetch,
+      store,
+      target: { kind: 'element', elementId: 'missing' },
+      item,
+    })).resolves.toBe(false);
+    expect(fetch).toHaveBeenCalledWith('/files/new-file', { method: 'DELETE' });
+  });
+
+  it('retains the uploaded file after a successful replacement', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'image', type: 'image', x: 0, y: 0, width: 100, height: 100,
+      rotation: 0, opacity: 1, locked: false, hidden: false, src: '/old.png',
+    });
+    const fetch = vi.fn();
+
+    await expect(replaceUploadedImageAtDropTarget({
+      fetch,
+      store,
+      target: { kind: 'element', elementId: 'image' },
+      item,
+    })).resolves.toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

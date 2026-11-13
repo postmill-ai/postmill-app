@@ -62,12 +62,14 @@ saved.
 
 ## Workspace panels
 
-On desktop, the right panel has **Inspector**, **Layers**, **Brand**, and **AI** tabs. Selecting an
-element opens Inspector. AI and Brand stay mounted while hidden, so generated results and in-flight work
-survive tab changes and collapsing the panel. Your active tab and collapsed state are remembered per
-organization. The tool rail's Brand button and **Tools ▸ Workspace** open the same surfaces. **History**
-and **Versions** are beside Undo/Redo, **Templates** is beside Save, and View is reserved for zoom and
-display settings. History, Versions, and Template Fields retain their movable floating panels.
+On desktop, the right panel has **Inspector**, **Layers**, **Brand**, and **AI** tabs. Your explicit tab
+choice stays active during selection, multi-select, and rename. AI and Brand mount when first opened,
+then stay mounted while hidden so generated results and in-flight work survive tab changes and collapse.
+Your active tab and collapsed state are remembered per organization, and Expand restores that tab. On
+phones and tablets, Inspector starts closed so the canvas stays visible. The tool rail's Brand button
+and **Tools ▸ Workspace** open the same surfaces. **History** and **Versions** are beside Undo/Redo,
+**Templates** is beside Save, and View is reserved for zoom and display settings. History, Versions,
+and Template Fields retain their movable floating panels.
 
 ## Video timeline
 
@@ -180,8 +182,9 @@ shrink-to-fit behavior. The Inspector's **Size** control can grow the box for wr
 within the output bounds and without shrinking a manually resized box. With text selected,
 **Ctrl/Cmd+>** and **Ctrl/Cmd+<** (with or without Shift, including ISO keyboard layouts) increase or
 decrease font size across the selection as one undoable edit, starting from the size painted on canvas.
-Mixed rich-text sizes adjust independently, and the shortcuts also work in the inline editor without
-running in ordinary fields.
+An already shrunk box keeps its geometry; an unshrunk box grows within the output as needed so each
+increase remains visible. Mixed rich-text sizes adjust independently, and the shortcuts also work in
+the inline editor without running in ordinary fields.
 
 A normal image-file drop always inserts a new image, and an SVG drop imports editable paths. Hold
 **Alt/Option** while dropping onto an unlocked static image or still-image clip to show the distinct

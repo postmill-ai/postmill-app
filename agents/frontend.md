@@ -353,17 +353,22 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   Ordinary content-editable commits change only text/rich runs and retain the existing box's shrink-to-fit
   behavior. `measure-text.ts` owns growth for the explicit Inspector Size control: height grows for wrapping,
   width only for one unwrapped overflow word, growth never shrinks a manual box, and output bounds and
-  alignment anchors are preserved. Canvas Ctrl/Cmd+> and < (with or without Shift, plus physical
-  `Comma`/`Period` codes for ISO layouts) run `text-shortcuts.ts`, ignore ordinary text-entry focus but
-  remain available in the inline contenteditable, and cover every selected static text or video
-  text/caption clip. Static shortcuts start at the fitted size, adjust rich runs independently, leave box
-  geometry unchanged, and commit once; unset caption sizes start at the renderer's 28px fallback. Inline
-  blur serialization applies shortcut deltas instead of restoring stale run sizes.
+  alignment anchors are preserved. Canvas Ctrl/Cmd+> and < match those keys with or without Shift;
+  physical `Comma`/`Period` codes require Shift and a non-letter key so Dvorak paste and unshifted
+  Cmd+comma/period are untouched. `text-shortcuts.ts` ignores ordinary text-entry focus but remains
+  available in the inline contenteditable, and covers every selected static text or video text/caption
+  clip. Static shortcuts start at the fitted size and adjust rich runs independently. An already shrunk
+  box keeps its geometry; an unshrunk box grows through the same bounded helper so each increase paints
+  at the new size. Unset caption sizes start at the renderer's 28px fallback. Inline blur serialization
+  applies shortcut deltas instead of restoring stale run sizes.
 - **Desktop/mobile workspace shares one store and tool registry.** Desktop docks Inspector, Layers,
-  Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; AI and Brand stay mounted under hidden
-  wrappers across tab, selection, and collapse changes so results and in-flight work survive. Selection
-  reopens Inspector, and active-tab/collapse preferences persist per organization while legacy Layers and
-  Brand open preferences remain fallback inputs. The rail Brand action and Tools ▸ Workspace commands
+  Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; AI and Brand mount on their first visible
+  activation, then stay mounted under hidden wrappers so results and in-flight work survive tab and
+  collapse changes without eager fetches or hidden job adoption. Selection never changes the user's tab
+  or collapsed state; Layers multi-select/rename and Brand/AI workflows stay sticky, and Expand restores
+  the active tab. Active-tab/collapse preferences persist per organization while legacy Layers and Brand
+  open preferences remain fallback inputs. Mobile starts with Inspector closed and applies desktop
+  preferences only after the actual viewport is known. The rail Brand action and Tools ▸ Workspace commands
   select those tabs, History/Versions sit beside Undo/Redo, Templates sits beside Save, and View remains
   display-only. History, Versions, and Template Fields keep their persisted floating-panel positions.
   `mobile-designer-tools.tsx` keeps prominent quick actions and inline, non-modal Tools/Brand sheets;
@@ -397,8 +402,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   the new owned File, clears original/smart-filter and painted-mask state, propagates linked content,
   and commits one Undo. Ordinary file drops always retain insertion/SVG-import routing. Alt/Option-drop
   on an unlocked, visible static image or image/sticker clip shows a distinct Replace indicator and uses
-  those same actions; locked targets fall through to insertion, video/audio clips are never targets,
-  undecodable uploads are rejected, and target failures are not reported as upload failures. Generation
+  those same actions with `dropEffect: 'copy'` for OS drag negotiation; locked targets fall through to
+  insertion, video/audio clips are never targets, undecodable uploads are rejected, target failures are
+  not reported as upload failures, and a failed replacement deletes its newly uploaded File. Generation
   returns a review candidate and does not edit the doc; Apply commits once after the before/after dialog. Static
   (`ai-image-actions.ts`) and clip paths share `background-removal.ts` geometry: preserve the existing
   crop/fit/focal geometry by default, with preserve-frame contain and aspect-correct canvas fitting

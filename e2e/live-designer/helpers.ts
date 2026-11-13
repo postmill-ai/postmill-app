@@ -170,6 +170,8 @@ export async function selectImageLayer(page: Page, elementId: string): Promise<v
   const row = panel.locator(`[data-element-id=${JSON.stringify(elementId)}]`);
   await expect(row).toBeVisible();
   await row.click();
+  await expect(row).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: 'Inspector', exact: true }).first().click();
   await expect(page.getByRole('region', { name: 'Inspector', exact: true })).toBeVisible();
 }
 

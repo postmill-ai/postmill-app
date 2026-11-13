@@ -29,6 +29,11 @@ vi.mock('@postmill-ai/frontend/components/media-tools/use-media-picker', () => (
   useMediaPicker: () => ({ open: vi.fn(), element: null }),
 }));
 
+const closestAspectRatioMock = vi.fn(() => '1:1');
+vi.mock('@postmill-ai/frontend/components/media-tools/replicate/aspect-ratio', () => ({
+  closestAspectRatio: (width: number, height: number) => closestAspectRatioMock(width, height),
+}));
+
 const addImageClipMock = vi.fn();
 vi.mock('@postmill-ai/frontend/components/media-tools/designer/add-media-to-timeline', () => ({
   addMediaToTimeline: vi.fn(),
@@ -65,14 +70,17 @@ afterAll(() => vi.unstubAllGlobals());
 const addElementMock = vi.fn();
 let docMode: 'image' | 'video' = 'image';
 let jobsPayload: unknown[] = [];
+let outputSize = { width: 100, height: 100 };
 
-const store = {
-  getState: () => ({
-    doc: { mode: docMode, outputs: [{ width: 100, height: 100 }] },
-    currentOutput: 0,
-    addElement: addElementMock,
-  }),
-};
+const readState = () => ({
+  doc: { mode: docMode, outputs: [outputSize] },
+  currentOutput: 0,
+  addElement: addElementMock,
+});
+const store = Object.assign(
+  (selector: (state: ReturnType<typeof readState>) => unknown) => selector(readState()),
+  { getState: readState }
+);
 
 const renderPanel = (onClose?: () => void) =>
   render(
@@ -99,6 +107,8 @@ beforeEach(() => {
   sessionStorage.clear();
   docMode = 'image';
   jobsPayload = [];
+  outputSize = { width: 100, height: 100 };
+  closestAspectRatioMock.mockClear();
   addElementMock.mockClear();
   toastShow.mockClear();
   addImageClipMock.mockReset().mockReturnValue('clip-1');
@@ -127,6 +137,19 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('AiPanel provider picker wiring', () => {
+  it('follows the current output aspect instead of caching the initial canvas', async () => {
+    const view = renderPanel();
+    await waitFor(() => expect(closestAspectRatioMock).toHaveBeenCalledWith(100, 100));
+
+    outputSize = { width: 100, height: 200 };
+    view.rerender(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <AiPanel store={store} />
+      </SWRConfig>
+    );
+    await waitFor(() => expect(closestAspectRatioMock).toHaveBeenCalledWith(100, 200));
+  });
+
   it('posts the unchanged legacy payload on the Default path', async () => {
     renderPanel();
     await typePrompt('a cat');

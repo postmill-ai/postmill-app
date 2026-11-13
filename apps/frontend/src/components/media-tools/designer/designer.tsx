@@ -53,6 +53,7 @@ import { NewDesignDialog } from './new-design-dialog';
 import { CanvasInspector } from './panels/canvas-inspector';
 import {
   DesktopWorkspacePanel,
+  isMobileDesignerViewport,
   readDesktopWorkspacePreference,
   writeDesktopWorkspacePreference,
   type WorkspaceTab,
@@ -238,9 +239,7 @@ const DesignerContent: FC<
   const [pagesBarOverride, setPagesBarOverride] = useState<boolean | null>(null);
   // Start mobile with the full canvas visible; the inline Inspector opens at
   // half height on demand. Desktop stays expanded and docked.
-  const [inspectorCollapsed, setInspectorCollapsed] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth <= 1025
-  );
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(isMobileDesignerViewport);
   const [inspectorSnap, setInspectorSnap] = useState<MobileSheetSnap>('half');
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('inspector');
@@ -293,7 +292,7 @@ const DesignerContent: FC<
   });
   useEffect(() => {
     setWorkspacePreferenceReady(false);
-    if (mobileLayout) return;
+    if (mobileLayout || isMobileDesignerViewport()) return;
     const preference = readDesktopWorkspacePreference(localStorage, user?.orgId);
     setWorkspaceTab(preference.activeTab);
     setInspectorCollapsed(preference.collapsed);
@@ -465,12 +464,6 @@ const DesignerContent: FC<
   }, [showPagesBar, user?.orgId]);
   const selectedIds = store((s) => s.selectedIds);
   const selectedClip = store((s) => s.selectedClip);
-  useEffect(() => {
-    if (mobileLayout || (!selectedIds.length && !selectedClip)) return;
-    setWorkspaceTab('inspector');
-    setInspectorCollapsed(false);
-    setMobileToolsOpen(false);
-  }, [mobileLayout, selectedClip, selectedIds]);
   const brandEnforcement = store((s) => s.brandEnforcement);
   const brandAdminOverride = store((s) => s.brandAdminOverride);
   const undo = store((s) => s.undo);
@@ -1904,7 +1897,7 @@ const DesignerContent: FC<
 
             {inspectorCollapsed && (
               <button
-                onClick={() => openWorkspaceTab('inspector')}
+                onClick={() => openWorkspaceTab(workspaceTab)}
                 className="absolute end-0 top-2 z-20 px-1.5 py-3 rounded-s-md border border-e-0 border-studioBorder bg-newBgColorInner text-textColor/60 hover:text-textColor shadow-xl text-[14px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset mobile:hidden"
                 title={translate('show_properties', 'Show properties')}
                 aria-label={translate('expand_properties_panel', 'Expand properties panel')}

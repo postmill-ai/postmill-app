@@ -10,6 +10,8 @@ vi.mock('./fonts', () => ({
 vi.mock('./measure-text', () => ({
   fittedFontSize: (element: DesignerElement) =>
     element.text === 'fitted' ? 29 : element.fontSize ?? 16,
+  growBoxFor: (element: DesignerElement, fontSize: number) =>
+    element.richText?.length ? {} : { height: Math.ceil(fontSize * 1.2) },
 }));
 
 const textElement = (id: string, over: Partial<DesignerElement> = {}): DesignerElement => ({
@@ -48,7 +50,7 @@ describe('adjustSelectedTextFontSize', () => {
       expect(children(store, output).map((element) => element.fontSize)).toEqual([33, 33]);
       expect(children(store, output).map((element) => element.width)).toEqual([100, 100]);
     }
-    expect(children(store, 0).map((element) => element.height)).toEqual([20, 20]);
+    expect(children(store, 0).map((element) => element.height)).toEqual([40, 40]);
     // Box geometry remains format-local when the font edit propagates.
     expect(children(store, 1).map((element) => element.height)).toEqual([20, 20]);
 
@@ -85,6 +87,17 @@ describe('adjustSelectedTextFontSize', () => {
     store.getState().setSelectedIds(['maximum']);
     expect(adjustSelectedTextFontSize(store, 1)).toBe(false);
     expect(store.getState().history).toHaveLength(history);
+  });
+
+  it('grows an unshrunk default box on each increase instead of stepping down', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(textElement('default', { height: 39 }));
+    store.getState().setSelectedIds(['default']);
+
+    expect(adjustSelectedTextFontSize(store, 1)).toBe(true);
+    expect(children(store)[0]).toMatchObject({ fontSize: 33, height: 40 });
+    expect(adjustSelectedTextFontSize(store, 1)).toBe(true);
+    expect(children(store)[0]).toMatchObject({ fontSize: 34, height: 41 });
   });
 
   it('starts from the fitted size and leaves the existing box unchanged', () => {
@@ -163,11 +176,18 @@ describe('adjustSelectedTextFontSize', () => {
 describe('fontSizeShortcutDelta', () => {
   const modifiers = { ctrlKey: true, metaKey: false, altKey: false };
 
-  it('retains US punctuation shortcuts and accepts physical Comma/Period codes', () => {
+  it('retains punctuation shortcuts and accepts physical codes only with Shift', () => {
     expect(fontSizeShortcutDelta({ ...modifiers, key: '>', code: 'Period' })).toBe(1);
     expect(fontSizeShortcutDelta({ ...modifiers, key: '<', code: 'Comma' })).toBe(-1);
-    expect(fontSizeShortcutDelta({ ...modifiers, key: '.', code: 'Period' })).toBe(1);
-    expect(fontSizeShortcutDelta({ ...modifiers, key: ',', code: 'Comma' })).toBe(-1);
+    expect(fontSizeShortcutDelta({ ...modifiers, key: '.', code: 'Period' })).toBe(0);
+    expect(fontSizeShortcutDelta({ ...modifiers, key: ',', code: 'Comma' })).toBe(0);
+    expect(fontSizeShortcutDelta({ ...modifiers, shiftKey: true, key: '.', code: 'Period' })).toBe(1);
+    expect(fontSizeShortcutDelta({ ...modifiers, shiftKey: true, key: ',', code: 'Comma' })).toBe(-1);
+  });
+
+  it('does not turn Dvorak paste or other letter shortcuts into font-size edits', () => {
+    expect(fontSizeShortcutDelta({ ...modifiers, key: 'v', code: 'Period' })).toBe(0);
+    expect(fontSizeShortcutDelta({ ...modifiers, shiftKey: true, key: 'V', code: 'Period' })).toBe(0);
   });
 
   it('supports an unshifted ISO less-than key and ignores unmodified keys', () => {

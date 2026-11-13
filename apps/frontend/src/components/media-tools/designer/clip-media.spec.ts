@@ -65,6 +65,21 @@ describe('imageReplacementPatch', () => {
       maskEnabled: undefined,
     });
   });
+
+  it('clears a cross-aspect crop when clip frame dimensions are unavailable', () => {
+    const patch = imageReplacementPatch(
+      { url: '/new.png', fileId: 'new-file', width: 2000, height: 1000 },
+      {
+        naturalWidth: 1000,
+        naturalHeight: 1000,
+        crop: { x: 0, y: 0, width: 1000, height: 500 },
+        fitMode: 'cover',
+      }
+    );
+
+    expect(patch.crop).toBeUndefined();
+    expect(patch.fitMode).toBe('cover');
+  });
 });
 
 describe('replaceClipImage', () => {

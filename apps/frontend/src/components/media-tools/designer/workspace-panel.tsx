@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC } from 'react';
+import React, { FC, useEffect, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { AiPanel } from './panels/ai-panel';
@@ -21,6 +21,9 @@ type PreferenceStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 const workspaceTabs = new Set<WorkspaceTab>(['inspector', 'layers', 'brand', 'ai']);
 const storageSuffix = (orgId?: string | null) => orgId ? `-${orgId}` : '';
+
+export const isMobileDesignerViewport = () =>
+  typeof window !== 'undefined' && window.matchMedia('(max-width: 1025px)').matches;
 
 export const readDesktopWorkspacePreference = (
   storage: Pick<Storage, 'getItem'>,
@@ -88,6 +91,16 @@ export const DesktopWorkspacePanel: FC<DesktopWorkspacePanelProps> = ({
   collapsed = false,
 }) => {
   const t = useT();
+  const [activated, setActivated] = useState<ReadonlySet<'brand' | 'ai'>>(() => new Set());
+  useEffect(() => {
+    if (collapsed || (activeTab !== 'brand' && activeTab !== 'ai')) return;
+    const activation = setTimeout(() => {
+      setActivated((current) => current.has(activeTab)
+        ? current
+        : new Set(current).add(activeTab));
+    }, 0);
+    return () => clearTimeout(activation);
+  }, [activeTab, collapsed]);
   const title = {
     inspector: hasInspectorTarget
       ? t('inspector_panel_label', 'Inspector')
@@ -151,12 +164,16 @@ export const DesktopWorkspacePanel: FC<DesktopWorkspacePanelProps> = ({
             />
           )}
         </div>
-        <div hidden={activeTab !== 'brand'}>
-          <BrandPanel store={store} />
-        </div>
-        <div hidden={activeTab !== 'ai'}>
-          <AiPanel store={store} />
-        </div>
+        {activated.has('brand') && (
+          <div hidden={activeTab !== 'brand'}>
+            <BrandPanel store={store} />
+          </div>
+        )}
+        {activated.has('ai') && (
+          <div hidden={activeTab !== 'ai'}>
+            <AiPanel store={store} />
+          </div>
+        )}
       </div>
     </div>
   );

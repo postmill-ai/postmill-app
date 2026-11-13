@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useMemo, useRef, useState } from 'react';
+import React, { FC, useCallback, useRef, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
@@ -48,11 +48,10 @@ export const AiPanel: FC<AiPanelProps> = ({ store, onClose }) => {
   const [provider, setProvider] = useGenerationProviderChoice('image');
   // The canvas's aspect seeds a studio schema's aspect_ratio field (never
   // overriding an explicit Advanced-settings pick — see CompactReplicate).
-  const canvasAspect = useMemo(() => {
-    const state = store.getState();
+  const canvasAspect = store((state: any) => {
     const out = state.doc.outputs[state.currentOutput];
     return closestAspectRatio(out?.width, out?.height);
-  }, [store]);
+  });
 
   const inFlight = status === 'queued' || status === 'generating';
 

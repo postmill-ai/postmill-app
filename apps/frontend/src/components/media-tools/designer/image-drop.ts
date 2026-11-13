@@ -66,3 +66,21 @@ export const replaceImageAtDropTarget = (
 ): Promise<boolean> => target.kind === 'element'
   ? replaceStaticImage({ store, elementId: target.elementId, item })
   : replaceClipImage({ store, target: target.target, item });
+
+export const replaceUploadedImageAtDropTarget = async ({
+  fetch,
+  store,
+  target,
+  item,
+}: {
+  fetch: Fetch;
+  store: Store;
+  target: ImageDropTarget;
+  item: MediaImageItem;
+}): Promise<boolean> => {
+  const replaced = await replaceImageAtDropTarget(store, target, item);
+  if (!replaced && item.fileId) {
+    await fetch(`/files/${item.fileId}`, { method: 'DELETE' }).catch(() => undefined);
+  }
+  return replaced;
+};

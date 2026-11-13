@@ -44,9 +44,8 @@ export const replacementCrop = (
     };
   }
 
-  const frameAspect = before.width > 0 && before.height > 0
-    ? before.width / before.height
-    : before.crop.width / before.crop.height;
+  if (!(before.width > 0) || !(before.height > 0)) return undefined;
+  const frameAspect = before.width / before.height;
   const width = newAspect > frameAspect ? item.height * frameAspect : item.width;
   const height = newAspect > frameAspect ? item.height : item.width / frameAspect;
   const centerX = (before.crop.x + before.crop.width / 2) / before.naturalWidth;
