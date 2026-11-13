@@ -78,9 +78,14 @@ export const replaceUploadedImageAtDropTarget = async ({
   target: ImageDropTarget;
   item: MediaImageItem;
 }): Promise<boolean> => {
-  const replaced = await replaceImageAtDropTarget(store, target, item);
-  if (!replaced && item.fileId) {
-    await fetch(`/files/${item.fileId}`, { method: 'DELETE' }).catch(() => undefined);
+  let replaced = false;
+  try {
+    replaced = await replaceImageAtDropTarget(store, target, item);
+    return replaced;
+  } finally {
+    if (!replaced && item.fileId) {
+      const response = await fetch(`/files/${item.fileId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Uploaded image cleanup failed');
+    }
   }
-  return replaced;
 };

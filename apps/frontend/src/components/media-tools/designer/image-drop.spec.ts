@@ -127,6 +127,38 @@ describe('replaceUploadedImageAtDropTarget', () => {
     expect(fetch).toHaveBeenCalledWith('/files/new-file', { method: 'DELETE' });
   });
 
+  it('surfaces a refused cleanup instead of silently orphaning the upload', async () => {
+    const store = createDesignerStore();
+    const fetch = vi.fn().mockResolvedValue({ ok: false });
+
+    await expect(replaceUploadedImageAtDropTarget({
+      fetch,
+      store,
+      target: { kind: 'element', elementId: 'missing' },
+      item,
+    })).rejects.toThrow('Uploaded image cleanup failed');
+  });
+
+  it('attempts cleanup when applying the replacement throws', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'image', type: 'image', x: 0, y: 0, width: 100, height: 100,
+      rotation: 0, opacity: 1, locked: false, hidden: false, src: '/old.png',
+    });
+    vi.spyOn(store.getState(), 'updateElementsSilent').mockImplementation(() => {
+      throw new Error('write failed');
+    });
+    const fetch = vi.fn().mockResolvedValue({ ok: true });
+
+    await expect(replaceUploadedImageAtDropTarget({
+      fetch,
+      store,
+      target: { kind: 'element', elementId: 'image' },
+      item,
+    })).rejects.toThrow('write failed');
+    expect(fetch).toHaveBeenCalledWith('/files/new-file', { method: 'DELETE' });
+  });
+
   it('retains the uploaded file after a successful replacement', async () => {
     const store = createDesignerStore();
     store.getState().addElement({
