@@ -98,6 +98,19 @@ export const resolveTextEditTarget = (
   };
 };
 
+export const doubleClickTextEditId = (
+  output: Pick<DesignerOutput, 'children'> | undefined,
+  symbols: SymbolDefinition[] | undefined,
+  clickedId: string | undefined,
+  selectedIds: string[]
+): string | null => {
+  if (clickedId && resolveTextEditTarget(output, symbols, clickedId)) return clickedId;
+  if (clickedId && output?.children.some((child) => child.id === clickedId)) return null;
+  if (selectedIds.length !== 1) return null;
+  const selectedId = selectedIds[0];
+  return resolveTextEditTarget(output, symbols, selectedId) ? selectedId : null;
+};
+
 /**
  * The element patch that commits an edited symbol-child text to the instance.
  * `fill` rides along only when the editor actually changed it — writing a fill

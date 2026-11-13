@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveSelectableId,
   resolveTextEditTarget,
+  doubleClickTextEditId,
   symbolTextCommit,
   symbolFillCommit,
   refitSymbolToText,
@@ -125,6 +126,27 @@ describe('resolveTextEditTarget', () => {
     expect(
       resolveTextEditTarget(output, [definition], 'cta-1::plate')
     ).toBeNull();
+  });
+});
+
+describe('doubleClickTextEditId', () => {
+  it('opens the selected text when a curved-text blank area has no node id', () => {
+    expect(doubleClickTextEditId(output, [definition], undefined, ['headline']))
+      .toBe('headline');
+  });
+
+  it('prefers a directly clicked text node and does not hijack another layer', () => {
+    expect(doubleClickTextEditId(output, [definition], 'headline', ['headline']))
+      .toBe('headline');
+    expect(doubleClickTextEditId(output, [definition], 'cta-1', ['headline']))
+      .toBeNull();
+  });
+
+  it('does not open a selected non-text or multi-selection', () => {
+    expect(doubleClickTextEditId(output, [definition], undefined, ['cta-1']))
+      .toBeNull();
+    expect(doubleClickTextEditId(output, [definition], undefined, ['headline', 'cta-1']))
+      .toBeNull();
   });
 });
 

@@ -12,6 +12,7 @@ import { TextEditingOverlay, useTextEditTargetGuard } from './text-editing';
 import {
   resolveSelectableId,
   resolveTextEditTarget,
+  doubleClickTextEditId,
   symbolTextCommit,
   refitSymbolToText,
 } from './symbol-edit';
@@ -1768,11 +1769,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         void armCutoutRefinement(store, id);
         return;
       }
-      if (id && resolveTextEditTarget(pageOutput as DesignerOutput | undefined, doc.symbols, id)) {
-        setEditingTextId(id);
-      }
+      const editId = doubleClickTextEditId(
+        pageOutput as DesignerOutput | undefined,
+        doc.symbols,
+        id,
+        selectedIds
+      );
+      if (editId) setEditingTextId(editId);
     },
-    [output, pageOutput, doc, effectiveTool, paint, store]
+    [output, pageOutput, doc, effectiveTool, paint, store, selectedIds]
   );
 
   // Drop from panels (designer elements) and OS file drops.
