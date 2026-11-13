@@ -76,9 +76,9 @@ const parallelComposition = (): any => ({
   ],
 });
 
-// Real Chrome + FFmpeg acceptance is deliberately GitHub-runner-only. The
-// designer-video-acceptance workflow installs both binaries and sets the opt-in.
-describe.skipIf(process.env.GITHUB_ACTIONS !== 'true' || process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg video render integration', () => {
+// Opt in with RUN_RENDER_INTEGRATION=1. The GitHub acceptance workflow installs
+// Chrome and FFmpeg; a local run can use an existing Puppeteer Chrome instead.
+describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg video render integration', () => {
   it('renders a 1-second red MP4 with a thumbnail', async () => {
     const capture = new ChromiumFrameCaptureService();
     const encoder = new FfmpegVideoEncoderService(capture);
@@ -376,27 +376,9 @@ describe.skipIf(process.env.GITHUB_ACTIONS !== 'true' || process.env.RUN_RENDER_
 
   it('exports gradient and outlined text over an animated video clip to MP4', async () => {
     const fs = await import('fs');
-    const http = await import('http');
     const { execFileSync } = await import('child_process');
     const fixture = fs.readFileSync(path.resolve(__dirname, '../../../../../e2e/fixtures/motion-animated.mp4'));
-    const server = http.createServer((request, response) => {
-      response.setHeader('accept-ranges', 'bytes');
-      response.setHeader('access-control-allow-origin', '*');
-      response.setHeader('content-type', 'video/mp4');
-      const match = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range || '');
-      if (match) {
-        const start = Number(match[1]);
-        const end = Math.min(match[2] ? Number(match[2]) : fixture.length - 1, fixture.length - 1);
-        response.writeHead(206, { 'content-range': `bytes ${start}-${end}/${fixture.length}` });
-        response.end(fixture.subarray(start, end + 1));
-      } else {
-        response.end(fixture);
-      }
-    });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    if (!address || typeof address === 'string') throw new Error('Fixture server did not bind');
-    const src = `http://127.0.0.1:${address.port}/motion.mp4`;
+    const src = `data:video/mp4;base64,${fixture.toString('base64')}`;
     const capture = new ChromiumFrameCaptureService();
     const encoder = new FfmpegVideoEncoderService(capture);
     let result: Awaited<ReturnType<typeof encoder.encode>> | undefined;
@@ -478,7 +460,6 @@ describe.skipIf(process.env.GITHUB_ACTIONS !== 'true' || process.env.RUN_RENDER_
       expect(first.equals(last)).toBe(false);
     } finally {
       if (result) encoder.cleanup(path.dirname(result.videoPath));
-      await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   }, 120000);
 });

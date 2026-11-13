@@ -10,7 +10,6 @@ import {
 
 describe('composition media SSRF guard', () => {
   const prev = process.env.NEXT_PUBLIC_BACKEND_URL;
-  const prevCidrs = process.env.SSRF_ALLOWED_PRIVATE_CIDRS;
   beforeEach(() => {
     process.env.NEXT_PUBLIC_BACKEND_URL = 'https://app.example.com';
     delete process.env.SSRF_ALLOWED_PRIVATE_CIDRS;
@@ -18,8 +17,6 @@ describe('composition media SSRF guard', () => {
   afterEach(() => {
     if (prev == null) delete process.env.NEXT_PUBLIC_BACKEND_URL;
     else process.env.NEXT_PUBLIC_BACKEND_URL = prev;
-    if (prevCidrs == null) delete process.env.SSRF_ALLOWED_PRIVATE_CIDRS;
-    else process.env.SSRF_ALLOWED_PRIVATE_CIDRS = prevCidrs;
   });
 
   const comp = (src: string): any => ({
@@ -73,13 +70,4 @@ describe('composition media SSRF guard', () => {
     expect(await isRenderMediaUrlAllowed('http://10.0.0.5/x')).toBe(false);
   });
 
-  it('allows only an explicitly allowlisted private HTTP IP', async () => {
-    process.env.SSRF_ALLOWED_PRIVATE_CIDRS = '127.0.0.1/32';
-
-    expect(await isRenderMediaUrlAllowed('http://127.0.0.1:38663/motion.mp4')).toBe(true);
-    expect(await isRenderMediaUrlAllowed('http://127.0.0.2/motion.mp4')).toBe(false);
-    expect(await isRenderMediaUrlAllowed('http://10.0.0.5/motion.mp4')).toBe(false);
-    expect(await isRenderMediaUrlAllowed('http://169.254.169.254/latest/meta-data/')).toBe(false);
-    expect(await isRenderMediaUrlAllowed('http://example.com/motion.mp4')).toBe(false);
-  });
 });

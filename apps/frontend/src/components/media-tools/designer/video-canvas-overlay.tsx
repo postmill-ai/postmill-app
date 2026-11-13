@@ -424,6 +424,7 @@ const CaptionClip: FC<{ clip: VideoClip; width: number; height: number; playhead
     if (!ctx) return;
 
     ctx.clearRect(0, 0, width, height);
+    ctx.miterLimit = 2;
     const fontSize = clip.fontSize || 28;
     const fontWeight = clip.fontWeight || 700;
     const fontFamily = clip.fontFamily || 'Arial';

@@ -98,7 +98,7 @@ export const TextStrokeSection: FC<{
         >
           <span
             className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
-              outline ? 'translate-x-[18px] rtl:-translate-x-[18px]' : ''
+              outline ? 'translate-x-[18px]' : ''
             }`}
           />
         </button>

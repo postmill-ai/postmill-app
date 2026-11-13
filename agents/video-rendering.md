@@ -141,8 +141,9 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      v14) share the image-text contract. Writing a stroke to an older video document stamps v14. Konva
      uses `gradientFillProps` and `fillAfterStrokeEnabled`; the frame renderer builds gradients with
      `buildStyleGradient` and paints through the injected `drawVideoText` (stroke before fill, miter
-     limit 2). Text and caption fill/stroke are rasterized at alpha 1 and composited once at transition
-     opacity. Caption words keep active/spoken solid colors and scale the outline with word-pop. Static
+     limit 2). Only outlined text/captions fading below opacity 1 use a shared scratch bitmap at alpha 1,
+     sized by the export scale with overhang padding and composited once; all other text stays vector.
+     Caption words keep active/spoken solid colors and scale the outline with word-pop. Static
      posters project both fields to ordinary text elements. Strict and lenient schemas, clip ops, linked
      styles (nonzero outlines keep a 1px minimum), reflow and `.pdesign` retain them.
    - Speed (`clip.speed`) is pitch-preserving on both sides: the preview sets
@@ -465,9 +466,6 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
   served to the in-container Chromium by request interception from `/work/assets`
   (token-gated `render-asset` route as fallback) — never hand the container a remote
   clip URL to stream.
-- Composition media URLs are same-origin/relative, inert, or public HTTPS by default. Private HTTP
-  stays blocked unless its literal IP is explicitly included in `SSRF_ALLOWED_PRIVATE_CIDRS`; the
-  GitHub render acceptance uses only `127.0.0.1/32` for its local fixture server.
 - `VIDEO_RENDER_NETWORK=host` weakens container network isolation; treat as a security
   decision, not a convenience flag.
 - When touching the container contract (`render-job-spec.ts`, worker CLI), rebuild the

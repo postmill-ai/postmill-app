@@ -95,8 +95,6 @@ Docker Compose environment, or deployment config, then redeploy if needed.
   importers reject documents newer than their supported version with an explicit upgrade error instead
   of creating unreadable rows. Finish upgrading the destination before importing; use a pre-v14 archive
   for an older destination. Standalone `.pdesign` imports retain their existing newer-document guard.
-- The coordinated optional output `frozen` flag is compatible additive data under v13. It does not ride
-  the `textStroke` v14 bump and does not cause another document-version bump.
 
 ## Brand Studio upgrade notes
 

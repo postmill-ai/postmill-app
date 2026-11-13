@@ -249,8 +249,7 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   (`apply-linked.ts`), geometry and timing stay local (`VIDEO_CLIP_LOCAL_KEYS`). Doc v14 adds optional
   `textStroke`; its width follows the same aspect-aware type scale as linked font size and reflow, with
   a 1px minimum for nonzero sources. Writing a stroke to an older video document stamps v14 immediately.
-  Migration passes outputs through unchanged, so the coordinated optional output `frozen` field remains
-  additive under v13 and needs no second version bump. The same branches
+  The same branches
   serve the backend `addOutput`/`resizeOutput` ops, so agent-driven edits match the UI. The backend
   ops vocabulary adds clip ops (`updateClip`/`replaceClipMedia`/`updateTransition` in
   `designer-doc-ops.schema.ts`) which are FORMAT-LOCAL — no originId propagation on the headless
@@ -341,10 +340,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
 - **Timeline transport and Inspector essentials.** `timeline-split.ts` is the single split guard for
   the transport, S shortcut, context menu, and store: an unlocked selected clip, a strictly interior
   playhead, and at least 100 ms on both sides. Invalid cuts are no-ops; valid splits select the right
-  half. Split is a labeled transport action. Every genuinely touching junction of sufficiently wide clips
-  has a small native-button transition badge (including cuts) wholly above the clip body, leaving both
-  full-height trim edges clear; gaps, overlaps, and tiny rendered clips have no badge. The badge opens
-  the existing transition popover; do not add another timeline model. The transport's duration stepper uses `setVideoDuration` and the shared 1–180 s cap. Image
+  half. Split is a labeled transport action. Consecutive clips follow the renderer's
+  `from.endMs <= to.startMs` transition rule, including gaps and fractional flush cuts. A 24×16 badge
+  sits in a dedicated top lane clear of the ruler and both full-height trim edges; tiny cut-only pairs
+  omit it, but every pair with an existing transition keeps its control. The badge opens the existing
+  transition popover; do not add another timeline model. The transport's duration stepper uses `setVideoDuration` and the shared 1–180 s cap. Image
   replacement/background removal lives in `clip-media.ts`: preserve editing semantics, update media
   identity/intrinsics, and clear crop/original/smart-filter state. Generation returns a review
   candidate and does not edit the doc; Apply commits once after the before/after dialog. Static

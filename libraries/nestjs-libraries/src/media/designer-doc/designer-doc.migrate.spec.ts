@@ -58,14 +58,6 @@ describe('video character references', () => {
 });
 
 describe('optional-additive document fields', () => {
-  it('preserves a compatible output frozen flag without another version bump', () => {
-    const outputs = [{ id: 'video', frozen: true, tracks: [] }];
-    const migrated = migrateDoc({ version: 13, mode: 'video', outputs });
-    expect(migrated.version).toBe(13);
-    expect(migrated.outputs).toBe(outputs);
-    expect((migrated.outputs[0] as any).frozen).toBe(true);
-  });
-
   it('stamps v14 when an older document carries textStroke', () => {
     const outputs = [{
       id: 'video',

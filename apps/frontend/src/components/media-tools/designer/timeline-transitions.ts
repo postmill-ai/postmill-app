@@ -1,10 +1,10 @@
 import type { VideoClip } from './designer.store';
 
 export const MIN_TRANSITION_CLIP_WIDTH_PX = 24;
-export const TRANSITION_BADGE_WIDTH_PX = 16;
-export const TRANSITION_BADGE_HEIGHT_PX = 12;
-export const TRANSITION_BADGE_TOP_PX = -8;
-export const CLIP_TOP_PX = 4;
+export const TRANSITION_BADGE_WIDTH_PX = 24;
+export const TRANSITION_BADGE_HEIGHT_PX = 16;
+export const TRANSITION_BADGE_TOP_PX = 0;
+export const CLIP_TOP_PX = 20;
 
 export const touchingTransitionPairs = (
   clips: VideoClip[],
@@ -17,11 +17,11 @@ export const touchingTransitionPairs = (
     const to = sorted[index + 1];
     const fromWidth = (from.endMs + (from.freezeAtMs || 0) - from.startMs) * pixelsPerMs;
     const toWidth = (to.endMs + (to.freezeAtMs || 0) - to.startMs) * pixelsPerMs;
-    if (
-      from.endMs === to.startMs &&
+    const hasTransition = !!from.transitionOut || !!to.transitionIn;
+    const wideEnough =
       fromWidth >= MIN_TRANSITION_CLIP_WIDTH_PX &&
-      toWidth >= MIN_TRANSITION_CLIP_WIDTH_PX
-    ) {
+      toWidth >= MIN_TRANSITION_CLIP_WIDTH_PX;
+    if (from.endMs <= to.startMs && (wideEnough || hasTransition)) {
       pairs.push({ from, to });
     }
   }

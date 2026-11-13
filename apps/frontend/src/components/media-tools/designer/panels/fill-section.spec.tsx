@@ -3,6 +3,15 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FillSection, TextStrokeSection } from './fill-section';
 
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
+  useT:
+    () =>
+    (key: string, fallback: string, vars?: Record<string, unknown>) =>
+      vars
+        ? fallback.replace(/\{\{(\w+)\}\}/g, (_match, name) => String(vars[name]))
+        : fallback,
+}));
+
 describe('shared video text style controls', () => {
   it('creates a gradient through FillSection and edits outline color/width', () => {
     const setFill = vi.fn();
@@ -37,8 +46,6 @@ describe('shared video text style controls', () => {
         set={setStroke}
       />
     );
-    expect(screen.getByRole('switch', { name: 'Outline' }).firstElementChild?.className)
-      .toContain('rtl:-translate-x-[18px]');
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Outline width' }), {
       target: { value: '6' },
     });

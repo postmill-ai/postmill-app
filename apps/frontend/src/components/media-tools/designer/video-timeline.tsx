@@ -79,14 +79,14 @@ import {
 import { TimelineTransportControls } from './timeline-transport-controls';
 import { canSplitClipAt } from './timeline-split';
 import { ClipTimingControls } from './panels/clip-timing-controls';
-import { touchingTransitionPairs, transitionBadgeGeometry } from './timeline-transitions';
+import { CLIP_TOP_PX, touchingTransitionPairs, transitionBadgeGeometry } from './timeline-transitions';
 
 interface VideoTimelineProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
   sendTimelineAwareness?: (playheadMs: number, selectedClipId: string | null) => void;
 }
 
-const TRACK_HEIGHT = 36;
+const TRACK_HEIGHT = 52;
 const TRACK_GAP = 4;
 const RULER_HEIGHT = 22;
 const LABEL_WIDTH = 64;
@@ -498,7 +498,7 @@ const ClipRow = React.memo(function ClipRow({
       aria-valuemax={Math.round(durationMs - (clip.endMs - clip.startMs))}
       aria-valuetext={translate('clip_start_time', 'Start {{time}}', { time: formatTime(clip.startMs) })}
       tabIndex={0}
-      className={`absolute top-1 rounded-[4px] group touch-none select-none ${
+      className={`absolute rounded-[4px] group touch-none select-none ${
         locked ? 'cursor-not-allowed' : 'cursor-pointer'
       } ${
         // The primary (inspector target) keeps the white ring;
@@ -506,9 +506,10 @@ const ClipRow = React.memo(function ClipRow({
         primary ? 'ring-2 ring-white/60 z-10' : selected ? 'ring-2 ring-designerAccent/80 z-10' : ''
       }`}
       style={{
+        top: CLIP_TOP_PX,
         left,
         width,
-        height: TRACK_HEIGHT - 8,
+        height: TRACK_HEIGHT - 24,
         backgroundColor: TRACK_COLORS[trackType],
         opacity: clip.opacity ?? 0.9,
       }}

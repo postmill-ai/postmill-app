@@ -129,10 +129,10 @@ replace their local media with provider generation.
 
 The `Designer video acceptance` workflow runs those two cases on GitHub-hosted runners through
 `playwright.designer-ci.config.ts` after a production frontend build; the config refuses to load outside
-GitHub Actions. A sibling job builds the production backend, installs Chromium and FFmpeg, and runs
-`video-render.integration.spec.ts` with `RUN_RENDER_INTEGRATION=1` for real gradient/outline/sticker,
-poster and MP4 acceptance. The integration spec also requires `GITHUB_ACTIONS=true`, so it skips locally.
-Do not start these listeners, browsers, or render jobs on a development or production host for verification.
+GitHub Actions. A sibling job installs Chromium and FFmpeg and runs `video-render.integration.spec.ts`
+with `RUN_RENDER_INTEGRATION=1` for real gradient/outline/sticker, poster and MP4 acceptance. The same
+flag enables an explicitly authorized local run against an existing Puppeteer Chrome; no browser download
+is required. Do not start these listeners, browsers, or render jobs on a production host for verification.
 
 `playwright.designer-ci.config.ts` and `.github/workflows/designer-browser.yml` are the production-build
 Designer browser path. The workflow builds the frontend before Playwright starts `next start` on a
