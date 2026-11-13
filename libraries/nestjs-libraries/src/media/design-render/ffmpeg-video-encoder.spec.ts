@@ -380,6 +380,24 @@ describe('FfmpegVideoEncoderService.mixAudio loudness and hidden tracks', () => 
     expect(mix).toHaveBeenCalledWith(output, expect.any(String), true);
   });
 
+  it('does not download audio for a zero-volume video clip', async () => {
+    const service = new FfmpegVideoEncoderService();
+    const download = vi.spyOn(service as any, 'downloadAudio');
+    const mixed = await service.mixAudio({
+      ...output,
+      tracks: [{
+        type: 'video',
+        clips: [{
+          id: 'silent-video', startMs: 0, endMs: 1000,
+          src: 'http://127.0.0.1:38663/motion.mp4', volume: 0,
+        }],
+      }],
+    }, '/tmp');
+
+    expect(mixed).toBeNull();
+    expect(download).not.toHaveBeenCalled();
+  });
+
   it('a hidden track contributes nothing to the mix (like a muted one)', async () => {
     const hiddenOut = {
       ...output,

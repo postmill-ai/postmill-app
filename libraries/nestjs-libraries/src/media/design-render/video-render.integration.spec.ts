@@ -411,7 +411,7 @@ describe.skipIf(process.env.GITHUB_ACTIONS !== 'true' || process.env.RUN_RENDER_
             clips: [{
               id: 'animated-sticker', src, mediaType: 'video', startMs: 0, endMs: 1000,
               x: 0, y: 70, width: 320, height: 170, naturalWidth: 720, naturalHeight: 1280,
-              fitMode: 'fill',
+              fitMode: 'fill', volume: 0,
             }],
           },
           {
