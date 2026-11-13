@@ -22,6 +22,7 @@ describe('OpenAIAdapter.createLangchainModel (real @langchain/openai)', () => {
 
   it('forwards baseURL/model/sampling options', () => {
     const adapter = new OpenAIAdapter();
+    adapter.setSafeFetch(async () => { throw new Error('no network in construction test'); });
     const model = adapter.createLangchainModel(
       { apiKey: 'sk-test-construction-only', baseURL: 'https://example.com/v1' },
       'gpt-4.1',
