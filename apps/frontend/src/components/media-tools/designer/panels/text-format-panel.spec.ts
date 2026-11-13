@@ -12,7 +12,6 @@ vi.mock('../fonts', () => ({
 vi.mock('../measure-text', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../measure-text')>()),
   fittedFontSize: (el: { fontSize?: number }) => el.fontSize ?? 16,
-  measureForElement: () => (text: string, size: number) => text.length * size * 0.5,
 }));
 
 /** Fixed-width glyphs (0.5em), so every measurement below is exact. */
@@ -128,16 +127,18 @@ describe('buildFontSizeUpdate', () => {
     const first = buildFontSizeUpdate(
       baseText({ x: 100, align: 'center', text: 'supercalifragilistic' }),
       40,
-      { width: 1000, height: 400 }
+      { width: 1000, height: 400 },
+      measure
     );
     const second = buildFontSizeUpdate(
       baseText({ x: 600, align: 'center', text: 'supercalifragilistic' }),
       40,
-      { width: 1000, height: 400 }
+      { width: 1000, height: 400 },
+      measure
     );
 
-    expect(first).toMatchObject({ fontSize: 40, width: 340, x: 0 });
-    expect(second).toMatchObject({ fontSize: 40, width: 340, x: 480 });
+    expect(first).toMatchObject({ fontSize: 40, width: 400, x: 0 });
+    expect(second).toMatchObject({ fontSize: 40, width: 400, x: 450 });
   });
 });
 

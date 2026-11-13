@@ -17,6 +17,7 @@ import {
 import { fittedFontSize, growBoxFor } from '../measure-text';
 import { useBrandColors } from './use-brand-colors';
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import type { MeasureText } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {
   AlignCenterIcon,
@@ -208,10 +209,11 @@ const DEFAULT_SHADOW: DesignerTextShadow = {
 export const buildFontSizeUpdate = (
   element: DesignerElement,
   fontSize: number,
-  bounds: { width: number; height: number }
+  bounds: { width: number; height: number },
+  measure?: MeasureText | null
 ): Partial<DesignerElement> => ({
   fontSize,
-  ...growBoxFor(element, fontSize, undefined, bounds),
+  ...growBoxFor(element, fontSize, measure, bounds),
 });
 
 export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
