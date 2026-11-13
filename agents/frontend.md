@@ -288,7 +288,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   store's boolean-returning guarded actions and `DesignerDocService.applyOps`. Frozen
   canvas/Inspector/page/timeline/resize/remove/`setDoc` edits are rejected before selection/history
   changes, and the canvas shows a read-only hint. Pathfinder, Freeze Frame and captions use the
-  same guarded actions; no-op history pushes are dropped. Headless rejection uses
+  same guarded actions and return before their own history commits. Explicit `pushHistory()` calls
+  remain valid even when the document is unchanged (for example, concurrency markers). Headless rejection uses
   `DESIGNER_OP_OUTPUT_FROZEN`. History navigation, save adoption, explicit load/reset, version
   restore and remote collaboration documents use trusted raw replacement rather than local-edit
   guards; collaboration carries `frozen` in video output maps. No SQL migration is involved.

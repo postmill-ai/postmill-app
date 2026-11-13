@@ -2473,7 +2473,6 @@ describe('freeze review regressions', () => {
     store.getState().updateElements([id], { text: 'Rejected' });
     store.getState().addPage();
     store.getState().paste();
-    store.getState().pushHistory();
 
     expect(store.getState().doc).toBe(before);
     expect(store.getState().selectedIds).toBe(selection);

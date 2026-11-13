@@ -38,7 +38,6 @@ import { applyLinked, applyElementPatch, applyLinkedVideoClip, GEOMETRY_KEYS } f
 import {
   hasFrozenOutputMutation,
   isOutputFrozen,
-  structurallyEqual,
   withOutputFrozen,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/output-freeze';
 import {
@@ -514,8 +513,7 @@ export const createDesignerStore = (
   create<DesignerStore>((set, get) => {
     const rawSet = set;
     const mutate = (
-      partial: Partial<DesignerStore> | ((state: DesignerStore) => Partial<DesignerStore>),
-      replace?: boolean
+      partial: Partial<DesignerStore> | ((state: DesignerStore) => Partial<DesignerStore>)
     ): boolean => {
       let accepted = true;
       const updater = (state: DesignerStore) => {
@@ -527,7 +525,7 @@ export const createDesignerStore = (
         }
         return update;
       };
-      rawSet(updater, replace);
+      rawSet(updater);
       return accepted;
     };
 
