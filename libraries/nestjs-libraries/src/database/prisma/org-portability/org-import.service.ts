@@ -23,6 +23,7 @@ import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encr
 import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
+import { assertSupportedDesignerDocVersion } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.version';
 import { rewriteDocFileRefs, type FileRefRemap } from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
@@ -820,6 +821,11 @@ export class OrgImportService {
         row.fileSize = Number(extraction.manifest.assets[source.id].size);
       }
       if (['Design', 'DesignVersion', 'DesignTemplate'].includes(model) && row.doc) {
+        try {
+          assertSupportedDesignerDocVersion(row.doc);
+        } catch (error) {
+          throw new BadRequestException((error as Error).message);
+        }
         row.doc = this._designerDoc.assignIdsAndNormalize(
           this._designerDoc.stripIds(this._mapJson(row.doc, maps)),
         );

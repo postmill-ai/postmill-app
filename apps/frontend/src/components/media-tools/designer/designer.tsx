@@ -1163,6 +1163,7 @@ const DesignerContent: FC<
               fileId: item.fileId,
               width: item.width,
               height: item.height,
+              sticker: kind === 'sticker',
             })
               .then((landed) => {
                 if (landed?.probeFailed) {

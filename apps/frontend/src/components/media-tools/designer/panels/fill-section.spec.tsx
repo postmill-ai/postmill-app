@@ -37,11 +37,30 @@ describe('shared video text style controls', () => {
         set={setStroke}
       />
     );
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Width' }), {
+    expect(screen.getByRole('switch', { name: 'Outline' }).firstElementChild?.className)
+      .toContain('rtl:-translate-x-[18px]');
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Outline width' }), {
       target: { value: '6' },
     });
     expect(setStroke).toHaveBeenLastCalledWith({
       textStroke: { color: '#123456', width: 6 },
+    });
+  });
+
+  it.each(['#000000', '#FFFFFF'])('uses the caller default %s for an empty text fill', (defaultColor) => {
+    const setFill = vi.fn();
+    render(<FillSection element={{}} set={setFill} defaultColor={defaultColor} />);
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Gradient' }));
+    expect(setFill).toHaveBeenCalledWith({
+      fillGradient: {
+        type: 'linear',
+        angle: 0,
+        stops: [
+          { offset: 0, color: defaultColor },
+          { offset: 1, color: '#FFFFFF' },
+        ],
+      },
     });
   });
 });

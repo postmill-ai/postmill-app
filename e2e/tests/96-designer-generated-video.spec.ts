@@ -1276,6 +1276,8 @@ test.describe('Designer animated stock media (local non-paid fixture)', () => {
       src: STOCK_STICKER_URL,
       startMs: 0,
       endMs: 4000,
+      width: 720,
+      height: 1280,
       naturalWidth: 720,
       naturalHeight: 1280,
     });
@@ -1295,6 +1297,8 @@ test.describe('Designer animated stock media (local non-paid fixture)', () => {
       src: STOCK_STICKER_URL,
       mediaType: 'video',
       endMs: 4000,
+      width: 720,
+      height: 1280,
       naturalWidth: 720,
       naturalHeight: 1280,
     });
@@ -1327,6 +1331,20 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       [0, 1000], [1000, 4000],
     ]);
 
+    for (const [trim, expectedLabel] of [
+      [page.getByRole('slider', { name: 'Trim clip end', exact: true }).first(), 'Trim clip end'],
+      [page.getByRole('slider', { name: 'Trim clip start', exact: true }).nth(1), 'Trim clip start'],
+    ] as const) {
+      const box = await trim.boundingBox();
+      expect(box).not.toBeNull();
+      const point = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
+      const hitLabel = await page.evaluate(({ x, y }) =>
+        document.elementFromPoint(x, y)?.getAttribute('aria-label'), point);
+      expect(hitLabel).toBe(expectedLabel);
+      await page.mouse.click(point.x, point.y);
+      await expect(page.getByRole('dialog', { name: 'Transition', exact: true })).toHaveCount(0);
+    }
+
     await page.getByRole('button', { name: 'Duplicate clip', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips.length).toBe(3);
     await page.getByRole('button', { name: 'Delete clip', exact: true }).click();
@@ -1334,8 +1352,8 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await page.getByRole('button', { name: 'Cut transition', exact: true }).click();
     await page.getByRole('dialog', { name: 'Transition', exact: true })
       .getByRole('button', { name: 'Fade', exact: true }).click();
-    expect(mocks.doc.outputs[0].tracks[0].clips[0].transitionOut?.type).toBe('fade');
-    expect(mocks.doc.outputs[0].tracks[0].clips[1].transitionIn?.type).toBe('fade');
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[0].transitionOut?.type).toBe('fade');
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[1].transitionIn?.type).toBe('fade');
     await page.getByRole('spinbutton', { name: 'Duration (seconds)', exact: true }).fill('8');
     await expect.poll(() => mocks.doc.outputs[0].durationMs).toBe(8000);
 
@@ -1416,14 +1434,14 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await page.getByRole('radio', { name: 'Gradient', exact: true }).click();
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-original')?.fillGradient?.stops.length).toBe(2);
     await page.getByRole('switch', { name: 'Outline', exact: true }).click();
-    await page.getByRole('spinbutton', { name: 'Width', exact: true }).fill('6');
+    await page.getByRole('spinbutton', { name: 'Outline width', exact: true }).fill('6');
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-original')?.textStroke?.width).toBe(6);
 
     await saveDesign(page);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(4);
     await expect.poll(() => mocks.dashboardJobReads).toBeGreaterThan(1);
-    expect(mocks.doc.version).toBe(10);
+    expect(mocks.doc.version).toBe(14);
     expect(mocks.doc.outputs[0].durationMs).toBe(8000);
     expect(mocks.doc.outputs[0].tracks[0].clips).toHaveLength(2);
     expect(mocks.doc.outputs[0].tracks[0].clips[1]).toMatchObject({

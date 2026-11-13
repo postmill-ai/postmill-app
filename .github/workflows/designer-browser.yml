@@ -138,7 +138,7 @@ jobs:
         run: pnpm --dir e2e exec playwright install --with-deps chromium
 
       - name: Run production Designer browser specs
-        run: pnpm --dir e2e exec playwright test --config playwright.designer-ci.config.ts
+        run: pnpm --dir e2e exec playwright test --config playwright.designer-export-ci.config.ts
         env:
           NEXT_TELEMETRY_DISABLED: '1'
 

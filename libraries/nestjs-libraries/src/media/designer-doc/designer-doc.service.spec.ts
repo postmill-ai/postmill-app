@@ -1279,6 +1279,7 @@ describe('DesignerDocService clip ops (video outputs)', () => {
     expect(clip.fontStyle).toBe('italic');
     expect(clip.fontSize).toBe(80);
     expect(clip.textStroke).toEqual({ color: '#000000', width: 4 });
+    expect(result.version).toBe(14);
     expect(clip.y).toBe(700);
     expect(clip.startMs).toBe(500); // timing untouched
     expect(clip.id).toBe('clip-1');

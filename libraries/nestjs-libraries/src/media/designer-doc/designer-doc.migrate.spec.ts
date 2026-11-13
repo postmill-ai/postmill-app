@@ -57,12 +57,26 @@ describe('video character references', () => {
   });
 });
 
-describe('v14 forward-compatible output fields', () => {
-  it('preserves an optional output frozen flag for the coordinated v14 follow-up', () => {
+describe('optional-additive document fields', () => {
+  it('preserves a compatible output frozen flag without another version bump', () => {
     const outputs = [{ id: 'video', frozen: true, tracks: [] }];
-    const migrated = migrateDoc({ version: 14, mode: 'video', outputs });
+    const migrated = migrateDoc({ version: 13, mode: 'video', outputs });
+    expect(migrated.version).toBe(13);
     expect(migrated.outputs).toBe(outputs);
     expect((migrated.outputs[0] as any).frozen).toBe(true);
+  });
+
+  it('stamps v14 when an older document carries textStroke', () => {
+    const outputs = [{
+      id: 'video',
+      tracks: [{
+        id: 'text',
+        type: 'text',
+        clips: [{ id: 'clip', textStroke: { color: '#000000', width: 2 } }],
+      }],
+    }];
+    expect(migrateDoc({ version: 10, mode: 'video', outputs }).version).toBe(14);
+    expect(migrateDoc({ version: 10, mode: 'video', outputs: [] }).version).toBe(10);
   });
 });
 

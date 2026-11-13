@@ -6,7 +6,7 @@ import type {
   VideoClip,
   VideoOutput,
 } from './designer-doc.schema';
-import { typeScaleRatio } from './reflow';
+import { scalePx, typeScaleRatio } from './reflow';
 import { scalePathNodes } from './path-geometry';
 
 // Geometry is per-format and never propagates; everything else (style/content)
@@ -119,7 +119,7 @@ const scaledForOutput = (
       ? {
           textStroke: {
             ...shared.textStroke,
-            width: Math.max(0, Math.round(shared.textStroke.width * ratio)),
+            width: scalePx(shared.textStroke.width, ratio),
           },
         }
       : {}),

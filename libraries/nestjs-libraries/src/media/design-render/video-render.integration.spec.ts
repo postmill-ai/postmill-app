@@ -76,9 +76,9 @@ const parallelComposition = (): any => ({
   ],
 });
 
-// Opt-in: this spec launches a real headless Chrome + FFmpeg, which CI runners
-// don't provide. Run locally with RUN_RENDER_INTEGRATION=1.
-describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg video render integration', () => {
+// Real Chrome + FFmpeg acceptance is deliberately GitHub-runner-only. The
+// designer-video-acceptance workflow installs both binaries and sets the opt-in.
+describe.skipIf(process.env.GITHUB_ACTIONS !== 'true' || process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg video render integration', () => {
   it('renders a 1-second red MP4 with a thumbnail', async () => {
     const capture = new ChromiumFrameCaptureService();
     const encoder = new FfmpegVideoEncoderService(capture);

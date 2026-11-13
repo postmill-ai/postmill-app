@@ -78,6 +78,26 @@ CHANGELOG carefully, take a backup, and follow the expand-contract path document
 Check the CHANGELOG for any new env vars required by the release. Add them to your `.env` file,
 Docker Compose environment, or deployment config, then redeploy if needed.
 
+## DesignerDoc v14 compatibility
+
+- **Upgrade the frontend and backend together.** Video text/caption outlines use the optional-additive
+  `textStroke` field in DesignerDoc v14. New designs use v14, and writing an outline to an older video
+  document raises its version to 14. Older documents that never use the field keep their existing version.
+- **Do not send v14 writes to an old replica during a rolling deploy.** An old backend rejects v14 save,
+  create-version, server-preview, and `.pdesign` export requests as `Invalid DesignerDoc`. Drain old
+  replicas before enabling outline edits, or route all Designer writes and previews to upgraded replicas.
+  A new frontend paired with an old backend has the same boundary.
+- **Rollback is forward-only for edited designs.** An older image can open v13-and-earlier documents but
+  cannot validate or render v14 documents. Export any required assets before rollback and return to an
+  image that supports v14 to edit those designs again; there is no document down-migration.
+- **Organization archives are not backward-importable.** An archive containing v14 `Design`,
+  `DesignVersion`, or `DesignTemplate` documents cannot be imported into an older deployment. Current
+  importers reject documents newer than their supported version with an explicit upgrade error instead
+  of creating unreadable rows. Finish upgrading the destination before importing; use a pre-v14 archive
+  for an older destination. Standalone `.pdesign` imports retain their existing newer-document guard.
+- The coordinated optional output `frozen` flag is compatible additive data under v13. It does not ride
+  the `textStroke` v14 bump and does not cause another document-version bump.
+
 ## Brand Studio upgrade notes
 
 - **Apply the additive migration.** `20261112020000_brand_studio_knowledge` adds nullable org RAG,

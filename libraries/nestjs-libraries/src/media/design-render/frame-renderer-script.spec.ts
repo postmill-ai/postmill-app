@@ -54,15 +54,15 @@ describe('FRAME_RENDERER_SCRIPT', () => {
       }
     );
 
-  const run = (output: unknown, context = stubContext()) => {
+  const run = (output: unknown, context = stubContext(), bufferContext = context) => {
     const canvas = { width: 0, height: 0, getContext: () => context };
     const win: Record<string, unknown> = {
       __DATA: { output, baseUrl: 'https://example.test' },
     };
     const doc = {
       getElementById: () => canvas,
-      // The background-texture overlay builds its tile through this.
-      createElement: () => ({ width: 0, height: 0, getContext: () => stubContext() }),
+      // The background-texture overlay and text buffers build through this.
+      createElement: () => ({ width: 0, height: 0, getContext: () => bufferContext }),
     };
     const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
     fn(win, doc, class {});
@@ -321,6 +321,54 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     expect(state.lineWidth).toBe(2);
     expect(state.fillStyle).toBe('#ff0000');
   });
+
+  it.each(['text', 'caption'] as const)(
+    'composites %s stroke and fill once at fade opacity with Konva miter parity',
+    async (type) => {
+      const mainState: Record<string, unknown> = { canvas: { width: 100, height: 100 } };
+      const bufferState: Record<string, unknown> = {
+        canvas: { width: 100, height: 100 },
+        globalAlpha: 1,
+        measureText: (text: string) => ({ width: [...text].length * 10 }),
+      };
+      const composites: { alpha: number; x: number; y: number }[] = [];
+      const bufferPaints: { kind: string; alpha: number }[] = [];
+      const mainGlyphs: string[] = [];
+      mainState.drawImage = (_buffer: unknown, x: number, y: number) =>
+        composites.push({ alpha: mainState.globalAlpha as number, x, y });
+      mainState.fillText = () => mainGlyphs.push('fill');
+      mainState.strokeText = () => mainGlyphs.push('stroke');
+      bufferState.fillText = () => bufferPaints.push({ kind: 'fill', alpha: bufferState.globalAlpha as number });
+      bufferState.strokeText = () => bufferPaints.push({ kind: 'stroke', alpha: bufferState.globalAlpha as number });
+      const context = (state: Record<string, unknown>) => new Proxy(state, {
+        get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+        set: (target, prop, value) => { target[prop as string] = value; return true; },
+      });
+      const baseClip = {
+        id: type, startMs: 0, endMs: 1000, opacity: 0.5,
+        x: 0, y: 0, width: 100, height: 30, fontSize: 10,
+        fill: '#ffffff', textStroke: { color: '#123456', width: 2 },
+      };
+      const clip = type === 'text'
+        ? { ...baseClip, text: 'hello' }
+        : { ...baseClip, words: [{ word: 'hello', startMs: 0, endMs: 1000 }] };
+
+      const api = run({
+        ...output,
+        tracks: [{ id: `${type}-track`, type, clips: [clip] }],
+      }, context(mainState) as never, context(bufferState) as never);
+      await api.renderFrame(0);
+
+      const padding = type === 'text' ? 2 : 5;
+      expect(composites).toEqual([{ alpha: 0.5, x: -padding, y: -padding }]);
+      expect(mainGlyphs).toEqual([]);
+      expect(bufferPaints).toEqual([
+        { kind: 'stroke', alpha: 1 },
+        { kind: 'fill', alpha: 1 },
+      ]);
+      expect(bufferState.miterLimit).toBe(2);
+    }
+  );
 
   it('passes scalar and per-corner radii to roundRect without scalar coercion', async () => {
     const state: Record<string, unknown> = {

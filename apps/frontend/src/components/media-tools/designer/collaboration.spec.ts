@@ -252,6 +252,30 @@ describe('collaboration Yjs contract', () => {
     unsubscribe();
   });
 
+  it('carries and clears video gradient fills and text outlines', () => {
+    const ydoc = new Y.Doc();
+    const doc = makeVideoDoc();
+    const clip = (doc.outputs[0] as VideoOutput).tracks[0].clips[0];
+    clip.fillGradient = {
+      type: 'linear',
+      stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }],
+    };
+    clip.textStroke = { color: '#123456', width: 3 };
+    const last: { current: DesignerDoc | null } = { current: null };
+    sendUpdate(ydoc, doc, last);
+
+    let rebuiltClip = (rebuildDocFromY(ydoc.getMap(Y_DOC))!.outputs[0] as VideoOutput).tracks[0].clips[0];
+    expect(rebuiltClip.fillGradient).toEqual(clip.fillGradient);
+    expect(rebuiltClip.textStroke).toEqual(clip.textStroke);
+
+    clip.fillGradient = undefined;
+    clip.textStroke = undefined;
+    sendUpdate(ydoc, doc, last);
+    rebuiltClip = (rebuildDocFromY(ydoc.getMap(Y_DOC))!.outputs[0] as VideoOutput).tracks[0].clips[0];
+    expect(rebuiltClip.fillGradient).toBeUndefined();
+    expect(rebuiltClip.textStroke).toBeUndefined();
+  });
+
   it('does not notify when the rebuilt doc is unchanged', () => {
     const ydoc = new Y.Doc();
     const docMap = ydoc.getMap(Y_DOC);

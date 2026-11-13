@@ -96,7 +96,7 @@ export const CONTAINER_FILL_RATIO = 0.7;
  * `0` stays `0`, and a negative value (tight letter-spacing, an up/left shadow
  * offset) keeps its sign.
  */
-const scalePx = (value: number, factor: number): number => {
+export const scalePx = (value: number, factor: number): number => {
   if (!Number.isFinite(value) || value === 0) return value;
   return Math.sign(value) * Math.max(1, Math.round(Math.abs(value) * factor));
 };

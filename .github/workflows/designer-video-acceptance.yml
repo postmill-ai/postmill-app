@@ -1,0 +1,83 @@
+---
+name: Designer video acceptance
+
+on:
+  push:
+  merge_group:
+  pull_request:
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
+          pnpm install --frozen-lockfile
+          pnpm --dir e2e install --ignore-workspace --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --dir e2e exec playwright install --with-deps chromium
+      - name: Build production frontend
+        run: |
+          touch .env
+          pnpm run build:frontend
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_BACKEND_URL: http://127.0.0.1:3000
+      - name: Run Designer pointer, persistence, playback, and seek acceptance
+        run: |
+          touch .env
+          pnpm --dir e2e exec playwright test --config playwright.designer-ci.config.ts --grep 'Designer animated stock media|Designer video Inspector and timeline essentials'
+        env:
+          CI: '1'
+          GITHUB_ACTIONS: 'true'
+          NODE_ENV: production
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: designer-video-browser-acceptance
+          path: e2e/test-results-designer-ci
+          if-no-files-found: ignore
+
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - name: Install renderer dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
+          pnpm install --frozen-lockfile
+          pnpm exec puppeteer browsers install chrome --install-deps
+      - name: Build production backend
+        run: pnpm run build:backend
+        env:
+          NODE_ENV: production
+      - name: Run real Chromium and FFmpeg acceptance
+        run: pnpm exec vitest run --root libraries/nestjs-libraries src/media/design-render/video-render.integration.spec.ts
+        env:
+          CI: '1'
+          GITHUB_ACTIONS: 'true'
+          NODE_ENV: production
+          RUN_RENDER_INTEGRATION: '1'

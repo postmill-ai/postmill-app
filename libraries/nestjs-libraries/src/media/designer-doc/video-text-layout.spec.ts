@@ -96,6 +96,7 @@ describe('drawVideoText', () => {
       fillStyle: '' as unknown,
       strokeStyle: '' as unknown,
       lineWidth: 0,
+      miterLimit: 10,
       textBaseline: '',
       textAlign: '',
       measureText: (text: string) => ({ width: tenPx(text) }),
@@ -115,6 +116,7 @@ describe('drawVideoText', () => {
     expect(ctx.fillStyle).toBe(gradient);
     expect(ctx.strokeStyle).toBe('#123456');
     expect(ctx.lineWidth).toBe(3);
+    expect(ctx.miterLimit).toBe(2);
     expect(ctx.font).toBe('italic 700 10px "Inter"');
   });
 

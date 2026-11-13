@@ -126,6 +126,7 @@ export const drawVideoText = (
     fillStyle: unknown;
     strokeStyle?: unknown;
     lineWidth?: number;
+    miterLimit?: number;
     textBaseline: string;
     textAlign: string;
     measureText: (text: string) => { width: number };
@@ -141,6 +142,7 @@ export const drawVideoText = (
   ctx.fillStyle = options.fill || '#000000';
   ctx.strokeStyle = options.textStroke?.color || '#000000';
   ctx.lineWidth = options.textStroke?.width || 0;
+  ctx.miterLimit = 2;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   const measure = (text: string) => ctx.measureText(text).width;

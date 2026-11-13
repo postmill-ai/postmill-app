@@ -470,6 +470,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
           element={element}
           set={update}
           label={t('color', 'Color')}
+          defaultColor="#000000"
           brandColors={brandColors}
           brandEnforcement={brandEnforcement}
         />

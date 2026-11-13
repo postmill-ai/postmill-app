@@ -1609,6 +1609,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             element={clip}
             set={updateClip}
             label={translate('color', 'Color')}
+            defaultColor={clipTrackType === 'caption' ? '#FFFFFF' : '#000000'}
             brandEnforcement={brandEnforcement}
           />
           <TextStrokeSection
@@ -1671,6 +1672,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             element={clip}
             set={updateClip}
             label={translate('color', 'Color')}
+            defaultColor={clipTrackType === 'caption' ? '#FFFFFF' : '#000000'}
             brandEnforcement={brandEnforcement}
           />
           <TextStrokeSection

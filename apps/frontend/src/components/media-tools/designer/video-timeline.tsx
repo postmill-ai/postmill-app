@@ -79,6 +79,7 @@ import {
 import { TimelineTransportControls } from './timeline-transport-controls';
 import { canSplitClipAt } from './timeline-split';
 import { ClipTimingControls } from './panels/clip-timing-controls';
+import { touchingTransitionPairs, transitionBadgeGeometry } from './timeline-transitions';
 
 interface VideoTimelineProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -759,17 +760,14 @@ export const TrackRow = React.memo(function TrackRow({
           return (
             <div
               key={`trans-${from.id}-${to.id}`}
-              className="absolute top-1 z-20 group"
-              style={{
-                left: handleX - 8,
-                height: TRACK_HEIGHT - 8,
-              }}
+              className="absolute z-20 pointer-events-none"
+              style={transitionBadgeGeometry(handleX)}
             >
               <button
                 type="button"
                 data-transition-type={tType}
                 aria-haspopup="dialog"
-                className={`w-4 h-full flex items-center justify-center rounded-xs border ${
+                className={`w-full h-full pointer-events-auto flex items-center justify-center rounded-xs border ${
                   isTransitioning
                     ? 'border-designerAccent/70 bg-designerAccent/50 text-white hover:bg-designerAccent/70'
                     : 'border-studioBorder/70 bg-studioBg/80 text-textColor/70 hover:border-designerAccent/60 hover:text-textColor'
@@ -1559,15 +1557,13 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     if (!isVideo || !vo) return {};
     const pairs: Record<string, { from: VideoClip; to: VideoClip }[]> = {};
     for (const track of vo.tracks) {
-      const sorted = sortedTrackClips[track.id] || [];
-      const trackPairs: { from: VideoClip; to: VideoClip }[] = [];
-      for (let i = 0; i < sorted.length - 1; i++) {
-        trackPairs.push({ from: sorted[i], to: sorted[i + 1] });
-      }
-      pairs[track.id] = trackPairs;
+      pairs[track.id] = touchingTransitionPairs(
+        sortedTrackClips[track.id] || [],
+        pixelsPerMs
+      );
     }
     return pairs;
-  }, [isVideo, vo, sortedTrackClips]);
+  }, [isVideo, vo, sortedTrackClips, pixelsPerMs]);
 
   // Header labels: a custom name always wins; duplicate-type tracks get a
   // running number ("Video 2", "Audio 2", …) so same-type rows stay

@@ -2011,6 +2011,26 @@ describe('updateClipSilent timing rules', () => {
     const trackId = seedClip(store);
     expect(store.getState().updateClipSilent(0, trackId, 'nope', { opacity: 0.5 })).toBe(false);
   });
+
+  it('stamps v14 for stroke writes and insertion without re-versioning unrelated edits', () => {
+    const store = videoStore();
+    const trackId = seedClip(store);
+    store.setState((state) => ({ doc: { ...state.doc, version: 10 } }));
+
+    store.getState().updateClipSilent(0, trackId, 'c1', { fill: '#ffffff' });
+    expect(store.getState().doc.version).toBe(10);
+    store.getState().updateClipSilent(0, trackId, 'c1', {
+      textStroke: { color: '#000000', width: 2 },
+    });
+    expect(store.getState().doc.version).toBe(14);
+
+    store.setState((state) => ({ doc: { ...state.doc, version: 10 } }));
+    store.getState().addClip(0, trackId, {
+      id: 'stroked-insert', startMs: 4000, endMs: 5000,
+      textStroke: { color: '#123456', width: 1 },
+    } as never);
+    expect(store.getState().doc.version).toBe(14);
+  });
 });
 
 describe('persistent video clip groups', () => {

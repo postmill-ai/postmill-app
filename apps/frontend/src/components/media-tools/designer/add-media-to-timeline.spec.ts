@@ -248,6 +248,7 @@ describe('addMediaToTimeline — clip geometry', () => {
       durationMs: 2400,
       width: 480,
       height: 480,
+      sticker: true,
     });
 
     const { vo, clip } = firstVideoClip(store);
@@ -258,11 +259,27 @@ describe('addMediaToTimeline — clip geometry', () => {
       mediaType: 'video',
       startMs: 0,
       endMs: 2400,
-      width: 1080,
-      height: 1080,
+      width: 480,
+      height: 480,
       naturalWidth: 480,
       naturalHeight: 480,
     });
+  });
+
+  it('shrinks large animated stickers to the static 80% box without changing ordinary video sizing', async () => {
+    const stickerStore = createDesignerStore(1080, 1080);
+    await addMediaToTimeline(stickerStore, {
+      type: 'video', url: '/fixtures/large-sticker.mp4', durationMs: 1000,
+      width: 2400, height: 1200, sticker: true,
+    });
+    expect(firstVideoClip(stickerStore).clip).toMatchObject({ width: 864, height: 432 });
+
+    const videoStore = createDesignerStore(1080, 1080);
+    await addMediaToTimeline(videoStore, {
+      type: 'video', url: '/fixtures/ordinary.mp4', durationMs: 1000,
+      width: 480, height: 480,
+    });
+    expect(firstVideoClip(videoStore).clip).toMatchObject({ width: 1080, height: 1080 });
   });
 
   it('carries the generation fileId onto the clip (retention purge keep-list)', async () => {

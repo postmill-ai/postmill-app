@@ -138,11 +138,13 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      (depth ≤200) and is injected with `textExtrusionSource()`; the preview uses the same helper and
      the poster projects it to the static `extrusion` layer style. Reflow scales depth with font size.
    - Text fills and outlines (`clip.fillGradient`, `clip.textStroke`, optional-additive stroke in doc
-     v14) share the image-text contract. Konva uses `gradientFillProps` and `fillAfterStrokeEnabled`;
-     the frame renderer builds gradients with `buildStyleGradient` and paints through the injected
-     `drawVideoText` (stroke before fill). Caption words keep active/spoken solid colors and scale the
-     outline with word-pop. Static posters project both fields to ordinary text elements. Strict and
-     lenient schemas, clip ops, linked styles, reflow and `.pdesign` retain them.
+     v14) share the image-text contract. Writing a stroke to an older video document stamps v14. Konva
+     uses `gradientFillProps` and `fillAfterStrokeEnabled`; the frame renderer builds gradients with
+     `buildStyleGradient` and paints through the injected `drawVideoText` (stroke before fill, miter
+     limit 2). Text and caption fill/stroke are rasterized at alpha 1 and composited once at transition
+     opacity. Caption words keep active/spoken solid colors and scale the outline with word-pop. Static
+     posters project both fields to ordinary text elements. Strict and lenient schemas, clip ops, linked
+     styles (nonzero outlines keep a 1px minimum), reflow and `.pdesign` retain them.
    - Speed (`clip.speed`) is pitch-preserving on both sides: the preview sets
      `playbackRate` with `preservesPitch`/`webkitPreservesPitch`, and the mixer's
      `atempo` is likewise pitch-preserving, so preview and export audio match.

@@ -122,9 +122,17 @@ For Designer specs 96 and 97, optional `E2E_FRONTEND_ORIGIN` proxies only docume
 stay unchanged. It must be `http://localhost`, `127.0.0.1`, or `::1`; API/provider calls are never
 proxied by this setting. `E2E_BACKEND_ORIGIN` remains the separate opt-in loopback API proxy.
 Spec 96's animated-sticker case uses only `fixtures/motion.mp4` and a mocked stock response: it checks
-video-track insertion, real playback/seek, save/reopen, and zero generation calls. The essentials case
-also covers visible Split/transition controls and text gradient/outline persistence. These are non-paid
-acceptance paths; do not replace their local media with provider generation.
+video-track insertion, source-capped geometry, real playback/seek, save/reopen, and zero generation calls.
+The essentials case also covers real trim-edge pointer hit-testing, visible Split/transition controls,
+and text gradient/outline persistence with v14 stamping. These are non-paid acceptance paths; do not
+replace their local media with provider generation.
+
+The `Designer video acceptance` workflow runs those two cases on GitHub-hosted runners through
+`playwright.designer-ci.config.ts` after a production frontend build; the config refuses to load outside
+GitHub Actions. A sibling job builds the production backend, installs Chromium and FFmpeg, and runs
+`video-render.integration.spec.ts` with `RUN_RENDER_INTEGRATION=1` for real gradient/outline/sticker,
+poster and MP4 acceptance. The integration spec also requires `GITHUB_ACTIONS=true`, so it skips locally.
+Do not start these listeners, browsers, or render jobs on a development or production host for verification.
 
 `playwright.designer-ci.config.ts` and `.github/workflows/designer-browser.yml` are the production-build
 Designer browser path. The workflow builds the frontend before Playwright starts `next start` on a

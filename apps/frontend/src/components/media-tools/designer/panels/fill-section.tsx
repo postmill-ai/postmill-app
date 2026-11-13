@@ -18,9 +18,10 @@ export const FillSection: FC<{
   element: FillFields;
   set: (patch: Partial<FillFields>) => void;
   label?: string;
+  defaultColor?: string;
   brandColors?: string[];
   brandEnforcement?: boolean;
-}> = ({ element, set, label, brandColors, brandEnforcement }) => {
+}> = ({ element, set, label, defaultColor = '#2B5CD3', brandColors, brandEnforcement }) => {
   const t = useT();
   const isGradient = !!element.fillGradient?.stops?.length;
 
@@ -40,7 +41,7 @@ export const FillSection: FC<{
                     type: 'linear',
                     angle: 0,
                     stops: [
-                      { offset: 0, color: element.fill || '#2B5CD3' },
+                      { offset: 0, color: element.fill || defaultColor },
                       { offset: 1, color: '#FFFFFF' },
                     ],
                   }
@@ -59,7 +60,7 @@ export const FillSection: FC<{
       ) : (
         <ColorSwatch
           label={label || t('fill_button', 'Fill')}
-          value={element.fill || '#2B5CD3'}
+          value={element.fill || defaultColor}
           onChange={(hex) => set({ fill: hex })}
           brandColors={brandColors}
           brandEnforcement={brandEnforcement}
@@ -96,8 +97,8 @@ export const TextStrokeSection: FC<{
           }`}
         >
           <span
-            className={`absolute top-[2px] start-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
-              outline ? 'translate-x-[18px]' : ''
+            className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
+              outline ? 'translate-x-[18px] rtl:-translate-x-[18px]' : ''
             }`}
           />
         </button>
@@ -112,7 +113,7 @@ export const TextStrokeSection: FC<{
             brandEnforcement={brandEnforcement}
           />
           <Stepper
-            label={t('designer_label_width', 'Width')}
+            label={t('designer_label_outline_width', 'Outline width')}
             min={0}
             max={20}
             step={1}

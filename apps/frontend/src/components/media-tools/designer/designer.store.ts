@@ -24,6 +24,7 @@ import {
   genId,
   matchPreset,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
+import { withTextStrokeVersion } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.version';
 import {
   smartReflow,
   computeContainerBoxes,
@@ -1959,7 +1960,7 @@ export const createDesignerStore = (
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        set({ doc: withTextStrokeVersion({ ...doc, outputs: outs }, newClip), isDirty: true });
         get().pushHistory();
       },
 
@@ -2137,14 +2138,15 @@ export const createDesignerStore = (
           patched,
           editFormatOnly
         );
+        const nextDoc = withTextStrokeVersion({ ...doc, outputs }, patched);
         if (affected.length) {
           const now = Date.now();
           const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
           affected.forEach((i) => (nextFlash[i] = now));
-          set({ doc: { ...doc, outputs }, isDirty: true, linkedUpdateFlash: nextFlash });
+          set({ doc: nextDoc, isDirty: true, linkedUpdateFlash: nextFlash });
           return true;
         }
-        set({ doc: { ...doc, outputs }, isDirty: true });
+        set({ doc: nextDoc, isDirty: true });
         return true;
       },
 
