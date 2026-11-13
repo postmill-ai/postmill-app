@@ -471,7 +471,7 @@ describe.skipIf(process.env.GITHUB_ACTIONS !== 'true' || process.env.RUN_RENDER_
       const firstPath = path.join(path.dirname(result.videoPath), 'first.png');
       const lastPath = path.join(path.dirname(result.videoPath), 'last.png');
       execFileSync('ffmpeg', ['-y', '-ss', '0', '-i', result.videoPath, '-frames:v', '1', firstPath], { stdio: 'ignore' });
-      execFileSync('ffmpeg', ['-y', '-ss', '0.9', '-i', result.videoPath, '-frames:v', '1', lastPath], { stdio: 'ignore' });
+      execFileSync('ffmpeg', ['-y', '-sseof', '-0.2', '-i', result.videoPath, '-frames:v', '1', lastPath], { stdio: 'ignore' });
       const crop = { left: 0, top: 80, width: 320, height: 160 };
       const first = await sharp(firstPath).extract(crop).raw().toBuffer();
       const last = await sharp(lastPath).extract(crop).raw().toBuffer();
