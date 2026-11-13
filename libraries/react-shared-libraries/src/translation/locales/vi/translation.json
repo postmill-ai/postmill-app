@@ -3945,6 +3945,7 @@
   "designer_increase_font_size": "Tăng cỡ chữ",
   "designer_decrease_font_size": "Giảm cỡ chữ",
   "designer_image_replace_failed": "Không thể áp dụng thay thế hình ảnh",
+  "designer_image_cleanup_failed": "Hình ảnh đã được tải lên nhưng không thể áp dụng thay thế. Tệp vẫn còn trong thư viện của bạn.",
   "collapse_properties_panel": "Thu gọn bảng thuộc tính",
   "show_properties": "Hiện thuộc tính",
   "expand_properties_panel": "Mở rộng bảng thuộc tính",

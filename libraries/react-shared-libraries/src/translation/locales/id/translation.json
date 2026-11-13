@@ -3958,6 +3958,7 @@
   "designer_increase_font_size": "Perbesar ukuran font",
   "designer_decrease_font_size": "Perkecil ukuran font",
   "designer_image_replace_failed": "Penggantian gambar tidak dapat diterapkan",
+  "designer_image_cleanup_failed": "Gambar telah diunggah, tetapi penggantian tidak dapat diterapkan. File tetap ada di pustaka Anda.",
   "collapse_properties_panel": "Ciutkan panel properti",
   "show_properties": "Tampilkan properti",
   "expand_properties_panel": "Bentangkan panel properti",

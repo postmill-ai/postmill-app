@@ -3947,6 +3947,7 @@
   "designer_increase_font_size": "Увеличить размер шрифта",
   "designer_decrease_font_size": "Уменьшить размер шрифта",
   "designer_image_replace_failed": "Не удалось применить замену изображения",
+  "designer_image_cleanup_failed": "Изображение загружено, но замену применить не удалось. Файл останется в вашей библиотеке.",
   "collapse_properties_panel": "Свернуть панель свойств",
   "show_properties": "Показать свойства",
   "expand_properties_panel": "Развернуть панель свойств",

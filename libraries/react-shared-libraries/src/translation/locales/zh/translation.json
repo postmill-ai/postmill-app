@@ -3945,6 +3945,7 @@
   "designer_increase_font_size": "增大字体",
   "designer_decrease_font_size": "减小字体",
   "designer_image_replace_failed": "无法应用图像替换",
+  "designer_image_cleanup_failed": "图片已上传，但无法应用替换。文件仍保留在您的媒体库中。",
   "collapse_properties_panel": "收起属性面板",
   "show_properties": "显示属性",
   "expand_properties_panel": "展开属性面板",

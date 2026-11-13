@@ -42,7 +42,7 @@ import { CropOverlay } from './crop-overlay';
 import { ensureFontsUsed } from './fonts';
 import { getImageNaturalSize } from './elements';
 import { computeCoverCrop } from './reflow';
-import { imageDropTargetById, replaceUploadedImageAtDropTarget, uploadDroppedImage, type ImageDropTarget } from './image-drop';
+import { imageDropTargetById, replaceUploadedImageAtDropTarget, uploadDroppedImage, imageDropErrorMessage, type ImageDropTarget } from './image-drop';
 import { textureFillProps } from './textures';
 import { svgToPathElements } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-import';
 import {
@@ -1872,12 +1872,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             }
           })
           .catch((error) => {
-            toaster.show(
-              error instanceof Error && error.message === 'Image decode failed'
-                ? t('failed_to_load_dropped_image', 'Failed to load dropped image')
-                : t('failed_to_upload_file', 'Failed to upload file'),
-              'warning'
-            );
+            toaster.show(imageDropErrorMessage(error, t), 'warning');
           })
           .finally(() => setUploadingFile(false));
         return;

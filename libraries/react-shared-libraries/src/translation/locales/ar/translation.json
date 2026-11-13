@@ -3949,6 +3949,7 @@
   "designer_increase_font_size": "زيادة حجم الخط",
   "designer_decrease_font_size": "تقليل حجم الخط",
   "designer_image_replace_failed": "تعذر تطبيق استبدال الصورة",
+  "designer_image_cleanup_failed": "تم تحميل الصورة، ولكن تعذر تطبيق الاستبدال. يبقى الملف في مكتبتك.",
   "collapse_properties_panel": "طي لوحة الخصائص",
   "show_properties": "إظهار الخصائص",
   "expand_properties_panel": "توسيع لوحة الخصائص",

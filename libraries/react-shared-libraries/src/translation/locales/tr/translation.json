@@ -3945,6 +3945,7 @@
   "designer_increase_font_size": "Yazı tipi boyutunu artır",
   "designer_decrease_font_size": "Yazı tipi boyutunu azalt",
   "designer_image_replace_failed": "Görsel değişimi uygulanamadı",
+  "designer_image_cleanup_failed": "Görsel yüklendi ancak değiştirme uygulanamadı. Dosya kitaplığınızda kalır.",
   "collapse_properties_panel": "Özellikler panelini daralt",
   "show_properties": "Özellikleri göster",
   "expand_properties_panel": "Özellikler panelini genişlet",

@@ -3962,6 +3962,7 @@
   "designer_increase_font_size": "Zwiększ rozmiar czcionki",
   "designer_decrease_font_size": "Zmniejsz rozmiar czcionki",
   "designer_image_replace_failed": "Nie udało się zastosować zamiany obrazu",
+  "designer_image_cleanup_failed": "Obraz został przesłany, ale nie udało się go zastąpić. Plik pozostaje w bibliotece.",
   "collapse_properties_panel": "Zwiń panel właściwości",
   "show_properties": "Pokaż właściwości",
   "expand_properties_panel": "Rozwiń panel właściwości",

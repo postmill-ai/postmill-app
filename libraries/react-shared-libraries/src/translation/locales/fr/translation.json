@@ -3945,6 +3945,7 @@
   "designer_increase_font_size": "Augmenter la taille de police",
   "designer_decrease_font_size": "Réduire la taille de police",
   "designer_image_replace_failed": "Le remplacement de l’image n’a pas pu être appliqué",
+  "designer_image_cleanup_failed": "L’image a été téléchargée, mais le remplacement n’a pas pu être appliqué. Le fichier reste dans votre bibliothèque.",
   "collapse_properties_panel": "Réduire le panneau des propriétés",
   "show_properties": "Afficher les propriétés",
   "expand_properties_panel": "Développer le panneau des propriétés",

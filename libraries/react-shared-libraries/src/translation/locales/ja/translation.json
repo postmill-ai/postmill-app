@@ -3945,6 +3945,7 @@
   "designer_increase_font_size": "フォントサイズを大きく",
   "designer_decrease_font_size": "フォントサイズを小さく",
   "designer_image_replace_failed": "画像の置換を適用できませんでした",
+  "designer_image_cleanup_failed": "画像はアップロードされましたが、置換を適用できませんでした。ファイルはライブラリに残っています。",
   "collapse_properties_panel": "プロパティパネルを折りたたむ",
   "show_properties": "プロパティを表示",
   "expand_properties_panel": "プロパティパネルを展開",

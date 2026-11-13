@@ -3958,6 +3958,7 @@
   "designer_increase_font_size": "Lettergrootte vergroten",
   "designer_decrease_font_size": "Lettergrootte verkleinen",
   "designer_image_replace_failed": "De afbeeldingsvervanging kon niet worden toegepast",
+  "designer_image_cleanup_failed": "De afbeelding is geüpload, maar de vervanging kon niet worden toegepast. Het bestand blijft in je bibliotheek staan.",
   "collapse_properties_panel": "Eigenschappenpaneel inklappen",
   "show_properties": "Eigenschappen tonen",
   "expand_properties_panel": "Eigenschappenpaneel uitklappen",

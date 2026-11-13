@@ -3964,6 +3964,7 @@
   "designer_increase_font_size": "Increase font size",
   "designer_decrease_font_size": "Decrease font size",
   "designer_image_replace_failed": "That image replacement could not be applied",
+  "designer_image_cleanup_failed": "The image was uploaded, but the replacement could not be applied. The file remains in your library.",
   "collapse_properties_panel": "Collapse properties panel",
   "show_properties": "Show properties",
   "expand_properties_panel": "Expand properties panel",

@@ -3945,6 +3945,7 @@
   "designer_increase_font_size": "Aumentar tamaño de fuente",
   "designer_decrease_font_size": "Reducir tamaño de fuente",
   "designer_image_replace_failed": "No se pudo aplicar el reemplazo de imagen",
+  "designer_image_cleanup_failed": "La imagen se subió, pero no se pudo aplicar el reemplazo. El archivo permanece en tu biblioteca.",
   "collapse_properties_panel": "Contraer panel de propiedades",
   "show_properties": "Mostrar propiedades",
   "expand_properties_panel": "Expandir panel de propiedades",

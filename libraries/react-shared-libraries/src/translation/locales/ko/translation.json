@@ -3946,6 +3946,7 @@
   "designer_increase_font_size": "글꼴 크기 늘리기",
   "designer_decrease_font_size": "글꼴 크기 줄이기",
   "designer_image_replace_failed": "이미지 교체를 적용할 수 없습니다",
+  "designer_image_cleanup_failed": "이미지는 업로드되었지만 교체를 적용할 수 없습니다. 파일은 라이브러리에 남아 있습니다.",
   "collapse_properties_panel": "속성 패널 접기",
   "show_properties": "속성 표시",
   "expand_properties_panel": "속성 패널 펼치기",

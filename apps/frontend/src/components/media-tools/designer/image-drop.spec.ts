@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { imageDropTargetById, replaceUploadedImageAtDropTarget, uploadDroppedImage } from './image-drop';
+import { imageDropTargetById, replaceUploadedImageAtDropTarget, uploadDroppedImage, imageDropErrorMessage, UploadedImageCleanupError } from './image-drop';
 import { MAX_UPLOAD_BYTES } from './export-format';
 import { createDesignerStore, type VideoOutput, type VideoTrack } from './designer.store';
 
@@ -137,6 +137,16 @@ describe('replaceUploadedImageAtDropTarget', () => {
       target: { kind: 'element', elementId: 'missing' },
       item,
     })).rejects.toThrow('Uploaded image cleanup failed');
+  });
+
+  it('tells the user the uploaded file remains after refused cleanup', () => {
+    const t = vi.fn((_key: string, fallback: string) => fallback);
+
+    expect(imageDropErrorMessage(new UploadedImageCleanupError(), t)).toBe(
+      'The image was uploaded, but the replacement could not be applied. The file remains in your library.'
+    );
+    expect(t).toHaveBeenCalledWith('designer_image_cleanup_failed', expect.any(String));
+    expect(t).not.toHaveBeenCalledWith('failed_to_upload_file', expect.any(String));
   });
 
   it('attempts cleanup when applying the replacement throws', async () => {

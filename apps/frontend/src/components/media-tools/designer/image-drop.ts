@@ -67,6 +67,29 @@ export const replaceImageAtDropTarget = (
   ? replaceStaticImage({ store, elementId: target.elementId, item })
   : replaceClipImage({ store, target: target.target, item });
 
+export class UploadedImageCleanupError extends Error {
+  constructor() {
+    super('Uploaded image cleanup failed');
+    this.name = 'UploadedImageCleanupError';
+  }
+}
+
+export const imageDropErrorMessage = (
+  error: unknown,
+  t: (key: string, fallback: string) => string
+): string => {
+  if (error instanceof UploadedImageCleanupError) {
+    return t(
+      'designer_image_cleanup_failed',
+      'The image was uploaded, but the replacement could not be applied. The file remains in your library.'
+    );
+  }
+  if (error instanceof Error && error.message === 'Image decode failed') {
+    return t('failed_to_load_dropped_image', 'Failed to load dropped image');
+  }
+  return t('failed_to_upload_file', 'Failed to upload file');
+};
+
 export const replaceUploadedImageAtDropTarget = async ({
   fetch,
   store,
@@ -85,7 +108,7 @@ export const replaceUploadedImageAtDropTarget = async ({
   } finally {
     if (!replaced && item.fileId) {
       const response = await fetch(`/files/${item.fileId}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Uploaded image cleanup failed');
+      if (!response.ok) throw new UploadedImageCleanupError();
     }
   }
 };
