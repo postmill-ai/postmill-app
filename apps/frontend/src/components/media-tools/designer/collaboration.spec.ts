@@ -3,6 +3,7 @@ import * as Y from 'yjs';
 import { createDesignerStore, type DesignerDoc, type VideoOutput } from './designer.store';
 import {
   applyRemoteDoc,
+  createCollaborationSubscription,
   deepClone,
   deepEqual,
   rebuildDocFromY,
@@ -231,6 +232,24 @@ describe('collaboration Yjs contract', () => {
     store.getState().pushHistory('Edit clip geometry');
     store.getState().endGesture();
     expect(store.getState().gestureDepth).toBe(0);
+  });
+
+  it('suppresses broadcasts during a gesture and sends the latest document once on release', () => {
+    const store = createDesignerStore();
+    const sendUpdate = vi.fn();
+    const unsubscribe = createCollaborationSubscription(store, sendUpdate);
+    expect(sendUpdate).toHaveBeenCalledTimes(1);
+
+    store.getState().beginGesture();
+    const remote = deepClone(store.getState().doc);
+    remote.outputs[0].name = 'Changed during hold';
+    applyRemoteDoc(store, remote);
+    expect(sendUpdate).toHaveBeenCalledTimes(1);
+
+    store.getState().endGesture();
+    expect(sendUpdate).toHaveBeenCalledTimes(2);
+    expect(sendUpdate.mock.calls[1][0]).toBe(store.getState().doc);
+    unsubscribe();
   });
 
   it('does not notify when the rebuilt doc is unchanged', () => {

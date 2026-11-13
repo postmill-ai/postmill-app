@@ -444,6 +444,111 @@ describe('createDesignAutosave', () => {
     expect(callsTo(fetchMock, 'PUT', '/media/designs/design-4')).toHaveLength(1);
     expect(store.getState().isDirty).toBe(false);
   });
+
+  it('does not POST a queued intermediate doc again after a slow first create', async () => {
+    const store = createDesignerStore();
+    let resolvePost: (res: Response) => void = () => {};
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/media/designs') {
+        return new Promise<Response>((resolve) => {
+          resolvePost = resolve;
+        });
+      }
+      return Promise.resolve(okJson({}));
+    });
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    addText(store, 'D1');
+    autosave.save(store.getState().doc);
+    await flush();
+    addText(store, 'D2');
+    autosave.save(store.getState().doc);
+    addText(store, 'D3');
+    const latestDoc = store.getState().doc;
+    resolvePost(okJson({ id: 'design-slow-create' }));
+    await flush();
+
+    expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(1);
+    const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-slow-create');
+    expect(puts).toHaveLength(1);
+    expect(JSON.parse((puts[0][1] as RequestInit).body as string).doc).toEqual(latestDoc);
+    expect(store.getState().designId).toBe('design-slow-create');
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('adopts a first-create id across silent edits without a second POST', async () => {
+    const store = createDesignerStore();
+    addText(store, 'Committed base');
+    const id = store.getState().doc.outputs[0].children[0].id;
+    store.getState().updateElementsSilent([id], { x: 10 });
+    const firstSilentDoc = store.getState().doc;
+    expect(store.getState().history).not.toContain(firstSilentDoc);
+    let resolvePost: (res: Response) => void = () => {};
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/media/designs') {
+        return new Promise<Response>((resolve) => {
+          resolvePost = resolve;
+        });
+      }
+      return Promise.resolve(okJson({}));
+    });
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    autosave.save(firstSilentDoc);
+    await flush();
+    store.getState().updateElementsSilent([id], { x: 20 });
+    const latestDoc = store.getState().doc;
+    resolvePost(okJson({ id: 'design-silent-create' }));
+    await flush();
+    autosave.save(latestDoc);
+    await flush();
+
+    expect(store.getState().designId).toBe('design-silent-create');
+    expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(1);
+    const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-silent-create');
+    expect(puts).toHaveLength(1);
+    expect(JSON.parse((puts[0][1] as RequestInit).body as string).doc).toEqual(latestDoc);
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('does not adopt or share a create across reset design sessions', async () => {
+    const store = createDesignerStore();
+    const resolvers: Array<(response: Response) => void> = [];
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
+      resolvers.push(resolve);
+    }));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    addText(store, 'Old session');
+    autosave.save(store.getState().doc);
+    await flush();
+    store.getState().reset();
+    addText(store, 'New session');
+    const newCreate = autosave.ensureCreated();
+    await flush();
+    expect(resolvers).toHaveLength(2);
+
+    resolvers[0](okJson({ id: 'design-old-session' }));
+    await flush();
+    expect(store.getState().designId).toBeNull();
+    resolvers[1](okJson({ id: 'design-new-session' }));
+    await expect(newCreate).resolves.toBe('design-new-session');
+    await flush();
+    expect(store.getState().designId).toBe('design-new-session');
+    expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(2);
+  });
 });
 
 describe('createDesignAutosave retry bound', () => {
@@ -659,6 +764,63 @@ describe('createDesignAutosave retry bound', () => {
     expect(store.getState().isDirty).toBe(false);
   });
 
+  it('reschedules autosave retry after an immediate manual Save also fails', async () => {
+    vi.useFakeTimers();
+    const store = dirtyStore();
+    let down = true;
+    const fetchMock = vi.fn(() =>
+      down ? Promise.reject(new Error('backend down')) : Promise.resolve(okJson({}))
+    );
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(autosave.saveNow(store.getState().doc)).resolves.toBe('failed');
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(2);
+
+    down = false;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(3);
+    expect(store.getState().saveFailed).toBe(false);
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('does not cancel one design retry when another design saves successfully', async () => {
+    vi.useFakeTimers();
+    const store = dirtyStore();
+    let designXDown = true;
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/media/designs/design-x' && designXDown) {
+        designXDown = false;
+        return Promise.reject(new Error('design-x down'));
+      }
+      return Promise.resolve(okJson({}));
+    });
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(1);
+
+    const other = createDesignerStore();
+    store.getState().loadDesign(other.getState().doc, 'design-other', 'Other');
+    addText(store, 'Other design edit');
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState().isDirty).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-x')).toHaveLength(2);
+  });
+
   it('reports failed and superseded manual writes instead of treating them as saved', async () => {
     const store = dirtyStore();
     const fetchMock = vi.fn().mockRejectedValue(new Error('backend down'));
@@ -678,7 +840,7 @@ describe('createDesignAutosave retry bound', () => {
     expect(store.getState().isDirty).toBe(true);
   });
 
-  it('reports a manual write superseded while its request is in flight as skipped', async () => {
+  it('reports a successful manual write superseded while in flight as persisted', async () => {
     const store = dirtyStore();
     let resolvePut!: (response: Response) => void;
     const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
@@ -696,7 +858,7 @@ describe('createDesignAutosave retry bound', () => {
     const latestDoc = store.getState().doc;
     resolvePut(okJson({}));
 
-    await expect(manual).resolves.toBe('skipped');
+    await expect(manual).resolves.toBe('persisted');
     expect(store.getState().doc).toBe(latestDoc);
     expect(store.getState().isDirty).toBe(true);
   });
@@ -782,6 +944,7 @@ describe('createDesignAutosave retry bound', () => {
 
 describe('createDesignAutosave scheduling', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -970,6 +1133,47 @@ describe('createDesignAutosave scheduling', () => {
     await flush();
     expect(store.getState().doc).toBe(latestDoc);
     expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('times out an unsettled PUT and retries instead of blocking the design forever', async () => {
+    vi.useFakeTimers();
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-timeout');
+    addText(store, 'Edit');
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(store.getState().saveFailed).toBe(true);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-timeout')).toHaveLength(2);
+  });
+
+  it('does not join an identical manual Save to a request already hung on the network', async () => {
+    vi.useFakeTimers();
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-identical-timeout');
+    addText(store, 'Edit');
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    autosave.save(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    const manual = autosave.saveNow(store.getState().doc);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-identical-timeout')).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(30000);
+    await expect(manual).resolves.toBe('failed');
   });
 
   it('captures the original design and document for an idle preview', async () => {

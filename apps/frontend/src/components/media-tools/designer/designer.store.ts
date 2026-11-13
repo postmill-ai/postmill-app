@@ -134,6 +134,7 @@ export interface DesignerState {
   // saved state clears isDirty instead of always reporting unsaved.
   savedHistoryIndex: number;
   designId: string | null;
+  designSession: number;
   designTemplateId: string | null;
   templateId: string | null;
   designName: string;
@@ -578,7 +579,7 @@ export const createDesignerStore = (
       zoom: 1, viewportX: 0, viewportY: 0,
       history: [initialDoc], historyIndex: 0, historyLabels: ['Open'],
       savedHistoryIndex: 0,
-      designId: null, designTemplateId: null, templateId: null,
+      designId: null, designSession: 0, designTemplateId: null, templateId: null,
       designName: 'Untitled Design',
       isDirty: false, isSaving: false, lastSaved: null,
       previewRevision: 0,
@@ -1833,7 +1834,7 @@ export const createDesignerStore = (
           // every route into a new document gets it — there are four.
           fitNonce: get().fitNonce + 1,
           history: [newDoc], historyLabels: ['New'], historyIndex: 0, savedHistoryIndex: 0,
-          designId: null, designTemplateId: null, templateId: null,
+          designId: null, designSession: get().designSession + 1, designTemplateId: null, templateId: null,
           designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null, saveFailed: false, saveRetryPaused: false,
           editFormatOnly: false,
           brandEnforcement: false,
@@ -1854,7 +1855,7 @@ export const createDesignerStore = (
         // paint over matching ids) for the tab's lifetime.
         disposeAllBuffers();
         set({
-          doc: migrated, designId: id, designName: name,
+          doc: migrated, designId: id, designSession: get().designSession + 1, designName: name,
           templateId, designTemplateId: templateId,
           selectedIds: [], currentOutput: 0, currentPage: 0,
           // The zoom and viewport belonged to whatever was open before. Reset

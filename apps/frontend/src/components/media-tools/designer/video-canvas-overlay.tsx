@@ -699,18 +699,24 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   };
 
   const gestureCommitPending = useRef(false);
-  const gestureClipRef = useRef<string | null>(null);
+  const gestureClipRef = useRef<{ clipId: string; token: number } | null>(null);
+  const gestureSequenceRef = useRef(0);
+  const commitTokenRef = useRef<number | null>(null);
   const endClipGesture = useCallback(() => {
     if (!gestureClipRef.current) return;
     gestureClipRef.current = null;
+    commitTokenRef.current = null;
     store.getState().endGesture();
   }, [store]);
   const beginClipGesture = (clipId: string) => {
-    if (!gestureClipRef.current) gestureClipRef.current = clipId;
+    if (!gestureClipRef.current || commitTokenRef.current !== null) {
+      gestureClipRef.current = { clipId, token: ++gestureSequenceRef.current };
+      commitTokenRef.current = null;
+    }
     store.getState().beginGesture();
   };
   useEffect(() => {
-    const activeId = gestureClipRef.current;
+    const activeId = gestureClipRef.current?.clipId;
     if (activeId && !clipsAtPlayhead.some(({ clip }) => clip.id === activeId)) {
       endClipGesture();
     }
@@ -718,6 +724,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   useEffect(() => () => {
     if (gestureClipRef.current) {
       gestureClipRef.current = null;
+      commitTokenRef.current = null;
       store.getState().endGesture();
     }
   }, [store]);
@@ -731,8 +738,12 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
       gestureCommitPending.current = false;
     });
     const clipId = target.id();
+    const gesture = gestureClipRef.current;
+    if (!gesture || gesture.clipId !== clipId) return;
+    const token = gesture.token;
+    commitTokenRef.current = token;
     return runGestureCommit(store, async () => {
-      if (gestureClipRef.current !== clipId) return;
+      if (gestureClipRef.current?.token !== token) return;
       const transformer = target.getLayer()?.findOne('Transformer') as
         | Konva.Transformer
         | undefined;
@@ -812,7 +823,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
       }
 
       const latest = store.getState();
-      const stale = gestureClipRef.current !== clipId || latest.history !== history || remapped.some(({ trackId, clipId }) => {
+      const stale = gestureClipRef.current?.token !== token || latest.history !== history || remapped.some(({ trackId, clipId }) => {
         const current = (latest.doc.outputs[currentOutput] as VideoOutput).tracks
           .find((track) => track.id === trackId)?.clips.find((clip) => clip.id === clipId);
         return !current?.maskSrc;
@@ -830,8 +841,9 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
         });
       });
       store.getState().pushHistory('Edit clip geometry');
-    }).finally(() => {
-      if (gestureClipRef.current === clipId) gestureClipRef.current = null;
+    }, undefined, () => gestureClipRef.current?.token === token).finally(() => {
+      if (commitTokenRef.current === token) commitTokenRef.current = null;
+      if (gestureClipRef.current?.token === token) gestureClipRef.current = null;
     });
   };
 

@@ -3,6 +3,7 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createDesignerStore, migrateDoc, type DesignerStore, type DesignerDoc, type DesignerAttribution, type VideoOutput, type VideoClip, type DesignerOutput, type DesignerElement } from './designer.store';
 import { createAutosaveSubscription, createDesignAutosave } from './designer-autosave';
+import { manualSaveToastKind, runManualSave } from './manual-save';
 import { applyRemoteDoc, useCollaboration } from './collaboration';
 import { subscribeToBaseDocument } from './collaboration-doc';
 import type { TimelineAwareness, ImageAwareness } from './collaboration';
@@ -644,17 +645,8 @@ const DesignerContent: FC<
       return;
     }
     try {
-      // A first save goes through the autosave create guard, so a create
-      // already in flight (or a rapid Cmd+S repeat) can never POST a duplicate
-      // design. The brand-compliance check above stays manual-save-only.
-      if (!store.getState().designId) {
-        await designAutosave.ensureCreated();
-      }
-      const cur = store.getState();
-      const result = cur.designId && cur.isDirty
-        ? await designAutosave.saveNow(cur.doc)
-        : 'persisted';
-      if (result !== 'persisted') {
+      const result = await runManualSave(store, designAutosave);
+      if (manualSaveToastKind(result) === 'warning') {
         toaster.show(translate('save_failed', 'Failed to save'), 'warning');
         return;
       }

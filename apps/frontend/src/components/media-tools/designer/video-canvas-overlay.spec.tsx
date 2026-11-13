@@ -549,6 +549,38 @@ describe('video overlay selection and gesture commits', () => {
     expect(first.draggable()).toBe(false);
   });
 
+  it('tracks a second drag that starts before the first commit finishes', async () => {
+    const { store, trackId } = gestureStore();
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return 0;
+    });
+    const stage = await renderGestureStore(store);
+    const first = stage.findOne('#first')!;
+    const second = stage.findOne('#second')!;
+    const depth = store.getState().history.length;
+
+    await act(async () => {
+      first.fire('dragstart');
+      first.position({ x: 45, y: 55 });
+      first.fire('dragend');
+      second.fire('dragstart');
+      second.position({ x: 205, y: 115 });
+      frames.splice(0).forEach((callback) => callback(0));
+      second.fire('dragend');
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const clips = (store.getState().doc.outputs[0] as VideoOutput).tracks
+      .find((track) => track.id === trackId)!.clips;
+    expect(clips.map((clip) => [clip.x, clip.y])).toEqual([[45, 55], [205, 115]]);
+    expect(store.getState().history).toHaveLength(depth + 2);
+    expect(store.getState().gestureDepth).toBe(0);
+  });
+
   it.each(['delete', 'playhead'] as const)('releases a held transform when the clip leaves the stage (%s)', async (reason) => {
     const { store, trackId } = gestureStore();
     const stage = await renderGestureStore(store);

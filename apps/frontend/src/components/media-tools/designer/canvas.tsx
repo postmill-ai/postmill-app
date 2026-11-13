@@ -2036,8 +2036,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         }}
       >
         <Layer
-          onDragStart={() => {
+          onDragStart={(e) => {
             if (!isVideo) {
+              const id = e.target.id();
+              if (id && !selectedIds.includes(id)) handleElementSelect(id);
               noteGestureStart();
               store.getState().beginGesture();
             }

@@ -5,7 +5,8 @@ type DesignerStoreApi = ReturnType<typeof createDesignerStore>;
 export const runGestureCommit = async (
   store: DesignerStoreApi,
   commit: () => void | Promise<void>,
-  onEnd?: () => void
+  onEnd?: () => void,
+  shouldEnd: () => boolean = () => true
 ): Promise<void> => {
   try {
     await commit();
@@ -13,7 +14,7 @@ export const runGestureCommit = async (
     try {
       onEnd?.();
     } finally {
-      store.getState().endGesture();
+      if (shouldEnd()) store.getState().endGesture();
     }
   }
 };

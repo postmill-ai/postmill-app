@@ -13,6 +13,7 @@ import type {
   VideoOutput,
   VideoTrack,
 } from './designer.store';
+import { subscribeToBaseDocument } from './collaboration-doc';
 
 export interface TimelineAwareness {
   type: 'timeline';
@@ -127,6 +128,11 @@ export const applyRemoteDoc = (store: DesignerStoreApi, remoteDoc: DesignerDoc) 
     ? mergeRemoteDocForGesture(state.doc, remoteDoc, state)
     : remoteDoc);
 };
+
+export const createCollaborationSubscription = (
+  store: DesignerStoreApi,
+  sendUpdate: (doc: DesignerDoc) => void
+): (() => void) => subscribeToBaseDocument(store, sendUpdate);
 
 function setIfChanged(m: Y.Map<any>, key: string, value: any) {
   if (m.get(key) !== value) {

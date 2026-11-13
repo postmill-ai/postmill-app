@@ -126,6 +126,22 @@ describe('DesignerCanvas gesture wiring', () => {
     expect(frames.size).toBe(0);
   });
 
+  it('selects an unselected element when its drag starts', async () => {
+    const store = shapeStore();
+    store.getState().setSelectedIds([]);
+    const stage = await renderCanvas(store);
+    const node = stage.findOne('#moving')!;
+    const layer = node.getLayer()!;
+
+    await act(async () => {
+      layer.fire('dragstart', { target: node });
+      expect(store.getState().selectedIds).toEqual(['moving']);
+      expect(store.getState().gestureDepth).toBe(1);
+      layer.fire('dragend', { target: node });
+    });
+    expect(store.getState().gestureDepth).toBe(0);
+  });
+
   it('brackets Transformer work and commits baked geometry once', async () => {
     const store = shapeStore();
     const stage = await renderCanvas(store);

@@ -133,9 +133,9 @@ export interface DesignAutosave {
   /** Manual Save: bypass debounce, idle capture, retry pause, and queued writes. */
   saveNow: (sentDoc: DesignerDoc) => Promise<SaveResult>;
   /**
-   * Create the design once and resolve to its id. Concurrent callers share the
-   * same in-flight POST — manual Save awaits this so Cmd+S mid-create can
-   * never mint a duplicate design.
+   * Create the design once and resolve to its id. Concurrent callers in the
+   * same design session share the in-flight POST, so Cmd+S mid-create cannot
+   * mint a duplicate design.
    */
   ensureCreated: () => Promise<string>;
   /** The in-flight create promise, or null when idle. */
@@ -149,25 +149,56 @@ export const createDesignAutosave = ({
 }: DesignAutosaveDeps): DesignAutosave => {
   type SaveRequest = {
     designId: string | null;
+    session: number;
     sentDoc: DesignerDoc;
     sentName: string;
     immediate: boolean;
+    networkStarted: boolean;
+  };
+  type PendingSave = {
+    name: string;
+    started: boolean;
+    request: SaveRequest;
+    promise: Promise<SaveResult>;
   };
   type SaveQueue = {
     designId: string | null;
+    session: number;
     tail: Promise<unknown>;
-    pending: Map<DesignerDoc, { name: string; started: boolean; promise: Promise<SaveResult> }[]>;
+    pending: Map<DesignerDoc, PendingSave[]>;
+    createPromise: Promise<string> | null;
+    createDoc: DesignerDoc | null;
   };
-  const newSaveQueue = (): SaveQueue => ({
+  type RetryState = {
+    timer: ReturnType<typeof setTimeout> | null;
+    attempt: number;
+    consecutiveFailures: number;
+    pausedOn: SaveRequest | null;
+    lastFailed: { doc: DesignerDoc; name: string; preview: PreviewUpload } | null;
+  };
+  const newSaveQueue = (session: number): SaveQueue => ({
     designId: null,
+    session,
     tail: Promise.resolve(),
     pending: new Map(),
+    createPromise: null,
+    createDoc: null,
   });
+  const newRetryState = (): RetryState => ({
+    timer: null,
+    attempt: 0,
+    consecutiveFailures: 0,
+    pausedOn: null,
+    lastFailed: null,
+  });
+  const setBounded = <K, V>(map: Map<K, V>, key: K, value: V) => {
+    map.delete(key);
+    map.set(key, value);
+    if (map.size > 25) map.delete(map.keys().next().value as K);
+  };
   const designQueues = new Map<string, SaveQueue>();
-  let activeNewQueue = newSaveQueue();
-  let createPromise: Promise<string> | null = null;
-  let createDoc: DesignerDoc | null = null;
-  const createdDesignIds = new WeakMap<DesignerDoc, string>();
+  let activeNewQueue = newSaveQueue(store.getState().designSession);
+  const createdDesignIds = new WeakMap<DesignerDoc, { id: string; session: number }>();
   const lastPersistedDocs = new Map<string, DesignerDoc>();
   let writeSequence = 0;
   const latestWriteStarted = new Map<string, number>();
@@ -175,13 +206,10 @@ export const createDesignAutosave = ({
     sequence: number;
     request: SaveRequest & { designId: string };
   }>();
+  const retryStates = new Map<string, RetryState>();
   let activeWrites = 0;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
-  let retryAttempt = 0;
   const MAX_CONSECUTIVE_FAILURES = 5;
-  let consecutiveFailures = 0;
-  let pausedOn: SaveRequest | null = null;
-  let lastFailed: { doc: DesignerDoc; name: string; preview: PreviewUpload } | null = null;
+  const SAVE_REQUEST_TIMEOUT_MS = 30000;
 
   const beginSaving = () => {
     activeWrites += 1;
@@ -191,8 +219,20 @@ export const createDesignAutosave = ({
     activeWrites = Math.max(0, activeWrites - 1);
     if (activeWrites === 0) store.getState().setSaving(false);
   };
-  const isCurrentDesign = (request: SaveRequest) =>
-    store.getState().designId === request.designId;
+  const isCurrentDesign = (request: SaveRequest) => {
+    const state = store.getState();
+    return state.designId === request.designId && state.designSession === request.session;
+  };
+  const retryKey = (request: SaveRequest) => request.designId ?? `new:${request.session}`;
+  const retryStateFor = (request: SaveRequest) => {
+    const key = retryKey(request);
+    let state = retryStates.get(key);
+    if (!state) {
+      state = newRetryState();
+      retryStates.set(key, state);
+    }
+    return state;
+  };
 
   type PreviewTask = { promise: Promise<PreviewUpload>; start: () => void };
   const previewTasks = new Map<DesignerDoc, PreviewTask>();
@@ -230,47 +270,44 @@ export const createDesignAutosave = ({
     return promise;
   };
 
-  const clearRetry = () => {
-    if (retryTimer) clearTimeout(retryTimer);
-    retryTimer = null;
-    retryAttempt = 0;
-    consecutiveFailures = 0;
-    lastFailed = null;
-    pausedOn = null;
+  const clearRetry = (request: SaveRequest) => {
+    const state = retryStateFor(request);
+    if (state.timer) clearTimeout(state.timer);
+    retryStates.delete(retryKey(request));
   };
 
   const resumeImmediate = (request: SaveRequest) => {
-    if (retryTimer) clearTimeout(retryTimer);
-    retryTimer = null;
-    retryAttempt = 0;
-    consecutiveFailures = 0;
-    pausedOn = null;
+    const state = retryStateFor(request);
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = null;
+    state.attempt = 0;
+    state.consecutiveFailures = 0;
+    state.pausedOn = null;
     if (isCurrentDesign(request)) store.getState().setSaveRetryPaused(false);
   };
 
   const scheduleRetry = (request: SaveRequest) => {
+    const state = retryStateFor(request);
     if (isCurrentDesign(request)) store.getState().setSaveFailed(true);
-    consecutiveFailures += 1;
-    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-      pausedOn = request;
+    state.consecutiveFailures += 1;
+    if (state.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      state.pausedOn = request;
       if (isCurrentDesign(request)) store.getState().setSaveRetryPaused(true);
       return;
     }
-    if (retryTimer) return;
-    const delay = Math.min(30000, 2000 * 2 ** retryAttempt);
-    retryAttempt += 1;
-    retryTimer = setTimeout(() => {
-      retryTimer = null;
+    if (state.timer) return;
+    const delay = Math.min(30000, 2000 * 2 ** state.attempt);
+    state.attempt += 1;
+    state.timer = setTimeout(() => {
+      state.timer = null;
       const s = store.getState();
       if (isCurrentDesign(request)) {
         if (!s.isDirty) {
           s.setSaveFailed(false);
-          retryAttempt = 0;
-          consecutiveFailures = 0;
-          lastFailed = null;
+          clearRetry(request);
           return;
         }
-        enqueueSave({ ...request, sentDoc: s.doc, sentName: s.designName });
+        enqueueSave({ ...request, sentDoc: s.doc, sentName: s.designName, networkStarted: false });
         return;
       }
       enqueueSave(request);
@@ -278,7 +315,7 @@ export const createDesignAutosave = ({
   };
 
   const notePersisted = (request: SaveRequest) => {
-    clearRetry();
+    clearRetry(request);
     if (!isCurrentDesign(request)) return;
     const s = store.getState();
     s.setSaveFailed(false);
@@ -295,13 +332,15 @@ export const createDesignAutosave = ({
     if (request.designId) {
       let queue = designQueues.get(request.designId);
       if (!queue) {
-        queue = newSaveQueue();
+        queue = newSaveQueue(request.session);
         queue.designId = request.designId;
         designQueues.set(request.designId, queue);
       }
       return queue;
     }
-    if (activeNewQueue.designId) activeNewQueue = newSaveQueue();
+    if (activeNewQueue.designId || activeNewQueue.session !== request.session) {
+      activeNewQueue = newSaveQueue(request.session);
+    }
     return activeNewQueue;
   };
 
@@ -313,9 +352,10 @@ export const createDesignAutosave = ({
       if (request.immediate) previewTasks.get(request.sentDoc)?.start();
       return existing.promise;
     }
-    const entry = {
+    const entry: PendingSave = {
       name: request.sentName,
       started: false,
+      request,
       promise: Promise.resolve<SaveResult>('skipped'),
     };
     const promise = queue.tail.then(() => {
@@ -335,30 +375,56 @@ export const createDesignAutosave = ({
       const remaining = current.filter((candidate) => candidate !== entry);
       if (remaining.length) queue.pending.set(request.sentDoc, remaining);
       else queue.pending.delete(request.sentDoc);
+      if (queue.designId && !queue.pending.size && !queue.createPromise) {
+        designQueues.delete(queue.designId);
+      }
     };
     promise.then(settled, settled);
     return promise;
   };
 
+  const fetchWithTimeout = async (url: string, init: RequestInit): Promise<Response> => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error('Design save timed out'));
+      }, SAVE_REQUEST_TIMEOUT_MS);
+      (timer as unknown as { unref?: () => void }).unref?.();
+    });
+    try {
+      return await Promise.race([
+        fetchFn(url, { ...init, signal: controller.signal }),
+        timeout,
+      ]);
+    } finally {
+      clearTimeout(timer!);
+    }
+  };
+
   const ensureCreatedFor = (request: SaveRequest): Promise<string> => {
     const { sentDoc, sentName, immediate } = request;
     const state = store.getState();
-    const existing = request.designId ?? createdDesignIds.get(sentDoc) ??
-      (state.doc === sentDoc ? state.designId : null);
+    const created = createdDesignIds.get(sentDoc);
+    const existing = request.designId ??
+      (created?.session === request.session ? created.id : null) ??
+      (state.designSession === request.session && state.doc === sentDoc ? state.designId : null);
     if (existing) return Promise.resolve(existing);
-    if (createPromise) {
-      if (immediate && createDoc) previewTasks.get(createDoc)?.start();
-      return createPromise;
-    }
     const queue = queueFor(request);
-    createDoc = sentDoc;
+    if (queue.createPromise) {
+      if (immediate && queue.createDoc) previewTasks.get(queue.createDoc)?.start();
+      return queue.createPromise;
+    }
+    queue.createDoc = sentDoc;
     beginSaving();
-    createPromise = (async () => {
+    const promise = (async () => {
       try {
+        const failed = retryStateFor(request).lastFailed;
         const { previewFileId, previewDataUrl } = sentDoc.mode === 'video'
           ? {} as PreviewUpload
-          : lastFailed && lastFailed.doc === sentDoc && lastFailed.name === sentName
-            ? lastFailed.preview
+          : failed && failed.doc === sentDoc && failed.name === sentName
+            ? failed.preview
             : await previewFor(sentDoc, immediate);
         const payload: Record<string, unknown> = {
           name: sentName,
@@ -370,32 +436,41 @@ export const createDesignAutosave = ({
         else if (previewDataUrl) payload.previewDataUrl = previewDataUrl;
         let res: Response;
         try {
+          request.networkStarted = true;
           res = await fetchFn('/media/designs', {
             method: 'POST',
             body: JSON.stringify(payload),
           });
         } catch (err) {
-          lastFailed = { doc: sentDoc, name: sentName, preview: { previewFileId, previewDataUrl } };
+          retryStateFor(request).lastFailed = {
+            doc: sentDoc,
+            name: sentName,
+            preview: { previewFileId, previewDataUrl },
+          };
           throw err;
         }
         if (!res.ok) {
-          lastFailed = { doc: sentDoc, name: sentName, preview: { previewFileId, previewDataUrl } };
+          retryStateFor(request).lastFailed = {
+            doc: sentDoc,
+            name: sentName,
+            preview: { previewFileId, previewDataUrl },
+          };
           throw await autosaveError(res, 'Autosave create failed');
         }
         const data = await res.json();
         const designId = data.id as string;
         const persistedDoc = data.doc as DesignerDoc | undefined;
-        createdDesignIds.set(sentDoc, designId);
+        createdDesignIds.set(sentDoc, { id: designId, session: request.session });
         queue.designId = designId;
         designQueues.set(designId, queue);
         const before = store.getState();
-        if (!before.designId && (before.doc === sentDoc || before.history.includes(sentDoc))) {
+        if (before.designSession === request.session && !before.designId) {
           before.setDesignId(designId);
         }
         const after = store.getState();
         let retainedDoc = persistedDoc ?? sentDoc;
-        if (after.designId === designId) {
-          createdDesignIds.set(after.doc, designId);
+        if (after.designSession === request.session && after.designId === designId) {
+          createdDesignIds.set(after.doc, { id: designId, session: request.session });
           if (after.doc === sentDoc && after.designName === sentName) {
             if (persistedDoc) after.adoptPersistedDoc(sentDoc, persistedDoc);
             retainedDoc = store.getState().doc;
@@ -403,39 +478,46 @@ export const createDesignAutosave = ({
             if (activeWrites > 1) store.getState().setSaving(true);
           }
         }
-        lastPersistedDocs.set(designId, retainedDoc);
+        setBounded(lastPersistedDocs, designId, retainedDoc);
         retainPreview(sentDoc, retainedDoc);
+        clearRetry(request);
         notePersisted({ ...request, designId });
         return designId;
       } finally {
-        createPromise = null;
-        createDoc = null;
+        if (queue.createPromise === promise) {
+          queue.createPromise = null;
+          queue.createDoc = null;
+        }
         endSaving();
       }
     })();
-    return createPromise;
+    queue.createPromise = promise;
+    return promise;
   };
 
   const ensureCreated = (): Promise<string> => {
     const state = store.getState();
     return ensureCreatedFor({
       designId: state.designId,
+      session: state.designSession,
       sentDoc: state.doc,
       sentName: state.designName,
       immediate: true,
+      networkStarted: false,
     });
   };
 
   const putDoc = async (request: SaveRequest & { designId: string }) => {
     const { designId, sentDoc, sentName, immediate } = request;
+    const failed = retryStateFor(request).lastFailed;
     let preview: PreviewUpload = {};
     if (sentDoc.mode !== 'video' && lastPersistedDocs.get(designId) !== sentDoc) {
-      if (lastFailed && lastFailed.doc === sentDoc) {
-        preview = lastFailed.preview;
+      if (failed && failed.doc === sentDoc) {
+        preview = failed.preview;
       } else {
         preview = await previewFor(sentDoc, immediate);
         const current = store.getState();
-        if (current.designId === designId && current.doc !== sentDoc) {
+        if (current.designSession === request.session && current.designId === designId && current.doc !== sentDoc) {
           if (preview.previewFileId) {
             previewTasks.delete(sentDoc);
             fetchFn(`/files/${preview.previewFileId}/trash`, { method: 'POST' }).catch(() => {});
@@ -447,16 +529,17 @@ export const createDesignAutosave = ({
     const body = JSON.stringify({ name: sentName, doc: sentDoc, ...preview });
     let res: Response;
     try {
-      res = await fetchFn(`/media/designs/${designId}`, {
+      request.networkStarted = true;
+      res = await fetchWithTimeout(`/media/designs/${designId}`, {
         method: 'PUT',
         body,
       });
     } catch (err) {
-      lastFailed = { doc: sentDoc, name: sentName, preview };
+      retryStateFor(request).lastFailed = { doc: sentDoc, name: sentName, preview };
       throw err;
     }
     if (!res.ok) {
-      lastFailed = { doc: sentDoc, name: sentName, preview };
+      retryStateFor(request).lastFailed = { doc: sentDoc, name: sentName, preview };
       throw await autosaveError(res, 'Autosave PUT failed');
     }
     const data = await res.json();
@@ -468,7 +551,7 @@ export const createDesignAutosave = ({
   ): Promise<SaveResult> => {
     const { designId, sentDoc, sentName } = request;
     const sequence = ++writeSequence;
-    latestWriteStarted.set(designId, sequence);
+    setBounded(latestWriteStarted, designId, sequence);
     beginSaving();
     try {
       const persistedDoc = await putDoc(request);
@@ -477,24 +560,24 @@ export const createDesignAutosave = ({
         latestWriteStarted.get(designId) === newerSuccess.sequence
         ? newerSuccess.request
         : null;
-      if (!repair) latestSuccessfulWrites.set(designId, { sequence, request });
+      if (!repair) setBounded(latestSuccessfulWrites, designId, { sequence, request });
       const s = store.getState();
-      const superseded = s.designId === designId &&
-        (s.doc !== sentDoc || s.designName !== sentName);
+      const canAdopt = s.designSession === request.session && s.designId === designId &&
+        s.doc === sentDoc && s.designName === sentName;
       let retainedDoc = persistedDoc ?? sentDoc;
-      if (s.designId === designId && !superseded) {
+      if (canAdopt) {
         if (persistedDoc) s.adoptPersistedDoc(sentDoc, persistedDoc);
         retainedDoc = store.getState().doc;
         store.getState().markSaved();
         if (activeWrites > 1) store.getState().setSaving(true);
       }
       if (!repair) {
-        lastPersistedDocs.set(designId, retainedDoc);
+        setBounded(lastPersistedDocs, designId, retainedDoc);
         retainPreview(sentDoc, retainedDoc);
       }
       notePersisted(request);
       if (repair) await persistPut(repair);
-      return superseded ? 'skipped' : 'persisted';
+      return 'persisted';
     } finally {
       endSaving();
     }
@@ -502,25 +585,29 @@ export const createDesignAutosave = ({
 
   const persist = async (request: SaveRequest): Promise<SaveResult> => {
     const state = store.getState();
+    const retryState = retryStateFor(request);
     if (request.immediate) resumeImmediate(request);
-    else if (pausedOn?.designId === request.designId) {
-      if (pausedOn.sentDoc === request.sentDoc && pausedOn.sentName === request.sentName) {
+    else if (retryState.pausedOn?.designId === request.designId && retryState.pausedOn.session === request.session) {
+      if (retryState.pausedOn.sentDoc === request.sentDoc && retryState.pausedOn.sentName === request.sentName) {
         return 'skipped';
       }
-      pausedOn = null;
-      consecutiveFailures = 0;
-      retryAttempt = 0;
+      retryState.pausedOn = null;
+      retryState.consecutiveFailures = 0;
+      retryState.attempt = 0;
       if (isCurrentDesign(request)) state.setSaveRetryPaused(false);
     }
-    if (request.designId && state.designId === request.designId) {
+    if (request.designId && state.designSession === request.session && state.designId === request.designId) {
       if (!state.isDirty || state.doc !== request.sentDoc || state.designName !== request.sentName) {
         return 'skipped';
       }
-    } else if (!request.designId && state.designId === null && state.doc === request.sentDoc && !state.isDirty) {
+    } else if (!request.designId && state.designId === null && state.designSession === request.session && state.doc === request.sentDoc && !state.isDirty) {
+      return 'skipped';
+    }
+    if (!request.designId && state.designId && state.doc !== request.sentDoc) {
       return 'skipped';
     }
     if (!request.designId && isBlankDoc(request.sentDoc) && !request.immediate) {
-      clearRetry();
+      clearRetry(request);
       if (isCurrentDesign(request)) {
         state.setSaveFailed(false);
         state.setSaveRetryPaused(false);
@@ -528,18 +615,21 @@ export const createDesignAutosave = ({
       return 'skipped';
     }
     try {
-      const designId = request.designId ?? createdDesignIds.get(request.sentDoc) ??
-        (state.doc === request.sentDoc ? state.designId : null);
-      if (designId) return await persistPut({ ...request, designId });
+      const created = createdDesignIds.get(request.sentDoc);
+      const designId = request.designId ??
+        (created?.session === request.session ? created.id : null) ??
+        (state.designSession === request.session && state.doc === request.sentDoc ? state.designId : null);
+      if (designId) return await persistPut(Object.assign(request, { designId }));
       const createdId = await ensureCreatedFor(request);
       const after = store.getState();
-      if (after.designId === createdId && after.isDirty) {
-        createdDesignIds.set(after.doc, createdId);
+      if (after.designSession === request.session && after.designId === createdId && after.isDirty) {
+        createdDesignIds.set(after.doc, { id: createdId, session: request.session });
         return await persistPut({
           ...request,
           designId: createdId,
           sentDoc: after.doc,
           sentName: after.designName,
+          networkStarted: false,
         });
       }
       return 'persisted';
@@ -553,9 +643,11 @@ export const createDesignAutosave = ({
     const state = store.getState();
     return {
       designId: state.designId,
+      session: state.designSession,
       sentDoc,
       sentName: state.designName,
       immediate,
+      networkStarted: false,
     };
   };
 
@@ -564,22 +656,30 @@ export const createDesignAutosave = ({
     void enqueueSave(requestFor(sentDoc, false));
   };
 
-  const saveNow = (sentDoc: DesignerDoc) => {
+  const saveNow = async (sentDoc: DesignerDoc): Promise<SaveResult> => {
     const request = requestFor(sentDoc, true);
     const queue = queueFor(request);
     const pending = queue.pending.get(sentDoc) ?? [];
-    const existing = pending.find((entry) => entry.name === request.sentName && entry.started);
+    const existing = pending.find((entry) =>
+      entry.name === request.sentName && entry.started && !entry.request.networkStarted
+    );
     if (existing) {
       previewTasks.get(sentDoc)?.start();
       return existing.promise;
     }
-    return persist(request);
+    const result = await persist(request);
+    if (result === 'failed') scheduleRetry(request);
+    return result;
   };
 
   return {
     save,
     saveNow,
     ensureCreated,
-    createInFlight: () => createPromise,
+    createInFlight: () => {
+      const state = store.getState();
+      const queue = state.designId ? designQueues.get(state.designId) : activeNewQueue;
+      return queue?.createPromise ?? null;
+    },
   };
 };
