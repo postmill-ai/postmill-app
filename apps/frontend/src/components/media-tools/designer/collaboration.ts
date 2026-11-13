@@ -4,6 +4,7 @@ import {
   pageChildren,
   withPageChildren,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import { structurallyEqual } from '@postmill-ai/nestjs-libraries/media/designer-doc/output-freeze';
 import type {
   createDesignerStore,
   DesignerAttribution,
@@ -55,7 +56,7 @@ export function deepClone<T>(obj: T): T {
 }
 
 export function deepEqual(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  return structurallyEqual(a, b);
 }
 
 const GESTURE_GEOMETRY_KEYS = ['x', 'y', 'width', 'height', 'rotation', 'fontSize'] as const;
@@ -124,7 +125,7 @@ type DesignerStoreApi = ReturnType<typeof createDesignerStore>;
 
 export const applyRemoteDoc = (store: DesignerStoreApi, remoteDoc: DesignerDoc) => {
   const state = store.getState();
-  state.setDoc(state.gestureDepth > 0
+  state.replaceDocTrusted(state.gestureDepth > 0
     ? mergeRemoteDocForGesture(state.doc, remoteDoc, state)
     : remoteDoc);
 };
@@ -210,6 +211,11 @@ function syncOutputMap(
   setIfChanged(m, 'height', output.height);
   setIfChanged(m, 'fps', output.fps);
   setIfChanged(m, 'durationMs', output.durationMs);
+  if (output.frozen !== undefined) {
+    setIfChanged(m, 'frozen', output.frozen);
+  } else {
+    deleteIfPresent(m, 'frozen');
+  }
 
   let yTracks = m.get('tracks') as Y.Array<Y.Map<any>> | undefined;
   if (!yTracks) {
@@ -439,6 +445,7 @@ function yToVideoOutput(m: Y.Map<any>): VideoOutput {
     height: m.get('height'),
     fps: m.get('fps'),
     durationMs: m.get('durationMs'),
+    frozen: m.get('frozen'),
     tracks: (yTracks?.toArray() ?? []).map(yToVideoTrack),
   };
 }

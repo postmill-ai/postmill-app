@@ -2,7 +2,7 @@ import type { DesignerAction } from './actions';
 import type { DesignerElement, DesignerLayerStyle, VideoTrack } from './designer.store';
 import type { BooleanOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-boolean';
 import { offsetElement, pathfinderMany, roundElementCorners } from './pathfinder';
-import { pageChildren, withPageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import {
   expandSymbolInstance,
@@ -74,18 +74,11 @@ export const combineElements = (
     { ...subject, ...result.element } as DesignerElement,
     ...extras
   );
-  const outputs = st.doc.outputs.map((out, index) =>
-    index === st.currentOutput && 'children' in out
-      ? withPageChildren(out, st.currentPage, nextChildren)
-      : out
+  return st.commitActivePage(
+    nextChildren,
+    [subject.id, ...extras.map((element) => element.id)],
+    'Pathfinder'
   );
-  store.setState({
-    doc: { ...st.doc, outputs },
-    selectedIds: [subject.id, ...extras.map((element) => element.id)],
-    isDirty: true,
-  });
-  st.pushHistory('Pathfinder');
-  return true;
 };
 
 const STYLES: { type: DesignerLayerStyle['type']; label: string }[] = [

@@ -56,6 +56,29 @@ describe('FormatThumbnail scheduling', () => {
     expect(renderThumbnail.mock.calls[0][0].children[0].text).toBe('5');
     expect(renderThumbnail.mock.calls[0][2]).toBe(72);
   });
+
+  it('does not render off-screen thumbnails until the observer intersects', async () => {
+    let intersect: ((entries: { isIntersecting: boolean }[]) => void) | undefined;
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(private callback: (entries: { isIntersecting: boolean }[]) => void) {
+        intersect = callback;
+      }
+      observe() {}
+      disconnect() {}
+    });
+    render(<FormatThumbnail output={output('off-screen')} maxDim={72} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(renderThumbnail).not.toHaveBeenCalled();
+
+    act(() => intersect?.([{ isIntersecting: true }]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(180);
+    });
+    expect(renderThumbnail).toHaveBeenCalledTimes(1);
+  });
 });
 
 
@@ -107,5 +130,43 @@ describe('FormatThumbnail identity cache', () => {
     expect(renderThumbnail).toHaveBeenCalledTimes(2);
     expect(stringify).not.toHaveBeenCalled();
     stringify.mockRestore();
+  });
+
+  it('invalidates only the edited page and accepts structurally identical undo views', async () => {
+    const initial = output('page-one');
+    initial.pages = [{
+      id: 'page-two', children: [{
+        ...initial.children[0], id: 'page-two-text', text: 'page-two',
+      }],
+    }];
+    const view = render(<FormatThumbnail output={initial} pageNumber={1} maxDim={72} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(180);
+    });
+    expect(renderThumbnail).toHaveBeenCalledTimes(1);
+
+    view.rerender(<FormatThumbnail output={structuredClone(initial)} pageNumber={1} maxDim={72} />);
+    const pageOneEdit = {
+      ...initial,
+      children: [{ ...initial.children[0], text: 'edited-page-one' }],
+    };
+    view.rerender(<FormatThumbnail output={pageOneEdit} pageNumber={1} maxDim={72} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(360);
+    });
+    expect(renderThumbnail).toHaveBeenCalledTimes(1);
+
+    const pageTwoEdit = {
+      ...pageOneEdit,
+      pages: [{
+        ...initial.pages![0],
+        children: [{ ...initial.pages![0].children[0], text: 'edited-page-two' }],
+      }],
+    };
+    view.rerender(<FormatThumbnail output={pageTwoEdit} pageNumber={1} maxDim={72} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(180);
+    });
+    expect(renderThumbnail).toHaveBeenCalledTimes(2);
   });
 });

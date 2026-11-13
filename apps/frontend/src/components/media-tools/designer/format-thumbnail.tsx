@@ -6,6 +6,7 @@ import {
   pageChildren,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { videoOutputToPosterOutput } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-poster';
+import { structurallyEqual } from '@postmill-ai/nestjs-libraries/media/designer-doc/output-freeze';
 import type {
   DesignerOutput,
   SymbolDefinition,
@@ -15,7 +16,7 @@ import { renderOutputThumbnail } from './output-thumbnail';
 import { DesignPreviewImage } from './panels/design-preview-image';
 
 interface ThumbnailCacheEntry {
-  output: DesignerOutput | VideoOutput;
+  output: DesignerOutput;
   pageNumber: number;
   symbols?: SymbolDefinition[];
   maxDim: number;
@@ -25,18 +26,18 @@ interface ThumbnailCacheEntry {
 const thumbnailCache: ThumbnailCacheEntry[] = [];
 const matchesCacheEntry = (
   entry: ThumbnailCacheEntry,
-  output: DesignerOutput | VideoOutput,
+  output: DesignerOutput,
   symbols: SymbolDefinition[] | undefined,
   pageNumber: number,
   maxDim: number
 ) =>
-  entry.output === output &&
+  (entry.output === output || structurallyEqual(entry.output, output)) &&
   entry.symbols === symbols &&
   entry.pageNumber === pageNumber &&
   entry.maxDim === maxDim;
 
 const readThumbnailCache = (
-  output: DesignerOutput | VideoOutput,
+  output: DesignerOutput,
   symbols: SymbolDefinition[] | undefined,
   pageNumber: number,
   maxDim: number
@@ -88,7 +89,7 @@ export const FormatThumbnail = React.memo(function FormatThumbnail({
           },
     [output, pageNumber]
   );
-  const cacheHit = readThumbnailCache(output, symbols, pageNumber, maxDim);
+  const cacheHit = readThumbnailCache(view, symbols, pageNumber, maxDim);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -113,7 +114,7 @@ export const FormatThumbnail = React.memo(function FormatThumbnail({
       void renderOutputThumbnail(view, symbols, maxDim)
         .then((dataUrl) => {
           if (!dataUrl || renderSeq.current !== seq) return;
-          writeThumbnailCache({ output, symbols, pageNumber, maxDim, dataUrl });
+          writeThumbnailCache({ output: view, symbols, pageNumber, maxDim, dataUrl });
           setThumbnail(dataUrl);
         })
         .catch(() => undefined);

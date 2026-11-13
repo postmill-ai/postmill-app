@@ -273,20 +273,25 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   behavior, and Undo adds/removes the whole format. The Link/Unlink button beside output tabs only
   toggles `editFormatOnly`; it never rewrites existing element/clip links. Presets include grouped
   1080×1350 Instagram/Facebook/LinkedIn/Threads portraits and Facebook/LinkedIn squares with safe
-  zones. `FormatThumbnail` lazily renders near-visible output/page previews through the bounded
-  `output-thumbnail` stage and the existing video-poster projection, using a 100-entry LRU keyed by
-  output/page/symbols object identity and size. It debounces edits without stringifying output or
-  symbol content during render; never allocate full-resolution offscreen stages, serialize documents
-  per drag frame, or capture on every drag frame.
+  zones. `FormatThumbnail` lazily renders near-visible output/page previews through one queued,
+  shared `output-thumbnail` stage and the existing video-poster projection. Its 100-entry LRU is
+  scoped to the page view/symbols/size, with reference fast paths and structural fallback so an
+  unrelated page edit or undo does not invalidate every thumbnail. It debounces edits without
+  stringifying output or symbol content during render; never allocate full-resolution offscreen
+  stages for this path or capture on every drag frame. Saved library previews instead use
+  `renderLibraryPreview`, which retains the original full-size stage before scaling the final JPEG.
 - **Output freeze is distinct from layer/track lock.** Optional-additive `output.frozen` is valid on
   v13 without a version bump (and remains additive when a later version lands). Snowflakes switch
   the flag through `setOutputFrozen` (store and headless op); switching output, exporting, and
-  read-only clip/keyframe clipboard copies remain available. `output-freeze.ts` is the shared
-  mutation guard used by the Zustand write boundary and
-  `DesignerDocService.applyOps`: canvas/Inspector/page/timeline/resize/remove/`setDoc` changes to a
-  frozen output are rejected until unfreeze, while linked propagation skips frozen targets. Headless
-  rejection uses `DESIGNER_OP_OUTPUT_FROZEN`. Save adoption and explicit load/reset bypass only the
-  client boundary; no SQL migration is involved.
+  read-only clip/keyframe clipboard copies remain available. `output-freeze.ts` performs
+  reference-fast, key-order-insensitive checks (including referenced symbol definitions) for the
+  store's boolean-returning guarded actions and `DesignerDocService.applyOps`. Frozen
+  canvas/Inspector/page/timeline/resize/remove/`setDoc` edits are rejected before selection/history
+  changes, and the canvas shows a read-only hint. Pathfinder, Freeze Frame and captions use the
+  same guarded actions; no-op history pushes are dropped. Headless rejection uses
+  `DESIGNER_OP_OUTPUT_FROZEN`. History navigation, save adoption, explicit load/reset, version
+  restore and remote collaboration documents use trusted raw replacement rather than local-edit
+  guards; collaboration carries `frozen` in video output maps. No SQL migration is involved.
 - **Pathfinder is multi-shape and atomic.** Two or more unlocked shapes/paths/icons compute fully
   before one document commit on the current output/page only; linked copies in other formats stay
   untouched. Unite merges every region, Minus Front subtracts every later shape

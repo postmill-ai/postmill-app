@@ -2576,10 +2576,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         ...vo,
         tracks: vo.tracks.map((t) => (t.id === trackId ? { ...t, clips } : t)),
       };
-      const outs = [...state.doc.outputs];
-      outs[currentOutput] = updated;
-      store.setState({ doc: { ...state.doc, outputs: outs }, isDirty: true });
-      store.getState().pushHistory();
+      state.commitVideoOutput(currentOutput, updated, 'Freeze frame');
     },
     [store, currentOutput],
   );
@@ -3121,17 +3118,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   }, [vo, modals, generateVoiceover]);
 
   // Write a batch of caption clips into the output's caption track (creating
-  // it when absent) as ONE undo step — per-clip addClip would push a history
-  // entry per phrase. Same direct-setState discipline as handleFreezeFrame.
+  // it when absent) as ONE guarded undo step — per-clip addClip would push a
+  // history entry per phrase.
   const commitCaptionClips = useCallback(
     (clips: VideoClip[]) => {
       const state = store.getState();
       const currentVo = state.doc.outputs[currentOutput] as VideoOutput;
       const updated = withCaptionClips(currentVo, clips, genId);
-      const outs = [...state.doc.outputs];
-      outs[currentOutput] = updated;
-      store.setState({ doc: { ...state.doc, outputs: outs }, isDirty: true });
-      store.getState().pushHistory();
+      return state.commitVideoOutput(currentOutput, updated, 'Add captions');
     },
     [store, currentOutput],
   );
@@ -3209,7 +3203,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       );
       return;
     }
-    commitCaptionClips(captions);
+    if (!commitCaptionClips(captions)) return;
     if (failed > 0 || silent > 0) {
       toaster.show(
         translate('some_clips_could_not_be_transcribed', 'Captions added — some clips could not be transcribed'),
@@ -3244,7 +3238,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         );
         return;
       }
-      commitCaptionClips(clips);
+      if (!commitCaptionClips(clips)) return;
       toaster.show(translate('captions_imported', 'Captions imported'), 'success');
       if (skipped > 0) {
         toaster.show(
@@ -3689,6 +3683,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       role="toolbar"
       tabIndex={0}
       aria-label={translate('video_timeline', 'Video timeline')}
+      aria-disabled={vo.frozen === true}
       onKeyDown={handleKeyDown}
     >
       {/* Height splitter — drag to resize the timeline panel (persisted). */}
@@ -3733,6 +3728,11 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <span className="text-[11px] text-textColor/40">
           / {formatTime(vo.durationMs)}
         </span>
+        {vo.frozen === true && (
+          <span className="text-[11px] text-textColor/60">
+            {translate('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.')}
+          </span>
+        )}
         <TimelineTransportControls store={store} outputIndex={currentOutput} />
         <button
           type="button"

@@ -416,7 +416,7 @@ const outputPageView = (output: DesignerOutput, page: number): DesignerOutput =>
         children: pageChildren(output, page),
       };
 
-export { renderOutputThumbnail } from './output-thumbnail';
+export { renderLibraryPreview as renderOutputThumbnail } from './output-thumbnail';
 
 // --- Main component ---
 

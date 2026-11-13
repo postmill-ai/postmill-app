@@ -34,23 +34,42 @@ const preloadImages = (output: DesignerOutput): Promise<void> => {
   ).then(() => undefined);
 };
 
-export const renderOutputThumbnail = async (
-  output: DesignerOutput,
-  symbols?: SymbolDefinition[],
-  maxDim = 300
-): Promise<string | undefined> => {
-  await preloadImages(output);
+interface RenderLifecycle {
+  host: HTMLDivElement;
+  root: ReturnType<typeof createRoot>;
+  stageRef: React.RefObject<Konva.Stage | null>;
+}
 
+const createLifecycle = (): RenderLifecycle => {
   const host = document.createElement('div');
   host.style.position = 'fixed';
   host.style.left = '-100000px';
   host.style.top = '0';
   host.style.pointerEvents = 'none';
   document.body.appendChild(host);
+  return {
+    host,
+    root: createRoot(host),
+    stageRef: React.createRef<Konva.Stage>(),
+  };
+};
 
-  const root = createRoot(host);
-  const stageRef = React.createRef<Konva.Stage>();
-  const stageScale = Math.min(1, maxDim / Math.max(output.width, output.height));
+let sharedLifecycle: RenderLifecycle | undefined;
+let thumbnailQueue: Promise<void> = Promise.resolve();
+
+const renderWithLifecycle = async (
+  output: DesignerOutput,
+  symbols: SymbolDefinition[] | undefined,
+  captureMaxDim: number,
+  stageMaxDim: number | undefined,
+  lifecycle: RenderLifecycle,
+  temporary: boolean
+): Promise<string | undefined> => {
+  await preloadImages(output);
+  const { host, root, stageRef } = lifecycle;
+  const stageScale = stageMaxDim === undefined
+    ? 1
+    : Math.min(1, stageMaxDim / Math.max(output.width, output.height));
   const stageWidth = Math.max(1, Math.round(output.width * stageScale));
   const stageHeight = Math.max(1, Math.round(output.height * stageScale));
   const bg = output.bg;
@@ -124,9 +143,32 @@ export const renderOutputThumbnail = async (
     const stage = stageRef.current;
     if (!stage) return undefined;
     stage.draw();
-    return getThumbnailDataUrl(stage.toCanvas(), maxDim);
+    return getThumbnailDataUrl(stage.toCanvas(), captureMaxDim);
   } finally {
-    root.unmount();
-    host.remove();
+    if (temporary) {
+      root.unmount();
+      host.remove();
+    }
   }
+};
+
+export const renderOutputThumbnail = (
+  output: DesignerOutput,
+  symbols?: SymbolDefinition[],
+  maxDim = 96
+): Promise<string | undefined> => {
+  const run = thumbnailQueue.then(() => {
+    sharedLifecycle ??= createLifecycle();
+    return renderWithLifecycle(output, symbols, maxDim, maxDim, sharedLifecycle, false);
+  });
+  thumbnailQueue = run.then(() => undefined, () => undefined);
+  return run;
+};
+
+export const renderLibraryPreview = (
+  output: DesignerOutput,
+  symbols?: SymbolDefinition[]
+): Promise<string | undefined> => {
+  const lifecycle = createLifecycle();
+  return renderWithLifecycle(output, symbols, 300, undefined, lifecycle, true);
 };

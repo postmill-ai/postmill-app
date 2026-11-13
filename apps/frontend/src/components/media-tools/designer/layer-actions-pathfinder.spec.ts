@@ -66,6 +66,21 @@ describe('multi-shape Pathfinder document edits', () => {
     expect(store.getState().doc.outputs[0].children).toEqual(before);
   });
 
+  it('rejects frozen output writes without selection or history changes', () => {
+    const store = storeWith(shape('a', 0), shape('b', 50));
+    const elements = store.getState().doc.outputs[0].children;
+    store.getState().setOutputFrozen(0, true);
+    const before = store.getState().doc;
+    const selection = store.getState().selectedIds;
+    const historyLength = store.getState().history.length;
+
+    expect(combineElements(store, elements, 'unite')).toBe(false);
+
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().selectedIds).toBe(selection);
+    expect(store.getState().history).toHaveLength(historyLength);
+  });
+
   it('reports an empty operation through the action failure callback', () => {
     const store = storeWith(shape('a', 0), { ...shape('inner', 200, 20), y: 200, height: 20 });
     const before = store.getState().doc.outputs[0].children;

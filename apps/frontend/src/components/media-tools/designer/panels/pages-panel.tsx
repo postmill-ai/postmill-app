@@ -50,6 +50,7 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
     <div
       className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-t border-studioBorder bg-newBgColorInner overflow-x-auto"
       aria-label={t('designer_pages', 'Pages')}
+      aria-disabled={output.frozen === true}
     >
       <div className="flex shrink-0 items-center rounded-md border border-studioBorder p-0.5" role="group" aria-label={t('designer_page_view', 'Page view')}>
         {(['pages', 'carousel'] as const).map((option) => (
@@ -104,7 +105,7 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
             type="button"
             onClick={() => store.getState().setCurrentPage(i)}
             onDoubleClick={() => {
-              if (i === 0) return;
+              if (i === 0 || output.frozen) return;
               setEditingPage(i);
               setEditingName(output.pages?.[i - 1]?.name ?? '');
             }}

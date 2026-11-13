@@ -114,15 +114,21 @@ export const removePageAt = (
     if (!allowFirst || !output.pages?.length) return null;
     const [first, ...pages] = output.pages;
     const promotedBg = first.background ?? output.bg;
+    const remaining = pages.map((page) =>
+      page.background === undefined && output.bg !== undefined
+        ? { ...page, background: output.bg }
+        : page
+    );
     return {
       ...output,
+      name: first.name ?? output.name,
       children: first.children,
       bg: promotedBg,
       background:
         promotedBg?.type === 'color' && promotedBg.color
           ? promotedBg.color
           : output.background,
-      pages: pages.length ? pages : undefined,
+      pages: remaining.length ? remaining : undefined,
     };
   }
   const pages = (output.pages ?? []).filter((_, i) => i !== pageNumber - 1);

@@ -250,6 +250,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const fitNonce = store((s) => s.fitNonce);
 
   const output: any = doc.outputs[currentOutput];
+  const outputFrozen = output?.frozen === true;
   const currentPage = store((s) => s.currentPage);
   const previewPatches = store((s) => s.previewPatches);
   const previewOutput = store((s) => s.previewOutput);
@@ -1795,6 +1796,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       e.preventDefault();
       setDragOver(false);
       containerRef.current?.classList.remove('designer-drop-active');
+      if (outputFrozen) return;
 
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -1923,7 +1925,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           toaster.show(t('failed_to_upload_file', 'Failed to upload file'), 'warning');
         });
     },
-    [addElement, viewportX, viewportY, zoom, store, output, toaster, fetch, isVideo, t]
+    [addElement, viewportX, viewportY, zoom, store, output, outputFrozen, toaster, fetch, isVideo, t]
   );
 
   const bg = pageOutput?.bg;
@@ -1975,6 +1977,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       }}
       onDragOver={(e) => {
         e.preventDefault();
+        if (outputFrozen) {
+          e.dataTransfer.dropEffect = 'none';
+          return;
+        }
         e.dataTransfer.dropEffect = 'copy';
         const rect = containerRef.current?.getBoundingClientRect();
         if (rect) {
@@ -2137,14 +2143,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             // Only the Move tool drags elements; every other tool needs the
             // press for itself. Space-pan also suspends dragging so a pan that
             // starts over an element doesn't move it.
-            interactive={effectiveTool === 'move' && !isSpacePressed}
+            interactive={!outputFrozen && effectiveTool === 'move' && !isSpacePressed}
           />
           {isVideo && (
             <VideoCanvasOverlay
               store={store}
               width={output.width}
               height={output.height}
-              interactive={effectiveTool === 'move' && !isSpacePressed}
+              interactive={!outputFrozen && effectiveTool === 'move' && !isSpacePressed}
               onEditText={setEditingTextId}
               onRefineCutout={(clipId) => void armCutoutRefinement(store, clipId)}
               editingTextId={editingTextId}
@@ -2198,7 +2204,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
                   stroke="#22C3E6"
                   strokeWidth={1 / zoom}
                   hitStrokeWidth={8 / zoom}
-                  draggable
+                  draggable={!outputFrozen}
                   dragBoundFunc={(pos) => ({
                     x: axis === 'x' ? pos.x : 0,
                     y: axis === 'y' ? pos.y : 0,
@@ -2379,7 +2385,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               fill="#ffffff"
               stroke="#2B5CD3"
               strokeWidth={1.5 / zoom}
-              draggable={true}
+              draggable={!outputFrozen}
               onDragMove={(e) => {
                 const node = e.target;
                 const w = Math.max(16, Math.round(node.x() + 14 / zoom));
@@ -2446,7 +2452,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               brush stroke or a marquee drag. */}
           {/* A video document selects a CLIP rather than element ids, so the
               handles have to key off whichever selection this document uses. */}
-          {(isVideo ? selectedClips.length > 0 : selectedIds.length > 0) &&
+          {!outputFrozen && (isVideo ? selectedClips.length > 0 : selectedIds.length > 0) &&
             effectiveTool === 'move' && (
             <Transformer
               ref={transformerRef}
@@ -2470,6 +2476,18 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           )}
         </Layer>
       </Stage>
+
+      {outputFrozen && (
+        <div
+          className="absolute inset-0 z-10 flex items-start justify-center pt-4 cursor-not-allowed"
+          aria-disabled="true"
+          data-testid="frozen-canvas-guard"
+        >
+          <div className="pointer-events-none rounded-md border border-studioBorder bg-newBgColorInner px-3 py-2 text-[12px] text-textColor shadow-menu">
+            {t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.')}
+          </div>
+        </div>
+      )}
 
       {isVideo && selectedClip && (
         <div className="absolute top-2 end-2 z-30 flex gap-1 rounded-md border border-studioBorder bg-newBgColorInner p-1 shadow-menu">

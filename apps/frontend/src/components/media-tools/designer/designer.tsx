@@ -41,7 +41,8 @@ import { OutputTabs } from './output-tabs';
 import { PagesPanel } from './panels/pages-panel';
 import { ShortcutsOverlay } from './shortcuts';
 import { CommandPalette } from './command-palette';
-import { ExportDialog, renderOutputThumbnail } from './export-dialog';
+import { ExportDialog } from './export-dialog';
+import { renderLibraryPreview } from './output-thumbnail';
 import { VideoTimeline } from './video-timeline';
 import { fitWithin } from './panels/fit-within';
 import { MenuBar } from './menu-bar';
@@ -357,6 +358,9 @@ const DesignerContent: FC<
   const setActiveTool = store((s) => s.setActiveTool);
   const setToolOption = store((s) => s.setToolOption);
   const currentOutput = store((s) => s.currentOutput);
+  const currentOutputFrozen = store(
+    (s) => s.doc.outputs[s.currentOutput]?.frozen === true
+  );
   // Extra pages on the active image output drive the Pages bar's auto-visibility.
   const activeOutputPageCount = store((s) => {
     const out = s.doc.outputs[s.currentOutput] as any;
@@ -571,7 +575,7 @@ const DesignerContent: FC<
       // doc v8) — not whatever page/output the stage happens to be showing.
       const first = doc.outputs[0] as DesignerOutput | undefined;
       const previewDataUrl = first && 'children' in first
-        ? await renderOutputThumbnail(
+        ? await renderLibraryPreview(
             { ...first, children: pageChildren(first, 0) },
             doc.symbols as never
           )
@@ -1817,15 +1821,17 @@ const DesignerContent: FC<
                   onSnapChange={setInspectorSnap}
                   onClose={() => setInspectorCollapsed(true)}
                 />
-                <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                  {hasInspectorTarget ? (
-                    <InspectorPanel store={store} />
-                  ) : (
-                    <CanvasInspector
-                      key={`canvas-${currentOutput}-${currentOutputSizeKey}`}
-                      store={store}
-                    />
-                  )}
+                <div className="min-h-0 flex-1 overflow-y-auto p-3" aria-disabled={currentOutputFrozen}>
+                  <fieldset disabled={currentOutputFrozen} className="contents">
+                    {hasInspectorTarget ? (
+                      <InspectorPanel store={store} />
+                    ) : (
+                      <CanvasInspector
+                        key={`canvas-${currentOutput}-${currentOutputSizeKey}`}
+                        store={store}
+                      />
+                    )}
+                  </fieldset>
                 </div>
               </div>
             )}

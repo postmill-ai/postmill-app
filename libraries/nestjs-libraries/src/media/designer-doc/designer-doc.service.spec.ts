@@ -1574,6 +1574,50 @@ describe('frozen outputs and carousel document ops', () => {
     expect(doc.outputs[1]).toMatchObject({ width: 500, height: 500, frozen: undefined });
   });
 
+  it('seeds Add format from output 0 while another output is frozen', () => {
+    const service = makeService();
+    let doc = service.applyOps(createBlankDoc(), [
+      { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+      { op: 'addOutput', preset: { formatId: 'x-post', name: 'X', width: 1200, height: 675 } },
+    ]);
+    doc = service.applyOps(doc, [
+      {
+        op: 'updateElement', outputIndex: 1, elementId: doc.outputs[1].children[0].id,
+        patch: { text: 'Secondary' }, scope: 'format-only',
+      },
+      { op: 'setOutputFrozen', outputIndex: 1, frozen: true },
+      { op: 'addOutput', preset: { formatId: 'ig-story', name: 'Story', width: 1080, height: 1920 } },
+    ]);
+
+    expect(doc.outputs).toHaveLength(3);
+    expect(doc.outputs[2].children[0].text).toBe('Hello');
+  });
+
+  it('rejects a symbol-master replacement referenced by a frozen output', () => {
+    const service = makeService();
+    const instance = {
+      ...minimalImageElement,
+      id: 'instance', type: 'symbol', symbolId: 'sym-1', text: undefined,
+    };
+    const doc = service.validate({
+      ...createBlankDoc(),
+      outputs: [
+        { ...createBlankDoc().outputs[0], children: [instance] },
+        { ...createBlankDoc().outputs[0], id: 'out-frozen', frozen: true, children: [{ ...instance, id: 'instance-2' }] },
+      ],
+      symbols: [{
+        id: 'sym-1', name: 'Shared', width: 100, height: 50,
+        children: [{ ...minimalImageElement, id: 'master' }],
+      }],
+    });
+    const replacement = structuredClone(doc);
+    replacement.symbols![0].children[0].text = 'Changed';
+
+    expect(() => service.applyOps(doc, [{ op: 'setDoc', doc: replacement }])).toThrowError(
+      expect.objectContaining({ code: 'DESIGNER_OP_OUTPUT_FROZEN' })
+    );
+  });
+
   it('inserts carousel slides after a position and promotes a duplicate when slide 1 is deleted', () => {
     const service = makeService();
     let doc = service.applyOps(createBlankDoc(), [

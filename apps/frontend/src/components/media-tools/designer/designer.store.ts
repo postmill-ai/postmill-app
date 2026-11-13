@@ -38,6 +38,7 @@ import { applyLinked, applyElementPatch, applyLinkedVideoClip, GEOMETRY_KEYS } f
 import {
   hasFrozenOutputMutation,
   isOutputFrozen,
+  structurallyEqual,
   withOutputFrozen,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/output-freeze';
 import {
@@ -240,7 +241,9 @@ export interface DesignerState {
 }
 
 export interface DesignerActions {
-  setDoc: (doc: DesignerDoc) => void;
+  setDoc: (doc: DesignerDoc) => boolean;
+  /** Trusted server/remote replacement, not a local edit. Caller owns history semantics. */
+  replaceDocTrusted: (doc: DesignerDoc) => void;
   adoptPersistedDoc: (sentDoc: DesignerDoc, persistedDoc: DesignerDoc) => boolean;
   setCharacterReferences: (references: DesignerDoc['characterReferences']) => void;
   setBrandProfileId: (brandProfileId: string | null) => void;
@@ -248,11 +251,11 @@ export interface DesignerActions {
   setDesignId: (id: string | null) => void;
   setTemplateId: (id: string | null) => void;
   addElement: (element: DesignerElement, beforeId?: string) => void;
-  updateElement: (id: string, updates: Partial<DesignerElement>) => void;
+  updateElement: (id: string, updates: Partial<DesignerElement>) => boolean;
   updateElements: (ids: string[], updates: Partial<DesignerElement>) => void;
   // Same as updateElements but does NOT commit history — for continuous controls
   // (slider/drag), which push a single history entry on release instead.
-  updateElementsSilent: (ids: string[], updates: Partial<DesignerElement>) => void;
+  updateElementsSilent: (ids: string[], updates: Partial<DesignerElement>) => boolean;
   previewElements: (patches: Record<string, Partial<DesignerElement>>) => void;
   clearElementPreview: () => void;
   /**
@@ -260,14 +263,18 @@ export interface DesignerActions {
    * propagation or history. Each animation frame commits all moved nodes in one
    * store update; the final gesture commit applies linked edits and one Undo.
    */
-  updateElementEphemeral: (id: string, updates: Partial<DesignerElement>) => void;
+  updateElementEphemeral: (id: string, updates: Partial<DesignerElement>) => boolean;
   updateElementsEphemeral: (
     patches: { id: string; updates: Partial<DesignerElement> }[]
-  ) => void;
+  ) => boolean;
   commitElementGesture: (
     patches: { id: string; updates: Partial<DesignerElement> }[],
     label?: string
   ) => void;
+  /** Atomically replace the active page through the freeze guard and commit one history entry. */
+  commitActivePage: (children: DesignerElement[], selectedIds: string[], label: string) => boolean;
+  /** Atomically replace a video output through the freeze guard and commit one history entry. */
+  commitVideoOutput: (outputIndex: number, output: VideoOutput, label: string) => boolean;
   removeElement: (id: string) => void;
   removeElements: (ids: string[]) => void;
   applyMagicGrab: (id: string, background: DesignerElement, subject: DesignerElement) => boolean;
@@ -506,22 +513,23 @@ export const createDesignerStore = (
 ) =>
   create<DesignerStore>((set, get) => {
     const rawSet = set;
-    const setWithFreezeGuard: typeof set = (partial, replace) => {
+    const mutate = (
+      partial: Partial<DesignerStore> | ((state: DesignerStore) => Partial<DesignerStore>),
+      replace?: boolean
+    ): boolean => {
+      let accepted = true;
       const updater = (state: DesignerStore) => {
         const update = typeof partial === 'function' ? partial(state) : partial;
-        const nextDoc = update && typeof update === 'object'
-          ? (update as Partial<DesignerStore>).doc
-          : undefined;
-        if (nextDoc && hasFrozenOutputMutation(state.doc, nextDoc)) return {};
+        const nextDoc = update && typeof update === 'object' ? update.doc : undefined;
+        if (nextDoc && hasFrozenOutputMutation(state.doc, nextDoc)) {
+          accepted = false;
+          return {};
+        }
         return update;
       };
-      if (replace === true) {
-        rawSet(updater as (state: DesignerStore) => DesignerStore, true);
-      } else {
-        rawSet(updater, false);
-      }
+      rawSet(updater, replace);
+      return accepted;
     };
-    set = setWithFreezeGuard;
 
     const initialDoc = createEmptyDoc(width, height, attribution);
     const active = () => get().doc.outputs[get().currentOutput] as DesignerOutput | VideoOutput;
@@ -576,7 +584,7 @@ export const createDesignerStore = (
               c.id === id ? { ...c, focalPoint: fp } : c
             )
           );
-          set({ doc: { ...state.doc, outputs: outs }, isDirty: true });
+          mutate({ doc: { ...state.doc, outputs: outs }, isDirty: true });
           return;
         }
         const nextOutputs = state.doc.outputs.map((out, i) => {
@@ -590,7 +598,7 @@ export const createDesignerStore = (
             ),
           };
         });
-        set({ doc: { ...state.doc, outputs: nextOutputs }, isDirty: true });
+        mutate({ doc: { ...state.doc, outputs: nextOutputs }, isDirty: true });
       }).catch(() => {
         // Non-fatal: center fallback is already in place.
       });
@@ -642,7 +650,12 @@ export const createDesignerStore = (
       assistantSuggestions: {},
       setDoc: (doc) => {
         get().clearElementPreview();
-        set({ doc: migrateDoc(doc), isDirty: true });
+        return mutate({ doc: migrateDoc(doc), isDirty: true });
+      },
+      replaceDocTrusted: (doc) => {
+        const nextDoc = migrateDoc(doc);
+        rawSet({ doc: nextDoc, isDirty: true });
+        reconcileBuffersWithDoc(nextDoc);
       },
       adoptPersistedDoc: (sentDoc, persistedDoc) => {
         const state = get();
@@ -671,15 +684,15 @@ export const createDesignerStore = (
         const nextDoc = { ...doc };
         if (nextReferences) nextDoc.characterReferences = nextReferences;
         else delete nextDoc.characterReferences;
-        set({ doc: nextDoc, isDirty: true });
+        mutate({ doc: nextDoc, isDirty: true });
         get().pushHistory('Edit character references');
       },
-      setDesignName: (name) => set({ designName: name, isDirty: true }),
-      setDesignId: (id) => set({ designId: id }),
-      setTemplateId: (id) => set({ templateId: id }),
+      setDesignName: (name) => mutate({ designName: name, isDirty: true }),
+      setDesignId: (id) => mutate({ designId: id }),
+      setTemplateId: (id) => mutate({ templateId: id }),
 
       addElement: (element, beforeId) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         get().clearElementPreview();
         const { doc, currentOutput, currentPage } = get();
         const originId = element.originId || genId();
@@ -702,7 +715,7 @@ export const createDesignerStore = (
         // Linked (originId) seeding across outputs is a PAGE-1 behavior: an
         // element added on a later page exists on that page only.
         if (currentPage > 0) {
-          set({
+          mutate({
             doc: {
               ...doc,
               outputs: withActiveChildren(insert(sourceChildren, baseEl)),
@@ -727,7 +740,7 @@ export const createDesignerStore = (
                 return { ...out, children: insert((out as DesignerOutput).children, copy) };
               })();
         });
-        set({ doc: { ...doc, outputs: outs }, isDirty: true, selectedIds: [baseEl.id] });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true, selectedIds: [baseEl.id] });
         get().pushHistory();
 
         if (baseEl.type === 'image' && baseEl.src) {
@@ -736,12 +749,12 @@ export const createDesignerStore = (
       },
 
       updateElement: (id, updates) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return false;
         get().clearElementPreview();
         const { doc, currentOutput, currentPage, editFormatOnly, linkedUpdateFlash } = get();
         if (currentPage > 0) {
           // Per-page edits stay local — linked propagation is page-1-only.
-          set({
+          return mutate({
             doc: {
               ...doc,
               outputs: withActiveChildren(
@@ -750,22 +763,21 @@ export const createDesignerStore = (
             },
             isDirty: true,
           });
-          return;
         }
         const { outputs, affected } = applyLinked(doc, currentOutput, new Set([id]), updates, editFormatOnly);
         const now = Date.now();
         const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
         affected.forEach((i) => (nextFlash[i] = now));
-        set({ doc: { ...doc, outputs }, isDirty: true, linkedUpdateFlash: nextFlash });
+        return mutate({ doc: { ...doc, outputs }, isDirty: true, linkedUpdateFlash: nextFlash });
       },
 
       updateElements: (ids, updates) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         get().clearElementPreview();
         const { doc, currentOutput, currentPage, editFormatOnly, linkedUpdateFlash } = get();
         if (currentPage > 0) {
           const idSet = new Set(ids);
-          set({
+          mutate({
             doc: {
               ...doc,
               outputs: withActiveChildren(
@@ -781,12 +793,12 @@ export const createDesignerStore = (
         const now = Date.now();
         const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
         affected.forEach((i) => (nextFlash[i] = now));
-        set({ doc: { ...doc, outputs }, isDirty: true, linkedUpdateFlash: nextFlash });
+        mutate({ doc: { ...doc, outputs }, isDirty: true, linkedUpdateFlash: nextFlash });
         get().pushHistory();
       },
 
       updateElementsSilent: (ids, updates) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return false;
         get().clearElementPreview();
         const { doc, currentOutput, currentPage, editFormatOnly, linkedUpdateFlash } = get();
         const mediaUpdates = updates.src !== undefined && updates.qr === undefined
@@ -794,7 +806,7 @@ export const createDesignerStore = (
           : updates;
         if (currentPage > 0) {
           const idSet = new Set(ids);
-          set({
+          return mutate({
             doc: {
               ...doc,
               outputs: withActiveChildren(
@@ -803,13 +815,12 @@ export const createDesignerStore = (
             },
             isDirty: true,
           });
-          return;
         }
         const { outputs, affected } = applyLinked(doc, currentOutput, new Set(ids), mediaUpdates, editFormatOnly);
         const now = Date.now();
         const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
         affected.forEach((i) => (nextFlash[i] = now));
-        set({ doc: { ...doc, outputs }, isDirty: true, linkedUpdateFlash: nextFlash });
+        return mutate({ doc: { ...doc, outputs }, isDirty: true, linkedUpdateFlash: nextFlash });
       },
 
       previewElements: (patches) => {
@@ -847,15 +858,15 @@ export const createDesignerStore = (
       },
 
       updateElementEphemeral: (id, updates) => {
-        get().updateElementsEphemeral([{ id, updates }]);
+        return get().updateElementsEphemeral([{ id, updates }]);
       },
 
       updateElementsEphemeral: (patches) => {
-        if (isVideoMode() || !patches.length) return;
+        if (isVideoMode() || !patches.length || isOutputFrozen(activeImage())) return false;
         get().clearElementPreview();
         const { doc, currentOutput, currentPage } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput | undefined;
-        if (!out || !('children' in out)) return;
+        if (!out || !('children' in out)) return false;
         const byId = new Map(patches.map(({ id, updates }) => [id, updates]));
         let changed = false;
         const children = pageChildren(out, currentPage).map((el) => {
@@ -864,19 +875,42 @@ export const createDesignerStore = (
           changed = true;
           return applyElementPatch(el, updates);
         });
-        if (!changed) return;
+        if (!changed) return false;
         const outs = [...doc.outputs];
         outs[currentOutput] = withPageChildren(out, currentPage, children);
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        return mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
+      },
+
+      commitActivePage: (children, selectedIds, label) => {
+        if (isVideoMode() || isOutputFrozen(activeImage())) return false;
+        const accepted = mutate({
+          doc: { ...get().doc, outputs: withActiveChildren(children) },
+          selectedIds,
+          isDirty: true,
+        });
+        if (!accepted) return false;
+        get().pushHistory(label);
+        return true;
+      },
+
+      commitVideoOutput: (outputIndex, output, label) => {
+        const { doc } = get();
+        if (doc.mode !== 'video' || isOutputFrozen(doc.outputs[outputIndex])) return false;
+        const outputs = [...doc.outputs];
+        outputs[outputIndex] = output;
+        const accepted = mutate({ doc: { ...doc, outputs }, isDirty: true });
+        if (!accepted) return false;
+        get().pushHistory(label);
+        return true;
       },
 
       commitElementGesture: (patches, label) => {
-        if (isVideoMode() || !patches.length) return;
+        if (isVideoMode() || !patches.length || isOutputFrozen(activeImage())) return;
         const state = get();
         const { doc, currentOutput, currentPage, editFormatOnly } = state;
         if (currentPage > 0) {
           const byId = new Map(patches.map(({ id, updates }) => [id, updates]));
-          set({
+          const accepted = mutate({
             doc: {
               ...doc,
               outputs: withActiveChildren(
@@ -888,7 +922,7 @@ export const createDesignerStore = (
             },
             isDirty: true,
           });
-          get().pushHistory(label);
+          if (accepted) get().pushHistory(label);
           return;
         }
         let nextDoc = doc;
@@ -907,14 +941,13 @@ export const createDesignerStore = (
         const now = Date.now();
         const linkedUpdateFlash = { ...state.linkedUpdateFlash };
         affected.forEach((index) => (linkedUpdateFlash[index] = now));
-        set({ doc: nextDoc, isDirty: true, linkedUpdateFlash });
-        get().pushHistory(label);
+        if (mutate({ doc: nextDoc, isDirty: true, linkedUpdateFlash })) get().pushHistory(label);
       },
 
       removeElement: (id) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { selectedIds } = get();
-        set({
+        mutate({
           doc: { ...get().doc, outputs: withActiveChildren(activePageChildren().filter((el) => el.id !== id)) },
           isDirty: true, selectedIds: selectedIds.filter((s) => s !== id),
         });
@@ -923,11 +956,11 @@ export const createDesignerStore = (
       },
 
       removeElements: (ids) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         if (!ids.length) return;
         const remove = new Set(ids);
         const { selectedIds } = get();
-        set({
+        mutate({
           doc: { ...get().doc, outputs: withActiveChildren(activePageChildren().filter((el) => !remove.has(el.id))) },
           isDirty: true, selectedIds: selectedIds.filter((s) => !remove.has(s)),
         });
@@ -947,7 +980,7 @@ export const createDesignerStore = (
           id: subjectId,
           originId: subject.originId || genId(),
         });
-        set({
+        mutate({
           doc: { ...get().doc, outputs: withActiveChildren(next) },
           isDirty: true,
           selectedIds: [subjectId],
@@ -959,7 +992,7 @@ export const createDesignerStore = (
       duplicateElement: (id) => get().duplicateElements([id]),
 
       duplicateElements: (ids) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const children = activePageChildren();
         const selectedIds: string[] = [];
         const copies = [...new Set(ids)].flatMap((id) => {
@@ -999,7 +1032,7 @@ export const createDesignerStore = (
         });
         if (!copies.length) return;
 
-        set({
+        mutate({
           doc: { ...get().doc, outputs: withActiveChildren([...children, ...copies]) },
           isDirty: true,
           selectedIds,
@@ -1007,14 +1040,14 @@ export const createDesignerStore = (
         get().pushHistory();
       },
 
-      setSelectedIds: (ids) => set({ selectedIds: ids }),
-      setAssistantSuggestions: (key, entry) => set((state) => ({
+      setSelectedIds: (ids) => mutate({ selectedIds: ids }),
+      setAssistantSuggestions: (key, entry) => mutate((state) => ({
         assistantSuggestions: { ...state.assistantSuggestions, [key]: entry },
       })),
-      requestRename: (id) => set({ renamingId: id }),
+      requestRename: (id) => mutate({ renamingId: id }),
 
       setOutputBackground: (bg, commit = true) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { doc, currentOutput } = get();
         const outs = [...doc.outputs];
         const out = outs[currentOutput] as DesignerOutput;
@@ -1023,22 +1056,22 @@ export const createDesignerStore = (
           background: bg.type === 'color' && bg.color ? bg.color : out.background,
           bg,
         };
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         if (commit) get().pushHistory();
       },
 
       copySelection: () => {
         if (isVideoMode()) return;
         const { selectedIds } = get();
-        set({ clipboard: JSON.parse(JSON.stringify(activePageChildren().filter((el) => selectedIds.includes(el.id)))) });
+        mutate({ clipboard: JSON.parse(JSON.stringify(activePageChildren().filter((el) => selectedIds.includes(el.id)))) });
       },
 
       cutSelection: () => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { selectedIds } = get();
         const picked = activePageChildren().filter((el) => selectedIds.includes(el.id));
         if (!picked.length) return;
-        set({
+        mutate({
           clipboard: JSON.parse(JSON.stringify(picked)),
           doc: { ...get().doc, outputs: withActiveChildren(activePageChildren().filter((el) => !selectedIds.includes(el.id))) },
           selectedIds: [], isDirty: true,
@@ -1048,7 +1081,7 @@ export const createDesignerStore = (
       },
 
       paste: () => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { clipboard } = get();
         if (!clipboard.length) return;
         const groupRemap: Record<string, string> = {};
@@ -1057,7 +1090,7 @@ export const createDesignerStore = (
           if (groupId) { groupRemap[groupId] = groupRemap[groupId] || genId(); groupId = groupRemap[groupId]; }
           return { ...el, id: genId(), originId: genId(), x: el.x + 20, y: el.y + 20, groupId };
         });
-        set({ doc: { ...get().doc, outputs: withActiveChildren([...activePageChildren(), ...pasted]) }, selectedIds: pasted.map((el) => el.id), isDirty: true });
+        mutate({ doc: { ...get().doc, outputs: withActiveChildren([...activePageChildren(), ...pasted]) }, selectedIds: pasted.map((el) => el.id), isDirty: true });
         get().pushHistory();
       },
 
@@ -1072,7 +1105,7 @@ export const createDesignerStore = (
       createSymbol: (name) => {
         const { doc, currentOutput, currentPage, selectedIds } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput;
-        if (!('children' in out) || selectedIds.length === 0) return;
+        if (!('children' in out) || isOutputFrozen(out) || selectedIds.length === 0) return;
 
         const pageEls = pageChildren(out, currentPage);
         const members = pageEls.filter((c) => selectedIds.includes(c.id));
@@ -1122,7 +1155,7 @@ export const createDesignerStore = (
               ])
             : o
         );
-        set({
+        mutate({
           doc: { ...doc, outputs, symbols: [...(doc.symbols || []), definition] },
           selectedIds: [instance.id],
           isDirty: true,
@@ -1157,7 +1190,7 @@ export const createDesignerStore = (
       updateSymbolDefinition: (symbolId, children) => {
         const { doc } = get();
         if (!(doc.symbols || []).some((s) => s.id === symbolId)) return;
-        set({
+        const accepted = mutate({
           doc: {
             ...doc,
             symbols: (doc.symbols || []).map((s) =>
@@ -1166,6 +1199,7 @@ export const createDesignerStore = (
           },
           isDirty: true,
         });
+        if (!accepted) return;
         get().pushHistory('Edit symbol');
       },
 
@@ -1173,7 +1207,7 @@ export const createDesignerStore = (
         if (isVideoMode()) {
           const { doc, currentOutput, selectedClips } = get();
           const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
-          if (!vo || !selectedClips.length) return;
+          if (!vo || isOutputFrozen(vo) || !selectedClips.length) return;
           const selected = new Set(
             expandClipRefs(vo, selectedClips).map((ref) => `${ref.trackId}:${ref.clipId}`)
           );
@@ -1188,12 +1222,13 @@ export const createDesignerStore = (
               ),
             })),
           };
-          set({ doc: { ...doc, outputs: outs }, isDirty: true });
+          mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
           get().pushHistory('Group clips');
           return;
         }
         // Explicit ids let a caller (the canvas context menu) group without a
         // selection round-trip; the default is the live selection.
+        if (isOutputFrozen(activeImage())) return;
         const selectedIds = ids ?? get().selectedIds;
         // One layer is groupable — Photoshop's Layer ▸ Group Layers wraps a
         // single selection too. Only New ▸ Group from Layers is plural-only.
@@ -1219,7 +1254,7 @@ export const createDesignerStore = (
         );
         next.splice(Math.max(0, firstIndex), 0, groupEl);
 
-        set({
+        mutate({
           doc: { ...get().doc, outputs: withActiveChildren(next) },
           isDirty: true,
           selectedIds: [groupEl.id],
@@ -1232,7 +1267,7 @@ export const createDesignerStore = (
         if (isVideoMode()) {
           const { doc, currentOutput, selectedClips } = get();
           const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
-          if (!vo || !selectedClips.length) return;
+          if (!vo || isOutputFrozen(vo) || !selectedClips.length) return;
           const groupIds = new Set(
             selectedClips.flatMap((ref) => {
               const clip = vo.tracks
@@ -1254,10 +1289,11 @@ export const createDesignerStore = (
               ),
             })),
           };
-          set({ doc: { ...doc, outputs: outs }, isDirty: true });
+          mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
           get().pushHistory('Ungroup clips');
           return;
         }
+        if (isOutputFrozen(activeImage())) return;
         const selectedIds = ids ?? get().selectedIds;
         const children = activePageChildren();
 
@@ -1286,20 +1322,20 @@ export const createDesignerStore = (
               : el
           );
 
-        set({ doc: { ...get().doc, outputs: withActiveChildren(next) }, isDirty: true });
+        mutate({ doc: { ...get().doc, outputs: withActiveChildren(next) }, isDirty: true });
         get().pushHistory();
       },
 
       moveLayersTo: (ids, targetIndex, parentId) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const next = moveLayers(activePageChildren(), ids, targetIndex, parentId);
         if (next === activePageChildren()) return;
-        set({ doc: { ...get().doc, outputs: withActiveChildren(next) }, isDirty: true });
+        mutate({ doc: { ...get().doc, outputs: withActiveChildren(next) }, isDirty: true });
         get().pushHistory();
       },
 
       addLayer: (kind, init) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const out = activeImage();
         const el: DesignerElement = {
           id: '',
@@ -1324,36 +1360,36 @@ export const createDesignerStore = (
       },
 
       toggleClipped: (ids) => {
-        if (isVideoMode() || !ids.length) return;
+        if (isVideoMode() || isOutputFrozen(activeImage()) || !ids.length) return;
         const children = activePageChildren();
         const allClipped = children
           .filter((el) => ids.includes(el.id))
           .every((el) => el.clipped);
-        set({ doc: { ...get().doc, outputs: withActiveChildren(
+        mutate({ doc: { ...get().doc, outputs: withActiveChildren(
           children.map((el) => (ids.includes(el.id) ? { ...el, clipped: !allClipped } : el))
         ) }, isDirty: true });
         get().pushHistory();
       },
 
       setLayerBlend: (ids, blendMode) => {
-        if (isVideoMode() || !ids.length) return;
-        set({ doc: { ...get().doc, outputs: withActiveChildren(
+        if (isVideoMode() || isOutputFrozen(activeImage()) || !ids.length) return;
+        mutate({ doc: { ...get().doc, outputs: withActiveChildren(
           activePageChildren().map((el) => (ids.includes(el.id) ? { ...el, blendMode } : el))
         ) }, isDirty: true });
         get().pushHistory();
       },
 
       toggleGroupCollapsed: (id) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         // Panel-only state, so no history entry — collapsing a folder is not an
         // edit anyone wants to undo.
-        set({ doc: { ...get().doc, outputs: withActiveChildren(
+        mutate({ doc: { ...get().doc, outputs: withActiveChildren(
           activePageChildren().map((el) => (el.id === id ? { ...el, collapsed: !el.collapsed } : el))
         ) } });
       },
 
       reorder: (ids, dir) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const children = [...activePageChildren()];
         const picked = children.filter((el) => ids.includes(el.id));
         if (!picked.length) return;
@@ -1366,7 +1402,7 @@ export const createDesignerStore = (
           const indices = ids.map((id) => next.findIndex((el) => el.id === id)).filter((i) => i >= 0).sort((a, b) => (dir === 'forward' ? b - a : a - b));
           indices.forEach((i) => { const swap = dir === 'forward' ? i + 1 : i - 1; if (swap < 0 || swap >= next.length) return; [next[i], next[swap]] = [next[swap], next[i]]; });
         }
-        set({ doc: { ...get().doc, outputs: withActiveChildren(next) }, isDirty: true });
+        mutate({ doc: { ...get().doc, outputs: withActiveChildren(next) }, isDirty: true });
         get().pushHistory();
       },
 
@@ -1374,7 +1410,7 @@ export const createDesignerStore = (
         const { doc } = get();
         if (index < 0 || index >= doc.outputs.length) return;
         // Pages belong to an output; switching outputs always lands on page 1.
-        set({ currentOutput: index, currentPage: 0, selectedIds: [] });
+        mutate({ currentOutput: index, currentPage: 0, selectedIds: [] });
       },
 
       setCurrentPage: (pageNumber) => {
@@ -1383,18 +1419,18 @@ export const createDesignerStore = (
         const out = doc.outputs[currentOutput] as DesignerOutput | undefined;
         if (!out || !('children' in out)) return;
         if (pageNumber < 0 || pageNumber >= pageCount(out)) return;
-        set({ currentPage: pageNumber, selectedIds: [] });
+        mutate({ currentPage: pageNumber, selectedIds: [] });
       },
 
       addPage: (name, afterPageNumber) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { doc, currentOutput } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput;
         const next = appendPage(out, { id: genId(), name, children: [] }, afterPageNumber);
         if (!next) return;
         const outs = [...doc.outputs];
         outs[currentOutput] = next;
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           currentPage: afterPageNumber === undefined ? pageCount(next) - 1 : afterPageNumber + 1,
           selectedIds: [],
@@ -1404,14 +1440,14 @@ export const createDesignerStore = (
       },
 
       duplicatePage: (pageNumber) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { doc, currentOutput } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput;
         const next = duplicatePageAt(out, pageNumber);
         if (!next) return;
         const outs = [...doc.outputs];
         outs[currentOutput] = next;
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           currentPage: pageNumber + 1,
           selectedIds: [],
@@ -1421,7 +1457,7 @@ export const createDesignerStore = (
       },
 
       removePage: (pageNumber, allowFirst = false) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { doc, currentOutput, currentPage } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput;
         const next = removePageAt(out, pageNumber, allowFirst);
@@ -1433,7 +1469,7 @@ export const createDesignerStore = (
           : currentPage > pageNumber
             ? currentPage - 1
             : currentPage;
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           currentPage: selectedPage,
           selectedIds: [],
@@ -1443,7 +1479,7 @@ export const createDesignerStore = (
       },
 
       renamePage: (pageNumber, name) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { doc, currentOutput } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput;
         // Page 1's name slot is the output's own name — it already has a
@@ -1457,19 +1493,19 @@ export const createDesignerStore = (
             i === pageNumber - 1 ? { ...p, name: trimmed || undefined } : p
           ),
         };
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory('Rename page');
       },
 
       reorderPage: (from, to) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { doc, currentOutput, currentPage } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput;
         const next = movePage(out, from, to);
         if (!next) return;
         const outs = [...doc.outputs];
         outs[currentOutput] = next;
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           currentPage: currentPage === from ? to : currentPage,
           selectedIds: [],
@@ -1479,8 +1515,8 @@ export const createDesignerStore = (
       },
 
       addOutput: (preset, opts) => {
-        const { doc, currentOutput } = get();
-        if (doc.outputs.length >= MAX_OUTPUTS || isOutputFrozen(doc.outputs[currentOutput])) return;
+        const { doc } = get();
+        if (doc.outputs.length >= MAX_OUTPUTS) return;
         const linkContent = opts?.linkContent ?? true;
         let name = preset.name;
         for (let suffix = 2; doc.outputs.some((out) => out.name === name); suffix++) {
@@ -1488,7 +1524,7 @@ export const createDesignerStore = (
         }
         const namedPreset = { ...preset, name };
         if (isVideoMode()) {
-          const source = doc.outputs[currentOutput] as VideoOutput;
+          const source = doc.outputs[0] as VideoOutput;
           if (!source || !('tracks' in source)) return;
           const { output, sourceTracks } = seedVideoOutput(source, namedPreset);
           if (!linkContent) {
@@ -1498,12 +1534,12 @@ export const createDesignerStore = (
             }));
           }
           const outs = doc.outputs.map((o, i) =>
-            i === currentOutput
+            i === 0
               ? { ...(o as VideoOutput), tracks: linkContent ? sourceTracks : source.tracks }
               : o
           );
           outs.push(output);
-          set({
+          const accepted = mutate({
             doc: { ...doc, outputs: outs },
             currentOutput: outs.length - 1,
             currentPage: 0,
@@ -1512,10 +1548,11 @@ export const createDesignerStore = (
             selectedClips: [],
             isDirty: true,
           });
+          if (!accepted) return;
           get().pushHistory('Add format');
           return;
         }
-        const source = doc.outputs[currentOutput] as DesignerOutput;
+        const source = doc.outputs[0] as DesignerOutput;
         const sourceChildren = source.children.map((el) =>
           linkContent && !el.originId ? { ...el, originId: genId() } : el
         );
@@ -1557,18 +1594,19 @@ export const createDesignerStore = (
           background: source.background, bg: source.bg, children,
           ...(pages?.length ? { pages } : {}),
         };
-        const outs = doc.outputs.map((o, i) => (i === currentOutput ? { ...o, children: sourceChildren } : o)) as DesignerOutput[];
+        const outs = doc.outputs.map((o, i) => (i === 0 ? { ...o, children: sourceChildren } : o)) as DesignerOutput[];
         outs.push(newOutput);
-        set({ doc: { ...doc, outputs: outs }, currentOutput: outs.length - 1, selectedIds: [], isDirty: true });
+        const accepted = mutate({ doc: { ...doc, outputs: outs }, currentOutput: outs.length - 1, selectedIds: [], isDirty: true });
+        if (!accepted) return;
         get().pushHistory();
       },
 
       removeOutput: (index) => {
         const { doc, currentOutput } = get();
-        if (doc.outputs.length <= 1) return;
+        if (doc.outputs.length <= 1 || isOutputFrozen(doc.outputs[index])) return;
         const outs = doc.outputs.filter((_, i) => i !== index);
         const nextOutput = Math.max(0, Math.min(currentOutput, outs.length - 1));
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           currentOutput: nextOutput,
           currentPage: clampPage({ ...doc, outputs: outs } as DesignerDoc, nextOutput, get().currentPage),
@@ -1581,13 +1619,13 @@ export const createDesignerStore = (
       resizeOutput: (index, width, height, formatId, name) => {
         const { doc } = get();
         const out = doc.outputs[index];
-        if (!out) return;
+        if (!out || isOutputFrozen(out)) return;
         if ('tracks' in out) {
           // Video outputs resize in place: ids stay, every clip's geometry
           // smart-reflows onto the new canvas (timing/fps/duration untouched).
           const resized = reflowVideoOutputInPlace(out as VideoOutput, width, height, formatId, name);
           const outs = [...doc.outputs]; outs[index] = resized;
-          set({ doc: { ...doc, outputs: outs }, isDirty: true });
+          mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
           get().pushHistory('Resize format');
           return;
         }
@@ -1627,7 +1665,7 @@ export const createDesignerStore = (
           };
         });
         const outs = [...doc.outputs]; outs[index] = resized;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
       },
 
@@ -1638,32 +1676,32 @@ export const createDesignerStore = (
         const outs = doc.outputs.map((output, i) =>
           i === index ? withOutputFrozen(output, frozen) : output
         ) as DesignerDoc['outputs'];
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory(frozen ? 'Freeze format' : 'Unfreeze format');
       },
 
-      setEditFormatOnly: (v) => set({ editFormatOnly: v }),
+      setEditFormatOnly: (v) => mutate({ editFormatOnly: v }),
 
       setBrandProfileId: (brandProfileId) => {
         if (get().doc.brandProfileId === brandProfileId) return;
-        set({ doc: { ...get().doc, brandProfileId }, isDirty: true });
+        mutate({ doc: { ...get().doc, brandProfileId }, isDirty: true });
         get().pushHistory(brandProfileId ? 'Switch Brand Kit' : 'Switch to General Mode');
       },
 
-      setBrandEnforcement: (v) => set({ brandEnforcement: v }),
+      setBrandEnforcement: (v) => mutate({ brandEnforcement: v }),
 
-      setBrandAdminOverride: (v) => set({ brandAdminOverride: v }),
+      setBrandAdminOverride: (v) => mutate({ brandAdminOverride: v }),
 
       unlinkElement: (id) => {
-        if (isVideoMode()) return;
-        set({ doc: { ...get().doc, outputs: withActiveChildren(
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
+        mutate({ doc: { ...get().doc, outputs: withActiveChildren(
           activePageChildren().map((el) => (el.id === id ? { ...el, originId: undefined } : el))
         ) }, isDirty: true });
         get().pushHistory();
       },
 
       relinkElement: (id, originId) => {
-        if (isVideoMode()) return;
+        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { doc, currentOutput } = get();
         const el = (doc.outputs[currentOutput] as DesignerOutput).children.find((e) => e.id === id);
         if (!el) return;
@@ -1685,23 +1723,23 @@ export const createDesignerStore = (
                 ),
               }
         );
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
       },
 
-      setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(5, zoom)) }),
-      setViewport: (x, y) => set({ viewportX: x, viewportY: y }),
-      setSnapEnabled: (v) => set({ snapEnabled: v }),
-      setTimelineSnap: (v) => set({ timelineSnap: v }),
-      setTimelineHeight: (px) => set({ timelineHeight: Math.max(120, Math.min(600, Math.round(px))) }),
-      setShowGrid: (v) => set({ showGrid: v }),
-      setGridSize: (n) => set({ gridSize: Math.max(2, Math.min(500, Math.round(n))) }),
-      setSnapToGrid: (v) => set({ snapToGrid: v }),
+      setZoom: (zoom) => mutate({ zoom: Math.max(0.1, Math.min(5, zoom)) }),
+      setViewport: (x, y) => mutate({ viewportX: x, viewportY: y }),
+      setSnapEnabled: (v) => mutate({ snapEnabled: v }),
+      setTimelineSnap: (v) => mutate({ timelineSnap: v }),
+      setTimelineHeight: (px) => mutate({ timelineHeight: Math.max(120, Math.min(600, Math.round(px))) }),
+      setShowGrid: (v) => mutate({ showGrid: v }),
+      setGridSize: (n) => mutate({ gridSize: Math.max(2, Math.min(500, Math.round(n))) }),
+      setSnapToGrid: (v) => mutate({ snapToGrid: v }),
 
       // Guides live on the OUTPUT, so they follow the design rather than the
       // session — but nothing in any renderer reads them.
       addGuide: (axis, position) =>
-        set((state) => {
+        mutate((state) => {
           const doc = structuredClone(state.doc);
           const out = doc.outputs[state.currentOutput] as any;
           if (!out) return {};
@@ -1711,7 +1749,7 @@ export const createDesignerStore = (
         }),
 
       moveGuide: (axis, index, position) =>
-        set((state) => {
+        mutate((state) => {
           const doc = structuredClone(state.doc);
           const out = doc.outputs[state.currentOutput] as any;
           const guides = out?.guides;
@@ -1727,37 +1765,37 @@ export const createDesignerStore = (
         }),
 
       clearGuides: () =>
-        set((state) => {
+        mutate((state) => {
           const doc = structuredClone(state.doc);
           const out = doc.outputs[state.currentOutput] as any;
           if (!out) return {};
           out.guides = { x: [], y: [] };
           return { doc };
         }),
-      requestFit: () => set({ fitNonce: get().fitNonce + 1 }),
+      requestFit: () => mutate({ fitNonce: get().fitNonce + 1 }),
       setActiveTool: (toolId) => {
         const t = getTool(toolId);
         if (!t) return;
-        set({
+        mutate({
           activeTool: toolId,
           lastToolPerGroup: { ...get().lastToolPerGroup, [t.group]: toolId },
         });
       },
       setToolOption: (toolId, key, value) =>
-        set({
+        mutate({
           toolOptions: {
             ...get().toolOptions,
             [toolId]: { ...(get().toolOptions[toolId] || {}), [key]: value },
           },
         }),
 
-      requestGenerate: (kind) => set({ generateRequest: kind }),
+      requestGenerate: (kind) => mutate({ generateRequest: kind }),
 
-      setMaskTarget: (id) => set({ maskTargetId: id }),
+      setMaskTarget: (id) => mutate({ maskTargetId: id }),
 
       setSelection: (mask) => {
         const previous = get().selection;
-        set({
+        mutate({
           selection: mask,
           // Only a real selection is worth restoring; clearing an already-empty
           // one must not wipe what Reselect had to offer.
@@ -1802,7 +1840,7 @@ export const createDesignerStore = (
         get().clearElementPreview();
         const nextDoc = history[index];
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
-        set({
+        rawSet({
           doc: nextDoc,
           historyIndex: index,
           selectedIds: [],
@@ -1823,7 +1861,7 @@ export const createDesignerStore = (
         const newIndex = historyIndex - 1;
         const nextDoc = history[newIndex];
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
-        set({
+        rawSet({
           doc: nextDoc,
           historyIndex: newIndex,
           selectedIds: [],
@@ -1841,7 +1879,7 @@ export const createDesignerStore = (
         const newIndex = historyIndex + 1;
         const nextDoc = history[newIndex];
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
-        set({
+        rawSet({
           doc: nextDoc,
           historyIndex: newIndex,
           selectedIds: [],
@@ -1933,7 +1971,7 @@ export const createDesignerStore = (
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
       },
 
@@ -1947,7 +1985,7 @@ export const createDesignerStore = (
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
       },
 
@@ -1973,7 +2011,7 @@ export const createDesignerStore = (
         });
         const outs = [...doc.outputs];
         outs[target.outputIndex] = { ...vo, tracks };
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           isDirty: true,
           selectedClip: { outputIndex: target.outputIndex, trackId: subjectTrackId, clipId: subjectId },
@@ -2003,7 +2041,7 @@ export const createDesignerStore = (
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: withTextStrokeVersion({ ...doc, outputs: outs }, newClip), isDirty: true });
+        mutate({ doc: withTextStrokeVersion({ ...doc, outputs: outs }, newClip), isDirty: true });
         get().pushHistory();
       },
 
@@ -2059,7 +2097,7 @@ export const createDesignerStore = (
           const mv = moves.find((m) => m.trackId === r.trackId && m.clipId === r.clipId);
           return mv ? { ...r, trackId: mv.toTrackId ?? newTrackId! } : r;
         };
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           isDirty: true,
           selectedClips: selectedClips.map(retarget),
@@ -2075,7 +2113,7 @@ export const createDesignerStore = (
       removeClips: (outputIndex, refs) => {
         const { doc, selectedClip, selectedClips } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video' || !refs.length) return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo) || !refs.length) return;
         // Clips on locked tracks refuse deletion — filter them out before the
         // doomed-set is built (drag/trim are blocked at the gesture level).
         const lockedTracks = new Set(vo.tracks.filter((t) => t.locked).map((t) => t.id));
@@ -2094,7 +2132,7 @@ export const createDesignerStore = (
         outs[outputIndex] = updated;
         const nextSelected = selectedClips.filter((c) => !isDoomed(c.trackId, c.clipId));
         const wasPrimary = selectedClip && isDoomed(selectedClip.trackId, selectedClip.clipId);
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           isDirty: true,
           selectedClips: nextSelected,
@@ -2186,10 +2224,10 @@ export const createDesignerStore = (
           const now = Date.now();
           const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
           affected.forEach((i) => (nextFlash[i] = now));
-          set({ doc: nextDoc, isDirty: true, linkedUpdateFlash: nextFlash });
+          mutate({ doc: nextDoc, isDirty: true, linkedUpdateFlash: nextFlash });
           return true;
         }
-        set({ doc: nextDoc, isDirty: true });
+        mutate({ doc: nextDoc, isDirty: true });
         return true;
       },
 
@@ -2201,14 +2239,14 @@ export const createDesignerStore = (
         const updated: VideoOutput = { ...vo, durationMs: clamped };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
       },
 
       splitClip: (outputIndex, trackId, clipId, atMs) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video' || !canSplitClipAt(vo, trackId, clipId, atMs)) return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo) || !canSplitClipAt(vo, trackId, clipId, atMs)) return;
         let resultingClipId: string | null = null;
         const updated: VideoOutput = {
           ...vo,
@@ -2251,7 +2289,7 @@ export const createDesignerStore = (
         if (!resultingClipId) return;
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           isDirty: true,
           selectedClip: { outputIndex, trackId, clipId: resultingClipId },
@@ -2262,7 +2300,7 @@ export const createDesignerStore = (
 
       setMode: (mode) => {
         const { doc } = get();
-        if (doc.mode === mode) return;
+        if (doc.mode === mode || doc.outputs.some(isOutputFrozen)) return;
         if (mode === 'video') {
           const source = doc.outputs[0] as DesignerOutput;
           const trackId = genId();
@@ -2279,7 +2317,7 @@ export const createDesignerStore = (
             durationMs: Math.min(preset?.maxDurationMs ?? 10000, 10000),
             tracks: [{ id: trackId, type: 'video', clips: [] }],
           };
-          set({ doc: { ...doc, mode: 'video', outputs: [vo] }, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, currentPage: 0, isDirty: true });
+          mutate({ doc: { ...doc, mode: 'video', outputs: [vo] }, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, currentPage: 0, isDirty: true });
         } else {
           const source = doc.outputs[0] as VideoOutput;
           const imgOut: DesignerOutput = {
@@ -2293,25 +2331,25 @@ export const createDesignerStore = (
           };
           const nextDoc = { ...doc, mode: 'image' as const, outputs: [imgOut] };
           delete nextDoc.characterReferences;
-          set({ doc: nextDoc, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, currentPage: 0, isDirty: true });
+          mutate({ doc: nextDoc, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, currentPage: 0, isDirty: true });
         }
         get().pushHistory();
       },
 
-      setPlayhead: (ms) => set({ playheadMs: ms }),
+      setPlayhead: (ms) => mutate({ playheadMs: ms }),
 
-      setIsPlaying: (playing) => set({ isPlaying: playing }),
+      setIsPlaying: (playing) => mutate({ isPlaying: playing }),
 
       setSelectedClip: (clip) => {
         if (!clip) {
-          set({ selectedClip: null, selectedClips: [], selectedIds: [] });
+          mutate({ selectedClip: null, selectedClips: [], selectedIds: [] });
           return;
         }
         const vo = get().doc.outputs[clip.outputIndex] as VideoOutput | undefined;
         const selectedClips = vo
           ? groupRefsForClip(vo, clip.trackId, clip.clipId)
           : [{ trackId: clip.trackId, clipId: clip.clipId }];
-        set({ selectedClip: clip, selectedClips, selectedIds: [] });
+        mutate({ selectedClip: clip, selectedClips, selectedIds: [] });
       },
 
       setSelectedClips: (clips, primary) => {
@@ -2322,7 +2360,7 @@ export const createDesignerStore = (
         const primarySurvives =
           selectedClip &&
           clips.some((c) => c.trackId === selectedClip.trackId && c.clipId === selectedClip.clipId);
-        set({
+        mutate({
           selectedClips: clips,
           selectedClip: requestedPrimary
             ? { outputIndex: currentOutput, ...primary }
@@ -2360,7 +2398,7 @@ export const createDesignerStore = (
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         // Gain rides a range slider: the caller passes commit:false per tick
         // and pushes one history entry on release.
         if (commit) get().pushHistory();
@@ -2376,7 +2414,7 @@ export const createDesignerStore = (
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
       },
 
@@ -2393,7 +2431,7 @@ export const createDesignerStore = (
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory('Rename track');
       },
 
@@ -2407,7 +2445,7 @@ export const createDesignerStore = (
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory(muted ? 'Mute track' : 'Unmute track');
       },
 
@@ -2421,7 +2459,7 @@ export const createDesignerStore = (
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory(locked ? 'Lock track' : 'Unlock track');
       },
 
@@ -2435,7 +2473,7 @@ export const createDesignerStore = (
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory(hidden ? 'Hide track' : 'Show track');
       },
 
@@ -2451,7 +2489,7 @@ export const createDesignerStore = (
         const markers = [...(vo.markers || []), marker].sort((a, b) => a.tMs - b.tMs);
         const outs = [...doc.outputs];
         outs[outputIndex] = { ...vo, markers };
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory('Add marker');
         return marker.id;
       },
@@ -2459,25 +2497,25 @@ export const createDesignerStore = (
       renameMarker: (outputIndex, markerId, name) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video' || !vo.markers?.some((m) => m.id === markerId)) return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo) || !vo.markers?.some((m) => m.id === markerId)) return;
         const trimmed = name.trim();
         const markers = vo.markers.map((m) =>
           m.id === markerId ? { ...m, name: trimmed || undefined } : m
         );
         const outs = [...doc.outputs];
         outs[outputIndex] = { ...vo, markers };
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory('Rename marker');
       },
 
       removeMarker: (outputIndex, markerId) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video' || !vo.markers?.some((m) => m.id === markerId)) return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo) || !vo.markers?.some((m) => m.id === markerId)) return;
         const markers = vo.markers.filter((m) => m.id !== markerId);
         const outs = [...doc.outputs];
         outs[outputIndex] = { ...vo, markers: markers.length ? markers : undefined };
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory('Delete marker');
       },
 
@@ -2520,7 +2558,7 @@ export const createDesignerStore = (
         // One history entry for the whole operation (duration extension +
         // insert) — a split setVideoDuration/addClip pair would undo in two
         // steps for a single user gesture.
-        set({ doc: { ...doc, outputs: outs }, isDirty: true, selectedClip: { outputIndex, trackId, clipId: newClip.id }, selectedClips: [{ trackId, clipId: newClip.id }], selectedIds: [] });
+        mutate({ doc: { ...doc, outputs: outs }, isDirty: true, selectedClip: { outputIndex, trackId, clipId: newClip.id }, selectedClips: [{ trackId, clipId: newClip.id }], selectedIds: [] });
         get().pushHistory('Duplicate clip');
         return newClip.id;
       },
@@ -2559,7 +2597,7 @@ export const createDesignerStore = (
         outs[outputIndex] = updated;
         const nextSelected = selectedClips.filter((c) => !(c.trackId === trackId && c.clipId === clipId));
         const wasPrimary = selectedClip?.trackId === trackId && selectedClip?.clipId === clipId;
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           isDirty: true,
           selectedClips: nextSelected,
@@ -2575,7 +2613,7 @@ export const createDesignerStore = (
       rippleDeleteClips: (outputIndex, refs) => {
         const { doc, selectedClip, selectedClips } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video' || !refs.length) return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo) || !refs.length) return;
         // Locked tracks refuse deletion, same as removeClips.
         const lockedTracks = new Set(vo.tracks.filter((t) => t.locked).map((t) => t.id));
         const editable = refs.filter((r) => !lockedTracks.has(r.trackId));
@@ -2611,7 +2649,7 @@ export const createDesignerStore = (
         outs[outputIndex] = updated;
         const nextSelected = selectedClips.filter((c) => !isDoomed(c.trackId, c.clipId));
         const wasPrimary = selectedClip && isDoomed(selectedClip.trackId, selectedClip.clipId);
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           isDirty: true,
           selectedClips: nextSelected,
@@ -2641,13 +2679,13 @@ export const createDesignerStore = (
             entries.push({ clip: JSON.parse(JSON.stringify(clip)), trackId: track.id, trackType: track.type });
           }
         }
-        if (entries.length) set({ clipClipboard: entries });
+        if (entries.length) mutate({ clipClipboard: entries });
       },
 
       pasteClips: (atMs) => {
         const { doc, currentOutput, clipClipboard } = get();
         const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video' || !clipClipboard.length) return;
+        if (!vo || doc.mode !== 'video' || isOutputFrozen(vo) || !clipClipboard.length) return;
 
         const anchor = Math.max(0, atMs);
         const earliest = Math.min(...clipClipboard.map((e) => e.clip.startMs));
@@ -2699,7 +2737,7 @@ export const createDesignerStore = (
         outs[currentOutput] = updated;
         // One history entry for the whole paste (track creation + duration
         // extension + inserts), like duplicateClip.
-        set({
+        mutate({
           doc: { ...doc, outputs: outs },
           isDirty: true,
           selectedClips: pastedRefs,
@@ -2719,7 +2757,7 @@ export const createDesignerStore = (
         if (!clip?.keyframes?.length) return;
         // Deep clone: later edits to the source clip must not rewrite what a
         // future paste will produce.
-        set({ keyframeClipboard: JSON.parse(JSON.stringify(clip.keyframes)) });
+        mutate({ keyframeClipboard: JSON.parse(JSON.stringify(clip.keyframes)) });
       },
 
       pasteClipKeyframes: (atMs) => {

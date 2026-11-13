@@ -276,6 +276,23 @@ describe('collaboration Yjs contract', () => {
     expect(rebuiltClip.textStroke).toBeUndefined();
   });
 
+  it('synchronizes frozen output flags in both directions', () => {
+    const source = new Y.Doc();
+    const peer = new Y.Doc();
+    const doc = makeVideoDoc();
+    (doc.outputs[0] as VideoOutput).frozen = true;
+    const last: { current: DesignerDoc | null } = { current: null };
+
+    Y.applyUpdate(peer, sendUpdate(source, doc, last));
+    expect((rebuildDocFromY(peer.getMap(Y_DOC))!.outputs[0] as VideoOutput).frozen).toBe(true);
+
+    (doc.outputs[0] as VideoOutput).frozen = undefined;
+    Y.applyUpdate(peer, sendUpdate(source, doc, last));
+    const rebuilt = rebuildDocFromY(peer.getMap(Y_DOC))!;
+    expect((rebuilt.outputs[0] as VideoOutput).frozen).toBeUndefined();
+    expect(peer.getMap(Y_DOC).get('outputs')?.toArray()[0].has('frozen')).toBe(false);
+  });
+
   it('does not notify when the rebuilt doc is unchanged', () => {
     const ydoc = new Y.Doc();
     const docMap = ydoc.getMap(Y_DOC);

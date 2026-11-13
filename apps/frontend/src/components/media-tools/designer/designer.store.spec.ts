@@ -2423,6 +2423,156 @@ describe('output freeze and carousel workflows', () => {
 });
 
 
+describe('freeze review regressions', () => {
+  const addTextEl = (store: ReturnType<typeof createDesignerStore>, text: string) =>
+    store.getState().addElement({
+      id: '', type: 'text', x: 0, y: 0, width: 100, height: 30,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text,
+    });
+
+  it('undoes after adopting a key-reordered persisted clone', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setOutputFrozen(1, true);
+    const sentDoc = store.getState().doc;
+    const reordered = {
+      ...sentDoc,
+      outputs: sentDoc.outputs.map((output) =>
+        Object.fromEntries(Object.entries(output).reverse()) as typeof output
+      ),
+    };
+
+    expect(store.getState().adoptPersistedDoc(sentDoc, reordered)).toBe(true);
+    expect(store.getState().setDoc(reordered)).toBe(true);
+    store.getState().setCurrentOutput(0);
+    addTextEl(store, 'Editable format');
+    const editIndex = store.getState().historyIndex;
+
+    store.getState().undo();
+
+    expect(store.getState().historyIndex).toBe(editIndex - 1);
+    expect(store.getState().doc.outputs[0].children).toHaveLength(0);
+    expect(store.getState().doc.outputs[1].frozen).toBe(true);
+  });
+
+  it('does not change selection, history, or redo for blocked edits', () => {
+    const store = createDesignerStore();
+    addTextEl(store, 'Keep me');
+    const id = store.getState().doc.outputs[0].children[0].id;
+    store.getState().setSelectedIds([id]);
+    store.getState().setOutputFrozen(0, true);
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().undo();
+    const before = store.getState().doc;
+    const selection = store.getState().selectedIds;
+    const historyLength = store.getState().history.length;
+    const historyIndex = store.getState().historyIndex;
+
+    expect(store.getState().updateElementEphemeral(id, { x: 99 })).toBe(false);
+    store.getState().removeElement(id);
+    store.getState().updateElements([id], { text: 'Rejected' });
+    store.getState().addPage();
+    store.getState().paste();
+    store.getState().pushHistory();
+
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().selectedIds).toBe(selection);
+    expect(store.getState().history).toHaveLength(historyLength);
+    expect(store.getState().historyIndex).toBe(historyIndex);
+
+    store.getState().redo();
+    expect(store.getState().doc.outputs).toHaveLength(2);
+  });
+
+  it('seeds Add format from output 0 even when the current output is frozen', () => {
+    const store = createDesignerStore();
+    addTextEl(store, 'Primary');
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setEditFormatOnly(true);
+    const secondId = store.getState().doc.outputs[1].children[0].id;
+    store.getState().updateElement(secondId, { text: 'Secondary' });
+    store.getState().pushHistory();
+    store.getState().setEditFormatOnly(false);
+    store.getState().setOutputFrozen(1, true);
+
+    store.getState().addOutput({ formatId: 'ig-story', name: 'Story', width: 1080, height: 1920 });
+
+    expect(store.getState().doc.outputs).toHaveLength(3);
+    expect(store.getState().doc.outputs[2].children[0].text).toBe('Primary');
+  });
+
+  it('guards direct video output replacements used by Freeze Frame and captions', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const output = store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+    store.getState().setOutputFrozen(0, true);
+    const before = store.getState().doc;
+    const historyLength = store.getState().history.length;
+    const updated = {
+      ...output,
+      tracks: [...output.tracks, { id: 'caption-track', type: 'caption' as const, clips: [] }],
+    };
+
+    expect(store.getState().commitVideoOutput(0, updated, 'Add captions')).toBe(false);
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyLength);
+
+    store.getState().setOutputFrozen(0, false);
+    const unfrozenHistoryLength = store.getState().history.length;
+    expect(store.getState().commitVideoOutput(0, updated, 'Add captions')).toBe(true);
+    expect(store.getState().history).toHaveLength(unfrozenHistoryLength + 1);
+    store.getState().undo();
+    expect((store.getState().doc.outputs[0] as import('./designer.store').VideoOutput).tracks).toHaveLength(1);
+  });
+
+  it('rejects symbol-master edits referenced by a frozen output', () => {
+    const store = createDesignerStore();
+    addTextEl(store, 'Master');
+    const id = store.getState().doc.outputs[0].children[0].id;
+    store.getState().setSelectedIds([id]);
+    store.getState().createSymbol('Shared');
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setOutputFrozen(1, true);
+    const before = store.getState().doc;
+    const historyLength = store.getState().history.length;
+    const definition = before.symbols![0];
+
+    store.getState().updateSymbolDefinition(definition.id, [
+      { ...definition.children[0], text: 'Changed' },
+    ]);
+
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyLength);
+  });
+
+  it('preserves promoted slide names and inherited backgrounds when deleting slide 1', () => {
+    const store = createDesignerStore();
+    const doc = store.getState().doc;
+    store.getState().replaceDocTrusted({
+      ...doc,
+      outputs: [{
+        ...doc.outputs[0],
+        name: 'Original',
+        bg: { type: 'color', color: '#ff0000' },
+        pages: [
+          { id: 'p2', name: 'Promoted', background: { type: 'color', color: '#0000ff' }, children: [] },
+          { id: 'p3', name: 'Inherited', children: [] },
+          { id: 'p4', name: 'Explicit', background: { type: 'color', color: '#00ff00' }, children: [] },
+        ],
+      }],
+    });
+
+    store.getState().removePage(0, true);
+
+    const output = store.getState().doc.outputs[0];
+    expect(output.name).toBe('Promoted');
+    expect(output.bg).toEqual({ type: 'color', color: '#0000ff' });
+    expect(output.pages?.[0].background).toEqual({ type: 'color', color: '#ff0000' });
+    expect(output.pages?.[1].background).toEqual({ type: 'color', color: '#00ff00' });
+  });
+});
+
+
 describe('frozen output read-only clipboard actions', () => {
   it('copies clips and keyframes while still rejecting paste mutations', () => {
     const store = createDesignerStore();
