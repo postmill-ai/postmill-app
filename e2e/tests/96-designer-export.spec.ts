@@ -124,6 +124,11 @@ async function installMocks(page: Page) {
 
 test('production export keeps preview counts, JPEG 3x settings, and completed outputs on retry', async ({ page }) => {
   const state = await installMocks(page);
+  await page.context().addCookies([{
+    name: 'auth',
+    value: 'e2e-local-session',
+    url: 'http://127.0.0.1:4200',
+  }]);
   await page.goto(`/media/designer?designId=${DESIGN_ID}`);
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Export reliability');
   await expect(page.locator('.konva-stage').first()).toBeVisible();
