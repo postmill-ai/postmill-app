@@ -229,6 +229,71 @@ describe('smartReflow cover images', () => {
   });
 });
 
+describe('smartReflow contain media', () => {
+  it('keeps a cloned logo in its uniformly scaled frame without rewriting crop or focal choices', () => {
+    const logo: DesignerElement = {
+      id: 'logo',
+      type: 'image',
+      src: 'https://example.com/logo.png',
+      x: 100,
+      y: 100,
+      width: 240,
+      height: 120,
+      naturalWidth: 1600,
+      naturalHeight: 900,
+      fitMode: 'contain',
+      crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+      focalPoint: { x: 0.2, y: 0.7 },
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+    };
+    const before = JSON.parse(JSON.stringify(logo));
+
+    const result = smartReflow(
+      logo,
+      { width: 1080, height: 1080 },
+      { width: 1200, height: 675, formatId: 'x-post' }
+    );
+
+    expect(result.width).toBe(150);
+    expect(result.height).toBe(75);
+    expect(result.width! / result.height!).toBe(logo.width / logo.height);
+    expect(result.crop).toBeUndefined();
+    expect(result.focalPoint).toBeUndefined();
+    expect(logo).toEqual(before);
+  });
+
+  it('keeps a same-column text stack non-overlapping across an aspect change', () => {
+    const base: DesignerElement = {
+      id: 'headline',
+      type: 'text',
+      text: 'Headline',
+      x: 100,
+      y: 100,
+      width: 400,
+      height: 80,
+      fontSize: 48,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+    };
+    const subhead = { ...base, id: 'subhead', y: 200, fontSize: 24 };
+    const source = { width: 1080, height: 1080 };
+    const target = { width: 1200, height: 675, formatId: 'x-post' };
+    const before = JSON.stringify([base, subhead]);
+    const stacks = computeTextStackBoxes([base, subhead], source);
+    const headlineOut = smartReflow(base, source, target, stacks.get(base));
+    const subheadOut = smartReflow(subhead, source, target, stacks.get(subhead));
+
+    expect(subheadOut.y!).toBeGreaterThanOrEqual(headlineOut.y! + headlineOut.height!);
+    expect(subheadOut.y! - (headlineOut.y! + headlineOut.height!)).toBeGreaterThan(0);
+    expect(JSON.stringify([base, subhead])).toBe(before);
+  });
+});
+
 describe('smartReflow grouped pairs', () => {
   const squareSource = { width: 1080, height: 1080 };
   const storyTarget = { width: 1080, height: 1920, formatId: 'ig-story' };

@@ -55,6 +55,9 @@ import { wrapIconSvgDataUrl } from '@postmill-ai/nestjs-libraries/media/designer
 
 type SelectHandler = (id: string, evt?: Konva.KonvaEventObject<any>) => void;
 
+export const layerListensForHits = (element: DesignerElement): boolean =>
+  element.type !== 'raster' || !!element.src;
+
 export const fullBoxHitProps = (width: number, height: number) => ({
   hitFunc: (context: Konva.Context, shape: Konva.Shape) => {
     context.beginPath();
@@ -698,7 +701,8 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, inter
       height={element.height}
       rotation={element.rotation}
       opacity={element.opacity}
-      draggable={!element.locked && interactive}
+      draggable={!element.locked && interactive && layerListensForHits(element)}
+      listening={layerListensForHits(element)}
       clipFunc={clipFunc}
       onClick={(e) => onSelect(element.id, e)}
       onTap={(e) => onSelect(element.id, e)}

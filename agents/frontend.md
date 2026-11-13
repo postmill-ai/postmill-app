@@ -416,6 +416,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   preserve the center and scale fontSize on text/caption clips. Exit frames are clamped at zero and
   re-anchored to the new duration by `updateClipSilent` when a timing edit changes a matched exit.
   Multi-select text effects compute each element's own path and commit one history entry.
+- **Preset previews are transient, never edits.** Text styles/effects and photo frames use
+  `previewElements`/`clearElementPreview`: autosave ignores `previewRevision`, leaving restores the
+  baseline, real edits cancel preview first, and clicks commit once. Resets clear only their own
+  effect/mask; styles scale from the canvas type basis and preserve colors unless explicitly set.
+  Effects never rasterize text or add hit-blocking layers; empty `src`-less rasters do not intercept
+  hits. Snap uses the nearest guide at 6 screen px (`6 / zoom`) against multi-selection bounds.
+  Add-format/resize shares text-stack/panel frames and safe-zone clamps translate each stack as one.
 - **QR codes are ordinary raster media plus editable settings.** `qr-code.ts` uses the frontend's
   `qrcode` dependency to make a 1024px PNG data URL, stored in the existing `src` on an image element
   or still-image clip. Optional-additive doc v13 `qr` preserves value, six-digit colors, L/M/Q/H error

@@ -2,8 +2,10 @@
 
 import React, { FC } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import type { DesignerElement } from '../designer.store';
 import { defaultStyle } from '../layer-actions';
+import { usePresetPreview } from '../use-preset-preview';
 
 export type TextEffectKind = 'arc' | 'wave' | 'circle' | 'gradient' | 'outline' | 'shadow' | 'extrusion';
 
@@ -57,11 +59,34 @@ export const textEffectPatch = (
   }
 };
 
+export const textEffectResetPatch = (
+  kind: TextEffectKind,
+  element: DesignerElement
+): Partial<DesignerElement> => {
+  switch (kind) {
+    case 'arc':
+    case 'wave':
+    case 'circle':
+      return { curve: 0, textPath: undefined };
+    case 'gradient':
+      return { fillGradient: undefined };
+    case 'outline':
+      return { textStroke: undefined };
+    case 'shadow':
+      return { textShadow: undefined };
+    case 'extrusion':
+      return {
+        styles: (element.styles || []).filter((style) => style.type !== 'extrusion'),
+      };
+  }
+};
+
 export const TextEffectPresets: FC<{
   store: any;
   textElements: DesignerElement[];
 }> = ({ store, textElements }) => {
   const t = useT();
+  const { preview, cancel } = usePresetPreview(store);
   if (!textElements.length) return null;
   const effects: { kind: TextEffectKind; key: string; label: string }[] = [
     { kind: 'arc', key: 'designer_path_arc', label: 'Arc text' },
@@ -72,11 +97,29 @@ export const TextEffectPresets: FC<{
     { kind: 'shadow', key: 'designer_label_drop_shadow', label: 'Text shadow' },
     { kind: 'extrusion', key: 'designer_style_extrusion', label: '3D Extrusion' },
   ];
-  const applyEffect = (kind: TextEffectKind) => {
-    for (const element of textElements) {
-      store.getState().updateElementsSilent([element.id], textEffectPatch(kind, element));
+  const previewEffect = (kind: TextEffectKind, reset = false) => {
+    preview(Object.fromEntries(
+      textElements.map((element) => [
+        element.id,
+        reset ? textEffectResetPatch(kind, element) : textEffectPatch(kind, element),
+      ])
+    ));
+  };
+  const applyEffect = (kind: TextEffectKind, reset = false) => {
+    cancel();
+    const state = store.getState();
+    const output = state.doc.outputs[state.currentOutput];
+    const selected = new Set(textElements.map((element) => element.id));
+    const current = pageChildren(output, state.currentPage).filter(
+      (element: DesignerElement) => selected.has(element.id) && element.type === 'text'
+    );
+    for (const element of current) {
+      state.updateElement(
+        element.id,
+        reset ? textEffectResetPatch(kind, element) : textEffectPatch(kind, element)
+      );
     }
-    store.getState().pushHistory();
+    state.pushHistory();
   };
   return (
     <div className="flex flex-col gap-2">
@@ -84,16 +127,33 @@ export const TextEffectPresets: FC<{
         {t('designer_effects_heading', 'Text Effects')}
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {effects.map((effect) => (
-          <button
-            key={effect.kind}
-            type="button"
-            onClick={() => applyEffect(effect.kind)}
-            className="px-2.5 py-1.5 rounded-md border border-studioBorder bg-newBgColorInner text-[11px] text-textColor hover:border-designerAccent hover:bg-designerAccent/10"
-          >
-            {t(effect.key, effect.label)}
-          </button>
-        ))}
+        {effects.map((effect) => {
+          const label = t(effect.key, effect.label);
+          return (
+            <div key={effect.kind} className="flex rounded-md border border-studioBorder bg-newBgColorInner overflow-hidden">
+              <button
+                type="button"
+                onMouseEnter={() => previewEffect(effect.kind)}
+                onMouseLeave={cancel}
+                onClick={() => applyEffect(effect.kind)}
+                className="px-2.5 py-1.5 text-[11px] text-textColor hover:bg-designerAccent/10"
+              >
+                {label}
+              </button>
+              <button
+                type="button"
+                aria-label={t('designer_reset_named_effect', 'Reset {{effect}}', { effect: label })}
+                title={t('designer_none', 'None')}
+                onMouseEnter={() => previewEffect(effect.kind, true)}
+                onMouseLeave={cancel}
+                onClick={() => applyEffect(effect.kind, true)}
+                className="px-1.5 py-1.5 border-s border-studioBorder text-[10px] text-textColor/50 hover:bg-designerAccent/10 hover:text-textColor"
+              >
+                {t('designer_none_short', 'None')}
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -27,6 +27,7 @@ import { QrCodeControls } from './qr-code-controls';
 import { trySetPointerCapture } from '../pointer-capture';
 import { applyStaticMagicGrab, prepareStaticMagicGrab } from '../magic-grab';
 import { openMagicGrabReview } from '../magic-grab-modal';
+import { usePresetPreview } from '../use-preset-preview';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -51,6 +52,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   const updateElement = store((s: any) => s.updateElement);
   const updateElements = store((s: any) => s.updateElements);
   const updateElementsSilent = store((s: any) => s.updateElementsSilent);
+  const { preview, cancel } = usePresetPreview(store);
 
   const [aiLoading, setAiLoading] = useState<string | false>(false);
   const [upscaleScale, setUpscaleScale] = useState(2);
@@ -85,6 +87,13 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   const [draggingFocal, setDraggingFocal] = useState(false);
 
   const set = (u: Partial<DesignerElement>) => updateElements(ids, u);
+  const previewFrame = (mask: DesignerElement['mask']) => {
+    preview(Object.fromEntries(ids.map((id) => [id, { mask }])));
+  };
+  const applyFrame = (mask: DesignerElement['mask']) => {
+    cancel();
+    updateElements(ids, { mask });
+  };
 
   const filters = useMemo(() => element.filters || [], [element.filters]);
 
@@ -790,6 +799,21 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       <div className="space-y-2">
         <div className="text-[11px] text-textColor/50">{t('designer_label_mask_frame', 'Mask / Frame')}</div>
         <div className="grid grid-cols-3 gap-1.5">
+          <button
+            type="button"
+            title={t('designer_none', 'None')}
+            onMouseEnter={() => previewFrame(undefined)}
+            onMouseLeave={cancel}
+            onClick={() => applyFrame(undefined)}
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-[20px] transition-all ${
+              !element.mask
+                ? 'border-designerAccent bg-designerAccent/10 text-btnPrimaryAccent'
+                : 'border-studioBorder bg-newBgColorInner text-textColor/60 hover:border-designerAccent hover:text-textColor'
+            }`}
+          >
+            <span className="leading-none">∅</span>
+            <span className="text-[9px] leading-none">{t('designer_none', 'None')}</span>
+          </button>
           {(
             [
               { shape: 'ellipse', label: t('designer_mask_circle', 'Circle'), icon: '⬮' },
@@ -816,15 +840,17 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
                 key={shape}
                 type="button"
                 title={label}
-                onClick={() => {
-                  updateElement(element.id, {
-                    mask: {
-                      type: 'shape',
-                      shape,
-                      cornerRadius: shape === 'rounded-rect' ? 8 : undefined,
-                    },
-                  });
-                }}
+                onMouseEnter={() => previewFrame({
+                  type: 'shape',
+                  shape,
+                  cornerRadius: shape === 'rounded-rect' ? 8 : undefined,
+                })}
+                onMouseLeave={cancel}
+                onClick={() => applyFrame({
+                  type: 'shape',
+                  shape,
+                  cornerRadius: shape === 'rounded-rect' ? 8 : undefined,
+                })}
                 className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-[20px] transition-all ${
                   active
                     ? 'border-designerAccent bg-designerAccent/10 text-btnPrimaryAccent'
@@ -884,7 +910,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
 
         {element.mask && (
           <button
-            onClick={() => updateElement(element.id, { mask: undefined })}
+            onClick={() => applyFrame(undefined)}
             className="w-full px-3 py-2 rounded-md text-[12px] border border-red-400/40 text-dangerText hover:bg-red-400/10 transition-colors"
           >
             {t('designer_remove_frame', 'Remove frame')}

@@ -469,6 +469,46 @@ describe('repeated output dimensions', () => {
     expect(store.getState().doc.outputs[1].children[0].text).toBe('Shared');
   });
 
+  it.each([true, false])('reflows stacks and contain media without changing the source (linked=%s)', (linkContent) => {
+    const store = createDesignerStore();
+    const shared = {
+      x: 100, width: 400, rotation: 0, opacity: 1, locked: false, hidden: false,
+    };
+    store.getState().addElement({
+      ...shared, id: 'headline', type: 'text', y: 100, height: 80, fontSize: 48, text: 'Headline',
+    });
+    store.getState().addElement({
+      ...shared, id: 'subhead', type: 'text', y: 200, height: 80, fontSize: 24, text: 'Subhead',
+    });
+    store.getState().addElement({
+      id: 'logo', type: 'image', src: 'https://example.com/logo.png', x: 650, y: 100,
+      width: 240, height: 120, naturalWidth: 1600, naturalHeight: 900, fitMode: 'contain',
+      crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 }, focalPoint: { x: 0.2, y: 0.7 },
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    const sourceGeometry = store.getState().doc.outputs[0].children.map((el) => ({
+      id: el.id, x: el.x, y: el.y, width: el.width, height: el.height,
+    }));
+
+    store.getState().addOutput(
+      { formatId: 'x-post', name: 'X Post', width: 1200, height: 675 },
+      { linkContent }
+    );
+
+    const outputs = store.getState().doc.outputs;
+    const headline = outputs[1].children.find((el) => el.text === 'Headline')!;
+    const subhead = outputs[1].children.find((el) => el.text === 'Subhead')!;
+    const logo = outputs[1].children.find((el) => el.type === 'image')!;
+    expect(subhead.y).toBeGreaterThanOrEqual(headline.y + headline.height);
+    expect(logo.width / logo.height).toBe(2);
+    expect(logo.crop).toEqual({ x: 0.1, y: 0.1, width: 0.8, height: 0.8 });
+    expect(logo.focalPoint).toEqual({ x: 0.2, y: 0.7 });
+    expect(outputs[0].children.map((el) => ({
+      id: el.id, x: el.x, y: el.y, width: el.width, height: el.height,
+    }))).toEqual(sourceGeometry);
+    expect(!!headline.originId).toBe(linkContent);
+  });
+
   it('enforces MAX_OUTPUTS without changing the existing document', () => {
     const store = createDesignerStore();
     const doc = store.getState().doc;

@@ -1,11 +1,18 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { TextEffectPresets, textEffectPatch } from './text-effect-presets';
-import type { DesignerElement } from '../designer.store';
+import {
+  TextEffectPresets,
+  textEffectPatch,
+  textEffectResetPatch,
+} from './text-effect-presets';
+import { createDesignerStore, type DesignerElement } from '../designer.store';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
-  useT: () => (_key: string, fallback: string) => fallback,
+  useT: () => (_key: string, fallback: string, vars?: Record<string, unknown>) =>
+    vars
+      ? fallback.replace(/\{\{(\w+)\}\}/g, (_match, name) => String(vars[name]))
+      : fallback,
 }));
 
 const element = {
@@ -45,20 +52,74 @@ describe('text effect presets', () => {
   });
 
   it('sizes effects per selected element and commits one history entry', () => {
-    const updateElementsSilent = vi.fn();
-    const pushHistory = vi.fn();
-    const store = { getState: () => ({ updateElementsSilent, pushHistory }) };
+    const store = createDesignerStore();
     const second = { ...element, id: 'text-2', width: 800, height: 200 };
+    store.getState().addElement(element);
+    store.getState().addElement(second);
+    const history = store.getState().history.length;
     render(<TextEffectPresets store={store} textElements={[element, second]} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Wave text' }));
 
-    expect(updateElementsSilent).toHaveBeenCalledTimes(2);
-    const firstPath = updateElementsSilent.mock.calls[0][1].textPath;
-    const secondPath = updateElementsSilent.mock.calls[1][1].textPath;
-    expect(firstPath).not.toBe(secondPath);
-    expect(updateElementsSilent.mock.calls[0][0]).toEqual(['text-1']);
-    expect(updateElementsSilent.mock.calls[1][0]).toEqual(['text-2']);
-    expect(pushHistory).toHaveBeenCalledOnce();
+    const children = store.getState().doc.outputs[0].children;
+    expect(children[0].textPath).toContain('Q 100');
+    expect(children[1].textPath).toContain('Q 200');
+    expect(store.getState().history.length).toBe(history + 1);
+  });
+
+  it('previews and restores without history or dirty state, then commits once', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(element);
+    store.getState().markSaved();
+    const before = store.getState().doc;
+    const history = store.getState().history.length;
+    render(<TextEffectPresets store={store} textElements={[element]} />);
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Text shadow' }));
+    expect(store.getState().doc.outputs[0].children[0].textShadow?.blur).toBe(8);
+    expect(store.getState().history.length).toBe(history);
+    expect(store.getState().isDirty).toBe(false);
+    fireEvent.mouseLeave(screen.getByRole('button', { name: 'Text shadow' }));
+    expect(store.getState().doc).toBe(before);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Text shadow' }));
+    expect(store.getState().history.length).toBe(history + 1);
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].children[0].textShadow).toBeUndefined();
+  });
+
+  it('restores the preview baseline before a real store edit', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({ ...element, fontSize: 32 });
+    const id = store.getState().doc.outputs[0].children[0].id;
+    store.getState().previewElements({ [id]: { fontSize: 72 } });
+
+    store.getState().updateElement(id, { fill: '#abcdef' });
+
+    expect(store.getState().doc.outputs[0].children[0]).toMatchObject({
+      fontSize: 32,
+      fill: '#abcdef',
+    });
+  });
+
+  it('resets only the requested effect and never rasterizes the text', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(element);
+    render(<TextEffectPresets store={store} textElements={[element]} />);
+
+    for (const name of ['Arc text', 'Wave text', 'Circle text', 'Text shadow']) {
+      fireEvent.click(screen.getByRole('button', { name }));
+    }
+    expect(store.getState().doc.outputs[0].children).toHaveLength(1);
+    expect(store.getState().doc.outputs[0].children[0].type).toBe('text');
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].children[0].textShadow).toBeUndefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset Circle text/ }));
+    const current = store.getState().doc.outputs[0].children[0];
+    expect(current.textPath).toBeUndefined();
+    expect(current.curve).toBe(0);
+    expect(current.styles).toEqual(element.styles);
+    expect(textEffectResetPatch('shadow', current).textPath).toBeUndefined();
   });
 });

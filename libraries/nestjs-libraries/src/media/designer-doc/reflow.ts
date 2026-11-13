@@ -628,18 +628,16 @@ export const smartReflow = (
       result.fitMode = mode;
       result.focalPoint = coverFocalPoint(el, newW, newH);
     } else if (mode === 'contain') {
-      const { width: w, height: h } = fitWithin(
-        el.naturalWidth || el.width || source.width,
-        el.naturalHeight || el.height || source.height,
-        target.width,
-        target.height
-      );
-      newW = w;
-      newH = h;
+      // Contain media keeps its authored frame and scales it uniformly with the
+      // layout. Re-fitting the natural bitmap to the WHOLE target made a small
+      // cloned logo become a canvas-sized image and destroyed its relationship
+      // to nearby copy. The renderer already contains the bitmap inside this
+      // frame, so aspect, crop and focal choices need no rewrite here.
+      newW = scaleDim(el.width, scale);
+      newH = scaleDim(el.height, scale);
       result.width = newW;
       result.height = newH;
       result.fitMode = mode;
-      result.focalPoint = el.focalPoint || { x: 0.5, y: 0.5 };
     } else {
       newW = scaleDim(el.width, scaleX);
       newH = scaleDim(el.height, scaleY);
@@ -772,10 +770,24 @@ export const smartReflow = (
         newW = Math.max(10, Math.floor(safeW));
         result.width = newW;
       }
-      if (x < safe.left) x = safe.left;
-      if (x + newW > safe.right) x = Math.max(safe.left, safe.right - newW);
-      if (y < safe.top) y = safe.top;
-      if (y + newH > safe.bottom) y = Math.max(safe.top, safe.bottom - newH);
+      if (groupBox && !groupBox.anchor) {
+        // Clamp the shared stack frame, not its members independently. Moving
+        // only the first line off a safe-zone edge collapses the authored gap
+        // and can put it on top of the next line.
+        const frameLeft = x - (el.x - groupBox.x) * contentScale;
+        const frameTop = y - (el.y - groupBox.y) * contentScale;
+        const frameRight = frameLeft + groupBox.width * contentScale;
+        const frameBottom = frameTop + groupBox.height * contentScale;
+        if (frameLeft < safe.left) x += safe.left - frameLeft;
+        else if (frameRight > safe.right) x -= frameRight - safe.right;
+        if (frameTop < safe.top) y += safe.top - frameTop;
+        else if (frameBottom > safe.bottom) y -= frameBottom - safe.bottom;
+      } else {
+        if (x < safe.left) x = safe.left;
+        if (x + newW > safe.right) x = Math.max(safe.left, safe.right - newW);
+        if (y < safe.top) y = safe.top;
+        if (y + newH > safe.bottom) y = Math.max(safe.top, safe.bottom - newH);
+      }
     } else {
       const safeW = safe.right - safe.left;
       const safeH = safe.bottom - safe.top;

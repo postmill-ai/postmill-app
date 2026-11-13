@@ -81,6 +81,11 @@ import {
   normalizeCanvasWheel,
 } from './canvas-pinch';
 import { seedBufferFromCanvas } from './raster-layers';
+import {
+  boundsForSnapBoxes,
+  nearestSnap,
+  snapToleranceForZoom,
+} from './canvas-snap';
 
 /**
  * How much of the viewport a fitted artboard fills, leaving the rest as margin.
@@ -118,8 +123,6 @@ const GUIDE_OVERREACH = 40;
 const GUIDE_DELETE_SLACK = 24;
 /** Upper bound on grid lines per axis, so a tiny grid can't stall the stage. */
 const MAX_GRID_LINES = 200;
-
-const SNAP = 6;
 
 export const DesignerCanvas: FC<CanvasProps> = ({
   store,
@@ -1095,9 +1098,17 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       // which reports the element box) snapped on its box. The element box is
       // the authoring rectangle for both: it is what the Transformer shows and
       // what the marquee hit-tests, so it is what snapping measures.
-      const moving = children.find((el) => el.id === node.id());
-      const w = (moving ? moving.width : node.width()) * node.scaleX();
-      const h = (moving ? moving.height : node.height()) * node.scaleY();
+      const attached = transformerRef.current?.nodes() || [];
+      const movingNodes = attached.length > 1 ? attached : [node];
+      const movingBox = boundsForSnapBoxes(movingNodes.map((movingNode) => {
+        const moving = children.find((el) => el.id === movingNode.id());
+        return {
+          x: movingNode.x(),
+          y: movingNode.y(),
+          width: (moving ? moving.width : movingNode.width()) * Math.abs(movingNode.scaleX()),
+          height: (moving ? moving.height : movingNode.height()) * Math.abs(movingNode.scaleY()),
+        };
+      }));
       const targetsX = [0, output.width / 2, output.width];
       const targetsY = [0, output.height / 2, output.height];
       // A guide you can't snap to is a decoration; same for a grid.
@@ -1111,44 +1122,40 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         targetsX.push(el.x, el.x + el.width / 2, el.x + el.width);
         targetsY.push(el.y, el.y + el.height / 2, el.y + el.height);
       });
+      const snapped = nearestSnap(movingBox, targetsX, targetsY, zoom);
+      for (const movingNode of movingNodes) {
+        if (snapped.dx) movingNode.x(movingNode.x() + snapped.dx);
+        if (snapped.dy) movingNode.y(movingNode.y() + snapped.dy);
+      }
+      const placed = {
+        ...movingBox,
+        x: movingBox.x + snapped.dx,
+        y: movingBox.y + snapped.dy,
+      };
       const lines: { points: number[] }[] = [];
-      const edgesX = [node.x(), node.x() + w / 2, node.x() + w];
-      const edgesY = [node.y(), node.y() + h / 2, node.y() + h];
-      let snapDX: number | null = null;
-      let snapDY: number | null = null;
-      edgesX.forEach((ex) => {
-        targetsX.forEach((tx) => {
-          if (Math.abs(ex - tx) <= SNAP && (snapDX === null || Math.abs(tx - ex) < Math.abs(snapDX))) {
-            snapDX = tx - ex;
-            lines.push({ points: [tx, 0, tx, output.height] });
-          }
-        });
-      });
-      edgesY.forEach((ey) => {
-        targetsY.forEach((ty) => {
-          if (Math.abs(ey - ty) <= SNAP && (snapDY === null || Math.abs(ty - ey) < Math.abs(snapDY))) {
-            snapDY = ty - ey;
-            lines.push({ points: [0, ty, output.width, ty] });
-          }
-        });
-      });
-      if (snapDX !== null) node.x(node.x() + snapDX);
-      if (snapDY !== null) node.y(node.y() + snapDY);
+      if (snapped.verticalGuide !== null) {
+        lines.push({ points: [snapped.verticalGuide, 0, snapped.verticalGuide, output.height] });
+      }
+      if (snapped.horizontalGuide !== null) {
+        lines.push({ points: [0, snapped.horizontalGuide, output.width, snapped.horizontalGuide] });
+      }
 
       // Equal-spacing detection, on top of the edge/centre snaps. This is what
       // separates a smart guide from a plain one: it can tell you three cards
       // are evenly spread, which no edge comparison can.
       const spacing = findEqualSpacing(
-        { id: '__moving', x: node.x(), y: node.y(), width: w, height: h },
+        { id: '__moving', ...placed },
         others.map((el) => ({ id: el.id, x: el.x, y: el.y, width: el.width, height: el.height })),
-        SNAP
+        snapToleranceForZoom(zoom)
       );
       setSpacingGuide(
         spacing
           ? {
               ...spacing,
               // The badge sits on the axis the gap runs along, centred in it.
-              cross: spacing.axis === 'x' ? node.y() + h / 2 : node.x() + w / 2,
+              cross: spacing.axis === 'x'
+                ? placed.y + placed.height / 2
+                : placed.x + placed.width / 2,
             }
           : null
       );
@@ -1156,7 +1163,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       setGuides(lines);
       setHud({ x: node.x(), y: node.y() - 22, text: `${Math.round(node.x())}, ${Math.round(node.y())}` });
     },
-    [output, pageOutput, selectedIds, snapEnabled, isVideo, docGuides, snapToGrid, gridSize]
+    [output, pageOutput, selectedIds, snapEnabled, isVideo, docGuides, snapToGrid, gridSize, zoom]
   );
   // Grid lines in document space. Capped: a 2px grid on a 4000px artboard is
   // 2,000 nodes Konva would redraw on every pan.

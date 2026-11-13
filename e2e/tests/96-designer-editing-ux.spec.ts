@@ -33,9 +33,15 @@ const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 async function installMocks(page: Page) {
+  await page.context().addCookies([{
+    name: 'auth',
+    value: 'mocked-designer-e2e',
+    url: `${process.env.E2E_BASE || 'http://localhost:4201'}/`,
+  }]);
   const state = {
     doc: structuredClone(initialDoc),
     suggestionCalls: 0,
+    renderDocs: [] as unknown[],
   };
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -57,7 +63,7 @@ async function installMocks(page: Page) {
     if (method === 'GET' && pathname === '/user/organizations') {
       return json(route, [{ id: 'e2e-org', name: 'E2E Org', users: [{ disabled: false }] }]);
     }
-    if (method === 'GET' && ['/announcements', '/notifications', '/integrations/list', '/brands', '/media/fonts'].includes(pathname)) {
+    if (method === 'GET' && ['/announcements', '/notifications', '/integrations/list', '/brands', '/media/fonts', '/files/folders'].includes(pathname)) {
       return json(route, []);
     }
     if (method === 'GET' && ['/settings/media/config', '/settings/ai/config', '/settings/storage', '/files/limits'].includes(pathname)) {
@@ -76,6 +82,18 @@ async function installMocks(page: Page) {
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}/versions`) {
       return json(route, []);
+    }
+    if (method === 'POST' && pathname === '/media/designs/render') {
+      const body = request.postDataJSON() as { doc?: unknown };
+      state.renderDocs.push(body.doc);
+      return route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg==', 'base64'),
+      });
+    }
+    if (method === 'POST' && pathname === '/files/upload-simple') {
+      return json(route, { id: 'exported-file', path: '/mock-export/editing.png' }, 201);
     }
     if (method === 'POST' && pathname === '/media/designer-assistant/suggestions') {
       state.suggestionCalls++;
@@ -126,8 +144,8 @@ async function installMocks(page: Page) {
 
 async function openDesigner(page: Page) {
   await page.goto(`/media/designer?designId=${DESIGN_ID}`);
-  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
-  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX', { timeout: 60_000 });
+  await expect(page.locator('.konva-stage').first()).toBeVisible({ timeout: 60_000 });
 }
 
 async function editText(page: Page) {
@@ -179,6 +197,63 @@ test('selected words retain independent colors through autosave and reopen', asy
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await editText(page);
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toContainText('Hello world');
+});
+
+test('text effects remain editable through Paint layers, preview, undo, reopen, and export', async ({ page }) => {
+  const state = await installMocks(page);
+  const children = state.doc.outputs[0].children as Array<Record<string, unknown>>;
+  children.push({
+    id: 'empty-paint', type: 'raster', name: 'Paint layer', x: 0, y: 0,
+    width: 400, height: 400, rotation: 0, opacity: 1, locked: false, hidden: false,
+  });
+  await openDesigner(page);
+  await editText(page);
+  await page.getByRole('textbox', { name: 'Design name' }).click();
+
+  for (const name of ['Arc text', 'Wave text', 'Circle text', 'Text shadow']) {
+    await page.getByRole('button', { name, exact: true }).click();
+  }
+  await expect.poll(() => JSON.stringify(state.doc.outputs[0].children[0])).toContain('textShadow');
+  expect(state.doc.outputs[0].children).toHaveLength(2);
+  expect(state.doc.outputs[0].children[0].type).toBe('text');
+  await editText(page);
+  await page.getByRole('textbox', { name: 'Design name' }).click();
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)' }).click();
+  await expect.poll(() => state.doc.outputs[0].children[0].textShadow).toBeUndefined();
+  await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)' }).click();
+  await expect.poll(() => state.doc.outputs[0].children[0].textShadow).toBeDefined();
+
+  const heading = page.getByRole('button', { name: /H Heading 1/ });
+  await heading.hover();
+  await expect(page.getByRole('spinbutton', { name: 'Size', exact: true })).toHaveValue('24');
+  await page.waitForTimeout(2300);
+  expect(state.doc.outputs[0].children[0].fontSize).toBe(32);
+  await page.getByRole('textbox', { name: 'Design name' }).hover();
+  await expect(page.getByRole('spinbutton', { name: 'Size', exact: true })).toHaveValue('32');
+  await heading.click();
+  await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(24);
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)' }).click();
+  await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(32);
+  await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)' }).click();
+  await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(24);
+
+  await page.getByRole('button', { name: 'Save (Ctrl+S)' }).click();
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await editText(page);
+  await page.getByRole('textbox', { name: 'Design name' }).click();
+
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
+  await expect.poll(() => state.renderDocs.length).toBe(1);
+  expect(JSON.stringify(state.renderDocs[0])).toContain('textShadow');
+  expect(JSON.stringify(state.renderDocs[0])).toContain('textPath');
+  const downloadEvent = page.waitForEvent('download');
+  await page.getByRole('link', { name: /\.png$/ }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toMatch(/\.png$/);
+  expect(await download.failure()).toBeNull();
 });
 
 test('touchpad mode pans without changing zoom and pinches to zoom', async ({ page }) => {

@@ -128,14 +128,14 @@ describe('TextInspector paged text', () => {
     expect(screen.getByRole('region', { name: 'Text formatting' })).toBeTruthy();
     expect(screen.getByText(/Low contrast/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Heading 1/ }));
-    fireEvent.click(screen.getByRole('button', { name: '#2B5CD3' }));
+    fireEvent.click(screen.getByRole('button', { name: '#123456' }));
     const color = screen.getByRole('textbox', { name: 'Hex color' });
     fireEvent.change(color, { target: { value: '#abcdef' } });
     fireEvent.blur(color);
 
     expect(output(store, 1).pages?.[0].children[0]).toMatchObject({
       id: 'page-two',
-      fontSize: 48,
+      fontSize: 64,
       fontWeight: 700,
       fill: '#ABCDEF',
     });
@@ -169,5 +169,50 @@ describe('TextInspector paged text', () => {
     expect(pageOne).toHaveLength(1);
     expect(pageOne[0].name).not.toBe('Text Backdrop');
     expect(output(store, 0).pages).toBeUndefined();
+  });
+
+  it('preserves solid, gradient, and rich-run colors when applying a style', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      ...textElement('rich', 'Rich text'),
+      fill: '#123456',
+      fillGradient: {
+        type: 'linear',
+        angle: 45,
+        stops: [
+          { offset: 0, color: '#111111' },
+          { offset: 1, color: '#eeeeee' },
+        ],
+      },
+      richText: [
+        { text: 'Rich', fill: '#aa0000' },
+        { text: ' text', fill: '#00aa00' },
+      ],
+    });
+    store.getState().setSelectedIds(['rich']);
+    await renderInspector(store);
+
+    fireEvent.click(screen.getByRole('button', { name: /Heading 1/ }));
+
+    const current = output(store, 0).children[0];
+    expect(current.fill).toBe('#123456');
+    expect(current.fillGradient?.angle).toBe(45);
+    expect(current.richText?.map((run) => run.fill)).toEqual(['#aa0000', '#00aa00']);
+    expect(current.fontSize).toBe(48);
+  });
+
+  it('uses bounded canvas-relative sizing with a stable style hierarchy', async () => {
+    const store = createDesignerStore(1200, 675);
+    store.getState().addElement(textElement('heading', 'Heading'));
+    store.getState().setSelectedIds(['heading']);
+    await renderInspector(store);
+
+    fireEvent.click(screen.getByRole('button', { name: /Heading 1/ }));
+    expect(output(store, 0).children[0].fontSize).toBe(40);
+    fireEvent.click(screen.getByRole('button', { name: 'B Body' }));
+
+    const current = output(store, 0).children[0];
+    expect(current.fontSize).toBe(13);
+    expect(store.getState().doc.outputs[0]).toMatchObject({ width: 1200, height: 675 });
   });
 });

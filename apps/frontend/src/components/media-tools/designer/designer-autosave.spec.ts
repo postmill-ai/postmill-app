@@ -755,4 +755,27 @@ describe('createAutosaveSubscription', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('suspends a pending save during preview and resumes with the restored document', async () => {
+    const store = createDesignerStore(1080, 1080);
+    const save = vi.fn();
+    const unsubscribe = createAutosaveSubscription(store, {
+      save,
+      ensureCreated: vi.fn(),
+      createInFlight: () => null,
+    }, 5);
+    addText(store, 'Preview');
+    const id = store.getState().doc.outputs[0].children[0].id;
+
+    store.getState().previewElements({ [id]: { fontSize: 72 } });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(save).not.toHaveBeenCalled();
+
+    store.getState().clearElementPreview();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    unsubscribe();
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0][0].outputs[0].children[0].fontSize).toBeUndefined();
+  });
 });

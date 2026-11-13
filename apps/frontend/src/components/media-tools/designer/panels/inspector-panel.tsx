@@ -23,6 +23,7 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
   const t = useT();
   const doc = store((s: any) => s.doc);
   const currentOutput = store((s: any) => s.currentOutput);
+  const currentPage = store((s: any) => s.currentPage);
   const selectedIds = store((s: any) => s.selectedIds);
   const setSelectedIds = store((s: any) => s.setSelectedIds);
   const unlinkElement = store((s: any) => s.unlinkElement);
@@ -34,10 +35,10 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
 
   const selected: DesignerElement[] = useMemo(
     () =>
-      isVideoMode ? [] : pageChildren(doc.outputs[currentOutput] as any, store.getState().currentPage).filter(
+      isVideoMode ? [] : pageChildren(doc.outputs[currentOutput] as any, currentPage).filter(
         (c: DesignerElement) => selectedIds.includes(c.id),
       ),
-    [doc, currentOutput, selectedIds, isVideoMode],
+    [doc, currentOutput, currentPage, selectedIds, isVideoMode],
   );
 
   if (!selected.length && !selectedClip) return null;
@@ -77,6 +78,7 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
   const primary = selected[0];
   const ids = selected.map((s) => s.id);
   const isMixedType = selected.some((s) => s.type !== primary.type);
+  const isLinked = currentPage === 0 && !!primary.originId;
 
   return (
     <div className="space-y-4">
@@ -92,10 +94,10 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
                 })
               : t(`designer_element_type_${primary.type}`, primary.type)}
           </div>
-          {primary.originId ? (
+          {isLinked ? (
             <span className="text-[11px] text-btnPrimaryAccent shrink-0">{t('designer_linked_formats', '🔗 Linked — edits update all formats')}</span>
           ) : (
-            <span className="text-[11px] text-gray-500 shrink-0">{t('designer_format_only', '🔓 This format only')}</span>
+            <span className="text-[11px] text-newTableText shrink-0">{t('designer_format_only', '🔓 This format only')}</span>
           )}
         </div>
         <button
@@ -108,16 +110,16 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
         </button>
       </div>
 
-      {primary.originId && (
+      {isLinked && (
         <button
-          className="w-full text-xs px-2 py-1.5 rounded-sm border border-[#2a2a4a] text-gray-400 hover:text-white hover:border-red-500/50"
+          className="w-full text-xs px-2 py-1.5 rounded-sm border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10 hover:border-designerAccent"
           onClick={() => { unlinkElement(primary.id); }}
         >
           {t('designer_unlink', 'Unlink')}
         </button>
       )}
 
-      {!primary.originId && primary.type !== 'icon' && (
+      {currentPage === 0 && !isLinked && primary.type !== 'icon' && (
         <button
           className="w-full text-xs px-2 py-1.5 rounded-sm border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10"
           onClick={() => {

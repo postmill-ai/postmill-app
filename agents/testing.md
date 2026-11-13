@@ -131,6 +131,13 @@ not run it against another origin. The workflow runs PRs and `main` pushes only;
 it must never become a required check. Add later Designer specs to this config only after making them
 equally self-contained. Never run this config, its `webServer`, or `next start` on a production host.
 
+`96-designer-editing-ux.spec.ts` also has `playwright.designer-editing.config.ts` for its
+network-mocked canvas interaction cases. With `E2E_SKIP_AUTH_SETUP=1`, the spec installs a
+mock-only auth cookie and mocks identity, organization, design, render, and upload routes; it
+starts no `webServer`. Set `E2E_BASE` to an already-running loopback worktree frontend and run
+`pnpm exec playwright test --config playwright.designer-editing.config.ts` from `e2e/`. Never use
+the mock cookie or skip flag for unmocked/live tests.
+
 ### Opt-in live provider playback (never default CI)
 
 `99-provider-live-media.spec.ts` and `playwright.provider-live.config.ts` are a separate,
