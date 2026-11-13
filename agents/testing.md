@@ -132,11 +132,14 @@ it must never become a required check. Add later Designer specs to this config o
 equally self-contained. Never run this config, its `webServer`, or `next start` on a production host.
 
 `96-designer-editing-ux.spec.ts` also has `playwright.designer-editing.config.ts` for its
-network-mocked canvas interaction cases. With `E2E_SKIP_AUTH_SETUP=1`, the spec installs a
-mock-only auth cookie and mocks identity, organization, design, render, and upload routes; it
-starts no `webServer`. Set `E2E_BASE` to an already-running loopback worktree frontend and run
-`pnpm exec playwright test --config playwright.designer-editing.config.ts` from `e2e/`. Never use
-the mock cookie or skip flag for unmocked/live tests.
+network-mocked canvas interaction cases. Only with `E2E_SKIP_AUTH_SETUP=1` does the spec install a
+mock-only auth cookie; real-session configs keep their saved session. It mocks identity, organization,
+design, render, and upload routes and starts no `webServer`. Set `E2E_BASE` to an already-running
+loopback worktree frontend and run `pnpm exec playwright test --config
+playwright.designer-editing.config.ts` from `e2e/`. The `designer-editing-e2e` job in
+`.github/workflows/test.yml` builds the frontend, starts that production bundle only on the GitHub
+runner, and executes this config with the skip flag and mocked routes. Never use the mock cookie or
+skip flag for unmocked/live tests, and never start the server or Playwright on the production host.
 
 ### Opt-in live provider playback (never default CI)
 

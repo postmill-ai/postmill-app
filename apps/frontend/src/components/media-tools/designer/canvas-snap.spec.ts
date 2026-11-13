@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { findEqualSpacing } from '@postmill-ai/nestjs-libraries/media/designer-doc/align-distribute';
 import {
   boundsForSnapBoxes,
+  EQUAL_SPACING_DOCUMENT_PX,
   nearestSnap,
+  selectionIncludesDraggedNode,
   snapToleranceForZoom,
 } from './canvas-snap';
 
@@ -47,5 +50,25 @@ describe('canvas snapping', () => {
     expect(result.dx).toBe(24);
     expect(result.verticalGuide).toBe(1624);
     expect(result.dy).toBe(0);
+  });
+
+  it('uses multi-selection bounds only when the dragged node is attached', () => {
+    expect(selectionIncludesDraggedNode(['one', 'two'], 'one')).toBe(true);
+    expect(selectionIncludesDraggedNode(['one', 'two'], 'unselected')).toBe(false);
+    expect(selectionIncludesDraggedNode(['one'], 'one')).toBe(false);
+    expect(selectionIncludesDraggedNode([], 'guide')).toBe(false);
+  });
+
+  it('classifies equal spacing with fixed document-space tolerance at low zoom', () => {
+    const others = [
+      { id: 'a', x: 0, y: 0, width: 100, height: 100 },
+      { id: 'b', x: 160, y: 0, width: 100, height: 100 },
+    ];
+    const equal = { id: 'moving', x: 320, y: 0, width: 100, height: 100 };
+    const sixtyPixelsOff = { ...equal, x: 380 };
+
+    expect(findEqualSpacing(equal, others, EQUAL_SPACING_DOCUMENT_PX)).not.toBeNull();
+    expect(findEqualSpacing(sixtyPixelsOff, others, EQUAL_SPACING_DOCUMENT_PX)).toBeNull();
+    expect(findEqualSpacing(sixtyPixelsOff, others, snapToleranceForZoom(0.1))).not.toBeNull();
   });
 });

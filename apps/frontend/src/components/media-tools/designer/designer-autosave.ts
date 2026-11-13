@@ -83,23 +83,21 @@ export const createAutosaveSubscription = (
     timer = setTimeout(() => {
       timer = null;
       const s = store.getState();
-      if (s.isDirty && !s.isPreviewing) designAutosave.save(s.doc);
+      if (s.isDirty) designAutosave.save(s.doc);
     }, debounceMs);
   };
   const unsubscribe = store.subscribe((state) => {
     const prevState = prev;
     prev = state;
-    if (state.previewRevision !== prevState.previewRevision) {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      if (!state.isPreviewing && state.doc !== prevState.doc) schedule();
-      return;
-    }
     if (state.doc !== prevState.doc || state.designName !== prevState.designName) {
       schedule();
-    } else if (state.designId !== prevState.designId && state.designId && !state.isPreviewing) {
+    } else if (
+      state.previewRevision !== prevState.previewRevision &&
+      !state.isPreviewing &&
+      state.isDirty
+    ) {
+      schedule();
+    } else if (state.designId !== prevState.designId && state.designId) {
       designAutosave.save(state.doc);
     }
   });

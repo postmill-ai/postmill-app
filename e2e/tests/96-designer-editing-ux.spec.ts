@@ -33,14 +33,17 @@ const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 async function installMocks(page: Page) {
-  await page.context().addCookies([{
-    name: 'auth',
-    value: 'mocked-designer-e2e',
-    url: `${process.env.E2E_BASE || 'http://localhost:4201'}/`,
-  }]);
+  if (process.env.E2E_SKIP_AUTH_SETUP === '1') {
+    await page.context().addCookies([{
+      name: 'auth',
+      value: 'mocked-designer-e2e',
+      url: `${process.env.E2E_BASE || 'http://localhost:4201'}/`,
+    }]);
+  }
   const state = {
     doc: structuredClone(initialDoc),
     suggestionCalls: 0,
+    saveDocs: [] as unknown[],
     renderDocs: [] as unknown[],
   };
   await page.route('**/*', async (route) => {
@@ -77,7 +80,10 @@ async function installMocks(page: Page) {
     }
     if (method === 'PUT' && pathname === `/media/designs/${DESIGN_ID}`) {
       const body = request.postDataJSON() as { doc?: typeof state.doc };
-      if (body.doc) state.doc = body.doc;
+      if (body.doc) {
+        state.saveDocs.push(body.doc);
+        state.doc = body.doc;
+      }
       return json(route, { id: DESIGN_ID, name: 'Editing UX', doc: state.doc });
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}/versions`) {
@@ -226,9 +232,21 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
 
   const heading = page.getByRole('button', { name: /H Heading 1/ });
   await heading.hover();
-  await expect(page.getByRole('spinbutton', { name: 'Size', exact: true })).toHaveValue('24');
+  await expect(page.getByRole('spinbutton', { name: 'Size', exact: true })).toHaveValue('32');
   await page.waitForTimeout(2300);
   expect(state.doc.outputs[0].children[0].fontSize).toBe(32);
+  const savesBeforePreview = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBeforePreview);
+  expect(JSON.stringify(state.saveDocs.at(-1))).toContain('"fontSize":32');
+  expect(JSON.stringify(state.saveDocs.at(-1))).not.toContain('"fontSize":24');
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
+  await expect.poll(() => state.renderDocs.length).toBe(1);
+  expect(JSON.stringify(state.renderDocs[0])).toContain('"fontSize":32');
+  expect(JSON.stringify(state.renderDocs[0])).not.toContain('"fontSize":24');
+  await expect(page.getByRole('link', { name: /\.png$/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('textbox', { name: 'Design name' }).hover();
   await expect(page.getByRole('spinbutton', { name: 'Size', exact: true })).toHaveValue('32');
   await heading.click();
@@ -246,9 +264,9 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
-  await expect.poll(() => state.renderDocs.length).toBe(1);
-  expect(JSON.stringify(state.renderDocs[0])).toContain('textShadow');
-  expect(JSON.stringify(state.renderDocs[0])).toContain('textPath');
+  await expect.poll(() => state.renderDocs.length).toBe(2);
+  expect(JSON.stringify(state.renderDocs[1])).toContain('textShadow');
+  expect(JSON.stringify(state.renderDocs[1])).toContain('textPath');
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('link', { name: /\.png$/ }).click();
   const download = await downloadEvent;

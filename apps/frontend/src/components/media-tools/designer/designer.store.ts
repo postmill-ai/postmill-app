@@ -138,9 +138,12 @@ export interface DesignerState {
   templateId: string | null;
   designName: string;
   isDirty: boolean; isSaving: boolean; lastSaved: Date | null;
-  /** Changes only for non-destructive preset previews; autosave ignores these writes. */
+  /** Editor-only projection state; preview patches never enter `doc` or history. */
   previewRevision: number;
   isPreviewing: boolean;
+  previewPatches: Record<string, Partial<DesignerElement>> | null;
+  previewOutput: number | null;
+  previewPage: number | null;
   /** An autosave write failed and a backoff retry is pending — drives the header pill. */
   saveFailed: boolean;
   /** Retries gave up after repeated failures; the next real edit re-arms them. */
@@ -486,7 +489,6 @@ export const createDesignerStore = (
 ) =>
   create<DesignerStore>((set, get) => {
     const initialDoc = createEmptyDoc(width, height, attribution);
-    let preview: { base: DesignerDoc; applied: DesignerDoc } | null = null;
     const active = () => get().doc.outputs[get().currentOutput] as DesignerOutput | VideoOutput;
     const activeImage = () => get().doc.outputs[get().currentOutput] as DesignerOutput;
     const isVideoMode = () => get().doc.mode === 'video';
@@ -572,6 +574,9 @@ export const createDesignerStore = (
       isDirty: false, isSaving: false, lastSaved: null,
       previewRevision: 0,
       isPreviewing: false,
+      previewPatches: null,
+      previewOutput: null,
+      previewPage: null,
       saveFailed: false, saveRetryPaused: false,
       editFormatOnly: false,
       brandEnforcement: false,
@@ -599,7 +604,10 @@ export const createDesignerStore = (
       maskTargetId: null,
       clipboard: [],
       assistantSuggestions: {},
-      setDoc: (doc) => set({ doc: migrateDoc(doc), isDirty: true }),
+      setDoc: (doc) => {
+        get().clearElementPreview();
+        set({ doc: migrateDoc(doc), isDirty: true });
+      },
       adoptPersistedDoc: (sentDoc, persistedDoc) => {
         if (get().doc !== sentDoc || !persistedDoc || typeof persistedDoc !== 'object') return false;
         const nextDoc = migrateDoc(persistedDoc);
@@ -764,36 +772,35 @@ export const createDesignerStore = (
       previewElements: (patches) => {
         if (isVideoMode()) return;
         const state = get();
-        const current = state.doc;
-        const base = preview?.applied === current ? preview.base : current;
-        const out = base.outputs[state.currentOutput] as DesignerOutput | undefined;
+        const out = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
         if (!out || !('children' in out)) return;
-        const outputs = [...base.outputs];
-        outputs[state.currentOutput] = withPageChildren(
-          out,
-          state.currentPage,
-          pageChildren(out, state.currentPage).map((el) =>
-            patches[el.id] ? applyElementPatch(el, patches[el.id]) : el
-          )
+        const ids = new Set(pageChildren(out, state.currentPage).map((element) => element.id));
+        const scoped = Object.fromEntries(
+          Object.entries(patches).filter(([id]) => ids.has(id))
         );
-        const applied = { ...base, outputs };
-        preview = { base, applied };
+        if (!Object.keys(scoped).length) {
+          get().clearElementPreview();
+          return;
+        }
         set({
-          doc: applied,
+          previewPatches: scoped,
+          previewOutput: state.currentOutput,
+          previewPage: state.currentPage,
           isPreviewing: true,
           previewRevision: state.previewRevision + 1,
         });
       },
 
       clearElementPreview: () => {
-        const pending = preview;
-        if (!pending && !get().isPreviewing) return;
-        preview = null;
-        set((state) => ({
-          doc: pending && get().doc === pending.applied ? pending.base : state.doc,
+        const state = get();
+        if (!state.isPreviewing && !state.previewPatches) return;
+        set({
+          previewPatches: null,
+          previewOutput: null,
+          previewPage: null,
           isPreviewing: false,
           previewRevision: state.previewRevision + 1,
-        }));
+        });
       },
 
       updateElementEphemeral: (id, updates) => {
@@ -1648,6 +1655,7 @@ export const createDesignerStore = (
       },
 
       pushHistory: (label) => {
+        get().clearElementPreview();
         const { doc, history, historyLabels, historyIndex, savedHistoryIndex } = get();
         const snapshot = JSON.parse(JSON.stringify(doc));
         const newHistory = history.slice(0, historyIndex + 1);
@@ -1671,6 +1679,7 @@ export const createDesignerStore = (
       jumpToHistory: (index) => {
         const { history, historyIndex, savedHistoryIndex, currentOutput, currentPage } = get();
         if (index < 0 || index >= history.length || index === historyIndex) return;
+        get().clearElementPreview();
         const nextDoc = JSON.parse(JSON.stringify(history[index]));
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
         set({
@@ -1690,6 +1699,7 @@ export const createDesignerStore = (
       undo: () => {
         const { historyIndex, history, savedHistoryIndex, currentOutput, currentPage } = get();
         if (historyIndex <= 0) return;
+        get().clearElementPreview();
         const newIndex = historyIndex - 1;
         const nextDoc = JSON.parse(JSON.stringify(history[newIndex]));
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
@@ -1707,6 +1717,7 @@ export const createDesignerStore = (
       redo: () => {
         const { historyIndex, history, savedHistoryIndex, currentOutput, currentPage } = get();
         if (historyIndex >= history.length - 1) return;
+        get().clearElementPreview();
         const newIndex = historyIndex + 1;
         const nextDoc = JSON.parse(JSON.stringify(history[newIndex]));
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
@@ -1727,6 +1738,7 @@ export const createDesignerStore = (
       setSaveRetryPaused: (paused) => set({ saveRetryPaused: paused }),
 
       reset: (w, h) => {
+        get().clearElementPreview();
         const newDoc = createEmptyDoc(w, h);
         // Every live paint buffer belongs to the document being discarded.
         disposeAllBuffers();
@@ -1750,6 +1762,7 @@ export const createDesignerStore = (
       },
 
       loadDesign: (doc, id, name, templateId = null) => {
+        get().clearElementPreview();
         const migrated = migrateDoc(doc);
         // Buffers from the previously open design would otherwise live (and
         // paint over matching ids) for the tab's lifetime.

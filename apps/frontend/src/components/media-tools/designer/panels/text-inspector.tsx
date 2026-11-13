@@ -1,7 +1,7 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
-import { buildTextElementPatch, TextFormatPanel } from './text-format-panel';
+import { TextFormatPanel } from './text-format-panel';
 import {
   FONT_PAIRINGS,
   RESET_TEXT_STYLE,
@@ -103,31 +103,39 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
     );
   }, [selectedIds, out, currentPage]);
 
-  const { preview, cancel } = usePresetPreview(store);
+  const { previewAsync, cancel } = usePresetPreview(store);
 
   const previewPreset = useCallback(
     (preset: TextStylePreset) => {
       if (!textElements.length || !out) return;
-      void ensureFontLoaded(preset.fontFamily);
-      preview(Object.fromEntries(
-        textElements.map((element) => [
-          element.id,
-          buildTextElementPatch(
-            element,
+      const startingDoc = store.getState().doc;
+      void previewAsync(async () => {
+        await ensureFontLoaded(
+          preset.fontFamily,
+          [preset.fontWeight],
+          preset.fontStyle === 'italic'
+        );
+        if (store.getState().doc !== startingDoc) return {};
+        return Object.fromEntries(
+          textElements.map((element) => [
+            element.id,
             textStylePatch(preset, element, out),
-            null
-          ),
-        ])
-      ));
+          ])
+        );
+      });
     },
-    [preview, textElements, out]
+    [previewAsync, textElements, out, store]
   );
 
   const applyPreset = useCallback(
-    (preset: TextStylePreset) => {
+    async (preset: TextStylePreset) => {
       if (!textElements.length) return;
       cancel();
-      void ensureFontLoaded(preset.fontFamily);
+      await ensureFontLoaded(
+        preset.fontFamily,
+        [preset.fontWeight],
+        preset.fontStyle === 'italic'
+      );
       const state = store.getState();
       const output = state.doc.outputs[state.currentOutput];
       const selected = new Set(textElements.map((element) => element.id));
@@ -135,14 +143,7 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
         (element: DesignerElement) => selected.has(element.id) && element.type === 'text'
       );
       for (const element of current) {
-        state.updateElement(
-          element.id,
-          buildTextElementPatch(
-            element,
-            textStylePatch(preset, element, output),
-            null
-          )
-        );
+        state.updateElement(element.id, textStylePatch(preset, element, output));
       }
       state.pushHistory();
     },

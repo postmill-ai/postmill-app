@@ -83,8 +83,9 @@ import {
 import { seedBufferFromCanvas } from './raster-layers';
 import {
   boundsForSnapBoxes,
+  EQUAL_SPACING_DOCUMENT_PX,
   nearestSnap,
-  snapToleranceForZoom,
+  selectionIncludesDraggedNode,
 } from './canvas-snap';
 
 /**
@@ -240,6 +241,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
   const output: any = doc.outputs[currentOutput];
   const currentPage = store((s) => s.currentPage);
+  const previewPatches = store((s) => s.previewPatches);
+  const previewOutput = store((s) => s.previewOutput);
+  const previewPage = store((s) => s.previewPage);
+  const activePreviewPatches =
+    previewOutput === currentOutput && previewPage === currentPage ? previewPatches : null;
   /**
    * The ACTIVE PAGE as an output-shaped view: same canvas size and metadata,
    * but `children`/`bg` resolve to the current page (page 0 = the output
@@ -1092,14 +1098,21 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       if (!output || isVideo) return;
       if (!snapEnabled) { setGuides([]); setSpacingGuide(null); return; }
       const children = (pageOutput as DesignerOutput | undefined)?.children || [];
-      const others = children.filter((el) => !selectedIds.includes(el.id) && !el.hidden);
+      const others = children.filter(
+        (el) => !selectedIds.includes(el.id) && el.id !== node.id() && !el.hidden
+      );
       // A warped shape is a Konva `Line`, whose `width()` is the bbox of its
       // POINTS — so it snapped on its bulge while a warped PATH (a `Shape`,
       // which reports the element box) snapped on its box. The element box is
       // the authoring rectangle for both: it is what the Transformer shows and
       // what the marquee hit-tests, so it is what snapping measures.
       const attached = transformerRef.current?.nodes() || [];
-      const movingNodes = attached.length > 1 ? attached : [node];
+      const movingNodes = selectionIncludesDraggedNode(
+        attached.map((attachedNode) => attachedNode.id()),
+        node.id()
+      )
+        ? attached
+        : [node];
       const movingBox = boundsForSnapBoxes(movingNodes.map((movingNode) => {
         const moving = children.find((el) => el.id === movingNode.id());
         return {
@@ -1146,7 +1159,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       const spacing = findEqualSpacing(
         { id: '__moving', ...placed },
         others.map((el) => ({ id: el.id, x: el.x, y: el.y, width: el.width, height: el.height })),
-        snapToleranceForZoom(zoom)
+        EQUAL_SPACING_DOCUMENT_PX
       );
       setSpacingGuide(
         spacing
@@ -2041,6 +2054,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           )}
           <CanvasElements
             elements={isVideo ? [] : (pageOutput?.children || [])}
+            previewPatches={isVideo ? null : activePreviewPatches}
             symbols={doc.symbols}
             editingTextId={editingTextId}
             geometryNonce={geometryNonce}

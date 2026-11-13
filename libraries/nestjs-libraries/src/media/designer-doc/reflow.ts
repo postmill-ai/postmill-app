@@ -628,13 +628,24 @@ export const smartReflow = (
       result.fitMode = mode;
       result.focalPoint = coverFocalPoint(el, newW, newH);
     } else if (mode === 'contain') {
-      // Contain media keeps its authored frame and scales it uniformly with the
-      // layout. Re-fitting the natural bitmap to the WHOLE target made a small
-      // cloned logo become a canvas-sized image and destroyed its relationship
-      // to nearby copy. The renderer already contains the bitmap inside this
-      // frame, so aspect, crop and focal choices need no rewrite here.
-      newW = scaleDim(el.width, scale);
-      newH = scaleDim(el.height, scale);
+      if (perAxis) {
+        // Full-canvas contain media keeps the established target fit. Its frame
+        // is centered below so landscape and portrait assets never pin left/top.
+        const fitted = fitWithin(
+          el.naturalWidth || el.width || source.width,
+          el.naturalHeight || el.height || source.height,
+          target.width,
+          target.height
+        );
+        newW = fitted.width;
+        newH = fitted.height;
+        result.focalPoint = el.focalPoint || { x: 0.5, y: 0.5 };
+      } else {
+        // A small logo keeps its relationship to nearby copy instead of being
+        // re-fitted into a canvas-sized frame.
+        newW = scaleDim(el.width, scale);
+        newH = scaleDim(el.height, scale);
+      }
       result.width = newW;
       result.height = newH;
       result.fitMode = mode;
@@ -683,26 +694,32 @@ export const smartReflow = (
   // its group's anchor transform; everything else snaps to the derived anchor.
   let x: number;
   let y: number;
-  if (perAxis) {
+  const groupFrameFills = groupBox ? containerFills(groupBox) : false;
+  const groupFrameScaleX = groupFrameFills ? containerScaleX : typeScale;
+  const groupFrameW = groupBox
+    ? groupFrameFills
+      ? Math.round(groupBox.width * containerScaleX)
+      : groupBox.width * typeScale
+    : 0;
+  const groupFrameH = groupBox ? groupBox.height * typeScale : 0;
+  const fullCanvasContain =
+    perAxis && el.type === 'image' && (el.fitMode || 'cover') === 'contain';
+  if (fullCanvasContain) {
+    x = (target.width - newW) / 2;
+    y = (target.height - newH) / 2;
+  } else if (perAxis) {
     x = Math.round(el.x * scaleX);
     y = Math.round(el.y * scaleY);
   } else if (groupBox) {
-    const frameFills = containerFills(groupBox);
-    const groupW = frameFills
-      ? Math.round(groupBox.width * containerScaleX)
-      : groupBox.width * contentScale;
-    const groupH = groupBox.height * contentScale;
-    // A frame that follows the container keeps its members' offsets
-    // proportional to the frame, not to the (smaller) uniform ratio.
-    const offsetFactor = frameFills ? containerScaleX : contentScale;
     x = Math.round(
       (container
-        ? placeInContainer(groupBox, groupW)
-        : anchorX(anchor, target.width, groupW)) +
-        (el.x - groupBox.x) * offsetFactor
+        ? placeInContainer(groupBox, groupFrameW)
+        : anchorX(anchor, target.width, groupFrameW)) +
+        (el.x - groupBox.x) * groupFrameScaleX
     );
     y = Math.round(
-      anchorY(anchor, target.height, groupH) + (el.y - groupBox.y) * contentScale
+      anchorY(anchor, target.height, groupFrameH) +
+        (el.y - groupBox.y) * typeScale
     );
   } else {
     x = container
@@ -762,66 +779,77 @@ export const smartReflow = (
     el.type === 'symbol'
   ) {
     const safe = getSafeZoneInset(target.formatId || '', target.width, target.height);
-    if (el.type === 'text') {
-      // A box wider than the title-safe area still overflows the right edge
-      // after x-clamping — shrink the width to fit first.
-      const safeW = safe.right - safe.left;
-      if (newW > safeW) {
-        newW = Math.max(10, Math.floor(safeW));
-        result.width = newW;
-      }
-      if (groupBox && !groupBox.anchor) {
-        // Clamp the shared stack frame, not its members independently. Moving
-        // only the first line off a safe-zone edge collapses the authored gap
-        // and can put it on top of the next line.
-        const frameLeft = x - (el.x - groupBox.x) * contentScale;
-        const frameTop = y - (el.y - groupBox.y) * contentScale;
-        const frameRight = frameLeft + groupBox.width * contentScale;
-        const frameBottom = frameTop + groupBox.height * contentScale;
-        if (frameLeft < safe.left) x += safe.left - frameLeft;
-        else if (frameRight > safe.right) x -= frameRight - safe.right;
-        if (frameTop < safe.top) y += safe.top - frameTop;
-        else if (frameBottom > safe.bottom) y -= frameBottom - safe.bottom;
-      } else {
+    const safeW = safe.right - safe.left;
+    const safeH = safe.bottom - safe.top;
+    if (el.type === 'text' && newW > safeW) {
+      newW = Math.max(10, Math.floor(safeW));
+      result.width = newW;
+    }
+    const clampElementX = () => {
+      if (el.type === 'text') {
         if (x < safe.left) x = safe.left;
         if (x + newW > safe.right) x = Math.max(safe.left, safe.right - newW);
-        if (y < safe.top) y = safe.top;
-        if (y + newH > safe.bottom) y = Math.max(safe.top, safe.bottom - newH);
+        return;
       }
-    } else {
-      const safeW = safe.right - safe.left;
-      const safeH = safe.bottom - safe.top;
-      // Full-bleed per-axis elements (cover images, panel bands) and any
-      // side already flush with the canvas edge are exempt: pulling a flush
-      // edge inward leaves a background-colored "frame" strip behind it.
-      // (`perAxis` is hoisted above — same rule.)
-      // Grouped pairs (CTA/badge) are never flush-exempt — their label
-      // clamps identically, so an exempted side would unglue the pair.
-      // Neither are badge chips (`*-bg` companions and small accents under
-      // 6% of the source canvas): a chip flush with an edge is a clipped
-      // badge, not an intentional bleed — bands/panels keep their exemption
-      // through the perAxis/fullBleedShape path above.
       const isChip =
         !!el.originId?.endsWith('-bg') ||
         el.width * el.height < source.width * source.height * 0.06;
       const flushLeft = !el.groupId && !isChip && x === 0;
       const flushRight =
         !el.groupId && !isChip && Math.abs(x + newW - target.width) <= 1;
-      const flushTop = !el.groupId && !isChip && y === 0;
-      const flushBottom =
-        !el.groupId && !isChip && Math.abs(y + newH - target.height) <= 1;
       if (newW <= safeW && !perAxis) {
         if (x < safe.left && !flushLeft) x = safe.left;
         if (x + newW > safe.right && !flushRight) {
           x = Math.max(safe.left, safe.right - newW);
         }
       }
+    };
+    const clampElementY = () => {
+      if (el.type === 'text') {
+        if (y < safe.top) y = safe.top;
+        if (y + newH > safe.bottom) y = Math.max(safe.top, safe.bottom - newH);
+        return;
+      }
+      const isChip =
+        !!el.originId?.endsWith('-bg') ||
+        el.width * el.height < source.width * source.height * 0.06;
+      const flushTop = !el.groupId && !isChip && y === 0;
+      const flushBottom =
+        !el.groupId && !isChip && Math.abs(y + newH - target.height) <= 1;
       if (newH <= safeH && !perAxis) {
         if (y < safe.top && !flushTop) y = safe.top;
         if (y + newH > safe.bottom && !flushBottom) {
           y = Math.max(safe.top, safe.bottom - newH);
         }
       }
+    };
+    if (groupBox && !groupBox.anchor && !perAxis) {
+      // Derive the shift from the shared frame, independently of member rounding,
+      // and apply that same shift to text, shapes and symbols alike. An oversize
+      // axis cannot move as one, so only that axis uses per-element fallback.
+      const frameLeft = container
+        ? placeInContainer(groupBox, groupFrameW)
+        : anchorX(anchor, target.width, groupFrameW);
+      const frameTop = anchorY(anchor, target.height, groupFrameH);
+      if (groupFrameW <= safeW) {
+        if (frameLeft < safe.left) x += safe.left - frameLeft;
+        else if (frameLeft + groupFrameW > safe.right) {
+          x -= frameLeft + groupFrameW - safe.right;
+        }
+      } else {
+        clampElementX();
+      }
+      if (groupFrameH <= safeH) {
+        if (frameTop < safe.top) y += safe.top - frameTop;
+        else if (frameTop + groupFrameH > safe.bottom) {
+          y -= frameTop + groupFrameH - safe.bottom;
+        }
+      } else {
+        clampElementY();
+      }
+    } else {
+      clampElementX();
+      clampElementY();
     }
   }
 

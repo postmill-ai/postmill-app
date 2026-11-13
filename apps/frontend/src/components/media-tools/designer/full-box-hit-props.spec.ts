@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type Konva from 'konva';
-import { fullBoxHitProps, layerListensForHits } from './elements';
-import type { DesignerElement } from '../designer.store';
+import { fullBoxHitProps, layerListensForHits, projectElementPreview } from './elements';
+import { disposeBuffer, ensureBuffer } from './raster-layers';
+import type { DesignerElement } from './designer.store';
 
 describe('fullBoxHitProps', () => {
   it('uses the complete text box as the selectable hit surface', () => {
@@ -28,5 +29,32 @@ describe('fullBoxHitProps', () => {
     expect(layerListensForHits(raster)).toBe(false);
     expect(layerListensForHits({ ...raster, src: 'data:image/png;base64,pixels' })).toBe(true);
     expect(layerListensForHits({ ...raster, type: 'text' })).toBe(true);
+  });
+
+  it('lets a Paint layer with live pixels but no committed src receive hits', () => {
+    const raster = {
+      id: 'paint-buffer', type: 'raster', x: 0, y: 0, width: 100, height: 100,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    } as DesignerElement;
+    ensureBuffer(raster);
+    try {
+      expect(layerListensForHits(raster)).toBe(true);
+    } finally {
+      disposeBuffer(raster.id);
+    }
+  });
+
+  it('projects preview patches without mutating the base elements', () => {
+    const base = [{
+      id: 'photo', type: 'image', src: '/photo.png', x: 0, y: 0,
+      width: 100, height: 100, rotation: 0, opacity: 1, locked: false, hidden: false,
+    }] as DesignerElement[];
+    const projected = projectElementPreview(base, {
+      photo: { mask: { type: 'shape', shape: 'ellipse' } },
+    });
+
+    expect(projected[0].mask).toMatchObject({ shape: 'ellipse' });
+    expect(base[0].mask).toBeUndefined();
+    expect(projectElementPreview(base, null)).toBe(base);
   });
 });

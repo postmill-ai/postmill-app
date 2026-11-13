@@ -1,6 +1,6 @@
 import { typeBasisPx } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import type { DesignerElement } from './designer.store';
-import { growBoxFor } from './panels/text-format-panel';
+import { fitStyleBoxFor } from './panels/text-format-panel';
 
 export interface TextStylePreset {
   name: string;
@@ -153,6 +153,6 @@ export const textStylePatch = (
   };
   return {
     ...patch,
-    ...growBoxFor({ ...element, ...patch }, patch.fontSize as number),
+    ...fitStyleBoxFor({ ...element, ...patch }, patch.fontSize as number),
   };
 };

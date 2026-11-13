@@ -1,8 +1,9 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TextInspector } from './text-inspector';
+import { ensureFontLoaded } from '../fonts';
 import {
   createDesignerStore,
   type DesignerElement,
@@ -38,12 +39,12 @@ vi.mock('@postmill-ai/react/toaster/toaster', () => ({
 
 vi.mock('../fonts', () => ({
   DESIGNER_FONTS: [],
-  ensureFontLoaded: () => Promise.resolve(),
+  ensureFontLoaded: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('../measure-text', () => ({
   fittedFontSize: (element: { fontSize?: number }) => element.fontSize ?? 16,
-  measureForElement: () => undefined,
+  measureForElement: () => (line: string, size: number) => line.length * size * 0.5,
 }));
 
 vi.mock('./designer-assistant-panel', () => ({
@@ -85,6 +86,13 @@ const renderInspector = async (store: Store) => {
   return rendered;
 };
 
+const clickStyle = async (name: string | RegExp) => {
+  fireEvent.click(screen.getByRole('button', { name }));
+  await act(async () => {
+    await Promise.resolve();
+  });
+};
+
 const createSecondOutputPageTwoSelection = () => {
   const store = createDesignerStore();
   store.getState().addElement(textElement('page-one', 'Page one'));
@@ -111,7 +119,7 @@ describe('TextInspector paged text', () => {
     expect(screen.getByText('Text Styles')).toBeTruthy();
     expect(screen.getByText('Pairings')).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Text formatting' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Heading 1/ }));
+    await clickStyle(/Heading 1/);
 
     expect(output(store, 0).children[0]).toMatchObject({ id: 'page-one', fontSize: 48, fontWeight: 700 });
     expect(output(store, 1).children[0]).toMatchObject({ fontFamily: 'Inter', fontWeight: 700, lineHeight: 1.1 });
@@ -127,7 +135,7 @@ describe('TextInspector paged text', () => {
     expect(screen.getByText('Pairings')).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Text formatting' })).toBeTruthy();
     expect(screen.getByText(/Low contrast/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Heading 1/ }));
+    await clickStyle(/Heading 1/);
     fireEvent.click(screen.getByRole('button', { name: '#123456' }));
     const color = screen.getByRole('textbox', { name: 'Hex color' });
     fireEvent.change(color, { target: { value: '#abcdef' } });
@@ -171,7 +179,7 @@ describe('TextInspector paged text', () => {
     expect(output(store, 0).pages).toBeUndefined();
   });
 
-  it('preserves solid, gradient, and rich-run colors when applying a style', async () => {
+  it('preserves colors and rich-run typography when applying a style', async () => {
     const store = createDesignerStore();
     store.getState().addElement({
       ...textElement('rich', 'Rich text'),
@@ -185,19 +193,22 @@ describe('TextInspector paged text', () => {
         ],
       },
       richText: [
-        { text: 'Rich', fill: '#aa0000' },
-        { text: ' text', fill: '#00aa00' },
+        { text: 'Rich', fill: '#aa0000', fontFamily: 'Georgia', fontSize: 18, fontWeight: 400 },
+        { text: ' text', fill: '#00aa00', fontFamily: 'Arial', fontSize: 28, fontWeight: 700 },
       ],
     });
     store.getState().setSelectedIds(['rich']);
     await renderInspector(store);
 
-    fireEvent.click(screen.getByRole('button', { name: /Heading 1/ }));
+    await clickStyle(/Heading 1/);
 
     const current = output(store, 0).children[0];
     expect(current.fill).toBe('#123456');
     expect(current.fillGradient?.angle).toBe(45);
     expect(current.richText?.map((run) => run.fill)).toEqual(['#aa0000', '#00aa00']);
+    expect(current.richText?.map((run) => run.fontFamily)).toEqual(['Georgia', 'Arial']);
+    expect(current.richText?.map((run) => run.fontSize)).toEqual([18, 28]);
+    expect(current.richText?.map((run) => run.fontWeight)).toEqual([400, 700]);
     expect(current.fontSize).toBe(48);
   });
 
@@ -207,12 +218,35 @@ describe('TextInspector paged text', () => {
     store.getState().setSelectedIds(['heading']);
     await renderInspector(store);
 
-    fireEvent.click(screen.getByRole('button', { name: /Heading 1/ }));
+    await clickStyle(/Heading 1/);
     expect(output(store, 0).children[0].fontSize).toBe(40);
-    fireEvent.click(screen.getByRole('button', { name: 'B Body' }));
+    await clickStyle('B Body');
 
     const current = output(store, 0).children[0];
     expect(current.fontSize).toBe(13);
+    expect(current.height).toBe(20);
     expect(store.getState().doc.outputs[0]).toMatchObject({ width: 1200, height: 675 });
+  });
+
+  it('resolves the preset font before committing measured growth', async () => {
+    let resolveFont = () => {};
+    vi.mocked(ensureFontLoaded).mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveFont = resolve;
+    }));
+    const store = createDesignerStore();
+    store.getState().addElement(textElement('deferred', 'A much longer heading'));
+    store.getState().setSelectedIds(['deferred']);
+    await renderInspector(store);
+    const depth = store.getState().history.length;
+
+    fireEvent.click(screen.getByRole('button', { name: /Heading 1/ }));
+    expect(store.getState().doc.outputs[0].children[0].fontSize).toBe(16);
+    expect(store.getState().history).toHaveLength(depth);
+
+    resolveFont();
+    await waitFor(() => expect(output(store, 0).children[0].fontSize).toBe(48));
+    expect(ensureFontLoaded).toHaveBeenCalledWith('Inter', [700], false);
+    expect(output(store, 0).children[0].height).toBe(159);
+    expect(store.getState().history).toHaveLength(depth + 1);
   });
 });

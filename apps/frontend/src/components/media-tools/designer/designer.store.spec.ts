@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { createDesignerStore, migrateDoc, MAX_TRACKS, type DesignerStore } from './designer.store';
+import { createDesignerStore, migrateDoc, MAX_TRACKS, type DesignerDoc, type DesignerStore } from './designer.store';
 
 /**
  * Focal detection is an async vision call; the store only consumes its
@@ -2138,5 +2138,122 @@ describe('Magic Grab actions', () => {
     expect(subjectTrackId).not.toBe(track.id);
     store.getState().undo();
     expect((store.getState().doc.outputs[0] as VideoOutput).tracks).toHaveLength(2);
+  });
+});
+
+describe('preset preview isolation', () => {
+  const text = {
+    id: 'preview-text', type: 'text', text: 'Preview', x: 0, y: 0,
+    width: 200, height: 40, fontSize: 32, rotation: 0, opacity: 1,
+    locked: false, hidden: false,
+  } as DesignerElement;
+
+  it('keeps doc identity, dirty state and history unchanged through preview and clear', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(text);
+    store.getState().markSaved();
+    const base = store.getState().doc;
+    const depth = store.getState().history.length;
+
+    store.getState().previewElements({ [text.id]: { fontSize: 72 } });
+    expect(store.getState().doc).toBe(base);
+    expect(store.getState().previewPatches).toEqual({ [text.id]: { fontSize: 72 } });
+    expect(store.getState().isDirty).toBe(false);
+    expect(store.getState().history).toHaveLength(depth);
+
+    store.getState().clearElementPreview();
+    expect(store.getState().doc).toBe(base);
+    expect(store.getState().previewPatches).toBeNull();
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('previews a photo frame and None without writing either into the document', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'photo', type: 'image', src: '/photo.png', x: 0, y: 0,
+      width: 200, height: 100, rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    const base = store.getState().doc;
+    store.getState().previewElements({
+      photo: { mask: { type: 'shape', shape: 'ellipse' } },
+    });
+    expect(store.getState().doc).toBe(base);
+    expect(store.getState().previewPatches?.photo.mask).toMatchObject({ shape: 'ellipse' });
+
+    store.getState().previewElements({ photo: { mask: undefined } });
+    expect(store.getState().doc).toBe(base);
+    expect(store.getState().previewPatches?.photo.mask).toBeUndefined();
+  });
+
+  it('duplicates and records history from the base document during a preview', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(text);
+    const depth = store.getState().history.length;
+    store.getState().previewElements({ [text.id]: { fontSize: 72 } });
+
+    store.getState().duplicateElements([text.id]);
+    const children = store.getState().doc.outputs[0].children;
+    expect(children).toHaveLength(2);
+    expect(children.map((child) => child.fontSize)).toEqual([32, 32]);
+    expect(store.getState().history).toHaveLength(depth + 1);
+    expect(store.getState().history.at(-1)?.outputs[0].children.map((child) => child.fontSize))
+      .toEqual([32, 32]);
+    expect(store.getState().previewPatches).toBeNull();
+  });
+
+  it('does not broadcast a collaboration document change for preview-only transitions', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(text);
+    const sent: DesignerDoc[] = [];
+    let previous = store.getState().doc;
+    const unsubscribe = store.subscribe((state) => {
+      if (state.doc === previous) return;
+      previous = state.doc;
+      sent.push(state.doc);
+    });
+
+    store.getState().previewElements({ [text.id]: { fontSize: 72 } });
+    store.getState().clearElementPreview();
+    expect(sent).toEqual([]);
+
+    store.getState().updateElement(text.id, { fill: '#abcdef' });
+    expect(sent).toHaveLength(1);
+    expect(sent[0].outputs[0].children[0]).toMatchObject({ fontSize: 32, fill: '#abcdef' });
+    unsubscribe();
+  });
+
+  it('applies async focal-point writes to the base document during a frame preview', async () => {
+    focalMock.result = { x: 0.25, y: 0.75 };
+    try {
+      const store = createDesignerStore();
+      store.getState().addElement({
+        id: 'photo', type: 'image', src: '/photo.png', x: 0, y: 0,
+        width: 200, height: 100, rotation: 0, opacity: 1, locked: false, hidden: false,
+      });
+      store.getState().previewElements({
+        photo: { mask: { type: 'shape', shape: 'ellipse' } },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const photo = store.getState().doc.outputs[0].children[0];
+      expect(photo.focalPoint).toEqual({ x: 0.25, y: 0.75 });
+      expect(photo.mask).toBeUndefined();
+    } finally {
+      focalMock.result = null;
+    }
+  });
+
+  it('clears only the projection on undo and restores the real history document', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(text);
+    store.getState().updateElement(text.id, { fill: '#abcdef' });
+    store.getState().pushHistory();
+    store.getState().previewElements({ [text.id]: { fontSize: 72 } });
+
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].children[0].fontSize).toBe(32);
+    expect(store.getState().doc.outputs[0].children[0].fill).toBeUndefined();
+    expect(store.getState().previewPatches).toBeNull();
   });
 });

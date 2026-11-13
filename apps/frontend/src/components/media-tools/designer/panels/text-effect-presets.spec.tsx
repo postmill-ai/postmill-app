@@ -76,16 +76,35 @@ describe('text effect presets', () => {
     render(<TextEffectPresets store={store} textElements={[element]} />);
 
     fireEvent.mouseEnter(screen.getByRole('button', { name: 'Text shadow' }));
-    expect(store.getState().doc.outputs[0].children[0].textShadow?.blur).toBe(8);
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().previewPatches?.[element.id].textShadow?.blur).toBe(8);
     expect(store.getState().history.length).toBe(history);
     expect(store.getState().isDirty).toBe(false);
     fireEvent.mouseLeave(screen.getByRole('button', { name: 'Text shadow' }));
     expect(store.getState().doc).toBe(before);
+    expect(store.getState().previewPatches).toBeNull();
 
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Text shadow' }));
     fireEvent.click(screen.getByRole('button', { name: 'Text shadow' }));
     expect(store.getState().history.length).toBe(history + 1);
+    expect(store.getState().doc.outputs[0].children[0].textShadow?.blur).toBe(8);
+    expect(store.getState().previewPatches).toBeNull();
     store.getState().undo();
     expect(store.getState().doc.outputs[0].children[0].textShadow).toBeUndefined();
+  });
+
+  it('clears only the projection when the previewing inspector unmounts', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(element);
+    const base = store.getState().doc;
+    const rendered = render(<TextEffectPresets store={store} textElements={[element]} />);
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Arc text' }));
+    expect(store.getState().previewPatches?.[element.id].curve).toBe(45);
+
+    rendered.unmount();
+    expect(store.getState().doc).toBe(base);
+    expect(store.getState().previewPatches).toBeNull();
+    expect(store.getState().isPreviewing).toBe(false);
   });
 
   it('restores the preview baseline before a real store edit', () => {

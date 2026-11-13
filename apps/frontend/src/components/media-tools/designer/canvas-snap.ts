@@ -1,4 +1,10 @@
 export const SNAP_SCREEN_PX = 6;
+export const EQUAL_SPACING_DOCUMENT_PX = 2;
+
+export const selectionIncludesDraggedNode = (
+  attachedIds: string[],
+  draggedId: string
+): boolean => attachedIds.length > 1 && attachedIds.includes(draggedId);
 
 export interface SnapBox {
   x: number;

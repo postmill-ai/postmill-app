@@ -1298,3 +1298,116 @@ describe('smartReflow text width clamp', () => {
     );
   });
 });
+
+describe('smartReflow full-canvas contain media', () => {
+  const source = { width: 1080, height: 1080 };
+  const target = { width: 1200, height: 675, formatId: 'x-post' };
+  const image = (over: Partial<DesignerElement>): DesignerElement => ({
+    id: 'contain', type: 'image', fitMode: 'contain', x: 0, y: 0,
+    width: 1080, height: 608, naturalWidth: 1920, naturalHeight: 1080,
+    rotation: 0, opacity: 1, locked: false, hidden: false, ...over,
+  });
+
+  it('preserves the established landscape fit and centers the frame', () => {
+    expect(smartReflow(image({}), source, target)).toMatchObject({
+      x: 0, y: 0, width: 1200, height: 675,
+    });
+  });
+
+  it('fits and centers a full-height portrait frame instead of pinning it left', () => {
+    const result = smartReflow(
+      image({ x: 236, width: 608, height: 1080, naturalWidth: 1080, naturalHeight: 1920 }),
+      source,
+      target
+    );
+    expect(result).toMatchObject({ x: 410, y: 0, width: 380, height: 675 });
+  });
+});
+
+describe('smartReflow stack safe-zone shifts', () => {
+  const source = { width: 1080, height: 1080 };
+  const headline: DesignerElement = {
+    id: 'headline', type: 'text', text: 'Headline', x: 80, y: 80,
+    width: 600, height: 120, fontSize: 64, rotation: 0, opacity: 1,
+    locked: false, hidden: false, originId: 'headline',
+  };
+  const subhead: DesignerElement = {
+    ...headline, id: 'subhead', text: 'Subhead', y: 220, height: 50,
+    fontSize: 32, originId: 'subhead',
+  };
+  const pill: DesignerElement = {
+    id: 'pill', type: 'shape', shape: 'rect', x: 80, y: 280,
+    width: 240, height: 60, rotation: 0, opacity: 1, locked: false,
+    hidden: false, groupId: 'cta', originId: 'cta-bg',
+  };
+  const label: DesignerElement = {
+    ...headline, id: 'label', text: 'Shop', x: 110, y: 295,
+    width: 180, height: 30, fontSize: 24, groupId: 'cta', originId: 'cta',
+  };
+  const elements = [headline, subhead, pill, label];
+
+  it.each([
+    { width: 1200, height: 675, formatId: 'x-post' },
+    { width: 1080, height: 1350, formatId: 'ig-portrait' },
+    { width: 1080, height: 1920, formatId: 'ig-story' },
+  ])('moves a grouped CTA with the whole stack on $width×$height', (target) => {
+    const stacks = computeTextStackBoxes(elements, source);
+    const outputs = new Map(elements.map((element) => [
+      element.id,
+      smartReflow(element, source, target, stacks.get(element)),
+    ]));
+    const pillOut = outputs.get('pill')!;
+    const labelOut = outputs.get('label')!;
+
+    expect(stacks.get(label)).toBe(stacks.get(pill));
+    expect(labelOut.y!).toBeGreaterThanOrEqual(pillOut.y!);
+    expect(labelOut.y! + labelOut.height!).toBeLessThanOrEqual(
+      pillOut.y! + pillOut.height!
+    );
+    expect(labelOut.x!).toBeGreaterThanOrEqual(pillOut.x!);
+    expect(labelOut.x! + labelOut.width!).toBeLessThanOrEqual(
+      pillOut.x! + pillOut.width!
+    );
+  });
+
+  it('falls back per element on an axis wider than the safe area', () => {
+    const wide = { width: 1000, height: 1500, formatId: 'unknown-format' };
+    const wideElements = elements.map((element, index) =>
+      index === 0
+        ? { ...element, x: 0, width: 1080 }
+        : index === 1
+          ? { ...element, x: 600, width: 480 }
+          : element
+    );
+    const stacks = computeTextStackBoxes(wideElements, source);
+    const safe = getSafeZoneInset(wide.formatId, wide.width, wide.height);
+    const frame = stacks.get(wideElements[0])!;
+    expect(frame.width * typeScaleRatio(source, wide)).toBeGreaterThan(safe.right - safe.left);
+    const outputs = wideElements.map((element) =>
+      smartReflow(element, source, wide, stacks.get(element))
+    );
+
+    for (const result of outputs) {
+      expect(result.x!).toBeGreaterThanOrEqual(safe.left);
+      expect(result.x! + result.width!).toBeLessThanOrEqual(safe.right);
+    }
+  });
+
+  it('falls back per element on an axis taller than the safe area', () => {
+    const banner = { width: 1584, height: 396, formatId: 'unknown-format' };
+    const tall = elements.map((element, index) => ({
+      ...element,
+      y: index * 220,
+      height: index < 2 ? 200 : element.height,
+    }));
+    const frame = { x: 80, y: 0, width: 600, height: 720 };
+    const safe = getSafeZoneInset(banner.formatId, banner.width, banner.height);
+    expect(frame.height * typeScaleRatio(source, banner)).toBeGreaterThan(safe.bottom - safe.top);
+    const outputs = tall.map((element) => smartReflow(element, source, banner, frame));
+
+    for (const result of outputs) {
+      expect(result.y!).toBeGreaterThanOrEqual(safe.top);
+      expect(result.y! + result.height!).toBeLessThanOrEqual(safe.bottom);
+    }
+  });
+});

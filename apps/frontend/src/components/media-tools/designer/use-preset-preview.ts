@@ -1,19 +1,37 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { DesignerElement } from './designer.store';
 
+type PreviewPatches = Record<string, Partial<DesignerElement>>;
+
 export const usePresetPreview = (store: any) => {
+  const generation = useRef(0);
   const preview = useCallback(
-    (patches: Record<string, Partial<DesignerElement>>) => {
+    (patches: PreviewPatches) => {
+      generation.current += 1;
       store.getState().previewElements(patches);
     },
     [store]
   );
 
+  const previewAsync = useCallback(
+    async (load: () => Promise<PreviewPatches>) => {
+      const request = ++generation.current;
+      try {
+        const patches = await load();
+        if (generation.current === request) store.getState().previewElements(patches);
+      } catch {
+        // A failed font load leaves the base canvas untouched.
+      }
+    },
+    [store]
+  );
+
   const cancel = useCallback(() => {
+    generation.current += 1;
     store.getState().clearElementPreview();
   }, [store]);
 
   useEffect(() => cancel, [cancel]);
 
-  return { preview, cancel };
+  return { preview, previewAsync, cancel };
 };

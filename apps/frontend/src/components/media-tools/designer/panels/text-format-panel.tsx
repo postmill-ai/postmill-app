@@ -56,9 +56,10 @@ export type TextElementUpdates = Partial<DesignerElement> &
  * count at the current size grew the box for the old wrap, which the fitter
  * then immediately shrank the font back into.
  */
-export const growBoxFor = (
+const boxPatchFor = (
   element: DesignerElement | null,
   fontSize: number,
+  shrinkHeight: boolean,
   measure?: MeasureText
 ): Partial<DesignerElement> => {
   if (!element || element.type !== 'text') return {};
@@ -89,9 +90,12 @@ export const growBoxFor = (
     Math.max(0, paragraphs - 1) * (element.paragraphSpacing || 0);
 
   const patch: Partial<DesignerElement> = {};
-  if (needed > element.height) patch.height = needed;
+  if (needed > element.height || (shrinkHeight && needed < element.height)) {
+    patch.height = needed;
+  }
   // A single word wider than the box never wraps — it overflows — so growing
-  // height can't make the size honest there; the box has to widen.
+  // height can't make the size honest there; the box has to widen. Style changes
+  // may shrink height, but never collapse an intentionally wide layout box.
   if (lines.length === 1 && paragraphs === 1) {
     const lineWidth =
       measureLineWidth(lines[0], fontSize, letterSpacing, m, scaleX) + indent;
@@ -99,6 +103,18 @@ export const growBoxFor = (
   }
   return patch;
 };
+
+export const growBoxFor = (
+  element: DesignerElement | null,
+  fontSize: number,
+  measure?: MeasureText
+): Partial<DesignerElement> => boxPatchFor(element, fontSize, false, measure);
+
+export const fitStyleBoxFor = (
+  element: DesignerElement | null,
+  fontSize: number,
+  measure?: MeasureText
+): Partial<DesignerElement> => boxPatchFor(element, fontSize, true, measure);
 
 /**
  * The patch one `update()` call writes to an element.

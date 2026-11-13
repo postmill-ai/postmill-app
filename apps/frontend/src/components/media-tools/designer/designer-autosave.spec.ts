@@ -756,7 +756,7 @@ describe('createAutosaveSubscription', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('suspends a pending save during preview and resumes with the restored document', async () => {
+  it('saves the dirty base document during preview and re-arms on preview end', async () => {
     const store = createDesignerStore(1080, 1080);
     const save = vi.fn();
     const unsubscribe = createAutosaveSubscription(store, {
@@ -769,13 +769,67 @@ describe('createAutosaveSubscription', () => {
 
     store.getState().previewElements({ [id]: { fontSize: 72 } });
     await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(save).not.toHaveBeenCalled();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0][0].outputs[0].children[0].fontSize).toBeUndefined();
 
     store.getState().clearElementPreview();
     await new Promise((resolve) => setTimeout(resolve, 30));
     unsubscribe();
 
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1][0].outputs[0].children[0].fontSize).toBeUndefined();
+  });
+
+  it('does not drop an undo save when its previewing inspector unmounts', async () => {
+    const store = createDesignerStore(1080, 1080);
+    const save = vi.fn();
+    const unsubscribe = createAutosaveSubscription(store, {
+      save,
+      ensureCreated: vi.fn(),
+      createInFlight: () => null,
+    }, 5);
+    addText(store, 'First');
+    addText(store, 'Second');
+    const id = store.getState().doc.outputs[0].children[1].id;
+    store.getState().previewElements({ [id]: { fontSize: 72 } });
+
+    store.getState().undo();
+    store.getState().clearElementPreview();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    unsubscribe();
+
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save.mock.calls[0][0].outputs[0].children[0].fontSize).toBeUndefined();
+    expect(save.mock.calls[0][0].outputs[0].children).toHaveLength(1);
+    expect(JSON.stringify(save.mock.calls[0][0])).not.toContain('72');
+  });
+
+  it('retries a real dirty document while a preview projection is active', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = createDesignerStore(1080, 1080);
+      store.getState().setDesignId('design-preview-retry');
+      addText(store, 'Base text');
+      const id = store.getState().doc.outputs[0].children[0].id;
+      const fetchMock = vi.fn()
+        .mockRejectedValueOnce(new Error('backend down'))
+        .mockImplementation(() => Promise.resolve(okJson({})));
+      const autosave = createDesignAutosave({
+        store,
+        fetchFn: fetchMock,
+        uploadPreview: vi.fn().mockResolvedValue({}),
+      });
+
+      autosave.save(store.getState().doc);
+      await vi.advanceTimersByTimeAsync(0);
+      store.getState().previewElements({ [id]: { fontSize: 72 } });
+      await vi.advanceTimersByTimeAsync(2000);
+
+      const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-preview-retry');
+      expect(puts).toHaveLength(2);
+      const retryBody = JSON.parse((puts[1][1] as RequestInit).body as string);
+      expect(retryBody.doc.outputs[0].children[0].fontSize).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
