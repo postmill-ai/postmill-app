@@ -146,15 +146,15 @@ test('production export keeps preview counts, JPEG 3x settings, and completed ou
 
   await page.getByRole('button', { name: 'Export 2 files', exact: true }).click();
   await expect(page.getByText('Some exports need attention')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Export reliability - A.jpg' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Export_reliability - A.jpg' })).toBeVisible();
   expect(state.renders.filter((render) => render.pixelRatio === 3)).toHaveLength(2);
   expect(state.renders.filter((render) => render.pixelRatio === 3).every((render) => render.format === 'jpeg')).toBe(true);
   expect(state.uploads).toBe(2);
 
   await page.getByRole('button', { name: 'Retry output' }).click();
   await expect(page.getByText('Saved to /files')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Export reliability - A.jpg' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Export reliability - B.jpg' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Export_reliability - A.jpg' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Export_reliability - B.jpg' })).toBeVisible();
   expect(state.uploads).toBe(3);
   expect(state.renders).toHaveLength(4);
 });
