@@ -234,10 +234,7 @@ async function editText(page: Page) {
 }
 
 async function selectBodyCopy(page: Page) {
-  if (await page.getByRole('listbox', { name: 'Layers' }).count() === 0) {
-    await page.getByRole('menuitem', { name: 'View', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Layers', exact: true }).click();
-  }
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
   const row = page.locator('[data-element-id="body-copy"]');
   await expect(row).toBeVisible();
   await row.click();
@@ -622,7 +619,7 @@ test('font-size shortcuts respect selection, text focus, bounds and help', async
   await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(32);
 
   await page.getByRole('menuitem', { name: 'Help', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Keyboard Shortcuts', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Keyboard Shortcuts/ }).click();
   await expect(page.getByText('Increase font size', { exact: true })).toBeVisible();
   await expect(page.getByText('Decrease font size', { exact: true })).toBeVisible();
 });
