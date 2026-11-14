@@ -1101,6 +1101,14 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
             rotation={props.rotation}
             opacity={props.opacity}
           >
+            <KonvaRect
+              x={0}
+              y={0}
+              width={props.width}
+              height={props.height}
+              fill="#000000"
+              opacity={0}
+            />
             <FilteredClipImage
               clip={clip}
               width={props.width}

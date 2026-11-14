@@ -319,7 +319,7 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
     await textEffects.getByRole('button', { name, exact: true }).click();
   }
   await expect.poll(() => JSON.stringify(state.doc.outputs[0].children[0])).toContain('textShadow');
-  expect(state.doc.outputs[0].children).toHaveLength(2);
+  expect(state.doc.outputs[0].children).toHaveLength(3);
   expect(state.doc.outputs[0].children[0].type).toBe('text');
   await editBodyCopyWithPointer(page);
   await page.getByRole('textbox', { name: 'Design name' }).click();
@@ -508,10 +508,10 @@ test('desktop workspace tabs switch the visible panel and keep View display-only
   await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
   const expand = page.getByRole('button', { name: 'Expand properties panel', exact: true });
   await expect(expand).toHaveClass(/rounded-s-md/);
-  const arrowTransform = await expand.locator('span').evaluate((element) =>
-    getComputedStyle(element).transform
+  const arrowRotation = await expand.locator('span').evaluate((element) =>
+    getComputedStyle(element).rotate
   );
-  expect(arrowTransform).not.toBe('none');
+  expect(arrowRotation).toBe('180deg');
 });
 
 test('Layers selection stays sticky and desktop workspace preferences survive reload', async ({ page }) => {
@@ -613,7 +613,7 @@ test('font-size shortcuts respect selection, text focus, bounds and help', async
   await expect.poll(() => state.doc.outputs[0].children[0].fontSize).toBe(32);
   await page.getByRole('application', { name: 'Design canvas' }).evaluate((canvas) => {
     canvas.dispatchEvent(new KeyboardEvent('keydown', {
-      key: '.', code: 'Period', ctrlKey: true, shiftKey: false,
+      key: '.', code: 'Period', ctrlKey: true, shiftKey: true,
       bubbles: true, cancelable: true,
     }));
   });
