@@ -1288,6 +1288,7 @@ describe('AiDesignerGateway handleStart attachment validation', () => {
 
     expect(service.createSession).toHaveBeenCalledTimes(1);
     expect(conductor.handleStart).toHaveBeenCalledTimes(1);
+    expect(idempotency.releaseStart).not.toHaveBeenCalled();
     expect(client.emit).toHaveBeenCalledWith('error', {
       code: 'duplicate_nonce',
       message: 'Your previous request is still being processed.',
