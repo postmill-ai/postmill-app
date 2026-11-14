@@ -582,6 +582,8 @@ ${stripExportsNamespace(mediaGeometrySource())}
     const fontSize = clip.fontSize || 28;
     const fontWeight = clip.fontWeight || 700;
     const fontStyle = clip.fontStyle === 'italic' ? 'italic ' : '';
+    ctx.font = \`\${fontStyle}\${fontWeight} \${fontSize}px "\${clip.fontFamily || 'Arial'}"\`;
+    ctx.textBaseline = 'top';
     const lineHeight = fontSize * 1.35;
     const spaceWidth = ctx.measureText(' ').width;
     const relativeMs = Math.max(0, playheadMs - clip.startMs);

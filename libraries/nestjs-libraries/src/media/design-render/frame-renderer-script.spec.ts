@@ -283,6 +283,50 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     ]);
   });
 
+  it('measures caption spacing with the caption font before laying out words', async () => {
+    const measurements: { text: string; font: string; baseline: string; width: number }[] = [];
+    const wordPositions: { text: string; x: number }[] = [];
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      font: '10px sans-serif',
+      textBaseline: 'alphabetic',
+      measureText: (text: string) => {
+        const font = state.font as string;
+        const fontSize = Number.parseFloat(/([\d.]+)px/.exec(font)?.[1] || '10');
+        const width = [...text].length * fontSize;
+        measurements.push({ text, font, baseline: state.textBaseline as string, width });
+        return { width };
+      },
+      fillText: (text: string, x: number) => wordPositions.push({ text, x }),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      tracks: [{
+        id: 'caption-track', type: 'caption',
+        clips: [{
+          id: 'caption-spacing', startMs: 0, endMs: 1000,
+          x: 0, y: 0, width: 200, height: 60, fontSize: 40,
+          words: [
+            { word: 'a', startMs: 0, endMs: 500 },
+            { word: 'b', startMs: 500, endMs: 1000 },
+          ],
+        }],
+      }],
+    }, context as never);
+    await api.renderFrame(0);
+
+    expect(measurements).toEqual([
+      { text: ' ', font: '700 40px "Arial"', baseline: 'top', width: 40 },
+      { text: 'a', font: '700 40px "Arial"', baseline: 'top', width: 40 },
+      { text: 'b', font: '700 40px "Arial"', baseline: 'top', width: 40 },
+    ]);
+    expect(wordPositions).toEqual([{ text: 'a', x: 0 }, { text: 'b', x: 80 }]);
+  });
+
   it('outlines caption words while preserving active-word solid colors', async () => {
     const calls: { kind: string; text: string }[] = [];
     const gradient = { addColorStop: () => undefined };
