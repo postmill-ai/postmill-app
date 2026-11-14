@@ -50,6 +50,10 @@ export const BrandKitProvider = ({ store, children }: { store: any; children: Re
   return <BrandKitContext.Provider value={value}>{children}</BrandKitContext.Provider>;
 };
 
+export const BrandKitModalProvider = ({ store, children }: { store: any; children: React.ReactNode }) => (
+  <BrandKitProvider store={store}>{children}</BrandKitProvider>
+);
+
 export const useBrandKit = () => {
   const context = useContext(BrandKitContext);
   if (!context) throw new Error('useBrandKit must be used inside BrandKitProvider');
