@@ -63,7 +63,8 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
 // v11 adds optional painted mask fields to still-image video clips.
 // v12 adds 3D extrusion layer styles and text-clip extrusion.
 // v13 adds editable QR settings to image elements and still-image clips.
-export const DESIGNER_DOC_VERSION = 13;
+// v14 adds optional textStroke to video text/caption clips.
+export const DESIGNER_DOC_VERSION = 14;
 
 /**
  * Maximum pages per image output, INCLUDING page 1 (`output.children` itself).

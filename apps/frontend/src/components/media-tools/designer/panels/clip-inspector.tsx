@@ -3,7 +3,7 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ColorSwatch, SegmentedControl, Slider, Stepper } from '../controls';
-import { FillSection } from './fill-section';
+import { FillSection, TextStrokeSection } from './fill-section';
 import {
   AlignCenterIcon,
   AlignJustifyIcon,
@@ -1605,10 +1605,17 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
               onChange={(align) => updateClip({ align: align as VideoClip['align'] })}
             />
           </div>
-          <ColorSwatch
+          <FillSection
+            element={clip}
+            set={updateClip}
             label={translate('color', 'Color')}
-            value={clip.fill || '#000000'}
-            onChange={(hex) => updateClip({ fill: hex })}
+            defaultColor={clipTrackType === 'caption' ? '#FFFFFF' : '#000000'}
+            brandEnforcement={brandEnforcement}
+          />
+          <TextStrokeSection
+            element={clip}
+            set={updateClip}
+            brandEnforcement={brandEnforcement}
           />
           <div className="pt-2 border-t border-studioBorder space-y-2">
             <button
@@ -1660,6 +1667,18 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             value={clip.fontFamily || 'Arial'}
             brandEnforcement={brandEnforcement}
             onPick={(family) => updateClip({ fontFamily: family })}
+          />
+          <FillSection
+            element={clip}
+            set={updateClip}
+            label={translate('color', 'Color')}
+            defaultColor={clipTrackType === 'caption' ? '#FFFFFF' : '#000000'}
+            brandEnforcement={brandEnforcement}
+          />
+          <TextStrokeSection
+            element={clip}
+            set={updateClip}
+            brandEnforcement={brandEnforcement}
           />
         </div>
       )}

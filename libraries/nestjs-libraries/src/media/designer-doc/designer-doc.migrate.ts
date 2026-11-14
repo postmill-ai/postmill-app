@@ -6,6 +6,7 @@ import type { DesignerDoc } from './designer-doc.schema';
 // without importing this module (which imports the schema's types).
 export { DESIGNER_DOC_VERSION } from './designer-doc.limits';
 import { DESIGNER_DOC_VERSION } from './designer-doc.limits';
+import { withTextStrokeVersion } from './designer-doc.version';
 
 let elementCounter = 0;
 
@@ -76,7 +77,7 @@ export const migrateDoc = (raw: any): DesignerDoc => {
   if (!raw || !Array.isArray(raw.outputs)) {
     return raw as DesignerDoc;
   }
-  return {
+  return withTextStrokeVersion({
     version: raw.version || DESIGNER_DOC_VERSION,
     mode: raw.mode || 'image',
     outputs: raw.outputs,
@@ -86,5 +87,5 @@ export const migrateDoc = (raw: any): DesignerDoc => {
     // symbol instance in the document on the next load.
     ...(Array.isArray(raw.symbols) ? { symbols: raw.symbols } : {}),
     ...(Array.isArray(raw.characterReferences) ? { characterReferences: raw.characterReferences } : {}),
-  } as DesignerDoc;
+  } as DesignerDoc);
 };

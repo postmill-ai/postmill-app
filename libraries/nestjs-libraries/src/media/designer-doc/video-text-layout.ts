@@ -14,7 +14,8 @@ export interface VideoTextDrawOptions {
   fontFamily?: string;
   fontWeight?: number;
   fontStyle?: 'normal' | 'italic';
-  fill?: string;
+  fill?: unknown;
+  textStroke?: { color: string; width: number };
   align?: VideoTextAlign;
 }
 
@@ -123,10 +124,14 @@ export const drawVideoText = (
   ctx: {
     font: string;
     fillStyle: unknown;
+    strokeStyle?: unknown;
+    lineWidth?: number;
+    miterLimit?: number;
     textBaseline: string;
     textAlign: string;
     measureText: (text: string) => { width: number };
     fillText: (text: string, x: number, y: number) => void;
+    strokeText?: (text: string, x: number, y: number) => void;
   },
   options: VideoTextDrawOptions
 ): VideoTextLine[] => {
@@ -135,9 +140,16 @@ export const drawVideoText = (
   const align = options.align || 'left';
   ctx.font = `${options.fontStyle === 'italic' ? 'italic ' : ''}${options.fontWeight || 400} ${fontSize}px "${options.fontFamily || 'Arial'}"`;
   ctx.fillStyle = options.fill || '#000000';
+  ctx.strokeStyle = options.textStroke?.color || '#000000';
+  ctx.lineWidth = options.textStroke?.width || 0;
+  ctx.miterLimit = 2;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   const measure = (text: string) => ctx.measureText(text).width;
+  const paint = (text: string, x: number, y: number) => {
+    if (options.textStroke && options.textStroke.width > 0) ctx.strokeText?.(text, x, y);
+    ctx.fillText(text, x, y);
+  };
   const lines = layoutVideoText(
     options.text,
     options.width,
@@ -159,11 +171,11 @@ export const drawVideoText = (
       const spaces = line.text.split(' ').length - 1;
       for (const char of videoTextCharacters(line.text)) {
         if (char === ' ') x += (options.width - line.width) / spaces;
-        ctx.fillText(char, x, y);
+        paint(char, x, y);
         x += measure(char);
       }
     } else {
-      ctx.fillText(line.text, x, y);
+      paint(line.text, x, y);
     }
   }
   return lines;

@@ -1,0 +1,73 @@
+import React from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { FillSection, TextStrokeSection } from './fill-section';
+
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
+  useT:
+    () =>
+    (key: string, fallback: string, vars?: Record<string, unknown>) =>
+      vars
+        ? fallback.replace(/\{\{(\w+)\}\}/g, (_match, name) => String(vars[name]))
+        : fallback,
+}));
+
+describe('shared video text style controls', () => {
+  it('creates a gradient through FillSection and edits outline color/width', () => {
+    const setFill = vi.fn();
+    const setStroke = vi.fn();
+    const { rerender } = render(
+      <>
+        <FillSection element={{ fill: '#112233' }} set={setFill} />
+        <TextStrokeSection element={{}} set={setStroke} />
+      </>
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Gradient' }));
+    expect(setFill).toHaveBeenCalledWith({
+      fillGradient: {
+        type: 'linear',
+        angle: 0,
+        stops: [
+          { offset: 0, color: '#112233' },
+          { offset: 1, color: '#FFFFFF' },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Outline' }));
+    expect(setStroke).toHaveBeenLastCalledWith({
+      textStroke: { color: '#000000', width: 2 },
+    });
+
+    rerender(
+      <TextStrokeSection
+        element={{ textStroke: { color: '#123456', width: 2 } }}
+        set={setStroke}
+      />
+    );
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Outline width' }), {
+      target: { value: '6' },
+    });
+    expect(setStroke).toHaveBeenLastCalledWith({
+      textStroke: { color: '#123456', width: 6 },
+    });
+  });
+
+  it.each(['#000000', '#FFFFFF'])('uses the caller default %s for an empty text fill', (defaultColor) => {
+    const setFill = vi.fn();
+    render(<FillSection element={{}} set={setFill} defaultColor={defaultColor} />);
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Gradient' }));
+    expect(setFill).toHaveBeenCalledWith({
+      fillGradient: {
+        type: 'linear',
+        angle: 0,
+        stops: [
+          { offset: 0, color: defaultColor },
+          { offset: 1, color: '#FFFFFF' },
+        ],
+      },
+    });
+  });
+});

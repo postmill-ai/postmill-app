@@ -121,6 +121,18 @@ For Designer specs 96 and 97, optional `E2E_FRONTEND_ORIGIN` proxies only docume
 `E2E_BASE` to a loopback HTTP worktree server while the saved auth origin and mocked API behavior
 stay unchanged. It must be `http://localhost`, `127.0.0.1`, or `::1`; API/provider calls are never
 proxied by this setting. `E2E_BACKEND_ORIGIN` remains the separate opt-in loopback API proxy.
+Spec 96's animated-sticker case uses only `fixtures/motion.mp4` and a mocked stock response: it checks
+video-track insertion, source-capped geometry, real playback/seek, save/reopen, and zero generation calls.
+The essentials case also covers real trim-edge pointer hit-testing, visible Split/transition controls,
+and text gradient/outline persistence with v14 stamping. These are non-paid acceptance paths; do not
+replace their local media with provider generation.
+
+The `Designer video acceptance` workflow runs those two cases on GitHub-hosted runners through
+`playwright.designer-ci.config.ts` after a production frontend build; the config refuses to load outside
+GitHub Actions. A sibling job installs Chromium and FFmpeg and runs `video-render.integration.spec.ts`
+with `RUN_RENDER_INTEGRATION=1` for real gradient/outline/sticker, poster and MP4 acceptance. The same
+flag enables an explicitly authorized local run against an existing Puppeteer Chrome; no browser download
+is required. Do not start these listeners, browsers, or render jobs on a production host for verification.
 
 `playwright.designer-ci.config.ts` and `.github/workflows/designer-browser.yml` are the production-build
 Designer browser path. The workflow builds the frontend before Playwright starts `next start` on a

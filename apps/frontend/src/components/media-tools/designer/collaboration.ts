@@ -325,6 +325,14 @@ function syncClipMap(
     deleteIfPresent(m, 'transitionOut');
   }
 
+  for (const key of ['fillGradient', 'textStroke'] as const) {
+    if (clip[key]) {
+      setIfChanged(m, key, JSON.stringify(clip[key]));
+    } else {
+      deleteIfPresent(m, key);
+    }
+  }
+
   if (clip.frames) {
     setIfChanged(m, 'frames', JSON.stringify(clip.frames));
   } else {
@@ -465,6 +473,14 @@ function yToVideoClip(m: Y.Map<any>): VideoClip {
   }
   if (m.has('transitionOut')) {
     clip.transitionOut = JSON.parse(m.get('transitionOut'));
+  }
+
+  for (const key of ['fillGradient', 'textStroke'] as const) {
+    if (m.has(key)) {
+      try {
+        (clip as any)[key] = JSON.parse(m.get(key));
+      } catch {}
+    }
   }
 
   if (m.has('frames')) {

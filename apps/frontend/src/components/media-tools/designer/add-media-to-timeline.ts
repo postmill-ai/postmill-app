@@ -139,7 +139,16 @@ interface AddMediaToTimelineOptions {
   width?: number;
   height?: number;
   durationMs?: number;
+  sticker?: boolean;
 }
+
+export const timelineMediaTypeForPick = (
+  requested: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio',
+  picked: 'image' | 'video' | 'audio'
+): 'image' | 'video' | 'audio' => {
+  if (requested === 'video' || requested === 'audio') return requested;
+  return picked === 'video' ? 'video' : 'image';
+};
 
 export interface AddImageClipOptions {
   url: string;
@@ -596,7 +605,8 @@ export interface LandedClipRef {
 const positiveNumber = (value: number | undefined): number | undefined =>
   value !== undefined && Number.isFinite(value) && value > 0 ? value : undefined;
 
-function containVideo(natW: number, natH: number, maxW: number, maxH: number) {
+function containVideo(natW: number, natH: number, maxW: number, maxH: number, sticker = false) {
+  if (sticker) return fitWithin(natW, natH, maxW * 0.8, maxH * 0.8);
   const scale = Math.min(maxW / natW, maxH / natH);
   return { width: Math.round(natW * scale), height: Math.round(natH * scale) };
 }
@@ -661,7 +671,7 @@ export function addMediaToTimeline(
       const width = positiveNumber(metadata.width);
       const height = positiveNumber(metadata.height);
       if (needsDimensions && width !== undefined && height !== undefined) {
-        const fit = containVideo(width, height, curVo.width, curVo.height);
+        const fit = containVideo(width, height, curVo.width, curVo.height, options.sticker);
         Object.assign(updates, {
           x: Math.round((curVo.width - fit.width) / 2),
           y: Math.round((curVo.height - fit.height) / 2),
@@ -741,7 +751,7 @@ export function addMediaToTimeline(
               const vo = store.getState().doc.outputs[out] as VideoOutput;
               const fit =
                 natW && natH
-                  ? containVideo(natW, natH, vo.width, vo.height)
+                  ? containVideo(natW, natH, vo.width, vo.height, options.sticker)
                   : { width: vo.width, height: vo.height };
               return {
                 ...clipBase,

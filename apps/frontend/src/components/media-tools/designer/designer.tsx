@@ -62,7 +62,7 @@ import { fetchDesignForEditor } from './load-design';
 import { downloadPdesignArtifact, replaceDesignerDesignId } from './pdesign-file';
 import { BulkCreateDialog } from './bulk-create-dialog';
 import { MobileQuickActions, MobileSheetHeader, MobileToolsDialog, MobileWorkspaceSheet, type MobileSheetSnap } from './mobile-designer-tools';
-import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
+import { addImageClipToTimeline, addMediaToTimeline, timelineMediaTypeForPick } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
@@ -1120,9 +1120,9 @@ const DesignerContent: FC<
    *
    * One picker instance, narrowed per call through `openWith` — which is what
    * that API exists for. In an image document, image-kind picks become elements;
-   * in a video document they become image clips at the playhead via
-   * `addImageClipToTimeline`; video and audio go to `addMediaToTimeline`, which
-   * finds or creates the track and probes the clip's real duration.
+   * in a video document static image picks become image clips at the playhead via
+   * `addImageClipToTimeline`; videos (including animated stickers) and audio go
+   * to `addMediaToTimeline`, which finds the track and probes real duration.
    */
   const onInsertMedia = useCallback(
     (kind: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio') => {
@@ -1145,9 +1145,8 @@ const DesignerContent: FC<
         audio: translate('insert_audio', 'Insert audio'),
       };
       const isTimelineMedia = kind === 'video' || kind === 'audio';
-      // In a video document an image/sticker/icon pick becomes an image CLIP on
-      // the timeline (schema track types `image`/`sticker` and both renderers
-      // already support it), not an element — image-mode behaviour is unchanged.
+      // Static image/sticker/icon picks become image clips in a video document;
+      // an MP4 sticker is rerouted to the video path in onSelect below.
       const isTimelineImage =
         !isTimelineMedia && store.getState().doc.mode === 'video';
 
@@ -1156,13 +1155,15 @@ const DesignerContent: FC<
         tabs: TABS[kind],
         requireFile: kind === 'vector',
         onSelect: (item) => {
-          if (isTimelineMedia) {
+          const timelineType = timelineMediaTypeForPick(kind, item.type);
+          if (isTimelineMedia || (isTimelineImage && timelineType === 'video')) {
             void addMediaToTimeline(store, {
-              type: kind,
+              type: timelineType === 'audio' ? 'audio' : 'video',
               url: item.url,
               fileId: item.fileId,
               width: item.width,
               height: item.height,
+              sticker: kind === 'sticker',
             })
               .then((landed) => {
                 if (landed?.probeFailed) {

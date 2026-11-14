@@ -70,9 +70,10 @@ export const TimelineTransportControls: FC<{
         disabled={!splitEnabled}
         title={t('designer_split_clip_hint', 'Split the selected clip at the playhead (S)')}
         aria-label={t('designer_split_clip', 'Split clip')}
-        className="w-7 h-7 flex items-center justify-center rounded-sm text-textColor/70 hover:text-textColor hover:bg-studioBorder/30 disabled:opacity-30 disabled:cursor-not-allowed"
+        className="h-7 px-1.5 flex items-center justify-center gap-1 rounded-sm text-[11px] font-medium text-textColor/70 hover:text-textColor hover:bg-studioBorder/30 disabled:opacity-30 disabled:cursor-not-allowed"
       >
         <SplitClipIcon size={16} />
+        <span>{t('designer_split', 'Split')}</span>
       </button>
       <button
         type="button"

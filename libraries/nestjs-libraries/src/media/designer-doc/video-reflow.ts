@@ -62,6 +62,7 @@ const CLIP_PATCH_KEYS = [
   'width',
   'height',
   'fontSize',
+  'textStroke',
   'fitMode',
   'focalPoint',
   'strokeWidth',
@@ -164,7 +165,9 @@ export const reflowVideoClip = (
           naturalHeight: clip.naturalHeight,
         }
       : {}),
-    ...(pseudoType === 'text' ? { fontSize: clip.fontSize } : {}),
+    ...(pseudoType === 'text'
+      ? { fontSize: clip.fontSize, textStroke: clip.textStroke }
+      : {}),
     ...(pseudoType === 'shape'
       ? { strokeWidth: clip.strokeWidth, borderRadius: clip.borderRadius }
       : {}),

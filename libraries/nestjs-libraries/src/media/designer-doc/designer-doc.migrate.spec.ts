@@ -57,6 +57,21 @@ describe('video character references', () => {
   });
 });
 
+describe('optional-additive document fields', () => {
+  it('stamps v14 when an older document carries textStroke', () => {
+    const outputs = [{
+      id: 'video',
+      tracks: [{
+        id: 'text',
+        type: 'text',
+        clips: [{ id: 'clip', textStroke: { color: '#000000', width: 2 } }],
+      }],
+    }];
+    expect(migrateDoc({ version: 10, mode: 'video', outputs }).version).toBe(14);
+    expect(migrateDoc({ version: 10, mode: 'video', outputs: [] }).version).toBe(10);
+  });
+});
+
 describe('zero legacy support', () => {
   it('does not rewrite a legacy root shape — it passes through for the schema to reject', () => {
     const legacy = { version: 1, width: 1080, height: 1080, pages: [] };

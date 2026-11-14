@@ -1,0 +1,118 @@
+---
+name: Designer video acceptance
+
+on:
+  push:
+    paths:
+      - '.github/workflows/designer-video-acceptance.yml'
+      - 'apps/frontend/src/components/media-tools/designer/**'
+      - 'libraries/nestjs-libraries/src/media/**'
+      - 'libraries/react-shared-libraries/src/translation/locales/**'
+      - 'e2e/**'
+  merge_group:
+  pull_request:
+    paths:
+      - '.github/workflows/designer-video-acceptance.yml'
+      - 'apps/frontend/src/components/media-tools/designer/**'
+      - 'libraries/nestjs-libraries/src/media/**'
+      - 'libraries/react-shared-libraries/src/translation/locales/**'
+      - 'e2e/**'
+
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - name: Install dependencies
+        run: |
+          ok=0
+          for i in 1 2; do
+            if [ "$i" = "2" ]; then
+              echo 'http://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt
+              sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' \
+                /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            fi
+            if timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 update \
+              && timeout 900 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 install -y \
+                libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev; then
+              ok=1; break
+            fi
+          done
+          if [ "$ok" != 1 ]; then exit 1; fi
+          pnpm install --frozen-lockfile
+          pnpm --dir e2e install --ignore-workspace --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --dir e2e exec playwright install --with-deps chromium
+      - name: Build production frontend
+        run: |
+          touch .env
+          pnpm run build:frontend
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_BACKEND_URL: http://127.0.0.1:3000
+      - name: Run Designer pointer, persistence, playback, and seek acceptance
+        run: |
+          touch .env
+          pnpm --dir e2e exec playwright test --config playwright.designer-ci.config.ts --grep 'Designer animated stock media|Designer video Inspector and timeline essentials'
+        env:
+          CI: '1'
+          GITHUB_ACTIONS: 'true'
+          NODE_ENV: production
+          NEXT_PUBLIC_BACKEND_URL: http://127.0.0.1:3000
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: designer-video-browser-acceptance
+          path: e2e/test-results-designer-ci
+          if-no-files-found: ignore
+
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      PUPPETEER_CACHE_DIR: ${{ github.workspace }}/.cache/puppeteer
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - name: Install renderer dependencies
+        run: |
+          ok=0
+          for i in 1 2; do
+            if [ "$i" = "2" ]; then
+              echo 'http://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt
+              sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' \
+                /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            fi
+            if timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 update \
+              && timeout 900 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 install -y \
+                ffmpeg libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev; then
+              ok=1; break
+            fi
+          done
+          if [ "$ok" != 1 ]; then exit 1; fi
+          pnpm install --frozen-lockfile
+          sudo env "PATH=$PATH" "PUPPETEER_CACHE_DIR=$PUPPETEER_CACHE_DIR" pnpm exec puppeteer browsers install chrome --install-deps
+      - name: Run real Chromium and FFmpeg acceptance
+        run: pnpm exec vitest run --root libraries/nestjs-libraries src/media/design-render/video-render.integration.spec.ts
+        env:
+          CI: '1'
+          GITHUB_ACTIONS: 'true'
+          NODE_ENV: production
+          RUN_RENDER_INTEGRATION: '1'

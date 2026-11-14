@@ -246,7 +246,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   are allowed in both document modes; the store disambiguates names (`Name 2`, `Name 3`, …) and
   enforces `MAX_OUTPUTS`. `originId` on `VideoClip` links sibling
   clips across variants: content/style edits propagate through `applyLinkedVideoClip`
-  (`apply-linked.ts`), geometry and timing stay local (`VIDEO_CLIP_LOCAL_KEYS`). The same branches
+  (`apply-linked.ts`), geometry and timing stay local (`VIDEO_CLIP_LOCAL_KEYS`). Doc v14 adds optional
+  `textStroke`; its width follows the same aspect-aware type scale as linked font size and reflow, with
+  a 1px minimum for nonzero sources. Writing a stroke to an older video document stamps v14 immediately.
+  The same branches
   serve the backend `addOutput`/`resizeOutput` ops, so agent-driven edits match the UI. The backend
   ops vocabulary adds clip ops (`updateClip`/`replaceClipMedia`/`updateTransition` in
   `designer-doc-ops.schema.ts`) which are FORMAT-LOCAL — no originId propagation on the headless
@@ -337,7 +340,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
 - **Timeline transport and Inspector essentials.** `timeline-split.ts` is the single split guard for
   the transport, S shortcut, context menu, and store: an unlocked selected clip, a strictly interior
   playhead, and at least 100 ms on both sides. Invalid cuts are no-ops; valid splits select the right
-  half. The transport's duration stepper uses `setVideoDuration` and the shared 1–180 s cap. Image
+  half. Split is a labeled transport action. Consecutive clips follow the renderer's
+  `from.endMs <= to.startMs` transition rule, including gaps and fractional flush cuts. A 24×16 badge
+  sits in a dedicated top lane clear of the ruler and both full-height trim edges; tiny cut-only pairs
+  omit it, but every pair with an existing transition keeps its control. The badge opens the existing
+  transition popover; do not add another timeline model. The transport's duration stepper uses `setVideoDuration` and the shared 1–180 s cap. Image
   replacement/background removal lives in `clip-media.ts`: preserve editing semantics, update media
   identity/intrinsics, and clear crop/original/smart-filter state. Generation returns a review
   candidate and does not edit the doc; Apply commits once after the before/after dialog. Static
@@ -428,6 +435,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   and name-only saves reuse the persisted preview. Video saves still omit client snapshots. Create
   and update saves drive the Saving indicator, including the first create.
 
+- **Animated stock stickers are video media.** `stock-stickers.tsx` marks an MP4 pick as `type: 'video'`;
+  video-mode `onInsertMedia` must route that pick through `addMediaToTimeline` (real duration/dimensions,
+  `mediaType: 'video'`, playback/seek/poster/export), never `addImageClipToTimeline`. Animated stickers
+  use the static-sticker sizing rule too: contain within 80% of the canvas without upscaling a small
+  source rendition. Ordinary videos still contain-fit to the full canvas. Static stickers remain image
+  clips, and existing `fileId` references pass through unchanged.
+
 - **Stock vectors and icons.** Pixabay vector searches omit blank `q`, cache for 24 hours, and
   prefer `vectorURL` with the documented raster fallback. Only actual SVG URLs are rasterized into an
   owned PNG File before insertion; raster fallbacks use ordinary URL import without upscaling.
@@ -444,7 +458,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `video-text-layout.ts`: paragraphs, long-token splitting, fixed-box overflow, one-fontSize line
   height, centred baselines and justified offsets. The frame script receives it through
   `videoTextLayoutSource()`; never reintroduce a second `wrapText` there. Shape clips use the same
-  `buildStyleGradient` and `gradientFillProps` as image shapes. Static 3D is an `extrusion` layer
+  `buildStyleGradient` and `gradientFillProps` as image shapes. Text and compatible caption clips use
+  those same gradients plus optional v14 `textStroke`; the shared Inspector exposes solid/multi-stop
+  fills and outline color/width. Chromium strokes before filling through `drawVideoText` with Konva's
+  miter limit 2, composites the resulting text/caption bitmap once at transition opacity, and Konva uses
+  `fillAfterStrokeEnabled`; posters project both fields to static text. Static 3D is an `extrusion` layer
   style rendered from the layer alpha; text clips use optional v12 `textExtrusion`. Both derive
   offsets from the bounded `text-extrusion.ts` module (depth ≤200), which is injected into the frame
   script and projected onto the poster as an extrusion style. Animation presets live in

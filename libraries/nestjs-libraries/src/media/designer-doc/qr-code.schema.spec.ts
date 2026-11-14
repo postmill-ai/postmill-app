@@ -58,7 +58,7 @@ describe('QR document compatibility', () => {
   it('round-trips editable settings verbatim in .pdesign files', () => {
     const parsed = parsePostmillFile(buildPostmillFile(imageDoc as any, 'QR campaign'));
     expect((parsed.doc as any).outputs[0].children[0].qr).toEqual(qr);
-    expect(parsed.manifest.docVersion).toBe(13);
+    expect(parsed.manifest.docVersion).toBe(14);
   });
 
   it('clears settings when a headless operation replaces the image source', () => {

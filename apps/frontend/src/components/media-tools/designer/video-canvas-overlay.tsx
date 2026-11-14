@@ -38,6 +38,7 @@ import { fullBoxHitProps, gradientFillProps } from './elements';
 import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
 import { groupRefsForClip, toggleClipRefs } from './video-selection';
 import { extrusionOffsets } from '@postmill-ai/nestjs-libraries/media/designer-doc/text-extrusion';
+import { buildStyleGradient } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-style-render';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import {
   discardBackgroundRemovalMask,
@@ -423,6 +424,7 @@ const CaptionClip: FC<{ clip: VideoClip; width: number; height: number; playhead
     if (!ctx) return;
 
     ctx.clearRect(0, 0, width, height);
+    ctx.miterLimit = 2;
     const fontSize = clip.fontSize || 28;
     const fontWeight = clip.fontWeight || 700;
     const fontFamily = clip.fontFamily || 'Arial';
@@ -434,7 +436,11 @@ const CaptionClip: FC<{ clip: VideoClip; width: number; height: number; playhead
     // Per-word styling comes from the shared module, which the frame renderer
     // is handed as source — so a karaoke caption in the preview is the one that
     // gets rendered.
-    const states = captionWordStates(words, relativeMs, clip.captionStyle, clip.fill || '#ffffff');
+    const baseFill = clip.fill || '#ffffff';
+    const states = captionWordStates(words, relativeMs, clip.captionStyle, baseFill);
+    const fillGradient = clip.fillGradient?.stops?.length
+      ? buildStyleGradient(ctx, clip.fillGradient, width, height)
+      : null;
     let x = 0;
     let y = 0;
     for (let i = 0; i < words.length; i++) {
@@ -451,7 +457,12 @@ const CaptionClip: FC<{ clip: VideoClip; width: number; height: number; playhead
         ctx.fillStyle = state.background;
         ctx.fillRect(x - 2, y - 2, wordWidth + 4, scaled + 4);
       }
-      ctx.fillStyle = state.color;
+      ctx.fillStyle = fillGradient && state.color === baseFill ? fillGradient : state.color;
+      if (clip.textStroke && clip.textStroke.width > 0) {
+        ctx.strokeStyle = canvasColor(clip.textStroke.color);
+        ctx.lineWidth = clip.textStroke.width * state.scale;
+        ctx.strokeText(w.word, x, y + (fontSize - scaled));
+      }
       // Grown from the baseline, not the top, or the line jumps as the
       // highlight moves along it.
       ctx.fillText(w.word, x, y + (fontSize - scaled));
@@ -994,6 +1005,14 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
             clip.endMs - clip.startMs
           );
           const fontStyle = `${clip.fontStyle === 'italic' ? 'italic ' : ''}${clip.fontWeight ?? 400}`;
+          const hasGradient = !!clip.fillGradient?.stops?.length;
+          const textPaintProps = {
+            ...gradientFillProps(clip.fillGradient, props.width, props.height),
+            fill: hasGradient ? undefined : canvasColor(clip.fill || '#000000'),
+            stroke: canvasColor(clip.textStroke?.color),
+            strokeWidth: clip.textStroke?.width,
+            fillAfterStrokeEnabled: !!clip.textStroke?.width,
+          };
           if (clip.textExtrusion?.depth) {
             const extrusion = clip.textExtrusion;
             const offsets = extrusionOffsets(extrusion, 1);
@@ -1040,7 +1059,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
                   lineHeight={1}
                   align={clip.align || 'left'}
                   fontStyle={fontStyle}
-                  fill={canvasColor(clip.fill || '#000000')}
+                  {...textPaintProps}
                 />
               </Group>
             );
@@ -1062,7 +1081,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               lineHeight={1}
               align={clip.align || 'left'}
               fontStyle={fontStyle}
-              fill={canvasColor(clip.fill || '#000000')}
+              {...textPaintProps}
               rotation={props.rotation}
               opacity={props.opacity}
               globalCompositeOperation={blendGco}

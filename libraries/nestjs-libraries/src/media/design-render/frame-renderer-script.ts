@@ -487,6 +487,40 @@ ${stripExportsNamespace(mediaGeometrySource())}
     ctx.restore();
   }
 
+  let textScratch;
+  let textScratchCtx;
+
+  function textBufferFor(props, strokeWidth, force = false, contentHeight = props.height) {
+    if (props.opacity >= 1 || (!force && !(strokeWidth > 0))) return null;
+    if (!textScratch) {
+      textScratch = document.createElement('canvas');
+      textScratchCtx = textScratch.getContext('2d');
+    }
+    const padding = Math.ceil(props.fontSize + strokeWidth * 2);
+    const width = props.width + padding * 2;
+    const height = Math.max(props.height, contentHeight) + padding * 2;
+    textScratch.width = Math.max(1, Math.ceil(width * renderScale));
+    textScratch.height = Math.max(1, Math.ceil(height * renderScale));
+    textScratchCtx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+    textScratchCtx.clearRect(0, 0, width, height);
+    textScratchCtx.translate(padding, padding);
+    textScratchCtx.globalAlpha = 1;
+    textScratchCtx.globalCompositeOperation = 'source-over';
+    textScratchCtx.filter = 'none';
+    return { padding, width, height };
+  }
+
+  function compositeTextBuffer(ctx, buffer, props) {
+    ctx.save();
+    ctx.globalAlpha = props.opacity;
+    ctx.drawImage(
+      textScratch,
+      0, 0, textScratch.width, textScratch.height,
+      -buffer.padding, -buffer.padding, buffer.width, buffer.height
+    );
+    ctx.restore();
+  }
+
   function drawTextClip(ctx, clip, props) {
     // The reveal slice comes from the injected designer-doc/text-reveal source —
     // the same implementation the preview overlay runs, so an exported frame
@@ -498,6 +532,8 @@ ${stripExportsNamespace(mediaGeometrySource())}
       clip.endMs - clip.startMs
     );
     if (!text) return;
+    const buffer = textBufferFor(props, clip.textStroke?.width || 0);
+    const gradientCtx = buffer ? textScratchCtx : ctx;
     const textOptions = {
       text,
       width: props.width,
@@ -506,7 +542,12 @@ ${stripExportsNamespace(mediaGeometrySource())}
       fontFamily: clip.fontFamily || 'Arial',
       fontWeight: clip.fontWeight || 400,
       fontStyle: clip.fontStyle || 'normal',
-      fill: clip.fill || '#000000',
+      fill: clip.fillGradient && clip.fillGradient.stops && clip.fillGradient.stops.length
+        ? buildStyleGradient(gradientCtx, clip.fillGradient, props.width, props.height)
+        : clip.fill || '#000000',
+      textStroke: clip.textStroke
+        ? { ...clip.textStroke, color: canvasColor(clip.textStroke.color) }
+        : undefined,
       align: clip.align || 'left',
     };
     if (clip.textExtrusion?.depth) {
@@ -514,14 +555,23 @@ ${stripExportsNamespace(mediaGeometrySource())}
         ctx.save();
         ctx.globalAlpha = props.opacity * (clip.textExtrusion.opacity ?? 0.85);
         ctx.translate(offset.x, offset.y);
-        drawVideoText(ctx, { ...textOptions, fill: clip.textExtrusion.color || '#000000' });
+        drawVideoText(ctx, {
+          ...textOptions,
+          fill: clip.textExtrusion.color || '#000000',
+          textStroke: undefined,
+        });
         ctx.restore();
       }
     }
-    ctx.save();
-    ctx.globalAlpha = props.opacity;
-    drawVideoText(ctx, textOptions);
-    ctx.restore();
+    if (buffer) {
+      drawVideoText(textScratchCtx, textOptions);
+      compositeTextBuffer(ctx, buffer, props);
+    } else {
+      ctx.save();
+      ctx.globalAlpha = props.opacity;
+      drawVideoText(ctx, textOptions);
+      ctx.restore();
+    }
   }
 
   async function drawCaptionClip(ctx, clip, props, playheadMs) {
@@ -539,7 +589,10 @@ ${stripExportsNamespace(mediaGeometrySource())}
     const relativeMs = Math.max(0, playheadMs - clip.startMs);
     // Per-word styling comes from the shared module (see captionStylesSource),
     // so a karaoke caption looks the same here as in the editor.
-    const states = captionWordStates(words, relativeMs, clip.captionStyle, clip.fill || '#ffffff');
+    const baseFill = clip.fill || '#ffffff';
+    const states = captionWordStates(words, relativeMs, clip.captionStyle, baseFill);
+    const layout = [];
+    let contentHeight = props.height;
     let x = 0;
     let y = 0;
     for (let i = 0; i < words.length; i++) {
@@ -551,16 +604,39 @@ ${stripExportsNamespace(mediaGeometrySource())}
         x = 0;
         y += lineHeight;
       }
-      if (state.background) {
-        ctx.fillStyle = state.background;
-        ctx.fillRect(x - 2, y - 2, wordWidth + 4, scaled + 4);
-      }
-      ctx.fillStyle = state.color;
-      // A scaled word grows from its own baseline, not its top, or the line
-      // visibly jumps as the highlight moves along it.
-      ctx.fillText(words[i].word, x, y + (fontSize - scaled));
+      layout.push({ word: words[i].word, state, scaled, width: wordWidth, x, y });
+      contentHeight = Math.max(contentHeight, y + fontSize, y + scaled + 2);
       x += wordWidth + spaceWidth;
     }
+    const buffer = textBufferFor(
+      props,
+      clip.textStroke?.width || 0,
+      props.opacity < 1,
+      contentHeight
+    );
+    const drawCtx = buffer ? textScratchCtx : ctx;
+    drawCtx.miterLimit = 2;
+    drawCtx.textBaseline = 'top';
+    const fillGradient = clip.fillGradient && clip.fillGradient.stops && clip.fillGradient.stops.length
+      ? buildStyleGradient(drawCtx, clip.fillGradient, props.width, props.height)
+      : null;
+    for (const item of layout) {
+      drawCtx.font = fontStyle + (item.state.weight || fontWeight) + ' ' + item.scaled + 'px "' + (clip.fontFamily || 'Arial') + '"';
+      if (item.state.background) {
+        drawCtx.fillStyle = item.state.background;
+        drawCtx.fillRect(item.x - 2, item.y - 2, item.width + 4, item.scaled + 4);
+      }
+      drawCtx.fillStyle = fillGradient && item.state.color === baseFill ? fillGradient : item.state.color;
+      if (clip.textStroke && clip.textStroke.width > 0) {
+        drawCtx.strokeStyle = canvasColor(clip.textStroke.color);
+        drawCtx.lineWidth = clip.textStroke.width * item.state.scale;
+        drawCtx.strokeText(item.word, item.x, item.y + (fontSize - item.scaled));
+      }
+      // A scaled word grows from its own baseline, not its top, or the line
+      // visibly jumps as the highlight moves along it.
+      drawCtx.fillText(item.word, item.x, item.y + (fontSize - item.scaled));
+    }
+    if (buffer) compositeTextBuffer(ctx, buffer, props);
     ctx.restore();
   }
 

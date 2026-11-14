@@ -1,13 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
-import path from 'node:path';
 
-if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_ENVIRONMENT !== 'github-hosted') {
-  throw new Error('The production Designer browser server may only start on a GitHub-hosted runner.');
+if (process.env.GITHUB_ACTIONS !== 'true') {
+  throw new Error('The Designer production-build acceptance config runs only on GitHub Actions runners.');
 }
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['**/96-designer-export.spec.ts'],
+  testMatch: '**/96-designer-generated-video.spec.ts',
   timeout: 180_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,
@@ -16,29 +15,35 @@ export default defineConfig({
   reporter: [['list']],
   outputDir: './test-results-designer-ci',
   webServer: {
-    command: 'pnpm --filter ./apps/frontend exec next start --hostname 127.0.0.1 --port 4200',
-    cwd: path.resolve(__dirname, '..'),
-    url: 'http://127.0.0.1:4200/auth',
+    command: 'pnpm --filter ./apps/frontend run start',
+    cwd: '..',
+    url: 'http://127.0.0.1:4200',
     reuseExistingServer: false,
     timeout: 120_000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: {
-      NODE_ENV: 'production',
-      NEXT_PUBLIC_BACKEND_URL: 'https://api.postmill.ai',
-      NEXT_TELEMETRY_DISABLED: '1',
-    },
   },
   use: {
     baseURL: 'http://127.0.0.1:4200',
-    storageState: { cookies: [], origins: [] },
-    ignoreHTTPSErrors: false,
+    storageState: {
+      cookies: [{
+        name: 'auth',
+        value: 'designer-ci-mocked-session',
+        domain: '127.0.0.1',
+        path: '/',
+        expires: -1,
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+      }],
+      origins: [],
+    },
+    viewport: { width: 1440, height: 1000 },
+    ignoreHTTPSErrors: true,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
   projects: [
     {
-      name: 'chromium-production',
+      name: 'chromium',
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } },
     },
   ],

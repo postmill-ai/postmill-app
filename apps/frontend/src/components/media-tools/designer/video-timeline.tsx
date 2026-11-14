@@ -79,13 +79,14 @@ import {
 import { TimelineTransportControls } from './timeline-transport-controls';
 import { canSplitClipAt } from './timeline-split';
 import { ClipTimingControls } from './panels/clip-timing-controls';
+import { CLIP_TOP_PX, transitionPairs, transitionBadgeGeometry } from './timeline-transitions';
 
 interface VideoTimelineProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
   sendTimelineAwareness?: (playheadMs: number, selectedClipId: string | null) => void;
 }
 
-const TRACK_HEIGHT = 36;
+const TRACK_HEIGHT = 52;
 const TRACK_GAP = 4;
 const RULER_HEIGHT = 22;
 const LABEL_WIDTH = 64;
@@ -497,7 +498,7 @@ const ClipRow = React.memo(function ClipRow({
       aria-valuemax={Math.round(durationMs - (clip.endMs - clip.startMs))}
       aria-valuetext={translate('clip_start_time', 'Start {{time}}', { time: formatTime(clip.startMs) })}
       tabIndex={0}
-      className={`absolute top-1 rounded-[4px] group touch-none select-none ${
+      className={`absolute rounded-[4px] group touch-none select-none ${
         locked ? 'cursor-not-allowed' : 'cursor-pointer'
       } ${
         // The primary (inspector target) keeps the white ring;
@@ -505,9 +506,10 @@ const ClipRow = React.memo(function ClipRow({
         primary ? 'ring-2 ring-white/60 z-10' : selected ? 'ring-2 ring-designerAccent/80 z-10' : ''
       }`}
       style={{
+        top: CLIP_TOP_PX,
         left,
         width,
-        height: TRACK_HEIGHT - 8,
+        height: TRACK_HEIGHT - 24,
         backgroundColor: TRACK_COLORS[trackType],
         opacity: clip.opacity ?? 0.9,
       }}
@@ -646,7 +648,7 @@ interface TrackRowProps {
   >;
 }
 
-const TrackRow = React.memo(function TrackRow({
+export const TrackRow = React.memo(function TrackRow({
   track,
   label,
   pairs,
@@ -751,7 +753,7 @@ const TrackRow = React.memo(function TrackRow({
           />
         ))}
 
-        {/* Transition handles between adjacent clips */}
+        {/* Transition handles for sequential clips, including across gaps */}
         {pairs.map(({ from, to }) => {
           const handleX = from.endMs * pixelsPerMs;
           const tType = from.transitionOut?.type || to.transitionIn?.type || 'cut';
@@ -759,16 +761,17 @@ const TrackRow = React.memo(function TrackRow({
           return (
             <div
               key={`trans-${from.id}-${to.id}`}
-              className="absolute top-1 z-20 group"
-              style={{
-                left: handleX - 4,
-                height: TRACK_HEIGHT - 8,
-              }}
+              className="absolute z-20 pointer-events-none"
+              style={transitionBadgeGeometry(handleX)}
             >
               <button
                 type="button"
-                className={`w-2 h-full flex items-center justify-center rounded-xs ${
-                  isTransitioning ? 'bg-yellow-500/40 hover:bg-yellow-500/60' : 'bg-transparent hover:bg-white/10'
+                data-transition-type={tType}
+                aria-haspopup="dialog"
+                className={`w-full h-full pointer-events-auto flex items-center justify-center rounded-xs border ${
+                  isTransitioning
+                    ? 'border-designerAccent/70 bg-designerAccent/50 text-white hover:bg-designerAccent/70'
+                    : 'border-studioBorder/70 bg-studioBg/80 text-textColor/70 hover:border-designerAccent/60 hover:text-textColor'
                 }`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -781,12 +784,12 @@ const TrackRow = React.memo(function TrackRow({
                     y: rect.top,
                   });
                 }}
-                title={translate('transition_hint', '{{label}} transition', { label: transitionLabel(tType) })}
+                title={translate('designer_edit_transition_hint', 'Edit {{label}} transition', { label: transitionLabel(tType) })}
                 aria-label={translate('transition_hint', '{{label}} transition', { label: transitionLabel(tType) })}
               >
-                {isTransitioning && (
-                  <div className="w-1 h-3 rounded-full bg-yellow-400" />
-                )}
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M4.5 3 1.5 6l3 3M7.5 3l3 3-3 3M2 6h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
             </div>
           );
@@ -1555,15 +1558,13 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     if (!isVideo || !vo) return {};
     const pairs: Record<string, { from: VideoClip; to: VideoClip }[]> = {};
     for (const track of vo.tracks) {
-      const sorted = sortedTrackClips[track.id] || [];
-      const trackPairs: { from: VideoClip; to: VideoClip }[] = [];
-      for (let i = 0; i < sorted.length - 1; i++) {
-        trackPairs.push({ from: sorted[i], to: sorted[i + 1] });
-      }
-      pairs[track.id] = trackPairs;
+      pairs[track.id] = transitionPairs(
+        sortedTrackClips[track.id] || [],
+        pixelsPerMs
+      );
     }
     return pairs;
-  }, [isVideo, vo, sortedTrackClips]);
+  }, [isVideo, vo, sortedTrackClips, pixelsPerMs]);
 
   // Header labels: a custom name always wins; duplicate-type tracks get a
   // running number ("Video 2", "Audio 2", …) so same-type rows stay
@@ -4303,6 +4304,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             onClick={() => setTransitionPopover(null)}
           />
           <div
+            role="dialog"
+            aria-label={translate('transition', 'Transition')}
             className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[180px]"
             style={{
               left: transitionPopover.x,

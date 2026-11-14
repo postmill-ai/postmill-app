@@ -76,8 +76,8 @@ const parallelComposition = (): any => ({
   ],
 });
 
-// Opt-in: this spec launches a real headless Chrome + FFmpeg, which CI runners
-// don't provide. Run locally with RUN_RENDER_INTEGRATION=1.
+// Opt in with RUN_RENDER_INTEGRATION=1. The GitHub acceptance workflow installs
+// Chrome and FFmpeg; a local run can use an existing Puppeteer Chrome instead.
 describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg video render integration', () => {
   it('renders a 1-second red MP4 with a thumbnail', async () => {
     const capture = new ChromiumFrameCaptureService();
@@ -371,6 +371,95 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
       expect(darkPixels).toBeGreaterThan(100);
     } finally {
       fs.rmSync(frameDir, { recursive: true, force: true });
+    }
+  }, 120000);
+
+  it('exports gradient and outlined text over an animated video clip to MP4', async () => {
+    const fs = await import('fs');
+    const { execFileSync } = await import('child_process');
+    const fixture = fs.readFileSync(path.resolve(__dirname, '../../../../../e2e/fixtures/motion-animated.mp4'));
+    const src = `data:video/mp4;base64,${fixture.toString('base64')}`;
+    const capture = new ChromiumFrameCaptureService();
+    const encoder = new FfmpegVideoEncoderService(capture);
+    let result: Awaited<ReturnType<typeof encoder.encode>> | undefined;
+
+    try {
+      const output: VideoOutput = {
+        ...redVideo(1000),
+        background: '#000000',
+        tracks: [
+          {
+            id: 'motion', type: 'video',
+            clips: [{
+              id: 'animated-sticker', src, mediaType: 'video', startMs: 0, endMs: 1000,
+              x: 0, y: 70, width: 320, height: 170, naturalWidth: 720, naturalHeight: 1280,
+              fitMode: 'fill', volume: 0,
+            }],
+          },
+          {
+            id: 'panel', type: 'shape',
+            clips: [{
+              id: 'panel', shape: 'rect', fill: '#ffffff', startMs: 0, endMs: 1000,
+              x: 0, y: 0, width: 320, height: 70,
+            }],
+          },
+          {
+            id: 'text', type: 'text',
+            clips: [{
+              id: 'gradient-outline', text: 'GRADIENT', startMs: 0, endMs: 1000,
+              x: 10, y: 10, width: 200, height: 45,
+              fontFamily: 'Arial', fontSize: 32, fontWeight: 700,
+              textStroke: { color: '#000000', width: 3 },
+              fillGradient: {
+                type: 'linear', angle: 0,
+                stops: [
+                  { offset: 0, color: '#ff0000' },
+                  { offset: 0.5, color: '#ffff00' },
+                  { offset: 1, color: '#0000ff' },
+                ],
+              },
+            }],
+          },
+        ],
+      };
+      result = await encoder.encode(output, { fps: 5, bitrateKbps: 500, format: 'mp4' });
+      expect(fs.statSync(result.videoPath).size).toBeGreaterThan(1000);
+      const metadata = JSON.parse(execFileSync('ffprobe', [
+        '-v', 'error', '-select_streams', 'v:0',
+        '-show_entries', 'stream=codec_name,width,height:format=duration',
+        '-of', 'json', result.videoPath,
+      ], { encoding: 'utf8' }));
+      expect(metadata.streams[0]).toMatchObject({ codec_name: 'h264', width: 320, height: 240 });
+      expect(Number(metadata.format.duration)).toBeCloseTo(1, 1);
+
+      const { data, info } = await sharp(result.thumbnailPath)
+        .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const colors = { red: 0, yellow: 0, blue: 0, outline: 0 };
+      for (let y = 0; y < 70; y++) {
+        for (let x = 0; x < info.width; x++) {
+          const index = (y * info.width + x) * info.channels;
+          const [r, g, b] = [data[index], data[index + 1], data[index + 2]];
+          if (r > 150 && g < 120 && b < 120) colors.red++;
+          if (r > 150 && g > 150 && b < 120) colors.yellow++;
+          if (b > 120 && r < 150 && g < 170) colors.blue++;
+          if (r < 60 && g < 60 && b < 60) colors.outline++;
+        }
+      }
+      expect(colors.red).toBeGreaterThan(5);
+      expect(colors.yellow).toBeGreaterThan(5);
+      expect(colors.blue).toBeGreaterThan(5);
+      expect(colors.outline).toBeGreaterThan(20);
+
+      const firstPath = path.join(path.dirname(result.videoPath), 'first.png');
+      const lastPath = path.join(path.dirname(result.videoPath), 'last.png');
+      execFileSync('ffmpeg', ['-y', '-ss', '0', '-i', result.videoPath, '-frames:v', '1', firstPath], { stdio: 'ignore' });
+      execFileSync('ffmpeg', ['-y', '-sseof', '-0.2', '-i', result.videoPath, '-frames:v', '1', lastPath], { stdio: 'ignore' });
+      const crop = { left: 0, top: 80, width: 320, height: 160 };
+      const first = await sharp(firstPath).extract(crop).raw().toBuffer();
+      const last = await sharp(lastPath).extract(crop).raw().toBuffer();
+      expect(first.equals(last)).toBe(false);
+    } finally {
+      if (result) encoder.cleanup(path.dirname(result.videoPath));
     }
   }, 120000);
 });

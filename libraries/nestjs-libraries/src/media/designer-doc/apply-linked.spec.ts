@@ -98,6 +98,26 @@ describe('applyLinked fontSize propagation', () => {
     expect((outputs[1] as any).children[0].fill).toBe('#000000');
   });
 
+  it('keeps nonzero linked image outlines visible at small type ratios', () => {
+    const doc = makeDoc();
+    Object.assign(doc.outputs[1], { width: 200, height: 200 });
+    const { outputs } = applyLinked(
+      doc,
+      0,
+      new Set(['e1']),
+      { textStroke: { color: '#123456', width: 2 } },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].textStroke.width).toBe(2);
+    expect((outputs[1] as any).children[0].textStroke).toEqual({ color: '#123456', width: 1 });
+
+    const zero = applyLinked(doc, 0, new Set(['e1']), {
+      textStroke: { color: '#123456', width: 0 },
+    }, false);
+    expect((zero.outputs[1] as any).children[0].textStroke.width).toBe(0);
+  });
+
   it('keeps the edit on the current output when editFormatOnly is set', () => {
     const { outputs, affected } = applyLinked(
       makeDoc(),
@@ -215,8 +235,8 @@ describe('applyLinkedVideoClip styles', () => {
         id: `video-${index}`,
         formatId: 'square',
         name: 'Square',
-        width: 1080,
-        height: 1080,
+        width: index === 0 ? 1080 : 1200,
+        height: index === 0 ? 1080 : 675,
         fps: 30,
         durationMs: 5000,
         tracks: [{
@@ -246,7 +266,14 @@ describe('applyLinkedVideoClip styles', () => {
       0,
       'track-0',
       'clip-0',
-      { fillGradient, align: 'justify', fontStyle: 'italic', groupId: 'new-group', x: 999 },
+      {
+        fillGradient,
+        align: 'justify',
+        fontStyle: 'italic',
+        textStroke: { color: '#000000', width: 6 },
+        groupId: 'new-group',
+        x: 999,
+      },
       false
     );
     const sibling = (outputs[1] as any).tracks[0].clips[0];
@@ -254,6 +281,7 @@ describe('applyLinkedVideoClip styles', () => {
     expect(sibling.fillGradient).toEqual(fillGradient);
     expect(sibling.align).toBe('justify');
     expect(sibling.fontStyle).toBe('italic');
+    expect(sibling.textStroke).toEqual({ color: '#000000', width: 5 });
     expect(sibling.groupId).toBe('group-1');
     expect(sibling.x).toBe(100);
     expect(sibling.startMs).toBe(500);

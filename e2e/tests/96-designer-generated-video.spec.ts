@@ -17,6 +17,7 @@ const CUTOUT_VERTICAL_RESULT_URL = '/mock-storage/cutout-vertical-result.png';
 const CUSTOM_POSTER_URL = '/mock-storage/custom-poster.png';
 const STOCK_VECTOR_URL = '/mock-storage/outline-vector.svg';
 const STOCK_ICON_URL = '/mock-storage/outline-icon.svg';
+const STOCK_STICKER_URL = '/mock-storage/animated-sticker.mp4';
 const STOCK_VECTOR_THUMB_URL = '/mock-storage/vector-thumb.png';
 const IMPORTED_VECTOR_URL = '/mock-storage/imported-vector.png';
 const GENERATED_POSTER_URL = 'https://app.postmill.ai/mock-storage/generated-poster.jpg';
@@ -70,6 +71,9 @@ interface VideoClipSnapshot {
     type: 'linear' | 'radial';
     stops: Array<{ offset: number; color: string }>;
   };
+  textStroke?: { color: string; width: number };
+  transitionIn?: { type: string; durationMs: number };
+  transitionOut?: { type: string; durationMs: number };
 }
 
 interface DesignerElementSnapshot extends Omit<VideoClipSnapshot, 'startMs' | 'endMs'> {
@@ -280,6 +284,10 @@ class DesignerMocks {
       file: 'replacement.webm',
       contentType: 'video/webm',
     },
+    [STOCK_STICKER_URL]: {
+      file: 'motion.mp4',
+      contentType: 'video/mp4',
+    },
     [RENDERED_VIDEO_URL]: {
       file: 'motion-rear-moov.mp4',
       contentType: 'video/mp4',
@@ -384,6 +392,10 @@ class DesignerMocks {
           setupCompleted: true,
           profile: {},
         });
+        return;
+      }
+      if (method === 'POST' && pathname === '/user/preferred-language') {
+        await json(route, {});
         return;
       }
       if (method === 'GET' && pathname === '/settings/roles/me') {
@@ -584,6 +596,31 @@ class DesignerMocks {
 
       if (pathname === '/media/upscale-video' && method === 'POST') {
         await json(route, { id: REPLACEMENT_URL });
+        return;
+      }
+
+      if (pathname === '/media/stock/stickers' && method === 'GET') {
+        await json(route, {
+          results: [{
+            id: 'animated-sticker-1',
+            url: ASYMMETRIC_URL,
+            thumbUrl: ASYMMETRIC_URL,
+            mp4Url: STOCK_STICKER_URL,
+            isSticker: true,
+            description: 'QA animated sticker',
+            author: 'QA Stickers',
+            authorUrl: 'https://example.com/stickers',
+            sourceUrl: 'https://example.com/sticker',
+            width: 720,
+            height: 1280,
+            source: 'giphy',
+            attribution: { provider: 'GIPHY' },
+          }],
+          page: 1,
+          totalPages: 1,
+          configured: true,
+          source: 'giphy',
+        });
         return;
       }
 
@@ -1228,6 +1265,53 @@ test.describe('Designer motion graphics editing (mocked local document)', () => 
   });
 });
 
+test.describe('Designer animated stock media (local non-paid fixture)', () => {
+  test('MP4 sticker insertion plays, seeks, saves and reopens as a video clip', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+
+    await page.getByRole('menuitem', { name: 'Insert', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Sticker…', exact: true }).click();
+    await page.getByRole('button', { name: 'QA animated sticker', exact: true }).click();
+    await expect.poll(() => mocks.savedClips()[0]?.mediaType).toBe('video');
+    expect(mocks.doc.outputs[0].tracks[0]).toMatchObject({ type: 'video' });
+    expect(mocks.savedClips()[0]).toMatchObject({
+      src: STOCK_STICKER_URL,
+      startMs: 0,
+      endMs: 4000,
+      width: 720,
+      height: 1280,
+      naturalWidth: 720,
+      naturalHeight: 1280,
+    });
+    expect(mocks.doc.outputs[0].tracks.some((track) => track.type === 'image')).toBe(false);
+
+    await expectRealPlayback(page);
+    const seek = page.getByRole('slider', { name: 'Seek timeline', exact: true });
+    await seek.press('Home');
+    await seek.press('Shift+ArrowRight');
+    await expect.poll(() => page.locator('video').first().evaluate((element: HTMLVideoElement) => element.currentTime))
+      .toBeGreaterThan(0.75);
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1);
+    expect(mocks.savedClips()[0]).toMatchObject({
+      src: STOCK_STICKER_URL,
+      mediaType: 'video',
+      endMs: 4000,
+      width: 720,
+      height: 1280,
+      naturalWidth: 720,
+      naturalHeight: 1280,
+    });
+    await expectRealPlayback(page);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
 test.describe('Designer video Inspector and timeline essentials (mocked local document)', () => {
   test('timeline tools, image replacement/removal, radius/text styles, and save/reload', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -1251,10 +1335,29 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       [0, 1000], [1000, 4000],
     ]);
 
+    for (const [trim, expectedLabel] of [
+      [page.getByRole('slider', { name: 'Trim clip end', exact: true }).first(), 'Trim clip end'],
+      [page.getByRole('slider', { name: 'Trim clip start', exact: true }).nth(1), 'Trim clip start'],
+    ] as const) {
+      const box = await trim.boundingBox();
+      expect(box).not.toBeNull();
+      const point = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
+      const hitLabel = await page.evaluate(({ x, y }) =>
+        document.elementFromPoint(x, y)?.getAttribute('aria-label'), point);
+      expect(hitLabel).toBe(expectedLabel);
+      await page.mouse.click(point.x, point.y);
+      await expect(page.getByRole('dialog', { name: 'Transition', exact: true })).toHaveCount(0);
+    }
+
     await page.getByRole('button', { name: 'Duplicate clip', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips.length).toBe(3);
     await page.getByRole('button', { name: 'Delete clip', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips.length).toBe(2);
+    await page.getByRole('button', { name: 'Cut transition', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Transition', exact: true })
+      .getByRole('button', { name: 'Fade', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[0].transitionOut?.type).toBe('fade');
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[1].transitionIn?.type).toBe('fade');
     await page.getByRole('spinbutton', { name: 'Duration (seconds)', exact: true }).fill('8');
     await expect.poll(() => mocks.doc.outputs[0].durationMs).toBe(8000);
 
@@ -1292,6 +1395,7 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await expect(review.getByRole('img', { name: 'Before', exact: true })).toBeVisible();
     await expect(review.getByRole('img', { name: 'After', exact: true })).toBeVisible();
     expect(mocks.doc.outputs[0].tracks[0].clips[1]?.src).toBe(REPLACEMENT_IMAGE_URL);
+    await review.getByRole('radio', { name: 'Preserve frame', exact: true }).click();
     await review.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[1]?.maskSrc).toContain('/mock-masks/');
     expect(mocks.backgroundRemovalPosts).toHaveLength(1);
@@ -1332,12 +1436,17 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
         return clip ? [clip.fontWeight, clip.fontStyle] : [];
       }).toEqual([fontWeight, fontStyle]);
     }
+    await page.getByRole('radio', { name: 'Gradient', exact: true }).click();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-original')?.fillGradient?.stops.length).toBe(2);
+    await page.getByRole('switch', { name: 'Outline', exact: true }).click();
+    await page.getByRole('spinbutton', { name: 'Outline width', exact: true }).fill('6');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-original')?.textStroke?.width).toBe(6);
 
     await saveDesign(page);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(4);
     await expect.poll(() => mocks.dashboardJobReads).toBeGreaterThan(1);
-    expect(mocks.doc.version).toBe(10);
+    expect(mocks.doc.version).toBe(14);
     expect(mocks.doc.outputs[0].durationMs).toBe(8000);
     expect(mocks.doc.outputs[0].tracks[0].clips).toHaveLength(2);
     expect(mocks.doc.outputs[0].tracks[0].clips[1]).toMatchObject({
@@ -1357,7 +1466,9 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     expect(mocks.savedClips().find((clip) => clip.id === 'text-original')).toMatchObject({
       fontWeight: 700,
       fontStyle: 'italic',
+      textStroke: { color: '#000000', width: 6 },
     });
+    expect(mocks.savedClips().find((clip) => clip.id === 'text-original')?.fillGradient?.stops).toHaveLength(2);
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

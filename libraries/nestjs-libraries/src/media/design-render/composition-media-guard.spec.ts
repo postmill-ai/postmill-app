@@ -69,4 +69,5 @@ describe('composition media SSRF guard', () => {
   it('rejects a private-IP host', async () => {
     expect(await isRenderMediaUrlAllowed('http://10.0.0.5/x')).toBe(false);
   });
+
 });

@@ -54,15 +54,24 @@ describe('FRAME_RENDERER_SCRIPT', () => {
       }
     );
 
-  const run = (output: unknown, context = stubContext()) => {
+  const run = (
+    output: unknown,
+    context = stubContext(),
+    bufferContext = context,
+    created: { width: number; height: number }[] = []
+  ) => {
     const canvas = { width: 0, height: 0, getContext: () => context };
     const win: Record<string, unknown> = {
       __DATA: { output, baseUrl: 'https://example.test' },
     };
     const doc = {
       getElementById: () => canvas,
-      // The background-texture overlay builds its tile through this.
-      createElement: () => ({ width: 0, height: 0, getContext: () => stubContext() }),
+      // The background-texture overlay and text buffers build through this.
+      createElement: () => {
+        const element = { width: 0, height: 0, getContext: () => bufferContext };
+        created.push(element);
+        return element;
+      },
     };
     const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
     fn(win, doc, class {});
@@ -218,6 +227,329 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     }, context as never);
     await api.renderFrame(0);
     expect(state.font).toBe('italic 700 10px "Arial"');
+  });
+
+  it('paints revealed keyframed text with shared multi-stop gradients and an outline', async () => {
+    const calls: { kind: string; text: string; x: number; y: number }[] = [];
+    const stops: [number, string][] = [];
+    const gradient = { addColorStop: (offset: number, color: string) => stops.push([offset, color]) };
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      createLinearGradient: () => gradient,
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
+      strokeText: (text: string, x: number, y: number) => calls.push({ kind: 'stroke', text, x, y }),
+      fillText: (text: string, x: number, y: number) => calls.push({ kind: 'fill', text, x, y }),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      tracks: [{
+        id: 'text-track', type: 'text',
+        clips: [{
+          id: 'styled-text', startMs: 0, endMs: 1000, text: 'ab cd',
+          x: 0, y: 0, width: 45, height: 30, fontSize: 20,
+          fontWeight: 700, fontStyle: 'italic', align: 'right',
+          textReveal: { mode: 'chars', durationMs: 1000 },
+          keyframes: [{ tMs: 0, props: { fontSize: 10 } }],
+          textStroke: { color: '#123456', width: 3 },
+          fillGradient: {
+            type: 'linear', angle: 0,
+            stops: [
+              { offset: 0, color: '#000000' },
+              { offset: 0.4, color: '#ff0000' },
+              { offset: 1, color: '#ffffff' },
+            ],
+          },
+        }],
+      }],
+    }, context as never);
+    await api.renderFrame(500);
+
+    expect(state.font).toBe('italic 700 10px "Arial"');
+    expect(state.fillStyle).toBe(gradient);
+    expect(state.strokeStyle).toBe('#123456');
+    expect(state.lineWidth).toBe(3);
+    expect(stops).toEqual([
+      [0, '#000000'],
+      [0.4, '#ff0000'],
+      [1, '#ffffff'],
+    ]);
+    expect(calls).toEqual([
+      { kind: 'stroke', text: 'ab ', x: 15, y: 5 },
+      { kind: 'fill', text: 'ab ', x: 15, y: 5 },
+    ]);
+  });
+
+  it('measures caption spacing with the caption font before laying out words', async () => {
+    const measurements: { text: string; font: string; baseline: string; width: number }[] = [];
+    const wordPositions: { text: string; x: number }[] = [];
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      font: '10px sans-serif',
+      textBaseline: 'alphabetic',
+      measureText: (text: string) => {
+        const font = state.font as string;
+        const fontSize = Number.parseFloat(/([\d.]+)px/.exec(font)?.[1] || '10');
+        const width = [...text].length * fontSize;
+        measurements.push({ text, font, baseline: state.textBaseline as string, width });
+        return { width };
+      },
+      fillText: (text: string, x: number) => wordPositions.push({ text, x }),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      tracks: [{
+        id: 'caption-track', type: 'caption',
+        clips: [{
+          id: 'caption-spacing', startMs: 0, endMs: 1000,
+          x: 0, y: 0, width: 200, height: 60, fontSize: 40,
+          words: [
+            { word: 'a', startMs: 0, endMs: 500 },
+            { word: 'b', startMs: 500, endMs: 1000 },
+          ],
+        }],
+      }],
+    }, context as never);
+    await api.renderFrame(0);
+
+    expect(measurements).toEqual([
+      { text: ' ', font: '700 40px "Arial"', baseline: 'top', width: 40 },
+      { text: 'a', font: '700 40px "Arial"', baseline: 'top', width: 40 },
+      { text: 'b', font: '700 40px "Arial"', baseline: 'top', width: 40 },
+    ]);
+    expect(wordPositions).toEqual([{ text: 'a', x: 0 }, { text: 'b', x: 80 }]);
+  });
+
+  it('outlines caption words while preserving active-word solid colors', async () => {
+    const calls: { kind: string; text: string }[] = [];
+    const gradient = { addColorStop: () => undefined };
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      createLinearGradient: () => gradient,
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
+      strokeText: (text: string) => calls.push({ kind: 'stroke', text }),
+      fillText: (text: string) => calls.push({ kind: 'fill', text }),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      tracks: [{
+        id: 'caption-track', type: 'caption',
+        clips: [{
+          id: 'caption', startMs: 0, endMs: 1000,
+          x: 0, y: 0, width: 100, height: 30, fontSize: 10,
+          words: [
+            { word: 'hello', startMs: 0, endMs: 500 },
+            { word: 'world', startMs: 500, endMs: 1000 },
+          ],
+          captionStyle: { preset: 'karaoke', activeColor: '#ff0000' },
+          fill: '#ffffff',
+          textStroke: { color: '#123456', width: 2 },
+          fillGradient: {
+            type: 'linear', angle: 0,
+            stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }],
+          },
+        }],
+      }],
+    }, context as never);
+    await api.renderFrame(750);
+
+    expect(calls).toEqual([
+      { kind: 'stroke', text: 'hello' },
+      { kind: 'fill', text: 'hello' },
+      { kind: 'stroke', text: 'world' },
+      { kind: 'fill', text: 'world' },
+    ]);
+    expect(state.strokeStyle).toBe('#123456');
+    expect(state.lineWidth).toBe(2);
+    expect(state.fillStyle).toBe('#ff0000');
+  });
+
+  it.each(['text', 'caption'] as const)(
+    'composites %s stroke and fill once at fade opacity with device-scale, overhang-safe bounds',
+    async (type) => {
+      const mainState: Record<string, unknown> = {
+        canvas: { width: 100, height: 100 },
+        measureText: (text: string) => ({ width: [...text].length * 10 }),
+      };
+      const bufferState: Record<string, unknown> = {
+        canvas: { width: 100, height: 100 },
+        globalAlpha: 1,
+        measureText: (text: string) => ({ width: [...text].length * 10 }),
+      };
+      const composites: { alpha: number; x: number; y: number; width: number; height: number }[] = [];
+      const bufferPaints: { kind: string; alpha: number }[] = [];
+      const mainGlyphs: string[] = [];
+      const created: { width: number; height: number }[] = [];
+      mainState.drawImage = (
+        _buffer: unknown, _sx: number, _sy: number, _sw: number, _sh: number,
+        x: number, y: number, width: number, height: number
+      ) => composites.push({ alpha: mainState.globalAlpha as number, x, y, width, height });
+      mainState.fillText = () => mainGlyphs.push('fill');
+      mainState.strokeText = () => mainGlyphs.push('stroke');
+      bufferState.fillText = () => bufferPaints.push({ kind: 'fill', alpha: bufferState.globalAlpha as number });
+      bufferState.strokeText = () => bufferPaints.push({ kind: 'stroke', alpha: bufferState.globalAlpha as number });
+      const context = (state: Record<string, unknown>) => new Proxy(state, {
+        get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+        set: (target, prop, value) => { target[prop as string] = value; return true; },
+      });
+      const baseClip = {
+        id: type, startMs: 0, endMs: 1000, opacity: 0.5,
+        x: 0, y: 0, width: 100, height: 30, fontSize: 10,
+        fill: '#ffffff', textStroke: { color: '#123456', width: 2 },
+      };
+      const clip = type === 'text'
+        ? { ...baseClip, text: 'hello' }
+        : { ...baseClip, words: [{ word: 'hello', startMs: 0, endMs: 1000 }] };
+
+      const api = run({
+        ...output,
+        renderScale: 2,
+        tracks: [{ id: `${type}-track`, type, clips: [clip] }],
+      }, context(mainState) as never, context(bufferState) as never, created);
+      await api.renderFrame(0);
+      await api.renderFrame(200);
+
+      expect(created.map(({ width, height }) => ({ width, height })))
+        .toEqual([{ width: 256, height: 116 }]);
+      expect(composites).toEqual([
+        { alpha: 0.5, x: -14, y: -14, width: 128, height: 58 },
+        { alpha: 0.5, x: -14, y: -14, width: 128, height: 58 },
+      ]);
+      expect(mainGlyphs).toEqual([]);
+      expect(bufferPaints).toEqual([
+        { kind: 'stroke', alpha: 1 }, { kind: 'fill', alpha: 1 },
+        { kind: 'stroke', alpha: 1 }, { kind: 'fill', alpha: 1 },
+      ]);
+      expect(bufferState.miterLimit).toBe(2);
+    }
+  );
+
+  it('flattens a faded caption background and glyph before compositing once', async () => {
+    const created: { width: number; height: number }[] = [];
+    const mainState: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
+      fillRect: vi.fn(),
+      fillText: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    const bufferState: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      globalAlpha: 1,
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
+      fillRect: vi.fn(),
+      fillText: vi.fn(),
+    };
+    const context = (state: Record<string, unknown>) => new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      tracks: [{
+        id: 'caption-track', type: 'caption',
+        clips: [{
+          id: 'faded-caption', startMs: 0, endMs: 1000, opacity: 0.5,
+          x: 0, y: 0, width: 100, height: 30, fontSize: 10,
+          words: [{ word: 'hello', startMs: 0, endMs: 1000 }],
+          captionStyle: { preset: 'box-highlight', highlightColor: '#123456' },
+          fill: '#ffffff',
+        }],
+      }],
+    }, context(mainState) as never, context(bufferState) as never, created);
+    await api.renderFrame(0);
+
+    expect(created).toHaveLength(1);
+    expect(bufferState.fillRect).toHaveBeenCalledOnce();
+    expect(bufferState.fillText).toHaveBeenCalledOnce();
+    expect(bufferState.globalAlpha).toBe(1);
+    expect(mainState.fillText).not.toHaveBeenCalled();
+    expect(mainState.drawImage).toHaveBeenCalledOnce();
+    expect(mainState.globalAlpha).toBe(0.5);
+  });
+
+  it('keeps every wrapped line when a faded caption overflows its authored box', async () => {
+    const created: { width: number; height: number }[] = [];
+    const mainState: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      measureText: (text: string) => ({ width: [...text].length * 20 }),
+      drawImage: vi.fn(),
+    };
+    const bufferState: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      measureText: (text: string) => ({ width: [...text].length * 20 }),
+      fillText: vi.fn(),
+    };
+    const context = (state: Record<string, unknown>) => new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      renderScale: 2,
+      tracks: [{
+        id: 'caption-track', type: 'caption',
+        clips: [{
+          id: 'overflow-caption', startMs: 0, endMs: 1000, opacity: 0.5,
+          x: 0, y: 0, width: 40, height: 10, fontSize: 10,
+          words: ['aa', 'bb', 'cc', 'dd'].map((word) => ({ word, startMs: 0, endMs: 1000 })),
+          captionStyle: { preset: 'box-highlight', highlightColor: '#123456' },
+          fill: '#ffffff',
+        }],
+      }],
+    }, context(mainState) as never, context(bufferState) as never, created);
+    await api.renderFrame(0);
+
+    expect(bufferState.fillText).toHaveBeenCalledTimes(4);
+    expect(created).toMatchObject([{ width: 120, height: 145 }]);
+    expect(mainState.drawImage).toHaveBeenCalledWith(
+      expect.anything(), 0, 0, 120, 145, -10, -10, 60, 72.5
+    );
+  });
+
+  it.each([
+    { opacity: 1, textStroke: { color: '#123456', width: 2 } },
+    { opacity: 0.5, textStroke: undefined },
+  ])('draws text directly without a scratch bitmap unless an outlined fade needs it', async (style) => {
+    const created: { width: number; height: number }[] = [];
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      measureText: (text: string) => ({ width: [...text].length * 10 }),
+      fillText: vi.fn(),
+      strokeText: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const api = run({
+      ...output,
+      tracks: [{
+        id: 'text-track', type: 'text',
+        clips: [{
+          id: 'direct', startMs: 0, endMs: 1000, text: 'hello',
+          x: 0, y: 0, width: 100, height: 30, fontSize: 10,
+          fill: '#ffffff', ...style,
+        }],
+      }],
+    }, context as never, context as never, created);
+    await api.renderFrame(0);
+
+    expect(created).toEqual([]);
+    expect(state.fillText).toHaveBeenCalled();
+    expect(state.drawImage).not.toHaveBeenCalled();
   });
 
   it('passes scalar and per-corner radii to roundRect without scalar coercion', async () => {
