@@ -5,6 +5,7 @@ type PreviewPatches = Record<string, Partial<DesignerElement>>;
 
 export const usePresetPreview = (store: any) => {
   const generation = useRef(0);
+  const applyGeneration = useRef(0);
   const preview = useCallback(
     (patches: PreviewPatches) => {
       generation.current += 1;
@@ -28,10 +29,10 @@ export const usePresetPreview = (store: any) => {
 
   const applyAsync = useCallback(
     async (load: () => Promise<() => void>) => {
-      const request = ++generation.current;
+      const request = ++applyGeneration.current;
       try {
         const commit = await load();
-        if (generation.current === request) commit();
+        if (applyGeneration.current === request) commit();
       } catch {
         // A failed font load leaves the base document and history untouched.
       }

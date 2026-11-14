@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import type { DesignerOutput, DesignerElement } from './designer.store';
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { addText as addTextTo } from './add-text';
@@ -574,7 +575,10 @@ export const useDesignerActions = (
     return a.map((action) => ({
       ...action,
       run: () => {
-        store.getState().clearElementPreview();
+        const state = store.getState();
+        if (state.isPreviewing || state.previewPatches) {
+          flushSync(() => state.clearElementPreview());
+        }
         action.run();
       },
     }));

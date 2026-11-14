@@ -1324,6 +1324,26 @@ describe('smartReflow full-canvas contain media', () => {
   });
 
   it.each([
+    {
+      name: 'horizontal',
+      element: image({ x: 236, width: 608, height: 1080, naturalWidth: 1001, naturalHeight: 1920 }),
+      axis: 'x' as const,
+      targetSize: target.width,
+    },
+    {
+      name: 'vertical',
+      element: image({ x: 0, y: 236, naturalWidth: 1920, naturalHeight: 1001 }),
+      axis: 'y' as const,
+      targetSize: target.height,
+    },
+  ])('rounds $name centering when the fitted contain frame is fractional', ({ element, axis, targetSize }) => {
+    const result = smartReflow(element, source, target);
+    const fittedSize = axis === 'x' ? result.width! : result.height!;
+    expect(result[axis]).toBe(Math.round((targetSize - fittedSize) / 2));
+    expect(Number.isInteger(result[axis])).toBe(true);
+  });
+
+  it.each([
     { target: { width: 1080, height: 1920, formatId: 'ig-story' }, expectedY: 0 },
     { target: { width: 1080, height: 1350, formatId: 'ig-portrait' }, expectedY: 0 },
   ])('keeps a top banner at the top on $target.width×$target.height', ({ target: portrait, expectedY }) => {
@@ -1433,6 +1453,10 @@ describe('smartReflow stack safe-zone shifts', () => {
     expect(stacks.get(raster)).toBe(stacks.get(label));
     expect(iconOut.y).toBe(labelOut.y);
     expect(rasterOut.y).toBe(labelOut.y);
+    for (const result of outputs.values()) {
+      expect(Number.isInteger(result.x)).toBe(true);
+      expect(Number.isInteger(result.y)).toBe(true);
+    }
     const expectedGap = Math.max(1, Math.round(4 * typeScaleRatio(source, target)));
     expect(Math.abs(pathOut.y! - (labelOut.y! + labelOut.height!) - expectedGap))
       .toBeLessThanOrEqual(1);

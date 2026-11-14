@@ -183,7 +183,7 @@ async function selectBodyCopy(page: Page) {
   await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
 }
 
-async function editSelectedBodyCopy(page: Page) {
+async function editBodyCopyWithPointer(page: Page) {
   await page.getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
   const stage = page.locator('.konva-stage').first();
@@ -192,6 +192,7 @@ async function editSelectedBodyCopy(page: Page) {
   const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
   const outputX = (box.width - 400 * scale) / 2;
   const outputY = (box.height - 400 * scale) / 2;
+  await stage.click({ position: { x: outputX + 390 * scale, y: outputY + 390 * scale } });
   await stage.dblclick({ position: { x: outputX + 230 * scale, y: outputY + 50 * scale } });
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
 }
@@ -254,7 +255,7 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   await expect.poll(() => JSON.stringify(state.doc.outputs[0].children[0])).toContain('textShadow');
   expect(state.doc.outputs[0].children).toHaveLength(2);
   expect(state.doc.outputs[0].children[0].type).toBe('text');
-  await editSelectedBodyCopy(page);
+  await editBodyCopyWithPointer(page);
   await page.getByRole('textbox', { name: 'Design name' }).click();
 
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)' }).click();
@@ -299,7 +300,7 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await expect(page.locator('.konva-stage').first()).toBeVisible();
   await selectBodyCopy(page);
-  await editSelectedBodyCopy(page);
+  await editBodyCopyWithPointer(page);
   await page.getByRole('textbox', { name: 'Design name' }).click();
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();

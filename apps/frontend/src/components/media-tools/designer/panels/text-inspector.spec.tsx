@@ -250,7 +250,29 @@ describe('TextInspector paged text', () => {
     expect(store.getState().history).toHaveLength(depth + 1);
   });
 
-  it('shrinks only a height previously grown by the style feature', async () => {
+  it('keeps the clicked style when the pointer leaves before its font resolves', async () => {
+    let resolveFont = () => {};
+    vi.mocked(ensureFontLoaded).mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveFont = resolve;
+    }));
+    const store = createDesignerStore();
+    store.getState().addElement(textElement('deferred-leave', 'A much longer heading'));
+    store.getState().setSelectedIds(['deferred-leave']);
+    await renderInspector(store);
+    const depth = store.getState().history.length;
+    const heading = screen.getByRole('button', { name: /Heading 1/ });
+
+    fireEvent.click(heading);
+    fireEvent.mouseLeave(heading);
+    expect(output(store, 0).children[0].fontSize).toBe(16);
+
+    resolveFont();
+    await waitFor(() => expect(output(store, 0).children[0].fontSize).toBe(48));
+    expect(output(store, 0).children[0].height).toBe(159);
+    expect(store.getState().history).toHaveLength(depth + 1);
+  });
+
+  it('shrinks feature-grown boxes only back to their remembered authored height', async () => {
     const store = createDesignerStore();
     store.getState().addElement(textElement('grown', 'A much longer heading'));
     store.getState().setSelectedIds(['grown']);
@@ -259,7 +281,11 @@ describe('TextInspector paged text', () => {
     await clickStyle(/Heading 1/);
     expect(output(store, 0).children[0].height).toBe(159);
     await clickStyle('B Body');
-    expect(output(store, 0).children[0].height).toBe(24);
+    expect(output(store, 0).children[0].height).toBe(60);
+    await clickStyle(/Heading 1/);
+    expect(output(store, 0).children[0].height).toBe(159);
+    await clickStyle('Reset style');
+    expect(output(store, 0).children[0].height).toBe(60);
   });
 
   it('ignores a stale slow-font apply after a newer preset wins', async () => {

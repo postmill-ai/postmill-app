@@ -1772,12 +1772,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       const editId = doubleClickTextEditId(
         pageOutput as DesignerOutput | undefined,
         doc.symbols,
-        id,
-        selectedIds
+        id
       );
       if (editId) setEditingTextId(editId);
     },
-    [output, pageOutput, doc, effectiveTool, paint, store, selectedIds]
+    [pageOutput, doc, effectiveTool, paint, store]
   );
 
   // Drop from panels (designer elements) and OS file drops.

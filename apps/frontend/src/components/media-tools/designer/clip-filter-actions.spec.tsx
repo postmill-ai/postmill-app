@@ -1,6 +1,10 @@
-import { renderHook } from '@testing-library/react';
+import React from 'react';
+import { act, render, renderHook } from '@testing-library/react';
+import Konva from 'konva';
+import { Layer, Stage } from 'react-konva';
 import { describe, it, expect, vi } from 'vitest';
-import { useDesignerActions, type DesignerActionCtx } from './actions';
+import { useDesignerActions, type DesignerAction, type DesignerActionCtx } from './actions';
+import { CanvasElements } from './elements';
 import { createDesignerStore, type VideoOutput } from './designer.store';
 
 /**
@@ -115,5 +119,51 @@ describe('Filter menu — video clip path', () => {
 
     result.current.find((action) => action.id === 'view-grid')!.run();
     expect(store.getState().previewPatches).toBeNull();
+  });
+
+  it('flushes preview clearing to Konva before a synchronous stage reader', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'text', type: 'text', text: 'Preview', x: 0, y: 0, width: 100, height: 30,
+      fontSize: 16, rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().previewElements({ text: { fontSize: 72 } });
+    let actions: DesignerAction[] = [];
+    let capturedFontSize: number | undefined;
+    const ctx = {
+      ...stubCtx(),
+      onCanvasProperties: () => {
+        const stage = Konva.stages[Konva.stages.length - 1];
+        capturedFontSize = (stage.findOne('#text') as Konva.Text).fontSize();
+      },
+    } as DesignerActionCtx;
+    const PreviewStage = () => {
+      const currentActions = useDesignerActions(store, ctx);
+      React.useEffect(() => {
+        actions = currentActions;
+      }, [currentActions]);
+      const children = store((state: any) => state.doc.outputs[0].children);
+      const previewPatches = store((state: any) => state.previewPatches);
+      return (
+        <Stage width={200} height={100}>
+          <Layer>
+            <CanvasElements
+              elements={children}
+              previewPatches={previewPatches}
+              interactive={false}
+              onSelect={() => {}}
+            />
+          </Layer>
+        </Stage>
+      );
+    };
+    render(<PreviewStage />);
+    const stage = Konva.stages[Konva.stages.length - 1];
+    expect((stage.findOne('#text') as Konva.Text).fontSize()).toBeGreaterThan(16);
+
+    act(() => actions.find((action) => action.id === 'canvas-properties')!.run());
+
+    expect(capturedFontSize).toBe(16);
+    expect((stage.findOne('#text') as Konva.Text).fontSize()).toBe(16);
   });
 });

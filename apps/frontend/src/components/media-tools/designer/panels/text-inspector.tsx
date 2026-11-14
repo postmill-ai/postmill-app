@@ -104,28 +104,46 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
   }, [selectedIds, out, currentPage]);
 
   const { previewAsync, applyAsync, cancel } = usePresetPreview(store);
-  const grownHeights = useRef(new Map<string, number>());
+  const grownHeights = useRef(
+    new Map<string, { grownHeight: number; authoredHeight: number }>()
+  );
   const stylePatchFor = useCallback(
     (
       preset: TextStylePreset,
       element: DesignerElement,
       canvas: { width: number; height: number }
     ) => {
-      const grown = grownHeights.current.get(element.id);
-      if (grown !== undefined && grown !== element.height) {
+      const remembered = grownHeights.current.get(element.id);
+      if (remembered && remembered.grownHeight !== element.height) {
         grownHeights.current.delete(element.id);
       }
-      return textStylePatch(preset, element, canvas, {
-        shrinkGrownHeight: grown === element.height,
+      const canShrink = remembered?.grownHeight === element.height;
+      const patch = textStylePatch(preset, element, canvas, {
+        shrinkGrownHeight: canShrink,
       });
+      if (remembered?.grownHeight === element.height && patch.height !== undefined) {
+        patch.height = Math.max(remembered.authoredHeight, patch.height);
+      }
+      return patch;
     },
     []
   );
   const noteAppliedPatch = useCallback(
     (element: DesignerElement, patch: Partial<DesignerElement>) => {
-      if (patch.height !== undefined && patch.height > element.height) {
-        grownHeights.current.set(element.id, patch.height);
-      } else if (patch.height !== undefined && patch.height < element.height) {
+      if (patch.height === undefined) return;
+      const remembered = grownHeights.current.get(element.id);
+      const continuing = remembered?.grownHeight === element.height;
+      if (patch.height > element.height) {
+        grownHeights.current.set(element.id, {
+          grownHeight: patch.height,
+          authoredHeight: continuing ? remembered.authoredHeight : element.height,
+        });
+      } else if (continuing && patch.height < element.height) {
+        grownHeights.current.set(element.id, {
+          ...remembered,
+          grownHeight: patch.height,
+        });
+      } else if (patch.height < element.height) {
         grownHeights.current.delete(element.id);
       }
     },

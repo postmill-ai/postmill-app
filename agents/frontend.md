@@ -421,10 +421,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   merges them into Konva render props. Save, duplicate, history, async writes, collaboration, export,
   thumbnails and server payloads always read the base document. Mouse leave/unmount clears only the
   projection, real edits/history cancel it, clicks commit once, and ending a preview re-arms a dirty
-  autosave without suspending base-document saves or retries. Command and shortcut dispatch clears
-  the projection before any live-stage read. Resets clear only their own effect/mask. Styles scale
-  from the canvas type basis, preserve colors and rich-run typography, await the target font before
-  measuring, and may shrink only a height the style feature previously grew. Effects never rasterize
+  autosave without suspending base-document saves or retries. Command and shortcut dispatch
+  synchronously flushes an active projection to the stage before any live-stage read. Resets clear
+  only their own effect/mask. Styles scale from the canvas type basis, preserve colors and rich-run
+  typography, await the target font before measuring, and shrink feature-grown boxes only back to
+  the height remembered before the first growth, never below their authored height. Effects never rasterize
   text or add hit-blocking layers; a Paint layer listens when it has either `src` or a live buffer.
   Snap uses the nearest guide at 6 screen px (`6 / zoom`), but uses multi-selection bounds only when
   the dragged node belongs to that selection; equal-spacing classification uses 2 document px.

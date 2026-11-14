@@ -64,7 +64,8 @@ export const fullBoxHitProps = (width: number, height: number) => ({
     context.beginPath();
     context.rect(0, 0, width, height);
     context.closePath();
-    context.fillStrokeShape(shape);
+    context.setAttr('fillStyle', shape.colorKey);
+    context.fill();
   },
 });
 

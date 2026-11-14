@@ -790,15 +790,15 @@ export const smartReflow = (
       : anchorX(anchor, target.width, groupFrameW);
     const frameTop = anchorY(anchor, target.height, groupFrameH);
     if (groupFrameW <= safeW) {
-      if (frameLeft < safe.left) x += safe.left - frameLeft;
+      if (frameLeft < safe.left) x = Math.round(x + safe.left - frameLeft);
       else if (frameLeft + groupFrameW > safe.right) {
-        x -= frameLeft + groupFrameW - safe.right;
+        x = Math.round(x - (frameLeft + groupFrameW - safe.right));
       }
     }
     if (groupFrameH <= safeH) {
-      if (frameTop < safe.top) y += safe.top - frameTop;
+      if (frameTop < safe.top) y = Math.round(y + safe.top - frameTop);
       else if (frameTop + groupFrameH > safe.bottom) {
-        y -= frameTop + groupFrameH - safe.bottom;
+        y = Math.round(y - (frameTop + groupFrameH - safe.bottom));
       }
     }
   }

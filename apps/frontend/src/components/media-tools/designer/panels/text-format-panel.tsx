@@ -51,10 +51,11 @@ export type TextElementUpdates = Partial<DesignerElement> &
  *
  * The fitter is shrink-only by design, which means the Size field could be set
  * to anything and the canvas would quietly paint something smaller. Growing the
- * box (never shrinking it — that would fight a deliberate layout) makes the
- * number honest. The wrap is computed AT THE REQUESTED size: measuring the line
- * count at the current size grew the box for the old wrap, which the fitter
- * then immediately shrank the font back into.
+ * box makes the number honest. Style changes may later shrink feature-added
+ * height, but only to the height remembered before the first style growth. The
+ * wrap is computed AT THE REQUESTED size: measuring the line count at the
+ * current size grew the box for the old wrap, which the fitter then immediately
+ * shrank the font back into.
  */
 const boxPatchFor = (
   element: DesignerElement | null,
