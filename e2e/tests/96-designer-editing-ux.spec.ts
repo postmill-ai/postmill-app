@@ -184,6 +184,11 @@ async function selectBodyCopy(page: Page) {
 }
 
 async function editBodyCopyWithPointer(page: Page) {
+  const layersPanel = page.getByRole('dialog', { name: 'Layers', exact: true });
+  if (await layersPanel.count()) {
+    await layersPanel.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(layersPanel).toHaveCount(0);
+  }
   await page.getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
   const stage = page.locator('.konva-stage').first();
