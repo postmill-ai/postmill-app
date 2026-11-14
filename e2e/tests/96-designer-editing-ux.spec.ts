@@ -238,6 +238,7 @@ async function selectBodyCopy(page: Page) {
   const row = page.locator('[data-element-id="body-copy"]');
   await expect(row).toBeVisible();
   await row.click();
+  await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
   await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
 }
 
