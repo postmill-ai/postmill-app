@@ -4046,6 +4046,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                         <input
                           type="checkbox"
                           checked={!!track.autoDuck}
+                          disabled={!!vo.frozen}
                           onChange={(e) => store.getState().setTrackAutoDuck(currentOutput, track.id, e.target.checked)}
                           className="accent-designerAccent w-3 h-3"
                         />
@@ -4055,6 +4056,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                         <input
                           type="checkbox"
                           checked={!!track.muted}
+                          disabled={!!vo.frozen}
                           onChange={(e) => store.getState().setTrackMuted(currentOutput, track.id, e.target.checked)}
                           className="accent-designerAccent w-3 h-3"
                         />
