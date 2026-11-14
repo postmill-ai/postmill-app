@@ -916,6 +916,8 @@ export interface VideoMarker {
 
 export interface VideoOutput {
   id: string;
+  /** Optional-additive on v13; freezes document edits, not switching/export. */
+  frozen?: boolean;
   formatId: string;
   name: string;
   width: number;
@@ -947,6 +949,8 @@ export interface DesignerPageContent {
 
 export interface DesignerOutput {
   id: string;
+  /** Optional-additive on v13; freezes document edits, not switching/export. */
+  frozen?: boolean;
   formatId: string;
   name: string;
   width: number;
@@ -1976,6 +1980,7 @@ const { strict: StrictVideoMarkerSchema, lenient: LenientVideoMarkerSchema } =
 // ---------------------------------------------------------------------------
 const videoOutputCommon = {
   id: z.string().max(200),
+  frozen: z.boolean().optional(),
   formatId: z.string().max(64),
   name: z.string().max(200),
 };
@@ -2029,6 +2034,7 @@ const { strict: StrictDesignerPageContentSchema, lenient: LenientDesignerPageCon
 // ---------------------------------------------------------------------------
 const designerOutputCommon = {
   id: z.string().max(200),
+  frozen: z.boolean().optional(),
   formatId: z.string().max(64),
   name: z.string().max(200),
   background: ColorSchema,

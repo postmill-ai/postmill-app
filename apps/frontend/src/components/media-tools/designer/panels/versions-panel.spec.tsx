@@ -85,6 +85,29 @@ describe('VersionsPanel', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/versions/v1/restore'))).toBe(true);
   });
 
+  it('restores a differing document over a frozen output with one history entry', async () => {
+    const store = setup();
+    store.getState().setOutputFrozen(0, true);
+    await screen.findByRole('button', { name: 'Preview' });
+    const nextDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((output, index) =>
+        index === 0 ? { ...output, name: 'Server restored output', frozen: true } : output),
+    };
+    fetchMock.mockImplementation((url: string) => Promise.resolve({
+      ok: true,
+      json: async () => url.endsWith('/restore') ? { doc: nextDoc } : [version],
+    }));
+    const before = store.getState().historyIndex;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+
+    await waitFor(() => expect(store.getState().doc.outputs[0].name).toBe('Server restored output'));
+    expect(store.getState().historyIndex).toBe(before + 1);
+    expect(store.getState().historyLabels.at(-1)).toBe('Restore version');
+    expect(toasterShow).toHaveBeenCalledWith('Version restored', 'success');
+  });
+
   it.each([
     { outcome: 'cancelled', approved: false },
     { outcome: 'failed', approved: true },

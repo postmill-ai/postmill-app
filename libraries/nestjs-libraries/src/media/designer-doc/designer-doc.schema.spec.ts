@@ -772,3 +772,29 @@ describe('primitive schemas', () => {
     }).success).toBe(true);
   });
 });
+
+
+describe('optional output freeze flag', () => {
+  it('accepts frozen on v13 image and video outputs in strict and lenient parsers', () => {
+    const image = {
+      ...imageDocFixture,
+      version: 13,
+      outputs: [{ ...imageDocFixture.outputs[0], frozen: true }],
+    };
+    const video = {
+      ...videoDocFixture,
+      version: 13,
+      outputs: [{ ...videoDocFixture.outputs[0], frozen: true }],
+    };
+    for (const schema of [DesignerDocStrictSchema, DesignerDocLenientSchema]) {
+      expect(schema.parse(image).outputs[0].frozen).toBe(true);
+      expect(schema.parse(video).outputs[0].frozen).toBe(true);
+    }
+  });
+
+  it('leaves older documents without the optional flag valid and unchanged', () => {
+    const parsed = DesignerDocStrictSchema.parse(imageDocFixture);
+    expect(parsed.version).toBe(2);
+    expect(parsed.outputs[0].frozen).toBeUndefined();
+  });
+});

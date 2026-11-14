@@ -1525,3 +1525,118 @@ describe('DesignerDocService clip ops (video outputs)', () => {
     expect(other.text).toBe('Headline');
   });
 });
+
+
+describe('frozen outputs and carousel document ops', () => {
+  it('rejects frozen source, resize and setDoc mutations while skipping frozen linked targets', () => {
+    const service = makeService();
+    let doc = service.applyOps(createBlankDoc(), [
+      { op: 'addElement', outputIndex: 0, element: { ...minimalImageElement, originId: 'shared-text' } },
+      {
+        op: 'addOutput',
+        preset: { formatId: 'x-post', name: 'X', width: 1200, height: 675 },
+      },
+      { op: 'setOutputFrozen', outputIndex: 1, frozen: true },
+    ]);
+    const sourceId = doc.outputs[0].children[0].id;
+    const targetId = doc.outputs[1].children[0].id;
+
+    doc = service.applyOps(doc, [
+      {
+        op: 'updateElement', outputIndex: 0, elementId: sourceId,
+        patch: { text: 'After' }, scope: 'shared',
+      },
+    ]);
+    expect(doc.outputs[0].children[0].text).toBe('After');
+    expect(doc.outputs[1].children[0].text).toBe('Hello');
+
+    for (const op of [
+      { op: 'updateElement', outputIndex: 1, elementId: targetId, patch: { text: 'Rejected' } },
+      { op: 'resizeOutput', outputIndex: 1, width: 500, height: 500 },
+      { op: 'addPage', outputIndex: 1 },
+      { op: 'removeOutput', outputIndex: 1 },
+    ] as const) {
+      expect(() => service.applyOps(doc, [op as any])).toThrowError(
+        expect.objectContaining({ code: 'DESIGNER_OP_OUTPUT_FROZEN' })
+      );
+    }
+
+    const replacement = structuredClone(doc);
+    replacement.outputs[1].name = 'Replacement';
+    expect(() => service.applyOps(doc, [{ op: 'setDoc', doc: replacement }])).toThrowError(
+      expect.objectContaining({ code: 'DESIGNER_OP_OUTPUT_FROZEN' })
+    );
+
+    doc = service.applyOps(doc, [{ op: 'setOutputFrozen', outputIndex: 1, frozen: false }]);
+    doc = service.applyOps(doc, [
+      { op: 'resizeOutput', outputIndex: 1, width: 500, height: 500 },
+    ]);
+    expect(doc.outputs[1]).toMatchObject({ width: 500, height: 500, frozen: undefined });
+  });
+
+  it('seeds Add format from output 0 while another output is frozen', () => {
+    const service = makeService();
+    let doc = service.applyOps(createBlankDoc(), [
+      { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+      { op: 'addOutput', preset: { formatId: 'x-post', name: 'X', width: 1200, height: 675 } },
+    ]);
+    doc = service.applyOps(doc, [
+      {
+        op: 'updateElement', outputIndex: 1, elementId: doc.outputs[1].children[0].id,
+        patch: { text: 'Secondary' }, scope: 'format-only',
+      },
+      { op: 'setOutputFrozen', outputIndex: 1, frozen: true },
+      { op: 'addOutput', preset: { formatId: 'ig-story', name: 'Story', width: 1080, height: 1920 } },
+    ]);
+
+    expect(doc.outputs).toHaveLength(3);
+    expect(doc.outputs[2].children[0].text).toBe('Hello');
+  });
+
+  it('rejects a symbol-master replacement referenced by a frozen output', () => {
+    const service = makeService();
+    const instance = {
+      ...minimalImageElement,
+      id: 'instance', type: 'symbol', symbolId: 'sym-1', text: undefined,
+    };
+    const doc = service.validate({
+      ...createBlankDoc(),
+      outputs: [
+        { ...createBlankDoc().outputs[0], children: [instance] },
+        { ...createBlankDoc().outputs[0], id: 'out-frozen', frozen: true, children: [{ ...instance, id: 'instance-2' }] },
+      ],
+      symbols: [{
+        id: 'sym-1', name: 'Shared', width: 100, height: 50,
+        children: [{ ...minimalImageElement, id: 'master' }],
+      }],
+    });
+    const replacement = structuredClone(doc);
+    replacement.symbols![0].children[0].text = 'Changed';
+
+    expect(() => service.applyOps(doc, [{ op: 'setDoc', doc: replacement }])).toThrowError(
+      expect.objectContaining({ code: 'DESIGNER_OP_OUTPUT_FROZEN' })
+    );
+  });
+
+  it('inserts carousel slides after a position and promotes a duplicate when slide 1 is deleted', () => {
+    const service = makeService();
+    let doc = service.applyOps(createBlankDoc(), [
+      { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+      { op: 'addPage', outputIndex: 0, name: 'Last' },
+      { op: 'addPage', outputIndex: 0, name: 'Middle', afterPageNumber: 0 },
+      { op: 'duplicatePage', outputIndex: 0, pageNumber: 0 },
+    ]);
+    expect(doc.outputs[0].pages?.map((page) => page.name)).toEqual([
+      undefined, 'Middle', 'Last',
+    ]);
+    const originalId = doc.outputs[0].children[0].id;
+
+    doc = service.applyOps(doc, [
+      { op: 'removePage', outputIndex: 0, pageNumber: 0, allowFirst: true },
+    ]);
+    expect(doc.outputs[0].children).toHaveLength(1);
+    expect(doc.outputs[0].children[0].text).toBe('Hello');
+    expect(doc.outputs[0].children[0].id).not.toBe(originalId);
+    expect(doc.outputs[0].pages?.map((page) => page.name)).toEqual(['Middle', 'Last']);
+  });
+});

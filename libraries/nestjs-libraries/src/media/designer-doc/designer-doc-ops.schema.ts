@@ -79,6 +79,7 @@ const AddPageOpSchema = z
     outputIndex: outputIndex,
     name: z.string().max(200).optional(),
     background: StrictDesignerBackgroundSchema.optional(),
+    afterPageNumber: pageNumber.optional(),
   })
   .strict();
 
@@ -86,8 +87,10 @@ const RemovePageOpSchema = z
   .object({
     op: z.literal('removePage'),
     outputIndex: outputIndex,
-    // Page 1 (pageNumber 0) is the output itself and cannot be removed.
+    // Page 1 is removable only in the explicit carousel flow, which promotes
+    // the next slide into the output's base page slot.
     pageNumber: pageNumber,
+    allowFirst: z.boolean().optional(),
   })
   .strict();
 
@@ -128,6 +131,14 @@ const ResizeOutputOpSchema = z
     height: strictNum(1, MAX_DIMENSION),
     formatId: z.string().max(64).optional(),
     name: z.string().max(200).optional(),
+  })
+  .strict();
+
+const SetOutputFrozenOpSchema = z
+  .object({
+    op: z.literal('setOutputFrozen'),
+    outputIndex: outputIndex,
+    frozen: z.boolean(),
   })
   .strict();
 
@@ -286,6 +297,7 @@ export const DesignerDocOpSchema = z.discriminatedUnion('op', [
   RemoveOutputOpSchema,
   AddOutputOpSchema,
   ResizeOutputOpSchema,
+  SetOutputFrozenOpSchema,
   SetOutputBackgroundOpSchema,
   AddPageOpSchema,
   RemovePageOpSchema,

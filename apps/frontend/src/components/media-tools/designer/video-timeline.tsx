@@ -50,10 +50,7 @@ import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/f
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { aspectBucketForDimensions } from '@postmill-ai/nestjs-libraries/media/slide/slide-aspect';
 import { closestAspectRatio } from '@postmill-ai/frontend/components/media-tools/replicate/aspect-ratio';
-import {
-  sourceTimeForClipTime,
-  splitSpeedCurveForClip,
-} from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
+import { commitCaptionClips as commitCaptionOutput, freezeFrameAt } from './video-output-actions';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import {
   GenerationProviderPicker,
@@ -73,7 +70,6 @@ import {
   mapTranscriptionToCaptionPhrases,
   parseSubtitles,
   serializeSrt,
-  withCaptionClips,
   type TranscribedWord,
 } from './captions';
 import { TimelineTransportControls } from './timeline-transport-controls';
@@ -2267,7 +2263,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       setDragging(null);
       setDragOverTrackId(null);
       setDragOverNewTrack(false);
-      if (!liveVo) return;
+      if (!liveVo || liveVo.frozen) return;
 
       if (dragging.edge === 'move') {
         const members = dropMembers(liveVo.tracks);
@@ -2379,7 +2375,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       setDragging(null);
       setDragOverTrackId(null);
       setDragOverNewTrack(false);
-      if (dragMovedRef.current) store.getState().pushHistory();
+      if (dragMovedRef.current && !vo.frozen) store.getState().pushHistory();
     };
     const handlePointerCancel = (e: PointerEvent) => handleCancel(e.pointerId);
     const handleBlur = () => handleCancel();
@@ -2504,82 +2500,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   const handleFreezeFrame = useCallback(
     (trackId: string, clipId: string) => {
-      const state = store.getState();
-      const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
-      if (!vo) return;
-
-      const track = vo.tracks.find((t) => t.id === trackId);
-      const idx = track?.clips.findIndex((c) => c.id === clipId);
-      if (idx == null || idx < 0 || !track) return;
-
-      const original = track.clips[idx];
-      const freezeDuration = 2000;
-      const splitPoint = Math.max(original.startMs + 100, Math.min(original.endMs - 100, state.playheadMs));
-
-      if (splitPoint <= original.startMs || splitPoint >= original.endMs) return;
-
-      (globalThis as any)._clipCounter = ((globalThis as any)._clipCounter || 0) + 1;
-      const ctr = (globalThis as any)._clipCounter;
-
-      // Source time of the frame under the playhead — the frozen frame, and the
-      // point the second half resumes from. For a ramped clip that is the
-      // INTEGRATED mapping (the legacy sum only holds at constant speed), and
-      // the two outer clips split the curve at the cut, re-based per side.
-      const curveSplit = splitSpeedCurveForClip(original, splitPoint - original.startMs);
-      const frozenSourceMs = curveSplit
-        ? sourceTimeForClipTime(original, splitPoint - original.startMs)
-        : (original.trimInMs ?? 0) + (splitPoint - original.startMs);
-
-      const first: VideoClip = {
-        ...original,
-        id: `el-${Date.now()}-${ctr}`,
-        endMs: splitPoint,
-        ...(curveSplit
-          ? { speedCurve: curveSplit.first.speedCurve, trimInMs: curveSplit.first.trimInMs }
-          : {}),
-      };
-      const freeze: VideoClip = {
-        id: `el-${Date.now()}-${ctr + 1}`,
-        startMs: splitPoint,
-        endMs: splitPoint + freezeDuration,
-        src: original.src,
-        fileId: original.fileId,
-        x: original.x,
-        y: original.y,
-        width: original.width,
-        height: original.height,
-        rotation: original.rotation,
-        opacity: original.opacity,
-        naturalWidth: original.naturalWidth,
-        naturalHeight: original.naturalHeight,
-        speed: 0,
-        // Hold the frame at the split point (a speed:0 clip resolves to this
-        // constant source time), otherwise it shows the source's first frame.
-        trimInMs: frozenSourceMs,
-      };
-      const second: VideoClip = {
-        ...original,
-        id: `el-${Date.now()}-${ctr + 2}`,
-        startMs: splitPoint + freezeDuration,
-        // Resume from the split point, not the source start (always offset, even
-        // when the original had no trimIn). For a ramped clip the curve split
-        // already carries the correct per-side trim-in (reversed clips keep the
-        // original trim-in on the second half — the freeze holds the cut frame).
-        ...(curveSplit
-          ? { speedCurve: curveSplit.second.speedCurve, trimInMs: curveSplit.second.trimInMs }
-          : { trimInMs: frozenSourceMs }),
-      };
-
-      const clips = [...track.clips];
-      clips.splice(idx, 1, first, freeze, second);
-      const updated: VideoOutput = {
-        ...vo,
-        tracks: vo.tracks.map((t) => (t.id === trackId ? { ...t, clips } : t)),
-      };
-      const outs = [...state.doc.outputs];
-      outs[currentOutput] = updated;
-      store.setState({ doc: { ...state.doc, outputs: outs }, isDirty: true });
-      store.getState().pushHistory();
+      freezeFrameAt(store, currentOutput, trackId, clipId);
     },
     [store, currentOutput],
   );
@@ -2755,14 +2676,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         track?.clips.find((c) => c.id === fromClipId)?.transitionOut?.durationMs ??
         track?.clips.find((c) => c.id === toClipId)?.transitionIn?.durationMs;
       const durationMs = type === 'cut' ? 0 : existing && existing > 0 ? existing : TRANSITION_DEFAULT_MS;
-      state.updateClipSilent(currentOutput, trackId, fromClipId, {
+      const fromUpdated = state.updateClipSilent(currentOutput, trackId, fromClipId, {
         transitionOut: { type, durationMs, direction },
       });
-      state.updateClipSilent(currentOutput, trackId, toClipId, {
+      const toUpdated = state.updateClipSilent(currentOutput, trackId, toClipId, {
         transitionIn: { type, durationMs, direction },
       });
       setTransitionPopover(null);
-      store.getState().pushHistory();
+      if (fromUpdated || toUpdated) store.getState().pushHistory();
     },
     [store, currentOutput],
   );
@@ -2775,17 +2696,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const track = vo?.tracks.find((t) => t.id === trackId);
       const from = track?.clips.find((c) => c.id === fromClipId);
       const to = track?.clips.find((c) => c.id === toClipId);
-      if (from?.transitionOut) {
-        state.updateClipSilent(currentOutput, trackId, fromClipId, {
+      const fromUpdated = from?.transitionOut
+        ? state.updateClipSilent(currentOutput, trackId, fromClipId, {
           transitionOut: { ...from.transitionOut, durationMs: clamped },
-        });
-      }
-      if (to?.transitionIn) {
-        state.updateClipSilent(currentOutput, trackId, toClipId, {
+        })
+        : false;
+      const toUpdated = to?.transitionIn
+        ? state.updateClipSilent(currentOutput, trackId, toClipId, {
           transitionIn: { ...to.transitionIn, durationMs: clamped },
-        });
-      }
-      store.getState().pushHistory();
+        })
+        : false;
+      if (fromUpdated || toUpdated) store.getState().pushHistory();
     },
     [store, currentOutput],
   );
@@ -3121,18 +3042,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   }, [vo, modals, generateVoiceover]);
 
   // Write a batch of caption clips into the output's caption track (creating
-  // it when absent) as ONE undo step — per-clip addClip would push a history
-  // entry per phrase. Same direct-setState discipline as handleFreezeFrame.
+  // it when absent) as ONE guarded undo step — per-clip addClip would push a
+  // history entry per phrase.
   const commitCaptionClips = useCallback(
-    (clips: VideoClip[]) => {
-      const state = store.getState();
-      const currentVo = state.doc.outputs[currentOutput] as VideoOutput;
-      const updated = withCaptionClips(currentVo, clips, genId);
-      const outs = [...state.doc.outputs];
-      outs[currentOutput] = updated;
-      store.setState({ doc: { ...state.doc, outputs: outs }, isDirty: true });
-      store.getState().pushHistory();
-    },
+    (clips: VideoClip[]) => commitCaptionOutput(store, currentOutput, clips),
     [store, currentOutput],
   );
 
@@ -3209,7 +3122,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       );
       return;
     }
-    commitCaptionClips(captions);
+    if (!commitCaptionClips(captions)) return;
     if (failed > 0 || silent > 0) {
       toaster.show(
         translate('some_clips_could_not_be_transcribed', 'Captions added — some clips could not be transcribed'),
@@ -3244,7 +3157,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         );
         return;
       }
-      commitCaptionClips(clips);
+      if (!commitCaptionClips(clips)) return;
       toaster.show(translate('captions_imported', 'Captions imported'), 'success');
       if (skipped > 0) {
         toaster.show(
@@ -3497,11 +3410,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       // swap only, timing untouched).
       if (wholeClip) {
         const cur = store.getState();
-        cur.updateClipSilent(menu.outputIndex, menu.trackId, targetClipId, {
+        if (cur.updateClipSilent(menu.outputIndex, menu.trackId, targetClipId, {
           src: artifactUrl,
           fileId: undefined,
-        });
-        cur.pushHistory();
+        })) cur.pushHistory();
         return;
       }
       // The transform output duration may differ slightly from the segment —
@@ -3517,13 +3429,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (endMs > curVo.durationMs) {
         cur.setVideoDuration(menu.outputIndex, endMs);
       }
-      cur.updateClipSilent(menu.outputIndex, menu.trackId, targetClipId, {
+      if (cur.updateClipSilent(menu.outputIndex, menu.trackId, targetClipId, {
         src: artifactUrl,
         fileId: undefined,
         trimInMs: 0,
         endMs,
-      });
-      cur.pushHistory();
+      })) cur.pushHistory();
     };
 
     try {
@@ -3689,6 +3600,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       role="toolbar"
       tabIndex={0}
       aria-label={translate('video_timeline', 'Video timeline')}
+      aria-disabled={vo.frozen === true}
       onKeyDown={handleKeyDown}
     >
       {/* Height splitter — drag to resize the timeline panel (persisted). */}
@@ -3733,6 +3645,11 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <span className="text-[11px] text-textColor/40">
           / {formatTime(vo.durationMs)}
         </span>
+        {vo.frozen === true && (
+          <span className="text-[11px] text-textColor/60">
+            {translate('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.')}
+          </span>
+        )}
         <TimelineTransportControls store={store} outputIndex={currentOutput} />
         <button
           type="button"
@@ -4065,8 +3982,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               selectedClip.clipId,
               update
             )}
-            onCommit={() => store.getState().pushHistory()}
-            disabled={!!selectedTimingTrack.locked}
+            onCommit={() => {
+              if (!vo.frozen) store.getState().pushHistory();
+            }}
+            disabled={!!selectedTimingTrack.locked || !!vo.frozen}
           />
         </div>
       )}
@@ -4117,15 +4036,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                         max={200}
                         value={Math.round((track.gain ?? 1) * 100)}
                         onChange={(e) => store.getState().setTrackGain(currentOutput, track.id, Number(e.target.value) / 100, false)}
-                        onPointerUp={() => store.getState().pushHistory()}
-                        onKeyUp={() => store.getState().pushHistory()}
-                        onBlur={() => store.getState().pushHistory()}
+                        onPointerUp={() => { if (!vo.frozen) store.getState().pushHistory(); }}
+                        onKeyUp={() => { if (!vo.frozen) store.getState().pushHistory(); }}
+                        onBlur={() => { if (!vo.frozen) store.getState().pushHistory(); }}
+                        disabled={!!vo.frozen}
                         className="w-full accent-designerAccent"
                       />
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={!!track.autoDuck}
+                          disabled={!!vo.frozen}
                           onChange={(e) => store.getState().setTrackAutoDuck(currentOutput, track.id, e.target.checked)}
                           className="accent-designerAccent w-3 h-3"
                         />
@@ -4135,6 +4056,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                         <input
                           type="checkbox"
                           checked={!!track.muted}
+                          disabled={!!vo.frozen}
                           onChange={(e) => store.getState().setTrackMuted(currentOutput, track.id, e.target.checked)}
                           className="accent-designerAccent w-3 h-3"
                         />

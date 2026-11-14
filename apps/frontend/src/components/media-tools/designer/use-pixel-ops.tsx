@@ -12,6 +12,7 @@ import {
   getBuffer,
   commitBuffer,
   captureLayerPixels,
+  reconcileBuffersWithDoc,
 } from './raster-layers';
 import {
   fullMask,
@@ -283,6 +284,11 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
         target: PixelTarget
       ) => void | Promise<void>
     ): Promise<boolean> => {
+      const before = store.getState();
+      if (before.doc.outputs[before.currentOutput]?.frozen) {
+        toaster.show(t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.'), 'warning');
+        return false;
+      }
       const target = await resolveTarget();
       if (!target) return false;
 
@@ -298,14 +304,15 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
       target.ctx.putImageData(data, 0, 0);
 
       const result = await commitBuffer(target.element.id, fetchFn);
-      if (result) {
-        store.getState().updateElement(target.element.id, {
-          src: result.src,
-          fileId: result.fileId,
-        });
+      if (result && store.getState().updateElement(target.element.id, {
+        src: result.src,
+        fileId: result.fileId,
+      })) {
+        store.getState().pushHistory();
+        return true;
       }
-      store.getState().pushHistory();
-      return true;
+      reconcileBuffersWithDoc(store.getState().doc);
+      return false;
     },
     [resolveTarget, coverageFor, fetchFn, store, toaster, t]
   );

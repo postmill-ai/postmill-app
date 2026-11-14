@@ -24,6 +24,13 @@ export interface ChannelPreset {
 export const CHANNEL_PRESETS: ChannelPreset[] = [
   { id: 'ig-post', name: 'Instagram Post', width: 1080, height: 1080, category: 'social', provider: 'instagram' },
   {
+    id: 'ig-portrait', name: 'Instagram Portrait', width: 1080, height: 1350, category: 'social', provider: 'instagram',
+    safeZones: [
+      { label: 'Feed Header', x: 0, y: 0, width: 1080, height: 120, description: 'Account and feed controls' },
+      { label: 'Feed Actions', x: 0, y: 1190, width: 1080, height: 160, description: 'Caption and engagement controls' },
+    ],
+  },
+  {
     id: 'ig-story', name: 'Instagram Story', width: 1080, height: 1920, category: 'story', provider: 'instagram',
     safeZones: [
       { label: 'CTA Bar', x: 0, y: 1780, width: 1080, height: 140, description: 'CTA button bar at bottom' },
@@ -39,6 +46,20 @@ export const CHANNEL_PRESETS: ChannelPreset[] = [
   },
   { id: 'fb-post', name: 'Facebook Post', width: 1200, height: 630, category: 'social', provider: 'facebook' },
   {
+    id: 'fb-square', name: 'Facebook Square', width: 1080, height: 1080, category: 'social', provider: 'facebook',
+    safeZones: [
+      { label: 'Feed Header', x: 0, y: 0, width: 1080, height: 120, description: 'Account and feed controls' },
+      { label: 'Feed Actions', x: 0, y: 920, width: 1080, height: 160, description: 'Caption and engagement controls' },
+    ],
+  },
+  {
+    id: 'fb-portrait', name: 'Facebook Portrait', width: 1080, height: 1350, category: 'social', provider: 'facebook',
+    safeZones: [
+      { label: 'Feed Header', x: 0, y: 0, width: 1080, height: 120, description: 'Account and feed controls' },
+      { label: 'Feed Actions', x: 0, y: 1190, width: 1080, height: 160, description: 'Caption and engagement controls' },
+    ],
+  },
+  {
     id: 'fb-story', name: 'Facebook Story', width: 1080, height: 1920, category: 'story', provider: 'facebook',
     safeZones: [
       { label: 'CTA Bar', x: 0, y: 1780, width: 1080, height: 140, description: 'CTA button bar at bottom' },
@@ -46,6 +67,27 @@ export const CHANNEL_PRESETS: ChannelPreset[] = [
   },
   { id: 'x-post', name: 'X (Twitter) Post', width: 1200, height: 675, category: 'social', provider: 'x' },
   { id: 'linkedin-post', name: 'LinkedIn Post', width: 1200, height: 627, category: 'social', provider: 'linkedin' },
+  {
+    id: 'linkedin-square', name: 'LinkedIn Square', width: 1080, height: 1080, category: 'social', provider: 'linkedin',
+    safeZones: [
+      { label: 'Feed Header', x: 0, y: 0, width: 1080, height: 120, description: 'Account and feed controls' },
+      { label: 'Feed Actions', x: 0, y: 920, width: 1080, height: 160, description: 'Caption and engagement controls' },
+    ],
+  },
+  {
+    id: 'linkedin-portrait', name: 'LinkedIn Portrait', width: 1080, height: 1350, category: 'social', provider: 'linkedin',
+    safeZones: [
+      { label: 'Feed Header', x: 0, y: 0, width: 1080, height: 120, description: 'Account and feed controls' },
+      { label: 'Feed Actions', x: 0, y: 1190, width: 1080, height: 160, description: 'Caption and engagement controls' },
+    ],
+  },
+  {
+    id: 'threads-portrait', name: 'Threads Portrait', width: 1080, height: 1350, category: 'social', provider: 'threads',
+    safeZones: [
+      { label: 'Feed Header', x: 0, y: 0, width: 1080, height: 120, description: 'Account and feed controls' },
+      { label: 'Feed Actions', x: 0, y: 1190, width: 1080, height: 160, description: 'Caption and engagement controls' },
+    ],
+  },
   { id: 'linkedin-banner', name: 'LinkedIn Banner', width: 1584, height: 396, category: 'ad', provider: 'linkedin' },
   {
     id: 'tiktok', name: 'TikTok Video', width: 1080, height: 1920, category: 'story', provider: 'tiktok',

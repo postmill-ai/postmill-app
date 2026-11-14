@@ -67,7 +67,7 @@ export const VersionsPanel: FC<VersionsPanelProps> = ({ store }) => {
         // New history entry (undoable in-session), NOT loadDesign: a store
         // reset would wipe the undo stack and bypass the collab Yjs sync,
         // which watches store doc changes.
-        store.getState().setDoc(updated.doc);
+        store.getState().replaceDocTrusted(updated.doc);
         store.getState().pushHistory('Restore version');
         toaster.show(t('designer_version_restored', 'Version restored'), 'success');
         mutate();

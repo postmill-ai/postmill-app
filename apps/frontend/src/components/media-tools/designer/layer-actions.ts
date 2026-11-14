@@ -2,7 +2,7 @@ import type { DesignerAction } from './actions';
 import type { DesignerElement, DesignerLayerStyle, VideoTrack } from './designer.store';
 import type { BooleanOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-boolean';
 import { offsetElement, pathfinderMany, roundElementCorners } from './pathfinder';
-import { pageChildren, withPageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import {
   expandSymbolInstance,
@@ -74,18 +74,11 @@ export const combineElements = (
     { ...subject, ...result.element } as DesignerElement,
     ...extras
   );
-  const outputs = st.doc.outputs.map((out, index) =>
-    index === st.currentOutput && 'children' in out
-      ? withPageChildren(out, st.currentPage, nextChildren)
-      : out
+  return st.commitActivePage(
+    nextChildren,
+    [subject.id, ...extras.map((element) => element.id)],
+    'Pathfinder'
   );
-  store.setState({
-    doc: { ...st.doc, outputs },
-    selectedIds: [subject.id, ...extras.map((element) => element.id)],
-    isDirty: true,
-  });
-  st.pushHistory('Pathfinder');
-  return true;
 };
 
 const STYLES: { type: DesignerLayerStyle['type']; label: string }[] = [
@@ -148,15 +141,18 @@ export const layerActions = (
   /** Add or replace a style on every selected layer. */
   const addStyle = (type: DesignerLayerStyle['type']) => {
     const st = store.getState();
+    let changed = false;
     for (const el of live().selectedEls) {
       const styles = (el.styles || []).filter((s) => s.type !== type);
-      st.updateElement(el.id, { styles: [...styles, defaultStyle(type)] });
+      changed = st.updateElement(el.id, { styles: [...styles, defaultStyle(type)] }) || changed;
     }
-    st.pushHistory();
+    if (changed) st.pushHistory();
   };
 
   const canCombine = () => combinableElements(live().selectedEls).length >= 2;
   const isVideoDoc = () => store.getState().doc.mode === 'video';
+  const isFrozenDoc = () =>
+    store.getState().doc.outputs[store.getState().currentOutput]?.frozen === true;
 
   /**
    * Image-only by construction: every action here writes ELEMENTS, and the
@@ -167,7 +163,9 @@ export const layerActions = (
    */
   const imageOnly = (a: DesignerAction): DesignerAction => ({
     ...a,
-    enabled: () => !isVideoDoc() && (a.enabled ? a.enabled() : true),
+    enabled: () => !isVideoDoc() &&
+      (a.id === 'layer-new-artboard' || a.id === 'layer-new-artboard-group' || !isFrozenDoc()) &&
+      (a.enabled ? a.enabled() : true),
   });
 
   const actions: DesignerAction[] = [

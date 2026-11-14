@@ -3,11 +3,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import {
   CHANNEL_PRESETS,
   type ChannelPreset,
 } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { pageChildren, pageCount } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import { FormatThumbnail } from './format-thumbnail';
 
 interface OutputTabsProps {
   store: any;
@@ -21,6 +23,7 @@ const CHANNEL_GROUPS: Record<
   facebook: { label: 'Facebook', presets: [], mode: 'image' },
   x: { label: 'X (Twitter)', presets: [], mode: 'image' },
   linkedin: { label: 'LinkedIn', presets: [], mode: 'image' },
+  threads: { label: 'Threads', presets: [], mode: 'image' },
   tiktok: { label: 'TikTok', presets: [], mode: 'image' },
   youtube: { label: 'YouTube', presets: [], mode: 'image' },
   pinterest: { label: 'Pinterest', presets: [], mode: 'image' },
@@ -34,6 +37,8 @@ for (const p of CHANNEL_PRESETS) {
   else if (p.id === 'x-post') CHANNEL_GROUPS.x.presets.push(p);
   else if (p.id.startsWith('linkedin-'))
     CHANNEL_GROUPS.linkedin.presets.push(p);
+  else if (p.id.startsWith('threads-'))
+    CHANNEL_GROUPS.threads.presets.push(p);
   else if (p.id === 'tiktok') CHANNEL_GROUPS.tiktok.presets.push(p);
   else if (p.id.startsWith('yt-'))
     CHANNEL_GROUPS.youtube.presets.push(p);
@@ -45,8 +50,8 @@ for (const p of CHANNEL_PRESETS) {
 
 const RECOMMENDED_IDS = ['ig-post', 'ig-story', 'linkedin-post', 'x-post'];
 
-const THUMB_H = 52;
-const THUMB_MIN_W = 86;
+const THUMB_H = 82;
+const THUMB_MIN_W = 100;
 
 type PopoverKind = 'addFormats' | 'overflow' | 'resize';
 
@@ -185,9 +190,11 @@ const PortalPopover: React.FC<PortalPopoverProps> = ({
 
 export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsProps) {
   const t = useT();
+  const toaster = useToaster();
   const doc = store((s: any) => s.doc);
   const currentOutput = store((s: any) => s.currentOutput);
   const currentPage = store((s: any) => s.currentPage ?? 0);
+  const editFormatOnly = store((s: any) => s.editFormatOnly);
   const outputs: any[] = doc.outputs;
   const mode: 'image' | 'video' = doc.mode || 'image';
 
@@ -251,15 +258,30 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
 
   const handleAddFormats = () => {
     const s = store.getState();
+    const applied: string[] = [];
     for (const id of pendingFormats) {
       const preset = CHANNEL_PRESETS.find((p) => p.id === id);
-      if (preset)
-        s.addOutput({
-          formatId: preset.id,
-          name: preset.name,
-          width: preset.width,
-          height: preset.height,
-        }, { linkContent });
+      if (preset && !s.addOutput({
+        formatId: preset.id,
+        name: preset.name,
+        width: preset.width,
+        height: preset.height,
+      }, { linkContent })) {
+        setPendingFormats((current) => {
+          const next = new Set(current);
+          applied.forEach((addedId) => next.delete(addedId));
+          return next;
+        });
+        const sourceFrozen = !!s.doc.outputs[s.currentOutput]?.frozen;
+        toaster.show(
+          sourceFrozen
+            ? t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.')
+            : t('something_went_wrong', 'Something went wrong'),
+          'warning'
+        );
+        return;
+      }
+      if (preset) applied.push(id);
     }
     setPendingFormats(new Set());
     closePopover();
@@ -269,12 +291,22 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
     const w = parseInt(cW, 10);
     const h = parseInt(cH, 10);
     if (w > 0 && h > 0) {
-      store.getState().addOutput({
+      const added = store.getState().addOutput({
         formatId: 'custom',
         name: `${w}×${h}`,
         width: w,
         height: h,
       }, { linkContent });
+      if (!added) {
+        const state = store.getState();
+        toaster.show(
+          state.doc.outputs[state.currentOutput]?.frozen
+            ? t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.')
+            : t('something_went_wrong', 'Something went wrong'),
+          'warning'
+        );
+        return;
+      }
       closePopover();
       setCW('1080');
       setCH('1080');
@@ -322,9 +354,8 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
             className="relative group shrink-0"
           >
             <button
-              onClick={() =>
-                store.getState().setCurrentOutput(i)
-              }
+              onClick={() => store.getState().setCurrentOutput(i)}
+              aria-current={i === currentOutput}
               className={`relative rounded-md border-2 flex flex-col items-center justify-center text-center px-2 gap-0.5 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
                 i === currentOutput
                   ? 'border-designerAccent bg-designerAccent/10'
@@ -332,7 +363,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
               }`}
               style={{ minWidth: THUMB_MIN_W, height: THUMB_H }}
             >
-{i !== currentOutput && Array.isArray(output.children) && output.children.some((c: any) => c?.originId && activeOriginIds.has(c.originId)) && (
+              {i !== currentOutput && Array.isArray(output.children) && output.children.some((c: any) => c?.originId && activeOriginIds.has(c.originId)) && (
                 <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-designerAccent" title={t('designer_has_linked_elements', 'Has linked elements')} />
               )}
               {(() => {
@@ -345,7 +376,12 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
                   />
                 ) : null;
               })()}
-
+              <FormatThumbnail
+                output={output}
+                symbols={doc.symbols}
+                maxDim={72}
+                className="h-[32px] max-w-[54px]"
+              />
               <span className="text-[11px] font-medium text-textColor leading-tight truncate max-w-[80px]">
                 {output.name}
               </span>
@@ -361,24 +397,46 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
                 </span>
               )}
             </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                store.getState().setOutputFrozen(i, !output.frozen);
+              }}
+              aria-pressed={output.frozen === true}
+              aria-label={output.frozen
+                ? t('designer_unfreeze_format', 'Unfreeze format')
+                : t('designer_freeze_format', 'Freeze format')}
+              title={output.frozen
+                ? t('designer_unfreeze_format_hint', 'Allow edits to this format')
+                : t('designer_freeze_format_hint', 'Prevent edits to this format')}
+              className={`absolute -top-1.5 -left-1.5 z-20 w-5 h-5 flex items-center justify-center rounded-full bg-newBgColorInner border text-[11px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
+                output.frozen
+                  ? 'border-designerAccent text-btnPrimaryAccent'
+                  : 'border-studioBorder text-textColor/40 hover:text-textColor'
+              }`}
+            >
+              ❄
+            </button>
             <div className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center gap-0.5 z-10">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   openPopover('resize', e.currentTarget as HTMLElement, { resizeIndex: i });
                 }}
+                disabled={output.frozen === true}
                 title={t('designer_resize_change_format_title', 'Resize / change format')}
                 aria-label={t('designer_resize_or_change_format_aria', 'Resize or change format')}
-                className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[8px] text-textColor/60 hover:text-textColor"
+                className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[8px] text-textColor/60 hover:text-textColor disabled:opacity-30"
               >
                 ⋮
               </button>
               {outputs.length > 1 && (
                 <button
                   onClick={(e) => handleRemove(e, i)}
+                  disabled={output.frozen === true}
                   title={t('designer_remove_format', 'Remove format')}
                   aria-label={t('designer_remove_format', 'Remove format')}
-                  className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[9px] text-dangerText hover:bg-red-500/20"
+                  className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[9px] text-dangerText hover:bg-red-500/20 disabled:opacity-30"
                 >
                   ×
                 </button>
@@ -463,6 +521,27 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
         )}
       </div>
 
+      <button
+        onClick={() => store.getState().setEditFormatOnly(!editFormatOnly)}
+        aria-pressed={!editFormatOnly}
+        aria-label={editFormatOnly
+          ? t('designer_link_format_edits', 'Link edits across formats')
+          : t('designer_unlink_format_edits', 'Unlink edits between formats')}
+        title={editFormatOnly
+          ? t('designer_link_format_edits_hint', 'Resume shared element edits; existing element links are preserved')
+          : t('designer_unlink_format_edits_hint', 'Edit this format only; existing element links are preserved')}
+        className={`shrink-0 rounded-md border px-2 text-[10px] font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
+          editFormatOnly
+            ? 'border-studioBorder text-textColor/60'
+            : 'border-designerAccent bg-designerAccent/10 text-btnPrimaryAccent'
+        }`}
+        style={{ width: 58, height: THUMB_H }}
+      >
+        {editFormatOnly
+          ? t('designer_link_edits', 'Link')
+          : t('designer_unlink_edits', 'Unlink')}
+      </button>
+
       {/* Add-format is available in BOTH modes now: image docs seed linked
           element copies, video docs clone+reflow a full timeline variant. */}
       <div className="relative shrink-0">
@@ -476,7 +555,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
             }
           }}
           aria-label={t('designer_add_format_aria', 'Add format')}
-          className="shrink-0 flex items-center justify-center rounded-md border-2 border-dashed border-studioBorder text-textColor/50 hover:border-designerAccent hover:text-btnPrimaryAccent text-[18px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+          className="shrink-0 flex items-center justify-center rounded-md border-2 border-dashed border-studioBorder text-textColor/50 hover:border-designerAccent hover:text-btnPrimaryAccent text-[18px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent disabled:opacity-30 disabled:hover:border-studioBorder"
           style={{ width: 40, height: THUMB_H }}
         >
           +
@@ -528,7 +607,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
             }}
             className="w-full text-left px-2 py-1.5 rounded-sm text-[11px] text-btnPrimaryAccent hover:bg-designerAccent/10 mb-2 border border-designerAccent/30"
           >
-            {t('designer_recommended_set_description', 'Recommended set (IG Post + Story + Linked + X)')}
+            {t('designer_recommended_set_description', 'Recommended set (IG Post + Story + LinkedIn + X)')}
           </button>
           )}
 

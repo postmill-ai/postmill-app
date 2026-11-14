@@ -4,6 +4,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { computePopoverLeft, computePopoverPlacement, OutputTabs } from './output-tabs';
 import { createDesignerStore } from './designer.store';
 
+const toasterShow = vi.hoisted(() => vi.fn());
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
+  useToaster: () => ({ show: toasterShow }),
+}));
+
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
     () =>
@@ -88,7 +93,7 @@ describe('OutputTabs in video mode', () => {
     // The popover heads as a video-format picker and offers video-category
     // presets — not the image channel groups.
     expect(screen.getByText('Add Video Format')).toBeTruthy();
-    expect(screen.queryByText('Recommended set (IG Post + Story + Linked + X)')).toBeNull();
+    expect(screen.queryByText('Recommended set (IG Post + Story + LinkedIn + X)')).toBeNull();
     // At least one video preset (CHANNEL_PRESETS category 'video') is listed.
     expect(screen.getByText('Add Video Format')).toBeTruthy();
     expect(document.querySelectorAll('input[type="checkbox"]').length).toBeGreaterThan(0);
@@ -157,11 +162,102 @@ describe('OutputTabs repeated dimensions', () => {
     render(<OutputTabs store={store} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Recommended set (IG Post + Story + Linked + X)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Recommended set (IG Post + Story + LinkedIn + X)' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add 3 format' }));
 
     expect(store.getState().doc.outputs.map((out) => out.formatId)).toEqual([
       'ig-post', 'ig-story', 'linkedin-post', 'x-post',
     ]);
+  });
+});
+
+
+describe('OutputTabs format workflows', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('lists portrait and square presets under their channel groups', () => {
+    const store = createDesignerStore();
+    render(<OutputTabs store={store} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+
+    expect(screen.getByRole('checkbox', { name: /Instagram Portrait 1080×1350/ })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /Facebook Square 1080×1080/ })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /LinkedIn Portrait 1080×1350/ })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /Threads Portrait 1080×1350/ })).toBeTruthy();
+  });
+
+  it('freezes and unfreezes from the snowflake while preserving output switching', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
+    render(<OutputTabs store={store} />);
+
+    const freeze = screen.getAllByRole('button', { name: 'Freeze format' })[0];
+    fireEvent.click(freeze);
+    expect(store.getState().doc.outputs[0].frozen).toBe(true);
+    expect(screen.getByRole('button', { name: 'Add format' })).toHaveProperty('disabled', false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unfreeze format' }));
+    expect(store.getState().doc.outputs[0].frozen).toBeUndefined();
+    fireEvent.click(screen.getByRole('button', { name: /X 1200×675/ }));
+    expect(store.getState().currentOutput).toBe(1);
+  });
+
+  it('keeps the popover open with a warning when a frozen source needs origin backfill', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Unlinked',
+    });
+    store.getState().updateElement('headline', { originId: undefined });
+    store.getState().setOutputFrozen(0, true);
+    toasterShow.mockClear();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom size' }));
+
+    expect(toasterShow).toHaveBeenCalledWith('This format is frozen. Unfreeze it to edit.', 'warning');
+    expect(screen.getByText('Add Formats')).toBeTruthy();
+    expect(store.getState().doc.outputs).toHaveLength(1);
+  });
+
+  it('clears already-applied selections when a later format is rejected', () => {
+    const store = createDesignerStore();
+    vi.spyOn(store.getState(), 'addOutput')
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    const first = screen.getByRole('checkbox', { name: /Instagram Post 1080×1080/ });
+    const second = screen.getByRole('checkbox', { name: /Instagram Story 1080×1920/ });
+    fireEvent.click(first);
+    fireEvent.click(second);
+    fireEvent.click(screen.getByRole('button', { name: 'Add 2 format' }));
+
+    expect(first).toHaveProperty('checked', false);
+    expect(second).toHaveProperty('checked', true);
+    expect(screen.getByText('Add Formats')).toBeTruthy();
+    expect(toasterShow).toHaveBeenCalledWith('Something went wrong', 'warning');
+  });
+
+  it('Link/Unlink changes edit scope without rewriting element links', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Linked',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    const origins = store.getState().doc.outputs.map((out: any) => out.children[0].originId);
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink edits between formats' }));
+    expect(store.getState().editFormatOnly).toBe(true);
+    expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
+    fireEvent.click(screen.getByRole('button', { name: 'Link edits across formats' }));
+    expect(store.getState().editFormatOnly).toBe(false);
   });
 });
