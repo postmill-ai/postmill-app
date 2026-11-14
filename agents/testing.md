@@ -122,6 +122,15 @@ For Designer specs 96 and 97, optional `E2E_FRONTEND_ORIGIN` proxies only docume
 stay unchanged. It must be `http://localhost`, `127.0.0.1`, or `::1`; API/provider calls are never
 proxied by this setting. `E2E_BACKEND_ORIGIN` remains the separate opt-in loopback API proxy.
 
+`playwright.designer-ci.config.ts` and `.github/workflows/designer-browser.yml` are the production-build
+Designer browser path. The workflow builds the frontend before Playwright starts `next start` on a
+GitHub-hosted runner; the config refuses to load anywhere else. The export spec stubs identity, API,
+render, upload, and media traffic and fails unexpected mutations, so it needs no backend, credentials,
+or paid providers. It skips outside the `chromium-production` project so broader legacy configs do
+not run it against another origin. The workflow runs PRs and `main` pushes only; its path filters mean
+it must never become a required check. Add later Designer specs to this config only after making them
+equally self-contained. Never run this config, its `webServer`, or `next start` on a production host.
+
 ### Opt-in live provider playback (never default CI)
 
 `99-provider-live-media.spec.ts` and `playwright.provider-live.config.ts` are a separate,
@@ -226,6 +235,12 @@ screencast recording active. Export every output at 1× and 3×, assert the page
 and the formats/dimensions/transparency are correct, and cold-reopen a shadow-heavy design to check
 both time-to-stable-frame and zero position drift. Static raster previews/exports use the server
 renderer sequentially; do not reintroduce full-resolution off-screen Konva stages for this flow.
+Reliability acceptance additionally covers a network-throw-then-success render, no blind 4xx/5xx
+retry, JPEG 3× without unnecessary reduction, >10 MiB fallback, and upload failure. Completed
+output/pages must survive a partial failure; per-output retry must not rerender or duplicate them,
+and an upload retry must reuse its cached blob. Diagnostics are limited to stage/output/page/format/
+scale/status/kind. Automatic retry is limited to one transient static-render attempt — never upload,
+paid video, or provider retries.
 
 Run from `e2e/` after `pnpm install --ignore-workspace`, supplying the appropriate deployment and
 design ID. Example for one authorized background-removal operation on a QA deployment:

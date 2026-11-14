@@ -1,0 +1,98 @@
+---
+name: Designer Browser
+
+# Path-filtered checks must remain optional in branch protection.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/frontend/src/components/media-tools/designer/**'
+      - 'e2e/**'
+      - '.github/workflows/designer-browser.yml'
+  merge_group:
+  pull_request:
+    paths:
+      - 'apps/frontend/src/components/media-tools/designer/**'
+      - 'e2e/**'
+      - '.github/workflows/designer-browser.yml'
+
+jobs:
+  production-export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml', 'e2e/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install native dependencies for node-canvas
+        run: |
+          ok=0
+          for i in 1 2; do
+            if [ "$i" = "2" ]; then
+              echo "::warning::default mirror failed; switching apt sources to archive.ubuntu.com"
+              echo 'http://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt
+              sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' \
+                /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            fi
+            if timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 update \
+              && timeout 900 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 install -y \
+                libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev; then
+              ok=1; break
+            fi
+            echo "::warning::apt attempt $i failed or stalled"
+          done
+          if [ "$ok" != 1 ]; then
+            echo "::error::apt-get failed on both mirrors"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production frontend
+        run: pnpm run build:frontend
+        env:
+          NEXT_PUBLIC_BACKEND_URL: https://api.postmill.ai
+          NEXT_TELEMETRY_DISABLED: '1'
+
+      - name: Install Playwright dependencies
+        run: pnpm --dir e2e install --ignore-workspace --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm --dir e2e exec playwright install --with-deps chromium
+
+      - name: Run production Designer browser specs
+        run: pnpm --dir e2e exec playwright test --config playwright.designer-ci.config.ts
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: designer-browser-results
+          path: e2e/test-results-designer-ci
+          if-no-files-found: ignore
+          retention-days: 7
