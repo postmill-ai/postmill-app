@@ -114,7 +114,9 @@ describe('applyKnockouts', () => {
       }),
     });
     await expect(applyKnockouts(requests(), d)).resolves.toBeInstanceOf(Map);
-    expect(d.warn).toHaveBeenCalledWith(expect.stringContaining('budget exhausted'));
+    expect(d.warn).toHaveBeenCalledWith(
+      'Subject knockout failed for "hero" (kind=budget name=Error message=budget exhausted). Using the photograph as supplied.'
+    );
   });
 
   it('pays for at most one knockout per design', async () => {

@@ -2953,6 +2953,8 @@
   "vertical": "Vertical",
   "ai_designer_error": "Erreur AI Designer",
   "message_not_delivered_retry": "Votre message n'a pas été livré. Veuillez réessayer.",
+  "image_attachment": "Pièce jointe image",
+  "ai_designer_attachment_state": "Les pièces jointes sont disponibles pendant la conversation ou la révision d’un plan ou d’un design.",
   "ai_designer": "AI Designer",
   "status_connected": "Connecté",
   "status_disconnected": "Déconnecté",

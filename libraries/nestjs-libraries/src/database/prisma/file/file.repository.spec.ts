@@ -38,6 +38,27 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+describe('FileRepository — getFileById', () => {
+  it('scopes lookup to the organization without hiding trashed lifecycle rows', async () => {
+    const { repo, model } = makeRepo();
+    model.file.findUnique.mockResolvedValue(null);
+
+    await repo.getFileById('org-1', 'file-from-org-2');
+
+    expect(model.file.findUnique).toHaveBeenCalledWith({
+      where: {
+        id: 'file-from-org-2',
+        organizationId: 'org-1',
+      },
+      include: {
+        folder: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+  });
+});
+
 describe('FileRepository — metadata storage', () => {
   it('stores metadata as a JSON object, not a string', async () => {
     const { repo, model } = makeRepo();

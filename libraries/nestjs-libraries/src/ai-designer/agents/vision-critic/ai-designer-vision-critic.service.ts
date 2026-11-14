@@ -30,6 +30,7 @@ import {
   parseAgentInput,
 } from '../../util/parse-agent-input';
 import { throwIfAborted } from '../../util/throw-if-aborted';
+import { aiDesignerFailureLog } from '../../conductor/failure-recovery';
 
 const VISION_CRITIC_MAX_INLINE_BYTES = 2 * 1024 * 1024;
 
@@ -415,7 +416,7 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
           // A cancel is not a per-file interpretation failure.
           throwIfAborted(signal);
           this._logger.warn(
-            `Reference interpretation failed for ${id}: ${(err as Error).message}`
+            `Reference interpretation failed for ${id}: ${aiDesignerFailureLog(err)}`
           );
         }
       })
@@ -458,7 +459,7 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
     } catch (err) {
       throwIfAborted(signal);
       this._logger.warn(
-        `Reference layout measurement failed: ${(err as Error).message}`
+        `Reference layout measurement failed: ${aiDesignerFailureLog(err)}`
       );
       return undefined;
     }
@@ -542,7 +543,7 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
     } catch (err) {
       throwIfAborted(signal);
       this._logger.warn(
-        `Reference comparison failed: ${(err as Error).message}`
+        `Reference comparison failed: ${aiDesignerFailureLog(err)}`
       );
       return { type: 'comparison', skipped: true };
     }
@@ -966,7 +967,7 @@ If the contact sheet looks good, return { "findings": [] }.`;
             // A cancel is not a per-format escalation failure.
             throwIfAborted(signal);
             this._logger.warn(
-              `Escalated critique failed for ${o.formatId}: ${(err as Error).message}`
+              `Escalated critique failed for ${o.formatId}: ${aiDesignerFailureLog(err)}`
             );
           }
         })
@@ -1339,7 +1340,7 @@ If the contact sheet looks good, return { "findings": [] }.`;
       };
     } catch (err) {
       this._logger.warn(
-        `Vision critic could not downscale oversized image: ${(err as Error).message}`
+        `Vision critic could not downscale oversized image: ${aiDesignerFailureLog(err)}`
       );
       return null;
     }
@@ -1362,7 +1363,7 @@ If the contact sheet looks good, return { "findings": [] }.`;
       return `data:image/jpeg;base64,${small.toString('base64')}`;
     } catch (err) {
       this._logger.warn(
-        `Vision critic could not build the feed-scale thumbnail: ${(err as Error).message}`
+        `Vision critic could not build the feed-scale thumbnail: ${aiDesignerFailureLog(err)}`
       );
       return null;
     }
@@ -1412,7 +1413,7 @@ If the contact sheet looks good, return { "findings": [] }.`;
       return resolved;
     } catch (err) {
       this._logger.warn(
-        `Vision critic could not attach reference ${fileId}: ${(err as Error).message}`
+        `Vision critic could not attach reference ${fileId}: ${aiDesignerFailureLog(err)}`
       );
       return null;
     }

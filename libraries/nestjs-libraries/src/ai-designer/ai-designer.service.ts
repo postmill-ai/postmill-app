@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type { AiDesignerFormat } from './ai-designer.types';
+import { aiDesignerFailureLog } from './conductor/failure-recovery';
 import { AiDesignerSessionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-designer/ai-designer-session.repository';
 import { AiDesignerMessageRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-designer/ai-designer-message.repository';
 import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
@@ -154,7 +155,7 @@ export class AiDesignerService {
       await this._purgeSessionIntermediates(organizationId, session).catch(
         (err) =>
           this._logger.warn(
-            `Could not purge AI Designer intermediates for session ${id}: ${(err as Error)?.message}`
+            `Could not purge AI Designer intermediates for session ${id}: ${aiDesignerFailureLog(err)}`
           )
       );
     }

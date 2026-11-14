@@ -59,6 +59,7 @@ export interface AiDesignerSocketCallbacks {
   onProgress?: (msg: AiDesignerProgressMsg) => void;
   onPreview?: (result: AiDesignerRenderResult) => void;
   onError?: (err: AiDesignerSocketError) => void;
+  onDisconnect?: () => void;
 }
 
 function makeNonce(): string {
@@ -139,6 +140,7 @@ export function useAiDesignerSocket(
 
     socket.on('disconnect', () => {
       setConnected(false);
+      callbacksRef.current.onDisconnect?.();
     });
 
     socket.on('connect_error', (err: Error) => {
@@ -190,8 +192,7 @@ export function useAiDesignerSocket(
   }, [backendUrl, sessionId, enabled]);
 
   const emit = useCallback(
-    <T extends object>(event: string, payload: T): string => {
-      const nonce = makeNonce();
+    <T extends object>(event: string, payload: T, nonce = makeNonce()): string => {
       socketRef.current?.emit(event, { ...payload, nonce });
       return nonce;
     },
@@ -216,18 +217,23 @@ export function useAiDesignerSocket(
   );
 
   const start = useCallback(
-    (payload: Omit<AiDesignerStartPayloadWithMode, 'nonce'>) => {
-      return emit('start', payload);
+    (payload: Omit<AiDesignerStartPayloadWithMode, 'nonce'>, nonce?: string) => {
+      return emit('start', payload, nonce);
     },
     [emit]
   );
 
   const sendMessage = useCallback(
-    (text: string) => {
-      return emit('message', { text } as Omit<
-        AiDesignerMessagePayloadDto,
-        'nonce'
-      >);
+    (
+      text: string,
+      referenceFileIds?: string[],
+      attachmentFileIds?: string[]
+    ) => {
+      return emit('message', {
+        text,
+        referenceFileIds,
+        attachmentFileIds,
+      } as Omit<AiDesignerMessagePayloadDto, 'nonce'>);
     },
     [emit]
   );

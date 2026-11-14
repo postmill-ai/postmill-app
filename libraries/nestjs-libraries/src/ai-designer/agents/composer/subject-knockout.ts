@@ -1,6 +1,7 @@
 import type { DesignerElement } from '../../../media/designer-doc/designer-doc.schema';
 import { maskRecipeById } from '../../design-language/mask-recipes';
 import type { DesignSlot } from '../../ai-designer.types';
+import { aiDesignerFailureLog } from '../../conductor/failure-recovery';
 
 /**
  * Cutting the subject out of its background so type can pass behind it.
@@ -104,7 +105,7 @@ export const applyKnockouts = async (
       });
     } catch (err) {
       deps.warn(
-        `Subject knockout failed for "${request.slot.id}": ${(err as Error)?.message}. Using the photograph as supplied.`
+        `Subject knockout failed for "${request.slot.id}" (${aiDesignerFailureLog(err)}). Using the photograph as supplied.`
       );
     }
   }

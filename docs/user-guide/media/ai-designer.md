@@ -65,7 +65,8 @@ Before chatting, you configure the brief:
 - **Attach files** (Prompt mode) — attach up to 10 files, 20 MB each: images, PDF, TXT, Markdown,
   CSV, TSV, or JSON. Images join the reference images; documents are read as background context for
   planning (PDFs up to 5 MB, first 10 pages; extracted text is capped per file and per session).
-  Files from another workspace or of an unsupported type are rejected before any paid planning.
+  Files from another workspace, trashed files, unreadable documents, and unsupported types are rejected
+  with a specific reason before the session is created or any paid planning begins.
 
 ## In the session
 
@@ -88,9 +89,12 @@ is delivered with an explicit quality warning rather than nothing.
 
 After delivery you can ask for revisions in the chat — for example, "change the background"
 regenerates the background imagery of an image-backed design. Ordinary text or style revisions keep
-every existing image and logo; only an explicit imagery request replaces them. While a plan is
-awaiting approval or a design has been delivered, the chat composer's **Attach files** button accepts
-the same attachments as the start form for that revision.
+every existing image and logo; only an explicit imagery request replaces them. During intake, while a
+plan is awaiting approval, and after delivery, the chat composer's **Attach files** button accepts the
+same attachments as the start form. Document excerpts guide both chat intake and planning. Chips remain
+visible until the workspace accepts your message; if sending is rejected, disconnected, or times out,
+the text and chips return so you can retry. Provider quota/billing, credential, rate-limit, timeout,
+and temporary-outage failures show actionable recovery guidance without exposing provider response data.
 
 ### Video sessions
 

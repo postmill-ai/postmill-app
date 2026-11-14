@@ -2966,6 +2966,8 @@
   "vertical": "Vertical",
   "ai_designer_error": "AI Designer error",
   "message_not_delivered_retry": "Your message was not delivered. Please try again.",
+  "image_attachment": "Image attachment",
+  "ai_designer_attachment_state": "Attachments are available while chatting or revising a plan or design.",
   "ai_designer": "AI Designer",
   "status_connected": "Connected",
   "status_disconnected": "Disconnected",

@@ -2953,6 +2953,8 @@
   "vertical": "Dọc",
   "ai_designer_error": "Lỗi AI Designer",
   "message_not_delivered_retry": "Tin nhắn của bạn chưa được gửi. Vui lòng thử lại.",
+  "image_attachment": "Tệp đính kèm hình ảnh",
+  "ai_designer_attachment_state": "Tệp đính kèm khả dụng khi trò chuyện hoặc chỉnh sửa kế hoạch hoặc thiết kế.",
   "ai_designer": "AI Designer",
   "status_connected": "Đã kết nối",
   "status_disconnected": "Đã ngắt kết nối",

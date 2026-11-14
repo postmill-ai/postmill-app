@@ -2966,6 +2966,8 @@
   "vertical": "Vertikal",
   "ai_designer_error": "Kesalahan AI Designer",
   "message_not_delivered_retry": "Pesan Anda tidak terkirim. Silakan coba lagi.",
+  "image_attachment": "Lampiran gambar",
+  "ai_designer_attachment_state": "Lampiran tersedia saat mengobrol atau merevisi rencana atau desain.",
   "ai_designer": "AI Designer",
   "status_connected": "Terhubung",
   "status_disconnected": "Terputus",

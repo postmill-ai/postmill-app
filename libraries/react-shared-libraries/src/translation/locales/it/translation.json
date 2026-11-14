@@ -2953,6 +2953,8 @@
   "vertical": "Verticale",
   "ai_designer_error": "Errore di AI Designer",
   "message_not_delivered_retry": "Il messaggio non è stato recapitato. Riprova.",
+  "image_attachment": "Allegato immagine",
+  "ai_designer_attachment_state": "Gli allegati sono disponibili durante la chat o la revisione di un piano o design.",
   "ai_designer": "AI Designer",
   "status_connected": "Connesso",
   "status_disconnected": "Disconnesso",

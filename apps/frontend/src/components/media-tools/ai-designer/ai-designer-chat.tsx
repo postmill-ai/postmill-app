@@ -55,6 +55,12 @@ const BUSY_SESSION_STATES: readonly AiDesignerSessionState[] = [
 const isBusyState = (state?: AiDesignerSessionState | null) =>
   !!state && BUSY_SESSION_STATES.includes(state);
 
+const RESTING_SESSION_STATES: readonly AiDesignerSessionState[] = [
+  'intake',
+  'awaiting_plan',
+  'delivered',
+];
+
 export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
   sessionId,
   mode,
@@ -102,6 +108,8 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
   const pendingSendRef = useRef<{
     nonce: string;
     text: string;
+    referenceItems: MediaSelectorItem[];
+    documentItems: AiDesignerDocumentItem[];
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
 
@@ -111,9 +119,8 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     };
   }, []);
 
-  // A send that will never echo back (server rejection, dropped delivery) was
-  // never persisted — drop its optimistic bubble instead of rendering a lie,
-  // and put the text back into the input so the user can retry.
+  // A send that was never acknowledged loses its optimistic bubble and gets
+  // its text and attachment chips back for retry.
   const failPendingSend = useCallback(() => {
     const pending = pendingSendRef.current;
     if (!pending) return;
@@ -125,6 +132,20 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
       )
     );
     setInput((cur) => (cur.trim() ? cur : pending.text));
+    setReferenceItems((current) => {
+      const merged = new Map(
+        pending.referenceItems.map((item) => [item.fileId || item.url, item])
+      );
+      for (const item of current) merged.set(item.fileId || item.url, item);
+      return [...merged.values()];
+    });
+    setDocumentItems((current) => {
+      const merged = new Map(
+        pending.documentItems.map((item) => [item.fileId, item])
+      );
+      for (const item of current) merged.set(item.fileId, item);
+      return [...merged.values()];
+    });
     setSending(false);
     // An undelivered send means nothing is working on it — drop the optimism.
     setOptimisticBusy(false);
@@ -134,7 +155,20 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     // Server echo of our own message: reconcile the optimistic entry and
     // release the sending state.
     if (msg.nonce && pendingSendRef.current?.nonce === msg.nonce) {
-      clearTimeout(pendingSendRef.current.timer);
+      const pending = pendingSendRef.current;
+      clearTimeout(pending.timer);
+      const sentReferences = new Set(
+        pending.referenceItems.map((item) => item.fileId || item.url)
+      );
+      const sentDocuments = new Set(
+        pending.documentItems.map((item) => item.fileId)
+      );
+      setReferenceItems((current) =>
+        current.filter((item) => !sentReferences.has(item.fileId || item.url))
+      );
+      setDocumentItems((current) =>
+        current.filter((item) => !sentDocuments.has(item.fileId))
+      );
       pendingSendRef.current = null;
       setSending(false);
     }
@@ -216,6 +250,13 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
       if (!err.nonce || pendingSendRef.current?.nonce === err.nonce) {
         failPendingSend();
       }
+      if (err.code === 'busy' || err.code === 'duplicate_nonce') {
+        toaster.show(
+          err.message || t('ai_designer_error', 'AI Designer error'),
+          'warning'
+        );
+        return;
+      }
       setSending(false);
       setOptimisticBusy(false);
       setErrorHalted(true);
@@ -236,6 +277,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
       onProgress,
       onPreview,
       onError,
+      onDisconnect: failPendingSend,
     },
     { sessionId }
   );
@@ -272,9 +314,12 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
   // socket-reported state wins, the SWR hydrate covers the pre-join gap, and
   // the optimistic flags cover the action→server latency.
   const effectiveState = liveState ?? displaySession?.state ?? null;
-  const canAttach = effectiveState === 'delivered' || effectiveState === 'awaiting_plan';
   const busy =
     !errorHalted && (sending || optimisticBusy || isBusyState(effectiveState));
+  const canRevise =
+    effectiveState === 'delivered' || effectiveState === 'awaiting_plan';
+  const canAttach =
+    !busy && !!effectiveState && RESTING_SESSION_STATES.includes(effectiveState);
 
   useEffect(() => {
     busyRef.current = busy;
@@ -349,7 +394,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
   const handleAttachments = async (files: File[]) => {
     if (!files.length) return;
     if (!canAttach) {
-      toaster.show(t('ai_designer_attachment_state', 'Attachments are available when revising a plan or design.'), 'warning');
+      toaster.show(t('ai_designer_attachment_state', 'Attachments are available while chatting or revising a plan or design.'), 'warning');
       return;
     }
     if (referenceItems.length + documentItems.length + files.length > MAX_AI_DESIGNER_ATTACHMENTS) {
@@ -383,15 +428,16 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     const referenceFileIds = referenceItems.map((item) => item.fileId).filter(Boolean) as string[];
     const attachmentFileIds = documentItems.map((item) => item.fileId);
     if (!canAttach && (referenceFileIds.length || attachmentFileIds.length)) {
-      toaster.show(t('ai_designer_attachment_state', 'Attachments are available when revising a plan or design.'), 'warning');
+      toaster.show(t('ai_designer_attachment_state', 'Attachments are available while chatting or revising a plan or design.'), 'warning');
       return;
     }
     setSending(true);
-    const nonce = canAttach
+    const hasAttachments = referenceFileIds.length > 0 || attachmentFileIds.length > 0;
+    const nonce = canRevise
       ? socket.revisePlan(text, undefined, referenceFileIds, attachmentFileIds)
-      : socket.sendMessage(text);
-    setReferenceItems([]);
-    setDocumentItems([]);
+      : hasAttachments
+        ? socket.sendMessage(text, referenceFileIds, attachmentFileIds)
+        : socket.sendMessage(text);
     setInput('');
     // Optimistically append a user message so the UI feels responsive. The
     // server echo carries the same nonce and replaces this entry.
@@ -411,6 +457,8 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     pendingSendRef.current = {
       nonce,
       text,
+      referenceItems: [...referenceItems],
+      documentItems: [...documentItems],
       timer: setTimeout(() => {
         // No echo within the window — treat the send as undelivered.
         failPendingSend();
@@ -571,6 +619,25 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
       </div>
 
       <div className="border-t border-studioBorder p-[12px] shrink-0 space-y-2">
+        {!!referenceItems.length && (
+          <div className="flex flex-wrap gap-2">
+            {referenceItems.map((item) => (
+              <span
+                key={item.fileId || item.url}
+                className="inline-flex items-center gap-2 px-2 py-1 rounded-lg border border-studioBorder bg-newBgColorInner text-[12px] text-textColor"
+              >
+                {item.name || t('image_attachment', 'Image attachment')}
+                <button
+                  type="button"
+                  aria-label={t('remove_attachment', 'Remove attachment')}
+                  onClick={() => setReferenceItems((prev) => prev.filter((other) => (other.fileId || other.url) !== (item.fileId || item.url)))}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         {!!documentItems.length && (
           <div className="flex flex-wrap gap-2">
             {documentItems.map((item) => (
@@ -596,7 +663,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
             secondary
             loading={attachmentUploading}
             disabled={!canAttach || attachmentUploading}
-            title={!canAttach ? t('ai_designer_attachment_state', 'Attachments are available when revising a plan or design.') : undefined}
+            title={!canAttach ? t('ai_designer_attachment_state', 'Attachments are available while chatting or revising a plan or design.') : undefined}
             onClick={() => attachmentInputRef.current?.click()}
           >
             {t('attach_files', 'Attach files')}

@@ -164,6 +164,20 @@ export class AiDesignerMessageDto {
   @MaxLength(4000)
   text!: string;
 
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  referenceFileIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  attachmentFileIds?: string[];
+
   @IsString()
   @MaxLength(100)
   nonce!: string;

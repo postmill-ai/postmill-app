@@ -189,6 +189,18 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   `_authenticate`) skips its CSRF check under the same `NOT_SECURED && NODE_ENV ===
   'development'` gate — never on `NOT_SECURED` alone (pinned by `ai-designer.gateway.spec.ts`).
   Any new `NOT_SECURED` branch must use this dev-only form.
+- AI Designer `start`, `message` and `revise` attachment IDs are bounded DTO fields, but DTO validation is not
+  authorization. The conductor's read-only preparation resolves every submitted live File through the current
+  org, enforces count/type bounds and extracts documents before `start` creates/announces a session or writes
+  config. Message/revise turns acquire the session turn before committing that preparation; busy or invalid
+  requests release the claimed nonce with a typed, nonce'd error and never persist rejected attachments.
+  Cross-org and soft-deleted IDs must never be merged or sent to an agent. Validated contexts are cached in the
+  server-owned brief rather than re-extracted on every turn; Brand Knowledge is retrieved at planning with
+  the actual intent, not during every intake turn. Recovery emits fixed category-specific text. Logs include
+  the category and error name; typed provider failures add provider id/upstream status but omit response
+  detail. Other error messages may appear in logs only after kernel `redactError` truncation and signed-URL
+  masking. Raw errors never reach chat; credentials, attachment contents and stacks must not be logged or
+  sent to Sentry.
 
 ## MCP scopes — `allowedScopes` is a ceiling
 

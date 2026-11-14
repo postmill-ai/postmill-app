@@ -2968,6 +2968,8 @@
   "vertical": "Pionowo",
   "ai_designer_error": "Błąd AI Designer",
   "message_not_delivered_retry": "Twoja wiadomość nie została dostarczona. Spróbuj ponownie.",
+  "image_attachment": "Załącznik graficzny",
+  "ai_designer_attachment_state": "Załączniki są dostępne podczas rozmowy lub poprawiania planu albo projektu.",
   "ai_designer": "AI Designer",
   "status_connected": "Połączono",
   "status_disconnected": "Rozłączono",

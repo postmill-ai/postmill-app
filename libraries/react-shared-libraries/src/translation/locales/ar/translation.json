@@ -2953,6 +2953,8 @@
   "vertical": "عمودي",
   "ai_designer_error": "خطأ في مصمم الذكاء الاصطناعي",
   "message_not_delivered_retry": "لم يتم تسليم رسالتك. يرجى المحاولة مرة أخرى.",
+  "image_attachment": "مرفق صورة",
+  "ai_designer_attachment_state": "تتوفر المرفقات أثناء الدردشة أو مراجعة خطة أو تصميم.",
   "ai_designer": "مصمم الذكاء الاصطناعي",
   "status_connected": "متصل",
   "status_disconnected": "غير متصل",

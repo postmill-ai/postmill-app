@@ -6,6 +6,7 @@ import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { docWithVideoPosters } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-poster';
 import type { AiDesignerRenderResult } from './ai-designer.types';
+import { aiDesignerFailureLog } from './conductor/failure-recovery';
 
 interface SaveOptions {
   name?: string;
@@ -212,7 +213,7 @@ export class AiDesignerSaverService {
         );
       } catch (err) {
         this._logger.warn(
-          `Text-contrast audit failed: ${(err as Error)?.message}`
+          `Text-contrast audit failed: ${aiDesignerFailureLog(err)}`
         );
       }
     }
@@ -222,7 +223,7 @@ export class AiDesignerSaverService {
       violations.push(...(await this._renderService.auditTextCollisions(doc)));
     } catch (err) {
       this._logger.warn(
-        `Text-collision audit failed: ${(err as Error)?.message}`
+        `Text-collision audit failed: ${aiDesignerFailureLog(err)}`
       );
     }
 
@@ -235,7 +236,7 @@ export class AiDesignerSaverService {
       );
     } catch (err) {
       this._logger.warn(
-        `Imagery-visibility audit failed: ${(err as Error)?.message}`
+        `Imagery-visibility audit failed: ${aiDesignerFailureLog(err)}`
       );
     }
 
@@ -293,7 +294,7 @@ export class AiDesignerSaverService {
           await adapter.removeFile(stale);
         } catch (err) {
           this._logger.warn(
-            `Failed to remove a superseded preview buffer ${stale}: ${(err as Error)?.message}`
+            `Failed to remove a superseded preview buffer ${stale}: ${aiDesignerFailureLog(err)}`
           );
         }
       }

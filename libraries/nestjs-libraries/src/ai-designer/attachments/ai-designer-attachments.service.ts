@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { AiDesignerValidationException } from '../conductor/failure-recovery';
 import { PDFParse } from 'pdf-parse';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
@@ -41,33 +42,45 @@ export class AiDesignerAttachmentsService {
 
   async contextsFor(orgId: string, fileIds: string[] = []): Promise<AiDesignerDocumentContext[]> {
     if (fileIds.length > MAX_AI_DESIGNER_ATTACHMENTS) {
-      throw new BadRequestException(`AI Designer is limited to ${MAX_AI_DESIGNER_ATTACHMENTS} attachments.`);
+      throw new AiDesignerValidationException(`AI Designer is limited to ${MAX_AI_DESIGNER_ATTACHMENTS} attachments.`);
     }
     const contexts: AiDesignerDocumentContext[] = [];
     let totalChars = 0;
     for (const fileId of new Set(fileIds)) {
       const file = await this._fileService.getFileById(orgId, fileId);
-      if (!file) throw new BadRequestException('An attachment could not be found.');
+      if (!file || file.deletedAt) {
+        throw new AiDesignerValidationException('An attachment could not be found.');
+      }
       if (file.fileSize > MAX_AI_DESIGNER_ATTACHMENT_BYTES) {
-        throw new BadRequestException('AI Designer attachments are limited to 20 MB each.');
+        throw new AiDesignerValidationException('AI Designer attachments are limited to 20 MB each.');
       }
-      const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, orgId);
-      const bytes = await adapter.readFile(file.path);
+      let bytes: Buffer;
+      try {
+        const adapter = await this._storageService.resolveAdapterForFolder(file.folderId, orgId);
+        bytes = await adapter.readFile(file.path);
+      } catch {
+        throw new AiDesignerValidationException('An attachment could not be read from storage.');
+      }
       if (bytes.length > MAX_AI_DESIGNER_ATTACHMENT_BYTES) {
-        throw new BadRequestException('AI Designer attachments are limited to 20 MB each.');
+        throw new AiDesignerValidationException('AI Designer attachments are limited to 20 MB each.');
       }
-      const detected = await fromBuffer(bytes);
+      let detected: Awaited<ReturnType<typeof fromBuffer>>;
+      try {
+        detected = await fromBuffer(bytes);
+      } catch {
+        throw new AiDesignerValidationException('An attachment could not be read as a document.');
+      }
       const extension = file.originalName?.split('.').pop()?.toLowerCase() || file.name.split('.').pop()?.toLowerCase() || '';
       const isPdf = detected?.mime === 'application/pdf';
       const isText = detected?.mime?.startsWith('text/') || detected?.mime === 'application/json' || TEXT_EXTENSIONS.has(extension);
       if (!isPdf && !isText) {
-        throw new BadRequestException('Attachments must be PDF, TXT, Markdown, CSV, TSV, or JSON documents.');
+        throw new AiDesignerValidationException('Attachments must be PDF, TXT, Markdown, CSV, TSV, or JSON documents.');
       }
       if (isPdf && bytes.length > MAX_AI_DESIGNER_PDF_BYTES) {
-        throw new BadRequestException('PDF attachments are limited to 5 MB each.');
+        throw new AiDesignerValidationException('PDF attachments are limited to 5 MB each.');
       }
       if (!isPdf && bytes.length > MAX_TEXT_ATTACHMENT_BYTES) {
-        throw new BadRequestException('Text attachments are limited to 2 MB each.');
+        throw new AiDesignerValidationException('Text attachments are limited to 2 MB each.');
       }
 
       let text: string;
@@ -83,10 +96,10 @@ export class AiDesignerAttachmentsService {
           text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
         }
       } catch {
-        throw new BadRequestException('An attachment could not be read as a document.');
+        throw new AiDesignerValidationException('An attachment could not be read as a document.');
       }
       text = cleanText(text).slice(0, MAX_AI_DESIGNER_ATTACHMENT_CHARS);
-      if (!text) throw new BadRequestException('An attachment contains no readable text.');
+      if (!text) throw new AiDesignerValidationException('An attachment contains no readable text.');
       const remaining = MAX_AI_DESIGNER_ATTACHMENT_TOTAL_CHARS - totalChars;
       if (remaining <= 0) break;
       text = text.slice(0, remaining);

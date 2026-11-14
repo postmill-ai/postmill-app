@@ -27,6 +27,7 @@ import type { AssetAspect, AssetNeedRequest, AssetResult } from '../../ai-design
 import { assetKey } from '../../util/aspect';
 import { raceWithTimeout } from '../../util/race-with-timeout';
 import { throwIfAborted } from '../../util/throw-if-aborted';
+import { aiDesignerFailureLog } from '../../conductor/failure-recovery';
 import {
   isAgentInputError,
   parseAgentInput,
@@ -340,7 +341,7 @@ export class AiDesignerAssetService implements OnModuleInit {
           // so: a silent fallthrough here renders flat backgrounds with zero
           // diagnostic trail.
           this._logger.warn(
-            `Asset generate failed for slot ${assetKey(need.slotId, need.aspect)} (attempt ${attempt}/2): ${(err as Error).message}${retry ? '; retrying once.' : '; trying stock.'}`
+            `Asset generate failed for slot ${assetKey(need.slotId, need.aspect)} (attempt ${attempt}/2): ${aiDesignerFailureLog(err)}${retry ? '; retrying once.' : '; trying stock.'}`
           );
           if (!retry) break;
         }
@@ -390,7 +391,7 @@ export class AiDesignerAssetService implements OnModuleInit {
         throwIfAborted(signal);
         if (need.allowStockFallback === false && !(err instanceof DefaultNotConfiguredError)) throw err;
         this._logger.warn(
-          `Image-to-image generation failed for slot ${assetKey(need.slotId, need.aspect)} — falling back to text-to-image: ${(err as Error).message}`
+          `Image-to-image generation failed for slot ${assetKey(need.slotId, need.aspect)} — falling back to text-to-image: ${aiDesignerFailureLog(err)}`
         );
       }
     }
@@ -474,7 +475,7 @@ export class AiDesignerAssetService implements OnModuleInit {
       return resolved;
     } catch (err) {
       this._logger.warn(
-        `Asset could not attach reference ${need.sourceFileId}: ${(err as Error).message}`
+        `Asset could not attach reference ${need.sourceFileId}: ${aiDesignerFailureLog(err)}`
       );
       return null;
     }
@@ -781,8 +782,7 @@ export class AiDesignerAssetService implements OnModuleInit {
       // the conductor surfaces the missing asset to the user via its
       // missing-asset note.
       this._logger.error(
-        `Gradient fallback failed for slot ${assetKey(need.slotId, need.aspect)}: ${(err as Error)?.message ?? err}`,
-        (err as Error)?.stack,
+        `Gradient fallback failed for slot ${assetKey(need.slotId, need.aspect)} (${aiDesignerFailureLog(err)})`,
         AiDesignerAssetService.name
       );
       return null;
@@ -885,7 +885,7 @@ export class AiDesignerAssetService implements OnModuleInit {
       return { naturalWidth: width, naturalHeight: height };
     } catch (err) {
       this._logger.warn(
-        `Asset size analysis skipped for ${filePath}: ${(err as Error)?.message}`
+        `Asset size analysis skipped for ${filePath} (${aiDesignerFailureLog(err)})`
       );
       return {};
     }

@@ -70,6 +70,30 @@ describe('AiDesignerAttachmentsService', () => {
     );
   });
 
+  it('rejects a soft-deleted file before reading storage', async () => {
+    const deleted = textFile('doc-1', 'Launch');
+    deleted.row.deletedAt = new Date('2026-01-01');
+    const { service, storageService } = makeService({ 'doc-1': deleted });
+
+    await expect(service.contextsFor('org-1', ['doc-1'])).rejects.toThrow(
+      'An attachment could not be found.'
+    );
+    expect(storageService.resolveAdapterForFolder).not.toHaveBeenCalled();
+  });
+
+  it('returns a safe validation reason for storage read failures', async () => {
+    const { service, storageService } = makeService({
+      'doc-1': textFile('doc-1', 'Launch'),
+    });
+    storageService.resolveAdapterForFolder.mockRejectedValueOnce(
+      new Error('upstream storage secret')
+    );
+
+    await expect(service.contextsFor('org-1', ['doc-1'])).rejects.toMatchObject({
+      message: 'An attachment could not be read from storage.',
+    });
+  });
+
   it('rejects more than ten attachments before reading storage', async () => {
     const { service, storageService } = makeService({});
     await expect(service.contextsFor('org-1', Array.from({ length: 11 }, (_, i) => `doc-${i}`))).rejects.toThrow(

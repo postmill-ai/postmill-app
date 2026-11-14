@@ -2953,6 +2953,8 @@
   "vertical": "Vertical",
   "ai_designer_error": "Error del Diseñador con IA",
   "message_not_delivered_retry": "Tu mensaje no se entregó. Por favor, inténtalo de nuevo.",
+  "image_attachment": "Imagen adjunta",
+  "ai_designer_attachment_state": "Los archivos adjuntos están disponibles mientras chateas o revisas un plan o diseño.",
   "ai_designer": "Diseñador con IA",
   "status_connected": "Conectado",
   "status_disconnected": "Desconectado",

@@ -4,6 +4,7 @@ import { validate } from 'class-validator';
 import {
   AiDesignerAcceptPlanDto,
   AiDesignerConfigDto,
+  AiDesignerMessageDto,
   StartAiDesignerSessionDto,
 } from './start-ai-designer-session.dto';
 
@@ -113,6 +114,20 @@ describe('StartAiDesignerSessionDto', () => {
     });
     expect(await validate(dto)).toHaveLength(0);
   });
+
+  it.each([
+    { brief: { documentContextFileIds: ['doc-1'] } },
+    { documentContextFileIds: ['doc-1'] },
+  ])('rejects client-supplied server-owned document context: %j', async (extra) => {
+    const dto = plainToInstance(StartAiDesignerSessionDto, {
+      config: { channels: ['ig-post'], variants: 1 },
+      mode: 'prompt',
+      nonce: 'nonce-1',
+      ...extra,
+    });
+    const errors = await validate(dto, { whitelist: true, forbidNonWhitelisted: true });
+    expect(errors.length).toBeGreaterThan(0);
+  });
 });
 
 describe('AiDesignerAcceptPlanDto', () => {
@@ -141,5 +156,27 @@ describe('AiDesignerAcceptPlanDto', () => {
     const dto = makeAcceptDto({ texts: 'not-an-object' });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'texts')).toBe(true);
+  });
+});
+
+describe('AiDesignerMessageDto', () => {
+  it('accepts optional bounded reference and document IDs', async () => {
+    const dto = plainToInstance(AiDesignerMessageDto, {
+      text: 'Use the attached brief',
+      referenceFileIds: ['image-1'],
+      attachmentFileIds: ['doc-1'],
+      nonce: 'nonce-1',
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects more than ten attachment IDs', async () => {
+    const dto = plainToInstance(AiDesignerMessageDto, {
+      text: 'Too many',
+      attachmentFileIds: Array.from({ length: 11 }, (_, index) => `doc-${index}`),
+      nonce: 'nonce-1',
+    });
+    const errors = await validate(dto);
+    expect(errors.some((error) => error.property === 'attachmentFileIds')).toBe(true);
   });
 });
