@@ -115,6 +115,27 @@ describe('AI background removal review', () => {
     expect(element(store).src).toBe('/newer.png');
   });
 
+  it('keeps a paid result valid when persisted save adoption lands during generation', async () => {
+    const store = setup();
+    const sentDoc = store.getState().doc;
+    const history = store.getState().history;
+    let resolveResponse!: (value: unknown) => void;
+    const response = new Promise((resolve) => { resolveResponse = resolve; });
+    const pending = aiRemoveBackground({
+      store,
+      elementId: 'image-1',
+      fetch: vi.fn().mockReturnValue(response),
+      probe: async () => ({ width: 1200, height: 800 }),
+    });
+    const persistedDoc = JSON.parse(JSON.stringify(sentDoc));
+    persistedDoc.outputs[0].name = 'Materialized by autosave';
+    store.getState().adoptPersistedDoc(sentDoc, persistedDoc);
+    resolveResponse({ ok: true, json: async () => ({ url: '/transparent.png' }) });
+
+    await expect(pending).resolves.not.toBeNull();
+    expect(store.getState().history).toBe(history);
+  });
+
   it('does not return a candidate when the source changes during generation', async () => {
     const store = setup();
     let resolveResponse!: (value: unknown) => void;

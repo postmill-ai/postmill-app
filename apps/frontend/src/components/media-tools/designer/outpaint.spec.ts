@@ -90,6 +90,21 @@ describe('image expansion', () => {
     expect(store.getState().history).toHaveLength(history.length + 1);
   });
 
+  it('keeps a reviewed candidate valid after persisted save adoption', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(imageElement());
+    const sentDoc = store.getState().doc;
+    const before = (sentDoc.outputs[0] as any).children[0];
+    const history = store.getState().history;
+    const candidate = { ...makeCandidate(before), history };
+    const persistedDoc = JSON.parse(JSON.stringify(sentDoc));
+    persistedDoc.outputs[0].name = 'Materialized by autosave';
+
+    store.getState().adoptPersistedDoc(sentDoc, persistedDoc);
+    expect(store.getState().history).toBe(history);
+    expect(applyAiOutpaint({ store, candidate })).toBe(true);
+  });
+
   it('sends the rasterized display frame and saves the referenced result as internal', async () => {
     const store = createDesignerStore();
     store.getState().addElement(imageElement());

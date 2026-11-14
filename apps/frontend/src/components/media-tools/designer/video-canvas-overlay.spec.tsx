@@ -494,6 +494,8 @@ describe('video overlay selection and gesture commits', () => {
     first.position({ x: 45, y: 55 });
     second.position({ x: 205, y: 115 });
     const depth = store.getState().history.length;
+    await act(async () => first.fire('dragstart'));
+    expect(store.getState().gestureDepth).toBe(1);
     await act(async () => {
       first.fire('dragend');
       second.fire('dragend');
@@ -502,6 +504,7 @@ describe('video overlay selection and gesture commits', () => {
     const clips = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips;
     expect(clips.map((clip) => [clip.x, clip.y])).toEqual([[45, 55], [205, 115]]);
     expect(store.getState().history.length).toBe(depth + 1);
+    expect(store.getState().gestureDepth).toBe(0);
     await act(async () => store.getState().undo());
     const restored = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips;
     expect(restored.map((clip) => [clip.x, clip.y])).toEqual([[20, 30], [180, 90]]);
@@ -522,12 +525,18 @@ describe('video overlay selection and gesture commits', () => {
     second.scale({ x: 0.5, y: 2 });
     const depth = store.getState().history.length;
     await act(async () => {
+      first.fire('transformstart');
+      second.fire('transformstart');
+    });
+    expect(store.getState().gestureDepth).toBe(1);
+    await act(async () => {
       first.fire('transformend');
       second.fire('transformend');
     });
     let clips = (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips;
     expect(clips.map((clip) => [clip.width, clip.height])).toEqual([[160, 90], [50, 100]]);
     expect(store.getState().history.length).toBe(depth + 1);
+    expect(store.getState().gestureDepth).toBe(0);
 
     await act(async () => store.getState().setTrackLocked(0, trackId, true));
     const lockedDepth = store.getState().history.length;
@@ -538,6 +547,63 @@ describe('video overlay selection and gesture commits', () => {
     expect(clips[0].y).toBe(30);
     expect(store.getState().history.length).toBe(lockedDepth);
     expect(first.draggable()).toBe(false);
+  });
+
+  it('tracks a second drag that starts before the first commit finishes', async () => {
+    const { store, trackId } = gestureStore();
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return 0;
+    });
+    const stage = await renderGestureStore(store);
+    const first = stage.findOne('#first')!;
+    const second = stage.findOne('#second')!;
+    const depth = store.getState().history.length;
+
+    await act(async () => {
+      first.fire('dragstart');
+      first.position({ x: 45, y: 55 });
+      first.fire('dragend');
+      second.fire('dragstart');
+      second.position({ x: 205, y: 115 });
+      frames.splice(0).forEach((callback) => callback(0));
+      second.fire('dragend');
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const clips = (store.getState().doc.outputs[0] as VideoOutput).tracks
+      .find((track) => track.id === trackId)!.clips;
+    expect(clips.map((clip) => [clip.x, clip.y])).toEqual([[45, 55], [205, 115]]);
+    expect(store.getState().history).toHaveLength(depth + 2);
+    expect(store.getState().gestureDepth).toBe(0);
+  });
+
+  it.each(['delete', 'playhead'] as const)('releases a held transform when the clip leaves the stage (%s)', async (reason) => {
+    const { store, trackId } = gestureStore();
+    const stage = await renderGestureStore(store);
+    const first = stage.findOne('#first')!;
+    await act(async () => first.fire('transformstart'));
+    expect(store.getState().gestureDepth).toBe(1);
+
+    await act(async () => {
+      if (reason === 'delete') store.getState().removeClip(0, trackId, 'first');
+      else store.getState().setPlayhead(5000);
+    });
+    expect(store.getState().gestureDepth).toBe(0);
+  });
+
+  it('releases a held drag when the overlay unmounts', async () => {
+    const { store } = gestureStore();
+    const stage = await renderGestureStore(store);
+    await act(async () => stage.findOne('#first')!.fire('dragstart'));
+    expect(store.getState().gestureDepth).toBe(1);
+
+    await act(async () => root?.unmount());
+    root = null;
+    expect(store.getState().gestureDepth).toBe(0);
   });
 });
 

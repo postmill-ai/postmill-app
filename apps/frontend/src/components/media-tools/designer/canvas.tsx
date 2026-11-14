@@ -33,6 +33,7 @@ import { VideoCanvasOverlay } from './video-canvas-overlay';
 import { sharedStageRef } from './stage-ref';
 import { bakeElementTransform, buildResizePatch } from './transform-resize';
 import { useGeometryNonce } from './use-geometry-nonce';
+import { runGestureCommit } from './gesture-lifecycle';
 import { getTool, resolveToolShortcut } from './tools';
 import { rectFromDrag, rectFromTap, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
 import { addText } from './add-text';
@@ -126,6 +127,12 @@ const GUIDE_DELETE_SLACK = 24;
 /** Upper bound on grid lines per axis, so a tiny grid can't stall the stage. */
 const MAX_GRID_LINES = 200;
 
+type SnapFeedback = {
+  guides: { points: number[] }[];
+  spacingGuide: (SpacingGuide & { cross: number }) | null;
+  hud: { x: number; y: number; text: string } | null;
+};
+
 export const DesignerCanvas: FC<CanvasProps> = ({
   store,
   showSafeZones,
@@ -210,6 +217,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [uploadingFile, setUploadingFile] = useState(false);
   const rafIdRef = useRef<number | null>(null);
+  const snapFeedbackRef = useRef<SnapFeedback | null>(null);
   const transformOriginalsRef = useRef(new Map<string, DesignerElement>());
   const pinchRef = useRef<{
     startDistance: number;
@@ -233,7 +241,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const pushHistory = store((s) => s.pushHistory);
   const setSelectedIds = store((s) => s.setSelectedIds);
   const updateElement = store((s) => s.updateElement);
-  const updateElementEphemeral = store((s) => s.updateElementEphemeral);
+  const updateElementsEphemeral = store((s) => s.updateElementsEphemeral);
+  const commitElementGesture = store((s) => s.commitElementGesture);
   const addElement = store((s) => s.addElement);
   const setZoom = store((s) => s.setZoom);
   const setViewport = store((s) => s.setViewport);
@@ -1096,9 +1105,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
   // Snapping during drag: align edges/centers to other elements + output guides (B3).
   const computeSnap = useCallback(
-    (node: Konva.Node) => {
-      if (!output || isVideo) return;
-      if (!snapEnabled) { setGuides([]); setSpacingGuide(null); return; }
+    (node: Konva.Node): SnapFeedback | null => {
+      if (!output || isVideo) return null;
+      if (!snapEnabled) return { guides: [], spacingGuide: null, hud: null };
       const children = (pageOutput as DesignerOutput | undefined)?.children || [];
       const others = children.filter(
         (el) => !selectedIds.includes(el.id) && el.id !== node.id() && !el.hidden
@@ -1158,8 +1167,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         others.map((el) => ({ id: el.id, x: el.x, y: el.y, width: el.width, height: el.height })),
         EQUAL_SPACING_DOCUMENT_PX
       );
-      setSpacingGuide(
-        spacing
+      return {
+        guides: lines,
+        spacingGuide: spacing
           ? {
               ...spacing,
               // The badge sits on the axis the gap runs along, centred in it.
@@ -1167,11 +1177,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
                 ? placed.y + placed.height / 2
                 : placed.x + placed.width / 2,
             }
-          : null
-      );
-
-      setGuides(lines);
-      setHud({ x: node.x(), y: node.y() - 22, text: `${Math.round(node.x())}, ${Math.round(node.y())}` });
+          : null,
+        hud: { x: node.x(), y: node.y() - 22, text: `${Math.round(node.x())}, ${Math.round(node.y())}` },
+      };
     },
     [output, pageOutput, selectedIds, snapEnabled, isVideo, docGuides, snapToGrid, gridSize, zoom]
   );
@@ -1197,61 +1205,61 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     (e: Konva.KonvaEventObject<DragEvent>) => {
       if (isVideo) return;
       if (e.target === e.target.getStage()) return;
-      computeSnap(e.target);
+      snapFeedbackRef.current = computeSnap(e.target);
       if (rafIdRef.current) return;
       rafIdRef.current = requestAnimationFrame(() => {
-        // Gesture-scoped write: current output only, no cross-output
-        // applyLinked per frame. dragEnd re-commits through updateElement.
-        // Every attached node is written, not just the drag target: the
-        // Transformer moves the whole multi-selection together, and each
-        // moved element's own cached wrappers key off its store geometry —
-        // a member left unwritten keeps its styled bitmap frozen until drop.
+        const feedback = snapFeedbackRef.current;
+        if (feedback) {
+          setGuides(feedback.guides);
+          setSpacingGuide(feedback.spacingGuide);
+          setHud(feedback.hud);
+        }
         const trNodes = transformerRef.current?.nodes() || [];
         const nodes = trNodes.length > 1 ? trNodes : [e.target];
-        nodes.forEach((node) => {
+        const patches = nodes.flatMap((node) => {
           const id = node.id();
-          if (id) {
-            updateElementEphemeral(id, { x: node.x(), y: node.y() });
-          }
+          return id ? [{ id, updates: { x: node.x(), y: node.y() } }] : [];
         });
+        updateElementsEphemeral(patches);
         rafIdRef.current = null;
       });
     },
-    [computeSnap, updateElementEphemeral, isVideo]
+    [computeSnap, updateElementsEphemeral, isVideo]
   );
 
   const handleDragEnd = useCallback(
     (e: Konva.KonvaEventObject<DragEvent>) => {
       if (isVideo) return;
-      noteGestureEnd();
-      setGuides([]);
-      setSpacingGuide(null);
-      setHud(null);
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      if (e.target === e.target.getStage()) return;
-      const trNodes = transformerRef.current?.nodes() || [];
-      const nodes = trNodes.length > 1 ? trNodes : [e.target];
-      let changed = false;
-      nodes.forEach((node) => {
-        const id = node.id();
-        if (id) {
-          updateElement(id, { x: node.x(), y: node.y() });
-          changed = true;
+      try {
+        setGuides([]);
+        setSpacingGuide(null);
+        setHud(null);
+        snapFeedbackRef.current = null;
+        if (rafIdRef.current) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
         }
-      });
-      if (changed) {
-        pushHistory();
-        // Gesture committed: rebuild the cached wrappers around the moved
-        // nodes exactly once (see useGeometryNonce). Other commit paths (a
-        // direct-select anchor drag ends here with no element id) are caught
-        // by the store subscription's trailing debounce.
-        bumpGeometryNow();
+        if (e.target === e.target.getStage()) return;
+        const trNodes = transformerRef.current?.nodes() || [];
+        const nodes = trNodes.length > 1 ? trNodes : [e.target];
+        const patches = nodes.flatMap((node) => {
+          const id = node.id();
+          return id ? [{ id, updates: { x: node.x(), y: node.y() } }] : [];
+        });
+        if (patches.length) {
+          commitElementGesture(patches);
+          // Gesture committed: rebuild the cached wrappers around the moved
+          // nodes exactly once (see useGeometryNonce). Other commit paths (a
+          // direct-select anchor drag ends here with no element id) are caught
+          // by the store subscription's trailing debounce.
+          bumpGeometryNow();
+        }
+      } finally {
+        noteGestureEnd();
+        store.getState().endGesture();
       }
     },
-    [pushHistory, updateElement, noteGestureEnd, bumpGeometryNow, isVideo]
+    [commitElementGesture, noteGestureEnd, bumpGeometryNow, isVideo, store]
   );
 
   /**
@@ -1347,82 +1355,84 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       // Throttle only the store write; the node attrs above are already correct.
       if (rafIdRef.current) return;
       rafIdRef.current = requestAnimationFrame(() => {
-        // Same gesture-scoped write as dragMove; transformEnd commits.
-        patches.forEach(({ id, patch }) => updateElementEphemeral(id, patch));
+        updateElementsEphemeral(
+          patches.map(({ id, patch }) => ({ id, updates: patch }))
+        );
         rafIdRef.current = null;
       });
     },
-    [bakeTransform, updateElementEphemeral, isVideo]
+    [bakeTransform, updateElementsEphemeral, isVideo]
   );
 
   const handleTransformEnd = useCallback(
     async (e: Konva.KonvaEventObject<Event>) => {
       if (isVideo) return;
-      noteGestureEnd();
-      setHud(null);
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      const patches = bakeTransform(e);
-      if (!patches.length) return;
-      const originals = new Map(transformOriginalsRef.current);
-      transformOriginalsRef.current.clear();
-      const history = store.getState().history;
-      patches.forEach(({ id, patch }) => updateElement(id, patch));
-
-      const remapped: { id: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
-      for (const { id, patch } of patches) {
-        const original = originals.get(id);
-        if (
-          original?.type !== 'image' || !original.maskSrc || original.maskEnabled === false ||
-          !original.naturalWidth || !original.naturalHeight ||
-          original.fitMode === 'fill' ||
-          !maskFrameAspectChanged(original, patch)
-        ) continue;
-        try {
-          const uploaded = await remapBackgroundRemovalMask({
-            fetch,
-            maskSrc: original.maskSrc,
-            source: { naturalWidth: original.naturalWidth, naturalHeight: original.naturalHeight },
-            previousFrame: original,
-            nextFrame: {
-              width: patch.width,
-              height: patch.height,
-              crop: original.crop,
-              fitMode: original.fitMode,
-              focalPoint: original.focalPoint,
-            },
-            id,
-          });
-          remapped.push({ id, src: uploaded.src, fileId: uploaded.fileId, canvas: uploaded.canvas });
-        } catch {
-          // Keep the existing mask if its pixels cannot be read or saved.
+      return runGestureCommit(store, async () => {
+        setHud(null);
+        if (rafIdRef.current) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
         }
-      }
+        const patches = bakeTransform(e);
+        if (!patches.length) return;
+        const originals = new Map(transformOriginalsRef.current);
+        transformOriginalsRef.current.clear();
+        const history = store.getState().history;
+        patches.forEach(({ id, patch }) => updateElement(id, patch));
 
-      const children = (store.getState().doc.outputs[store.getState().currentOutput] as DesignerOutput | undefined)?.children || [];
-      const stale = store.getState().history !== history || patches.some(({ id, patch }) => {
-        const current = children.find((child) => child.id === id);
-        return !current || current.x !== patch.x || current.y !== patch.y ||
-          current.width !== patch.width || current.height !== patch.height ||
-          current.rotation !== patch.rotation;
-      });
-      if (stale) {
-        await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetch, mask)));
-        return;
-      }
-      remapped.forEach(({ id, src, fileId, canvas }) => {
-        seedBufferFromCanvas(`${id}:mask`, canvas);
-        updateElement(id, {
-          maskSrc: src,
-          maskFileId: fileId,
-          maskEnabled: true,
+        const remapped: { id: string; src: string; fileId?: string; canvas: HTMLCanvasElement }[] = [];
+        for (const { id, patch } of patches) {
+          const original = originals.get(id);
+          if (
+            original?.type !== 'image' || !original.maskSrc || original.maskEnabled === false ||
+            !original.naturalWidth || !original.naturalHeight ||
+            original.fitMode === 'fill' ||
+            !maskFrameAspectChanged(original, patch)
+          ) continue;
+          try {
+            const uploaded = await remapBackgroundRemovalMask({
+              fetch,
+              maskSrc: original.maskSrc,
+              source: { naturalWidth: original.naturalWidth, naturalHeight: original.naturalHeight },
+              previousFrame: original,
+              nextFrame: {
+                width: patch.width,
+                height: patch.height,
+                crop: original.crop,
+                fitMode: original.fitMode,
+                focalPoint: original.focalPoint,
+              },
+              id,
+            });
+            remapped.push({ id, src: uploaded.src, fileId: uploaded.fileId, canvas: uploaded.canvas });
+          } catch {
+            // Keep the existing mask if its pixels cannot be read or saved.
+          }
+        }
+
+        const children = (store.getState().doc.outputs[store.getState().currentOutput] as DesignerOutput | undefined)?.children || [];
+        const stale = store.getState().history !== history || patches.some(({ id, patch }) => {
+          const current = children.find((child) => child.id === id);
+          return !current || current.x !== patch.x || current.y !== patch.y ||
+            current.width !== patch.width || current.height !== patch.height ||
+            current.rotation !== patch.rotation;
         });
-      });
-      pushHistory();
-      // Same commit-time cache rebuild as dragEnd (see useGeometryNonce).
-      bumpGeometryNow();
+        if (stale) {
+          await Promise.all(remapped.map((mask) => discardBackgroundRemovalMask(fetch, mask)));
+          return;
+        }
+        remapped.forEach(({ id, src, fileId, canvas }) => {
+          seedBufferFromCanvas(`${id}:mask`, canvas);
+          updateElement(id, {
+            maskSrc: src,
+            maskFileId: fileId,
+            maskEnabled: true,
+          });
+        });
+        pushHistory();
+        // Same commit-time cache rebuild as dragEnd (see useGeometryNonce).
+        bumpGeometryNow();
+      }, noteGestureEnd);
     },
     [bakeTransform, pushHistory, updateElement, isVideo, noteGestureEnd, bumpGeometryNow, fetch, store]
   );
@@ -2026,7 +2036,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         }}
       >
         <Layer
-          onDragStart={() => { if (!isVideo) noteGestureStart(); }}
+          onDragStart={(e) => {
+            if (!isVideo) {
+              const id = e.target.id();
+              if (id && !selectedIds.includes(id)) handleElementSelect(id);
+              noteGestureStart();
+              store.getState().beginGesture();
+            }
+          }}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
         >
@@ -2442,7 +2459,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               anchorSize={coarsePointer ? 22 : 10}
               anchorCornerRadius={coarsePointer ? 8 : 5}
               rotateAnchorOffset={coarsePointer ? 40 : 24}
-              onTransformStart={() => { if (!isVideo) noteGestureStart(); }}
+              onTransformStart={() => {
+                if (isVideo) return;
+                noteGestureStart();
+                store.getState().beginGesture();
+              }}
               onTransform={handleTransform}
               onTransformEnd={handleTransformEnd}
             />

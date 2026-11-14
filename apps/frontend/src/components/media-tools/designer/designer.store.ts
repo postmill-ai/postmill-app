@@ -134,6 +134,7 @@ export interface DesignerState {
   // saved state clears isDirty instead of always reporting unsaved.
   savedHistoryIndex: number;
   designId: string | null;
+  designSession: number;
   designTemplateId: string | null;
   templateId: string | null;
   designName: string;
@@ -160,6 +161,8 @@ export interface DesignerState {
    * prop-threading through DesignerCanvas.
    */
   isPlaying: boolean;
+  /** Active canvas gestures; document autosave waits for the final commit. */
+  gestureDepth: number;
   /** The primary selection — drives the inspector. Always a member of `selectedClips`. */
   selectedClip: { outputIndex: number; trackId: string; clipId: string } | null;
   /**
@@ -247,13 +250,18 @@ export interface DesignerActions {
   previewElements: (patches: Record<string, Partial<DesignerElement>>) => void;
   clearElementPreview: () => void;
   /**
-   * Gesture-scoped write: patches the element on the CURRENT output only, with
-   * no cross-output applyLinked and no linkedUpdateFlash churn. Drag/transform
-   * move events call it per rAF frame; dragEnd/transformEnd re-commit through
-   * updateElement (+ pushHistory), so the gesture's final state and its single
-   * history entry are identical to the plain updateElement path.
+   * Gesture-scoped writes patch only the CURRENT output, without linked-edit
+   * propagation or history. Each animation frame commits all moved nodes in one
+   * store update; the final gesture commit applies linked edits and one Undo.
    */
   updateElementEphemeral: (id: string, updates: Partial<DesignerElement>) => void;
+  updateElementsEphemeral: (
+    patches: { id: string; updates: Partial<DesignerElement> }[]
+  ) => void;
+  commitElementGesture: (
+    patches: { id: string; updates: Partial<DesignerElement> }[],
+    label?: string
+  ) => void;
   removeElement: (id: string) => void;
   removeElements: (ids: string[]) => void;
   applyMagicGrab: (id: string, background: DesignerElement, subject: DesignerElement) => boolean;
@@ -336,6 +344,8 @@ export interface DesignerActions {
   requestGenerate: (kind: 'video' | 'music' | 'voiceover' | 'record-voiceover' | null) => void;
   /** Arm a layer's mask as the paint target (null = paint the pixels). */
   setMaskTarget: (id: string | null) => void;
+  beginGesture: () => void;
+  endGesture: () => void;
   undo: () => void; redo: () => void; pushHistory: (label?: string) => void;
   /** Jump straight to a history entry, as Photoshop's History panel does. */
   jumpToHistory: (index: number) => void;
@@ -567,9 +577,9 @@ export const createDesignerStore = (
       currentOutput: 0,
       currentPage: 0,
       zoom: 1, viewportX: 0, viewportY: 0,
-      history: [JSON.parse(JSON.stringify(initialDoc))], historyIndex: 0, historyLabels: ['Open'],
+      history: [initialDoc], historyIndex: 0, historyLabels: ['Open'],
       savedHistoryIndex: 0,
-      designId: null, designTemplateId: null, templateId: null,
+      designId: null, designSession: 0, designTemplateId: null, templateId: null,
       designName: 'Untitled Design',
       isDirty: false, isSaving: false, lastSaved: null,
       previewRevision: 0,
@@ -583,6 +593,7 @@ export const createDesignerStore = (
       brandAdminOverride: false,
       playheadMs: 0,
       isPlaying: false,
+      gestureDepth: 0,
       selectedClip: null,
       selectedClips: [],
       clipClipboard: [],
@@ -609,9 +620,15 @@ export const createDesignerStore = (
         set({ doc: migrateDoc(doc), isDirty: true });
       },
       adoptPersistedDoc: (sentDoc, persistedDoc) => {
-        if (get().doc !== sentDoc || !persistedDoc || typeof persistedDoc !== 'object') return false;
+        const state = get();
+        if (state.doc !== sentDoc || !persistedDoc || typeof persistedDoc !== 'object') return false;
         const nextDoc = migrateDoc(persistedDoc);
-        set({ doc: nextDoc });
+        if (state.history[state.historyIndex] === sentDoc) {
+          state.history[state.historyIndex] = nextDoc;
+          set({ doc: nextDoc, history: state.history });
+        } else {
+          set({ doc: nextDoc });
+        }
         reconcileBuffersWithDoc(nextDoc);
         return true;
       },
@@ -804,18 +821,68 @@ export const createDesignerStore = (
       },
 
       updateElementEphemeral: (id, updates) => {
-        if (isVideoMode()) return;
+        get().updateElementsEphemeral([{ id, updates }]);
+      },
+
+      updateElementsEphemeral: (patches) => {
+        if (isVideoMode() || !patches.length) return;
         get().clearElementPreview();
         const { doc, currentOutput, currentPage } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput | undefined;
         if (!out || !('children' in out)) return;
+        const byId = new Map(patches.map(({ id, updates }) => [id, updates]));
+        let changed = false;
+        const children = pageChildren(out, currentPage).map((el) => {
+          const updates = byId.get(el.id);
+          if (!updates) return el;
+          changed = true;
+          return applyElementPatch(el, updates);
+        });
+        if (!changed) return;
         const outs = [...doc.outputs];
-        outs[currentOutput] = withPageChildren(
-          out,
-          currentPage,
-          pageChildren(out, currentPage).map((el) => (el.id === id ? applyElementPatch(el, updates) : el))
-        );
+        outs[currentOutput] = withPageChildren(out, currentPage, children);
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
+      },
+
+      commitElementGesture: (patches, label) => {
+        if (isVideoMode() || !patches.length) return;
+        const state = get();
+        const { doc, currentOutput, currentPage, editFormatOnly } = state;
+        if (currentPage > 0) {
+          const byId = new Map(patches.map(({ id, updates }) => [id, updates]));
+          set({
+            doc: {
+              ...doc,
+              outputs: withActiveChildren(
+                activePageChildren().map((el) => {
+                  const updates = byId.get(el.id);
+                  return updates ? applyElementPatch(el, updates) : el;
+                })
+              ),
+            },
+            isDirty: true,
+          });
+          get().pushHistory(label);
+          return;
+        }
+        let nextDoc = doc;
+        const affected = new Set<number>();
+        for (const { id, updates } of patches) {
+          const result = applyLinked(
+            nextDoc,
+            currentOutput,
+            new Set([id]),
+            updates,
+            editFormatOnly
+          );
+          nextDoc = { ...nextDoc, outputs: result.outputs };
+          result.affected.forEach((index) => affected.add(index));
+        }
+        const now = Date.now();
+        const linkedUpdateFlash = { ...state.linkedUpdateFlash };
+        affected.forEach((index) => (linkedUpdateFlash[index] = now));
+        set({ doc: nextDoc, isDirty: true, linkedUpdateFlash });
+        get().pushHistory(label);
       },
 
       removeElement: (id) => {
@@ -1654,20 +1721,29 @@ export const createDesignerStore = (
         });
       },
 
+      beginGesture: () => {
+        if (get().gestureDepth === 0) set({ gestureDepth: 1 });
+      },
+      endGesture: () => {
+        if (get().gestureDepth !== 0) set({ gestureDepth: 0 });
+      },
+
       pushHistory: (label) => {
         get().clearElementPreview();
-        const { doc, history, historyLabels, historyIndex, savedHistoryIndex } = get();
-        const snapshot = JSON.parse(JSON.stringify(doc));
+        const { doc, history, historyLabels, historyIndex, savedHistoryIndex, isDirty } = get();
+        // Documents are immutable snapshots: every store edit replaces the
+        // affected doc/output/element objects, so unchanged branches are shared.
         const newHistory = history.slice(0, historyIndex + 1);
         const newLabels = historyLabels.slice(0, historyIndex + 1);
-        newHistory.push(snapshot);
+        newHistory.push(doc);
         newLabels.push(label || 'Edit');
-        let savedIdx = savedHistoryIndex;
+        let savedIdx = savedHistoryIndex > historyIndex ? -1 : savedHistoryIndex;
         if (newHistory.length > 50) {
           newHistory.shift();
           newLabels.shift();
-          savedIdx -= 1; // indices shifted down; -1 → saved snapshot evicted
+          savedIdx = savedIdx >= 0 ? savedIdx - 1 : -1;
         }
+        if (!isDirty && history[historyIndex] !== doc) savedIdx = newHistory.length - 1;
         set({
           history: newHistory,
           historyLabels: newLabels,
@@ -1680,7 +1756,7 @@ export const createDesignerStore = (
         const { history, historyIndex, savedHistoryIndex, currentOutput, currentPage } = get();
         if (index < 0 || index >= history.length || index === historyIndex) return;
         get().clearElementPreview();
-        const nextDoc = JSON.parse(JSON.stringify(history[index]));
+        const nextDoc = history[index];
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
         set({
           doc: nextDoc,
@@ -1701,7 +1777,7 @@ export const createDesignerStore = (
         if (historyIndex <= 0) return;
         get().clearElementPreview();
         const newIndex = historyIndex - 1;
-        const nextDoc = JSON.parse(JSON.stringify(history[newIndex]));
+        const nextDoc = history[newIndex];
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
         set({
           doc: nextDoc,
@@ -1719,7 +1795,7 @@ export const createDesignerStore = (
         if (historyIndex >= history.length - 1) return;
         get().clearElementPreview();
         const newIndex = historyIndex + 1;
-        const nextDoc = JSON.parse(JSON.stringify(history[newIndex]));
+        const nextDoc = history[newIndex];
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
         set({
           doc: nextDoc,
@@ -1732,7 +1808,17 @@ export const createDesignerStore = (
         reconcileBuffersWithDoc(nextDoc);
       },
 
-      markSaved: () => set({ isDirty: false, isSaving: false, saveFailed: false, saveRetryPaused: false, lastSaved: new Date(), savedHistoryIndex: get().historyIndex }),
+      markSaved: () => {
+        const { doc, history, historyIndex } = get();
+        set({
+          isDirty: false,
+          isSaving: false,
+          saveFailed: false,
+          saveRetryPaused: false,
+          lastSaved: new Date(),
+          savedHistoryIndex: history[historyIndex] === doc ? historyIndex : -1,
+        });
+      },
       setSaving: (saving) => set({ isSaving: saving }),
       setSaveFailed: (failed) => set({ saveFailed: failed }),
       setSaveRetryPaused: (paused) => set({ saveRetryPaused: paused }),
@@ -1747,13 +1833,14 @@ export const createDesignerStore = (
           // Ask the canvas to fit. Bumped here rather than at the call sites so
           // every route into a new document gets it — there are four.
           fitNonce: get().fitNonce + 1,
-          history: [JSON.parse(JSON.stringify(newDoc))], historyLabels: ['New'], historyIndex: 0, savedHistoryIndex: 0,
-          designId: null, designTemplateId: null, templateId: null,
+          history: [newDoc], historyLabels: ['New'], historyIndex: 0, savedHistoryIndex: 0,
+          designId: null, designSession: get().designSession + 1, designTemplateId: null, templateId: null,
           designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null, saveFailed: false, saveRetryPaused: false,
           editFormatOnly: false,
           brandEnforcement: false,
           brandAdminOverride: false,
           playheadMs: 0,
+          gestureDepth: 0,
           selectedClip: null,
           selectedClips: [],
           linkedUpdateFlash: {},
@@ -1768,7 +1855,7 @@ export const createDesignerStore = (
         // paint over matching ids) for the tab's lifetime.
         disposeAllBuffers();
         set({
-          doc: migrated, designId: id, designName: name,
+          doc: migrated, designId: id, designSession: get().designSession + 1, designName: name,
           templateId, designTemplateId: templateId,
           selectedIds: [], currentOutput: 0, currentPage: 0,
           // The zoom and viewport belonged to whatever was open before. Reset
@@ -1776,10 +1863,11 @@ export const createDesignerStore = (
           // before the fit lands reads as a flash.
           zoom: 1, viewportX: 0, viewportY: 0,
           fitNonce: get().fitNonce + 1,
-          history: [JSON.parse(JSON.stringify(migrated))], historyLabels: ['Open'], historyIndex: 0, savedHistoryIndex: 0, isDirty: false,
+          history: [migrated], historyLabels: ['Open'], historyIndex: 0, savedHistoryIndex: 0, isDirty: false,
           // A paused/failed autosave belonged to the previous design.
           saveFailed: false, saveRetryPaused: false,
           playheadMs: 0,
+          gestureDepth: 0,
           selectedClip: null,
           selectedClips: [],
           linkedUpdateFlash: {},

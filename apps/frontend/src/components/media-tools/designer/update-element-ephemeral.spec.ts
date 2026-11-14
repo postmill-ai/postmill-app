@@ -95,6 +95,42 @@ describe('updateElementEphemeral', () => {
     expect(JSON.stringify(store.getState().doc)).toBe(gestureDoc);
   });
 
+  it('batches a multi-node frame and commits every node with one linked edit and one Undo', () => {
+    const store = setupLinkedDoc();
+    store.getState().addElement({ ...textElement(), id: 'second' } as never);
+    store.getState().setCurrentOutput(0);
+    const firstId = (store.getState().doc.outputs[0] as DesignerOutput).children[0].id;
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+    let previousDoc = before;
+    let docWrites = 0;
+    const unsubscribe = store.subscribe((state) => {
+      if (state.doc !== previousDoc) {
+        docWrites += 1;
+        previousDoc = state.doc;
+      }
+    });
+    const patches = [
+      { id: firstId, updates: { x: 30, fontSize: 40 } },
+      { id: 'second', updates: { x: 70, fontSize: 50 } },
+    ];
+
+    store.getState().updateElementsEphemeral(patches);
+    expect(docWrites).toBe(1);
+    expect(store.getState().doc.outputs[1]).toBe(before.outputs[1]);
+
+    store.getState().commitElementGesture(patches);
+    expect(docWrites).toBe(2);
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+    expect((store.getState().doc.outputs[1] as DesignerOutput).children[0].fontSize).not.toBe(
+      (before.outputs[1] as DesignerOutput).children[0].fontSize
+    );
+
+    store.getState().undo();
+    expect(store.getState().doc).toBe(before);
+    unsubscribe();
+  });
+
   it('is a no-op in video mode, matching updateElement', () => {
     const store = createDesignerStore(1080, 1080);
     store.getState().setMode('video');

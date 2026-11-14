@@ -3,7 +3,8 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createDesignerStore, migrateDoc, type DesignerStore, type DesignerDoc, type DesignerAttribution, type VideoOutput, type VideoClip, type DesignerOutput, type DesignerElement } from './designer.store';
 import { createAutosaveSubscription, createDesignAutosave } from './designer-autosave';
-import { useCollaboration } from './collaboration';
+import { manualSaveToastKind, runManualSave } from './manual-save';
+import { applyRemoteDoc, useCollaboration } from './collaboration';
 import { subscribeToBaseDocument } from './collaboration-doc';
 import type { TimelineAwareness, ImageAwareness } from './collaboration';
 import { CollaborationCursors, type PeerTimelineState } from './collaboration-cursors';
@@ -445,7 +446,7 @@ const DesignerContent: FC<
   // deps are stable. Inline arrows here got a new identity on every doc/selection
   // render, tearing down and rebuilding the socket + Y.Doc on every keystroke/drag.
   const onRemoteDoc = useCallback((remoteDoc: any) => {
-    store.getState().setDoc(migrateDoc(remoteDoc));
+    applyRemoteDoc(store, migrateDoc(remoteDoc));
   }, [store]);
   const onConnectedChange = useCallback((count: number) => {
     setConnectedCount(count);
@@ -560,20 +561,19 @@ const DesignerContent: FC<
   // back to the raw data URL when the upload fails so a preview is never lost.
   // ANY failure here (incl. a SecurityError from a tainted cross-origin canvas)
   // must degrade to "no preview" — the doc save is never gated on a thumbnail.
-  const uploadPreview = useCallback(async (): Promise<{
+  const uploadPreview = useCallback(async (doc: DesignerDoc): Promise<{
     previewFileId?: string;
     previewDataUrl?: string;
   }> => {
-    const state = store.getState();
-    if (state.doc.mode === 'video') return {};
+    if (doc.mode === 'video') return {};
     try {
       // The design thumbnail is ALWAYS page 1 of output 0 (multi-page docs,
       // doc v8) — not whatever page/output the stage happens to be showing.
-      const first = state.doc.outputs[0] as DesignerOutput | undefined;
+      const first = doc.outputs[0] as DesignerOutput | undefined;
       const previewDataUrl = first && 'children' in first
         ? await renderOutputThumbnail(
             { ...first, children: pageChildren(first, 0) },
-            state.doc.symbols as never
+            doc.symbols as never
           )
         : undefined;
       const previewBlob = previewDataUrl ? dataUrlToBlob(previewDataUrl) : null;
@@ -597,7 +597,7 @@ const DesignerContent: FC<
     } catch {
       return {};
     }
-  }, [fetch, store]);
+  }, [fetch]);
 
   // Autosave pipeline (create-on-first-edit, then PUT) — hoisted so both the
   // debounced-doc effect and manual Save share the same in-flight create guard.
@@ -644,44 +644,22 @@ const DesignerContent: FC<
       toaster.show(translate('save_blocked_off_brand', 'Save blocked: off-brand elements detected. Fix them or use admin override.'), 'warning');
       return;
     }
-    s.setSaving(true);
     try {
-      // A first save goes through the autosave create guard, so a create
-      // already in flight (or a rapid Cmd+S repeat) can never POST a duplicate
-      // design. The brand-compliance check above stays manual-save-only.
-      if (!store.getState().designId) {
-        await designAutosave.ensureCreated();
+      const result = await runManualSave(store, designAutosave);
+      const toastKind = manualSaveToastKind(result);
+      if (toastKind === 'warning') {
+        toaster.show(translate('save_failed', 'Failed to save'), 'warning');
+        return;
       }
-      const cur = store.getState();
-      // ensureCreated already persisted the current doc + preview; only PUT
-      // when edits landed while it was in flight (or a pre-existing design
-      // still has unsaved work).
-      if (cur.designId && cur.isDirty) {
-        const { previewFileId, previewDataUrl } = await uploadPreview();
-        const payload: Record<string, unknown> = {
-          name: cur.designName,
-          doc: cur.doc,
-          width: cur.doc.outputs[0]?.width,
-          height: cur.doc.outputs[0]?.height,
-        };
-        if (previewFileId) payload.previewFileId = previewFileId;
-        // Only ship the base64 preview as a fallback when the upload failed, to keep
-        // the save JSON small.
-        else if (previewDataUrl) payload.previewDataUrl = previewDataUrl;
-        const res = await fetch(`/media/designs/${cur.designId}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error('Save failed');
-        cur.markSaved();
+      if (toastKind === 'neutral') {
+        toaster.show(translate('designer_saving_ellipsis', 'Saving…'), 'warning');
+        return;
       }
       toaster.show(translate('design_saved', 'Design saved'), 'success');
     } catch {
       toaster.show(translate('save_failed', 'Failed to save'), 'warning');
-    } finally {
-      store.getState().setSaving(false);
     }
-  }, [fetch, toaster, store, getBrandViolationsNow, translate, uploadPreview, designAutosave]);
+  }, [toaster, store, getBrandViolationsNow, translate, designAutosave]);
 
   const handleSaveAsTemplate = useCallback(async () => {
     const s = store.getState();

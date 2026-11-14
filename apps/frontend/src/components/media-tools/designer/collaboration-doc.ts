@@ -7,10 +7,10 @@ export const subscribeToBaseDocument = (
   sendUpdate: (doc: DesignerDoc) => void
 ): (() => void) => {
   sendUpdate(store.getState().doc);
-  let previous = store.getState().doc;
+  let lastSent = store.getState().doc;
   return store.subscribe((state) => {
-    if (state.doc === previous) return;
-    previous = state.doc;
+    if (state.gestureDepth > 0 || state.doc === lastSent) return;
+    lastSent = state.doc;
     sendUpdate(state.doc);
   });
 };
