@@ -95,11 +95,12 @@ export const measureForElement = (el: DesignerElement): MeasureText | undefined 
  * Grow a flat text box enough for its authored size. Width changes only when
  * one unwrapped word cannot fit; ordinary wrapping affects height alone.
  */
-export const growBoxFor = (
+const boxPatchFor = (
   element: DesignerElement | null,
   fontSize: number,
   measure?: MeasureText | null,
-  bounds?: { width: number; height: number }
+  bounds?: { width: number; height: number },
+  shrinkHeight = false
 ): Partial<DesignerElement> => {
   if (!element || element.type !== 'text') return {};
   if (element.richText?.length || element.textPath || (element.curve || 0) !== 0) {
@@ -140,6 +141,8 @@ export const growBoxFor = (
           : desiredY;
       }
     }
+  } else if (shrinkHeight && needed < element.height) {
+    patch.height = needed;
   }
   if (lines.length === 1 && paragraphs === 1) {
     const lineWidth =
@@ -162,6 +165,20 @@ export const growBoxFor = (
   }
   return patch;
 };
+
+export const growBoxFor = (
+  element: DesignerElement | null,
+  fontSize: number,
+  measure?: MeasureText | null,
+  bounds?: { width: number; height: number }
+): Partial<DesignerElement> => boxPatchFor(element, fontSize, measure, bounds);
+
+export const fitStyleBoxFor = (
+  element: DesignerElement | null,
+  fontSize: number,
+  measure?: MeasureText | null,
+  shrinkHeight = false
+): Partial<DesignerElement> => boxPatchFor(element, fontSize, measure, undefined, shrinkHeight);
 
 /**
  * The size flat text should actually be painted at — the fitted size when it

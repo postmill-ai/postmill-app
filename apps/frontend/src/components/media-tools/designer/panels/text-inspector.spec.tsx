@@ -45,6 +45,16 @@ vi.mock('../fonts', () => ({
 vi.mock('../measure-text', () => ({
   fittedFontSize: (element: { fontSize?: number }) => element.fontSize ?? 16,
   measureForElement: () => (line: string, size: number) => line.length * size * 0.5,
+  fitStyleBoxFor: (
+    element: { text?: string; width: number; height: number; lineHeight?: number },
+    fontSize: number,
+    _measure: unknown,
+    shrinkHeight = false,
+  ) => {
+    const lines = Math.ceil((element.text?.length ?? 0) * fontSize * 0.5 / Math.max(1, element.width));
+    const height = Math.ceil(Math.max(1, lines) * (element.lineHeight || 1.2) * fontSize);
+    return height > element.height || (shrinkHeight && height < element.height) ? { height } : {};
+  },
 }));
 
 vi.mock('./designer-assistant-panel', () => ({
