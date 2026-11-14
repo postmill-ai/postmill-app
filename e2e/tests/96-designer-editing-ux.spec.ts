@@ -192,7 +192,7 @@ async function editBodyCopyWithPointer(page: Page) {
   const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
   const outputX = (box.width - 400 * scale) / 2;
   const outputY = (box.height - 400 * scale) / 2;
-  await stage.click({ position: { x: outputX + 390 * scale, y: outputY + 390 * scale } });
+  await stage.click({ position: { x: outputX + 10 * scale, y: outputY + 390 * scale } });
   await stage.dblclick({ position: { x: outputX + 230 * scale, y: outputY + 50 * scale } });
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
 }
