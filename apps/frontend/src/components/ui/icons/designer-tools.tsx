@@ -405,3 +405,18 @@ export const BrandIcon = toolIcon(
     <path d="M3.5 15.5h13M5 12.5h10" />
   </>
 );
+
+export const HistoryIcon = toolIcon(
+  <>
+    <path d="M3.5 6.5v4h4" />
+    <path d="M4 10a6.5 6.5 0 1 0 1.8-4.5L3.5 8" />
+    <path d="M10 6.5V10l2.5 1.5" />
+  </>
+);
+
+export const VersionsIcon = toolIcon(
+  <>
+    <circle cx="10" cy="10" r="6.5" />
+    <path d="M10 6.5V10l2.5 1.5M13.5 3.5h3v3" />
+  </>
+);

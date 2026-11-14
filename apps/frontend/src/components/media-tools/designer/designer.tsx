@@ -51,6 +51,14 @@ import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/d
 import { useDesignerActions, type DesignerActionCtx } from './actions';
 import { NewDesignDialog } from './new-design-dialog';
 import { CanvasInspector } from './panels/canvas-inspector';
+import {
+  DesktopWorkspacePanel,
+  isMobileDesignerViewport,
+  readDesktopWorkspacePreference,
+  writeDesktopWorkspacePreference,
+  type WorkspaceTab,
+} from './workspace-panel';
+import { HistoryIcon, VersionsIcon } from '@postmill-ai/frontend/components/ui/icons/designer-tools';
 import { useMediaPicker } from '../use-media-picker';
 import { StartDialog } from './start-dialog';
 import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, aiDetectSubject } from './ai-image-actions';
@@ -231,11 +239,11 @@ const DesignerContent: FC<
   const [pagesBarOverride, setPagesBarOverride] = useState<boolean | null>(null);
   // Start mobile with the full canvas visible; the inline Inspector opens at
   // half height on demand. Desktop stays expanded and docked.
-  const [inspectorCollapsed, setInspectorCollapsed] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth <= 1025
-  );
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(isMobileDesignerViewport);
   const [inspectorSnap, setInspectorSnap] = useState<MobileSheetSnap>('half');
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('inspector');
+  const [workspacePreferenceReady, setWorkspacePreferenceReady] = useState(false);
   const mobileLayout = useMediaQuery('(max-width: 1025px)');
   // Required startup picker on a fresh editor (no deep-linked asset/design and
   // no caller-supplied size) — forces an explicit format choice instead of the
@@ -268,22 +276,35 @@ const DesignerContent: FC<
     [mediaToolsStatus]
   );
   const user = useUser();
-  // Layers floats instead of docking in the rail; its position and open state
-  // persist per org.
+  // Mobile keeps the pre-tabs floating Layers surface and its per-org preference.
   const layersPanel = useFloatingPanelState('layers', user?.orgId, {
     x: 72,
     y: 16,
     height: 360,
     open: false,
   });
-  // Brand floats too — it is a reference surface you keep open while working,
-  // not a one-shot picker.
+  // Brand remains an inline sheet on mobile; desktop uses the workspace tabs.
   const brandPanel = useFloatingPanelState('brand', user?.orgId, {
     x: 360,
     y: 16,
     height: 420,
     open: false,
   });
+  useEffect(() => {
+    setWorkspacePreferenceReady(false);
+    if (mobileLayout || isMobileDesignerViewport()) return;
+    const preference = readDesktopWorkspacePreference(localStorage, user?.orgId);
+    setWorkspaceTab(preference.activeTab);
+    setInspectorCollapsed(preference.collapsed);
+    setWorkspacePreferenceReady(true);
+  }, [mobileLayout, user?.orgId]);
+  useEffect(() => {
+    if (!workspacePreferenceReady || mobileLayout) return;
+    writeDesktopWorkspacePreference(localStorage, user?.orgId, {
+      activeTab: workspaceTab,
+      collapsed: inspectorCollapsed,
+    });
+  }, [inspectorCollapsed, mobileLayout, user?.orgId, workspacePreferenceReady, workspaceTab]);
   // History floats as well: it is a navigation surface you keep open while
   // experimenting, and it needs the room a rail cannot give it.
   const historyPanel = useFloatingPanelState('history', user?.orgId, {
@@ -308,6 +329,31 @@ const DesignerContent: FC<
     height: 320,
     open: false,
   });
+  const openWorkspaceTab = useCallback((tab: WorkspaceTab) => {
+    if (mobileLayout) {
+      if (tab === 'inspector') {
+        setMobileToolsOpen(false);
+        brandPanel.setOpen(false);
+        setInspectorCollapsed(false);
+      } else if (tab === 'layers') {
+        setMobileToolsOpen(false);
+        layersPanel.toggle();
+      } else if (tab === 'brand') {
+        setMobileToolsOpen(false);
+        setInspectorCollapsed(true);
+        brandPanel.setOpen(true);
+      } else {
+        modals.openModal({
+          title: translate('ai', 'AI'),
+          children: (close: () => void) => <AiPanel store={store as any} onClose={close} />,
+        });
+      }
+      return;
+    }
+    setWorkspaceTab(tab);
+    setInspectorCollapsed(false);
+    setMobileToolsOpen(false);
+  }, [mobileLayout, brandPanel, layersPanel, modals, store, translate]);
   const brandColors = useBrandColors();
   const brandFonts = useBrandFonts();
   const {
@@ -1311,13 +1357,11 @@ const DesignerContent: FC<
       onClose: closeModal,
       onCanvasProperties: () => {
         store.getState().setSelectedIds([]);
-        setInspectorCollapsed(false);
+        openWorkspaceTab('inspector');
       },
       onTogglePanel: (id) => {
-        // Persistent surfaces float; one-shot pickers are modals. Both are still
-        // reached through the same Window-menu / ⌘K action ids.
-        if (id === 'layers') {
-          layersPanel.toggle();
+        if (id === 'layers' || id === 'brand' || id === 'ai') {
+          openWorkspaceTab(id);
           return;
         }
         if (id === 'history') {
@@ -1332,10 +1376,6 @@ const DesignerContent: FC<
           templatePanel.toggle();
           return;
         }
-        if (id === 'brand') {
-          brandPanel.toggle();
-          return;
-        }
         if (id === 'icons') {
           modals.openModal({
             title: translate('panel_icons', 'Icons'),
@@ -1343,19 +1383,16 @@ const DesignerContent: FC<
               <IconsPanel store={store as any} onClose={close} />
             ),
           });
-          return;
-        }
-        if (id === 'ai') {
-          modals.openModal({
-            title: translate('ai', 'AI'),
-            children: (close: () => void) => (
-              <AiPanel store={store as any} onClose={close} />
-            ),
-          });
-          return;
         }
       },
-      onToggleInspector: () => setInspectorCollapsed((c) => !c),
+      onToggleInspector: () => {
+        if (mobileLayout || workspaceTab !== 'inspector') {
+          if (mobileLayout) setInspectorCollapsed((collapsed) => !collapsed);
+          else openWorkspaceTab('inspector');
+          return;
+        }
+        setInspectorCollapsed((collapsed) => !collapsed);
+      },
       onToggleSafeZones: () => setShowSafeZones((v) => !v),
       onToggleRulers: () => setShowRulers((v) => !v),
       onTogglePagesBar,
@@ -1399,13 +1436,7 @@ const DesignerContent: FC<
       lastFilterLabel: pixelOps.lastFilterLabel,
       onFlattenFilters: pixelOps.onFlattenFilters,
       hasSmartFilters: pixelOps.hasSmartFilters,
-      onAiGenerate: () =>
-        modals.openModal({
-          title: translate('ai', 'AI'),
-          children: (close: () => void) => (
-            <AiPanel store={store as any} onClose={close} />
-          ),
-        }),
+      onAiGenerate: () => openWorkspaceTab('ai'),
       onAiRemoveBg: () =>
         runAi(async (id) => {
           const candidate = await aiRemoveBackground({ fetch, store, elementId: id });
@@ -1434,7 +1465,7 @@ const DesignerContent: FC<
       onAiInpaint: () => {
         const id = selectedImageId();
         if (!id) return;
-        setInspectorCollapsed(false);
+        openWorkspaceTab('inspector');
         toaster.show(translate('draw_mask_ai_tools_inpaint', 'Draw a mask in the inspector’s AI Tools, then Inpaint'), 'success');
       },
       onAiOutpaint: () => {
@@ -1515,6 +1546,9 @@ const DesignerContent: FC<
       selectedImageId,
       runAi,
       translate,
+      openWorkspaceTab,
+      mobileLayout,
+      workspaceTab,
     ]
   );
 
@@ -1619,6 +1653,25 @@ const DesignerContent: FC<
           >
             ↪
           </button>
+          <button
+            onClick={historyPanel.toggle}
+            aria-pressed={historyPanel.state.open}
+            className="w-8 h-8 flex items-center justify-center rounded-sm text-textColor hover:bg-studioBorder/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+            title={translate('designer_history', 'History')}
+            aria-label={translate('designer_history', 'History')}
+          >
+            <HistoryIcon size={17} />
+          </button>
+          <button
+            onClick={versionsPanel.toggle}
+            disabled={!currentDesignId}
+            aria-pressed={versionsPanel.state.open}
+            className="w-8 h-8 flex items-center justify-center rounded-sm text-textColor hover:bg-studioBorder/30 disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+            title={translate('designer_versions', 'Versions')}
+            aria-label={translate('designer_versions', 'Versions')}
+          >
+            <VersionsIcon size={17} />
+          </button>
           {currentDesignId && (
             <button
               className={`px-2.5 py-1 text-xs rounded border transition-colors ${
@@ -1633,6 +1686,12 @@ const DesignerContent: FC<
             </button>
           )}
           <div className="w-px h-6 bg-studioBorder mx-1" />
+          <button
+            onClick={ctx.onBrowseTemplates}
+            className="px-3 py-1.5 rounded-md text-[12px] border border-studioBorder text-textColor hover:bg-boxHover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+          >
+            {translate('browse_templates', 'Templates')}
+          </button>
           <button
             onClick={handleSave}
             disabled={isSaving}
@@ -1711,22 +1770,9 @@ const DesignerContent: FC<
             lastToolPerGroup={lastToolPerGroup}
             onSelect={setActiveTool}
             aiAvailable={aiActive}
-            onOpenBrand={brandPanel.toggle}
-            brandOpen={brandPanel.state.open}
+            onOpenBrand={() => openWorkspaceTab('brand')}
+            brandOpen={!inspectorCollapsed && workspaceTab === 'brand'}
           />
-        </div>
-        <div className="contents mobile:hidden">
-          {!mobileLayout && brandPanel.state.open && (
-            <FloatingPanel
-              title={translate('brand_label', 'Brand')}
-              onClose={() => brandPanel.setOpen(false)}
-              position={brandPanel.state}
-              onPositionChange={brandPanel.setPosition}
-              width={300}
-            >
-              <BrandPanel store={store as any} />
-            </FloatingPanel>
-          )}
         </div>
 
         {templatePanel.state.open && (
@@ -1765,7 +1811,7 @@ const DesignerContent: FC<
           </FloatingPanel>
         )}
 
-        {layersPanel.state.open && (
+        {mobileLayout && layersPanel.state.open && (
           <FloatingPanel
             title={translate('panel_layers', 'Layers')}
             onClose={() => layersPanel.setOpen(false)}
@@ -1809,11 +1855,24 @@ const DesignerContent: FC<
 
             {/* Desktop docks over the canvas edge; mobile is an inline sheet so
                 its height participates in layout and leaves the canvas visible. */}
-            {!inspectorCollapsed && (
+            {!mobileLayout && (
+              <DesktopWorkspacePanel
+                store={store}
+                activeTab={workspaceTab}
+                onTabChange={setWorkspaceTab}
+                onClose={() => setInspectorCollapsed(true)}
+                hasInspectorTarget={hasInspectorTarget}
+                currentOutput={currentOutput}
+                currentOutputSizeKey={currentOutputSizeKey}
+                collapsed={inspectorCollapsed}
+              />
+            )}
+
+            {!inspectorCollapsed && mobileLayout && (
               <div
                 role="region"
                 aria-label={hasInspectorTarget ? translate('inspector_panel_label', 'Inspector') : translate('canvas_panel_label', 'Canvas')}
-                className={`absolute right-0 top-0 bottom-0 w-[280px] z-20 flex flex-col border-l border-studioBorder bg-newBgColorInner shadow-xl mobile:relative mobile:inset-auto mobile:z-auto mobile:w-full mobile:shrink-0 mobile:rounded-t-xl mobile:border-l-0 mobile:border-t mobile:shadow-none ${inspectorSnap === 'half' ? 'mobile:h-[32dvh]' : 'mobile:h-[65dvh]'}`}
+                className={`relative flex w-full shrink-0 flex-col rounded-t-xl border-t border-studioBorder bg-newBgColorInner ${inspectorSnap === 'half' ? 'h-[32dvh]' : 'h-[65dvh]'}`}
               >
                 <MobileSheetHeader
                   title={hasInspectorTarget ? translate('inspector_panel_label', 'Inspector') : translate('canvas_panel_label', 'Canvas')}
@@ -1838,12 +1897,12 @@ const DesignerContent: FC<
 
             {inspectorCollapsed && (
               <button
-                onClick={() => setInspectorCollapsed(false)}
-                className="absolute right-0 top-2 z-20 px-1.5 py-3 rounded-l-md border border-r-0 border-studioBorder bg-newBgColorInner text-textColor/60 hover:text-textColor shadow-xl text-[14px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset mobile:hidden"
+                onClick={() => openWorkspaceTab(workspaceTab)}
+                className="absolute end-0 top-2 z-20 px-1.5 py-3 rounded-s-md border border-e-0 border-studioBorder bg-newBgColorInner text-textColor/60 hover:text-textColor shadow-xl text-[14px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset mobile:hidden"
                 title={translate('show_properties', 'Show properties')}
                 aria-label={translate('expand_properties_panel', 'Expand properties panel')}
               >
-                ‹
+                <span className="inline-block rtl:rotate-180">‹</span>
               </button>
             )}
           </div>

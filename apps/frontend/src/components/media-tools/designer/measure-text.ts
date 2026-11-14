@@ -1,5 +1,8 @@
 import {
+  applyTextTransform,
   fitTextToBox,
+  measureLineWidth,
+  wrapTextLines,
   type FittedText,
   type MeasureText,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
@@ -87,6 +90,95 @@ export const measureForElement = (el: DesignerElement): MeasureText | undefined 
     return ctx.measureText(line).width;
   };
 };
+
+/**
+ * Grow a flat text box enough for its authored size. Width changes only when
+ * one unwrapped word cannot fit; ordinary wrapping affects height alone.
+ */
+const boxPatchFor = (
+  element: DesignerElement | null,
+  fontSize: number,
+  measure?: MeasureText | null,
+  bounds?: { width: number; height: number },
+  shrinkHeight = false
+): Partial<DesignerElement> => {
+  if (!element || element.type !== 'text') return {};
+  if (element.richText?.length || element.textPath || (element.curve || 0) !== 0) {
+    return {};
+  }
+  const m = measure === undefined ? measureForElement(element) : measure;
+  if (!m) return {};
+
+  const text = applyTextTransform(element.text ?? '', element.textTransform);
+  const indent = element.firstLineIndent || 0;
+  const letterSpacing = element.letterSpacing || 0;
+  const scaleX = element.textScaleX || 1;
+  const lines = wrapTextLines(
+    text,
+    Math.max(1, element.width - indent),
+    fontSize,
+    letterSpacing,
+    m,
+    scaleX
+  );
+  const paragraphs = text.split('\n').length;
+  const needed =
+    Math.ceil(Math.max(1, lines.length) * (element.lineHeight || 1.2) * fontSize) +
+    Math.max(0, paragraphs - 1) * (element.paragraphSpacing || 0);
+
+  const patch: Partial<DesignerElement> = {};
+  if (needed > element.height) {
+    const nextHeight = bounds
+      ? Math.min(needed, Math.max(element.height, bounds.height))
+      : needed;
+    if (nextHeight > element.height) {
+      patch.height = nextHeight;
+      const delta = nextHeight - element.height;
+      if (element.verticalAlign === 'middle' || element.verticalAlign === 'bottom') {
+        const desiredY = element.y - delta / (element.verticalAlign === 'middle' ? 2 : 1);
+        patch.y = bounds
+          ? Math.max(0, Math.min(Math.max(0, bounds.height - nextHeight), desiredY))
+          : desiredY;
+      }
+    }
+  } else if (shrinkHeight && needed < element.height) {
+    patch.height = needed;
+  }
+  if (lines.length === 1 && paragraphs === 1) {
+    const lineWidth =
+      measureLineWidth(lines[0], fontSize, letterSpacing, m, scaleX) + indent;
+    if (lineWidth > element.width) {
+      const nextWidth = bounds
+        ? Math.min(Math.ceil(lineWidth), Math.max(element.width, bounds.width))
+        : Math.ceil(lineWidth);
+      if (nextWidth > element.width) {
+        patch.width = nextWidth;
+        const delta = nextWidth - element.width;
+        if (element.align === 'center' || element.align === 'right') {
+          const desiredX = element.x - delta / (element.align === 'center' ? 2 : 1);
+          patch.x = bounds
+            ? Math.max(0, Math.min(Math.max(0, bounds.width - nextWidth), desiredX))
+            : desiredX;
+        }
+      }
+    }
+  }
+  return patch;
+};
+
+export const growBoxFor = (
+  element: DesignerElement | null,
+  fontSize: number,
+  measure?: MeasureText | null,
+  bounds?: { width: number; height: number }
+): Partial<DesignerElement> => boxPatchFor(element, fontSize, measure, bounds);
+
+export const fitStyleBoxFor = (
+  element: DesignerElement | null,
+  fontSize: number,
+  measure?: MeasureText | null,
+  shrinkHeight = false
+): Partial<DesignerElement> => boxPatchFor(element, fontSize, measure, undefined, shrinkHeight);
 
 /**
  * The size flat text should actually be painted at — the fitted size when it

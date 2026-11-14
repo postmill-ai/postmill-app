@@ -14,11 +14,13 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { resolveTextEditTarget } from './symbol-edit';
 import { fittedFontSize } from './measure-text';
+import { boundedFontSize, fontSizeShortcutDelta } from './text-shortcuts';
 
 interface TextEditingProps {
   element: DesignerElement;
   stageRect: { x: number; y: number; scale: number };
   onUpdate: (id: string, updates: Partial<DesignerElement>) => void;
+  onAdjustFontSize?: (delta: number) => void;
   onComplete: () => void;
 }
 
@@ -257,7 +259,7 @@ const mergeRuns = (runs: TextRun[], el: DesignerElement): TextRun[] => {
 
 export const buildTextEditCommit = (
   runs: TextRun[],
-  element: DesignerElement
+  _element: DesignerElement
 ): Partial<DesignerElement> => {
   const flat = runs.map((r) => r.text).join('');
   const hasStyle = runs.some(
@@ -325,6 +327,7 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
   element,
   stageRect,
   onUpdate,
+  onAdjustFontSize,
   onComplete,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -333,6 +336,8 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
   // passive unmount cleanup runs, but the DOM object outlives removal, so the
   // unmount commit can still read the final innerHTML from this one.
   const editorNodeRef = useRef<HTMLDivElement | null>(null);
+  const initialElementRef = useRef(element);
+  const fontSizeDeltaRef = useRef(0);
   const [html] = useState(() => {
     if (element.richText?.length) {
       return runsToHtml(element.richText, element);
@@ -368,8 +373,18 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
     settledRef.current = true;
     const currentHtml =
       editorRef.current?.innerHTML ?? editorNodeRef.current?.innerHTML ?? '';
-    const serializedRuns = serializeHtml(currentHtml, element);
-    const { runs, truncated, coalesced } = capTextRuns(serializedRuns);
+    const initial = initialElementRef.current;
+    const serializedRuns = serializeHtml(currentHtml, initial);
+    const adjustedRuns = initial.richText?.length && fontSizeDeltaRef.current
+      ? serializedRuns.map((run) => ({
+          ...run,
+          fontSize: boundedFontSize(
+            run.fontSize ?? initial.fontSize ?? 16,
+            fontSizeDeltaRef.current
+          ),
+        }))
+      : serializedRuns;
+    const { runs, truncated, coalesced } = capTextRuns(adjustedRuns);
     if (truncated) {
       toaster.show(
         t('designer_text_paste_limit', 'Pasted text was shortened to the 20,000-character limit.'),
@@ -445,6 +460,14 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
       // overlay that stayed mounted would keep the Konva text hidden.
       settledRef.current = true;
       onComplete();
+      return;
+    }
+    const fontSizeDelta = fontSizeShortcutDelta(e);
+    if (fontSizeDelta) {
+      e.preventDefault();
+      e.stopPropagation();
+      fontSizeDeltaRef.current += fontSizeDelta;
+      onAdjustFontSize?.(fontSizeDelta);
       return;
     }
     // Inline style toggles, straight on the contentEditable DOM: the blur

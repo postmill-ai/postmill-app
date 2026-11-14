@@ -479,7 +479,7 @@ export const useDesignerActions = (
       { id: 'view-grid', label: 'Grid', menu: 'view', group: 'overlay', keywords: ['grid'], checked: () => store.getState().showGrid, run: () => { const st = store.getState(); st.setShowGrid(!st.showGrid); } },
       { id: 'view-snap-grid', label: 'Snap to Grid', menu: 'view', group: 'overlay', keywords: ['snap', 'grid'], checked: () => store.getState().snapToGrid, run: () => { const st = store.getState(); st.setSnapToGrid(!st.snapToGrid); } },
       { id: 'view-clear-guides', label: 'Clear Guides', menu: 'view', group: 'overlay', keywords: ['guides', 'clear'], run: () => store.getState().clearGuides() },
-      { id: 'command-palette', label: 'Command Palette', menu: 'view', group: 'cmd', shortcut: '⌘K', keywords: ['command', 'palette'], run: () => { if (typeof window !== 'undefined') window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true })); } },
+      { id: 'command-palette', label: 'Command Palette', menu: 'help', group: 'commands', shortcut: '⌘K', keywords: ['command', 'palette'], run: () => { if (typeof window !== 'undefined') window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true })); } },
 
       // ---------------- Insert ----------------
       { id: 'insert-text', label: 'Text', menu: 'insert', keywords: ['text'], run: addText },
@@ -555,17 +555,16 @@ export const useDesignerActions = (
       { id: 'ai-detect-subject', label: 'Auto-detect Subject', menu: 'tools', group: 'ai2', keywords: ['ai', 'subject', 'focal'], enabled: () => ctx.aiActive && live().singleImageSelected, run: ctx.onAiDetectSubject },
       { id: 'replace-image', label: 'Replace Image…', menu: 'tools', group: 'ai2', keywords: ['replace', 'image'], enabled: () => live().singleImageSelected, run: ctx.onOpenMedia },
 
-      // ---------------- Window ----------------
-      { id: 'win-templates', label: 'Templates', menu: 'view', group: 'win-panels', keywords: ['templates'], run: ctx.onBrowseTemplates },
-      { id: 'win-layers', label: 'Layers', menu: 'view', group: 'win-panels', keywords: ['layers'], run: () => ctx.onTogglePanel('layers') },
-      { id: 'win-history', label: 'History', menu: 'view', group: 'win-panels', keywords: ['history', 'undo', 'states'], run: () => ctx.onTogglePanel('history') },
-      { id: 'win-versions', label: 'Versions', menu: 'view', group: 'win-panels', keywords: ['versions', 'history', 'restore', 'snapshot'], enabled: () => !!store.getState().designId, run: () => ctx.onTogglePanel('versions') },
-      { id: 'win-template', label: 'Template Fields', menu: 'view', group: 'win-panels', keywords: ['template', 'slots', 'fields'], run: () => ctx.onTogglePanel('template') },
-      { id: 'win-brand', label: 'Brand', menu: 'view', group: 'win-panels', keywords: ['brand'], run: () => ctx.onTogglePanel('brand') },
-      { id: 'win-inspector', label: 'Properties / Inspector', menu: 'view', group: 'win-panels', keywords: ['inspector', 'properties'], run: ctx.onToggleInspector },
-      { id: 'win-icons', label: 'Icons', menu: 'view', group: 'win-panels2', keywords: ['icons'], run: () => ctx.onTogglePanel('icons') },
-      ...(ctx.aiActive ? [{ id: 'win-ai', label: 'AI', menu: 'view' as const, group: 'win-panels2', keywords: ['ai'], run: () => ctx.onTogglePanel('ai') }] : []),
-      ...(ctx.canShare ? [{ id: 'win-share', label: () => (ctx.collabEnabled ? 'Stop Sharing' : 'Share / Collaborate'), menu: 'view' as const, group: 'win-share', keywords: ['share', 'collaborate'], checked: () => ctx.collabEnabled, run: ctx.onToggleShare }] : []),
+      // ---------------- Workspace ----------------
+      { id: 'win-layers', label: 'Layers', menu: 'tools', submenu: 'Workspace', group: 'workspace', keywords: ['layers', 'panel'], run: () => ctx.onTogglePanel('layers') },
+      { id: 'win-history', label: 'History', menu: 'tools', submenu: 'Workspace', group: 'workspace', keywords: ['history', 'undo', 'states'], run: () => ctx.onTogglePanel('history') },
+      { id: 'win-versions', label: 'Versions', menu: 'tools', submenu: 'Workspace', group: 'workspace', keywords: ['versions', 'history', 'restore', 'snapshot'], enabled: () => !!store.getState().designId, run: () => ctx.onTogglePanel('versions') },
+      { id: 'win-template', label: 'Template Fields', menu: 'tools', submenu: 'Workspace', group: 'workspace', keywords: ['template', 'slots', 'fields'], run: () => ctx.onTogglePanel('template') },
+      { id: 'win-brand', label: 'Brand', menu: 'tools', submenu: 'Workspace', group: 'workspace', keywords: ['brand', 'panel'], run: () => ctx.onTogglePanel('brand') },
+      { id: 'win-inspector', label: 'Properties / Inspector', menu: 'tools', submenu: 'Workspace', group: 'workspace', keywords: ['inspector', 'properties'], run: ctx.onToggleInspector },
+      ...(ctx.aiActive ? [{ id: 'win-ai', label: 'AI', menu: 'tools' as const, submenu: 'Workspace', group: 'workspace', keywords: ['ai', 'panel'], run: () => ctx.onTogglePanel('ai') }] : []),
+      { id: 'win-icons', label: 'Icons', menu: 'tools', submenu: 'Workspace', group: 'workspace2', keywords: ['icons'], run: () => ctx.onTogglePanel('icons') },
+      ...(ctx.canShare ? [{ id: 'win-share', label: () => (ctx.collabEnabled ? 'Stop Sharing' : 'Share / Collaborate'), menu: 'tools' as const, submenu: 'Workspace', group: 'workspace2', keywords: ['share', 'collaborate'], checked: () => ctx.collabEnabled, run: ctx.onToggleShare }] : []),
 
       // ---------------- Help ----------------
       { id: 'help-shortcuts', label: 'Keyboard Shortcuts', menu: 'help', shortcut: '?', keywords: ['shortcuts', 'keys', 'help'], run: ctx.onShortcuts },

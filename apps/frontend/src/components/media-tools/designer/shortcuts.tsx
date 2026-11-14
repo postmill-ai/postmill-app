@@ -18,6 +18,8 @@ const SHORTCUTS: { keys: string; label: string; labelKey: string }[] = [
   { keys: 'Arrows', label: 'Nudge 1px', labelKey: 'designer_nudge_1px' },
   { keys: 'Shift + Arrows', label: 'Nudge 10px', labelKey: 'designer_nudge_10px' },
   { keys: 'Enter', label: 'Edit text', labelKey: 'designer_edit_text' },
+  { keys: '⌘/Ctrl + Shift + >', label: 'Increase font size', labelKey: 'designer_increase_font_size' },
+  { keys: '⌘/Ctrl + Shift + <', label: 'Decrease font size', labelKey: 'designer_decrease_font_size' },
   { keys: 'Esc', label: 'Deselect', labelKey: 'designer_action_deselect_deselect' },
   { keys: 'Space + drag', label: 'Pan canvas', labelKey: 'designer_pan_canvas' },
   { keys: 'Scroll', label: 'Zoom', labelKey: 'designer_zoom' },

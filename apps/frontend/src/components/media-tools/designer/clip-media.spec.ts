@@ -26,6 +26,8 @@ const setup = () => {
     smartFilters: [{ id: 'blur', params: { radius: 4 }, enabled: true }],
     filters: ['sepia:0.2'],
     crop: { x: 1, y: 2, width: 20, height: 20 },
+    fitMode: 'cover',
+    focalPoint: { x: 0.25, y: 0.75 },
     x: 11,
     y: 12,
     width: 200,
@@ -43,7 +45,7 @@ const clip = (store: ReturnType<typeof createDesignerStore>, trackId: string) =>
   (store.getState().doc.outputs[0] as VideoOutput).tracks.find((track) => track.id === trackId)!.clips[0];
 
 describe('imageReplacementPatch', () => {
-  it('changes only media state and clears stale crop/original/smart-filter state', () => {
+  it('changes media identity and clears original/smart-filter state', () => {
     expect(imageReplacementPatch({
       url: '/new.png', fileId: 'new-file', width: 1600, height: 900,
     })).toEqual({
@@ -53,6 +55,7 @@ describe('imageReplacementPatch', () => {
       naturalWidth: 1600,
       naturalHeight: 900,
       crop: undefined,
+      fitMode: undefined,
       focalPoint: undefined,
       originalSrc: undefined,
       originalFileId: undefined,
@@ -61,6 +64,21 @@ describe('imageReplacementPatch', () => {
       maskFileId: undefined,
       maskEnabled: undefined,
     });
+  });
+
+  it('clears a cross-aspect crop when clip frame dimensions are unavailable', () => {
+    const patch = imageReplacementPatch(
+      { url: '/new.png', fileId: 'new-file', width: 2000, height: 1000 },
+      {
+        naturalWidth: 1000,
+        naturalHeight: 1000,
+        crop: { x: 0, y: 0, width: 1000, height: 500 },
+        fitMode: 'cover',
+      }
+    );
+
+    expect(patch.crop).toBeUndefined();
+    expect(patch.fitMode).toBe('cover');
   });
 });
 
@@ -91,8 +109,9 @@ describe('replaceClipImage', () => {
       naturalWidth: 1600,
       naturalHeight: 900,
     });
-    expect(clip(store, trackId).crop).toBeUndefined();
-    expect(clip(store, trackId).focalPoint).toBeUndefined();
+    expect(clip(store, trackId).crop).toEqual({ x: 0, y: 100, width: 1600, height: 800 });
+    expect(clip(store, trackId).fitMode).toBe('cover');
+    expect(clip(store, trackId).focalPoint).toEqual({ x: 0.25, y: 0.75 });
   });
 
   it('rejects a pending result after another media edit is undone', async () => {
@@ -170,7 +189,7 @@ describe('removeClipImageBackground', () => {
       naturalWidth: 40,
       naturalHeight: 20,
     });
-    expect(after.fitMode).toBeUndefined();
+    expect(after.fitMode).toBe(before.fitMode);
     expect(after.crop).toEqual(before.crop);
     expect(after.smartFilters).toBeUndefined();
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ imageUrl: '/old.png' });

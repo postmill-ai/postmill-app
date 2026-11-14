@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildTextElementPatch, growBoxFor } from './text-format-panel';
+import { buildFontSizeUpdate, buildTextElementPatch } from './text-format-panel';
+import { growBoxFor } from '../measure-text';
 import type { DesignerElement, TextRun } from '../designer.store';
 import type { MeasureText } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 
@@ -8,12 +9,9 @@ vi.mock('../fonts', () => ({
   ensureFontLoaded: () => Promise.resolve(),
 }));
 
-// The no-measure branch only exists where no canvas backend does, and this
-// jsdom build HAS one — so the module's own measure has to be mocked away to
-// see it.
-vi.mock('../measure-text', () => ({
+vi.mock('../measure-text', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../measure-text')>()),
   fittedFontSize: (el: { fontSize?: number }) => el.fontSize ?? 16,
-  measureForElement: () => undefined,
 }));
 
 /** Fixed-width glyphs (0.5em), so every measurement below is exact. */
@@ -74,6 +72,31 @@ describe('growBoxFor', () => {
     expect(patch.height).toBe(Math.ceil(2 * 1.2 * 20) + 10);
   });
 
+  it('clamps explicit growth to the output and preserves alignment anchors', () => {
+    const patch = growBoxFor(
+      baseText({
+        x: 50, y: 50, align: 'center', verticalAlign: 'middle',
+        text: 'supercalifragilistic',
+      }),
+      40,
+      measure,
+      { width: 300, height: 100 }
+    );
+    expect(patch).toEqual({ width: 300, height: 48, x: 0, y: 38 });
+  });
+
+  it('does not move an oversized manual box when bounds prevent further growth', () => {
+    expect(growBoxFor(
+      baseText({
+        x: 50, y: 50, width: 400, height: 200,
+        align: 'center', verticalAlign: 'middle', text: 'supercalifragilistic',
+      }),
+      80,
+      measure,
+      { width: 300, height: 100 }
+    )).toEqual({});
+  });
+
   it('leaves rich, curved and on-path text alone — they render the authored size', () => {
     expect(
       growBoxFor(
@@ -95,7 +118,27 @@ describe('growBoxFor', () => {
     ).toEqual({});
     // jsdom has no canvas backend, so the panel's own measure is unavailable —
     // the box is left exactly as authored rather than grown on a guess.
-    expect(growBoxFor(baseText(), 40)).toEqual({});
+    expect(growBoxFor(baseText(), 40, null)).toEqual({});
+  });
+});
+
+describe('buildFontSizeUpdate', () => {
+  it('computes growth and position independently for each selected element', () => {
+    const first = buildFontSizeUpdate(
+      baseText({ x: 100, align: 'center', text: 'supercalifragilistic' }),
+      40,
+      { width: 1000, height: 400 },
+      measure
+    );
+    const second = buildFontSizeUpdate(
+      baseText({ x: 600, align: 'center', text: 'supercalifragilistic' }),
+      40,
+      { width: 1000, height: 400 },
+      measure
+    );
+
+    expect(first).toMatchObject({ fontSize: 40, width: 400, x: 0 });
+    expect(second).toMatchObject({ fontSize: 40, width: 400, x: 450 });
   });
 });
 

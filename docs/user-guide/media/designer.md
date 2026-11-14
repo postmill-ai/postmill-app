@@ -60,6 +60,17 @@ saved.
   for the document's fonts before laying out text. Preview thumbnails are generated for image and
   video designs, including designs that use remote stock videos.
 
+## Workspace panels
+
+On desktop, the right panel has **Inspector**, **Layers**, **Brand**, and **AI** tabs. Your explicit tab
+choice stays active during selection, multi-select, and rename. AI and Brand mount when first opened,
+then stay mounted while hidden so generated results and in-flight work survive tab changes and collapse.
+Your active tab and collapsed state are remembered per organization, and Expand restores that tab. On
+phones and tablets, Inspector starts closed so the canvas stays visible. The tool rail's Brand button
+and **Tools ▸ Workspace** open the same surfaces. **History** and **Versions** are beside Undo/Redo,
+**Templates** is beside Save, and View is reserved for zoom and display settings. History, Versions,
+and Template Fields retain their movable floating panels.
+
 ## Video timeline
 
 The timeline supports eight track types: **video, image, text, shape, paint, caption, audio, and
@@ -145,7 +156,7 @@ available directly below its tracks as well as in the Inspector.
 Tools, Brand, and the Inspector open as inline bottom sheets rather than covering the canvas. Use
 **Half** or **Expand**, drag the sheet handle, or collapse the sheet to restore the full canvas. The
 design name remains editable beside the logo. On desktop, **Brand** is available directly from the
-tool rail as well as the Window menu.
+tool rail, the right-panel tabs, and **Tools ▸ Workspace**.
 
 The Brand panel works on video designs too: palette colors apply to the selected text, caption, or
 shape clip, brand fonts apply to the selected text or caption clip, and a logo is added to the
@@ -166,7 +177,22 @@ Manage kits in **Brand Studio** (`/brands`).
 The mouse wheel zooms by default. Laptop users can enable **View → Touchpad mode** to pan with a
 two-finger swipe and zoom with a pinch (or **Ctrl/Cmd+scroll**). The preference is remembered per
 organization. While editing text, the color control above the text box colors only the selected
-characters, so one text box can contain multiple colors.
+characters, so one text box can contain multiple colors. Ordinary text edits retain the box's existing
+shrink-to-fit behavior. The Inspector's **Size** control can grow the box for wrapping or one long word,
+within the output bounds and without shrinking a manually resized box. With text selected,
+**Ctrl/Cmd+>** and **Ctrl/Cmd+<** (with or without Shift, including ISO keyboard layouts) increase or
+decrease font size across the selection as one undoable edit, starting from the size painted on canvas.
+An already shrunk box keeps its geometry; an unshrunk box grows within the output as needed so each
+increase remains visible. Mixed rich-text sizes adjust independently, and the shortcuts also work in
+the inline editor without running in ordinary fields.
+
+A normal image-file drop always inserts a new image, and an SVG drop imports editable paths. Hold
+**Alt/Option** while dropping onto an unlocked static image or still-image clip to show the distinct
+**Replace image** indicator and replace that target. The frame, fit mode, and focal point are retained;
+a cross-aspect source gets a cover crop centered on the old crop's relative center, so the frame never
+gains empty bands. The new file's intrinsic dimensions are adopted and linked formats update in one
+Undo step. Locked targets, video clips, and audio clips are not replacement targets, and files that the
+browser cannot decode are rejected.
 
 With a text element selected, the Inspector's **Text Effects** presets apply **Arc text**, **Wave
 text**, **Circle text**, **Gradient text**, **Text outline**, **Text shadow**, or **3D Extrusion** in

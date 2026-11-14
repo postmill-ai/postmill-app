@@ -28,6 +28,7 @@ import { trySetPointerCapture } from '../pointer-capture';
 import { applyStaticMagicGrab, prepareStaticMagicGrab } from '../magic-grab';
 import { openMagicGrabReview } from '../magic-grab-modal';
 import { usePresetPreview } from '../use-preset-preview';
+import { replaceStaticImage } from '../image-replacement';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -62,17 +63,12 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     title: t('replace_image', 'Replace image'),
     kinds: ['image'],
     onSelect: (item) => {
-      updateElement(element.id, {
-        src: item.url,
-        fileId: item.fileId,
-        qr: undefined,
-        naturalWidth: item.width || undefined,
-        naturalHeight: item.height || undefined,
-        crop: undefined,
-        mask: undefined,
-        maskSrc: undefined,
-        maskFileId: undefined,
-        maskEnabled: undefined,
+      void replaceStaticImage({ store, elementId: element.id, item }).then((replaced) => {
+        if (!replaced) {
+          toaster.show(t('designer_image_replace_failed', 'That image replacement could not be applied'), 'warning');
+        }
+      }).catch(() => {
+        toaster.show(t('designer_image_replace_failed', 'That image replacement could not be applied'), 'warning');
       });
     },
   });

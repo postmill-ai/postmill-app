@@ -154,33 +154,34 @@ export async function openMenuAction(page: Page, menu: string, action: string | 
   await page.getByRole('menuitem', { name: action, exact: typeof action === 'string' }).click();
 }
 
-export async function selectImageLayer(page: Page, elementId: string): Promise<void> {
-  let panel = page.getByRole('dialog', { name: 'Layers', exact: true });
+async function openDesktopLayers(page: Page) {
+  const panel = page.getByRole('region', { name: 'Layers', exact: true });
   if (!await panel.isVisible()) {
-    await openMenuAction(page, 'View', 'Layers');
+    await page.getByRole('menuitem', { name: 'Tools', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Workspace', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Layers', exact: true }).click();
   }
-  panel = page.getByRole('dialog', { name: 'Layers', exact: true });
   await expect(panel).toBeVisible();
+  return panel;
+}
+
+export async function selectImageLayer(page: Page, elementId: string): Promise<void> {
+  const panel = await openDesktopLayers(page);
   const row = panel.locator(`[data-element-id=${JSON.stringify(elementId)}]`);
   await expect(row).toBeVisible();
   await row.click();
   await expect(row).toHaveAttribute('aria-selected', 'true');
-  await panel.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(panel).toBeHidden();
+  await page.getByRole('tab', { name: 'Inspector', exact: true }).first().click();
+  await expect(page.getByRole('region', { name: 'Inspector', exact: true })).toBeVisible();
 }
 
 export async function expectSelectedLayer(page: Page, elementId: string): Promise<void> {
-  let panel = page.getByRole('dialog', { name: 'Layers', exact: true });
-  if (!await panel.isVisible()) {
-    await openMenuAction(page, 'View', 'Layers');
-  }
-  panel = page.getByRole('dialog', { name: 'Layers', exact: true });
-  await expect(panel).toBeVisible();
+  const panel = await openDesktopLayers(page);
   const row = panel.locator(`[data-element-id=${JSON.stringify(elementId)}]`);
   await expect(row).toBeVisible();
   await expect(row).toHaveAttribute('aria-selected', 'true');
-  await panel.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(panel).toBeHidden();
+  await page.getByRole('tab', { name: 'Inspector', exact: true }).first().click();
+  await expect(page.getByRole('region', { name: 'Inspector', exact: true })).toBeVisible();
 }
 
 export function watchDesignSave(page: Page, designId: string) {

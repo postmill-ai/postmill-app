@@ -1,14 +1,15 @@
+import { renderHook } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { MENU_ORDER, DESIGNER_DOCS_URL, type DesignerMenu } from './actions';
+import {
+  MENU_ORDER,
+  DESIGNER_DOCS_URL,
+  useDesignerActions,
+  type DesignerActionCtx,
+  type DesignerMenu,
+} from './actions';
 import { createDesignerStore } from './designer.store';
 
-/**
- * The menu bar's shape, and the two store requests the menus depend on.
- *
- * `useDesignerActions` is a hook needing a large context, so rather than
- * rendering it these assert the parts that can drift silently: the surviving
- * top-level menus, and the store behaviour the actions call into.
- */
+/** The menu bar's shape, and the store requests the menus depend on. */
 
 describe('the menu bar', () => {
   it('is the nine menus, in order', () => {
@@ -26,7 +27,7 @@ describe('the menu bar', () => {
   });
 
   it('no longer has Format, Options or Window as top-level menus', () => {
-    // They became File ▸ Format, File ▸ Options and a group inside View.
+    // They became File ▸ Format, File ▸ Options and Tools ▸ Workspace.
     for (const gone of ['format', 'options', 'window']) {
       expect(MENU_ORDER).not.toContain(gone as DesignerMenu);
     }
@@ -34,6 +35,54 @@ describe('the menu bar', () => {
 
   it('leaves room on mobile — MenuBar shows 4 and overflows the rest', () => {
     expect(MENU_ORDER.length - 4).toBe(5);
+  });
+
+  it('keeps View display-only and restores Icons and Share under Tools ▸ Workspace', () => {
+    const store = createDesignerStore();
+    const onTogglePanel = vi.fn();
+    const onToggleShare = vi.fn();
+    const ctx = {
+      showSafeZones: false,
+      showRulers: false,
+      showPagesBar: false,
+      touchpadMode: false,
+      aiActive: false,
+      canShare: true,
+      collabEnabled: false,
+      inModal: false,
+      canEditPixels: () => false,
+      hasLastFilter: () => false,
+      lastFilterLabel: () => '',
+      hasSmartFilters: () => false,
+      onTogglePanel,
+      onToggleShare,
+    } as unknown as DesignerActionCtx;
+    const { result } = renderHook(() => useDesignerActions(store, ctx));
+
+    expect(result.current.filter((action) => action.menu === 'view').map((action) => action.id)).toEqual([
+      'zoom-in',
+      'zoom-out',
+      'fit-screen',
+      'actual-size',
+      'view-touchpad-mode',
+      'view-safe-zones',
+      'view-rulers',
+      'view-pages',
+      'view-grid',
+      'view-snap-grid',
+      'view-clear-guides',
+    ]);
+
+    const icons = result.current.find((action) => action.id === 'win-icons')!;
+    const share = result.current.find((action) => action.id === 'win-share')!;
+    expect(icons).toMatchObject({ menu: 'tools', submenu: 'Workspace' });
+    expect(share).toMatchObject({ menu: 'tools', submenu: 'Workspace' });
+    expect(share.checked?.()).toBe(false);
+
+    icons.run();
+    share.run();
+    expect(onTogglePanel).toHaveBeenCalledWith('icons');
+    expect(onToggleShare).toHaveBeenCalledOnce();
   });
 });
 
