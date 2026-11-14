@@ -301,7 +301,7 @@ describe('collaboration Yjs contract', () => {
     remote.outputs[0].name = 'Remote replacement';
     (remote.outputs[0] as VideoOutput).frozen = true;
 
-    applyRemoteDesignerDoc(store, remote);
+    applyRemoteDoc(store, remote);
 
     expect(store.getState().doc.outputs[0].name).toBe('Remote replacement');
     expect(store.getState().doc.outputs[0].frozen).toBe(true);
