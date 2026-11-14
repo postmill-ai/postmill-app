@@ -189,6 +189,7 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
           const current = pageChildren(output, state.currentPage).filter(
             (element: DesignerElement) => selected.has(element.id) && element.type === 'text'
           );
+          if (!current.length) return;
           for (const element of current) {
             const patch = stylePatchFor(preset, element, output);
             state.updateElement(element.id, patch);

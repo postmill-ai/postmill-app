@@ -272,6 +272,28 @@ describe('TextInspector paged text', () => {
     expect(store.getState().history).toHaveLength(depth + 1);
   });
 
+  it('does not push history when the text is removed before its font resolves', async () => {
+    let resolveFont = () => {};
+    vi.mocked(ensureFontLoaded).mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveFont = resolve;
+    }));
+    const store = createDesignerStore();
+    store.getState().addElement(textElement('deferred-delete', 'A much longer heading'));
+    store.getState().setSelectedIds(['deferred-delete']);
+    await renderInspector(store);
+
+    fireEvent.click(screen.getByRole('button', { name: /Heading 1/ }));
+    act(() => { store.getState().removeElement('deferred-delete'); });
+    const depth = store.getState().history.length;
+
+    await act(async () => {
+      resolveFont();
+      await Promise.resolve();
+    });
+    expect(output(store, 0).children).toHaveLength(0);
+    expect(store.getState().history).toHaveLength(depth);
+  });
+
   it('shrinks feature-grown boxes only back to their remembered authored height', async () => {
     const store = createDesignerStore();
     store.getState().addElement(textElement('grown', 'A much longer heading'));
