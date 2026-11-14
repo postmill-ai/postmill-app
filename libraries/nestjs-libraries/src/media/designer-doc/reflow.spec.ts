@@ -1326,7 +1326,7 @@ describe('smartReflow full-canvas contain media', () => {
   it.each([
     {
       name: 'horizontal',
-      element: image({ x: 236, width: 608, height: 1080, naturalWidth: 1001, naturalHeight: 1920 }),
+      element: image({ x: 236, width: 608, height: 1080, naturalWidth: 1005, naturalHeight: 1920 }),
       axis: 'x' as const,
       targetSize: target.width,
     },
