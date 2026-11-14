@@ -280,11 +280,13 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   expect(JSON.stringify(state.saveDocs.at(-1))).not.toContain('"fontSize":24');
   await designName.fill('Editing UX');
   await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save to Files' }).click();
+  await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
+  await page.getByRole('button', { name: 'Next: Export 1 file' }).click();
   await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
-  await expect.poll(() => state.renderDocs.length).toBe(1);
-  expect(JSON.stringify(state.renderDocs[0])).toContain('"fontSize":32');
-  expect(JSON.stringify(state.renderDocs[0])).not.toContain('"fontSize":24');
   await expect(page.getByRole('link', { name: /\.png$/ })).toBeVisible();
+  expect(JSON.stringify(state.renderDocs.at(-1))).toContain('"fontSize":32');
+  expect(JSON.stringify(state.renderDocs.at(-1))).not.toContain('"fontSize":24');
   await page.getByText('Close', { exact: true }).click();
   await page.getByRole('textbox', { name: 'Design name' }).hover();
   await expect(page.getByRole('spinbutton', { name: 'Size', exact: true })).toHaveValue('32');
@@ -304,10 +306,13 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   await page.getByRole('textbox', { name: 'Design name' }).click();
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save to Files' }).click();
+  await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
+  await page.getByRole('button', { name: 'Next: Export 1 file' }).click();
   await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
-  await expect.poll(() => state.renderDocs.length).toBe(2);
-  expect(JSON.stringify(state.renderDocs[1])).toContain('textShadow');
-  expect(JSON.stringify(state.renderDocs[1])).toContain('textPath');
+  await expect(page.getByRole('link', { name: /\.png$/ })).toBeVisible();
+  expect(JSON.stringify(state.renderDocs.at(-1))).toContain('textShadow');
+  expect(JSON.stringify(state.renderDocs.at(-1))).toContain('textPath');
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('link', { name: /\.png$/ }).click();
   const download = await downloadEvent;
