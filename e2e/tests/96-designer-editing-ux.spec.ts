@@ -150,6 +150,9 @@ async function installMocks(page: Page, doc: any = initialDoc) {
       });
     }
     if (method === 'POST' && pathname === '/files/upload-simple') {
+      if (request.postDataBuffer()?.includes(Buffer.from('design-preview'))) {
+        return json(route, { id: 'design-preview-file', path: PNG_DATA_URL }, 201);
+      }
       state.uploads++;
       return json(route, { id: `dropped-file-${state.uploads}`, path: state.uploadPath });
     }
@@ -226,7 +229,7 @@ async function editText(page: Page) {
   const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
   const outputX = (box.width - 400 * scale) / 2;
   const outputY = (box.height - 400 * scale) / 2;
-  await stage.dblclick({ position: { x: outputX + 100 * scale, y: outputY + 100 * scale } });
+  await stage.dblclick({ position: { x: outputX + 100 * scale, y: outputY + 60 * scale } });
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
 }
 
@@ -469,7 +472,7 @@ test('desktop workspace tabs switch the visible panel and keep View display-only
   await expect(page.locator('[data-workspace-panel="inspector"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'History', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Versions', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Templates', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Browse templates', exact: true })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Layers', exact: true }).click();
   await expect(page.locator('[data-workspace-panel="layers"]')).toBeVisible();
@@ -528,7 +531,7 @@ test('Layers selection stays sticky and desktop workspace preferences survive re
   await rename.press('Enter');
   await expect(rename).toHaveCount(0);
   await expect(page.locator('[data-workspace-panel="layers"]')).toBeVisible();
-  expect(state.doc.outputs[0].children[0].name).toBe('Renamed body copy');
+  await expect.poll(() => state.doc.outputs[0].children[0].name).toBe('Renamed body copy');
 
   await page.getByRole('tab', { name: 'AI', exact: true }).click();
   await expect.poll(() => page.evaluate(() =>
