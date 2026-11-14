@@ -1381,13 +1381,18 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     }
   }, [selectedOutputs, doc, fetch, toaster, t]);
 
+  const generatePreviewsRef = useRef(generatePreviews);
+  useEffect(() => {
+    generatePreviewsRef.current = generatePreviews;
+  }, [generatePreviews]);
+
   useEffect(() => {
     if (step === 'export') {
       previewDoneRef.current = false;
       setPreviews([]);
-      generatePreviews();
+      generatePreviewsRef.current();
     }
-  }, [step, generatePreviews]);
+  }, [step, doc, selectedOutputs]);
 
   // --- Server-side PDF render ---
 
