@@ -1,3 +1,7 @@
+import { typeBasisPx } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
+import type { DesignerElement } from './designer.store';
+import { fitStyleBoxFor } from './panels/text-format-panel';
+
 export interface TextStylePreset {
   name: string;
   category: 'heading' | 'subheading' | 'body' | 'caption';
@@ -7,6 +11,7 @@ export interface TextStylePreset {
   lineHeight: number;
   letterSpacing: number;
   fill?: string;
+  fontStyle?: 'normal' | 'italic';
 }
 
 export const TEXT_STYLE_PRESETS: TextStylePreset[] = [
@@ -109,3 +114,51 @@ export const FONT_PAIRINGS: FontPairing[] = [
     body: { name: 'Elegant Body', category: 'body', fontFamily: 'Source Sans 3', fontSize: 16, fontWeight: 400, lineHeight: 1.55, letterSpacing: 0 },
   },
 ];
+
+export const RESET_TEXT_STYLE: TextStylePreset = {
+  name: 'Reset text style',
+  category: 'body',
+  fontFamily: 'Arial',
+  fontSize: 16,
+  fontWeight: 400,
+  fontStyle: 'normal',
+  lineHeight: 1.2,
+  letterSpacing: 0,
+};
+
+export const textStyleScale = (canvas: { width: number; height: number }): number =>
+  Math.max(0.5, Math.min(4, typeBasisPx(canvas.width, canvas.height) / 1080));
+
+export const textStyleFontSize = (
+  preset: TextStylePreset,
+  canvas: { width: number; height: number }
+): number => Math.max(1, Math.min(999, Math.round(preset.fontSize * textStyleScale(canvas))));
+
+export const textStylePatch = (
+  preset: TextStylePreset,
+  element: DesignerElement,
+  canvas: { width: number; height: number },
+  options: { shrinkGrownHeight?: boolean } = {}
+): Partial<DesignerElement> => {
+  const scale = textStyleScale(canvas);
+  const patch: Partial<DesignerElement> = {
+    fontFamily: preset.fontFamily,
+    fontSize: textStyleFontSize(preset, canvas),
+    fontWeight: preset.fontWeight,
+    lineHeight: preset.lineHeight,
+    letterSpacing: Math.round(preset.letterSpacing * scale * 100) / 100,
+    ...(preset.fontStyle ? { fontStyle: preset.fontStyle } : {}),
+    ...(preset.fill !== undefined
+      ? { fill: preset.fill, fillGradient: undefined }
+      : {}),
+  };
+  return {
+    ...patch,
+    ...fitStyleBoxFor(
+      { ...element, ...patch },
+      patch.fontSize as number,
+      undefined,
+      options.shrinkGrownHeight === true
+    ),
+  };
+};

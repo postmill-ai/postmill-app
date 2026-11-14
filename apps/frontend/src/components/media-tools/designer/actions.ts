@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import type { DesignerOutput, DesignerElement } from './designer.store';
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { addText as addTextTo } from './add-text';
@@ -571,6 +572,15 @@ export const useDesignerActions = (
       { id: 'help-docs', label: 'Designer Documentation', menu: 'help', group: 'docs', keywords: ['docs', 'documentation', 'guide', 'manual', 'help'], run: () => { window.open(DESIGNER_DOCS_URL, '_blank', 'noopener,noreferrer'); } },
     ];
 
-    return a;
+    return a.map((action) => ({
+      ...action,
+      run: () => {
+        const state = store.getState();
+        if (state.isPreviewing || state.previewPatches) {
+          flushSync(() => state.clearElementPreview());
+        }
+        action.run();
+      },
+    }));
   }, [store, ctx]);
 };

@@ -78,16 +78,25 @@ export const createAutosaveSubscription = (
 ): (() => void) => {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let prev = store.getState();
+  const schedule = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      const s = store.getState();
+      if (s.isDirty) designAutosave.save(s.doc);
+    }, debounceMs);
+  };
   const unsubscribe = store.subscribe((state) => {
     const prevState = prev;
     prev = state;
     if (state.doc !== prevState.doc || state.designName !== prevState.designName) {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        const s = store.getState();
-        if (s.isDirty) designAutosave.save(s.doc);
-      }, debounceMs);
+      schedule();
+    } else if (
+      state.previewRevision !== prevState.previewRevision &&
+      !state.isPreviewing &&
+      state.isDirty
+    ) {
+      schedule();
     } else if (state.designId !== prevState.designId && state.designId) {
       designAutosave.save(state.doc);
     }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveSelectableId,
   resolveTextEditTarget,
+  doubleClickTextEditId,
   symbolTextCommit,
   symbolFillCommit,
   refitSymbolToText,
@@ -125,6 +126,14 @@ describe('resolveTextEditTarget', () => {
     expect(
       resolveTextEditTarget(output, [definition], 'cta-1::plate')
     ).toBeNull();
+  });
+});
+
+describe('doubleClickTextEditId', () => {
+  it('opens only the text node hit by the pointer', () => {
+    expect(doubleClickTextEditId(output, [definition], 'headline')).toBe('headline');
+    expect(doubleClickTextEditId(output, [definition], undefined)).toBeNull();
+    expect(doubleClickTextEditId(output, [definition], 'cta-1')).toBeNull();
   });
 });
 

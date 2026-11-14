@@ -30,6 +30,7 @@ import {
   strokeEndpoints,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/stroke-style';
 import { getBuffer } from './raster-layers';
+import { applyElementPatch } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
 import { buildLayerTree, type LayerNode } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
 import {
   expandSymbols,
@@ -55,17 +56,33 @@ import { wrapIconSvgDataUrl } from '@postmill-ai/nestjs-libraries/media/designer
 
 type SelectHandler = (id: string, evt?: Konva.KonvaEventObject<any>) => void;
 
+export const layerListensForHits = (element: DesignerElement): boolean =>
+  element.type !== 'raster' || !!element.src || !!getBuffer(element.id);
+
 export const fullBoxHitProps = (width: number, height: number) => ({
   hitFunc: (context: Konva.Context, shape: Konva.Shape) => {
     context.beginPath();
     context.rect(0, 0, width, height);
     context.closePath();
-    context.fillStrokeShape(shape);
+    context.setAttr('fillStyle', shape.colorKey);
+    context.fill();
   },
 });
 
+export const projectElementPreview = (
+  elements: DesignerElement[],
+  patches?: Record<string, Partial<DesignerElement>> | null
+): DesignerElement[] =>
+  patches
+    ? elements.map((element) =>
+        patches[element.id] ? applyElementPatch(element, patches[element.id]) : element
+      )
+    : elements;
+
 interface ElementsProps {
   elements: DesignerElement[];
+  /** Editor-only patches, merged here and never passed by export/thumbnail callers. */
+  previewPatches?: Record<string, Partial<DesignerElement>> | null;
   /** Symbol definitions from the document, for expanding instances. */
   symbols?: SymbolDefinition[];
   onSelect: SelectHandler;
@@ -698,7 +715,8 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, inter
       height={element.height}
       rotation={element.rotation}
       opacity={element.opacity}
-      draggable={!element.locked && interactive}
+      draggable={!element.locked && interactive && layerListensForHits(element)}
+      listening={layerListensForHits(element)}
       clipFunc={clipFunc}
       onClick={(e) => onSelect(element.id, e)}
       onTap={(e) => onSelect(element.id, e)}
@@ -1074,6 +1092,7 @@ const collectVisibleLeaves = (nodes: LayerNode[]): DesignerElement[] =>
 
 export const CanvasElements: FC<ElementsProps> = ({
   elements,
+  previewPatches,
   symbols,
   onSelect,
   onContextMenu,
@@ -1083,10 +1102,14 @@ export const CanvasElements: FC<ElementsProps> = ({
   editingTextId,
   geometryNonce,
 }) => {
+  const projected = useMemo(
+    () => projectElementPreview(elements, previewPatches),
+    [elements, previewPatches]
+  );
   // Symbol instances expand to ordinary elements before the tree is built, so
   // nothing below here needs to know symbols exist — the same contract the
   // server renderer follows.
-  const expanded = useMemo(() => expandSymbols(elements, symbols), [elements, symbols]);
+  const expanded = useMemo(() => expandSymbols(projected, symbols), [projected, symbols]);
   const tree = useMemo(() => buildLayerTree(expanded), [expanded]);
 
   // Re-render when ANY bitmap in the tree finishes loading (or fails). Each

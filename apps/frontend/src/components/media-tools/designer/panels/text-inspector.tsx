@@ -1,8 +1,16 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TextFormatPanel } from './text-format-panel';
-import { TEXT_STYLE_PRESETS, TextStylePreset, FONT_PAIRINGS } from '../text-styles';
+import {
+  FONT_PAIRINGS,
+  RESET_TEXT_STYLE,
+  TEXT_STYLE_PRESETS,
+  TextStylePreset,
+  textStyleFontSize,
+  textStylePatch,
+} from '../text-styles';
+import { usePresetPreview } from '../use-preset-preview';
 import { ensureFontLoaded } from '../fonts';
 import { sharedStageRef } from '../stage-ref';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -95,41 +103,103 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
     );
   }, [selectedIds, out, currentPage]);
 
+  const { previewAsync, applyAsync, cancel } = usePresetPreview(store);
+  const grownHeights = useRef(
+    new Map<string, { grownHeight: number; authoredHeight: number }>()
+  );
+  const stylePatchFor = useCallback(
+    (
+      preset: TextStylePreset,
+      element: DesignerElement,
+      canvas: { width: number; height: number }
+    ) => {
+      const remembered = grownHeights.current.get(element.id);
+      if (remembered && remembered.grownHeight !== element.height) {
+        grownHeights.current.delete(element.id);
+      }
+      const canShrink = remembered?.grownHeight === element.height;
+      const patch = textStylePatch(preset, element, canvas, {
+        shrinkGrownHeight: canShrink,
+      });
+      if (remembered?.grownHeight === element.height && patch.height !== undefined) {
+        patch.height = Math.max(remembered.authoredHeight, patch.height);
+      }
+      return patch;
+    },
+    []
+  );
+  const noteAppliedPatch = useCallback(
+    (element: DesignerElement, patch: Partial<DesignerElement>) => {
+      if (patch.height === undefined) return;
+      const remembered = grownHeights.current.get(element.id);
+      const continuing = remembered?.grownHeight === element.height;
+      if (patch.height > element.height) {
+        grownHeights.current.set(element.id, {
+          grownHeight: patch.height,
+          authoredHeight: continuing ? remembered.authoredHeight : element.height,
+        });
+      } else if (continuing && patch.height < element.height) {
+        grownHeights.current.set(element.id, {
+          ...remembered,
+          grownHeight: patch.height,
+        });
+      } else if (patch.height < element.height) {
+        grownHeights.current.delete(element.id);
+      }
+    },
+    []
+  );
+
+  const previewPreset = useCallback(
+    (preset: TextStylePreset) => {
+      if (!textElements.length || !out) return;
+      const startingDoc = store.getState().doc;
+      void previewAsync(async () => {
+        await ensureFontLoaded(
+          preset.fontFamily,
+          [preset.fontWeight],
+          preset.fontStyle === 'italic'
+        );
+        if (store.getState().doc !== startingDoc) return {};
+        return Object.fromEntries(
+          textElements.map((element) => [
+            element.id,
+            stylePatchFor(preset, element, out),
+          ])
+        );
+      });
+    },
+    [previewAsync, textElements, out, store, stylePatchFor]
+  );
+
   const applyPreset = useCallback(
     (preset: TextStylePreset) => {
       if (!textElements.length) return;
-      void ensureFontLoaded(preset.fontFamily);
-      store.getState().updateElements(
-        textElements.map((el: any) => el.id),
-        {
-          fontFamily: preset.fontFamily,
-          fontSize: preset.fontSize,
-          fontWeight: preset.fontWeight,
-          lineHeight: preset.lineHeight,
-          letterSpacing: preset.letterSpacing,
-          fill: preset.fill,
-        }
-      );
+      cancel();
+      void applyAsync(async () => {
+        await ensureFontLoaded(
+          preset.fontFamily,
+          [preset.fontWeight],
+          preset.fontStyle === 'italic'
+        );
+        return () => {
+          const state = store.getState();
+          const output = state.doc.outputs[state.currentOutput];
+          const selected = new Set(textElements.map((element) => element.id));
+          const current = pageChildren(output, state.currentPage).filter(
+            (element: DesignerElement) => selected.has(element.id) && element.type === 'text'
+          );
+          if (!current.length) return;
+          for (const element of current) {
+            const patch = stylePatchFor(preset, element, output);
+            state.updateElement(element.id, patch);
+            noteAppliedPatch(element, patch);
+          }
+          state.pushHistory();
+        };
+      });
     },
-    [store, textElements]
-  );
-
-  const applyPairingPreset = useCallback(
-    (preset: TextStylePreset) => {
-      if (!textElements.length) return;
-      void ensureFontLoaded(preset.fontFamily);
-      store.getState().updateElements(
-        textElements.map((el: any) => el.id),
-        {
-          fontFamily: preset.fontFamily,
-          fontSize: preset.fontSize,
-          fontWeight: preset.fontWeight,
-          lineHeight: preset.lineHeight,
-          letterSpacing: preset.letterSpacing,
-        }
-      );
-    },
-    [store, textElements]
+    [store, textElements, cancel, applyAsync, stylePatchFor, noteAppliedPatch]
   );
 
   const handleAddBackdrop = useCallback(() => {
@@ -202,8 +272,19 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
     <div className="flex flex-col gap-5">
       {textElements.length > 0 && (
         <div className="flex flex-col gap-3">
-          <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
-            {t('designer_text_styles', 'Text Styles')}
+          <div className="flex items-center justify-between">
+            <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
+              {t('designer_text_styles', 'Text Styles')}
+            </div>
+            <button
+              type="button"
+              onMouseEnter={() => previewPreset(RESET_TEXT_STYLE)}
+              onMouseLeave={cancel}
+              onClick={() => applyPreset(RESET_TEXT_STYLE)}
+              className="text-[10px] px-2 py-1 rounded-sm border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-designerAccent/10"
+            >
+              {t('designer_reset_text_style', 'Reset style')}
+            </button>
           </div>
           <div className="flex flex-col gap-2">
             {categories.map((cat) => {
@@ -219,9 +300,11 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
                       <button
                         key={preset.name}
                         type="button"
+                        onMouseEnter={() => previewPreset(preset)}
+                        onMouseLeave={cancel}
                         onClick={() => applyPreset(preset)}
                         className="px-[10px] py-[6px] rounded-[6px] border border-studioBorder bg-newBgColorInner text-left hover:border-designerAccent hover:bg-studioBorder/10 transition-all"
-                        title={`${preset.name}: ${preset.fontSize}px / ${preset.fontWeight} / ${preset.lineHeight}`}
+                        title={`${preset.name}: ${textStyleFontSize(preset, out)}px / ${preset.fontWeight} / ${preset.lineHeight}`}
                       >
                         <div className="flex items-center gap-[6px]">
                           <span className="text-[10px] text-textColor/40 font-medium uppercase tracking-wider w-[20px]">
@@ -260,7 +343,9 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
                   <div className="flex-1" />
                   <button
                     type="button"
-                    onClick={() => applyPairingPreset(pairing.heading)}
+                    onMouseEnter={() => previewPreset(pairing.heading)}
+                    onMouseLeave={cancel}
+                    onClick={() => applyPreset(pairing.heading)}
                     className="text-[10px] px-2 py-1 rounded-sm bg-designerAccent/10 hover:bg-designerAccent/20 text-textColor"
                     title={t('designer_pairing_heading_title', '{{font}} heading', { font: pairing.heading.fontFamily })}
                   >
@@ -268,7 +353,9 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => applyPairingPreset(pairing.body)}
+                    onMouseEnter={() => previewPreset(pairing.body)}
+                    onMouseLeave={cancel}
+                    onClick={() => applyPreset(pairing.body)}
                     className="text-[10px] px-2 py-1 rounded-sm bg-designerAccent/10 hover:bg-designerAccent/20 text-textColor"
                     title={t('designer_pairing_body_title', '{{font}} body', { font: pairing.body.fontFamily })}
                   >

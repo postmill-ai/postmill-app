@@ -229,6 +229,71 @@ describe('smartReflow cover images', () => {
   });
 });
 
+describe('smartReflow contain media', () => {
+  it('keeps a cloned logo in its uniformly scaled frame without rewriting crop or focal choices', () => {
+    const logo: DesignerElement = {
+      id: 'logo',
+      type: 'image',
+      src: 'https://example.com/logo.png',
+      x: 100,
+      y: 100,
+      width: 240,
+      height: 120,
+      naturalWidth: 1600,
+      naturalHeight: 900,
+      fitMode: 'contain',
+      crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+      focalPoint: { x: 0.2, y: 0.7 },
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+    };
+    const before = JSON.parse(JSON.stringify(logo));
+
+    const result = smartReflow(
+      logo,
+      { width: 1080, height: 1080 },
+      { width: 1200, height: 675, formatId: 'x-post' }
+    );
+
+    expect(result.width).toBe(150);
+    expect(result.height).toBe(75);
+    expect(result.width! / result.height!).toBe(logo.width / logo.height);
+    expect(result.crop).toBeUndefined();
+    expect(result.focalPoint).toBeUndefined();
+    expect(logo).toEqual(before);
+  });
+
+  it('keeps a same-column text stack non-overlapping across an aspect change', () => {
+    const base: DesignerElement = {
+      id: 'headline',
+      type: 'text',
+      text: 'Headline',
+      x: 100,
+      y: 100,
+      width: 400,
+      height: 80,
+      fontSize: 48,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+    };
+    const subhead = { ...base, id: 'subhead', y: 200, fontSize: 24 };
+    const source = { width: 1080, height: 1080 };
+    const target = { width: 1200, height: 675, formatId: 'x-post' };
+    const before = JSON.stringify([base, subhead]);
+    const stacks = computeTextStackBoxes([base, subhead], source);
+    const headlineOut = smartReflow(base, source, target, stacks.get(base));
+    const subheadOut = smartReflow(subhead, source, target, stacks.get(subhead));
+
+    expect(subheadOut.y!).toBeGreaterThanOrEqual(headlineOut.y! + headlineOut.height!);
+    expect(subheadOut.y! - (headlineOut.y! + headlineOut.height!)).toBeGreaterThan(0);
+    expect(JSON.stringify([base, subhead])).toBe(before);
+  });
+});
+
 describe('smartReflow grouped pairs', () => {
   const squareSource = { width: 1080, height: 1080 };
   const storyTarget = { width: 1080, height: 1920, formatId: 'ig-story' };
@@ -1231,5 +1296,212 @@ describe('smartReflow text width clamp', () => {
     expect((result.x as number) + (result.width as number)).toBeLessThanOrEqual(
       950
     );
+  });
+});
+
+describe('smartReflow full-canvas contain media', () => {
+  const source = { width: 1080, height: 1080 };
+  const target = { width: 1200, height: 675, formatId: 'x-post' };
+  const image = (over: Partial<DesignerElement>): DesignerElement => ({
+    id: 'contain', type: 'image', fitMode: 'contain', x: 0, y: 0,
+    width: 1080, height: 608, naturalWidth: 1920, naturalHeight: 1080,
+    rotation: 0, opacity: 1, locked: false, hidden: false, ...over,
+  });
+
+  it('preserves the established landscape fit and centers the frame', () => {
+    expect(smartReflow(image({}), source, target)).toMatchObject({
+      x: 0, y: 0, width: 1200, height: 675,
+    });
+  });
+
+  it('fits and centers a full-height portrait frame instead of pinning it left', () => {
+    const result = smartReflow(
+      image({ x: 236, width: 608, height: 1080, naturalWidth: 1080, naturalHeight: 1920 }),
+      source,
+      target
+    );
+    expect(result).toMatchObject({ x: 410, y: 0, width: 380, height: 675 });
+  });
+
+  it.each([
+    {
+      name: 'horizontal',
+      element: image({ x: 236, width: 608, height: 1080, naturalWidth: 1005, naturalHeight: 1920 }),
+      axis: 'x' as const,
+      targetSize: target.width,
+    },
+    {
+      name: 'vertical',
+      element: image({ x: 0, y: 236, naturalWidth: 1920, naturalHeight: 1001 }),
+      axis: 'y' as const,
+      targetSize: target.height,
+    },
+  ])('rounds $name centering when the fitted contain frame is fractional', ({ element, axis, targetSize }) => {
+    const result = smartReflow(element, source, target);
+    const fittedSize = axis === 'x' ? result.width! : result.height!;
+    expect(result[axis]).toBe(Math.round((targetSize - fittedSize) / 2));
+    expect(Number.isInteger(result[axis])).toBe(true);
+  });
+
+  it.each([
+    { target: { width: 1080, height: 1920, formatId: 'ig-story' }, expectedY: 0 },
+    { target: { width: 1080, height: 1350, formatId: 'ig-portrait' }, expectedY: 0 },
+  ])('keeps a top banner at the top on $target.width×$target.height', ({ target: portrait, expectedY }) => {
+    const result = smartReflow(image({ x: 37 }), source, portrait);
+    expect(result).toMatchObject({ x: 0, y: expectedY, width: 1080, height: 608 });
+  });
+
+  it('keeps a footer strip at its scaled bottom origin rather than centering it vertically', () => {
+    const result = smartReflow(
+      image({ x: 37, y: 472 }),
+      source,
+      { width: 1080, height: 1920, formatId: 'ig-story' }
+    );
+    expect(result).toMatchObject({ x: 0, y: 839, width: 1080, height: 608 });
+  });
+
+  it.each([
+    { width: 1200, height: 675, formatId: 'x-post' },
+    { width: 1080, height: 1350, formatId: 'ig-portrait' },
+  ])('keeps a left column on the left on $width×$height', (landscape) => {
+    const result = smartReflow(
+      image({ x: 0, y: 37, width: 540, height: 1080, naturalWidth: 1080, naturalHeight: 1920 }),
+      source,
+      landscape
+    );
+    expect(result.x).toBe(0);
+  });
+});
+
+describe('smartReflow stack safe-zone shifts', () => {
+  const source = { width: 1080, height: 1080 };
+  const headline: DesignerElement = {
+    id: 'headline', type: 'text', text: 'Headline', x: 80, y: 80,
+    width: 600, height: 120, fontSize: 64, rotation: 0, opacity: 1,
+    locked: false, hidden: false, originId: 'headline',
+  };
+  const subhead: DesignerElement = {
+    ...headline, id: 'subhead', text: 'Subhead', y: 220, height: 50,
+    fontSize: 32, originId: 'subhead',
+  };
+  const pill: DesignerElement = {
+    id: 'pill', type: 'shape', shape: 'rect', x: 80, y: 280,
+    width: 240, height: 60, rotation: 0, opacity: 1, locked: false,
+    hidden: false, groupId: 'cta', originId: 'cta-bg',
+  };
+  const label: DesignerElement = {
+    ...headline, id: 'label', text: 'Shop', x: 110, y: 295,
+    width: 180, height: 30, fontSize: 24, groupId: 'cta', originId: 'cta',
+  };
+  const elements = [headline, subhead, pill, label];
+
+  it.each([
+    { width: 1200, height: 675, formatId: 'x-post' },
+    { width: 1080, height: 1350, formatId: 'ig-portrait' },
+    { width: 1080, height: 1920, formatId: 'ig-story' },
+  ])('moves a grouped CTA with the whole stack on $width×$height', (target) => {
+    const stacks = computeTextStackBoxes(elements, source);
+    const outputs = new Map(elements.map((element) => [
+      element.id,
+      smartReflow(element, source, target, stacks.get(element)),
+    ]));
+    const pillOut = outputs.get('pill')!;
+    const labelOut = outputs.get('label')!;
+
+    expect(stacks.get(label)).toBe(stacks.get(pill));
+    expect(labelOut.y!).toBeGreaterThanOrEqual(pillOut.y!);
+    expect(labelOut.y! + labelOut.height!).toBeLessThanOrEqual(
+      pillOut.y! + pillOut.height!
+    );
+    expect(labelOut.x!).toBeGreaterThanOrEqual(pillOut.x!);
+    expect(labelOut.x! + labelOut.width!).toBeLessThanOrEqual(
+      pillOut.x! + pillOut.width!
+    );
+  });
+
+  it.each([
+    { width: 1200, height: 675, formatId: 'x-post' },
+    { width: 1080, height: 1920, formatId: 'ig-story' },
+  ])('moves icons, underline paths and raster decorations with the stack on $width×$height', (target) => {
+    const underline: DesignerElement = {
+      id: 'underline', type: 'path', x: 110, y: 329, width: 180, height: 4,
+      nodes: [{ x: 0, y: 0 }, { x: 180, y: 0 }], stroke: '#111111', strokeWidth: 4,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+      groupId: 'cta', originId: 'cta-underline',
+    };
+    const icon = {
+      ...label, id: 'arrow', type: 'icon', icon: 'arrow-right', text: undefined,
+      x: 260, width: 30, originId: 'cta-icon',
+    } as DesignerElement;
+    const raster = {
+      ...label, id: 'raster-decoration', type: 'raster', src: '/decoration.png',
+      text: undefined, x: 110, originId: 'cta-raster',
+    } as DesignerElement;
+    const stackElements = [headline, subhead, label, underline, icon, raster];
+    const stacks = computeTextStackBoxes(stackElements, source);
+    const outputs = new Map(stackElements.map((element) => [
+      element.id,
+      smartReflow(element, source, target, stacks.get(element)),
+    ]));
+    const labelOut = outputs.get('label')!;
+    const iconOut = outputs.get('arrow')!;
+    const pathOut = outputs.get('underline')!;
+    const rasterOut = outputs.get('raster-decoration')!;
+
+    expect(stacks.get(icon)).toBe(stacks.get(label));
+    expect(stacks.get(underline)).toBe(stacks.get(label));
+    expect(stacks.get(raster)).toBe(stacks.get(label));
+    expect(iconOut.y).toBe(labelOut.y);
+    expect(rasterOut.y).toBe(labelOut.y);
+    for (const result of outputs.values()) {
+      expect(Number.isInteger(result.x)).toBe(true);
+      expect(Number.isInteger(result.y)).toBe(true);
+    }
+    const expectedGap = Math.max(1, Math.round(4 * typeScaleRatio(source, target)));
+    expect(Math.abs(pathOut.y! - (labelOut.y! + labelOut.height!) - expectedGap))
+      .toBeLessThanOrEqual(1);
+    expect(pathOut.nodes?.[0].x).toBe(0);
+    expect(pathOut.nodes?.[1].x).toBeCloseTo(180 * typeScaleRatio(source, target), 5);
+  });
+
+  it('falls back per element on an axis wider than the safe area', () => {
+    const wide = { width: 1000, height: 1500, formatId: 'unknown-format' };
+    const wideElements = elements.map((element, index) =>
+      index === 0
+        ? { ...element, x: 0, width: 1080 }
+        : index === 1
+          ? { ...element, x: 600, width: 480 }
+          : element
+    );
+    const stacks = computeTextStackBoxes(wideElements, source);
+    const safe = getSafeZoneInset(wide.formatId, wide.width, wide.height);
+    const frame = stacks.get(wideElements[0])!;
+    expect(frame.width * typeScaleRatio(source, wide)).toBeGreaterThan(safe.right - safe.left);
+    const outputs = wideElements.map((element) =>
+      smartReflow(element, source, wide, stacks.get(element))
+    );
+
+    for (const result of outputs) {
+      expect(result.x!).toBeGreaterThanOrEqual(safe.left);
+      expect(result.x! + result.width!).toBeLessThanOrEqual(safe.right);
+    }
+  });
+
+  it('falls back per element on an axis taller than the safe area', () => {
+    const banner = { width: 1584, height: 396, formatId: 'unknown-format' };
+    const tall = elements.map((element, index) => ({
+      ...element,
+      y: index * 220,
+      height: index < 2 ? 200 : element.height,
+    }));
+    const frame = { x: 80, y: 0, width: 600, height: 720 };
+    const safe = getSafeZoneInset(banner.formatId, banner.width, banner.height);
+    expect(frame.height * typeScaleRatio(source, banner)).toBeGreaterThan(safe.bottom - safe.top);
+    const outputs = tall.map((element) => smartReflow(element, source, banner, frame));
+
+    for (const result of outputs) {
+      expect(result.y!).toBeGreaterThanOrEqual(safe.top);
+      expect(result.y! + result.height!).toBeLessThanOrEqual(safe.bottom);
+    }
   });
 });

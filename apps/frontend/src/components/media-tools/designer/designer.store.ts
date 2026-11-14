@@ -24,7 +24,12 @@ import {
   genId,
   matchPreset,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
-import { smartReflow, computeGroupBoxes } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
+import {
+  smartReflow,
+  computeContainerBoxes,
+  computeGroupBoxes,
+  computeTextStackBoxes,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
 import { canSplitClipAt } from './timeline-split';
 import { TEXT_ANIMATION_PRESETS, buildTextAnimationUpdate, matchTextAnimationPreset } from './text-animation-presets';
@@ -133,6 +138,12 @@ export interface DesignerState {
   templateId: string | null;
   designName: string;
   isDirty: boolean; isSaving: boolean; lastSaved: Date | null;
+  /** Editor-only projection state; preview patches never enter `doc` or history. */
+  previewRevision: number;
+  isPreviewing: boolean;
+  previewPatches: Record<string, Partial<DesignerElement>> | null;
+  previewOutput: number | null;
+  previewPage: number | null;
   /** An autosave write failed and a backoff retry is pending — drives the header pill. */
   saveFailed: boolean;
   /** Retries gave up after repeated failures; the next real edit re-arms them. */
@@ -233,6 +244,8 @@ export interface DesignerActions {
   // Same as updateElements but does NOT commit history — for continuous controls
   // (slider/drag), which push a single history entry on release instead.
   updateElementsSilent: (ids: string[], updates: Partial<DesignerElement>) => void;
+  previewElements: (patches: Record<string, Partial<DesignerElement>>) => void;
+  clearElementPreview: () => void;
   /**
    * Gesture-scoped write: patches the element on the CURRENT output only, with
    * no cross-output applyLinked and no linkedUpdateFlash churn. Drag/transform
@@ -559,6 +572,11 @@ export const createDesignerStore = (
       designId: null, designTemplateId: null, templateId: null,
       designName: 'Untitled Design',
       isDirty: false, isSaving: false, lastSaved: null,
+      previewRevision: 0,
+      isPreviewing: false,
+      previewPatches: null,
+      previewOutput: null,
+      previewPage: null,
       saveFailed: false, saveRetryPaused: false,
       editFormatOnly: false,
       brandEnforcement: false,
@@ -586,7 +604,10 @@ export const createDesignerStore = (
       maskTargetId: null,
       clipboard: [],
       assistantSuggestions: {},
-      setDoc: (doc) => set({ doc: migrateDoc(doc), isDirty: true }),
+      setDoc: (doc) => {
+        get().clearElementPreview();
+        set({ doc: migrateDoc(doc), isDirty: true });
+      },
       adoptPersistedDoc: (sentDoc, persistedDoc) => {
         if (get().doc !== sentDoc || !persistedDoc || typeof persistedDoc !== 'object') return false;
         const nextDoc = migrateDoc(persistedDoc);
@@ -617,6 +638,7 @@ export const createDesignerStore = (
 
       addElement: (element, beforeId) => {
         if (isVideoMode()) return;
+        get().clearElementPreview();
         const { doc, currentOutput, currentPage } = get();
         const originId = element.originId || genId();
         const baseEl = { ...element, id: element.id || genId(), originId };
@@ -672,6 +694,7 @@ export const createDesignerStore = (
 
       updateElement: (id, updates) => {
         if (isVideoMode()) return;
+        get().clearElementPreview();
         const { doc, currentOutput, currentPage, editFormatOnly, linkedUpdateFlash } = get();
         if (currentPage > 0) {
           // Per-page edits stay local — linked propagation is page-1-only.
@@ -695,6 +718,7 @@ export const createDesignerStore = (
 
       updateElements: (ids, updates) => {
         if (isVideoMode()) return;
+        get().clearElementPreview();
         const { doc, currentOutput, currentPage, editFormatOnly, linkedUpdateFlash } = get();
         if (currentPage > 0) {
           const idSet = new Set(ids);
@@ -720,6 +744,7 @@ export const createDesignerStore = (
 
       updateElementsSilent: (ids, updates) => {
         if (isVideoMode()) return;
+        get().clearElementPreview();
         const { doc, currentOutput, currentPage, editFormatOnly, linkedUpdateFlash } = get();
         const mediaUpdates = updates.src !== undefined && updates.qr === undefined
           ? { ...updates, qr: undefined }
@@ -744,8 +769,43 @@ export const createDesignerStore = (
         set({ doc: { ...doc, outputs }, isDirty: true, linkedUpdateFlash: nextFlash });
       },
 
+      previewElements: (patches) => {
+        if (isVideoMode()) return;
+        const state = get();
+        const out = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
+        if (!out || !('children' in out)) return;
+        const ids = new Set(pageChildren(out, state.currentPage).map((element) => element.id));
+        const scoped = Object.fromEntries(
+          Object.entries(patches).filter(([id]) => ids.has(id))
+        );
+        if (!Object.keys(scoped).length) {
+          get().clearElementPreview();
+          return;
+        }
+        set({
+          previewPatches: scoped,
+          previewOutput: state.currentOutput,
+          previewPage: state.currentPage,
+          isPreviewing: true,
+          previewRevision: state.previewRevision + 1,
+        });
+      },
+
+      clearElementPreview: () => {
+        const state = get();
+        if (!state.isPreviewing && !state.previewPatches) return;
+        set({
+          previewPatches: null,
+          previewOutput: null,
+          previewPage: null,
+          isPreviewing: false,
+          previewRevision: state.previewRevision + 1,
+        });
+      },
+
       updateElementEphemeral: (id, updates) => {
         if (isVideoMode()) return;
+        get().clearElementPreview();
         const { doc, currentOutput, currentPage } = get();
         const out = doc.outputs[currentOutput] as DesignerOutput | undefined;
         if (!out || !('children' in out)) return;
@@ -1365,16 +1425,34 @@ export const createDesignerStore = (
         );
         const targetBasis = { ...namedPreset, id: '', background: '#fff', children: [] } as DesignerOutput;
         const groupBoxes = computeGroupBoxes(sourceChildren, source);
+        const stackBoxes = computeTextStackBoxes(sourceChildren, source);
+        const containerBoxes = computeContainerBoxes(sourceChildren);
         const children = sourceChildren.map((el) =>
-          seedCopy(el, source, targetBasis, linkContent ? el.originId : undefined, el.groupId ? groupBoxes.get(el.groupId) : undefined),
+          seedCopy(
+            el,
+            source,
+            targetBasis,
+            linkContent ? el.originId : undefined,
+            stackBoxes.get(el) ?? (el.groupId ? groupBoxes.get(el.groupId) : undefined),
+            containerBoxes.get(el)
+          )
         );
         const pages = source.pages?.map((page) => {
           const pageBoxes = computeGroupBoxes(page.children, source);
+          const pageStacks = computeTextStackBoxes(page.children, source);
+          const pageContainers = computeContainerBoxes(page.children);
           return {
             ...page,
             id: genId(),
             children: page.children.map((el) =>
-              seedCopy(el, source, targetBasis, linkContent ? genId() : undefined, el.groupId ? pageBoxes.get(el.groupId) : undefined)),
+              seedCopy(
+                el,
+                source,
+                targetBasis,
+                linkContent ? genId() : undefined,
+                pageStacks.get(el) ?? (el.groupId ? pageBoxes.get(el.groupId) : undefined),
+                pageContainers.get(el)
+              )),
           };
         });
         const newOutput: DesignerOutput = {
@@ -1421,15 +1499,35 @@ export const createDesignerStore = (
         const imgOut = out as DesignerOutput;
         const resized: DesignerOutput = { ...imgOut, width, height, formatId: formatId ?? imgOut.formatId, name: name ?? imgOut.name };
         const groupBoxes = computeGroupBoxes(imgOut.children, imgOut);
-        resized.children = imgOut.children.map((el) => seedCopy(el, imgOut, resized, el.originId || el.id, el.groupId ? groupBoxes.get(el.groupId) : undefined));
+        const stackBoxes = computeTextStackBoxes(imgOut.children, imgOut);
+        const containerBoxes = computeContainerBoxes(imgOut.children);
+        resized.children = imgOut.children.map((el) =>
+          seedCopy(
+            el,
+            imgOut,
+            resized,
+            el.originId || el.id,
+            stackBoxes.get(el) ?? (el.groupId ? groupBoxes.get(el.groupId) : undefined),
+            containerBoxes.get(el)
+          )
+        );
         // Pages 2+ carry elements in the OLD canvas coordinates — reflow them
         // too, or a resize leaves every extra page laid out for the old size.
         resized.pages = imgOut.pages?.map((page) => {
           const pageBoxes = computeGroupBoxes(page.children, imgOut);
+          const pageStacks = computeTextStackBoxes(page.children, imgOut);
+          const pageContainers = computeContainerBoxes(page.children);
           return {
             ...page,
             children: page.children.map((el) =>
-              seedCopy(el, imgOut, resized, el.originId || el.id, el.groupId ? pageBoxes.get(el.groupId) : undefined)),
+              seedCopy(
+                el,
+                imgOut,
+                resized,
+                el.originId || el.id,
+                pageStacks.get(el) ?? (el.groupId ? pageBoxes.get(el.groupId) : undefined),
+                pageContainers.get(el)
+              )),
           };
         });
         const outs = [...doc.outputs]; outs[index] = resized;
@@ -1557,6 +1655,7 @@ export const createDesignerStore = (
       },
 
       pushHistory: (label) => {
+        get().clearElementPreview();
         const { doc, history, historyLabels, historyIndex, savedHistoryIndex } = get();
         const snapshot = JSON.parse(JSON.stringify(doc));
         const newHistory = history.slice(0, historyIndex + 1);
@@ -1580,6 +1679,7 @@ export const createDesignerStore = (
       jumpToHistory: (index) => {
         const { history, historyIndex, savedHistoryIndex, currentOutput, currentPage } = get();
         if (index < 0 || index >= history.length || index === historyIndex) return;
+        get().clearElementPreview();
         const nextDoc = JSON.parse(JSON.stringify(history[index]));
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
         set({
@@ -1599,6 +1699,7 @@ export const createDesignerStore = (
       undo: () => {
         const { historyIndex, history, savedHistoryIndex, currentOutput, currentPage } = get();
         if (historyIndex <= 0) return;
+        get().clearElementPreview();
         const newIndex = historyIndex - 1;
         const nextDoc = JSON.parse(JSON.stringify(history[newIndex]));
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
@@ -1616,6 +1717,7 @@ export const createDesignerStore = (
       redo: () => {
         const { historyIndex, history, savedHistoryIndex, currentOutput, currentPage } = get();
         if (historyIndex >= history.length - 1) return;
+        get().clearElementPreview();
         const newIndex = historyIndex + 1;
         const nextDoc = JSON.parse(JSON.stringify(history[newIndex]));
         const clampedOutput = Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1));
@@ -1636,6 +1738,7 @@ export const createDesignerStore = (
       setSaveRetryPaused: (paused) => set({ saveRetryPaused: paused }),
 
       reset: (w, h) => {
+        get().clearElementPreview();
         const newDoc = createEmptyDoc(w, h);
         // Every live paint buffer belongs to the document being discarded.
         disposeAllBuffers();
@@ -1659,6 +1762,7 @@ export const createDesignerStore = (
       },
 
       loadDesign: (doc, id, name, templateId = null) => {
+        get().clearElementPreview();
         const migrated = migrateDoc(doc);
         // Buffers from the previously open design would otherwise live (and
         // paint over matching ids) for the tab's lifetime.
