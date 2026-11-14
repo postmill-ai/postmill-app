@@ -1383,7 +1383,7 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       naturalWidth: 8,
       naturalHeight: 2,
     });
-    expect(replaced.crop).toBeUndefined();
+    expect(replaced.crop).toEqual(beforeReplacement.crop);
     expect(replaced.originalSrc).toBeUndefined();
     expect(replaced.originalFileId).toBeUndefined();
     expect(replaced.smartFilters).toBeUndefined();
