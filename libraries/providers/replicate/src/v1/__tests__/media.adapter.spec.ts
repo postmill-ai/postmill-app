@@ -213,6 +213,121 @@ describe('ReplicateMediaAdapter.removeBackground model resolution', () => {
     expect(lastRequestUrl(fetchMock)).toBe('https://api.replicate.com/v1/predictions');
     expect(lastRequestBody(fetchMock).version).toBe(hash);
   });
+
+  it('retries a transient poll response without resubmitting the prediction', async () => {
+    vi.useFakeTimers();
+    try {
+      const pollingFetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: 'pred-1', status: 'processing' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 502,
+          text: () => Promise.resolve('<!DOCTYPE html>'),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            id: 'pred-1',
+            status: 'succeeded',
+            output: 'https://example.com/cutout.png',
+          }),
+        });
+      const pollingAdapter = new ReplicateMediaAdapter(pollingFetch as any);
+
+      const result = pollingAdapter.removeBackground('https://cdn.example.com/in.png', {
+        credentials: { apiKey: 'k' },
+      });
+      const assertion = expect(result).resolves.toBe('https://example.com/cutout.png');
+      await vi.runAllTimersAsync();
+      await assertion;
+
+      expect(pollingFetch).toHaveBeenCalledTimes(3);
+      expect(pollingFetch.mock.calls[0][0]).toBe(
+        'https://api.replicate.com/v1/models/bria/remove-background/predictions'
+      );
+      expect(pollingFetch.mock.calls[1][0]).toBe(
+        'https://api.replicate.com/v1/predictions/pred-1'
+      );
+      expect(pollingFetch.mock.calls[2][0]).toBe(
+        'https://api.replicate.com/v1/predictions/pred-1'
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects persistent transient polls with the last upstream status', async () => {
+    vi.useFakeTimers();
+    try {
+      const pollingFetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: 'pred-1', status: 'processing' }),
+        })
+        .mockResolvedValue({
+          ok: false,
+          status: 502,
+          text: () => Promise.resolve('<!DOCTYPE html>'),
+        });
+      const pollingAdapter = new ReplicateMediaAdapter(pollingFetch as any);
+
+      const result = pollingAdapter.removeBackground('https://cdn.example.com/in.png', {
+        credentials: { apiKey: 'k' },
+      });
+      const assertion = expect(result).rejects.toThrow(
+        'Replicate prediction timed out (last poll: 502)'
+      );
+      await vi.runAllTimersAsync();
+      await assertion;
+
+      expect(pollingFetch).toHaveBeenCalledTimes(121);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops transient polling at the time ceiling when each 502 takes 20 seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      const pollingFetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: 'pred-1', status: 'processing' }),
+        })
+        .mockImplementation(
+          () => new Promise((resolve) => {
+            setTimeout(() => resolve({
+              ok: false,
+              status: 502,
+              text: () => Promise.resolve('<!DOCTYPE html>'),
+            }), 20_000);
+          })
+        );
+      const pollingAdapter = new ReplicateMediaAdapter(pollingFetch as any);
+      const startedAt = Date.now();
+
+      const result = pollingAdapter.removeBackground('https://cdn.example.com/in.png', {
+        credentials: { apiKey: 'k' },
+      });
+      const assertion = expect(result).rejects.toThrow(
+        'Replicate prediction timed out (last poll: 502)'
+      );
+      await vi.runAllTimersAsync();
+      await assertion;
+
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(90_000);
+      expect(Date.now() - startedAt).toBeLessThan(120_000);
+      expect(pollingFetch).toHaveBeenCalledTimes(6);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('ReplicateMediaAdapter.removeBackground input field mapping', () => {
