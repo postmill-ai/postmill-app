@@ -86,7 +86,10 @@ export const RenderQueue: FC<{ jobs: HeyGenJob[] | undefined; isLoading: boolean
   return (
     <div className="flex flex-col gap-[8px]">
       {(jobs || []).map((job) => {
-        const meta = STATUS_META[job.status];
+        const meta = STATUS_META[job.status] ?? {
+          label: job.status,
+          className: 'text-newTableText bg-newTableBorder',
+        };
         const isAudio = job.operation === 'audio';
         const previewUrl = job.artifactUrl ? mediaDirectory.set(job.artifactUrl) : null;
         return (

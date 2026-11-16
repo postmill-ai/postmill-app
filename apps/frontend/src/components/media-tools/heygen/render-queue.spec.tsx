@@ -65,4 +65,10 @@ describe('HeyGen RenderQueue', () => {
     );
     expect(screen.queryByRole('button', { name: 'Copy Link' })).toBeNull();
   });
+
+  it('renders an unrecognized job status instead of crashing', () => {
+    render(<RenderQueue jobs={[job({ status: 'done' })]} isLoading={false} />);
+
+    expect(screen.getByText('done')).toBeTruthy();
+  });
 });
