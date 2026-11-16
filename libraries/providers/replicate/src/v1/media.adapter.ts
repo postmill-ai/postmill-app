@@ -329,9 +329,9 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
       });
       if (!res.ok) {
         const body = await res.text();
-        // Transient poll error: the prediction may still be fine — surface for a retry.
+        // A transient poll failure says nothing about the paid prediction; keep polling its id.
         if (isTransientStatus(res.status)) {
-          throw new Error(`Replicate poll transient error ${res.status}: ${redactError(body, 200)}`);
+          continue;
         }
         throw mediaUpstreamFromBody(this, res.status, body, 'image');
       }
