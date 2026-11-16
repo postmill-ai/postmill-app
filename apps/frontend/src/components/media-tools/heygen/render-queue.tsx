@@ -22,12 +22,14 @@ export const RenderQueue: FC<{ jobs: HeyGenJob[] | undefined; isLoading: boolean
     processing: { label: t('heygen_status_rendering', 'Rendering'), className: 'text-amber-600 bg-amber-600/10' },
     completed: { label: t('heygen_status_ready', 'Ready'), className: 'text-green-700 dark:text-green-400 bg-green-400/10' },
     failed: { label: t('failed', 'Failed'), className: 'text-dangerText bg-red-400/10' },
+    done: { label: t('heygen_status_ready', 'Ready'), className: 'text-green-700 dark:text-green-400 bg-green-400/10' },
   };
 
   const OPERATION_LABEL: Record<string, string> = {
     avatar: t('heygen_operation_avatar_video', 'Avatar video'),
     video: t('heygen_operation_avatar_video', 'Avatar video'),
     audio: t('heygen_operation_voiceover', 'Voiceover'),
+    tts: t('heygen_operation_voiceover', 'Voiceover'),
   };
 
   // /uploads is intentionally public (unguessable names), so the artifact URL
@@ -86,7 +88,10 @@ export const RenderQueue: FC<{ jobs: HeyGenJob[] | undefined; isLoading: boolean
   return (
     <div className="flex flex-col gap-[8px]">
       {(jobs || []).map((job) => {
-        const meta = STATUS_META[job.status];
+        const meta = STATUS_META[job.status] ?? {
+          label: job.status,
+          className: 'text-newTableText bg-newTableBorder',
+        };
         const isAudio = job.operation === 'audio';
         const previewUrl = job.artifactUrl ? mediaDirectory.set(job.artifactUrl) : null;
         return (
