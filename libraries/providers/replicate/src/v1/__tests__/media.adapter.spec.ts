@@ -321,9 +321,9 @@ describe('ReplicateMediaAdapter.removeBackground model resolution', () => {
       await vi.runAllTimersAsync();
       await assertion;
 
-      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(60_000);
-      expect(Date.now() - startedAt).toBeLessThan(70_000);
-      expect(pollingFetch).toHaveBeenCalledTimes(4);
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(90_000);
+      expect(Date.now() - startedAt).toBeLessThan(120_000);
+      expect(pollingFetch).toHaveBeenCalledTimes(6);
     } finally {
       vi.useRealTimers();
     }

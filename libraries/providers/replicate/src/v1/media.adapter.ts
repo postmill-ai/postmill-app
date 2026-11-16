@@ -319,9 +319,10 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
       return data;
     }
     if (!data.id) throw new Error('Replicate returned no prediction id');
-    // Slow responses cannot extend the loop beyond the 60-second deadline; 120 polls cap the
-    // immediate-response case.
-    const deadline = Date.now() + 60_000;
+    // 500ms granularity: most predictions finish inside the `Prefer: wait` window, so a coarse
+    // sleep was adding up to 2s of dead time after completion (rembg felt slow). A 90-second
+    // deadline bounds slow responses; 120 polls cap the immediate-response case.
+    const deadline = Date.now() + 90_000;
     let lastTransientStatus: number | undefined;
     for (let attempt = 0; attempt < 120 && Date.now() < deadline; attempt++) {
       await sleep(500);
