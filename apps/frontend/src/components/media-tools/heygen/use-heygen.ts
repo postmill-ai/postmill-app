@@ -29,7 +29,7 @@ export interface HeyGenVoice {
 export interface HeyGenJob {
   id: string;
   operation: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'done';
   artifactUrl: string | null;
   fileId: string | null;
   error: string | null;

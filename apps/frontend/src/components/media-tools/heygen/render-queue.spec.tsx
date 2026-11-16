@@ -66,9 +66,24 @@ describe('HeyGen RenderQueue', () => {
     expect(screen.queryByRole('button', { name: 'Copy Link' })).toBeNull();
   });
 
-  it('renders an unrecognized job status instead of crashing', () => {
-    render(<RenderQueue jobs={[job({ status: 'done' })]} isLoading={false} />);
+  it('presents a completed text-to-speech bookkeeping row without actions', () => {
+    const { container } = render(
+      <RenderQueue
+        jobs={[job({ operation: 'tts', status: 'done', artifactUrl: null, fileId: null })]}
+        isLoading={false}
+      />
+    );
 
-    expect(screen.getByText('done')).toBeTruthy();
+    expect(screen.getByText('Voiceover')).toBeTruthy();
+    expect(screen.getByText('Ready')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(container.querySelector('audio')).toBeNull();
+    expect(container.querySelector('video')).toBeNull();
+  });
+
+  it('renders an unrecognized job status instead of crashing', () => {
+    render(<RenderQueue jobs={[job({ status: 'archived' })]} isLoading={false} />);
+
+    expect(screen.getByText('archived')).toBeTruthy();
   });
 });
