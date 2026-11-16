@@ -319,10 +319,11 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
       return data;
     }
     if (!data.id) throw new Error('Replicate returned no prediction id');
-    // 500ms granularity: most predictions finish inside the `Prefer: wait` window, so a coarse
-    // sleep was adding up to 2s of dead time after completion (rembg felt slow). 120 × 500ms
-    // keeps the same ~60s poll ceiling as before.
-    for (let attempt = 0; attempt < 120; attempt++) {
+    // Slow responses cannot extend the loop beyond the 60-second deadline; 120 polls cap the
+    // immediate-response case.
+    const deadline = Date.now() + 60_000;
+    let lastTransientStatus: number | undefined;
+    for (let attempt = 0; attempt < 120 && Date.now() < deadline; attempt++) {
       await sleep(500);
       const res = await this._fetch(`${BASE}/predictions/${data.id}`, {
         headers: this._headers(options),
@@ -331,16 +332,20 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
         const body = await res.text();
         // A transient poll failure says nothing about the paid prediction; keep polling its id.
         if (isTransientStatus(res.status)) {
+          lastTransientStatus = res.status;
           continue;
         }
         throw mediaUpstreamFromBody(this, res.status, body, 'image');
       }
+      lastTransientStatus = undefined;
       const polled = (await res.json()) as ReplicatePredictionResponse;
       if (polled.status === 'succeeded' || polled.status === 'failed' || polled.status === 'canceled') {
         return polled;
       }
     }
-    throw new Error('Replicate prediction timed out');
+    throw new Error(
+      `Replicate prediction timed out${lastTransientStatus === undefined ? '' : ` (last poll: ${lastTransientStatus})`}`
+    );
   }
 
   // Flux-family image models take an `aspect_ratio` input token. The coarse
