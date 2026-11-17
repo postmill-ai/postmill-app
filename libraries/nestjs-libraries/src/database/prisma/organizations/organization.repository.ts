@@ -229,11 +229,22 @@ export class OrganizationRepository {
     });
 
     if (checkIfInviteExists) {
-      Logger.warn(
-        `addUserToOrg: invite ${id} already consumed (user=${userId} org=${orgId})`,
-        OrganizationRepository.name
-      );
-      return false;
+      if (checkIfInviteExists.id === userId) {
+        const membership = await this._userOrg.model.userOrganization.findUnique({
+          where: {
+            userId_organizationId: { userId, organizationId: orgId },
+          },
+        });
+        if (membership) {
+          return membership;
+        }
+      } else {
+        Logger.warn(
+          `addUserToOrg: invite ${id} already consumed (user=${userId} org=${orgId})`,
+          OrganizationRepository.name
+        );
+        return false;
+      }
     }
 
     const checkForSubscription =
@@ -264,24 +275,49 @@ export class OrganizationRepository {
           where: { organizationId: null, key: role === 'ADMIN' ? 'admin' : 'member', isSystem: true },
         });
 
-    const create = await this._userOrg.model.userOrganization.create({
-      data: {
-        roleId: appRole?.id,
-        userId,
-        organizationId: orgId,
-      },
-    });
+    try {
+      return await this._transaction.model.$transaction(async (tx) => {
+        const membership = await tx.userOrganization.upsert({
+          where: {
+            userId_organizationId: { userId, organizationId: orgId },
+          },
+          create: {
+            roleId: appRole?.id,
+            userId,
+            organizationId: orgId,
+          },
+          update: {},
+        });
 
-    await this._user.model.user.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        inviteId: id,
-      },
-    });
+        await tx.user.update({
+          where: {
+            id: userId,
+          },
+          data: {
+            inviteId: id,
+          },
+        });
 
-    return create;
+        return membership;
+      });
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'P2002') {
+        throw error;
+      }
+      const membership = await this._userOrg.model.userOrganization.findUnique({
+        where: {
+          userId_organizationId: { userId, organizationId: orgId },
+        },
+      });
+      if (!membership) {
+        throw error;
+      }
+      await this._user.model.user.update({
+        where: { id: userId },
+        data: { inviteId: id },
+      });
+      return membership;
+    }
   }
 
   async createInvitedUser(

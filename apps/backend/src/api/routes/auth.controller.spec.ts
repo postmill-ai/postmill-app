@@ -303,6 +303,23 @@ describe('AuthController — F1 behavioural tests', () => {
       );
       expect(res.json).toHaveBeenCalledWith({ token: 'provider-token', emailRequired: undefined });
     });
+
+    it('does not issue auth cookies when the provider rejects the authorization code', async () => {
+      const { controller } = makeController({
+        authService: {
+          checkExists: vi.fn().mockRejectedValue(
+            new BadRequestException('Sign-in could not be completed. Please restart the sign-in and try again.')
+          ),
+        },
+      });
+      const res = mockResponse();
+
+      await expect(
+        controller.oauthExists('expired-code', '', undefined, 'GOOGLE', res, '1.2.3.4', 'agent')
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(res.cookie).not.toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
   });
 
   describe('JWT verification pins HS256', () => {

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import * as crypto from 'crypto';
 import dayjs from 'dayjs';
 import { Provider } from '@prisma/client';
-import { Logger } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 
 vi.mock('@postmill-ai/nestjs-libraries/database/prisma/users/users.service', () => ({
   UsersService: class {},
@@ -1217,6 +1217,32 @@ describe('AuthService (backend)', () => {
         undefined,
         'login.nonce-123'
       );
+    });
+
+    it('checkExists turns a rejected authorization code into a recoverable 400', async () => {
+      providerInstance.getToken.mockRejectedValue(new Error('invalid_grant'));
+      providerInstance.getToken.mockRejectedValueOnce(
+        Object.assign(new Error('Token exchange failed'), {
+          response: { data: { error: 'invalid_grant' } },
+        })
+      );
+
+      await expect(service.checkExists('GOOGLE', 'expired-code')).rejects.toMatchObject({
+        response: { message: 'Sign-in could not be completed. Please restart the sign-in and try again.' },
+        status: 400,
+      });
+      await expect(service.checkExists('GOOGLE', 'expired-code')).rejects.toBeInstanceOf(
+        BadRequestException
+      );
+      expect(providerInstance.getUser).not.toHaveBeenCalled();
+    });
+
+    it('checkExists preserves unrelated token-exchange failures', async () => {
+      const failure = new Error('Google token endpoint unavailable');
+      providerInstance.getToken.mockRejectedValue(failure);
+
+      await expect(service.checkExists('GOOGLE', 'code')).rejects.toBe(failure);
+      expect(providerInstance.getUser).not.toHaveBeenCalled();
     });
 
     it('checkExists flags emailRequired when the provider user has no email', async () => {
