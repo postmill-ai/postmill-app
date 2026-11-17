@@ -5,9 +5,8 @@ import { OpenAIAdapter } from '../ai.adapter';
 vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => ({
     languageModel: vi.fn(() => ({ modelId: 'gpt-4.1' })),
-    // The adapter pins language models to Chat Completions via `.chat()` (avoids the
-    // Responses-API `{ type: 'text' }` 400) — mock it to mirror `.languageModel()`.
     chat: vi.fn((modelId: string) => ({ modelId })),
+    responses: vi.fn((modelId: string) => ({ modelId })),
     imageModel: vi.fn(function() { return {}; }),
     textEmbeddingModel: vi.fn(function() { return {}; }),
     speechModel: vi.fn(function() { return {}; }),
@@ -129,6 +128,17 @@ describe('OpenAIAdapter', () => {
       expect(model).toBeDefined();
       expect((model as any).modelId).toBe('gpt-4.1');
     });
+
+    it.each([undefined, 'https://api.openai.com/v1', 'https://api.openai.com/v1/'])(
+      'keeps the SDK default fetch for the canonical endpoint: %s',
+      (baseURL) => {
+        adapter.setSafeFetch(vi.fn());
+        adapter.createLanguageModel({ apiKey: 'sk-test', ...(baseURL ? { baseURL } : {}) }, 'gpt-6-luna');
+        expect(vi.mocked(createOpenAI).mock.calls.at(-1)![0]).toEqual(
+          expect.objectContaining({ fetch: undefined }),
+        );
+      },
+    );
   });
 
   describe('createLangchainModel', () => {

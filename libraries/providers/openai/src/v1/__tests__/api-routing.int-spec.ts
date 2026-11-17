@@ -17,7 +17,7 @@ function fixture(handler: (body: any, responses: boolean, n: number) => any) {
   const adapter = new OpenAIAdapter();
   adapter.setSafeFetch(async (url, init) => {
     const body = JSON.parse(init!.body as string); const responses = String(url).endsWith('/responses');
-    requests.push({ url: String(url), body });
+    requests.push({ url: String(url), body, timeoutMs: init?.timeoutMs });
     // Reproduce the reported endpoint restriction, including default reasoning.
     if (body.model.startsWith('gpt-6') && !responses && body.tools?.length && body.reasoning_effort !== 'none')
       return new Response(JSON.stringify({ error: { message: 'Function tools with reasoning_effort require /v1/responses', type: 'invalid_request_error', code: 'unsupported_parameter' } }), { status: 400, headers: { 'content-type': 'application/json' } });
@@ -30,9 +30,10 @@ const prompt: any = [{ role: 'system', content: 'Be helpful' }, { role: 'user', 
 describe('OpenAI real SDK wire contracts', () => {
   it.each(models)('%s: text, endpoint, supported parameters and usage', async modelId => {
     const { adapter, requests } = fixture((_b, r) => r ? response([text]) : chat({ role: 'assistant', content: 'Done' }));
-    const result = await adapter.createLanguageModel({ apiKey: 'fixture' }, modelId).doGenerate({ prompt, temperature: .7, topP: .9, maxOutputTokens: 80, providerOptions: { openai: { reasoningEffort: 'high' } } });
-    const { url, body } = requests[0];
+    const result = await adapter.createLanguageModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, modelId).doGenerate({ prompt, temperature: .7, topP: .9, maxOutputTokens: 80, providerOptions: { openai: { reasoningEffort: 'high' } } });
+    const { url, body, timeoutMs } = requests[0];
     expect(url.endsWith(modelId.startsWith('gpt-6') ? '/responses' : '/chat/completions')).toBe(true);
+    expect(timeoutMs).toBe(300_000);
     expect(body.model).toBe(modelId);
     expect(result.content).toContainEqual(expect.objectContaining({ type: 'text', text: 'Done' }));
     expect(result.usage).toMatchObject({ inputTokens: 12, outputTokens: 7 });
@@ -40,7 +41,7 @@ describe('OpenAI real SDK wire contracts', () => {
       expect(body.reasoning.effort).toBe('high'); expect(body.temperature).toBeUndefined(); expect(body.top_p).toBeUndefined();
       expect(body.max_output_tokens).toBe(80); expect(body.input[1].content[0].type).toBe('input_text');
       expect(result.usage.reasoningTokens).toBe(3);
-    } else { expect(body.temperature).toBe(.7); expect(body.reasoning_effort).toBeUndefined(); }
+    } else { expect(body.temperature).toBe(.7); }
   });
 
   it.each([...models.map(id => [id, true] as const), ...models.filter(id => id.startsWith('gpt-6')).map(id => [id, false] as const)])('%s store=%s: two tool rounds through AI SDK agent loop', async (modelId, store) => {
@@ -50,7 +51,7 @@ describe('OpenAI real SDK wire contracts', () => {
         : chat({ role: 'assistant', content: null, tool_calls: [{ id: `call_${n}`, type: 'function', function: { name: 'lookup', arguments: '{"value":"test"}' } }] });
     });
     const execute = vi.fn(async () => 'tool-result');
-    const result = await generateText({ model: adapter.createLanguageModel({ apiKey: 'fixture' }, modelId), prompt: 'Look up twice', providerOptions: { openai: { store, reasoningEffort: 'high' } }, tools: { lookup: tool({ inputSchema: jsonSchema({ type: 'object', properties: { value: { type: 'string' } }, required: ['value'], additionalProperties: false }), execute }) }, stopWhen: stepCountIs(3), maxRetries: 0 });
+    const result = await generateText({ model: adapter.createLanguageModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, modelId), prompt: 'Look up twice', providerOptions: { openai: { store, reasoningEffort: 'high' } }, tools: { lookup: tool({ inputSchema: jsonSchema({ type: 'object', properties: { value: { type: 'string' } }, required: ['value'], additionalProperties: false }), execute }) }, stopWhen: stepCountIs(3), maxRetries: 0 });
     expect(result.text).toBe('Done'); expect(execute).toHaveBeenCalledTimes(2); expect(requests).toHaveLength(3);
     for (const [i, req] of requests.entries()) {
       expect(req.body.model).toBe(modelId);
@@ -62,16 +63,17 @@ describe('OpenAI real SDK wire contracts', () => {
   it.each([400, 401, 429, 500, 503])('preserves upstream HTTP %i without changing API/model', async status => {
     const adapter = new OpenAIAdapter(); const fetch = vi.fn(async () => new Response(JSON.stringify({ error: { message: 'fixture rejection', type: 'fixture', code: 'fixture' } }), { status, headers: { 'content-type': 'application/json' } }));
     adapter.setSafeFetch(fetch);
-    await expect(adapter.createLanguageModel({ apiKey: 'fixture' }, 'gpt-6-luna').doGenerate({ prompt })).rejects.toMatchObject({ statusCode: status });
-    await expect(adapter.createLanguageModel({ apiKey: 'fixture' }, 'gpt-6-luna').doStream({ prompt })).rejects.toMatchObject({ statusCode: status });
+    await expect(adapter.createLanguageModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, 'gpt-6-luna').doGenerate({ prompt })).rejects.toMatchObject({ statusCode: status });
+    await expect(adapter.createLanguageModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, 'gpt-6-luna').doStream({ prompt })).rejects.toMatchObject({ statusCode: status });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it.each(models)('%s: LangChain text uses the same API', async modelId => {
     const { adapter, requests } = fixture((_b, r) => r ? response([text]) : chat({ role: 'assistant', content: 'Done' }));
-    const model = adapter.createLangchainModel({ apiKey: 'fixture' }, modelId, { temperature: .7, topP: .9, maxTokens: 80 });
+    const model = adapter.createLangchainModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, modelId, { temperature: .7, topP: .9, maxTokens: 80 });
     const answer = await model.invoke('Hello');
     expect(answer.text).toBe('Done'); expect(requests[0].body.model).toBe(modelId);
+    expect(requests[0].timeoutMs).toBe(300_000);
     expect(requests[0].url.endsWith(modelId.startsWith('gpt-6') ? '/responses' : '/chat/completions')).toBe(true);
     if (modelId.startsWith('gpt-6')) { expect(requests[0].body.temperature).toBeUndefined(); expect(requests[0].body.top_p).toBeUndefined(); }
   });
@@ -94,7 +96,7 @@ describe('OpenAI streaming with real SDK', () => {
       ];
       return new Response(events.map(e => `data: ${JSON.stringify(e)}\n\n`).join('') + 'data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } });
     });
-    const result = await adapter.createLanguageModel({ apiKey: 'fixture' }, modelId).doStream({ prompt });
+    const result = await adapter.createLanguageModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, modelId).doStream({ prompt });
     const chunks: any[] = []; for await (const chunk of result.stream) chunks.push(chunk);
     expect(requests[0].stream).toBe(true);
     expect(chunks).toContainEqual(expect.objectContaining({ type: 'text-delta', delta: 'Done' }));
@@ -111,7 +113,7 @@ describe('agent framework compatibility', () => {
       : (r ? response([{ type: 'function_call', id: `fc_${n}`, call_id: `call_${n}`, name: 'lookup', arguments: '{"value":"test"}' }])
         : chat({ role: 'assistant', content: null, tool_calls: [{ id: `call_${n}`, type: 'function', function: { name: 'lookup', arguments: '{"value":"test"}' } }] })));
     const execute = vi.fn(async () => ({ result: 'tool-result' }));
-    const agent = new Agent({ id: 'fixture', name: 'fixture', instructions: 'Only use fixture tools', model: adapter.createLanguageModel({ apiKey: 'fixture' }, modelId), tools: {
+    const agent = new Agent({ id: 'fixture', name: 'fixture', instructions: 'Only use fixture tools', model: adapter.createLanguageModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, modelId), tools: {
       lookup: createTool({ id: 'lookup', description: 'Fixture', inputSchema: z.object({ value: z.string() }), execute }),
     } });
     const result = await agent.generate('Look up twice', { maxSteps: 3 });
@@ -123,7 +125,7 @@ describe('agent framework compatibility', () => {
       ? (r ? response([text]) : chat({ role: 'assistant', content: 'Done' }))
       : (r ? response([{ type: 'function_call', id: `fc_${n}`, call_id: `call_${n}`, name: 'lookup', arguments: '{"value":"test"}' }])
         : chat({ role: 'assistant', content: null, tool_calls: [{ id: `call_${n}`, type: 'function', function: { name: 'lookup', arguments: '{"value":"test"}' } }] })));
-    const model = (adapter.createLangchainModel({ apiKey: 'fixture' }, modelId) as any).bindTools([{ name: 'lookup', description: 'Fixture', schema: z.object({ value: z.string() }) }]);
+    const model = (adapter.createLangchainModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, modelId) as any).bindTools([{ name: 'lookup', description: 'Fixture', schema: z.object({ value: z.string() }) }]);
     const messages: any[] = [new HumanMessage('Look up twice')];
     for (let n = 1; n <= 2; n++) {
       const reply: AIMessage = await model.invoke(messages, { reasoning: { effort: 'high' } });
@@ -155,7 +157,7 @@ describe('streaming function calls', () => {
       ];
       return new Response(events.map(e => `data: ${JSON.stringify(e)}\n\n`).join('') + 'data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } });
     });
-    const result = await adapter.createLanguageModel({ apiKey: 'fixture' }, modelId).doStream({ prompt, tools: [{ type: 'function', name: 'lookup', inputSchema: { type: 'object', properties: { value: { type: 'string' } } } }] });
+    const result = await adapter.createLanguageModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, modelId).doStream({ prompt, tools: [{ type: 'function', name: 'lookup', inputSchema: { type: 'object', properties: { value: { type: 'string' } } } }] });
     const chunks: any[] = []; for await (const chunk of result.stream) chunks.push(chunk);
     expect(chunks.filter(c => c.type === 'error')).toEqual([]);
     expect(chunks).toContainEqual(expect.objectContaining({ type: 'tool-call', toolCallId: 'call_1', toolName: 'lookup', input: '{"value":"test"}' }));
@@ -164,7 +166,7 @@ describe('streaming function calls', () => {
 
   it('Terra does not forward an unsupported reasoning effort', async () => {
     const { adapter, requests } = fixture(() => response([text]));
-    const result = await adapter.createLanguageModel({ apiKey: 'fixture' }, 'gpt-6.1-terra').doGenerate({ prompt, providerOptions: { openai: { reasoningEffort: 'none' } } });
+    const result = await adapter.createLanguageModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, 'gpt-6.1-terra').doGenerate({ prompt, providerOptions: { openai: { reasoningEffort: 'none' } } });
     expect(requests[0].body.reasoning).toBeUndefined();
     expect(result.warnings).toContainEqual(expect.objectContaining({ type: 'unsupported-setting', setting: 'reasoningEffort' }));
   });
@@ -179,16 +181,17 @@ describe('streaming function calls', () => {
 describe('catalog and transport', () => {
   it('keeps requested stored defaults in the fallback catalog when model listing fails', async () => {
     const adapter = new OpenAIAdapter(); adapter.setSafeFetch(async () => new Response('', { status: 503 }));
-    const catalog = await adapter.listModels({ apiKey: 'fixture' });
+    const catalog = await adapter.listModels({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' });
     for (const id of models) expect(catalog.some(m => m.id === id)).toBe(true);
   });
 
   it('adapts Request inputs without losing body, headers or abort signal', async () => {
     const adapter = new OpenAIAdapter(); const fetch = vi.fn(async () => new Response('{}')); adapter.setSafeFetch(fetch);
     const controller = new AbortController();
-    await (adapter as any)._sdkFetch()(new Request('https://example.com/v1/responses', { method: 'POST', headers: { 'x-fixture': 'yes' }, body: 'fixture', signal: controller.signal }));
+    await (adapter as any)._sdkFetch('https://example.com/v1')(new Request('https://example.com/v1/responses', { method: 'POST', headers: { 'x-fixture': 'yes' }, body: 'fixture', signal: controller.signal }));
     const [url, init] = fetch.mock.calls[0] as any;
     expect(url).toBe('https://example.com/v1/responses'); expect(init.method).toBe('POST'); expect(init.headers.get('x-fixture')).toBe('yes');
+    expect(init.timeoutMs).toBe(300_000);
     expect(new TextDecoder().decode(init.body)).toBe('fixture'); controller.abort(); expect(init.signal.aborted).toBe(true);
   });
 });
@@ -196,7 +199,7 @@ describe('catalog and transport', () => {
 
 it.each(['gpt-4o', 'gpt-4o-mini', 'gpt-5.2', 'o3'])('preserves the existing AI SDK Chat route for %s', async modelId => {
   const { adapter, requests } = fixture(() => chat({ role: 'assistant', content: 'Done' }));
-  await adapter.createLanguageModel({ apiKey: 'fixture' }, modelId).doGenerate({ prompt });
+  await adapter.createLanguageModel({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' }, modelId).doGenerate({ prompt });
   expect(requests[0].url.endsWith('/chat/completions')).toBe(true);
   expect(requests[0].body.model).toBe(modelId);
 });

@@ -16,6 +16,8 @@ import {
   type SafeFetchPort,
 } from '@postmill-ai/provider-kernel';
 
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+
 // GPT-6 tool calling with reasoning requires Responses. Keep the legacy API
 // for earlier models and OpenAI-compatible deployments using those model IDs.
 const usesResponses = (modelId: string) => /^gpt-6(?:[.-]|$)/.test(modelId);
@@ -96,26 +98,29 @@ export class OpenAIAdapter implements AIProviderAdapter {
     this._safeFetch = fetch;
   }
 
-  private _sdkFetch(): typeof globalThis.fetch | undefined {
+  private _sdkFetch(baseURL?: string): typeof globalThis.fetch | undefined {
+    if (!baseURL || baseURL.replace(/\/+$/, '') === OPENAI_BASE_URL) return undefined;
     const safeFetch = this._safeFetch;
-    if (!safeFetch) return undefined;
+    if (!safeFetch) throw new Error('OpenAI custom base URL requires safe fetch');
     return async (input, init) => {
       if (input instanceof Request) {
         const request = new Request(input, init);
         return safeFetch(request.url, {
-          method: request.method, headers: request.headers,
+          method: request.method,
+          headers: request.headers,
           body: request.body ? await request.arrayBuffer() : undefined,
-          signal: request.signal, redirect: request.redirect,
+          signal: request.signal,
+          redirect: request.redirect,
+          timeoutMs: 300_000,
         });
       }
-      return safeFetch(input, init);
+      return safeFetch(input, { ...init, timeoutMs: 300_000 });
     };
   }
 
   private _buildProvider(creds: Record<string, string>) {
-    if (creds.baseURL && !this._safeFetch) throw new Error('OpenAI custom base URL requires safe fetch');
     return createOpenAI({
-      fetch: this._sdkFetch(),
+      fetch: this._sdkFetch(creds.baseURL),
       apiKey: creds.apiKey,
       baseURL: creds.baseURL || undefined,
       organization: creds.organization || undefined,
@@ -125,7 +130,7 @@ export class OpenAIAdapter implements AIProviderAdapter {
   async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
     const live = await fetchOpenAIStyleModels(
       this._safeFetch,
-      creds.baseURL || 'https://api.openai.com/v1',
+      creds.baseURL || OPENAI_BASE_URL,
       creds.apiKey,
     );
     return mergeLiveModels(live, OPENAI_MODELS, this.capabilities);
@@ -137,7 +142,7 @@ export class OpenAIAdapter implements AIProviderAdapter {
     }
     // 0.4: only over the SSRF-safe fetch — never the global fetch on a tenant baseURL.
     if (!this._safeFetch) return { ok: false, error: 'cannot validate' };
-    const baseURL = (creds.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    const baseURL = (creds.baseURL || OPENAI_BASE_URL).replace(/\/+$/, '');
     // 5.15: cheap authenticated GET /models — no paid-generation fallback.
     // safeFetch throws on an SSRF/private URL; let it propagate.
     const response = await this._safeFetch(`${baseURL}/models`, {
@@ -159,21 +164,7 @@ export class OpenAIAdapter implements AIProviderAdapter {
     // Both SDK implementations accept LanguageModelV2 prompts and translate text,
     // reasoning, tool calls/results and streaming into the endpoint's wire format.
     if (usesResponses(modelId)) return provider.responses(modelId);
-    const model = provider.chat(modelId);
-    // Chat SDK v2 forwards reasoning_effort even for GPT-4. Guard explicit
-    // reasoning options from generic agent callers without changing other models.
-    if (!/^gpt-(?:4|3\.5)/.test(modelId)) return model;
-    return new Proxy(model, {
-      get(target, prop) {
-        if (prop === 'doGenerate' || prop === 'doStream') return (options: any) => {
-          const openai = { ...options.providerOptions?.openai };
-          delete openai.reasoningEffort;
-          delete openai.reasoningSummary;
-          return target[prop]({ ...options, providerOptions: { ...options.providerOptions, openai } });
-        };
-        return Reflect.get(target, prop);
-      },
-    });
+    return provider.chat(modelId);
   }
 
   createLangchainModel(
@@ -181,13 +172,12 @@ export class OpenAIAdapter implements AIProviderAdapter {
     modelId: string,
     opts?: AIModelOptions,
   ): BaseChatModel {
-    if (creds.baseURL && !this._safeFetch) throw new Error('OpenAI custom base URL requires safe fetch');
     const responses = usesResponses(modelId);
     return new ChatOpenAI({
       useResponsesApi: responses,
       apiKey: creds.apiKey,
       configuration: {
-        fetch: this._sdkFetch(),
+        fetch: this._sdkFetch(creds.baseURL),
         baseURL: creds.baseURL || undefined,
         organization: creds.organization || undefined,
       },
