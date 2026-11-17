@@ -16,6 +16,12 @@ import {
   type SafeFetchPort,
 } from '@postmill-ai/provider-kernel';
 
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+
+// GPT-6 tool calling with reasoning requires Responses. Keep the legacy API
+// for earlier models and OpenAI-compatible deployments using those model IDs.
+const usesResponses = (modelId: string) => /^gpt-6(?:[.-]|$)/.test(modelId);
+
 const OPENAI_CAPABILITIES: AICapabilities = {
   text: true,
   image: true,
@@ -64,6 +70,14 @@ const OPENAI_MODELS: ModelInfo[] = [
   { id: 'tts-1', label: 'TTS-1', kind: 'text', capabilities: { text: false, image: false, vision: false, embeddings: false, speech: true, tools: false } },
   { id: 'tts-1-hd', label: 'TTS-1 HD', kind: 'text', capabilities: { text: false, image: false, vision: false, embeddings: false, speech: true, tools: false } },
   { id: 'whisper-1', label: 'Whisper-1', kind: 'text', capabilities: { text: true, image: false, vision: false, embeddings: false, speech: true, tools: false } },
+  ...[
+    { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+    { id: 'gpt-6-luna', label: 'GPT-6 Luna' },
+    { id: 'gpt-6.1-terra', label: 'GPT-6.1 Terra' },
+  ].map(({ id, label }) => ({
+    id, label, kind: 'text' as const, reasoning: usesResponses(id),
+    capabilities: { ...OPENAI_CAPABILITIES, image: false, embeddings: false, speech: false },
+  })),
 ];
 
 export class OpenAIAdapter implements AIProviderAdapter {
@@ -88,8 +102,29 @@ export class OpenAIAdapter implements AIProviderAdapter {
     this._safeFetch = fetch;
   }
 
+  private _sdkFetch(baseURL?: string): typeof globalThis.fetch | undefined {
+    if (!baseURL || baseURL.replace(/\/+$/, '') === OPENAI_BASE_URL) return undefined;
+    const safeFetch = this._safeFetch;
+    if (!safeFetch) throw new Error('OpenAI custom base URL requires safe fetch');
+    return async (input, init) => {
+      if (input instanceof Request) {
+        const request = new Request(input, init);
+        return safeFetch(request.url, {
+          method: request.method,
+          headers: request.headers,
+          body: request.body ? await request.arrayBuffer() : undefined,
+          signal: request.signal,
+          redirect: request.redirect,
+          timeoutMs: 300_000,
+        });
+      }
+      return safeFetch(input, { ...init, timeoutMs: 300_000 });
+    };
+  }
+
   private _buildProvider(creds: Record<string, string>) {
     return createOpenAI({
+      fetch: this._sdkFetch(creds.baseURL),
       apiKey: creds.apiKey,
       baseURL: creds.baseURL || undefined,
       organization: creds.organization || undefined,
@@ -99,7 +134,7 @@ export class OpenAIAdapter implements AIProviderAdapter {
   async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
     const live = await fetchOpenAIStyleModels(
       this._safeFetch,
-      creds.baseURL || 'https://api.openai.com/v1',
+      creds.baseURL || OPENAI_BASE_URL,
       creds.apiKey,
     );
     return mergeLiveModels(live, OPENAI_MODELS, this.capabilities);
@@ -111,7 +146,7 @@ export class OpenAIAdapter implements AIProviderAdapter {
     }
     // 0.4: only over the SSRF-safe fetch — never the global fetch on a tenant baseURL.
     if (!this._safeFetch) return { ok: false, error: 'cannot validate' };
-    const baseURL = (creds.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    const baseURL = (creds.baseURL || OPENAI_BASE_URL).replace(/\/+$/, '');
     // 5.15: cheap authenticated GET /models — no paid-generation fallback.
     // safeFetch throws on an SSRF/private URL; let it propagate.
     const response = await this._safeFetch(`${baseURL}/models`, {
@@ -130,12 +165,27 @@ export class OpenAIAdapter implements AIProviderAdapter {
     _opts?: AIModelOptions,
   ): LanguageModelV2 {
     const provider = this._buildProvider(creds);
-    // Pin to the Chat Completions API. In @ai-sdk/openai v2, `.languageModel()` defaults to the
-    // Responses API, which rejects the `{ type: 'text' }` message parts that AIModelProvider
-    // hand-builds for the low-level doGenerate() call (400: "Invalid value: 'text'. Supported
-    // values are 'input_text', …"). Chat Completions accepts that format, so every generateText/
-    // generateObject/vision call works (the Daily Brief and all utility AI were 400ing otherwise).
-    return provider.chat(modelId);
+    // Both SDK implementations accept LanguageModelV2 prompts and translate text,
+    // reasoning, tool calls/results and streaming into the endpoint's wire format.
+    if (!usesResponses(modelId)) return provider.chat(modelId);
+    const model = provider.responses(modelId);
+    // Keep persisted threads independent of OpenAI's response retention. Callers
+    // can opt into storage; otherwise replay reasoning and content inline.
+    return new Proxy(model, {
+      get(target, prop) {
+        if (prop === 'doGenerate' || prop === 'doStream') return (options: any) => {
+          if (options.providerOptions?.openai?.store !== undefined) return target[prop](options);
+          return target[prop]({
+            ...options,
+            providerOptions: {
+              ...options.providerOptions,
+              openai: { ...options.providerOptions?.openai, store: false },
+            },
+          });
+        };
+        return Reflect.get(target, prop);
+      },
+    });
   }
 
   createLangchainModel(
@@ -143,15 +193,19 @@ export class OpenAIAdapter implements AIProviderAdapter {
     modelId: string,
     opts?: AIModelOptions,
   ): BaseChatModel {
+    const responses = usesResponses(modelId);
     return new ChatOpenAI({
+      useResponsesApi: responses,
+      zdrEnabled: responses,
       apiKey: creds.apiKey,
       configuration: {
+        fetch: this._sdkFetch(creds.baseURL),
         baseURL: creds.baseURL || undefined,
         organization: creds.organization || undefined,
       },
       model: modelId,
-      temperature: opts?.temperature,
-      topP: opts?.topP,
+      temperature: responses ? undefined : opts?.temperature,
+      topP: responses ? undefined : opts?.topP,
       maxTokens: opts?.maxTokens,
     });
   }

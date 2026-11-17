@@ -1237,11 +1237,13 @@ describe('AIModelProvider', () => {
         expect(resolved?.modelId).toBe('gpt-5');
       }
 
-      // resolveConfigForScope does not accept reasoning options, so exercise the
-      // private resolver directly for the reasoning:true branch.
-      const reasoningResolved = await (provider as any)._resolveConfig('utility', 'org-123', { reasoning: true });
+      const reasoningResolved = await provider.resolveConfigForScope('utility', 'org-123', { reasoning: true });
       expect(reasoningResolved?.providerId).toBe('openai');
       expect(reasoningResolved?.modelId).toBe('gpt-5');
+
+      const resolve = vi.spyOn(provider, 'resolveConfigForScope');
+      await provider.governedLanguageModel('utility', 'org-123', { reasoning: true });
+      expect(resolve).toHaveBeenLastCalledWith('utility', 'org-123', { reasoning: true });
     });
 
     it('falls back to SURFACE_DEFAULTS when no candidate is resolved', async () => {
