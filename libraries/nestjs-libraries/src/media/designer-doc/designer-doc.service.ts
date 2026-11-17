@@ -291,6 +291,9 @@ export class DesignerDocService {
             ? primary
             : undefined;
 
+        const contentLinkGroup = linkContent
+          ? source?.contentLinkGroup ?? `link-${randomUUID()}`
+          : `link-${randomUUID()}`;
         const newOutput: DesignerOutput = {
           id: '', // assigned by assignIdsAndNormalize
           formatId: op.preset.formatId,
@@ -299,7 +302,7 @@ export class DesignerDocService {
           height: op.preset.height,
           background: source?.background ?? '#ffffff',
           bg: source?.bg,
-          contentLinked: linkContent,
+          contentLinkGroup,
           // The copy stack's vertical budget belongs to the DESIGN, not to one
           // canvas — carried over so this format's type is measured with the
           // same rule the primary was composed under (see `typeBasisPx`).
@@ -345,8 +348,8 @@ export class DesignerDocService {
           const outputs = doc.outputs.map((out, i) =>
             i === 0 ? {
               ...out,
-              ...(isImageOutput(out) && out.contentLinked === false && linkContent
-                ? { contentLinked: true }
+              ...(isImageOutput(out) && linkContent && !out.contentLinkGroup
+                ? { contentLinkGroup }
                 : {}),
               children: sourceChildren,
             } : out
@@ -683,13 +686,66 @@ export class DesignerDocService {
     return { ...doc, outputs } as DesignerDoc;
   }
 
+  private _contentLinkGroups(doc: DesignerDoc): (string | undefined)[] {
+    const parents = doc.outputs.map((_, index) => index);
+    const find = (index: number): number => {
+      if (parents[index] !== index) parents[index] = find(parents[index]);
+      return parents[index];
+    };
+    const union = (left: number, right: number) => {
+      parents[find(left)] = find(right);
+    };
+
+    for (let leftIndex = 0; leftIndex < doc.outputs.length; leftIndex++) {
+      const left = doc.outputs[leftIndex];
+      if (!isImageOutput(left)) continue;
+      const leftOrigins = new Set(
+        left.children.filter((el) => el.originId).map((el) => el.originId as string)
+      );
+      for (let rightIndex = leftIndex + 1; rightIndex < doc.outputs.length; rightIndex++) {
+        const right = doc.outputs[rightIndex];
+        if (!isImageOutput(right)) continue;
+        const leftGroup = left.contentLinkGroup;
+        const rightGroup = right.contentLinkGroup;
+        const sharedOrigin = right.children.some(
+          (el) => el.originId && leftOrigins.has(el.originId)
+        );
+        if (leftGroup && rightGroup ? leftGroup === rightGroup : sharedOrigin) {
+          union(leftIndex, rightIndex);
+        }
+      }
+    }
+
+    const rootGroups = new Map<number, string>();
+    doc.outputs.forEach((out, index) => {
+      if (isImageOutput(out) && out.contentLinkGroup) {
+        rootGroups.set(find(index), out.contentLinkGroup);
+      }
+    });
+    return doc.outputs.map((out, index) => {
+      if (!isImageOutput(out)) return undefined;
+      const root = find(index);
+      let group = rootGroups.get(root);
+      if (!group) {
+        group = `link-${randomUUID()}`;
+        rootGroups.set(root, group);
+      }
+      return group;
+    });
+  }
+
   /**
    * Re-mint every id/originId for template instantiation and `.pdesign` import.
    * Group parent references must follow the new element ids within each page.
+   * Content-link relationships are captured before the shared origins disappear.
    */
   stripIds(doc: DesignerDoc): DesignerDoc {
-    const outputs = doc.outputs.map((out: any) => {
-      const base = this._normalizeItems([out], 'out', true)[0];
+    const contentLinkGroups = this._contentLinkGroups(doc);
+    const outputs = doc.outputs.map((out: any, index) => {
+      const linkedOut = contentLinkGroups[index]
+        ? { ...out, contentLinkGroup: contentLinkGroups[index] }
+        : out;
+      const base = this._normalizeItems([linkedOut], 'out', true)[0];
       if ('children' in base) {
         base.children = this._normalizeItems(base.children, 'el', true);
         if (Array.isArray(base.pages)) {

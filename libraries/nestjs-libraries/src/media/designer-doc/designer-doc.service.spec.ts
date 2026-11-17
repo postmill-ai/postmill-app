@@ -1125,7 +1125,10 @@ describe('DesignerDocService', () => {
     ]);
     const sourceElement = (staticResult.outputs[0] as any).children[0];
     const copiedElement = (staticResult.outputs[1] as any).children[0];
-    expect(staticResult.outputs[1].contentLinked).toBe(false);
+    expect(staticResult.outputs[0].contentLinkGroup).toBeDefined();
+    expect(staticResult.outputs[1].contentLinkGroup).toBeDefined();
+    expect(staticResult.outputs[1].contentLinkGroup)
+      .not.toBe(staticResult.outputs[0].contentLinkGroup);
     expect(copiedElement.id).not.toBe(sourceElement.id);
     expect(copiedElement.originId).toBe(copiedElement.id);
     expect(copiedElement.originId).not.toBe(sourceElement.originId);
@@ -1143,6 +1146,64 @@ describe('DesignerDocService', () => {
     expect(copiedClip.originId).toBe(copiedClip.id);
     expect(copiedClip.originId).not.toBe(sourceClip.originId);
     expect(copiedClip.startMs).toBe(sourceClip.startMs);
+  });
+
+  it('linked addOutput inherits an independent primary group and backfills a legacy primary', () => {
+    const service = makeService();
+    const independentDoc = createBlankDoc();
+    independentDoc.outputs[0].contentLinkGroup = 'independent-primary-group';
+    const independentResult = service.applyOps(independentDoc, [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 },
+      },
+    ]);
+    expect(independentResult.outputs.map((out) => out.contentLinkGroup)).toEqual([
+      'independent-primary-group',
+      'independent-primary-group',
+    ]);
+
+    const legacyDoc = createBlankDoc();
+    legacyDoc.outputs[0].contentLinkGroup = undefined;
+    const legacyResult = service.applyOps(legacyDoc, [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 },
+      },
+    ]);
+    expect(legacyResult.outputs[0].contentLinkGroup).toBeDefined();
+    expect(legacyResult.outputs[1].contentLinkGroup)
+      .toBe(legacyResult.outputs[0].contentLinkGroup);
+  });
+
+  it('stripIds preserves linked groups before shared origins are re-minted', () => {
+    const service = makeService();
+    const linkedDoc = service.applyOps(createBlankDoc(), [
+      { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 },
+      },
+    ]);
+    const group = linkedDoc.outputs[0].contentLinkGroup;
+    expect(group).toBeDefined();
+    expect(linkedDoc.outputs[1].contentLinkGroup).toBe(group);
+
+    const instantiated = service.assignIdsAndNormalize(service.stripIds(linkedDoc));
+    expect(instantiated.outputs.map((out) => out.contentLinkGroup)).toEqual([group, group]);
+    expect(instantiated.outputs[0].children[0].originId)
+      .not.toBe(instantiated.outputs[1].children[0].originId);
+
+    const legacyLinkedDoc = {
+      ...linkedDoc,
+      outputs: linkedDoc.outputs.map((out) => ({ ...out, contentLinkGroup: undefined })),
+    } as typeof linkedDoc;
+    const legacyInstantiated = service.assignIdsAndNormalize(service.stripIds(legacyLinkedDoc));
+    expect(legacyInstantiated.outputs[0].contentLinkGroup).toBeDefined();
+    expect(legacyInstantiated.outputs[1].contentLinkGroup)
+      .toBe(legacyInstantiated.outputs[0].contentLinkGroup);
+    expect(legacyInstantiated.outputs[0].children[0].originId)
+      .not.toBe(legacyInstantiated.outputs[1].children[0].originId);
   });
 
   it('addOutput with seed:false on a video doc appends an empty timeline', () => {

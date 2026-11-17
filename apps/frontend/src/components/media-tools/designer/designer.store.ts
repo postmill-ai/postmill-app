@@ -491,7 +491,7 @@ const createEmptyDoc = (width = 1080, height = 1080, attribution?: DesignerAttri
   return {
     version: DESIGNER_DOC_VERSION,
     mode: 'image',
-    outputs: [{ id: genId(), formatId: m.formatId, name: m.name, width, height, background: '#ffffff', contentLinked: true, children: [] }],
+    outputs: [{ id: genId(), formatId: m.formatId, name: m.name, width, height, background: '#ffffff', contentLinkGroup: genId(), children: [] }],
     attribution,
   };
 };
@@ -710,10 +710,10 @@ export const createDesignerStore = (
           next.splice(idx, 0, el);
           return next;
         };
-        // Linked (originId) seeding across outputs is a PAGE-1 behavior: an
-        // element added on a later page, with format-local editing, or to an
-        // independent output exists on the active output/page only.
-        if (currentPage > 0 || editFormatOnly || sourceOutput.contentLinked === false) {
+        // Cross-format seeding is a PAGE-1 behavior: an element added on a
+        // later page or with format-local editing exists on the active
+        // output/page only. Seeded siblings follow content-link groups below.
+        if (currentPage > 0 || editFormatOnly) {
           mutate({
             doc: {
               ...doc,
@@ -737,12 +737,16 @@ export const createDesignerStore = (
             return { ...out, children: insert((out as DesignerOutput).children, baseEl) };
           }
           const target = out as DesignerOutput;
-          const linked = target.children.some(
+          const sharedOrigin = target.children.some(
             (el) => el.originId && activeOriginIds.has(el.originId)
           );
-          const legacyIndependent = target.contentLinked === undefined &&
-            sourceChildren.length > 0 && target.children.length > 0 && !linked;
-          if (target.contentLinked === false || legacyIndependent || isOutputFrozen(out)) return out;
+          const sourceGroup = sourceOutput.contentLinkGroup;
+          const targetGroup = target.contentLinkGroup;
+          const legacyEmpty = sourceChildren.length === 0 || target.children.length === 0;
+          const linked = sourceGroup && targetGroup
+            ? sourceGroup === targetGroup
+            : sharedOrigin || (!sourceGroup && !targetGroup && legacyEmpty);
+          if (!linked || isOutputFrozen(out)) return out;
           const copy = seedCopy(baseEl, sourceOutput, target, originId);
           copyIds.set(i, copy.id);
           return { ...out, children: insert(target.children, copy) };
@@ -1603,15 +1607,18 @@ export const createDesignerStore = (
               )),
           };
         });
+        const contentLinkGroup = linkContent
+          ? source.contentLinkGroup ?? genId()
+          : genId();
         const newOutput: DesignerOutput = {
           id: genId(), formatId: namedPreset.formatId, name: namedPreset.name,
           width: namedPreset.width, height: namedPreset.height,
-          background: source.background, bg: source.bg, contentLinked: linkContent, children,
+          background: source.background, bg: source.bg, contentLinkGroup, children,
           ...(pages?.length ? { pages } : {}),
         };
         const outs = doc.outputs.map((o, i) => (i === currentOutput ? {
           ...o,
-          ...(source.contentLinked === false && linkContent ? { contentLinked: true } : {}),
+          ...(linkContent && !source.contentLinkGroup ? { contentLinkGroup } : {}),
           children: sourceChildren,
         } : o)) as DesignerOutput[];
         outs.push(newOutput);

@@ -304,11 +304,11 @@ test('selected words retain independent colors through autosave and reopen', asy
 test('shape insertion stays on an independent format through save, reload, and export', async ({ page }) => {
   const independentDoc = structuredClone(initialDoc) as any;
   Object.assign(independentDoc.outputs[0], {
-    id: 'linked-output', formatId: 'custom', name: 'Linked', contentLinked: true,
+    id: 'linked-output', formatId: 'custom', name: 'Linked', contentLinkGroup: 'browser-linked-group',
   });
   const independentOutput = structuredClone(independentDoc.outputs[0]);
   Object.assign(independentOutput, {
-    id: 'independent-output', name: 'Independent', contentLinked: false,
+    id: 'independent-output', name: 'Independent', contentLinkGroup: 'browser-independent-group',
   });
   independentOutput.children = independentOutput.children.map((child: any) => {
     const { originId, ...independentChild } = child;
@@ -320,13 +320,22 @@ test('shape insertion stays on an independent format through save, reload, and e
   const expectLocalShape = (doc: any) => {
     expect(doc.outputs[0].children.filter((child: any) => child.type === 'shape')).toHaveLength(0);
     expect(doc.outputs[1].children.filter((child: any) => child.type === 'shape')).toHaveLength(1);
-    expect(doc.outputs[1].contentLinked).toBe(false);
+    expect(doc.outputs[1].contentLinkGroup).toBe('browser-independent-group');
+    expect(doc.outputs[0].contentLinkGroup).not.toBe(doc.outputs[1].contentLinkGroup);
   };
   await openDesigner(page);
   await page.getByRole('button', { name: /Independent/ }).click();
 
   const stage = page.locator('.konva-stage').first();
-  await stage.click({ button: 'right', position: { x: 5, y: 5 } });
+  const stageBox = await stage.boundingBox();
+  if (!stageBox) throw new Error('Canvas has no bounding box');
+  const scale = Math.min(stageBox.width / 400, stageBox.height / 400) * 0.85;
+  const outputX = (stageBox.width - 400 * scale) / 2;
+  const outputY = (stageBox.height - 400 * scale) / 2;
+  await stage.click({
+    button: 'right',
+    position: { x: outputX + 390 * scale, y: outputY + 390 * scale },
+  });
   await page.getByRole('button', { name: 'Add Shape', exact: true }).click();
   const savesBeforeInsert = state.saveDocs.length;
   await page.keyboard.press('Control+s');

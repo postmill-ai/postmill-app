@@ -275,10 +275,15 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `originId`s, in which case the popover stays open with a warning and independent copies remain
   available. The Link/Unlink button beside output tabs only
   toggles `editFormatOnly`; it never rewrites existing element/clip links. Static page-1 insertion
-  is local when that toggle or an independent output is active. New static outputs persist the
-  optional-additive `contentLinked` flag so empty independent copies stay local after save/reload;
-  legacy outputs without the flag use shared `originId`s to distinguish linked content while
-  retaining linked insertion into empty formats. Later-page insertion is always local. Presets include grouped
+  is local when that toggle is on. New static outputs persist an optional-additive
+  `contentLinkGroup`: linked copies inherit the source's group and independent copies get a fresh
+  group, so separate linked sets can coexist and empty copies retain their behavior after reload.
+  Outputs with different explicit groups never seed each other; mixed grouped/legacy pairs require
+  a shared `originId`. Two legacy outputs use shared origins plus the old empty-format fallback.
+  Already-reminted legacy documents with no shared origins intentionally stay format-local because
+  stored data cannot distinguish them from independent copies. `stripIds` captures link groups from
+  shared origins before re-minting template/import ids, preserving relationships for new instances.
+  Later-page insertion is always local. Presets include grouped
   1080×1350 Instagram/Facebook/LinkedIn/Threads portraits and Facebook/LinkedIn squares with safe
   zones. `FormatThumbnail` lazily renders near-visible output/page previews through one queued,
   shared `output-thumbnail` stage and the existing video-poster projection. Its 100-entry LRU is

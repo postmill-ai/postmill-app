@@ -951,8 +951,8 @@ export interface DesignerOutput {
   id: string;
   /** Optional-additive on v13; freezes document edits, not switching/export. */
   frozen?: boolean;
-  /** Optional-additive on v14; false keeps new element insertion on this output. */
-  contentLinked?: boolean;
+  /** Optional-additive on v14; outputs in the same group receive linked insertions. */
+  contentLinkGroup?: string;
   formatId: string;
   name: string;
   width: number;
@@ -2037,7 +2037,7 @@ const { strict: StrictDesignerPageContentSchema, lenient: LenientDesignerPageCon
 const designerOutputCommon = {
   id: z.string().max(200),
   frozen: z.boolean().optional(),
-  contentLinked: z.boolean().optional(),
+  contentLinkGroup: z.string().max(200).optional(),
   formatId: z.string().max(64),
   name: z.string().max(200),
   background: ColorSchema,
