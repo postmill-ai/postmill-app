@@ -6,6 +6,8 @@ The OpenAI adapter routes native `gpt-6` and `gpt-6.x` model IDs through the Res
 
 Earlier models retain their existing behavior: AI SDK models use Chat Completions, and LangChain keeps its previous SDK routing. There is no silent retry against another API or model and no change to Postmill's configured model defaults.
 
+GPT-6 Responses calls default to `store: false`. Earlier answers, function calls, and encrypted reasoning are sent inline so persisted Postmill threads do not depend on OpenAI-retained response objects. A caller that explicitly sets `providerOptions.openai.store` keeps its chosen value. LangChain enables the equivalent `zdrEnabled` behavior only for GPT-6. Earlier Chat Completions models do not gain a `store` field.
+
 The fallback catalog includes `gpt-6-luna` and `gpt-6.1-terra`, so stored selections remain available when the live model list cannot be loaded. Live model-list results still take precedence according to the existing catalog merge rules.
 
 ## Model resolution and governance

@@ -70,8 +70,12 @@ const OPENAI_MODELS: ModelInfo[] = [
   { id: 'tts-1', label: 'TTS-1', kind: 'text', capabilities: { text: false, image: false, vision: false, embeddings: false, speech: true, tools: false } },
   { id: 'tts-1-hd', label: 'TTS-1 HD', kind: 'text', capabilities: { text: false, image: false, vision: false, embeddings: false, speech: true, tools: false } },
   { id: 'whisper-1', label: 'Whisper-1', kind: 'text', capabilities: { text: true, image: false, vision: false, embeddings: false, speech: true, tools: false } },
-  ...['gpt-4.1-mini', 'gpt-6-luna', 'gpt-6.1-terra'].map(id => ({
-    id, label: id, kind: 'text' as const, reasoning: usesResponses(id),
+  ...[
+    { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+    { id: 'gpt-6-luna', label: 'GPT-6 Luna' },
+    { id: 'gpt-6.1-terra', label: 'GPT-6.1 Terra' },
+  ].map(({ id, label }) => ({
+    id, label, kind: 'text' as const, reasoning: usesResponses(id),
     capabilities: { ...OPENAI_CAPABILITIES, image: false, embeddings: false, speech: false },
   })),
 ];
@@ -163,8 +167,25 @@ export class OpenAIAdapter implements AIProviderAdapter {
     const provider = this._buildProvider(creds);
     // Both SDK implementations accept LanguageModelV2 prompts and translate text,
     // reasoning, tool calls/results and streaming into the endpoint's wire format.
-    if (usesResponses(modelId)) return provider.responses(modelId);
-    return provider.chat(modelId);
+    if (!usesResponses(modelId)) return provider.chat(modelId);
+    const model = provider.responses(modelId);
+    // Keep persisted threads independent of OpenAI's response retention. Callers
+    // can opt into storage; otherwise replay reasoning and content inline.
+    return new Proxy(model, {
+      get(target, prop) {
+        if (prop === 'doGenerate' || prop === 'doStream') return (options: any) => {
+          if (options.providerOptions?.openai?.store !== undefined) return target[prop](options);
+          return target[prop]({
+            ...options,
+            providerOptions: {
+              ...options.providerOptions,
+              openai: { ...options.providerOptions?.openai, store: false },
+            },
+          });
+        };
+        return Reflect.get(target, prop);
+      },
+    });
   }
 
   createLangchainModel(
@@ -175,6 +196,7 @@ export class OpenAIAdapter implements AIProviderAdapter {
     const responses = usesResponses(modelId);
     return new ChatOpenAI({
       useResponsesApi: responses,
+      zdrEnabled: responses,
       apiKey: creds.apiKey,
       configuration: {
         fetch: this._sdkFetch(creds.baseURL),

@@ -38,10 +38,35 @@ describe('OpenAI real SDK wire contracts', () => {
     expect(result.content).toContainEqual(expect.objectContaining({ type: 'text', text: 'Done' }));
     expect(result.usage).toMatchObject({ inputTokens: 12, outputTokens: 7 });
     if (modelId.startsWith('gpt-6')) {
+      expect(body.store).toBe(false);
       expect(body.reasoning.effort).toBe('high'); expect(body.temperature).toBeUndefined(); expect(body.top_p).toBeUndefined();
       expect(body.max_output_tokens).toBe(80); expect(body.input[1].content[0].type).toBe('input_text');
       expect(result.usage.reasoningTokens).toBe(3);
-    } else { expect(body.temperature).toBe(.7); }
+    } else { expect(body.temperature).toBe(.7); expect('store' in body).toBe(false); }
+  });
+
+  it('defaults GPT-6 follow-ups to stateless inline history', async () => {
+    const continuedPrompt: any = [
+      { role: 'user', content: [{ type: 'text', text: 'First question' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Earlier reasoning', providerOptions: { openai: { itemId: 'rs_turn1' } } },
+          { type: 'text', text: 'Earlier answer', providerOptions: { openai: { itemId: 'msg_turn1' } } },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'Second question' }] },
+    ];
+    const { adapter, requests } = fixture(() => response([text]));
+    await adapter.createLanguageModel(
+      { apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' },
+      'gpt-6-luna',
+    ).doGenerate({ prompt: continuedPrompt });
+    const body = requests[0].body;
+    expect(body.store).toBe(false);
+    expect(JSON.stringify(body.input)).not.toContain('item_reference');
+    expect(JSON.stringify(body.input)).toContain('Earlier answer');
+    expect(body.include).toContain('reasoning.encrypted_content');
   });
 
   it.each([...models.map(id => [id, true] as const), ...models.filter(id => id.startsWith('gpt-6')).map(id => [id, false] as const)])('%s store=%s: two tool rounds through AI SDK agent loop', async (modelId, store) => {
@@ -75,7 +100,10 @@ describe('OpenAI real SDK wire contracts', () => {
     expect(answer.text).toBe('Done'); expect(requests[0].body.model).toBe(modelId);
     expect(requests[0].timeoutMs).toBe(300_000);
     expect(requests[0].url.endsWith(modelId.startsWith('gpt-6') ? '/responses' : '/chat/completions')).toBe(true);
-    if (modelId.startsWith('gpt-6')) { expect(requests[0].body.temperature).toBeUndefined(); expect(requests[0].body.top_p).toBeUndefined(); }
+    if (modelId.startsWith('gpt-6')) {
+      expect(requests[0].body.store).toBe(false);
+      expect(requests[0].body.temperature).toBeUndefined(); expect(requests[0].body.top_p).toBeUndefined();
+    } else { expect('store' in requests[0].body).toBe(false); }
   });
 });
 
@@ -183,6 +211,9 @@ describe('catalog and transport', () => {
     const adapter = new OpenAIAdapter(); adapter.setSafeFetch(async () => new Response('', { status: 503 }));
     const catalog = await adapter.listModels({ apiKey: 'fixture', baseURL: 'https://openai.fixture/v1' });
     for (const id of models) expect(catalog.some(m => m.id === id)).toBe(true);
+    expect(catalog.find(m => m.id === 'gpt-4.1-mini')?.label).toBe('GPT-4.1 Mini');
+    expect(catalog.find(m => m.id === 'gpt-6-luna')?.label).toBe('GPT-6 Luna');
+    expect(catalog.find(m => m.id === 'gpt-6.1-terra')?.label).toBe('GPT-6.1 Terra');
   });
 
   it('adapts Request inputs without losing body, headers or abort signal', async () => {
