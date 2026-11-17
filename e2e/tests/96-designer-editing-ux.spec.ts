@@ -301,6 +301,52 @@ test('selected words retain independent colors through autosave and reopen', asy
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toContainText('Hello world');
 });
 
+test('shape insertion stays on an independent format through save, reload, and export', async ({ page }) => {
+  const independentDoc = structuredClone(initialDoc) as any;
+  Object.assign(independentDoc.outputs[0], {
+    id: 'linked-output', formatId: 'custom', name: 'Linked', contentLinked: true,
+  });
+  const independentOutput = structuredClone(independentDoc.outputs[0]);
+  Object.assign(independentOutput, {
+    id: 'independent-output', name: 'Independent', contentLinked: false,
+  });
+  independentOutput.children = independentOutput.children.map((child: any) => {
+    const { originId, ...independentChild } = child;
+    void originId;
+    return { ...independentChild, id: `independent-${child.id}` };
+  });
+  independentDoc.outputs.push(independentOutput);
+  const state = await installMocks(page, independentDoc);
+  const expectLocalShape = (doc: any) => {
+    expect(doc.outputs[0].children.filter((child: any) => child.type === 'shape')).toHaveLength(0);
+    expect(doc.outputs[1].children.filter((child: any) => child.type === 'shape')).toHaveLength(1);
+    expect(doc.outputs[1].contentLinked).toBe(false);
+  };
+  await openDesigner(page);
+  await page.getByRole('button', { name: /Independent/ }).click();
+
+  const stage = page.locator('.konva-stage').first();
+  await stage.click({ button: 'right', position: { x: 5, y: 5 } });
+  await page.getByRole('button', { name: 'Add Shape', exact: true }).click();
+  const savesBeforeInsert = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBeforeInsert);
+  expectLocalShape(state.saveDocs.at(-1));
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await page.getByRole('button', { name: /Independent/ }).click();
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save to Files' }).click();
+  await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
+  await page.getByRole('button', { name: /Next: Export \d+ files?/ }).click();
+  await page.getByRole('button', { name: /^Export \d+ files?$/ }).click();
+  await expect(page.getByRole('link', { name: /\.png$/ }).first()).toBeVisible();
+  expect(state.renderDocs.length).toBeGreaterThan(0);
+  for (const doc of state.renderDocs) expectLocalShape(doc);
+});
+
 test('text effects remain editable through Paint layers, preview, undo, reopen, and export', async ({ page }) => {
   const state = await installMocks(page);
   const children = state.doc.outputs[0].children as Array<Record<string, unknown>>;

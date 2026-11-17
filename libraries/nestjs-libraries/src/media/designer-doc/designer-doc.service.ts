@@ -299,6 +299,7 @@ export class DesignerDocService {
           height: op.preset.height,
           background: source?.background ?? '#ffffff',
           bg: source?.bg,
+          contentLinked: linkContent,
           // The copy stack's vertical budget belongs to the DESIGN, not to one
           // canvas — carried over so this format's type is measured with the
           // same rule the primary was composed under (see `typeBasisPx`).
@@ -342,7 +343,13 @@ export class DesignerDocService {
             )
           );
           const outputs = doc.outputs.map((out, i) =>
-            i === 0 ? { ...out, children: sourceChildren } : out
+            i === 0 ? {
+              ...out,
+              ...(isImageOutput(out) && out.contentLinked === false && linkContent
+                ? { contentLinked: true }
+                : {}),
+              children: sourceChildren,
+            } : out
           ) as DesignerDoc['outputs'];
           outputs.push(newOutput);
           return { ...doc, outputs } as DesignerDoc;

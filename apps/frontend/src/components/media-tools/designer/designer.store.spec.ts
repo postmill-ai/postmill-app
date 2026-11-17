@@ -397,6 +397,202 @@ describe('Designer smoke: multi-format linked editing', () => {
   });
 });
 
+describe('format-local element insertion', () => {
+  afterEach(() => {
+    focalMock.result = null;
+  });
+
+  const makeElement = (type: 'text' | 'image' | 'shape', id: string) => ({
+    id,
+    type,
+    x: 20,
+    y: 30,
+    width: 200,
+    height: 100,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    ...(type === 'text' ? { text: 'Inserted', fontSize: 32 } : {}),
+    ...(type === 'image' ? { src: 'https://example.com/inserted.png' } : {}),
+    ...(type === 'shape' ? { shape: 'rect' } : {}),
+  }) as any;
+
+  const storeWithLinkedAndIndependentOutputs = () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Linked', width: 1200, height: 675 });
+    store.getState().addOutput(
+      { formatId: 'ig-story', name: 'Independent', width: 1080, height: 1920 },
+      { linkContent: false }
+    );
+    store.getState().setCurrentOutput(0);
+    return store;
+  };
+
+  it.each(['text', 'image', 'shape'] as const)(
+    'This format only inserts %s on the active output with one Undo',
+    (type) => {
+      const store = storeWithLinkedAndIndependentOutputs();
+      const origins = store.getState().doc.outputs.map((out) =>
+        out.children.map((el) => el.originId)
+      );
+      const historyLength = store.getState().history.length;
+      store.getState().setEditFormatOnly(true);
+
+      store.getState().addElement(makeElement(type, `local-${type}`));
+
+      expect(store.getState().doc.outputs.map((out) => out.children)).toHaveLength(3);
+      expect(store.getState().doc.outputs[0].children).toHaveLength(2);
+      expect(store.getState().doc.outputs[1].children).toHaveLength(1);
+      expect(store.getState().doc.outputs[2].children).toHaveLength(1);
+      expect(store.getState().doc.outputs.map((out) =>
+        out.children.slice(0, 1).map((el) => el.originId)
+      )).toEqual(origins);
+      expect(store.getState().history).toHaveLength(historyLength + 1);
+
+      store.getState().undo();
+      expect(store.getState().doc.outputs.every((out) => out.children.length === 1)).toBe(true);
+    }
+  );
+
+  it.each(['text', 'image', 'shape'] as const)(
+    '%s insertion respects independent outputs in both directions',
+    (type) => {
+      const store = storeWithLinkedAndIndependentOutputs();
+      const sourceOrigins = store.getState().doc.outputs.map((out) => out.children[0].originId);
+      store.getState().setCurrentOutput(2);
+
+      store.getState().addElement(makeElement(type, `independent-${type}`));
+
+      expect(store.getState().doc.outputs[0].children).toHaveLength(1);
+      expect(store.getState().doc.outputs[1].children).toHaveLength(1);
+      expect(store.getState().doc.outputs[2].children).toHaveLength(2);
+      expect(store.getState().doc.outputs.map((out) => out.children[0].originId)).toEqual(sourceOrigins);
+
+      const independentId = store.getState().doc.outputs[2].children[0].id;
+      store.getState().updateElement(independentId, { text: 'Independent edit' });
+      expect(store.getState().doc.outputs[0].children[0].text).toBe('Original');
+      expect(store.getState().doc.outputs[1].children[0].text).toBe('Original');
+
+      store.getState().undo();
+      store.getState().setCurrentOutput(0);
+      store.getState().addElement(makeElement(type, `linked-${type}`));
+
+      const outputs = store.getState().doc.outputs;
+      expect(outputs[0].children).toHaveLength(2);
+      expect(outputs[1].children).toHaveLength(2);
+      expect(outputs[2].children).toHaveLength(1);
+      expect(outputs[1].children[1].id).not.toBe(outputs[0].children[1].id);
+      expect(outputs[1].children[1].originId).toBe(outputs[0].children[1].originId);
+      expect(outputs[2].children[0].originId).toBeUndefined();
+
+      store.getState().undo();
+      expect(store.getState().doc.outputs.every((out) => out.children.length === 1)).toBe(true);
+    }
+  );
+
+  it.each(['text', 'image', 'shape'] as const)(
+    'later-page %s insertion stays local while linking is enabled',
+    (type) => {
+      const store = storeWithLinkedAndIndependentOutputs();
+      store.getState().setCurrentOutput(1);
+      store.getState().addPage();
+
+      store.getState().addElement(makeElement(type, `page-two-${type}`));
+
+      const outputs = store.getState().doc.outputs as any[];
+      expect(outputs[0].children).toHaveLength(1);
+      expect(outputs[1].children).toHaveLength(1);
+      expect(outputs[1].pages[0].children).toHaveLength(1);
+      expect(outputs[2].children).toHaveLength(1);
+      expect(outputs[2].pages).toBeUndefined();
+    }
+  );
+
+  it('keeps an empty independent copy local without suppressing empty linked formats', () => {
+    const independentStore = createDesignerStore();
+    independentStore.getState().addOutput(
+      { formatId: 'x-post', name: 'Independent', width: 1200, height: 675 },
+      { linkContent: false }
+    );
+
+    independentStore.getState().addElement(makeElement('shape', 'empty-independent-shape'));
+
+    expect(independentStore.getState().doc.outputs.map((out) => out.children.length)).toEqual([0, 1]);
+    expect(independentStore.getState().doc.outputs.map((out) => out.contentLinked)).toEqual([true, false]);
+
+    const linkedStore = createDesignerStore();
+    linkedStore.getState().addOutput({ formatId: 'x-post', name: 'Linked', width: 1200, height: 675 });
+    linkedStore.getState().setCurrentOutput(0);
+    linkedStore.getState().addElement(makeElement('shape', 'empty-linked-shape'));
+    expect(linkedStore.getState().doc.outputs.map((out) => out.children.length)).toEqual([1, 1]);
+  });
+
+  it('detects legacy independent copies by their lack of shared origins', () => {
+    const store = storeWithLinkedAndIndependentOutputs();
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out) => {
+        const { contentLinked, ...legacyOut } = out;
+        void contentLinked;
+        return legacyOut;
+      }),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().setCurrentOutput(2);
+
+    store.getState().addElement(makeElement('shape', 'legacy-independent-shape'));
+
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([1, 1, 2]);
+    store.getState().setCurrentOutput(0);
+    store.getState().addElement(makeElement('shape', 'legacy-linked-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 2, 2]);
+  });
+
+  it('skips frozen and independent siblings but seeds mutable linked siblings', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Frozen', width: 1200, height: 675 });
+    store.getState().addOutput({ formatId: 'linkedin-post', name: 'Mutable', width: 1200, height: 627 });
+    store.getState().addOutput(
+      { formatId: 'ig-story', name: 'Independent', width: 1080, height: 1920 },
+      { linkContent: false }
+    );
+    store.getState().setCurrentOutput(0);
+    store.getState().setOutputFrozen(1, true);
+
+    store.getState().addElement(makeElement('shape', 'linked-shape'));
+
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 1, 2, 1]);
+    expect(store.getState().doc.outputs[2].children[1].originId)
+      .toBe(store.getState().doc.outputs[0].children[1].originId);
+    store.getState().undo();
+    expect(store.getState().doc.outputs.every((out) => out.children.length === 1)).toBe(true);
+  });
+
+  it('attaches a detected focal point only to the independent output', async () => {
+    focalMock.result = { x: 0.25, y: 0.75 };
+    const store = storeWithLinkedAndIndependentOutputs();
+    store.getState().setCurrentOutput(2);
+
+    store.getState().addElement(makeElement('image', 'independent-image'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const outputs = store.getState().doc.outputs;
+    expect(outputs[0].children).toHaveLength(1);
+    expect(outputs[1].children).toHaveLength(1);
+    expect(outputs[2].children).toHaveLength(2);
+    expect(outputs[2].children[1].focalPoint).toEqual({ x: 0.25, y: 0.75 });
+  });
+});
+
 describe('repeated output dimensions', () => {
   it('allows repeated presets and custom sizes with unique names and format-local geometry', () => {
     const store = createDesignerStore();

@@ -1125,6 +1125,7 @@ describe('DesignerDocService', () => {
     ]);
     const sourceElement = (staticResult.outputs[0] as any).children[0];
     const copiedElement = (staticResult.outputs[1] as any).children[0];
+    expect(staticResult.outputs[1].contentLinked).toBe(false);
     expect(copiedElement.id).not.toBe(sourceElement.id);
     expect(copiedElement.originId).toBe(copiedElement.id);
     expect(copiedElement.originId).not.toBe(sourceElement.originId);

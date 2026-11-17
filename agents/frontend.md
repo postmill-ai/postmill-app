@@ -274,7 +274,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   its pages); a frozen source is allowed unless linked copying would need to backfill its missing
   `originId`s, in which case the popover stays open with a warning and independent copies remain
   available. The Link/Unlink button beside output tabs only
-  toggles `editFormatOnly`; it never rewrites existing element/clip links. Presets include grouped
+  toggles `editFormatOnly`; it never rewrites existing element/clip links. Static page-1 insertion
+  is local when that toggle or an independent output is active. New static outputs persist the
+  optional-additive `contentLinked` flag so empty independent copies stay local after save/reload;
+  legacy outputs without the flag use shared `originId`s to distinguish linked content while
+  retaining linked insertion into empty formats. Later-page insertion is always local. Presets include grouped
   1080×1350 Instagram/Facebook/LinkedIn/Threads portraits and Facebook/LinkedIn squares with safe
   zones. `FormatThumbnail` lazily renders near-visible output/page previews through one queued,
   shared `output-thumbnail` stage and the existing video-poster projection. Its 100-entry LRU is

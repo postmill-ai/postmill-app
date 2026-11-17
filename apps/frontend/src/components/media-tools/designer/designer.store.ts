@@ -491,7 +491,7 @@ const createEmptyDoc = (width = 1080, height = 1080, attribution?: DesignerAttri
   return {
     version: DESIGNER_DOC_VERSION,
     mode: 'image',
-    outputs: [{ id: genId(), formatId: m.formatId, name: m.name, width, height, background: '#ffffff', children: [] }],
+    outputs: [{ id: genId(), formatId: m.formatId, name: m.name, width, height, background: '#ffffff', contentLinked: true, children: [] }],
     attribution,
   };
 };
@@ -692,7 +692,7 @@ export const createDesignerStore = (
       addElement: (element, beforeId) => {
         if (isVideoMode() || isOutputFrozen(activeImage())) return;
         get().clearElementPreview();
-        const { doc, currentOutput, currentPage } = get();
+        const { doc, currentOutput, currentPage, editFormatOnly } = get();
         const originId = element.originId || genId();
         const baseEl = { ...element, id: element.id || genId(), originId };
         const sourceOutput = doc.outputs[currentOutput] as DesignerOutput;
@@ -711,8 +711,9 @@ export const createDesignerStore = (
           return next;
         };
         // Linked (originId) seeding across outputs is a PAGE-1 behavior: an
-        // element added on a later page exists on that page only.
-        if (currentPage > 0) {
+        // element added on a later page, with format-local editing, or to an
+        // independent output exists on the active output/page only.
+        if (currentPage > 0 || editFormatOnly || sourceOutput.contentLinked === false) {
           mutate({
             doc: {
               ...doc,
@@ -728,15 +729,23 @@ export const createDesignerStore = (
           return;
         }
         const copyIds = new Map<number, string>();
+        const activeOriginIds = new Set(
+          sourceChildren.filter((el) => el.originId).map((el) => el.originId as string)
+        );
         const outs = doc.outputs.map((out, i) => {
-          if (i !== currentOutput && isOutputFrozen(out)) return out;
-          return i === currentOutput
-            ? { ...out, children: insert((out as DesignerOutput).children, baseEl) }
-            : (() => {
-                const copy = seedCopy(baseEl, sourceOutput, out as DesignerOutput, originId);
-                copyIds.set(i, copy.id);
-                return { ...out, children: insert((out as DesignerOutput).children, copy) };
-              })();
+          if (i === currentOutput) {
+            return { ...out, children: insert((out as DesignerOutput).children, baseEl) };
+          }
+          const target = out as DesignerOutput;
+          const linked = target.children.some(
+            (el) => el.originId && activeOriginIds.has(el.originId)
+          );
+          const legacyIndependent = target.contentLinked === undefined &&
+            sourceChildren.length > 0 && target.children.length > 0 && !linked;
+          if (target.contentLinked === false || legacyIndependent || isOutputFrozen(out)) return out;
+          const copy = seedCopy(baseEl, sourceOutput, target, originId);
+          copyIds.set(i, copy.id);
+          return { ...out, children: insert(target.children, copy) };
         });
         mutate({ doc: { ...doc, outputs: outs }, isDirty: true, selectedIds: [baseEl.id] });
         get().pushHistory();
@@ -1597,10 +1606,14 @@ export const createDesignerStore = (
         const newOutput: DesignerOutput = {
           id: genId(), formatId: namedPreset.formatId, name: namedPreset.name,
           width: namedPreset.width, height: namedPreset.height,
-          background: source.background, bg: source.bg, children,
+          background: source.background, bg: source.bg, contentLinked: linkContent, children,
           ...(pages?.length ? { pages } : {}),
         };
-        const outs = doc.outputs.map((o, i) => (i === currentOutput ? { ...o, children: sourceChildren } : o)) as DesignerOutput[];
+        const outs = doc.outputs.map((o, i) => (i === currentOutput ? {
+          ...o,
+          ...(source.contentLinked === false && linkContent ? { contentLinked: true } : {}),
+          children: sourceChildren,
+        } : o)) as DesignerOutput[];
         outs.push(newOutput);
         const accepted = mutate({ doc: { ...doc, outputs: outs }, currentOutput: outs.length - 1, selectedIds: [], isDirty: true });
         if (!accepted) return false;
