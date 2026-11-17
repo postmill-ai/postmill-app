@@ -44,6 +44,14 @@ describe('OrganizationRepository invite acceptance (integration)', () => {
         repository.addUserToOrg(userId, inviteId, organizationId, 'USER'),
       ).resolves.toMatchObject({ userId, organizationId });
       expect(await prisma.userOrganization.count({ where: { userId, organizationId } })).toBe(1);
+
+      await prisma.userOrganization.delete({
+        where: { userId_organizationId: { userId, organizationId } },
+      });
+      await expect(
+        repository.addUserToOrg(userId, inviteId, organizationId, 'USER'),
+      ).resolves.toBe(false);
+      expect(await prisma.userOrganization.count({ where: { userId, organizationId } })).toBe(0);
     } finally {
       await prisma.organization.delete({ where: { id: organizationId } }).catch(() => undefined);
       await prisma.user.delete({ where: { id: userId } }).catch(() => undefined);

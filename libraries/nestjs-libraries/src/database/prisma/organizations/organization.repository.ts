@@ -238,6 +238,7 @@ export class OrganizationRepository {
         if (membership) {
           return membership;
         }
+        return false;
       } else {
         Logger.warn(
           `addUserToOrg: invite ${id} already consumed (user=${userId} org=${orgId})`,
@@ -277,16 +278,21 @@ export class OrganizationRepository {
 
     try {
       return await this._transaction.model.$transaction(async (tx) => {
-        const membership = await tx.userOrganization.upsert({
+        const existingMembership = await tx.userOrganization.findUnique({
           where: {
             userId_organizationId: { userId, organizationId: orgId },
           },
-          create: {
+        });
+        if (existingMembership) {
+          return existingMembership;
+        }
+
+        const membership = await tx.userOrganization.create({
+          data: {
             roleId: appRole?.id,
             userId,
             organizationId: orgId,
           },
-          update: {},
         });
 
         await tx.user.update({
@@ -312,10 +318,6 @@ export class OrganizationRepository {
       if (!membership) {
         throw error;
       }
-      await this._user.model.user.update({
-        where: { id: userId },
-        data: { inviteId: id },
-      });
       return membership;
     }
   }
