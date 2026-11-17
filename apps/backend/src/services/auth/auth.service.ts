@@ -487,7 +487,22 @@ export class AuthService {
     state?: string
   ) {
     const providerInstance = this._providerManager.getProvider(provider);
-    const token = await providerInstance.getToken(code, redirectUri, state);
+    let token: string;
+    try {
+      token = await providerInstance.getToken(code, redirectUri, state);
+    } catch (error) {
+      const providerError = (error as { response?: { data?: { error?: string } } })
+        ?.response?.data?.error;
+      if (
+        providerError === 'invalid_grant' ||
+        (error instanceof Error && error.message === 'invalid_grant')
+      ) {
+        throw new BadRequestException(
+          'Sign-in could not be completed. Please restart the sign-in and try again.'
+        );
+      }
+      throw error;
+    }
     const user = await providerInstance.getUser(token);
     if (!user) {
       throw new Error('Invalid user');

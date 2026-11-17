@@ -259,8 +259,12 @@ describe('OrganizationService', () => {
       // admin (level 1) acting on an owner (level 2) is rejected as before.
       await expect(
         service.changeTeamMemberRole(orgAs('role-admin'), adminActor, 'u-target', 'USER')
-      ).rejects.toThrow('You do not have permission to change this user role');
+      ).rejects.toMatchObject({
+        message: 'You do not have permission to change this user role',
+        status: 403,
+      });
       expect(mockRolesService.assertCanAssignRole).not.toHaveBeenCalled();
+      expect(mockRepo.changeTeamMemberRole).not.toHaveBeenCalled();
     });
 
     it('lets an owner demote an admin via the pure legacy path', async () => {

@@ -208,7 +208,10 @@ export class OrganizationService {
 
       // Only act on members strictly below you, and never promote above your own level.
       if (myLevel <= userLevel || myLevel <= targetLevel) {
-        throw new Error('You do not have permission to change this user role');
+        throw new HttpException(
+          'You do not have permission to change this user role',
+          HttpStatus.FORBIDDEN
+        );
       }
     }
 

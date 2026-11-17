@@ -3696,13 +3696,15 @@ paths:
           required: false
           in: query
           schema:
-            minimum: 1
+            minimum: 0
+            maximum: 1000000
             type: number
         - name: limit
           required: false
           in: query
           schema:
             minimum: 1
+            maximum: 1000
             type: number
         - name: search
           required: false
@@ -4440,6 +4442,7 @@ paths:
           description: Zero-based page index.
           schema:
             minimum: 0
+            maximum: 1000000
             default: 0
             type: number
       responses:
@@ -9223,6 +9226,7 @@ paths:
           description: Zero-based page index.
           schema:
             minimum: 0
+            maximum: 1000000
             default: 0
             type: number
       responses:

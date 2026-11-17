@@ -16,6 +16,7 @@ const mockOrganization = {
 const mockUserOrg = {
   userOrganization: {
     create: vi.fn(),
+    findUnique: vi.fn(),
     update: vi.fn(),
   },
 };
@@ -141,6 +142,64 @@ describe('OrganizationRepository', () => {
         data: { inviteId: 'invite-1' },
       });
       expect(result).toEqual({ organizationId: 'org-1' });
+    });
+
+    it('returns the existing row if a concurrent membership insert wins the race', async () => {
+      const membership = { id: 'membership-1', userId: 'u-1', organizationId: 'org-1' };
+      appRoleModel.findFirst.mockResolvedValue({ id: 'role-editor', key: 'editor' });
+      userOrgModel.create.mockRejectedValue({ code: 'P2002' });
+      userOrgModel.findUnique.mockResolvedValue(membership);
+
+      await expect(
+        repository.addUserToOrg('u-1', 'invite-1', 'org-1', 'USER')
+      ).resolves.toBe(membership);
+      expect(userModel.update).not.toHaveBeenCalled();
+    });
+
+    it('returns the existing membership when the same user replays an invite', async () => {
+      const membership = { id: 'membership-1', userId: 'u-1', organizationId: 'org-1', roleId: 'original-role' };
+      userModel.findFirst.mockResolvedValue({ id: 'u-1' });
+      userOrgModel.findUnique.mockResolvedValue(membership);
+
+      await expect(
+        repository.addUserToOrg('u-1', 'invite-1', 'org-1', 'ADMIN', 'new-role')
+      ).resolves.toBe(membership);
+
+      expect(userOrgModel.create).not.toHaveBeenCalled();
+      expect(userOrgModel.update).not.toHaveBeenCalled();
+      expect(userModel.update).not.toHaveBeenCalled();
+    });
+
+    it('does not let a removed member rejoin with their consumed invite', async () => {
+      userModel.findFirst.mockResolvedValue({ id: 'u-1' });
+      userOrgModel.findUnique.mockResolvedValue(null);
+
+      await expect(
+        repository.addUserToOrg('u-1', 'invite-1', 'org-1', 'ADMIN')
+      ).resolves.toBe(false);
+      expect(userOrgModel.create).not.toHaveBeenCalled();
+      expect(userModel.update).not.toHaveBeenCalled();
+    });
+
+    it('does not consume an unused invite opened by an existing member', async () => {
+      const membership = { id: 'membership-1', userId: 'u-1', organizationId: 'org-1' };
+      userOrgModel.findUnique.mockResolvedValue(membership);
+
+      await expect(
+        repository.addUserToOrg('u-1', 'invite-1', 'org-1', 'USER')
+      ).resolves.toBe(membership);
+      expect(userOrgModel.create).not.toHaveBeenCalled();
+      expect(userModel.update).not.toHaveBeenCalled();
+    });
+
+    it('still rejects a consumed invite for a different user', async () => {
+      userModel.findFirst.mockResolvedValue({ id: 'someone-else' });
+
+      await expect(
+        repository.addUserToOrg('u-1', 'invite-1', 'org-1', 'USER')
+      ).resolves.toBe(false);
+      expect(userOrgModel.findUnique).not.toHaveBeenCalled();
+      expect(userOrgModel.create).not.toHaveBeenCalled();
     });
   });
 
