@@ -68,7 +68,7 @@ jobs:
         # — any real high/critical advisory still fails the job. Restore the
         # hard gate once pnpm supports the bulk advisory endpoint.
         #
-        # Advisory allowlist (2026-10-28): advisories with NO patched version
+        # Advisory allowlist (reviewed 2026-11-17): advisories with NO patched version
         # ("patched: <0.0.0"), each unreachable in practice:
         #   GHSA-ch52-4w7c-c8xp  http-cache-semantics — dev-only: @swc/cli → bin-wrapper → got (build tooling, never ships)
         #   GHSA-86w9-cpqp-85rv  node-forge   — @copilotkit/runtime → @langchain/google-gauth → gtoken → google-p12-pem;
@@ -96,6 +96,11 @@ jobs:
         #                                     (verified 2026-10-28 across dist/); GraphQLPhoneNumber is never
         #                                     registered in the /chat schema, so the exponential-backtracking
         #                                     regex never runs. The CopilotKit bump follow-up removes this too.
+        #   GHSA-fc5q-39xc-vjpf  picomatch    — ReDoS through single-branch repeated extglobs, affecting <=4.0.7.
+        #                                     Verified 2026-11-17: the advisory has no patched release. The only lockfile
+        #                                     paths are dev/build tooling: root @swc/cli → tinyglobby, apps/backend
+        #                                     @nestjs/cli → @angular-devkit/core, and eslint-config-next → fast-glob →
+        #                                     micromatch. Production code neither imports picomatch nor passes user globs to it.
         # Drop entries the moment a patched release exists. Any NON-allowlisted
         # high/critical advisory fails the job.
         run: |
@@ -115,7 +120,8 @@ jobs:
             "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
             "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
             "https://github.com/advisories/GHSA-xcx6-jx8p-x3h5",
-            "https://github.com/advisories/GHSA-x8rm-f576-gq67"
+            "https://github.com/advisories/GHSA-x8rm-f576-gq67",
+            "https://github.com/advisories/GHSA-fc5q-39xc-vjpf"
           ]'
           REMAINING=$(echo "$OUT" | jq -c --argjson allowed "$ALLOWED" \
             '[.advisories[] | select(.url as $u | $allowed | index($u) | not) | {module: .module_name, severity, url}]')
@@ -124,7 +130,7 @@ jobs:
             echo "::error::high/critical advisories present (see above)"
             exit 1
           fi
-          echo "::warning::Only allowlisted unfixable advisories remain (http-cache-semantics, node-forge, zod, msal-node, graphql-scalars — see step comment). Revisit when patched releases ship."
+          echo "::warning::Only allowlisted unfixable advisories remain (http-cache-semantics, node-forge, zod, msal-node, graphql-scalars, picomatch — see step comment). Revisit when patched releases ship."
           exit 0
 
       - name: Check for reintroduced channel env reads
