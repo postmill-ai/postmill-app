@@ -34,7 +34,13 @@ import {
 import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
 import { canSplitClipAt } from './timeline-split';
 import { TEXT_ANIMATION_PRESETS, buildTextAnimationUpdate, matchTextAnimationPreset } from './text-animation-presets';
-import { applyLinked, applyElementPatch, applyLinkedVideoClip, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
+import {
+  applyLinked,
+  applyElementPatch,
+  applyLinkedVideoClip,
+  GEOMETRY_KEYS,
+  outputsLinkedForInsertion,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
 import {
   hasFrozenOutputMutation,
   isOutputFrozen,
@@ -100,21 +106,6 @@ export type {
   FillContents,
 };
 export { migrateDoc };
-
-const outputsLinkedForInsertion = (source: DesignerOutput, target: DesignerOutput) => {
-  const sourceGroup = source.contentLinkGroup;
-  const targetGroup = target.contentLinkGroup;
-  if (sourceGroup && targetGroup) return sourceGroup === targetGroup;
-  const sourceOrigins = new Set(
-    source.children.filter((el) => el.originId).map((el) => el.originId as string)
-  );
-  const sharedOrigin = target.children.some(
-    (el) => el.originId && sourceOrigins.has(el.originId)
-  );
-  return sharedOrigin || (
-    !sourceGroup && !targetGroup && (source.children.length === 0 || target.children.length === 0)
-  );
-};
 
 /** Hard cap on timeline tracks per output — unbounded track creation (the
  *  drag-below-creates-track gesture, landing on occupied tracks) would
@@ -1613,12 +1604,12 @@ export const createDesignerStore = (
         const legacyLinkedIndexes = new Set<number>();
         let contentLinkGroup = linkContent ? source.contentLinkGroup : undefined;
         if (linkContent && !contentLinkGroup) {
-          legacyLinkedIndexes.add(currentOutput);
+          if (!isOutputFrozen(source)) legacyLinkedIndexes.add(currentOutput);
           for (let index = 0; index < doc.outputs.length; index++) {
             const output = doc.outputs[index] as DesignerOutput;
             if (outputsLinkedForInsertion(source, output)) {
               contentLinkGroup ??= output.contentLinkGroup;
-              if (!output.contentLinkGroup) legacyLinkedIndexes.add(index);
+              if (!output.contentLinkGroup && !isOutputFrozen(output)) legacyLinkedIndexes.add(index);
             }
           }
         }

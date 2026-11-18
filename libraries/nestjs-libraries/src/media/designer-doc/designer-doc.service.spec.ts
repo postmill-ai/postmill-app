@@ -1210,6 +1210,69 @@ describe('DesignerDocService', () => {
     ]);
   });
 
+  it.each([0, 1])(
+    'linked addOutput leaves frozen legacy output %s unchanged',
+    (frozenIndex) => {
+      const service = makeService();
+      const linkedDoc = service.applyOps(createBlankDoc(), [
+        { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+        {
+          op: 'addOutput',
+          preset: { formatId: 'custom-tall', name: 'Linked', width: 1080, height: 1920 },
+        },
+      ]);
+      const legacyDoc = {
+        ...linkedDoc,
+        outputs: linkedDoc.outputs.map((out, index) => ({
+          ...out,
+          contentLinkGroup: undefined,
+          frozen: index === frozenIndex ? true : undefined,
+        })),
+      } as typeof linkedDoc;
+      const frozenBefore = structuredClone(legacyDoc.outputs[frozenIndex]);
+
+      const result = service.applyOps(legacyDoc, [
+        {
+          op: 'addOutput',
+          preset: { formatId: 'custom-wide', name: 'Wide', width: 1920, height: 1080 },
+        },
+      ]);
+
+      expect(result.outputs).toHaveLength(3);
+      expect(result.outputs[frozenIndex]).toEqual(frozenBefore);
+      const mutableIndex = frozenIndex === 0 ? 1 : 0;
+      expect(result.outputs[2].contentLinkGroup).toBeDefined();
+      expect(result.outputs[2].contentLinkGroup)
+        .toBe(result.outputs[mutableIndex].contentLinkGroup);
+    }
+  );
+
+  it('linked addOutput stamps an ungrouped legacy shared-origin sibling', () => {
+    const service = makeService();
+    const linkedDoc = service.applyOps(createBlankDoc(), [
+      { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-tall', name: 'Linked', width: 1080, height: 1920 },
+      },
+    ]);
+    const legacyDoc = {
+      ...linkedDoc,
+      outputs: linkedDoc.outputs.map((out) => ({ ...out, contentLinkGroup: undefined })),
+    } as typeof linkedDoc;
+
+    const result = service.applyOps(legacyDoc, [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-wide', name: 'Wide', width: 1920, height: 1080 },
+      },
+    ]);
+    const groups = result.outputs.map((out) => out.contentLinkGroup);
+
+    expect(groups[0]).toBeDefined();
+    expect(groups).toEqual([groups[0], groups[0], groups[0]]);
+  });
+
   it('stripIds preserves linked groups before shared origins are re-minted', () => {
     const service = makeService();
     const linkedDoc = service.applyOps(createBlankDoc(), [

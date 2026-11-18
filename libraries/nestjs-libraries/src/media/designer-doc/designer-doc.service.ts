@@ -38,9 +38,10 @@ import {
   computeTextStackBoxes,
   reflowBackground,
 } from './reflow';
-import { applyLinked } from './apply-linked';
+import { applyLinked, outputsLinkedForInsertion } from './apply-linked';
 import {
   hasFrozenOutputMutation,
+  isOutputFrozen,
   withOutputFrozen,
 } from './output-freeze';
 
@@ -51,21 +52,6 @@ const isImageOutput = (
 const isVideoOutput = (
   out: DesignerOutput | VideoOutput
 ): out is VideoOutput => 'tracks' in out;
-
-const outputsLinkedForInsertion = (source: DesignerOutput, target: DesignerOutput) => {
-  const sourceGroup = source.contentLinkGroup;
-  const targetGroup = target.contentLinkGroup;
-  if (sourceGroup && targetGroup) return sourceGroup === targetGroup;
-  const sourceOrigins = new Set(
-    source.children.filter((el) => el.originId).map((el) => el.originId as string)
-  );
-  const sharedOrigin = target.children.some(
-    (el) => el.originId && sourceOrigins.has(el.originId)
-  );
-  return sharedOrigin || (
-    !sourceGroup && !targetGroup && (source.children.length === 0 || target.children.length === 0)
-  );
-};
 
 @Injectable()
 export class DesignerDocService {
@@ -312,12 +298,12 @@ export class DesignerDocService {
           ? primary.contentLinkGroup
           : undefined;
         if (linkContent && primary && isImageOutput(primary) && !contentLinkGroup) {
-          legacyLinkedIndexes.add(0);
+          if (!isOutputFrozen(primary)) legacyLinkedIndexes.add(0);
           for (let index = 0; index < doc.outputs.length; index++) {
             const output = doc.outputs[index];
             if (isImageOutput(output) && outputsLinkedForInsertion(primary, output)) {
               contentLinkGroup ??= output.contentLinkGroup;
-              if (!output.contentLinkGroup) legacyLinkedIndexes.add(index);
+              if (!output.contentLinkGroup && !isOutputFrozen(output)) legacyLinkedIndexes.add(index);
             }
           }
         }

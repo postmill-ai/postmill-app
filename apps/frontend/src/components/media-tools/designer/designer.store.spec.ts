@@ -433,6 +433,22 @@ describe('format-local element insertion', () => {
     return store;
   };
 
+  const storeWithLegacyLinkedPair = () => {
+    const store = createDesignerStore();
+    store.getState().addElement(makeElement('text', 'legacy-source'));
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy linked', width: 1200, height: 675 });
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out) => ({
+        ...out,
+        contentLinkGroup: undefined,
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().setCurrentOutput(0);
+    return store;
+  };
+
   it.each(['text', 'image', 'shape'] as const)(
     'This format only inserts %s on the active output with one Undo',
     (type) => {
@@ -628,6 +644,74 @@ describe('format-local element insertion', () => {
     store.getState().addElement(makeElement('shape', 'legacy-empty-shape'));
 
     expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 1]);
+  });
+
+  it('allows linked Add Format with a frozen legacy sibling without changing it', () => {
+    const store = storeWithLegacyLinkedPair();
+    store.getState().setOutputFrozen(1, true);
+    const frozenBefore = store.getState().doc.outputs[1];
+
+    expect(store.getState().addOutput(
+      { formatId: 'linkedin-post', name: 'New linked', width: 1200, height: 627 }
+    )).toBe(true);
+
+    const outputs = store.getState().doc.outputs;
+    expect(outputs).toHaveLength(3);
+    expect(outputs[1]).toEqual(frozenBefore);
+    expect(outputs[0].contentLinkGroup).toBeDefined();
+    expect(outputs[2].contentLinkGroup).toBe(outputs[0].contentLinkGroup);
+  });
+
+  it('allows linked Add Format with a frozen legacy source without changing it', () => {
+    const store = storeWithLegacyLinkedPair();
+    store.getState().setOutputFrozen(0, true);
+    const frozenBefore = store.getState().doc.outputs[0];
+
+    expect(store.getState().addOutput(
+      { formatId: 'linkedin-post', name: 'New linked', width: 1200, height: 627 }
+    )).toBe(true);
+
+    const outputs = store.getState().doc.outputs;
+    expect(outputs).toHaveLength(3);
+    expect(outputs[0]).toEqual(frozenBefore);
+    expect(outputs[2].contentLinkGroup).toBeDefined();
+    expect(outputs[2].contentLinkGroup).toBe(outputs[1].contentLinkGroup);
+  });
+
+  it('adopts the existing group when adding from a previously frozen legacy sibling', () => {
+    const store = storeWithLegacyLinkedPair();
+    store.getState().setOutputFrozen(1, true);
+    expect(store.getState().addOutput(
+      { formatId: 'linkedin-post', name: 'New linked', width: 1200, height: 627 }
+    )).toBe(true);
+    store.getState().setOutputFrozen(1, false);
+    store.getState().setCurrentOutput(1);
+
+    expect(store.getState().addOutput(
+      { formatId: 'ig-story', name: 'Second new linked', width: 1080, height: 1920 }
+    )).toBe(true);
+
+    const groups = store.getState().doc.outputs.map((out) => out.contentLinkGroup);
+    expect(groups[0]).toBeDefined();
+    expect(groups).toEqual([groups[0], groups[0], groups[0], groups[0]]);
+  });
+
+  it('does not use the legacy empty fallback for a grouped independent copy', () => {
+    const store = createDesignerStore();
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: [{ ...store.getState().doc.outputs[0], contentLinkGroup: undefined }],
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().addOutput(
+      { formatId: 'x-post', name: 'Independent empty', width: 1200, height: 675 },
+      { linkContent: false }
+    );
+    store.getState().setCurrentOutput(0);
+
+    store.getState().addElement(makeElement('shape', 'legacy-only-shape'));
+
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([1, 0]);
   });
 
   it('keeps a linked copy made from an independent copy in that independent link group', () => {
