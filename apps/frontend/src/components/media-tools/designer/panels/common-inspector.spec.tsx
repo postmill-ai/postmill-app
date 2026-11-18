@@ -83,6 +83,118 @@ describe('CommonInspector blend modes', () => {
   });
 });
 
+describe('CommonInspector group geometry', () => {
+  it('shows member-derived bounds and edits members instead of the zero-sized container', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      ...element('shape'), id: 'a', x: 10, y: 20, width: 30, height: 40,
+    });
+    store.getState().addElement({
+      ...element('text'), id: 'b', x: 50, y: 10, width: 10, height: 10,
+    });
+    store.getState().groupSelection(['a', 'b']);
+    const before = children(store);
+    const group = before.find((el) => el.type === 'group')!;
+    const { rerender } = render(<CommonInspector selected={[group]} ids={[group.id]} store={store} />);
+
+    expect((screen.getByRole('spinbutton', { name: 'X' }) as HTMLInputElement).value).toBe('10');
+    expect((screen.getByRole('spinbutton', { name: 'Y' }) as HTMLInputElement).value).toBe('10');
+    expect((screen.getByRole('spinbutton', { name: 'W' }) as HTMLInputElement).value).toBe('50');
+    expect((screen.getByRole('spinbutton', { name: 'H' }) as HTMLInputElement).value).toBe('50');
+
+    const x = screen.getByRole('spinbutton', { name: 'X' });
+    fireEvent.change(x, { target: { value: '30' } });
+    fireEvent.blur(x);
+    let current = children(store);
+    expect(current.find((el) => el.id === 'a')).toMatchObject({ x: 30, y: 20, width: 30, height: 40 });
+    expect(current.find((el) => el.id === 'b')).toMatchObject({ x: 70, y: 10, width: 10, height: 10 });
+    expect(current.find((el) => el.id === group.id)).toMatchObject({ x: 0, y: 0, width: 0, height: 0 });
+    const beforeResize = current;
+
+    rerender(<CommonInspector selected={[current.find((el) => el.id === group.id)!]} ids={[group.id]} store={store} />);
+    const width = screen.getByRole('spinbutton', { name: 'W' });
+    fireEvent.change(width, { target: { value: '100' } });
+    fireEvent.blur(width);
+    current = children(store);
+    expect(current.find((el) => el.id === 'a')).toMatchObject({ x: 30, width: 60 });
+    expect(current.find((el) => el.id === 'b')).toMatchObject({ x: 110, width: 20 });
+    expect(current.find((el) => el.id === group.id)).toMatchObject({ x: 0, width: 0 });
+
+    act(() => store.getState().undo());
+    expect(children(store)).toEqual(beforeResize);
+    act(() => store.getState().undo());
+    expect(children(store)).toEqual(before);
+  });
+  it('aligns group members to the canvas with one Undo per click', () => {
+    const store = createDesignerStore(1000, 1000);
+    store.getState().addElement({
+      ...element('shape'), id: 'a', x: 100, y: 100, width: 100, height: 100,
+    });
+    store.getState().addElement({
+      ...element('shape'), id: 'b', x: 300, y: 200, width: 200, height: 100,
+    });
+    store.getState().groupSelection(['a', 'b']);
+    const original = children(store);
+    const group = original.find((el) => el.type === 'group')!;
+    render(<CommonInspector selected={[group]} ids={[group.id]} store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Align horizontal center' }));
+    const centered = children(store);
+    expect(centered.find((el) => el.id === 'a')).toMatchObject({ x: 300, y: 100 });
+    expect(centered.find((el) => el.id === 'b')).toMatchObject({ x: 500, y: 200 });
+    expect(centered.find((el) => el.id === group.id)).toMatchObject({ x: 0, y: 0, width: 0, height: 0 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Align bottom' }));
+    const bottom = children(store);
+    expect(bottom.find((el) => el.id === 'a')).toMatchObject({ x: 300, y: 800 });
+    expect(bottom.find((el) => el.id === 'b')).toMatchObject({ x: 500, y: 900 });
+    expect(bottom.find((el) => el.id === group.id)).toMatchObject({ x: 0, y: 0, width: 0, height: 0 });
+
+    act(() => store.getState().undo());
+    expect(children(store)).toEqual(centered);
+    act(() => store.getState().undo());
+    expect(children(store)).toEqual(original);
+  });
+
+  it('rounds centred groups with odd bounds to integer coordinates', () => {
+    const store = createDesignerStore(1000, 1000);
+    store.getState().addElement({
+      ...element('shape'), id: 'a', x: 0, y: 0, width: 101, height: 101,
+    });
+    store.getState().addElement({
+      ...element('shape'), id: 'b', x: 201, y: 201, width: 100, height: 100,
+    });
+    store.getState().groupSelection(['a', 'b']);
+    const group = children(store).find((el) => el.type === 'group')!;
+    render(<CommonInspector selected={[group]} ids={[group.id]} store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Align horizontal center' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Align vertical center' }));
+    const centred = children(store);
+    expect(centred.find((el) => el.id === 'a')).toMatchObject({ x: 350, y: 350 });
+    expect(centred.find((el) => el.id === 'b')).toMatchObject({ x: 551, y: 551 });
+    expect(centred.find((el) => el.id === group.id)).toMatchObject({ x: 0, y: 0, width: 0, height: 0 });
+  });
+
+  it('derives bounds from the active carousel page rather than page 1', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({ ...element('shape'), x: 0, y: 0, width: 400, height: 400 });
+    store.getState().addPage();
+    store.getState().addElement({ ...element('shape'), x: 25, y: 35, width: 50, height: 60 });
+    store.getState().addElement({ ...element('text'), x: 100, y: 120, width: 80, height: 30 });
+    const page = store.getState().doc.outputs[0].pages![0].children;
+    store.getState().groupSelection(page.map((el) => el.id));
+    const groupedPage = store.getState().doc.outputs[0].pages![0].children;
+    const group = groupedPage.find((el) => el.type === 'group')!;
+    render(<CommonInspector selected={[group]} ids={[group.id]} store={store} />);
+
+    expect((screen.getByRole('spinbutton', { name: 'X' }) as HTMLInputElement).value).toBe('25');
+    expect((screen.getByRole('spinbutton', { name: 'Y' }) as HTMLInputElement).value).toBe('35');
+    expect((screen.getByRole('spinbutton', { name: 'W' }) as HTMLInputElement).value).toBe('155');
+    expect((screen.getByRole('spinbutton', { name: 'H' }) as HTMLInputElement).value).toBe('115');
+  });
+});
+
 describe('CommonInspector geometry history', () => {
   it('commits a typed width once on blur so one Undo restores the original width', () => {
     const store = createDesignerStore();

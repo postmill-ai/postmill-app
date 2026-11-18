@@ -91,6 +91,7 @@ import {
   nearestSnap,
   movingNodesForSnap,
 } from './canvas-snap';
+import { selectionLeafIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
 
 /**
  * How much of the viewport a fitted artboard fills, leaving the rest as margin.
@@ -651,7 +652,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           .filter((ref) => !videoOutput?.tracks.find((track) => track.id === ref.trackId)?.locked)
           .map((ref) => ref.clipId)
       : selectedIds;
-    const nodes = ids
+    const nodeIds = isVideo
+      ? ids
+      : selectionLeafIds((pageOutput as DesignerOutput | undefined)?.children || [], ids);
+    const nodes = nodeIds
       .map((id) => stage.findOne('#' + id))
       .filter((n): n is Konva.Node => !!n);
     const current = transformer.nodes();
@@ -1113,8 +1117,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       if (!output || isVideo) return null;
       if (!snapEnabled) return { guides: [], spacingGuide: null, hud: null };
       const children = (pageOutput as DesignerOutput | undefined)?.children || [];
+      const selectedGeometryIds = new Set(selectionLeafIds(children, selectedIds));
       const others = children.filter(
-        (el) => !selectedIds.includes(el.id) && el.id !== node.id() && !el.hidden
+        (el) => !selectedGeometryIds.has(el.id) && el.id !== node.id() && el.type !== 'group' && !el.hidden
       );
       // A warped shape is a Konva `Line`, whose `width()` is the bbox of its
       // POINTS — so it snapped on its bulge while a warped PATH (a `Shape`,

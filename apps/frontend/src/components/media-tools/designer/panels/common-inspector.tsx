@@ -6,6 +6,11 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import type { DesignerBlendMode, DesignerElement } from '../designer.store';
 import { SELECTABLE_BLEND_MODES } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
 import { BLEND_LABELS } from './layers-panel';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import {
+  groupBounds,
+  groupGeometryPatches,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
 
 interface CommonInspectorProps {
   selected: DesignerElement[];
@@ -24,46 +29,66 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
   const updateElement = store((s: any) => s.updateElement);
   const updateElements = store((s: any) => s.updateElements);
   const updateElementsSilent = store((s: any) => s.updateElementsSilent);
+  const updateElementsEphemeral = store((s: any) => s.updateElementsEphemeral);
   const setLayerBlend = store((s: any) => s.setLayerBlend);
   const reorder = store((s: any) => s.reorder);
   const pushHistory = store((s: any) => s.pushHistory);
   const currentOutput = store((s: any) => s.currentOutput);
+  const currentPage = store((s: any) => s.currentPage);
   const doc = store((s: any) => s.doc);
 
   const output = doc.outputs[currentOutput];
   const primary = selected[0];
+  const activeChildren = pageChildren(output, currentPage);
+  const isSingleGroup = selected.length === 1 && primary.type === 'group';
+  const derivedBounds = isSingleGroup ? groupBounds(activeChildren, primary.id) : null;
+  const geometryPrimary = derivedBounds ? { ...primary, ...derivedBounds } : primary;
   const canvasW = output.width;
   const canvasH = output.height;
 
   const [aspectLocked, setAspectLocked] = useState(false);
   const aspectRatio =
-    primary.naturalWidth && primary.naturalHeight
-      ? primary.naturalWidth / primary.naturalHeight
-      : primary.width / (primary.height || 1);
+    geometryPrimary.naturalWidth && geometryPrimary.naturalHeight
+      ? geometryPrimary.naturalWidth / geometryPrimary.naturalHeight
+      : geometryPrimary.width / (geometryPrimary.height || 1);
 
   const set = (u: Partial<DesignerElement>) => updateElements(ids, u);
+  const setGeometry = (u: Partial<DesignerElement>) => {
+    if (!isSingleGroup) return updateElementsSilent(ids, u);
+    return updateElementsEphemeral(groupGeometryPatches(activeChildren, primary.id, u));
+  };
 
   const handleWidthChange = (n: number) => {
     if (aspectLocked) {
       const h = Math.round(n / aspectRatio);
-      updateElementsSilent(ids, { width: n, height: h });
+      setGeometry({ width: n, height: h });
     } else {
-      updateElementsSilent(ids, { width: n });
+      setGeometry({ width: n });
     }
   };
 
   const handleHeightChange = (n: number) => {
     if (aspectLocked) {
       const w = Math.round(n * aspectRatio);
-      updateElementsSilent(ids, { width: w, height: n });
+      setGeometry({ width: w, height: n });
     } else {
-      updateElementsSilent(ids, { height: n });
+      setGeometry({ height: n });
     }
   };
 
   const isMulti = selected.length > 1;
 
   const alignH = (pos: 'left' | 'center' | 'right') => {
+    if (isSingleGroup && derivedBounds) {
+      const x = pos === 'left'
+        ? 0
+        : pos === 'right'
+          ? canvasW - derivedBounds.width
+          : Math.round((canvasW - derivedBounds.width) / 2);
+      setGeometry({ x });
+      pushHistory();
+      return;
+    }
     if (isMulti) {
       const minX = Math.min(...selected.map((s) => s.x));
       const maxX = Math.max(...selected.map((s) => s.x + s.width));
@@ -87,6 +112,16 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
   };
 
   const alignV = (pos: 'top' | 'middle' | 'bottom') => {
+    if (isSingleGroup && derivedBounds) {
+      const y = pos === 'top'
+        ? 0
+        : pos === 'bottom'
+          ? canvasH - derivedBounds.height
+          : Math.round((canvasH - derivedBounds.height) / 2);
+      setGeometry({ y });
+      pushHistory();
+      return;
+    }
     if (isMulti) {
       const minY = Math.min(...selected.map((s) => s.y));
       const maxY = Math.max(...selected.map((s) => s.y + s.height));
@@ -162,14 +197,14 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
       <div className="grid grid-cols-2 gap-2">
         <Stepper
           label={t('designer_label_x', 'X')}
-          value={Math.round(primary.x)}
-          onChange={(n) => updateElementsSilent(ids, { x: n })}
+          value={Math.round(geometryPrimary.x)}
+          onChange={(n) => setGeometry({ x: n })}
           onCommit={() => pushHistory()}
         />
         <Stepper
           label={t('designer_label_y', 'Y')}
-          value={Math.round(primary.y)}
-          onChange={(n) => updateElementsSilent(ids, { y: n })}
+          value={Math.round(geometryPrimary.y)}
+          onChange={(n) => setGeometry({ y: n })}
           onCommit={() => pushHistory()}
         />
       </div>
@@ -192,14 +227,14 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
           <Stepper
             label={t('designer_label_w', 'W')}
             min={1}
-            value={Math.round(primary.width)}
+            value={Math.round(geometryPrimary.width)}
             onChange={handleWidthChange}
             onCommit={() => pushHistory()}
           />
           <Stepper
             label={t('designer_label_h', 'H')}
             min={1}
-            value={Math.round(primary.height)}
+            value={Math.round(geometryPrimary.height)}
             onChange={handleHeightChange}
             onCommit={() => pushHistory()}
           />

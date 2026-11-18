@@ -463,6 +463,127 @@ describe('DesignerDocService', () => {
     expect(bar.x - label.x).toBe(0);
   });
 
+  it('keeps a blank-id badge folder centered through setDoc and addOutput in one batch', () => {
+    const service = makeService();
+    const result = service.applyOps(createBlankDoc(), [{
+      op: 'setDoc',
+      doc: {
+        version: 14,
+        mode: 'image',
+        outputs: [{
+          id: 'primary', formatId: 'custom', name: 'Primary', width: 1080, height: 1080,
+          background: '#ffffff',
+          children: [{
+            id: 'badge-folder', originId: 'badge-folder', type: 'group', groupId: 'badge',
+            x: 0, y: 0, width: 0, height: 0,
+            rotation: 0, opacity: 1, locked: false, hidden: false,
+          }, {
+            id: '', originId: 'badge-bg', type: 'shape', shape: 'rect', parentId: 'badge-folder', groupId: 'badge',
+            x: 60, y: 54, width: 91, height: 52,
+            rotation: 0, opacity: 1, locked: false, hidden: false,
+          }, {
+            id: '', originId: 'badge', type: 'text', text: 'NEW', fontSize: 20,
+            parentId: 'badge-folder', groupId: 'badge', x: 73, y: 60, width: 65, height: 40,
+            rotation: 0, opacity: 1, locked: false, hidden: false,
+          }, {
+            ...minimalImageElement, id: '', originId: 'headline', text: 'Separate blank-id content',
+            x: 200, y: 300, width: 400, height: 80,
+          }],
+        }],
+      },
+    }, {
+      op: 'addOutput',
+      preset: { formatId: 'x-post', name: 'Wide', width: 1200, height: 675 },
+    }]);
+    const added = result.outputs[1] as any;
+    const chip = added.children.find((el: any) => el.originId === 'badge-bg');
+    const badgeLabel = added.children.find((el: any) => el.originId === 'badge');
+    const chipCenter = chip.x + chip.width / 2;
+    const labelCenter = badgeLabel.x + badgeLabel.width / 2;
+
+    expect(Math.abs(labelCenter - chipCenter)).toBeLessThanOrEqual(1);
+    expect(added.children.some((el: any) => el.text === 'Separate blank-id content')).toBe(true);
+  });
+
+  it.each([true, false])('addOutput remaps nested parents and clones every page (linked=%s)', (linkContent) => {
+    const service = makeService();
+    const group = (id: string, parentId?: string, groupId?: string) => ({
+      id, originId: `origin-${id}`, type: 'group', parentId, groupId,
+      x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    const rawDoc = {
+      version: 13,
+      mode: 'image',
+      outputs: [{
+        id: 'primary', formatId: 'custom', name: 'Primary', width: 400, height: 400, background: '#ffffff',
+        children: [
+          group('outer', undefined, 'outer-move'),
+          group('inner', 'outer', 'inner-move'),
+          {
+            id: 'logo', originId: 'origin-logo', type: 'image', parentId: 'inner', groupId: 'inner-move',
+            x: 20, y: 30, width: 80, height: 40, rotation: 0, opacity: 1, locked: false, hidden: false,
+            src: '/uploads/logo.png', crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+          },
+          {
+            ...minimalImageElement, id: 'copy', originId: 'origin-copy', parentId: 'outer', groupId: 'outer-move',
+            x: 40, y: 320, width: 300, height: 50, text: 'Primary source',
+          },
+        ],
+        pages: [{
+          id: 'page-two',
+          children: [
+            group('page-group', undefined, 'page-move'),
+            {
+              ...minimalImageElement, id: 'page-copy', originId: 'origin-page-copy',
+              parentId: 'page-group', groupId: 'page-move', text: 'Page two',
+            },
+          ],
+        }],
+      }, {
+        id: 'other', formatId: 'custom', name: 'Other', width: 400, height: 400, background: '#ffffff',
+        children: [{ ...minimalImageElement, id: 'other-copy', text: 'Do not clone this output' }],
+      }],
+    };
+    const doc = service.validate(rawDoc);
+    const sourceOrigins = new Set([
+      ...doc.outputs[0].children,
+      ...(doc.outputs[0].pages?.flatMap((page) => page.children) || []),
+    ].map((el) => el.originId));
+
+    const result = service.applyOps(doc, [{
+      op: 'addOutput',
+      preset: { formatId: 'custom-tall', name: 'Clone', width: 300, height: 500 },
+      linkContent,
+    }]);
+    const added = result.outputs[2] as any;
+    expect(added.children.map((el: any) => el.type)).toEqual(['group', 'group', 'image', 'text']);
+    expect(added.children.some((el: any) => el.text === 'Do not clone this output')).toBe(false);
+    expect(added.pages).toHaveLength(1);
+    const outer = added.children.find((el: any) => el.type === 'group' && !el.parentId);
+    const inner = added.children.find((el: any) => el.type === 'group' && el.parentId);
+    const logo = added.children.find((el: any) => el.type === 'image');
+    expect(inner.parentId).toBe(outer.id);
+    expect(logo.parentId).toBe(inner.id);
+    expect(logo.crop).toEqual({ x: 0.1, y: 0.1, width: 0.8, height: 0.8 });
+    for (const page of [added.children, added.pages[0].children]) {
+      const ids = new Set(page.map((el: any) => el.id));
+      for (const el of page) {
+        expect(ids.has(el.id)).toBe(true);
+        if (el.parentId) expect(ids.has(el.parentId)).toBe(true);
+        expect(el.originId).toBeTruthy();
+        if (!linkContent) expect(sourceOrigins.has(el.originId)).toBe(false);
+      }
+    }
+    const pageGroup = added.pages[0].children.find((el: any) => el.type === 'group');
+    const pageCopy = added.pages[0].children.find((el: any) => el.type === 'text');
+    expect(pageCopy.parentId).toBe(pageGroup.id);
+    if (linkContent) {
+      expect(logo.originId).toBe('origin-logo');
+      expect(pageCopy.originId).not.toBe('origin-page-copy');
+    }
+  });
+
   it('addOutput reflows panel contents against the panel, not the canvas', () => {
     const service = makeService();
     const doc = service.validate({

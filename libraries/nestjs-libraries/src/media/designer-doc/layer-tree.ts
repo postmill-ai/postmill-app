@@ -1,3 +1,5 @@
+import { MAX_FONT_SIZE } from './designer-doc.limits';
+import { MIN_FIT_FONT_SIZE } from './fit-text';
 import type { DesignerElement } from './designer-doc.schema';
 
 /**
@@ -161,6 +163,62 @@ export const groupBounds = (
     maxY = Math.max(maxY, m.y + m.height);
   }
   return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+};
+
+export const selectionLeafIds = (
+  children: DesignerElement[],
+  ids: string[]
+): string[] => {
+  const byId = new Map(children.map((el) => [el.id, el]));
+  const leaves = new Set<string>();
+  for (const id of ids) {
+    const el = byId.get(id);
+    if (!el) continue;
+    if (el.type !== 'group') {
+      leaves.add(el.id);
+      continue;
+    }
+    for (const descendantId of descendantIds(children, el.id)) {
+      const descendant = byId.get(descendantId);
+      if (descendant && descendant.type !== 'group') leaves.add(descendant.id);
+    }
+  }
+  return children.filter((el) => leaves.has(el.id)).map((el) => el.id);
+};
+
+export const groupGeometryPatches = (
+  children: DesignerElement[],
+  groupId: string,
+  updates: Partial<DesignerElement>
+): { id: string; updates: Partial<DesignerElement> }[] => {
+  const bounds = groupBounds(children, groupId);
+  if (!bounds) return [];
+  const scaleX = updates.width === undefined ? 1 : Math.max(1, updates.width) / bounds.width;
+  const scaleY = updates.height === undefined ? 1 : Math.max(1, updates.height) / bounds.height;
+  const originX = updates.x ?? bounds.x;
+  const originY = updates.y ?? bounds.y;
+  const resizeType = updates.width !== undefined && updates.height !== undefined;
+  const typeScale = Math.sqrt(scaleX * scaleY);
+  const ids = new Set(descendantIds(children, groupId));
+  return children.flatMap((el) => {
+    if (!ids.has(el.id) || el.type === 'group') return [];
+    const patch: Partial<DesignerElement> = {
+      x: originX + (el.x - bounds.x) * scaleX,
+      y: originY + (el.y - bounds.y) * scaleY,
+      width: Math.max(1, el.width * scaleX),
+      height: Math.max(1, el.height * scaleY),
+    };
+    if (
+      resizeType && typeScale > 0 && el.type === 'text' && el.fontSize &&
+      !el.richText?.length && !el.textPath && (el.curve || 0) === 0
+    ) {
+      patch.fontSize = Math.min(
+        MAX_FONT_SIZE,
+        Math.max(MIN_FIT_FONT_SIZE, Math.round(el.fontSize * typeScale))
+      );
+    }
+    return [{ id: el.id, updates: patch }];
+  });
 };
 
 /**

@@ -376,6 +376,211 @@ describe('smartReflow grouped pairs', () => {
     });
   });
 
+  it('derives parent-group reflow bounds from sized members while excluding full-bleed media', () => {
+    const container: DesignerElement = {
+      id: 'folder', type: 'group', x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    };
+    const fullBleed = {
+      ...bar, parentId: 'folder', x: 0, y: 0, width: 1080, height: 1080,
+    };
+    const groupedLabel = { ...label, parentId: 'folder' };
+    const boxes = computeGroupBoxes([container, fullBleed, groupedLabel], squareSource);
+
+    expect(boxes.get('cta')).toEqual({ x: 400, y: 500, width: 280, height: 60 });
+    const anchored = computeGroupBoxes([
+      container,
+      { ...fullBleed, anchor: 'top-right' as const },
+      { ...groupedLabel, anchor: 'top-right' as const },
+    ], squareSource);
+    expect(anchored.get('cta')).toEqual({
+      x: 400, y: 500, width: 280, height: 60, anchor: 'top-right',
+    });
+    expect(smartReflow(container, squareSource, storyTarget, boxes.get('cta'))).toEqual({});
+  });
+
+  it('keeps blank-id folder membership limited to its own parent links', () => {
+    const container: DesignerElement = {
+      id: 'folder', type: 'group', groupId: 'badge', x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    };
+    const chip = {
+      ...bar, id: '', parentId: 'folder', groupId: 'badge', x: 60, y: 54, width: 91, height: 52,
+    };
+    const badgeLabel = {
+      ...label, id: '', parentId: 'folder', groupId: 'badge', x: 73, y: 60, width: 65, height: 40,
+    };
+    const unrelated = { ...label, id: '', groupId: 'other' };
+    const boxes = computeGroupBoxes([container, chip, badgeLabel, unrelated], squareSource);
+
+    expect(boxes.get('badge')).toEqual({ x: 60, y: 54, width: 91, height: 52 });
+    expect(boxes.get('other')).toEqual({ x: 400, y: 500, width: 280, height: 60 });
+  });
+
+  it('keeps full-bleed folder members out of the placement frame', () => {
+    const container = (id: string): DesignerElement => ({
+      id, type: 'group', x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    const background = {
+      ...bar, id: 'background', parentId: 'badge-folder', groupId: 'badge',
+      x: 0, y: 0, width: 1080, height: 1080,
+    };
+    const badge = {
+      ...bar, id: 'badge-chip', parentId: 'badge-folder', groupId: 'badge',
+      x: 880, y: 40, width: 160, height: 160,
+    };
+    const band = {
+      ...bar, id: 'band', parentId: 'band-folder', groupId: 'band',
+      x: 0, y: 900, width: 1080, height: 180,
+    };
+    const bandLabel = {
+      ...label, id: 'band-label', parentId: 'band-folder', groupId: 'band',
+      x: 60, y: 950, width: 500, height: 60,
+    };
+    const children = [
+      container('badge-folder'), container('band-folder'), background, badge, band, bandLabel,
+    ];
+    const unfolded = children.flatMap((el) =>
+      el.type === 'group' ? [] : [{ ...el, parentId: undefined }]
+    );
+    const folderBoxes = computeGroupBoxes(children, squareSource);
+    const mainBoxes = computeGroupBoxes(unfolded, squareSource);
+    expect(folderBoxes).toEqual(mainBoxes);
+
+    for (const target of [{ width: 1200, height: 675 }, storyTarget]) {
+      expect(smartReflow(badge, squareSource, target, folderBoxes.get('badge')))
+        .toEqual(smartReflow(badge, squareSource, target, mainBoxes.get('badge')));
+      expect(smartReflow(bandLabel, squareSource, target, folderBoxes.get('band')))
+        .toEqual(smartReflow(bandLabel, squareSource, target, mainBoxes.get('band')));
+    }
+  });
+
+  it('reflows nested folder leaves exactly like the equivalent flat folder', () => {
+    const container = (id: string, parentId?: string, groupId?: string): DesignerElement => ({
+      id, type: 'group', parentId, groupId, x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    const headline = {
+      ...label, id: 'headline', name: 'headline', groupId: 'outer-move',
+      x: 200, y: 100, width: 400, height: 80,
+    };
+    const photo = {
+      ...bar, id: 'photo', name: 'photo', type: 'image' as const, groupId: 'inner-move',
+      x: 600, y: 250, width: 240, height: 180,
+    };
+    const cta = {
+      ...bar, id: 'cta', name: 'cta', groupId: 'inner-move',
+      x: 200, y: 800, width: 280, height: 80,
+    };
+    const nested = [
+      container('outer', undefined, 'outer-move'),
+      container('inner', 'outer', 'inner-move'),
+      { ...headline, parentId: 'outer' },
+      { ...photo, parentId: 'inner' },
+      { ...cta, parentId: 'inner' },
+    ];
+    const flat = [
+      container('outer'),
+      { ...headline, parentId: 'outer' },
+      { ...photo, parentId: 'outer' },
+      { ...cta, parentId: 'outer' },
+    ];
+    const nestedBoxes = computeGroupBoxes(nested, squareSource);
+    const flatBoxes = computeGroupBoxes(flat, squareSource);
+    const nestedLeaves = nested.filter((el) => el.type !== 'group');
+    const flatLeaves = flat.filter((el) => el.type !== 'group');
+
+    for (let index = 0; index < nestedLeaves.length; index++) {
+      const nestedLeaf = nestedLeaves[index];
+      const flatLeaf = flatLeaves[index];
+      expect(smartReflow(
+        nestedLeaf,
+        squareSource,
+        { width: 1200, height: 675 },
+        nestedLeaf.groupId ? nestedBoxes.get(nestedLeaf.groupId) : undefined
+      )).toEqual(smartReflow(
+        flatLeaf,
+        squareSource,
+        { width: 1200, height: 675 },
+        flatLeaf.groupId ? flatBoxes.get(flatLeaf.groupId) : undefined
+      ));
+    }
+  });
+
+  const nestedFolderChildren = (
+    anchors: Partial<Record<'headline' | 'photo' | 'cta', DesignerElement['anchor']>> = {}
+  ): DesignerElement[] => [
+    {
+      id: 'outer', type: 'group', x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    },
+    {
+      id: 'inner', type: 'group', parentId: 'outer', groupId: 'outer-move',
+      x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    },
+    {
+      ...label, id: 'folder-headline', parentId: 'outer', groupId: 'outer-move',
+      x: 200, y: 100, width: 400, height: 80, anchor: anchors.headline,
+    },
+    {
+      ...bar, id: 'folder-photo', type: 'image', parentId: 'inner', groupId: 'inner-move',
+      x: 600, y: 250, width: 240, height: 180, anchor: anchors.photo,
+    },
+    {
+      ...bar, id: 'folder-cta', parentId: 'inner', groupId: 'inner-move',
+      x: 200, y: 800, width: 280, height: 80, anchor: anchors.cta,
+    },
+  ];
+  const nestedFolderFrame = { x: 200, y: 100, width: 640, height: 780 };
+
+  it('gives every move-unit in an unanchored nested folder the same frame', () => {
+    const boxes = computeGroupBoxes(nestedFolderChildren(), squareSource);
+    expect(boxes.get('outer-move')).toEqual(nestedFolderFrame);
+    expect(boxes.get('inner-move')).toEqual(nestedFolderFrame);
+  });
+
+  it('uses a folder-wide unanimous anchor for seeded nested formats', () => {
+    const boxes = computeGroupBoxes(nestedFolderChildren({
+      headline: 'center', photo: 'center', cta: 'center',
+    }), squareSource);
+    expect(boxes.get('outer-move')).toEqual({ ...nestedFolderFrame, anchor: 'center' });
+    expect(boxes.get('inner-move')).toEqual({ ...nestedFolderFrame, anchor: 'center' });
+  });
+
+  it('uses the shared nested frame without an anchor when folder leaves disagree', () => {
+    const boxes = computeGroupBoxes(nestedFolderChildren({
+      headline: 'top-center', photo: 'center-right', cta: 'bottom-left',
+    }), squareSource);
+    expect(boxes.get('outer-move')).toEqual(nestedFolderFrame);
+    expect(boxes.get('inner-move')).toEqual(nestedFolderFrame);
+  });
+
+  it('keeps the single-unit anchor rule inside a mixed-content folder', () => {
+    const container: DesignerElement = {
+      id: 'badge-folder', type: 'group', groupId: 'badge', x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    };
+    const chip = {
+      ...bar, id: 'single-chip', parentId: 'badge-folder', groupId: 'badge', anchor: 'top-right' as const,
+      x: 880, y: 40, width: 160, height: 60,
+    };
+    const badgeLabel = {
+      ...label, id: 'single-label', parentId: 'badge-folder', groupId: 'badge', anchor: 'top-right' as const,
+      x: 900, y: 50, width: 120, height: 40,
+    };
+    const loose = {
+      ...bar, id: 'single-loose', parentId: 'badge-folder', groupId: undefined,
+      x: 100, y: 500, width: 200, height: 200,
+    };
+    const boxes = computeGroupBoxes([container, chip, badgeLabel, loose], squareSource);
+
+    expect(boxes.get('badge')).toEqual({
+      x: 880, y: 40, width: 160, height: 60, anchor: 'top-right',
+    });
+  });
+
   it('re-derives the group anchor even when a member carries its own anchor', () => {
     const boxes = computeGroupBoxes([bar, label]);
     const anchoredBar = { ...bar, anchor: 'top-left' as const };

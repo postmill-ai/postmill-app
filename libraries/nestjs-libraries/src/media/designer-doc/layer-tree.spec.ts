@@ -5,6 +5,8 @@ import {
   flattenForDisplay,
   descendantIds,
   groupBounds,
+  groupGeometryPatches,
+  selectionLeafIds,
   isEffectivelyHidden,
   isEffectivelyLocked,
   moveLayers,
@@ -125,6 +127,51 @@ describe('groupBounds', () => {
 
   it('returns null for an empty group', () => {
     expect(groupBounds([group('g')], 'g')).toBeNull();
+  });
+});
+
+describe('selection geometry', () => {
+  const children = [
+    group('outer'),
+    group('inner', { parentId: 'outer' }),
+    el('a', { parentId: 'inner', x: 10, y: 20, width: 30, height: 40 }),
+    el('b', { parentId: 'outer', x: 50, y: 10, width: 10, height: 10 }),
+    el('loose', { x: 200, y: 200 }),
+  ];
+
+  it('uses unique leaf ids and derived bounds for nested selections', () => {
+    expect(selectionLeafIds(children, ['outer', 'a'])).toEqual(['a', 'b']);
+    expect(groupBounds(children, 'outer')).toEqual({
+      x: 10, y: 10, width: 50, height: 50,
+    });
+    expect(selectionLeafIds(children, ['missing'])).toEqual([]);
+  });
+
+  it('moves and scales members without patching the container or their links', () => {
+    const grouped = [
+      group('g'),
+      el('a', {
+        type: 'image', parentId: 'g', originId: 'image-origin', groupId: 'move',
+        x: 10, y: 20, width: 30, height: 40,
+        crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+      }),
+      el('b', {
+        type: 'text', parentId: 'g', originId: 'text-origin', groupId: 'move',
+        x: 50, y: 10, width: 10, height: 10, fontSize: 20,
+      }),
+    ];
+    const patches = groupGeometryPatches(grouped, 'g', { x: 30, width: 100, height: 100 });
+    expect(patches).toHaveLength(2);
+    expect(patches.find((patch) => patch.id === 'a')?.updates).toEqual({
+      x: 30, y: 30, width: 60, height: 80,
+    });
+    expect(patches.find((patch) => patch.id === 'b')?.updates).toEqual({
+      x: 110, y: 10, width: 20, height: 20, fontSize: 40,
+    });
+    expect(patches.some((patch) => patch.id === 'g')).toBe(false);
+    expect(grouped.find((item) => item.id === 'a')).toMatchObject({
+      originId: 'image-origin', parentId: 'g', crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+    });
   });
 });
 

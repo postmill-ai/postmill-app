@@ -359,6 +359,150 @@ test('shape insertion stays on an independent format through save, reload, and e
   expect(renderedShapes).not.toContainEqual(['independent-output', 0]);
 });
 
+test('grouped mixed media survives Undo, independent clone, reload, and export', async ({ page }) => {
+  const doc = {
+    version: 13,
+    mode: 'image',
+    outputs: [{
+      id: 'first-output', formatId: 'custom', name: 'First', contentLinkGroup: 'first-link',
+      width: 400, height: 400, background: '#ffffff',
+      children: [{
+        id: 'first-sentinel', originId: 'first-origin', type: 'text', text: 'First output sentinel',
+        x: 20, y: 20, width: 200, height: 40, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }],
+    }, {
+      id: 'source-output', formatId: 'custom', name: 'Source', contentLinkGroup: 'source-link',
+      width: 400, height: 400, background: '#ffffff',
+      children: [{
+        id: 'mixed-background', originId: 'background-origin', type: 'shape', shape: 'rect', fill: '#eeeeff',
+        x: 0, y: 0, width: 400, height: 400, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }, {
+        id: 'mixed-logo', originId: 'logo-origin', type: 'image', src: PNG_DATA_URL,
+        x: 20, y: 30, width: 80, height: 40, naturalWidth: 40, naturalHeight: 20,
+        crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 }, fitMode: 'contain',
+        rotation: 0, opacity: 1, locked: false, hidden: false,
+      }, {
+        id: 'mixed-phone', originId: 'phone-origin', type: 'image', src: PNG_DATA_URL,
+        x: 160, y: 80, width: 120, height: 220, naturalWidth: 100, naturalHeight: 200,
+        rotation: 0, opacity: 1, locked: false, hidden: false,
+      }, {
+        id: 'mixed-copy', originId: 'copy-origin', type: 'text', text: 'Grouped mixed copy', fontSize: 28,
+        x: 40, y: 330, width: 300, height: 50, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }],
+      pages: [{ id: 'source-page-two', name: 'Second slide', children: [{
+        id: 'page-two-copy', originId: 'page-two-origin', type: 'text', text: 'Second slide copy',
+        x: 30, y: 40, width: 240, height: 60, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }] }],
+    }],
+  };
+  const state = await installMocks(page, doc);
+  await openDesigner(page);
+  const persist = async () => {
+    const before = state.saveDocs.length;
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => state.saveDocs.length).toBeGreaterThan(before);
+  };
+  const assertClone = (saved: any) => {
+    expect(saved.outputs).toHaveLength(3);
+    const source = saved.outputs[1];
+    const cloned = saved.outputs[2];
+    expect(cloned.contentLinkGroup).not.toBe(source.contentLinkGroup);
+    expect(cloned.children.map((el: any) => el.type)).toEqual(source.children.map((el: any) => el.type));
+    expect(cloned.pages).toHaveLength(source.pages.length);
+    expect(JSON.stringify(cloned)).not.toContain('First output sentinel');
+    for (const children of [cloned.children, ...cloned.pages.map((item: any) => item.children)]) {
+      const ids = new Set(children.map((el: any) => el.id));
+      for (const el of children) {
+        expect(el.originId).toBeUndefined();
+        if (el.parentId) expect(ids.has(el.parentId)).toBe(true);
+      }
+    }
+    expect(cloned.children.find((el: any) => el.naturalWidth === 40)?.crop).toEqual({
+      x: 0.1, y: 0.1, width: 0.8, height: 0.8,
+    });
+    return cloned;
+  };
+
+  await page.getByRole('button', { name: /Source/ }).click();
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
+  const stage = page.locator('.konva-stage').first();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('Canvas has no bounding box');
+  const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
+  const outputX = (box.width - 400 * scale) / 2;
+  const outputY = (box.height - 400 * scale) / 2;
+  await page.mouse.move(box.x + outputX - 8, box.y + outputY + 4);
+  await page.mouse.down();
+  await page.mouse.move(box.x + outputX + 300 * scale, box.y + outputY + 390 * scale, { steps: 12 });
+  await page.mouse.up();
+  await page.keyboard.press('Control+g');
+  await persist();
+
+  const grouped = (state.saveDocs.at(-1) as any).outputs[1];
+  const group = grouped.children.find((el: any) => el.type === 'group');
+  expect(group).toBeTruthy();
+  expect(grouped.children.filter((el: any) => el.parentId === group.id)).toHaveLength(4);
+  expect((state.saveDocs.at(-1) as any).outputs[0].children.some((el: any) => el.parentId)).toBe(false);
+  await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'W', exact: true })).toHaveValue('400');
+  await expect(page.getByRole('spinbutton', { name: 'H', exact: true })).toHaveValue('400');
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await persist();
+  expect((state.saveDocs.at(-1) as any).outputs[1].children.some((el: any) => el.type === 'group')).toBe(false);
+  expect((state.saveDocs.at(-1) as any).outputs[1].children).toHaveLength(4);
+  await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)', exact: true }).click();
+  await persist();
+
+  await page.getByRole('button', { name: 'Add format', exact: true }).click();
+  await page.getByRole('radio', { name: 'Independent copies (carousel / pages)' }).check();
+  await page.getByRole('checkbox', { name: /Instagram Story/ }).check();
+  await page.getByRole('button', { name: 'Add 1 format', exact: true }).click();
+  await persist();
+  const cloned = assertClone(state.saveDocs.at(-1));
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+  for (const el of cloned.children) {
+    await expect(page.locator(`[data-element-id="${el.id}"]`)).toBeVisible();
+  }
+  await page.getByRole('button', { name: 'Second slide', exact: true }).click();
+  for (const el of cloned.pages[0].children) {
+    await expect(page.locator(`[data-element-id="${el.id}"]`)).toBeVisible();
+  }
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await persist();
+  expect((state.saveDocs.at(-1) as any).outputs).toHaveLength(2);
+  await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)', exact: true }).click();
+  await persist();
+  assertClone(state.saveDocs.at(-1));
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX', { timeout: 60_000 });
+  await page.getByRole('button', { name: /Instagram Story/ }).click();
+  assertClone(state.doc);
+  const rendersBeforeExport = state.renderDocs.length;
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save to Files' }).click();
+  await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
+  await page.getByRole('button', { name: /Next: Export \d+ files?/ }).click();
+  await page.getByRole('button', { name: /^Export \d+ files?$/ }).click();
+  await expect(page.getByRole('link', { name: /\.png$/ }).first()).toBeVisible();
+  expect(state.renderDocs.length).toBeGreaterThan(rendersBeforeExport);
+  const exported = state.renderDocs
+    .slice(rendersBeforeExport)
+    .map((rendered: any) => rendered.outputs[0])
+    .find((output: any) =>
+      output.formatId === 'ig-story' && output.children.some((el: any) => el.type === 'group'));
+  expect(exported).toBeTruthy();
+  const exportedIds = new Set(exported.children.map((el: any) => el.id));
+  expect(exported.children.filter((el: any) => el.parentId)).toHaveLength(4);
+  for (const el of exported.children) {
+    expect(el.originId).toBeUndefined();
+    if (el.parentId) expect(exportedIds.has(el.parentId)).toBe(true);
+  }
+});
+
 test('text effects remain editable through Paint layers, preview, undo, reopen, and export', async ({ page }) => {
   const state = await installMocks(page);
   const children = state.doc.outputs[0].children as Array<Record<string, unknown>>;

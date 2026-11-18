@@ -142,11 +142,11 @@ export const computeGroupBoxes = (
   source?: { width: number; height: number }
 ): Map<string, GroupBox> => {
   const boxes = new Map<string, GroupBox>();
+  const isFullBleed = (el: DesignerElement) =>
+    !!source && (el.width >= source.width * 0.95 || el.height >= source.height * 0.95);
   for (const el of elements) {
-    if (!el.groupId) continue;
-    if (source && (el.width >= source.width * 0.95 || el.height >= source.height * 0.95)) {
-      continue;
-    }
+    if (!el.groupId || el.type === 'group') continue;
+    if (isFullBleed(el)) continue;
     const box = boxes.get(el.groupId);
     if (!box) {
       boxes.set(el.groupId, {
@@ -168,7 +168,7 @@ export const computeGroupBoxes = (
   // has been disqualified (a member without an anchor, or a disagreement).
   const consensus = new Map<string, Anchor | null>();
   for (const el of elements) {
-    if (!el.groupId) continue;
+    if (!el.groupId || el.type === 'group') continue;
     const seen = consensus.get(el.groupId);
     if (seen === null) continue;
     if (!el.anchor || (seen !== undefined && seen !== el.anchor)) {
@@ -176,6 +176,55 @@ export const computeGroupBoxes = (
       continue;
     }
     consensus.set(el.groupId, el.anchor);
+  }
+  const containers = new Map<string, DesignerElement>();
+  for (const el of elements) {
+    if (el.type === 'group' && el.id) containers.set(el.id, el);
+  }
+  const folders = new Map<string, DesignerElement[]>();
+  for (const el of elements) {
+    if (el.type === 'group') continue;
+    let root: string | undefined;
+    const seen = new Set<string>();
+    let parentId = el.parentId;
+    while (parentId && containers.has(parentId) && !seen.has(parentId)) {
+      seen.add(parentId);
+      root = parentId;
+      parentId = containers.get(parentId)?.parentId;
+    }
+    if (!root) continue;
+    const members = folders.get(root);
+    if (members) members.push(el);
+    else folders.set(root, [el]);
+  }
+  for (const members of folders.values()) {
+    const sized = members.filter((el) => !isFullBleed(el));
+    if (!sized.length) continue;
+    const x = Math.min(...sized.map((el) => el.x));
+    const y = Math.min(...sized.map((el) => el.y));
+    const right = Math.max(...sized.map((el) => el.x + el.width));
+    const bottom = Math.max(...sized.map((el) => el.y + el.height));
+    const groupIds = new Set(
+      members.filter((el) => el.groupId).map((el) => el.groupId as string)
+    );
+    const mixed = groupIds.size > 1;
+    const folderAnchor =
+      mixed && sized.every((el) => el.anchor && el.anchor === sized[0].anchor)
+        ? sized[0].anchor
+        : null;
+    for (const groupId of groupIds) {
+      if (mixed) consensus.set(groupId, folderAnchor ?? null);
+      else if (consensus.get(groupId)) continue;
+      const existing = boxes.get(groupId);
+      const left = existing ? Math.min(existing.x, x) : x;
+      const top = existing ? Math.min(existing.y, y) : y;
+      boxes.set(groupId, {
+        x: left,
+        y: top,
+        width: (existing ? Math.max(existing.x + existing.width, right) : right) - left,
+        height: (existing ? Math.max(existing.y + existing.height, bottom) : bottom) - top,
+      });
+    }
   }
   for (const [groupId, anchor] of consensus) {
     const box = boxes.get(groupId);
