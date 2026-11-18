@@ -3318,7 +3318,7 @@ describe('static clipboard paste placement', () => {
     const clipboardJson = JSON.stringify(store.getState().clipboard);
     const historyBefore = store.getState().history.length;
 
-    store.getState().paste({ x: 300, y: 200 } as never);
+    store.getState().paste({ x: 300, y: 200 });
 
     const pasted = (store.getState().doc.outputs[1] as DesignerOutput).children;
     expect(pasted.map((child) => child.type)).toEqual(source.children.map((child) => child.type));
@@ -3338,7 +3338,9 @@ describe('static clipboard paste placement', () => {
     const text = pasted.find((child) => child.type === 'text')!;
     const sourceText = source.children.find((child) => child.type === 'text')!;
     expect(text.fontSize).toBeLessThan(sourceText.fontSize!);
-    expect(text.richText).toEqual(sourceText.richText);
+    expect(text.richText?.map((run) => ({ text: run.text, fontWeight: run.fontWeight }))).toEqual([
+      { text: 'Big headline', fontWeight: 700 },
+    ]);
     expect(text.rotation).toBe(12);
     const image = pasted.find((child) => child.type === 'image')!;
     const sourceImage = source.children.find((child) => child.type === 'image')!;
@@ -3358,6 +3360,76 @@ describe('static clipboard paste placement', () => {
     expect(store.getState().history).toHaveLength(historyBefore + 1);
     store.getState().undo();
     expect(store.getState().doc.outputs[1].children).toHaveLength(0);
+  });
+
+  it('clamps a pointer-pasted batch onto the target without moving members independently', () => {
+    const store = createDesignerStore(600, 400);
+    store.getState().addElement({
+      id: 'wide', type: 'shape', shape: 'rect', x: 100, y: 100, width: 200, height: 100,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addElement({
+      id: 'small', type: 'shape', shape: 'rect', x: 150, y: 150, width: 150, height: 50,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().groupSelection(['wide', 'small']);
+    const group = store.getState().doc.outputs[0].children.find((child) => child.type === 'group')!;
+    store.getState().setSelectedIds([group.id]);
+    store.getState().copySelection();
+    const originalIds = new Set(store.getState().doc.outputs[0].children.map((child) => child.id));
+
+    store.getState().paste({ x: 590, y: 390 });
+
+    const leaves = store.getState().doc.outputs[0].children
+      .filter((child) => child.type === 'shape' && !originalIds.has(child.id));
+    expect(Math.min(...leaves.map((child) => child.x))).toBe(400);
+    expect(Math.max(...leaves.map((child) => child.x + child.width))).toBe(600);
+    expect(Math.min(...leaves.map((child) => child.y))).toBe(300);
+    expect(Math.max(...leaves.map((child) => child.y + child.height))).toBe(400);
+    expect(leaves[1].x - leaves[0].x).toBe(50);
+    expect(leaves[1].y - leaves[0].y).toBe(50);
+  });
+
+  it('centers an oversized batch instead of clamping it', () => {
+    const store = createDesignerStore(600, 400);
+    store.getState().addElement({
+      id: 'oversized', type: 'shape', shape: 'rect', x: -50, y: 100, width: 700, height: 100,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().groupSelection(['oversized']);
+    const group = store.getState().doc.outputs[0].children.find((child) => child.type === 'group')!;
+    store.getState().setSelectedIds([group.id]);
+    store.getState().copySelection();
+
+    store.getState().paste({ x: 300, y: 200 });
+
+    const pasted = store.getState().doc.outputs[0].children.find((child) => child.id === 'oversized');
+    const copy = store.getState().doc.outputs[0].children.find((child) => child.type === 'shape' && child.id !== 'oversized')!;
+    expect(pasted).toBeTruthy();
+    expect(copy.x).toBe(-50);
+    expect(copy.x + copy.width).toBe(650);
+    expect(copy.y).toBe(150);
+  });
+
+  it('cuts a complete selected group and restores it with one Undo', () => {
+    const store = createDesignerStore(600, 400);
+    for (const id of ['first', 'second']) {
+      store.getState().addElement({
+        id, type: 'shape', shape: 'rect', x: 100, y: 100, width: 100, height: 100,
+        rotation: 0, opacity: 1, locked: false, hidden: false,
+      });
+    }
+    store.getState().groupSelection(['first', 'second']);
+    const before = store.getState().doc.outputs[0].children;
+    const group = before.find((child) => child.type === 'group')!;
+    store.getState().setSelectedIds([group.id]);
+
+    store.getState().cutSelection();
+
+    expect(store.getState().doc.outputs[0].children).toHaveLength(0);
+    expect(store.getState().clipboard.map((child) => child.type)).toEqual(['group', 'shape', 'shape']);
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].children.map((child) => child.type)).toEqual(['group', 'shape', 'shape']);
   });
 });
 

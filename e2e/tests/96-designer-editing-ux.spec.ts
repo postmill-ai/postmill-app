@@ -403,11 +403,13 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   await openDesigner(page);
   await page.getByRole('tab', { name: 'Layers', exact: true }).click();
   await page.locator('[data-element-id="paste-group"]').click();
-  await page.keyboard.press('Control+c');
+  // Shortcuts are canvas-focus-scoped, so the keys go to the canvas itself.
+  const canvasRegion = page.getByRole('application', { name: 'Design canvas' });
+  await canvasRegion.press('Control+c');
   await page.getByRole('button', { name: /Paste Target/ }).click();
 
   // Keyboard paste retains its offset behavior and remains one atomic edit.
-  await page.keyboard.press('Control+v');
+  await canvasRegion.press('Control+v');
   await persist();
   let savedTarget = (state.saveDocs.at(-1) as any).outputs[1];
   expect(savedTarget.children).toHaveLength(5);
@@ -416,15 +418,19 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   expect((state.saveDocs.at(-1) as any).outputs[1].children).toHaveLength(1);
 
   const stage = page.locator('.konva-stage').first();
-  await page.getByRole('button', { name: 'Fit to screen', exact: true }).click();
+  // The canvas's own zoom buttons sit under the right-hand panel at this viewport.
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
   const box = await stage.boundingBox();
   if (!box) throw new Error('Canvas has no bounding box');
   const fitZoom = Math.min(box.width / 400, box.height / 400) * 0.85;
   const outputX = (box.width - 400 * fitZoom) / 2;
   const outputY = (box.height - 400 * fitZoom) / 2;
-  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
-  const zoom = fitZoom * 1.25;
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Zoom In/ }).click();
+  const zoom = fitZoom * 1.2;
   // Pan by a known screen-space delta; Konva must still report document coordinates.
+  await canvasRegion.focus();
   await page.keyboard.down('Space');
   await page.mouse.move(box.x + 30, box.y + 30);
   await page.mouse.down();
@@ -471,10 +477,33 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   expect((state.saveDocs.at(-1) as any).outputs[1].children).toHaveLength(1);
   await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)', exact: true }).click();
   await persist();
+
+  // The bare pasteboard opens the canvas menu. Its off-artboard point must clamp
+  // the whole batch onto the target rather than using the keyboard fallback.
+  await stage.click({ button: 'right', position: { x: 10, y: 150 } });
+  await page.getByRole('button', { name: 'Paste', exact: true }).click();
+  await persist();
+  savedTarget = (state.saveDocs.at(-1) as any).outputs[1];
+  expect(savedTarget.children).toHaveLength(9);
+  const canvasLeaves = savedTarget.children.slice(5).filter((child: any) => child.type !== 'group');
+  const canvasLeft = Math.min(...canvasLeaves.map((child: any) => child.x));
+  const canvasRight = Math.max(...canvasLeaves.map((child: any) => child.x + child.width));
+  const canvasTop = Math.min(...canvasLeaves.map((child: any) => child.y));
+  const canvasBottom = Math.max(...canvasLeaves.map((child: any) => child.y + child.height));
+  expect(canvasLeft).toBe(0);
+  expect(canvasRight).toBeLessThanOrEqual(400);
+  expect(canvasTop).toBeGreaterThanOrEqual(0);
+  expect(canvasBottom).toBeLessThanOrEqual(400);
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await persist();
+  expect((state.saveDocs.at(-1) as any).outputs[1].children).toHaveLength(5);
+  await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)', exact: true }).click();
+  await persist();
+
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await page.getByRole('button', { name: /Paste Target/ }).click();
-  expect((state.doc as any).outputs[1].children).toHaveLength(5);
+  expect((state.doc as any).outputs[1].children).toHaveLength(9);
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Save to Files' }).click();
@@ -486,9 +515,14 @@ test('cross-format Paste centers a complete group at the pointer through reload 
     rendered.outputs.some((output: any) => output.id === 'paste-target')
   );
   const renderedTarget = targetRender.outputs.find((output: any) => output.id === 'paste-target');
-  expect(renderedTarget.children.map((child: any) => child.type)).toEqual(['text', 'group', 'shape', 'image', 'text']);
-  expect(renderedTarget.children.some((child: any) => child.text === 'Pointer pasted headline')).toBe(true);
-  const renderedSource = targetRender.outputs.find((output: any) => output.id === 'paste-source');
+  expect(renderedTarget.children.map((child: any) => child.type)).toEqual([
+    'text', 'group', 'shape', 'image', 'text', 'group', 'shape', 'image', 'text',
+  ]);
+  expect(renderedTarget.children.filter((child: any) => child.text === 'Pointer pasted headline')).toHaveLength(2);
+  // Export sends one single-output document per rendered file.
+  const renderedSource = (state.renderDocs as any[])
+    .map((rendered) => rendered.outputs.find((output: any) => output.id === 'paste-source'))
+    .find(Boolean);
   expect(renderedSource.children).toEqual(doc.outputs[0].children);
 });
 
