@@ -43,7 +43,7 @@ exports[`composition badge-burst > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 895,
+      "y": 1001,
     },
     {
       "fontSize": 87,
@@ -52,7 +52,7 @@ exports[`composition badge-burst > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 513,
+      "y": 533,
     },
     {
       "fontSize": 37,
@@ -61,7 +61,7 @@ exports[`composition badge-burst > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 753,
+      "y": 773,
     },
     {
       "h": 63,
@@ -69,7 +69,7 @@ exports[`composition badge-burst > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 822,
+      "y": 859,
     },
   ],
   "typeBudget": 1.5529227519633613,
@@ -253,7 +253,7 @@ exports[`composition banner-strip > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 848,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -262,7 +262,7 @@ exports[`composition banner-strip > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 864,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 15,
@@ -271,7 +271,7 @@ exports[`composition banner-strip > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 893,
+      "y": 999,
     },
     {
       "fontSize": 92,
@@ -280,7 +280,7 @@ exports[`composition banner-strip > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 424,
+      "y": 530,
     },
     {
       "fontSize": 39,
@@ -289,7 +289,7 @@ exports[`composition banner-strip > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 675,
+      "y": 781,
     },
     {
       "h": 63,
@@ -297,7 +297,7 @@ exports[`composition banner-strip > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 822,
+      "y": 928,
     },
   ],
   "typeBudget": 1.2252297305744826,
@@ -473,7 +473,7 @@ exports[`composition centred-emblem > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 848,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -482,7 +482,7 @@ exports[`composition centred-emblem > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 864,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 15,
@@ -491,7 +491,7 @@ exports[`composition centred-emblem > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 893,
+      "y": 999,
     },
     {
       "fontSize": 92,
@@ -500,7 +500,7 @@ exports[`composition centred-emblem > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 299,
+      "y": 319,
     },
     {
       "fontSize": 39,
@@ -509,7 +509,7 @@ exports[`composition centred-emblem > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 562,
+      "y": 582,
     },
   ],
   "typeBudget": 1.3891493543928373,
@@ -669,7 +669,7 @@ exports[`composition editorial-sidebar > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 54,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -678,7 +678,7 @@ exports[`composition editorial-sidebar > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 70,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 11,
@@ -687,7 +687,7 @@ exports[`composition editorial-sidebar > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 302,
       "x": 54,
-      "y": 900,
+      "y": 1006,
     },
     {
       "fontSize": 47,
@@ -696,7 +696,7 @@ exports[`composition editorial-sidebar > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 302,
       "x": 54,
-      "y": 335,
+      "y": 388,
     },
     {
       "fontSize": 18,
@@ -705,7 +705,7 @@ exports[`composition editorial-sidebar > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 302,
       "x": 54,
-      "y": 530,
+      "y": 583,
     },
     {
       "h": 63,
@@ -713,7 +713,7 @@ exports[`composition editorial-sidebar > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 54,
-      "y": 609,
+      "y": 662,
     },
   ],
   "typeBudget": 3.125586047383884,
@@ -905,7 +905,7 @@ exports[`composition hero-fullbleed > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 848,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -914,7 +914,7 @@ exports[`composition hero-fullbleed > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 864,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 15,
@@ -923,7 +923,7 @@ exports[`composition hero-fullbleed > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 893,
+      "y": 999,
     },
     {
       "fontSize": 92,
@@ -932,7 +932,7 @@ exports[`composition hero-fullbleed > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 424,
+      "y": 530,
     },
     {
       "fontSize": 39,
@@ -941,7 +941,7 @@ exports[`composition hero-fullbleed > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 675,
+      "y": 781,
     },
     {
       "h": 63,
@@ -949,7 +949,7 @@ exports[`composition hero-fullbleed > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 822,
+      "y": 928,
     },
   ],
   "typeBudget": 1.2252297305744826,
@@ -1112,7 +1112,7 @@ exports[`composition minimal-centered > lays out on 'ig-post' 1`] = `
 {
   "children": [
     {
-      "h": 494,
+      "h": 428,
       "originId": "img",
       "type": "image",
       "w": 1080,
@@ -1133,7 +1133,7 @@ exports[`composition minimal-centered > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 451,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -1142,7 +1142,7 @@ exports[`composition minimal-centered > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 467,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 13,
@@ -1151,25 +1151,25 @@ exports[`composition minimal-centered > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 897,
+      "y": 1003,
     },
     {
-      "fontSize": 66,
-      "h": 131,
+      "fontSize": 83,
+      "h": 197,
       "originId": "headline",
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 599,
+      "y": 577,
     },
     {
-      "fontSize": 24,
-      "h": 34,
+      "fontSize": 35,
+      "h": 51,
       "originId": "sub",
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 762,
+      "y": 807,
     },
     {
       "h": 63,
@@ -1177,7 +1177,7 @@ exports[`composition minimal-centered > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 824,
+      "y": 890,
     },
   ],
   "typeBudget": 1.444715328568551,
@@ -1361,7 +1361,7 @@ exports[`composition overlap-card > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 848,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -1370,7 +1370,7 @@ exports[`composition overlap-card > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 864,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 15,
@@ -1379,7 +1379,7 @@ exports[`composition overlap-card > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 893,
+      "y": 999,
     },
     {
       "fontSize": 92,
@@ -1388,7 +1388,7 @@ exports[`composition overlap-card > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 842,
       "x": 119,
-      "y": 435,
+      "y": 541,
     },
     {
       "fontSize": 39,
@@ -1397,7 +1397,7 @@ exports[`composition overlap-card > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 842,
       "x": 119,
-      "y": 676,
+      "y": 782,
     },
     {
       "h": 63,
@@ -1405,7 +1405,7 @@ exports[`composition overlap-card > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 811,
+      "y": 917,
     },
   ],
   "typeBudget": 1.6179504245281287,
@@ -1568,12 +1568,12 @@ exports[`composition poster-frame > lays out on 'ig-post' 1`] = `
 {
   "children": [
     {
-      "h": 185,
+      "h": 357,
       "originId": "img",
       "type": "image",
       "w": 886,
       "x": 97,
-      "y": 163,
+      "y": 97,
     },
     {
       "h": 0,
@@ -1589,7 +1589,7 @@ exports[`composition poster-frame > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 848,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -1598,7 +1598,7 @@ exports[`composition poster-frame > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 864,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 15,
@@ -1607,7 +1607,7 @@ exports[`composition poster-frame > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 893,
+      "y": 999,
     },
     {
       "fontSize": 92,
@@ -1616,7 +1616,7 @@ exports[`composition poster-frame > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 886,
       "x": 97,
-      "y": 381,
+      "y": 487,
     },
     {
       "fontSize": 39,
@@ -1625,7 +1625,7 @@ exports[`composition poster-frame > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 886,
       "x": 97,
-      "y": 632,
+      "y": 738,
     },
     {
       "h": 63,
@@ -1633,7 +1633,7 @@ exports[`composition poster-frame > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 778,
+      "y": 884,
     },
   ],
   "typeBudget": 1.7650368267579581,
@@ -1825,7 +1825,7 @@ exports[`composition poster-left > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 54,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -1834,7 +1834,7 @@ exports[`composition poster-left > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 70,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 15,
@@ -1843,7 +1843,7 @@ exports[`composition poster-left > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 893,
+      "y": 999,
     },
     {
       "fontSize": 92,
@@ -1852,7 +1852,7 @@ exports[`composition poster-left > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 196,
+      "y": 133,
     },
     {
       "fontSize": 39,
@@ -1861,7 +1861,7 @@ exports[`composition poster-left > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 448,
+      "y": 382,
     },
     {
       "h": 63,
@@ -1869,7 +1869,7 @@ exports[`composition poster-left > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 54,
-      "y": 594,
+      "y": 528,
     },
   ],
   "typeBudget": 1.9740543457161375,
@@ -2077,7 +2077,7 @@ exports[`composition split-panel > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 54,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -2086,7 +2086,7 @@ exports[`composition split-panel > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 70,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 11,
@@ -2095,7 +2095,7 @@ exports[`composition split-panel > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 389,
       "x": 54,
-      "y": 900,
+      "y": 1006,
     },
     {
       "fontSize": 47,
@@ -2104,7 +2104,7 @@ exports[`composition split-panel > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 389,
       "x": 54,
-      "y": 335,
+      "y": 388,
     },
     {
       "fontSize": 21,
@@ -2113,7 +2113,7 @@ exports[`composition split-panel > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 389,
       "x": 54,
-      "y": 530,
+      "y": 583,
     },
     {
       "h": 63,
@@ -2121,7 +2121,7 @@ exports[`composition split-panel > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 54,
-      "y": 609,
+      "y": 662,
     },
   ],
   "typeBudget": 3.125586047383884,
@@ -2292,12 +2292,12 @@ exports[`composition stacked-thirds > lays out on 'ig-post' 1`] = `
 {
   "children": [
     {
-      "h": 314,
+      "h": 486,
       "originId": "img",
       "type": "image",
       "w": 972,
       "x": 54,
-      "y": 405,
+      "y": 339,
     },
     {
       "h": 0,
@@ -2313,7 +2313,7 @@ exports[`composition stacked-thirds > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 848,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -2322,7 +2322,7 @@ exports[`composition stacked-thirds > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 864,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 15,
@@ -2331,7 +2331,7 @@ exports[`composition stacked-thirds > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 618,
+      "y": 559,
     },
     {
       "fontSize": 92,
@@ -2340,7 +2340,7 @@ exports[`composition stacked-thirds > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 192,
+      "y": 133,
     },
     {
       "fontSize": 39,
@@ -2349,7 +2349,7 @@ exports[`composition stacked-thirds > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 421,
+      "y": 362,
     },
     {
       "h": 63,
@@ -2357,7 +2357,7 @@ exports[`composition stacked-thirds > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 545,
+      "y": 486,
     },
   ],
   "typeBudget": 1.8753516284303302,
@@ -2520,12 +2520,12 @@ exports[`composition top-bottom > lays out on 'ig-post' 1`] = `
 {
   "children": [
     {
-      "h": 429,
+      "h": 601,
       "originId": "img",
       "type": "image",
       "w": 1080,
       "x": 0,
-      "y": 315,
+      "y": 249,
     },
     {
       "h": 0,
@@ -2541,7 +2541,7 @@ exports[`composition top-bottom > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 848,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -2550,7 +2550,7 @@ exports[`composition top-bottom > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 864,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 12,
@@ -2559,7 +2559,7 @@ exports[`composition top-bottom > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 898,
+      "y": 1004,
     },
     {
       "fontSize": 73,
@@ -2568,7 +2568,7 @@ exports[`composition top-bottom > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 189,
+      "y": 133,
     },
     {
       "fontSize": 35,
@@ -2577,7 +2577,7 @@ exports[`composition top-bottom > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 765,
+      "y": 871,
     },
     {
       "h": 63,
@@ -2585,7 +2585,7 @@ exports[`composition top-bottom > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 825,
+      "y": 931,
     },
   ],
   "typeBudget": 1.7190723260611362,
@@ -2761,7 +2761,7 @@ exports[`composition type-dominant > lays out on 'ig-post' 1`] = `
       "type": "shape",
       "w": 178,
       "x": 848,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -2770,7 +2770,7 @@ exports[`composition type-dominant > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 146,
       "x": 864,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 15,
@@ -2779,7 +2779,7 @@ exports[`composition type-dominant > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 893,
+      "y": 999,
     },
     {
       "fontSize": 92,
@@ -2788,7 +2788,7 @@ exports[`composition type-dominant > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 929,
       "x": 76,
-      "y": 299,
+      "y": 319,
     },
     {
       "fontSize": 39,
@@ -2797,7 +2797,7 @@ exports[`composition type-dominant > lays out on 'ig-post' 1`] = `
       "type": "text",
       "w": 929,
       "x": 76,
-      "y": 562,
+      "y": 582,
     },
     {
       "h": 63,
@@ -2805,7 +2805,7 @@ exports[`composition type-dominant > lays out on 'ig-post' 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 719,
+      "y": 739,
     },
   ],
   "typeBudget": 1.9051191145958914,
@@ -2973,7 +2973,7 @@ exports[`headline emphasis > does not change any geometry 1`] = `
       "type": "shape",
       "w": 178,
       "x": 848,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 26,
@@ -2982,7 +2982,7 @@ exports[`headline emphasis > does not change any geometry 1`] = `
       "type": "text",
       "w": 146,
       "x": 864,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 15,
@@ -2991,7 +2991,7 @@ exports[`headline emphasis > does not change any geometry 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 893,
+      "y": 999,
     },
     {
       "fontSize": 92,
@@ -3000,7 +3000,7 @@ exports[`headline emphasis > does not change any geometry 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 424,
+      "y": 530,
     },
     {
       "fontSize": 39,
@@ -3009,7 +3009,7 @@ exports[`headline emphasis > does not change any geometry 1`] = `
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 675,
+      "y": 781,
     },
     {
       "h": 63,
@@ -3017,7 +3017,7 @@ exports[`headline emphasis > does not change any geometry 1`] = `
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 822,
+      "y": 928,
     },
   ],
   "typeBudget": 1.2252297305744826,
@@ -3034,7 +3034,7 @@ exports[`legacy composition badge-burst slot variants > with no imagery at all, 
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 550,
+      "y": 656,
     },
     {
       "fontSize": 37,
@@ -3043,7 +3043,7 @@ exports[`legacy composition badge-burst slot variants > with no imagery at all, 
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 790,
+      "y": 896,
     },
     {
       "h": 63,
@@ -3051,7 +3051,7 @@ exports[`legacy composition badge-burst slot variants > with no imagery at all, 
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 857,
+      "y": 963,
     },
   ],
   "typeBudget": 1.2252297305744826,
@@ -3076,7 +3076,7 @@ exports[`legacy composition badge-burst slot variants > without a footer, so the
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 550,
+      "y": 656,
     },
     {
       "fontSize": 37,
@@ -3085,7 +3085,7 @@ exports[`legacy composition badge-burst slot variants > without a footer, so the
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 790,
+      "y": 896,
     },
     {
       "h": 63,
@@ -3093,7 +3093,7 @@ exports[`legacy composition badge-burst slot variants > without a footer, so the
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 857,
+      "y": 963,
     },
   ],
   "typeBudget": 1.2252297305744826,
@@ -3202,7 +3202,7 @@ exports[`legacy composition hero-fullbleed slot variants > with no imagery at al
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 478,
+      "y": 584,
     },
     {
       "fontSize": 39,
@@ -3211,7 +3211,7 @@ exports[`legacy composition hero-fullbleed slot variants > with no imagery at al
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 730,
+      "y": 836,
     },
     {
       "h": 63,
@@ -3219,7 +3219,7 @@ exports[`legacy composition hero-fullbleed slot variants > with no imagery at al
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 857,
+      "y": 963,
     },
   ],
   "typeBudget": 1.2252297305744826,
@@ -3244,7 +3244,7 @@ exports[`legacy composition hero-fullbleed slot variants > without a footer, so 
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 478,
+      "y": 584,
     },
     {
       "fontSize": 39,
@@ -3253,7 +3253,7 @@ exports[`legacy composition hero-fullbleed slot variants > without a footer, so 
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 730,
+      "y": 836,
     },
     {
       "h": 63,
@@ -3261,7 +3261,7 @@ exports[`legacy composition hero-fullbleed slot variants > without a footer, so 
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 857,
+      "y": 963,
     },
   ],
   "typeBudget": 1.2252297305744826,
@@ -3278,7 +3278,7 @@ exports[`legacy composition minimal-centered slot variants > with no imagery at 
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 342,
+      "y": 362,
     },
     {
       "fontSize": 35,
@@ -3287,7 +3287,7 @@ exports[`legacy composition minimal-centered slot variants > with no imagery at 
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 571,
+      "y": 591,
     },
     {
       "h": 63,
@@ -3295,7 +3295,7 @@ exports[`legacy composition minimal-centered slot variants > with no imagery at 
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 654,
+      "y": 674,
     },
   ],
   "typeBudget": 1.444715328568551,
@@ -3306,7 +3306,7 @@ exports[`legacy composition minimal-centered slot variants > without a footer, s
 {
   "children": [
     {
-      "h": 494,
+      "h": 428,
       "originId": "img",
       "type": "image",
       "w": 1080,
@@ -3320,7 +3320,7 @@ exports[`legacy composition minimal-centered slot variants > without a footer, s
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 550,
+      "y": 570,
     },
     {
       "fontSize": 35,
@@ -3329,7 +3329,7 @@ exports[`legacy composition minimal-centered slot variants > without a footer, s
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 780,
+      "y": 800,
     },
     {
       "h": 63,
@@ -3337,7 +3337,7 @@ exports[`legacy composition minimal-centered slot variants > without a footer, s
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 857,
+      "y": 883,
     },
   ],
   "typeBudget": 1.444715328568551,
@@ -3446,7 +3446,7 @@ exports[`legacy composition top-bottom slot variants > with no imagery at all, w
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 35,
@@ -3455,7 +3455,7 @@ exports[`legacy composition top-bottom slot variants > with no imagery at all, w
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 315,
+      "y": 249,
     },
     {
       "h": 63,
@@ -3463,7 +3463,7 @@ exports[`legacy composition top-bottom slot variants > with no imagery at all, w
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 387,
+      "y": 321,
     },
   ],
   "typeBudget": 1.7190723260611362,
@@ -3474,12 +3474,12 @@ exports[`legacy composition top-bottom slot variants > without a footer, so the 
 {
   "children": [
     {
-      "h": 467,
+      "h": 639,
       "originId": "img",
       "type": "image",
       "w": 1080,
       "x": 0,
-      "y": 315,
+      "y": 249,
     },
     {
       "fontSize": 73,
@@ -3488,7 +3488,7 @@ exports[`legacy composition top-bottom slot variants > without a footer, so the 
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 120,
+      "y": 54,
     },
     {
       "fontSize": 35,
@@ -3497,7 +3497,7 @@ exports[`legacy composition top-bottom slot variants > without a footer, so the 
       "type": "text",
       "w": 972,
       "x": 54,
-      "y": 803,
+      "y": 909,
     },
     {
       "h": 63,
@@ -3505,7 +3505,7 @@ exports[`legacy composition top-bottom slot variants > without a footer, so the 
       "type": "symbol",
       "w": 296,
       "x": 392,
-      "y": 857,
+      "y": 963,
     },
   ],
   "typeBudget": 1.7190723260611362,

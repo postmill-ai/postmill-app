@@ -952,6 +952,7 @@ async function sampleSafeZonePixels(
 }
 
 test('safe zones scale to platform formats and keep the custom guide unshaded', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
   const output = (id: string, formatId: string, name: string, width: number, height: number) => ({
     id, formatId, name, width, height, background: '#ffffff', children: [],
   });
@@ -997,7 +998,7 @@ test('safe zones scale to platform formats and keep the custom guide unshaded', 
       name: 'Facebook Story', width: 1080, height: 1920,
       samples: [
         { x: 1000, y: 50, expected: 'shaded' },
-        { x: 500, y: 1850, expected: 'shaded' },
+        { x: 900, y: 1850, expected: 'shaded' },
         { x: 500, y: 500, expected: 'clear' },
       ],
     },
@@ -1018,7 +1019,7 @@ test('safe zones scale to platform formats and keep the custom guide unshaded', 
   ];
 
   for (const item of cases) {
-    await page.getByText(item.name, { exact: true }).click();
+    await page.getByRole('button', { name: `${item.name} ${item.width}×${item.height}`, exact: true }).click();
     await page.getByRole('menuitem', { name: 'View', exact: true }).click();
     await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
     await expect.poll(

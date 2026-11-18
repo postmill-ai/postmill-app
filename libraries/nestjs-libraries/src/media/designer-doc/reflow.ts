@@ -1,3 +1,4 @@
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { getSafeZoneOverlays } from './safe-zones';
 import type { DesignerBackground, DesignerElement } from './designer-doc.schema';
 import { subjectPointToFocalPoint } from './focal-point';
@@ -969,12 +970,16 @@ export const getSafeZoneInset = (
   if (zones.some((zone) => zone.kind === 'title-safe')) {
     return fallback;
   }
+  const policy = CHANNEL_PRESETS.find((preset) => preset.id === formatId)?.safeZoneLayout;
+  if (policy === 'guide-only') return fallback;
+  // Existing edge-to-edge presets keep their canvas default. Newly zoned
+  // formats opt into retaining generic margins on every unobstructed side.
+  let left = policy === 'preserve-generic-margins' ? fallback.left : 0;
+  let top = policy === 'preserve-generic-margins' ? fallback.top : 0;
+  let right = policy === 'preserve-generic-margins' ? fallback.right : width;
+  let bottom = policy === 'preserve-generic-margins' ? fallback.bottom : height;
   // Full-width UI bands inset the top/bottom. A substantial edge rail or
   // profile region also insets its side; small corner badges stay local.
-  let left = 0;
-  let top = 0;
-  let right = width;
-  let bottom = height;
   for (const z of zones) {
     const spansWidth = z.x <= 0 && z.x + z.width >= width;
     const coversVerticalEdge = z.height >= height * 0.25;

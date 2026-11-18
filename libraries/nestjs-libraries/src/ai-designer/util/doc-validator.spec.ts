@@ -152,12 +152,12 @@ describe('validateDesignDoc', () => {
     const { doc: out, violations } = validateDesignDoc(doc);
     const [legal, banner] = (out.outputs[0] as any).children;
 
-    // Instagram Post's feed actions begin at 920: 920 - 30.
-    expect(legal.y).toBe(890);
+    // Feed regions are guides only; layout retains the generic 5% inset.
+    expect(legal.y).toBe(996);
     expect(legal.x).toBe(54);
     expect(banner.x).toBe(0);
     expect(banner.width).toBe(1080);
-    expect(banner.y).toBe(120);
+    expect(banner.y).toBe(54);
     expect(violations.some((v) => v.includes('title-safe area'))).toBe(true);
 
     // Idempotent: the repaired doc is clean on a second pass.
@@ -217,12 +217,12 @@ describe('validateDesignDoc', () => {
           originId: 'badge-bg',
           type: 'shape',
           shape: 'rect',
-          x: 1450,
+          x: 1411,
           y: 40,
           width: 150,
           height: 48,
         }),
-        el({ originId: 'badge', text: 'SALE', x: 1464, y: 40, width: 122, height: 48 }),
+        el({ originId: 'badge', text: 'SALE', x: 1425, y: 40, width: 122, height: 48 }),
       ],
       { formatId: 'linkedin-banner', width: 1584, height: 396 }
     );
@@ -230,8 +230,8 @@ describe('validateDesignDoc', () => {
     const { doc: out } = validateDesignDoc(doc);
     const [chip, label] = (out.outputs[0] as any).children;
 
-    // The profile obstruction only insets the left; the right stays full-bleed.
-    expect(chip.x + chip.width).toBeCloseTo(1584, 6);
+    // The profile obstruction insets the left; the generic 5% right margin remains.
+    expect(chip.x + chip.width).toBeCloseTo(1504.8, 6);
     expect(label.x - chip.x).toBe(14);
   });
 

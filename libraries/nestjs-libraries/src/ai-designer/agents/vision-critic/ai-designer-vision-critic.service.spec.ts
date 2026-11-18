@@ -388,16 +388,27 @@ describe('AiDesignerVisionCriticService', () => {
     expect(vocabulary).toContain('never with a text fix');
   });
 
-  it('scales platform obstruction coordinates to the output in the critique prompt', async () => {
+  it('scales and rounds platform obstruction coordinates in the critique prompt', async () => {
     aiDefaults.vision.mockResolvedValue('{"findings": []}');
 
     await handler(makeRequest({
-      outputs: [{ formatId: 'ig-story', width: 540, height: 960 }],
+      outputs: [{ formatId: 'ig-story', width: 2118, height: 3763 }],
     }), 'org1');
 
     const prompt = aiDefaults.vision.mock.calls[0][2] as string;
-    expect(prompt).toContain('Top UI: x=0 y=0 w=540 h=40');
-    expect(prompt).toContain('CTA Bar: x=0 y=890 w=540 h=70');
+    expect(prompt).toContain('Top UI: x=0 y=0 w=2118 h=157');
+    expect(prompt).toContain('CTA Bar: x=0 y=3489 w=2118 h=274');
+  });
+
+  it('omits the safe-zone block for a generic custom format', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+
+    await handler(makeRequest({
+      outputs: [{ formatId: 'custom', width: 400, height: 300 }],
+    }), 'org1');
+
+    const prompt = aiDefaults.vision.mock.calls[0][2] as string;
+    expect(prompt).not.toContain('Safe zones:');
   });
 
   it('lists each output with its 25% feed-scale pixel size', async () => {

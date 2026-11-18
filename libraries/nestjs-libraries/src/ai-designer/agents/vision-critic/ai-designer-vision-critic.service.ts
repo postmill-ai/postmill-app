@@ -721,7 +721,7 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
           .filter((zone) => zone.kind === 'obstruction')
           .map(
             (z) =>
-              `      - ${z.label}: x=${z.x} y=${z.y} w=${z.width} h=${z.height} (${z.description})`
+              `      - ${z.label}: x=${Math.round(z.x)} y=${Math.round(z.y)} w=${Math.round(z.width)} h=${Math.round(z.height)} (${z.description})`
           )
           .join('\n');
         return [

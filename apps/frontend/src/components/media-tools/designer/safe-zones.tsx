@@ -72,8 +72,8 @@ export const SafeZoneOverlay: FC<SafeZoneOverlayProps> = ({
       ))}
       {hasObstructions && (
         <Group
-          x={8 / zoom}
-          y={8 / zoom}
+          x={0}
+          y={height + 8 / zoom}
           name="safe-zone-legend"
           listening={false}
         >
@@ -94,7 +94,7 @@ export const SafeZoneOverlay: FC<SafeZoneOverlayProps> = ({
               )}
               fontSize={fontSize}
               padding={padding}
-              width={Math.min(320 / zoom, Math.max(1, width - 36 / zoom))}
+              width={320 / zoom}
               wrap="word"
               fill="#ffffff"
               fontFamily="Arial"

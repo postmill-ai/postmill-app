@@ -5,6 +5,7 @@ import Konva from 'konva';
 import { Layer, Stage } from 'react-konva';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SafeZoneOverlay } from './safe-zones';
+import canvasSource from './canvas.tsx?raw';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
@@ -99,5 +100,17 @@ describe('SafeZoneOverlay', () => {
     expect(texts.map((text) => (text as Konva.Text).text())).toContain(
       'Shaded = may be covered · Platform UI is approximate'
     );
+
+    const legendBox = legend.getClientRect();
+    const overlapping = layer.find('.safe-zone-label').filter((label) => {
+      const box = label.getClientRect();
+      return legendBox.x < box.x + box.width && legendBox.x + legendBox.width > box.x &&
+        legendBox.y < box.y + box.height && legendBox.y + legendBox.height > box.y;
+    });
+    expect(overlapping).toEqual([]);
+  });
+
+  it('receives the live canvas zoom', () => {
+    expect(canvasSource).toMatch(/<SafeZoneOverlay[\s\S]*?zoom=\{zoom\}/);
   });
 });

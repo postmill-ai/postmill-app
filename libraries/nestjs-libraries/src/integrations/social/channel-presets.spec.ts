@@ -63,6 +63,15 @@ describe('channel format presets', () => {
     expect(labels('tiktok')).toContain('Action Rail');
   });
 
+  it('keeps feed regions guide-only and preserves margins for newly zoned real overlays', () => {
+    for (const id of ['ig-post', 'fb-post', 'x-post', 'linkedin-post']) {
+      expect(CHANNEL_PRESETS.find((preset) => preset.id === id)?.safeZoneLayout).toBe('guide-only');
+    }
+    for (const id of ['linkedin-banner', 'yt-thumbnail', 'pinterest-pin', 'reel', 'short', 'tiktok-video']) {
+      expect(CHANNEL_PRESETS.find((preset) => preset.id === id)?.safeZoneLayout).toBe('preserve-generic-margins');
+    }
+  });
+
   it('keeps one existing YouTube Short preset', () => {
     expect(CHANNEL_PRESETS.filter((preset) => preset.id === 'short')).toHaveLength(1);
     expect(CHANNEL_PRESETS.find((preset) => preset.id === 'short')).toMatchObject({

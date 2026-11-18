@@ -65,13 +65,46 @@ describe('getSafeZoneInset', () => {
     });
   });
 
-  it('ignores a small corner timestamp when deriving edge insets', () => {
+  it('keeps generic margins around a small YouTube corner timestamp', () => {
     expect(getSafeZoneInset('yt-thumbnail', 1280, 720)).toEqual({
-      left: 0,
-      top: 0,
-      right: 1280,
-      bottom: 720,
+      left: 64,
+      top: 36,
+      right: 1216,
+      bottom: 684,
     });
+  });
+
+  it('keeps feed guide regions layout-neutral', () => {
+    expect(getSafeZoneInset('ig-post', 1080, 1080)).toEqual({
+      left: 54,
+      top: 54,
+      right: 1026,
+      bottom: 1026,
+    });
+  });
+
+  it('preserves generic margins on newly zoned formats without adding them to existing presets', () => {
+    expect(getSafeZoneInset('linkedin-banner', 1584, 396)).toEqual({
+      left: 400,
+      top: 19.8,
+      right: 1504.8,
+      bottom: 376.2,
+    });
+    expect(getSafeZoneInset('pinterest-pin', 1000, 1500)).toEqual({
+      left: 50,
+      top: 75,
+      right: 950,
+      bottom: 1370,
+    });
+    expect(getSafeZoneInset('reel', 1080, 1920)).toEqual({
+      left: 54,
+      top: 120,
+      right: 900,
+      bottom: 1450,
+    });
+    expect(getSafeZoneInset('ig-story', 1080, 1920).left).toBe(0);
+    expect(getSafeZoneInset('ig-reel', 1080, 1920).left).toBe(0);
+    expect(getSafeZoneInset('tiktok', 1080, 1920).left).toBe(0);
   });
 
   it('uses the 5% fallback for formats without safe zones', () => {

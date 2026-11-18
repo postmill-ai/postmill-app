@@ -15,6 +15,8 @@ export interface ChannelPreset {
   category: 'social' | 'story' | 'ad' | 'custom' | 'video';
   /** Approximate unsafe platform UI rectangles in these reference pixels. */
   safeZones?: SafeZoneOverlay[];
+  /** Feed guides can stay layout-neutral; new real overlays may retain generic margins. */
+  safeZoneLayout?: 'guide-only' | 'preserve-generic-margins';
   provider?: string | null;
   /** Target frame rate for video outputs (video presets only). */
   fps?: number;
@@ -45,6 +47,7 @@ const SHORT_SAFE_ZONES = verticalVideoZones(120);
 export const CHANNEL_PRESETS: ChannelPreset[] = [
   {
     id: 'ig-post', name: 'Instagram Post', width: 1080, height: 1080, category: 'social', provider: 'instagram',
+    safeZoneLayout: 'guide-only',
     safeZones: feedZones(1080, 1080, 120, 160),
   },
   {
@@ -67,6 +70,7 @@ export const CHANNEL_PRESETS: ChannelPreset[] = [
   },
   {
     id: 'fb-post', name: 'Facebook Post', width: 1200, height: 630, category: 'social', provider: 'facebook',
+    safeZoneLayout: 'guide-only',
     safeZones: feedZones(1200, 630, 90, 130),
   },
   {
@@ -92,10 +96,12 @@ export const CHANNEL_PRESETS: ChannelPreset[] = [
   },
   {
     id: 'x-post', name: 'X (Twitter) Post', width: 1200, height: 675, category: 'social', provider: 'x',
+    safeZoneLayout: 'guide-only',
     safeZones: feedZones(1200, 675, 80, 140),
   },
   {
     id: 'linkedin-post', name: 'LinkedIn Post', width: 1200, height: 627, category: 'social', provider: 'linkedin',
+    safeZoneLayout: 'guide-only',
     safeZones: feedZones(1200, 627, 90, 130),
   },
   {
@@ -121,6 +127,7 @@ export const CHANNEL_PRESETS: ChannelPreset[] = [
   },
   {
     id: 'linkedin-banner', name: 'LinkedIn Banner', width: 1584, height: 396, category: 'ad', provider: 'linkedin',
+    safeZoneLayout: 'preserve-generic-margins',
     safeZones: [
       { label: 'Profile Photo', x: 0, y: 176, width: 400, height: 220, description: 'Profile photo and account identity area' },
     ],
@@ -131,12 +138,14 @@ export const CHANNEL_PRESETS: ChannelPreset[] = [
   },
   {
     id: 'yt-thumbnail', name: 'YouTube Thumbnail', width: 1280, height: 720, category: 'social', provider: 'youtube',
+    safeZoneLayout: 'preserve-generic-margins',
     safeZones: [
       { label: 'Duration Timestamp', x: 1060, y: 640, width: 220, height: 80, description: 'Video duration timestamp corner' },
     ],
   },
   {
     id: 'pinterest-pin', name: 'Pinterest Pin', width: 1000, height: 1500, category: 'social', provider: 'pinterest',
+    safeZoneLayout: 'preserve-generic-margins',
     safeZones: [
       { label: 'Save and More Actions', x: 760, y: 0, width: 240, height: 140, description: 'Save button and additional actions' },
       { label: 'Source and Destination', x: 0, y: 1370, width: 1000, height: 130, description: 'Source, destination and engagement controls' },
@@ -146,14 +155,17 @@ export const CHANNEL_PRESETS: ChannelPreset[] = [
   // Video presets
   {
     id: 'reel', name: 'Instagram Reel (Video)', width: 1080, height: 1920, category: 'video', provider: 'instagram', fps: 30, maxDurationMs: 60000,
+    safeZoneLayout: 'preserve-generic-margins',
     safeZones: REEL_SAFE_ZONES,
   },
   {
     id: 'short', name: 'YouTube Short', width: 1080, height: 1920, category: 'video', provider: 'youtube', fps: 30, maxDurationMs: 60000,
+    safeZoneLayout: 'preserve-generic-margins',
     safeZones: SHORT_SAFE_ZONES,
   },
   {
     id: 'tiktok-video', name: 'TikTok Video', width: 1080, height: 1920, category: 'video', provider: 'tiktok', fps: 30, maxDurationMs: 60000,
+    safeZoneLayout: 'preserve-generic-margins',
     safeZones: TIKTOK_SAFE_ZONES,
   },
   { id: 'feed-video-1x1', name: 'Feed Video (1:1)', width: 1080, height: 1080, category: 'video', provider: null, fps: 30, maxDurationMs: 60000 },

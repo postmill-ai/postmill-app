@@ -4701,7 +4701,7 @@ describe('AiDesignerComposerService LLM revise protections', () => {
     const post = (revised.outputs[0] as any).children[0];
     const story = (revised.outputs[1] as any).children[0];
     // The leak onto the unrequested format was dropped…
-    expect(post.y).toBe(120);
+    expect(post.y).toBe(100);
     // …while the in-scope op applied.
     expect(story.y).toBe(940);
   });
@@ -5788,8 +5788,8 @@ describe('AiDesignerComposerService panel side', () => {
   });
 
   // A right sidebar's copy must stay inside both the panel and the safe area.
-  // LinkedIn's profile obstruction insets the left, while the right stays
-  // full-bleed; a fractional coordinate would expose a validator clamp.
+  // LinkedIn's profile obstruction insets the left; the generic right margin
+  // remains. A fractional coordinate would expose a validator clamp.
   it('keeps a wide banner\'s sidebar copy inside both the panel and the safe area', async () => {
     const doc = await composeWith(
       makePlan({ formatTemplate: 'editorial-sidebar', panelSide: 'right' }),
@@ -5797,7 +5797,7 @@ describe('AiDesignerComposerService panel side', () => {
     );
 
     const sidebar = byOrigin(doc, 'editorial-sidebar-bg');
-    const safeRight = 1584;
+    const safeRight = 1584 * 0.95;
     for (const originId of ['headline', 'sub']) {
       const el = byOrigin(doc, originId);
       expect(el.x).toBeGreaterThanOrEqual(400);

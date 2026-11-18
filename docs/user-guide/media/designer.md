@@ -34,6 +34,8 @@ saved.
   regions scaled to the active format: shaded areas may be covered, so keep important content outside
   them. Custom and other formats without platform regions show an unshaded 5% title-safe outline.
   These guides are editor-only and never appear in exports; custom dimensions remain available.
+  AI Designer and Add format keep copy out of actual overlay regions. Feed header/action regions are
+  visual guides only and do not change layout; a side without an actual overlay retains its generic margin.
 - **Freeze a format** — select the snowflake on an output tab to prevent canvas, Inspector, page,
   timeline, resize, and incoming linked edits to that output. Other formats remain editable. You can
   still switch to a frozen output, export it, and copy clips or keyframes for use elsewhere; pasting
