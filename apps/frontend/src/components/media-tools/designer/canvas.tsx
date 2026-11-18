@@ -2313,7 +2313,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             );
           })}
           {showSafeZones && safeZonePreset && (
-            <SafeZoneOverlay presetId={safeZonePreset} width={output.width} height={output.height} visible={true} />
+            <SafeZoneOverlay presetId={safeZonePreset} width={output.width} height={output.height} visible={true} zoom={zoom} />
           )}
           {marquee && (
             <Rect

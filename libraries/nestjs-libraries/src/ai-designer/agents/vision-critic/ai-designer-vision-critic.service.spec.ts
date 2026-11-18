@@ -28,11 +28,12 @@ const makeRequest = (overrides?: {
   referenceCues?: string[];
   referenceFileIds?: string[];
   briefIntent?: string;
+  outputs?: { formatId: string; width: number; height: number }[];
 }) =>
   JSON.stringify({
     type: 'critique-request',
     contactSheetUrl: overrides?.contactSheetUrl ?? 'https://example.com/contact.png',
-    outputs: [{ formatId: 'ig-square', width: 1080, height: 1080 }],
+    outputs: overrides?.outputs ?? [{ formatId: 'ig-square', width: 1080, height: 1080 }],
     rubric: {
       criteria: [
         { name: 'Legibility', description: 'Text is readable', weight: 1 },
@@ -385,6 +386,41 @@ describe('AiDesignerVisionCriticService', () => {
     expect(vocabulary).toContain('brand_safety');
     expect(vocabulary).toContain('branded product');
     expect(vocabulary).toContain('never with a text fix');
+  });
+
+  it('scales and rounds platform obstruction coordinates in the critique prompt', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+
+    await handler(makeRequest({
+      outputs: [{ formatId: 'ig-story', width: 2118, height: 3763 }],
+    }), 'org1');
+
+    const prompt = aiDefaults.vision.mock.calls[0][2] as string;
+    expect(prompt).toContain('Top UI: x=0 y=0 w=2118 h=157');
+    expect(prompt).toContain('CTA Bar: x=0 y=3489 w=2118 h=274');
+  });
+
+  it('omits the safe-zone block for a generic custom format', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+
+    await handler(makeRequest({
+      outputs: [{ formatId: 'custom', width: 400, height: 300 }],
+    }), 'org1');
+
+    const prompt = aiDefaults.vision.mock.calls[0][2] as string;
+    expect(prompt).not.toContain('Safe zones:');
+  });
+
+  it('omits canvas-only feed guides from an Instagram Post critique prompt', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+
+    await handler(makeRequest({
+      outputs: [{ formatId: 'ig-post', width: 1080, height: 1080 }],
+    }), 'org1');
+
+    const prompt = aiDefaults.vision.mock.calls[0][2] as string;
+    expect(prompt).not.toContain('Feed Header');
+    expect(prompt).not.toContain('Feed Actions');
   });
 
   it('lists each output with its 25% feed-scale pixel size', async () => {

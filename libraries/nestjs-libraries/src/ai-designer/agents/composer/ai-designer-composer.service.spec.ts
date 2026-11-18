@@ -5805,6 +5805,7 @@ describe('AiDesignerComposerService panel side', () => {
     const safeRight = 1584 * 0.95;
     for (const originId of ['headline', 'sub']) {
       const el = byOrigin(doc, originId);
+      expect(el.x).toBeGreaterThanOrEqual(400);
       expect(el.x).toBeGreaterThanOrEqual(sidebar.x);
       expect(el.x + el.width).toBeLessThanOrEqual(sidebar.x + sidebar.width);
       // Inside the title-safe area, so the validator never has to clamp it.

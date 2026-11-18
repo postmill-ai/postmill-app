@@ -919,3 +919,127 @@ test('an undecodable Alt-drop keeps the old target and reports decode failure', 
   expect(state.doc.outputs[0].children).toHaveLength(2);
   expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
 });
+
+type SafeZoneSample = { x: number; y: number; expected: 'shaded' | 'clear' };
+
+async function sampleSafeZonePixels(
+  page: Page,
+  width: number,
+  height: number,
+  samples: SafeZoneSample[]
+) {
+  const canvas = page.locator('.konva-stage').first().locator('canvas').first();
+  return canvas.evaluate((element, args) => {
+    const canvas = element as HTMLCanvasElement;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Safe-zone canvas has no 2d context');
+    const bounds = canvas.getBoundingClientRect();
+    const scale = Math.min(bounds.width / args.width, bounds.height / args.height) * 0.85;
+    const left = (bounds.width - args.width * scale) / 2;
+    const top = (bounds.height - args.height * scale) / 2;
+    const ratioX = canvas.width / bounds.width;
+    const ratioY = canvas.height / bounds.height;
+
+    return args.samples.map((sample) => {
+      const x = Math.round((left + sample.x * scale) * ratioX);
+      const y = Math.round((top + sample.y * scale) * ratioY);
+      const [r, g, b] = context.getImageData(x, y, 1, 1).data;
+      const shaded = r >= 250 && g >= 220 && g <= 245 && b >= 220 && b <= 245 && g < r - 5;
+      const clear = r >= 250 && g >= 250 && b >= 250;
+      return shaded ? 'shaded' : clear ? 'clear' : `${r},${g},${b}`;
+    });
+  }, { width, height, samples });
+}
+
+test('safe zones scale to platform formats and keep the custom guide unshaded', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const output = (id: string, formatId: string, name: string, width: number, height: number) => ({
+    id, formatId, name, width, height, background: '#ffffff', children: [],
+  });
+  const outputs = [
+    output('story', 'ig-story', 'Story enlarged', 2118, 3763),
+    output('reel', 'ig-reel', 'Reel', 1080, 1920),
+    output('tiktok', 'tiktok', 'TikTok', 1080, 1920),
+    output('facebook-story', 'fb-story', 'Facebook Story', 1080, 1920),
+    output('linkedin-banner', 'linkedin-banner', 'LinkedIn Banner', 1584, 396),
+    output('youtube', 'yt-thumbnail', 'YouTube Thumbnail', 1280, 720),
+  ];
+  const state = await installMocks(page, { version: 13, mode: 'image', outputs });
+  await openDesigner(page);
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Safe Zones', exact: true }).click();
+
+  const cases: { name: string; width: number; height: number; samples: SafeZoneSample[] }[] = [
+    {
+      name: 'Story enlarged', width: 2118, height: 3763,
+      samples: [
+        { x: 1059, y: 20, expected: 'shaded' },
+        { x: 1059, y: 3700, expected: 'shaded' },
+        { x: 1059, y: 1800, expected: 'clear' },
+      ],
+    },
+    {
+      name: 'Reel', width: 1080, height: 1920,
+      samples: [
+        { x: 1000, y: 1200, expected: 'shaded' },
+        { x: 500, y: 1700, expected: 'shaded' },
+        { x: 500, y: 1000, expected: 'clear' },
+      ],
+    },
+    {
+      name: 'TikTok', width: 1080, height: 1920,
+      samples: [
+        { x: 1000, y: 1200, expected: 'shaded' },
+        { x: 500, y: 1700, expected: 'shaded' },
+        { x: 500, y: 1000, expected: 'clear' },
+      ],
+    },
+    {
+      name: 'Facebook Story', width: 1080, height: 1920,
+      samples: [
+        { x: 1000, y: 50, expected: 'shaded' },
+        { x: 900, y: 1850, expected: 'shaded' },
+        { x: 500, y: 500, expected: 'clear' },
+      ],
+    },
+    {
+      name: 'LinkedIn Banner', width: 1584, height: 396,
+      samples: [
+        { x: 100, y: 350, expected: 'shaded' },
+        { x: 700, y: 100, expected: 'clear' },
+      ],
+    },
+    {
+      name: 'YouTube Thumbnail', width: 1280, height: 720,
+      samples: [
+        { x: 1200, y: 710, expected: 'shaded' },
+        { x: 500, y: 300, expected: 'clear' },
+      ],
+    },
+  ];
+
+  for (const item of cases) {
+    await page.getByRole('button', { name: `${item.name} ${item.width}×${item.height}`, exact: true }).click();
+    await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
+    await expect.poll(
+      () => sampleSafeZonePixels(page, item.width, item.height, item.samples),
+      { timeout: 15_000 }
+    ).toEqual(item.samples.map((sample) => sample.expected));
+  }
+
+  state.doc = {
+    version: 13,
+    mode: 'image',
+    outputs: [output('custom', 'custom', 'Custom', 400, 300)],
+  };
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Safe Zones', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
+  await expect.poll(() => sampleSafeZonePixels(page, 400, 300, [
+    { x: 200, y: 150, expected: 'clear' },
+  ])).toEqual(['clear']);
+});

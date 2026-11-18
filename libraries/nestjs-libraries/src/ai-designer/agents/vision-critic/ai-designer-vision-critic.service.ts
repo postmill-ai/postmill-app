@@ -8,7 +8,7 @@ import {
 import type { AgentResponse, ContextPacket } from '@reaatech/agent-mesh';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
-import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import { getEnforcedSafeZones } from '@postmill-ai/nestjs-libraries/media/designer-doc/safe-zones';
 import {
   isLocalStorageUrl,
   loadVisionImageBytes,
@@ -717,11 +717,11 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
 
     const outputLines = payload.outputs
       .map((o) => {
-        const preset = CHANNEL_PRESETS.find((p) => p.id === o.formatId);
-        const safeZones = preset?.safeZones
-          ?.map(
+        const safeZones = getEnforcedSafeZones(o.formatId, o.width, o.height)
+          .filter((zone) => zone.kind === 'obstruction')
+          .map(
             (z) =>
-              `      - ${z.label}: x=${z.x} y=${z.y} w=${z.width} h=${z.height} (${z.description})`
+              `      - ${z.label}: x=${Math.round(z.x)} y=${Math.round(z.y)} w=${Math.round(z.width)} h=${Math.round(z.height)} (${z.description})`
           )
           .join('\n');
         return [

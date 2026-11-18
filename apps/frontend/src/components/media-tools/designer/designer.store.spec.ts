@@ -358,6 +358,38 @@ describe('migrateDoc', () => {
 });
 
 describe('Designer smoke: multi-format linked editing', () => {
+  it.each([
+    {
+      formatId: 'ig-post', name: 'Instagram Post', width: 1080, height: 1080,
+      kicker: { x: 54, y: 54 }, legal: { x: 54, y: 986 },
+    },
+    {
+      formatId: 'yt-thumbnail', name: 'YouTube Thumbnail', width: 1280, height: 720,
+      kicker: { x: 64, y: 36 }, legal: { x: 64, y: 648 },
+    },
+  ])('keeps generic margins when adding $formatId with visual safe zones', (target) => {
+    const store = createDesignerStore(1080, 1080);
+    act(() => {
+      store.getState().addElement({
+        id: 'kicker', originId: 'kicker', type: 'text', x: 60, y: 60, width: 200, height: 40,
+        rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Kicker',
+      });
+      store.getState().addElement({
+        id: 'legal', originId: 'legal', type: 'text', x: 60, y: 990, width: 400, height: 40,
+        rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Legal',
+      });
+      store.getState().addOutput(target);
+    });
+
+    const children = (store.getState().doc.outputs[1] as any).children;
+    const kicker = children.find((element: any) => element.originId === 'kicker');
+    const legal = children.find((element: any) => element.originId === 'legal');
+    expect(kicker).toMatchObject(target.kicker);
+    expect(legal).toMatchObject(target.legal);
+    expect(kicker.x).not.toBe(0);
+    expect(legal.x).not.toBe(0);
+  });
+
   it('adds text and image across two tabs, undo removes from both', () => {
     const store = createDesignerStore(1080, 1080);
     const { result } = renderHook(() => store());

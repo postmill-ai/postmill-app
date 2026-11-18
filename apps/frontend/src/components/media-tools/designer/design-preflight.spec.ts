@@ -88,6 +88,96 @@ describe('analyzeDesignerPreflight', () => {
     expect(result.findings[0].vars.zone).toBe('CTA Bar');
   });
 
+  it('checks scaled unsafe zones on an enlarged Story', () => {
+    const result = analyze(doc([output([
+      text('covered', { y: 3500 }),
+    ], { formatId: 'ig-story', width: 2118, height: 3763 })]));
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'covered' }),
+    ]);
+    expect(result.findings[0].vars.zone).toBe('CTA Bar');
+  });
+
+  it('checks the Reel action rail', () => {
+    const result = analyze(doc([output([
+      text('covered', { x: 920, y: 1000, width: 100, height: 80 }),
+    ], { formatId: 'ig-reel', width: 1080, height: 1920 })]));
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'covered' }),
+    ]);
+    expect(result.findings[0].vars.zone).toBe('Action Rail');
+  });
+
+  it('does not enforce canvas-only Instagram Post feed guides in preflight', () => {
+    const result = analyze(doc([output([
+      text('badge', { x: 64, y: 56 }),
+    ], { formatId: 'ig-post', width: 1080, height: 1080 })]));
+
+    expect(result.findings).toEqual([]);
+  });
+
+  it('uses the generic title-safe fallback for a guide-only feed format', () => {
+    const result = analyze(doc([output([
+      text('outside', { x: 64, y: 10 }),
+    ], { formatId: 'ig-post', width: 1080, height: 1080 })]));
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'outside' }),
+    ]);
+    expect(result.findings[0].vars.zone).toBe('Title Safe (5%)');
+  });
+
+  it('continues to enforce real Story overlays in preflight', () => {
+    const result = analyze(doc([output([
+      text('covered', { y: 20 }),
+    ], { formatId: 'ig-story', width: 1080, height: 1920 })]));
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'covered' }),
+    ]);
+    expect(result.findings[0].vars.zone).toBe('Top UI');
+  });
+
+  it('retains the generic edge warning for a margin-preserving YouTube format', () => {
+    const result = analyze(doc([output([
+      text('edge', { x: 4, y: 300, width: 100, height: 30 }),
+    ], { formatId: 'yt-thumbnail', width: 1280, height: 720 })]));
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'edge' }),
+    ]);
+    expect(result.findings[0].vars.zone).toBe('Title Safe (5%)');
+  });
+
+  it('does not warn for YouTube text inside both the generic and platform zones', () => {
+    const result = analyze(doc([output([
+      text('safe', { x: 100, y: 300, width: 100, height: 30 }),
+    ], { formatId: 'yt-thumbnail', width: 1280, height: 720 })]));
+
+    expect(result.findings).toEqual([]);
+  });
+
+  it('still checks YouTube text against the timestamp obstruction', () => {
+    const result = analyze(doc([output([
+      text('covered', { x: 1080, y: 650, width: 100, height: 30 }),
+    ], { formatId: 'yt-thumbnail', width: 1280, height: 720 })]));
+
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'covered' }),
+    ]));
+    expect(result.findings.map((finding) => finding.vars.zone)).toContain('Duration Timestamp');
+  });
+
+  it('does not add a generic edge warning to an existing Story preset', () => {
+    const result = analyze(doc([output([
+      text('edge', { x: 4, y: 900, width: 100, height: 30 }),
+    ], { formatId: 'ig-story', width: 1080, height: 1920 })]));
+
+    expect(result.findings).toEqual([]);
+  });
+
   it('uses the generic title-safe area for custom dimensions', () => {
     const result = analyze(doc([output([text('one', { x: 0, y: 0 })])]));
     expect(result.findings).toEqual([

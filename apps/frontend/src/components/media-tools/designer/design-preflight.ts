@@ -1,4 +1,4 @@
-import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import { getEnforcedSafeZones } from '@postmill-ai/nestjs-libraries/media/designer-doc/safe-zones';
 import { pageBackground, pageChildren, pageName } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { fitTextToBox, measureLineWidth } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import { layoutVideoText } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-text-layout';
@@ -112,22 +112,18 @@ export const analyzeDesignerPreflight = (
       return;
     }
     if (rotation) box = rotatedBox(box, rotation);
-    const preset = CHANNEL_PRESETS.find((item) => item.id === output.formatId);
-    const zones = preset?.safeZones?.length
-      ? preset.safeZones
-      : [{ label: 'Title Safe (5%)', x: output.width * 0.05, y: output.height * 0.05, width: output.width * 0.9, height: output.height * 0.9 }];
+    const zones = getEnforcedSafeZones(output.formatId, output.width, output.height);
     const target = targetName(output, pageNumber);
-    if (preset?.safeZones?.length) {
-      for (const zone of preset.safeZones) {
-        if (intersects(box, zone)) {
-          add('safe-zone', 'designer_preflight_safe_zone', { zone: zone.label, target }, outputIndex, pageNumber, elementId, clip);
-        }
-      }
-      return;
+    const titleSafe = zones.find((zone) => zone.kind === 'title-safe');
+    if (titleSafe) {
+      const unsafe = box.x < titleSafe.x || box.y < titleSafe.y || box.x + box.width > titleSafe.x + titleSafe.width || box.y + box.height > titleSafe.y + titleSafe.height;
+      if (unsafe) add('safe-zone', 'designer_preflight_safe_zone', { zone: titleSafe.label, target }, outputIndex, pageNumber, elementId, clip);
     }
-    const safe = zones[0];
-    const unsafe = box.x < safe.x || box.y < safe.y || box.x + box.width > safe.x + safe.width || box.y + box.height > safe.y + safe.height;
-    if (unsafe) add('safe-zone', 'designer_preflight_safe_zone', { zone: safe.label, target }, outputIndex, pageNumber, elementId, clip);
+    for (const zone of zones) {
+      if (zone.kind === 'obstruction' && intersects(box, zone)) {
+        add('safe-zone', 'designer_preflight_safe_zone', { zone: zone.label, target }, outputIndex, pageNumber, elementId, clip);
+      }
+    }
   };
 
   const backgroundColor = (output: DesignerOutput | VideoOutput, pageNumber: number): string | null => {

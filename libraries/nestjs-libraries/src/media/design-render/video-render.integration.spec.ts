@@ -98,6 +98,38 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
     encoder.cleanup(path.dirname(result.videoPath));
   }, 120000);
 
+  it('keeps editor safe-zone overlays out of captured video frames', async () => {
+    const capture = new ChromiumFrameCaptureService();
+    const fs = await import('fs');
+    const os = await import('os');
+    const frameDir = fs.mkdtempSync(path.join(os.tmpdir(), 'safe-zone-free-video-'));
+    const output: VideoOutput = {
+      ...redVideo(1000),
+      formatId: 'reel',
+      width: 540,
+      height: 960,
+      fps: 1,
+      background: '#ffffff',
+    };
+
+    try {
+      expect(await capture.captureFrames(output, 1, frameDir)).toBe(1);
+      const { data, info } = await sharp(path.join(frameDir, 'frame-00001.png'))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const at = (x: number, y: number) => {
+        const index = (y * info.width + x) * info.channels;
+        return [...data.subarray(index, index + 4)];
+      };
+      expect(at(100, 20)).toEqual([255, 255, 255, 255]);
+      expect(at(480, 400)).toEqual([255, 255, 255, 255]);
+      expect(at(100, 900)).toEqual([255, 255, 255, 255]);
+    } finally {
+      fs.rmSync(frameDir, { recursive: true, force: true });
+    }
+  }, 120000);
+
   it('extracts the selected timeline frame instead of the midpoint', async () => {
     const capture = new ChromiumFrameCaptureService();
     const encoder = new FfmpegVideoEncoderService(capture);

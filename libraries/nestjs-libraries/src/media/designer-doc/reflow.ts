@@ -1,4 +1,5 @@
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import { getEnforcedSafeZones } from './safe-zones';
 import type { DesignerBackground, DesignerElement } from './designer-doc.schema';
 import { subjectPointToFocalPoint } from './focal-point';
 import { scalePathNodes } from './path-geometry';
@@ -965,27 +966,29 @@ export const getSafeZoneInset = (
     right: width * 0.95,
     bottom: height * 0.95,
   };
-  const preset = CHANNEL_PRESETS.find((p) => p.id === formatId);
-  if (!preset?.safeZones?.length) {
+  const zones = getEnforcedSafeZones(formatId, width, height);
+  if (zones.every((zone) => zone.kind === 'title-safe')) {
     return fallback;
   }
-  // `safeZones` are UNSAFE overlay rects (platform UI chrome — see
-  // channel-presets.ts). Each zone hugging a canvas edge shrinks the safe
-  // area from that edge; zones floating in the interior can't be expressed
-  // as an inset box and are ignored.
-  let left = 0;
-  let top = 0;
-  let right = width;
-  let bottom = height;
-  for (const z of preset.safeZones) {
+  const policy = CHANNEL_PRESETS.find((preset) => preset.id === formatId)?.safeZoneLayout;
+  // Existing edge-to-edge presets keep their canvas default. Newly zoned
+  // formats opt into retaining generic margins on every unobstructed side.
+  let left = policy === 'preserve-generic-margins' ? fallback.left : 0;
+  let top = policy === 'preserve-generic-margins' ? fallback.top : 0;
+  let right = policy === 'preserve-generic-margins' ? fallback.right : width;
+  let bottom = policy === 'preserve-generic-margins' ? fallback.bottom : height;
+  // Full-width UI bands inset the top/bottom. A substantial edge rail or
+  // profile region also insets its side; small corner badges stay local.
+  for (const z of zones) {
+    if (z.kind !== 'obstruction') continue;
     const spansWidth = z.x <= 0 && z.x + z.width >= width;
-    const spansHeight = z.y <= 0 && z.y + z.height >= height;
+    const coversVerticalEdge = z.height >= height * 0.25;
     if (spansWidth && z.y <= 0) top = Math.max(top, z.y + z.height);
     if (spansWidth && z.y + z.height >= height) {
       bottom = Math.min(bottom, z.y);
     }
-    if (spansHeight && z.x <= 0) left = Math.max(left, z.x + z.width);
-    if (spansHeight && z.x + z.width >= width) right = Math.min(right, z.x);
+    if (coversVerticalEdge && z.x <= 0) left = Math.max(left, z.x + z.width);
+    if (coversVerticalEdge && z.x + z.width >= width) right = Math.min(right, z.x);
   }
   // Degenerate zone data (overlays covering the canvas) — fall back rather
   // than clamp everything into a zero-area box.

@@ -105,6 +105,34 @@ const rect = (over: any = {}): any => ({
   ...over,
 });
 
+describe('safe-zone export boundary', () => {
+  it('keeps platform overlays out of static PNG pixels', async () => {
+    const pixels = await render(doc([], {
+      formatId: 'ig-story', name: 'Story', width: 540, height: 960,
+    }));
+
+    expect(pixels.inkBox()).toBeNull();
+  });
+
+  it('keeps platform overlays out of video poster pixels', async () => {
+    const poster = videoOutputToPosterOutput({
+      id: 'video-poster',
+      formatId: 'reel',
+      name: 'Video poster',
+      width: 540,
+      height: 960,
+      fps: 30,
+      durationMs: 1000,
+      background: '#ffffff',
+      bg: { type: 'color', color: '#ffffff' },
+      tracks: [],
+    });
+    const pixels = await render({ ...doc([]), outputs: [poster] });
+
+    expect(pixels.inkBox()).toBeNull();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // 1. Geometry
 // ---------------------------------------------------------------------------
