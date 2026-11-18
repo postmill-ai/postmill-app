@@ -38,9 +38,10 @@ import {
   computeTextStackBoxes,
   reflowBackground,
 } from './reflow';
-import { applyLinked } from './apply-linked';
+import { applyLinked, outputsLinkedForInsertion } from './apply-linked';
 import {
   hasFrozenOutputMutation,
+  isOutputFrozen,
   withOutputFrozen,
 } from './output-freeze';
 
@@ -282,8 +283,9 @@ export class DesignerDocService {
 
         // Use the primary (first) image output as the seed source so a
         // headless Composer's `setDoc`+`addOutput` sequence matches the manual
-        // Designer's linked-by-default behavior. `seed: false` opts out
-        // (empty white canvas, no originId backfill); a doc left without
+        // Designer's linked-by-default behavior. `seed: false` opts out of
+        // content copying (empty white canvas, no originId backfill) but stays
+        // linked unless `linkContent: false` is also set; a doc left without
         // outputs (removeOutput'd) has nothing to seed from.
         const primary = doc.outputs[0];
         const source =
@@ -291,6 +293,26 @@ export class DesignerDocService {
             ? primary
             : undefined;
 
+        const legacyLinkedIndexes = new Set<number>();
+        let contentLinkGroup = linkContent && primary && isImageOutput(primary)
+          ? primary.contentLinkGroup
+          : undefined;
+        if (linkContent && primary && isImageOutput(primary) && !contentLinkGroup) {
+          if (!isOutputFrozen(primary)) legacyLinkedIndexes.add(0);
+          for (let index = 0; index < doc.outputs.length; index++) {
+            const output = doc.outputs[index];
+            if (isImageOutput(output) && outputsLinkedForInsertion(primary, output)) {
+              contentLinkGroup ??= output.contentLinkGroup;
+              if (!output.contentLinkGroup && !isOutputFrozen(output)) legacyLinkedIndexes.add(index);
+            }
+          }
+        }
+        contentLinkGroup ??= `link-${randomUUID()}`;
+        const linkedOutputs = doc.outputs.map((out, index) =>
+          isImageOutput(out) && legacyLinkedIndexes.has(index)
+            ? { ...out, contentLinkGroup }
+            : out
+        ) as DesignerDoc['outputs'];
         const newOutput: DesignerOutput = {
           id: '', // assigned by assignIdsAndNormalize
           formatId: op.preset.formatId,
@@ -299,6 +321,7 @@ export class DesignerDocService {
           height: op.preset.height,
           background: source?.background ?? '#ffffff',
           bg: source?.bg,
+          contentLinkGroup,
           // The copy stack's vertical budget belongs to the DESIGN, not to one
           // canvas — carried over so this format's type is measured with the
           // same rule the primary was composed under (see `typeBasisPx`).
@@ -341,14 +364,16 @@ export class DesignerDocService {
               containerBoxes.get(el)
             )
           );
-          const outputs = doc.outputs.map((out, i) =>
-            i === 0 ? { ...out, children: sourceChildren } : out
+          const outputs = linkedOutputs.map((out, i) =>
+            i === 0 && isImageOutput(out)
+              ? { ...out, children: sourceChildren }
+              : out
           ) as DesignerDoc['outputs'];
           outputs.push(newOutput);
           return { ...doc, outputs } as DesignerDoc;
         }
 
-        return { ...doc, outputs: [...doc.outputs, newOutput] } as DesignerDoc;
+        return { ...doc, outputs: [...linkedOutputs, newOutput] } as DesignerDoc;
       }
 
       case 'resizeOutput': {
@@ -676,13 +701,58 @@ export class DesignerDocService {
     return { ...doc, outputs } as DesignerDoc;
   }
 
+  private _contentLinkGroups(doc: DesignerDoc): (string | undefined)[] {
+    const parents = doc.outputs.map((_, index) => index);
+    const find = (index: number): number => {
+      if (parents[index] !== index) parents[index] = find(parents[index]);
+      return parents[index];
+    };
+    const union = (left: number, right: number) => {
+      parents[find(left)] = find(right);
+    };
+
+    for (let leftIndex = 0; leftIndex < doc.outputs.length; leftIndex++) {
+      const left = doc.outputs[leftIndex];
+      if (!isImageOutput(left)) continue;
+      for (let rightIndex = leftIndex + 1; rightIndex < doc.outputs.length; rightIndex++) {
+        const right = doc.outputs[rightIndex];
+        if (!isImageOutput(right)) continue;
+        if (outputsLinkedForInsertion(left, right)) {
+          union(leftIndex, rightIndex);
+        }
+      }
+    }
+
+    const rootGroups = new Map<number, string>();
+    doc.outputs.forEach((out, index) => {
+      if (isImageOutput(out) && out.contentLinkGroup) {
+        rootGroups.set(find(index), out.contentLinkGroup);
+      }
+    });
+    return doc.outputs.map((out, index) => {
+      if (!isImageOutput(out)) return undefined;
+      const root = find(index);
+      let group = rootGroups.get(root);
+      if (!group) {
+        group = `link-${randomUUID()}`;
+        rootGroups.set(root, group);
+      }
+      return group;
+    });
+  }
+
   /**
    * Re-mint every id/originId for template instantiation and `.pdesign` import.
    * Group parent references must follow the new element ids within each page.
+   * Content-link relationships are captured before the shared origins disappear.
    */
   stripIds(doc: DesignerDoc): DesignerDoc {
-    const outputs = doc.outputs.map((out: any) => {
-      const base = this._normalizeItems([out], 'out', true)[0];
+    const contentLinkGroups = this._contentLinkGroups(doc);
+    const outputs = doc.outputs.map((out: any, index) => {
+      const linkedOut = contentLinkGroups[index]
+        ? { ...out, contentLinkGroup: contentLinkGroups[index] }
+        : out;
+      const base = this._normalizeItems([linkedOut], 'out', true)[0];
       if ('children' in base) {
         base.children = this._normalizeItems(base.children, 'el', true);
         if (Array.isArray(base.pages)) {

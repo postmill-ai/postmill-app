@@ -26,7 +26,9 @@ saved.
 - **Output tabs** — a design can carry several formats (sizes) at once. **Add format** adds another
   size; linked elements stay in sync across formats unless you choose **Unlink** beside the tabs.
   **Link** resumes shared edits without changing any existing element links. Choose **Independent
-  copies** when adding repeated dimensions that should be edited separately. Linked formats remain
+  copies** when adding repeated dimensions that should be edited separately. A new element on page
+  1 is added to the linked formats; it stays on the current format when **Unlink** is on or the
+  format is an independent copy. Linked formats remain
   the default. Grouped presets include 1080×1350 portraits for Instagram, Facebook, LinkedIn, and
   Threads, plus Facebook and LinkedIn squares; their safe zones are available through **View → Safe
   Zones**, and custom dimensions remain available.

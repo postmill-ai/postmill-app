@@ -301,6 +301,64 @@ test('selected words retain independent colors through autosave and reopen', asy
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toContainText('Hello world');
 });
 
+test('shape insertion stays on an independent format through save, reload, and export', async ({ page }) => {
+  const independentDoc = structuredClone(initialDoc) as any;
+  Object.assign(independentDoc.outputs[0], {
+    id: 'linked-output', formatId: 'custom', name: 'Linked', contentLinkGroup: 'browser-linked-group',
+  });
+  const independentOutput = structuredClone(independentDoc.outputs[0]);
+  Object.assign(independentOutput, {
+    id: 'independent-output', name: 'Independent', contentLinkGroup: 'browser-independent-group',
+  });
+  independentOutput.children = independentOutput.children.map((child: any) => {
+    const { originId, ...independentChild } = child;
+    void originId;
+    return { ...independentChild, id: `independent-${child.id}` };
+  });
+  independentDoc.outputs.push(independentOutput);
+  const state = await installMocks(page, independentDoc);
+  const expectLocalShape = (doc: any) => {
+    expect(doc.outputs[0].children.filter((child: any) => child.type === 'shape')).toHaveLength(0);
+    expect(doc.outputs[1].children.filter((child: any) => child.type === 'shape')).toHaveLength(1);
+    expect(doc.outputs[1].contentLinkGroup).toBe('browser-independent-group');
+    expect(doc.outputs[0].contentLinkGroup).not.toBe(doc.outputs[1].contentLinkGroup);
+  };
+  await openDesigner(page);
+  await page.getByRole('button', { name: /Independent/ }).click();
+
+  const stage = page.locator('.konva-stage').first();
+  // The canvas menu opens only on the bare stage: right of the 20px ruler,
+  // left of the artboard.
+  await stage.click({ button: 'right', position: { x: 60, y: 150 } });
+  await page.getByRole('button', { name: 'Add Shape', exact: true }).click();
+  const savesBeforeInsert = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBeforeInsert);
+  expectLocalShape(state.saveDocs.at(-1));
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await page.getByRole('button', { name: /Independent/ }).click();
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save to Files' }).click();
+  await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
+  await page.getByRole('button', { name: /Next: Export \d+ files?/ }).click();
+  await page.getByRole('button', { name: /^Export \d+ files?$/ }).click();
+  await expect(page.getByRole('link', { name: /\.png$/ }).first()).toBeVisible();
+  expect(state.renderDocs.length).toBeGreaterThan(0);
+  const renderedShapes = (state.renderDocs as any[]).flatMap((doc) =>
+    doc.outputs.map((out: any) => [
+      out.id,
+      out.children.filter((child: any) => child.type === 'shape').length,
+    ])
+  );
+  expect(renderedShapes).toContainEqual(['independent-output', 1]);
+  expect(renderedShapes).toContainEqual(['linked-output', 0]);
+  expect(renderedShapes).not.toContainEqual(['linked-output', 1]);
+  expect(renderedShapes).not.toContainEqual(['independent-output', 0]);
+});
+
 test('text effects remain editable through Paint layers, preview, undo, reopen, and export', async ({ page }) => {
   const state = await installMocks(page);
   const children = state.doc.outputs[0].children as Array<Record<string, unknown>>;

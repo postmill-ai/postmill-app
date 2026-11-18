@@ -56,6 +56,7 @@ export const createBlankDoc = (
         width,
         height,
         background: '#ffffff',
+        contentLinkGroup: genId(),
         children: [],
       },
     ],

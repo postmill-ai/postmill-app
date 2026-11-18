@@ -40,6 +40,21 @@ const isImageOutput = (
   out: DesignerOutput | VideoOutput
 ): out is DesignerOutput => 'children' in out;
 
+export const outputsLinkedForInsertion = (source: DesignerOutput, target: DesignerOutput) => {
+  const sourceGroup = source.contentLinkGroup;
+  const targetGroup = target.contentLinkGroup;
+  if (sourceGroup && targetGroup) return sourceGroup === targetGroup;
+  const sourceOrigins = new Set(
+    source.children.filter((el) => el.originId).map((el) => el.originId as string)
+  );
+  const sharedOrigin = target.children.some(
+    (el) => el.originId && sourceOrigins.has(el.originId)
+  );
+  return sharedOrigin || (
+    !sourceGroup && !targetGroup && (source.children.length === 0 || target.children.length === 0)
+  );
+};
+
 /**
  * Apply one element patch, MERGING `symbolOverrides` per definition-child id
  * instead of replacing the map: overrides are keyed by the child INSIDE the

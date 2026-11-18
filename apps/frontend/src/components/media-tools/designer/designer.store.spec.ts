@@ -397,6 +397,513 @@ describe('Designer smoke: multi-format linked editing', () => {
   });
 });
 
+describe('format-local element insertion', () => {
+  afterEach(() => {
+    focalMock.result = null;
+  });
+
+  const makeElement = (type: 'text' | 'image' | 'shape', id: string) => ({
+    id,
+    type,
+    x: 20,
+    y: 30,
+    width: 200,
+    height: 100,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    ...(type === 'text' ? { text: 'Inserted', fontSize: 32 } : {}),
+    ...(type === 'image' ? { src: 'https://example.com/inserted.png' } : {}),
+    ...(type === 'shape' ? { shape: 'rect' } : {}),
+  }) as any;
+
+  const storeWithLinkedAndIndependentOutputs = () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Linked', width: 1200, height: 675 });
+    store.getState().addOutput(
+      { formatId: 'ig-story', name: 'Independent', width: 1080, height: 1920 },
+      { linkContent: false }
+    );
+    store.getState().setCurrentOutput(0);
+    return store;
+  };
+
+  const storeWithLegacyLinkedPair = () => {
+    const store = createDesignerStore();
+    store.getState().addElement(makeElement('text', 'legacy-source'));
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy linked', width: 1200, height: 675 });
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out) => ({
+        ...out,
+        contentLinkGroup: undefined,
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().setCurrentOutput(0);
+    return store;
+  };
+
+  it.each(['text', 'image', 'shape'] as const)(
+    'This format only inserts %s on the active output with one Undo',
+    (type) => {
+      const store = storeWithLinkedAndIndependentOutputs();
+      const origins = store.getState().doc.outputs.map((out) =>
+        out.children.map((el) => el.originId)
+      );
+      const historyLength = store.getState().history.length;
+      store.getState().setEditFormatOnly(true);
+
+      store.getState().addElement(makeElement(type, `local-${type}`));
+
+      expect(store.getState().doc.outputs.map((out) => out.children)).toHaveLength(3);
+      expect(store.getState().doc.outputs[0].children).toHaveLength(2);
+      expect(store.getState().doc.outputs[1].children).toHaveLength(1);
+      expect(store.getState().doc.outputs[2].children).toHaveLength(1);
+      expect(store.getState().doc.outputs.map((out) =>
+        out.children.slice(0, 1).map((el) => el.originId)
+      )).toEqual(origins);
+      expect(store.getState().history).toHaveLength(historyLength + 1);
+
+      store.getState().undo();
+      expect(store.getState().doc.outputs.every((out) => out.children.length === 1)).toBe(true);
+    }
+  );
+
+  it.each(['text', 'image', 'shape'] as const)(
+    '%s insertion respects independent outputs in both directions',
+    (type) => {
+      const store = storeWithLinkedAndIndependentOutputs();
+      const sourceOrigins = store.getState().doc.outputs.map((out) => out.children[0].originId);
+      store.getState().setCurrentOutput(2);
+
+      store.getState().addElement(makeElement(type, `independent-${type}`));
+
+      expect(store.getState().doc.outputs[0].children).toHaveLength(1);
+      expect(store.getState().doc.outputs[1].children).toHaveLength(1);
+      expect(store.getState().doc.outputs[2].children).toHaveLength(2);
+      expect(store.getState().doc.outputs.map((out) => out.children[0].originId)).toEqual(sourceOrigins);
+
+      const independentId = store.getState().doc.outputs[2].children[0].id;
+      store.getState().updateElement(independentId, { text: 'Independent edit' });
+      expect(store.getState().doc.outputs[0].children[0].text).toBe('Original');
+      expect(store.getState().doc.outputs[1].children[0].text).toBe('Original');
+
+      store.getState().undo();
+      store.getState().setCurrentOutput(0);
+      store.getState().addElement(makeElement(type, `linked-${type}`));
+
+      const outputs = store.getState().doc.outputs;
+      expect(outputs[0].children).toHaveLength(2);
+      expect(outputs[1].children).toHaveLength(2);
+      expect(outputs[2].children).toHaveLength(1);
+      expect(outputs[1].children[1].id).not.toBe(outputs[0].children[1].id);
+      expect(outputs[1].children[1].originId).toBe(outputs[0].children[1].originId);
+      expect(outputs[2].children[0].originId).toBeUndefined();
+
+      store.getState().undo();
+      expect(store.getState().doc.outputs.every((out) => out.children.length === 1)).toBe(true);
+    }
+  );
+
+  it.each(['text', 'image', 'shape'] as const)(
+    'later-page %s insertion stays local while linking is enabled',
+    (type) => {
+      const store = storeWithLinkedAndIndependentOutputs();
+      store.getState().setCurrentOutput(1);
+      store.getState().addPage();
+
+      store.getState().addElement(makeElement(type, `page-two-${type}`));
+
+      const outputs = store.getState().doc.outputs as any[];
+      expect(outputs[0].children).toHaveLength(1);
+      expect(outputs[1].children).toHaveLength(1);
+      expect(outputs[1].pages[0].children).toHaveLength(1);
+      expect(outputs[2].children).toHaveLength(1);
+      expect(outputs[2].pages).toBeUndefined();
+    }
+  );
+
+  it('keeps an empty independent copy local without suppressing empty linked formats', () => {
+    const independentStore = createDesignerStore();
+    independentStore.getState().addOutput(
+      { formatId: 'x-post', name: 'Independent', width: 1200, height: 675 },
+      { linkContent: false }
+    );
+
+    independentStore.getState().addElement(makeElement('shape', 'empty-independent-shape'));
+
+    expect(independentStore.getState().doc.outputs.map((out) => out.children.length)).toEqual([0, 1]);
+    const groups = independentStore.getState().doc.outputs.map((out) => out.contentLinkGroup);
+    expect(groups[0]).toBeDefined();
+    expect(groups[1]).toBeDefined();
+    expect(groups[1]).not.toBe(groups[0]);
+
+    const linkedStore = createDesignerStore();
+    linkedStore.getState().addOutput({ formatId: 'x-post', name: 'Linked', width: 1200, height: 675 });
+    linkedStore.getState().setCurrentOutput(0);
+    linkedStore.getState().addElement(makeElement('shape', 'empty-linked-shape'));
+    expect(linkedStore.getState().doc.outputs.map((out) => out.children.length)).toEqual([1, 1]);
+  });
+
+  it('detects legacy independent copies by their lack of shared origins', () => {
+    const store = storeWithLinkedAndIndependentOutputs();
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out) => {
+        const { contentLinkGroup, ...legacyOut } = out;
+        void contentLinkGroup;
+        return legacyOut;
+      }),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().setCurrentOutput(2);
+
+    store.getState().addElement(makeElement('shape', 'legacy-independent-shape'));
+
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([1, 1, 2]);
+    store.getState().setCurrentOutput(0);
+    store.getState().addElement(makeElement('shape', 'legacy-linked-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 2, 2]);
+  });
+
+  it('keeps every legacy linked format together across adds from different tabs', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy B', width: 1200, height: 675 });
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out) => ({
+        ...out,
+        contentLinkGroup: undefined,
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+
+    store.getState().setCurrentOutput(1);
+    store.getState().addOutput({ formatId: 'linkedin-post', name: 'Linked E', width: 1200, height: 627 });
+    store.getState().setCurrentOutput(0);
+    store.getState().addOutput({ formatId: 'ig-story', name: 'Linked F', width: 1080, height: 1920 });
+
+    const groups = store.getState().doc.outputs.map((out) => out.contentLinkGroup);
+    expect(groups[0]).toBeDefined();
+    expect(new Set(groups).size).toBe(1);
+    store.getState().addElement(makeElement('shape', 'legacy-a-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 2, 2, 2]);
+    store.getState().setCurrentOutput(1);
+    store.getState().addElement(makeElement('shape', 'legacy-b-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([3, 3, 3, 3]);
+  });
+
+  it('backfills a legacy empty format when a linked format is added', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(makeElement('text', 'legacy-source'));
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy empty', width: 1200, height: 675 });
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out, index) => ({
+        ...out,
+        contentLinkGroup: undefined,
+        children: index === 1 ? [] : out.children,
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().setCurrentOutput(0);
+
+    store.getState().addOutput({ formatId: 'linkedin-post', name: 'Linked new', width: 1200, height: 627 });
+    const groups = store.getState().doc.outputs.map((out) => out.contentLinkGroup);
+    expect(groups[0]).toBeDefined();
+    expect(groups).toEqual([groups[0], groups[0], groups[0]]);
+    store.getState().addElement(makeElement('shape', 'legacy-empty-after-add'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 1, 2]);
+  });
+
+  it('seeds a legacy empty format without explicit groups', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(makeElement('text', 'legacy-source'));
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy empty', width: 1200, height: 675 });
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out, index) => ({
+        ...out,
+        contentLinkGroup: undefined,
+        children: index === 1 ? [] : out.children,
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().setCurrentOutput(0);
+
+    store.getState().addElement(makeElement('shape', 'legacy-empty-shape'));
+
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 1]);
+  });
+
+  it('allows linked Add Format with a frozen legacy sibling without changing it', () => {
+    const store = storeWithLegacyLinkedPair();
+    store.getState().setOutputFrozen(1, true);
+    const frozenBefore = store.getState().doc.outputs[1];
+
+    expect(store.getState().addOutput(
+      { formatId: 'linkedin-post', name: 'New linked', width: 1200, height: 627 }
+    )).toBe(true);
+
+    const outputs = store.getState().doc.outputs;
+    expect(outputs).toHaveLength(3);
+    expect(outputs[1]).toEqual(frozenBefore);
+    expect(outputs[0].contentLinkGroup).toBeDefined();
+    expect(outputs[2].contentLinkGroup).toBe(outputs[0].contentLinkGroup);
+  });
+
+  it('allows linked Add Format with a frozen legacy source without changing it', () => {
+    const store = storeWithLegacyLinkedPair();
+    store.getState().setOutputFrozen(0, true);
+    const frozenBefore = store.getState().doc.outputs[0];
+
+    expect(store.getState().addOutput(
+      { formatId: 'linkedin-post', name: 'New linked', width: 1200, height: 627 }
+    )).toBe(true);
+
+    const outputs = store.getState().doc.outputs;
+    expect(outputs).toHaveLength(3);
+    expect(outputs[0]).toEqual(frozenBefore);
+    expect(outputs[2].contentLinkGroup).toBeDefined();
+    expect(outputs[2].contentLinkGroup).toBe(outputs[1].contentLinkGroup);
+  });
+
+  it('adopts the existing group when adding from a previously frozen legacy sibling', () => {
+    const store = storeWithLegacyLinkedPair();
+    store.getState().setOutputFrozen(1, true);
+    expect(store.getState().addOutput(
+      { formatId: 'linkedin-post', name: 'New linked', width: 1200, height: 627 }
+    )).toBe(true);
+    store.getState().setOutputFrozen(1, false);
+    store.getState().setCurrentOutput(1);
+
+    expect(store.getState().addOutput(
+      { formatId: 'ig-story', name: 'Second new linked', width: 1080, height: 1920 }
+    )).toBe(true);
+
+    const groups = store.getState().doc.outputs.map((out) => out.contentLinkGroup);
+    expect(groups[0]).toBeDefined();
+    expect(groups).toEqual([groups[0], groups[0], groups[0], groups[0]]);
+  });
+
+  it('does not use the legacy empty fallback for a grouped independent copy', () => {
+    const store = createDesignerStore();
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: [{ ...store.getState().doc.outputs[0], contentLinkGroup: undefined }],
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().addOutput(
+      { formatId: 'x-post', name: 'Independent empty', width: 1200, height: 675 },
+      { linkContent: false }
+    );
+    store.getState().setCurrentOutput(0);
+
+    store.getState().addElement(makeElement('shape', 'legacy-only-shape'));
+
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([1, 0]);
+  });
+
+  it('keeps a linked copy made from an independent copy in that independent link group', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput(
+      { formatId: 'x-post', name: 'Independent C', width: 1200, height: 675 },
+      { linkContent: false }
+    );
+    store.getState().addOutput({ formatId: 'linkedin-post', name: 'Linked D', width: 1200, height: 627 });
+
+    const initialGroups = store.getState().doc.outputs.map((out) => out.contentLinkGroup);
+    expect(initialGroups[1]).toBe(initialGroups[2]);
+    expect(initialGroups[0]).not.toBe(initialGroups[1]);
+    store.getState().setCurrentOutput(0);
+    const independentBefore = store.getState().doc.outputs[1];
+    const linkedBefore = store.getState().doc.outputs[2];
+    store.getState().addElement(makeElement('shape', 'first-format-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 1, 1]);
+    expect(store.getState().doc.outputs[1]).toBe(independentBefore);
+    expect(store.getState().doc.outputs[2]).toBe(linkedBefore);
+
+    store.getState().setCurrentOutput(1);
+    const firstBefore = store.getState().doc.outputs[0];
+    store.getState().addElement(makeElement('shape', 'independent-group-shape'));
+    const outputs = store.getState().doc.outputs;
+    expect(outputs.map((out) => out.children.length)).toEqual([2, 2, 2]);
+    expect(outputs[0]).toBe(firstBefore);
+    expect(outputs[2].children[1].originId).toBe(outputs[1].children[1].originId);
+  });
+
+  it('does not mix a legacy independent copy with a new linked group', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput(
+      { formatId: 'x-post', name: 'Legacy independent C', width: 1200, height: 675 },
+      { linkContent: false }
+    );
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out) => {
+        const { contentLinkGroup, ...legacyOut } = out;
+        void contentLinkGroup;
+        return legacyOut;
+      }),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().setCurrentOutput(0);
+    store.getState().addOutput({ formatId: 'linkedin-post', name: 'Linked D', width: 1200, height: 627 });
+
+    const groups = store.getState().doc.outputs.map((out) => out.contentLinkGroup);
+    expect(groups[0]).toBeDefined();
+    expect(groups[0]).toBe(groups[2]);
+    expect(groups[1]).toBeUndefined();
+    store.getState().setCurrentOutput(1);
+    store.getState().addElement(makeElement('shape', 'legacy-independent-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([1, 2, 1]);
+
+    store.getState().setCurrentOutput(0);
+    const independentAfterLocal = store.getState().doc.outputs[1];
+    store.getState().addElement(makeElement('shape', 'legacy-linked-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 2, 2]);
+    expect(store.getState().doc.outputs[1]).toBe(independentAfterLocal);
+  });
+
+  it('uses shared origins symmetrically when only one output has a link group', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Grouped', width: 1200, height: 675 });
+    const mixedDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out, index) => ({
+        ...out,
+        contentLinkGroup: index === 0 ? undefined : out.contentLinkGroup,
+        children: out.children.map((child) => ({ ...child, originId: child.id })),
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(mixedDoc);
+
+    store.getState().setCurrentOutput(0);
+    const groupedBefore = store.getState().doc.outputs[1];
+    store.getState().addElement(makeElement('shape', 'legacy-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 1]);
+    expect(store.getState().doc.outputs[1]).toBe(groupedBefore);
+
+    store.getState().setCurrentOutput(1);
+    const legacyBefore = store.getState().doc.outputs[0];
+    store.getState().addElement(makeElement('shape', 'grouped-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 2]);
+    expect(store.getState().doc.outputs[0]).toBe(legacyBefore);
+  });
+
+  it('keeps re-minted outputs with the same link group linked in both directions', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Grouped', width: 1200, height: 675 });
+    const group = store.getState().doc.outputs[0].contentLinkGroup;
+    const remintedDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out) => ({
+        ...out,
+        contentLinkGroup: group,
+        children: out.children.map((child) => ({ ...child, originId: child.id })),
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(remintedDoc);
+
+    store.getState().setCurrentOutput(0);
+    store.getState().addElement(makeElement('shape', 'reminted-linked-first'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 2]);
+    store.getState().setCurrentOutput(1);
+    store.getState().addElement(makeElement('shape', 'reminted-linked-second'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([3, 3]);
+  });
+
+  it('keeps already-reminted legacy formats with unshared origins local', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy', width: 1200, height: 675 });
+    const remintedDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out) => ({
+        ...out,
+        contentLinkGroup: undefined,
+        children: out.children.map((child) => ({ ...child, originId: child.id })),
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(remintedDoc);
+
+    store.getState().setCurrentOutput(0);
+    store.getState().addElement(makeElement('shape', 'reminted-first'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 1]);
+    store.getState().setCurrentOutput(1);
+    store.getState().addElement(makeElement('shape', 'reminted-second'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 2]);
+  });
+
+  it('skips frozen and independent siblings but seeds mutable linked siblings', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Frozen', width: 1200, height: 675 });
+    store.getState().addOutput({ formatId: 'linkedin-post', name: 'Mutable', width: 1200, height: 627 });
+    store.getState().addOutput(
+      { formatId: 'ig-story', name: 'Independent', width: 1080, height: 1920 },
+      { linkContent: false }
+    );
+    store.getState().setCurrentOutput(0);
+    store.getState().setOutputFrozen(1, true);
+
+    store.getState().addElement(makeElement('shape', 'linked-shape'));
+
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 1, 2, 1]);
+    expect(store.getState().doc.outputs[2].children[1].originId)
+      .toBe(store.getState().doc.outputs[0].children[1].originId);
+    store.getState().undo();
+    expect(store.getState().doc.outputs.every((out) => out.children.length === 1)).toBe(true);
+  });
+
+  it('attaches a detected focal point only to the independent output', async () => {
+    focalMock.result = { x: 0.25, y: 0.75 };
+    const store = storeWithLinkedAndIndependentOutputs();
+    store.getState().setCurrentOutput(2);
+
+    store.getState().addElement(makeElement('image', 'independent-image'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const outputs = store.getState().doc.outputs;
+    expect(outputs[0].children).toHaveLength(1);
+    expect(outputs[1].children).toHaveLength(1);
+    expect(outputs[2].children).toHaveLength(2);
+    expect(outputs[2].children[1].focalPoint).toEqual({ x: 0.25, y: 0.75 });
+  });
+});
+
 describe('repeated output dimensions', () => {
   it('allows repeated presets and custom sizes with unique names and format-local geometry', () => {
     const store = createDesignerStore();

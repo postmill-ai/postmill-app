@@ -34,7 +34,13 @@ import {
 import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
 import { canSplitClipAt } from './timeline-split';
 import { TEXT_ANIMATION_PRESETS, buildTextAnimationUpdate, matchTextAnimationPreset } from './text-animation-presets';
-import { applyLinked, applyElementPatch, applyLinkedVideoClip, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
+import {
+  applyLinked,
+  applyElementPatch,
+  applyLinkedVideoClip,
+  GEOMETRY_KEYS,
+  outputsLinkedForInsertion,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
 import {
   hasFrozenOutputMutation,
   isOutputFrozen,
@@ -491,7 +497,7 @@ const createEmptyDoc = (width = 1080, height = 1080, attribution?: DesignerAttri
   return {
     version: DESIGNER_DOC_VERSION,
     mode: 'image',
-    outputs: [{ id: genId(), formatId: m.formatId, name: m.name, width, height, background: '#ffffff', children: [] }],
+    outputs: [{ id: genId(), formatId: m.formatId, name: m.name, width, height, background: '#ffffff', contentLinkGroup: genId(), children: [] }],
     attribution,
   };
 };
@@ -692,7 +698,7 @@ export const createDesignerStore = (
       addElement: (element, beforeId) => {
         if (isVideoMode() || isOutputFrozen(activeImage())) return;
         get().clearElementPreview();
-        const { doc, currentOutput, currentPage } = get();
+        const { doc, currentOutput, currentPage, editFormatOnly } = get();
         const originId = element.originId || genId();
         const baseEl = { ...element, id: element.id || genId(), originId };
         const sourceOutput = doc.outputs[currentOutput] as DesignerOutput;
@@ -710,9 +716,10 @@ export const createDesignerStore = (
           next.splice(idx, 0, el);
           return next;
         };
-        // Linked (originId) seeding across outputs is a PAGE-1 behavior: an
-        // element added on a later page exists on that page only.
-        if (currentPage > 0) {
+        // Cross-format seeding is a PAGE-1 behavior: an element added on a
+        // later page or with format-local editing exists on the active
+        // output/page only. Seeded siblings follow content-link groups below.
+        if (currentPage > 0 || editFormatOnly) {
           mutate({
             doc: {
               ...doc,
@@ -729,14 +736,14 @@ export const createDesignerStore = (
         }
         const copyIds = new Map<number, string>();
         const outs = doc.outputs.map((out, i) => {
-          if (i !== currentOutput && isOutputFrozen(out)) return out;
-          return i === currentOutput
-            ? { ...out, children: insert((out as DesignerOutput).children, baseEl) }
-            : (() => {
-                const copy = seedCopy(baseEl, sourceOutput, out as DesignerOutput, originId);
-                copyIds.set(i, copy.id);
-                return { ...out, children: insert((out as DesignerOutput).children, copy) };
-              })();
+          if (i === currentOutput) {
+            return { ...out, children: insert((out as DesignerOutput).children, baseEl) };
+          }
+          const target = out as DesignerOutput;
+          if (!outputsLinkedForInsertion(sourceOutput, target) || isOutputFrozen(out)) return out;
+          const copy = seedCopy(baseEl, sourceOutput, target, originId);
+          copyIds.set(i, copy.id);
+          return { ...out, children: insert(target.children, copy) };
         });
         mutate({ doc: { ...doc, outputs: outs }, isDirty: true, selectedIds: [baseEl.id] });
         get().pushHistory();
@@ -1594,13 +1601,30 @@ export const createDesignerStore = (
               )),
           };
         });
+        const legacyLinkedIndexes = new Set<number>();
+        let contentLinkGroup = linkContent ? source.contentLinkGroup : undefined;
+        if (linkContent && !contentLinkGroup) {
+          if (!isOutputFrozen(source)) legacyLinkedIndexes.add(currentOutput);
+          for (let index = 0; index < doc.outputs.length; index++) {
+            const output = doc.outputs[index] as DesignerOutput;
+            if (outputsLinkedForInsertion(source, output)) {
+              contentLinkGroup ??= output.contentLinkGroup;
+              if (!output.contentLinkGroup && !isOutputFrozen(output)) legacyLinkedIndexes.add(index);
+            }
+          }
+        }
+        contentLinkGroup ??= genId();
         const newOutput: DesignerOutput = {
           id: genId(), formatId: namedPreset.formatId, name: namedPreset.name,
           width: namedPreset.width, height: namedPreset.height,
-          background: source.background, bg: source.bg, children,
+          background: source.background, bg: source.bg, contentLinkGroup, children,
           ...(pages?.length ? { pages } : {}),
         };
-        const outs = doc.outputs.map((o, i) => (i === currentOutput ? { ...o, children: sourceChildren } : o)) as DesignerOutput[];
+        const outs = doc.outputs.map((o, i) => ({
+          ...o,
+          ...(legacyLinkedIndexes.has(i) ? { contentLinkGroup } : {}),
+          ...(i === currentOutput ? { children: sourceChildren } : {}),
+        })) as DesignerOutput[];
         outs.push(newOutput);
         const accepted = mutate({ doc: { ...doc, outputs: outs }, currentOutput: outs.length - 1, selectedIds: [], isDirty: true });
         if (!accepted) return false;
