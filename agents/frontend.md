@@ -474,6 +474,7 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   create a second hidden video for canvas drawing, and never let one consumer's teardown destroy the
   other's element. Same-id `src` changes must reload the shared element.
 
+- **Static clipboard paste is source-aware and atomic.** Copy/Cut captures the source output's type basis and the complete selected group subtree in z-order. Cross-size paste uses `seedChildren`/`smartReflow` with fresh element/origin/group IDs and remapped included parents. Right-click Paste receives Konva document coordinates (including zoom/pan), centers the complete post-reflow leaf bounds at that point, and translates/clamps the batch together; keyboard paste retains +20/+20 after any required reflow. One Undo removes the whole batch. Video clip clipboard timing is a separate, unchanged path.
 - **Gesture commits and history stay immutable.** Static drag frames batch every moved node into one
   current-output-only write through `updateElementsEphemeral`; `commitElementGesture` then applies
   linked edits once and pushes one Undo. Transform frames synchronously bake Konva scale into geometry,
