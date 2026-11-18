@@ -269,6 +269,19 @@ describe('videoOutputToPosterOutput', () => {
     expect(poster.children.find((el) => el.id === shape.id)?.fillGradient).toEqual(shape.fillGradient);
   });
 
+  it.each([0, 6])('projects shape stroke color and explicit width %s', (strokeWidth) => {
+    const out = makeVideoOutput();
+    const shape = out.tracks[2].clips[0];
+    shape.stroke = '#123456';
+    shape.strokeWidth = strokeWidth;
+
+    const poster = videoOutputToPosterOutput(out);
+    expect(poster.children.find((el) => el.id === shape.id)).toMatchObject({
+      stroke: '#123456',
+      strokeWidth,
+    });
+  });
+
   it('the projection validates as a renderable image-mode doc', () => {
     const doc = {
       version: 8,

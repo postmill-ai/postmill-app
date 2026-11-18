@@ -395,6 +395,73 @@ describe('video overlay styles and keyframed text', () => {
     }
   );
 
+  it('passes shape stroke color and explicit widths to Konva without changing line fallbacks', async () => {
+    const store = createDesignerStore(500, 500);
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'shape');
+    const output = store.getState().doc.outputs[0] as VideoOutput;
+    const track = output.tracks.find((item) => item.type === 'shape')!;
+    const widths = [4, 0, 6, 2, 10];
+    FILL_SHAPES.forEach((shape, index) => {
+      store.getState().addClip(0, track.id, {
+        id: `stroke-${shape}`,
+        startMs: 0,
+        endMs: 1000,
+        shape,
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 80,
+        fill: '#112233',
+        stroke: '#123456',
+        strokeWidth: widths[index],
+      } as never);
+    });
+    store.getState().addClip(0, track.id, {
+      id: 'stroke-legacy', startMs: 0, endMs: 1000, shape: 'rect',
+      width: 120, height: 80, stroke: '#123456',
+    } as never);
+    store.getState().addClip(0, track.id, {
+      id: 'stroke-no-color', startMs: 0, endMs: 1000, shape: 'rect',
+      width: 120, height: 80, strokeWidth: 5,
+    } as never);
+    store.getState().addClip(0, track.id, {
+      id: 'stroke-line', startMs: 0, endMs: 1000, shape: 'line',
+      width: 120, height: 80, stroke: '#123456', strokeWidth: 0,
+    } as never);
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={500} height={500}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={500} height={500} />
+          </Layer>
+        </Stage>
+      );
+    });
+
+    const stage = Konva.stages[Konva.stages.length - 1];
+    FILL_SHAPES.forEach((shapeName, index) => {
+      const group = stage.findOne(`#stroke-${shapeName}`)!;
+      const node = group.findOne(
+        shapeName === 'rect' ? 'Rect' : shapeName === 'ellipse' ? 'Ellipse' : 'Line'
+      ) as Konva.Shape;
+      expect(node.stroke()).toBe('#123456');
+      expect(node.strokeWidth()).toBe(widths[index]);
+    });
+    expect((stage.findOne('#stroke-legacy')!.findOne('Rect') as Konva.Rect).strokeWidth()).toBe(1);
+    const noColor = stage.findOne('#stroke-no-color')!.findOne('Rect') as Konva.Rect;
+    expect(noColor.stroke()).toBeUndefined();
+    expect(noColor.strokeWidth()).toBe(5);
+    expect((stage.findOne('#stroke-line')!.findOne('Line') as Konva.Line).strokeWidth()).toBe(2);
+  });
+
   it('restores the solid fill when a shape gradient is removed', async () => {
     const store = createDesignerStore(500, 500);
     store.getState().setMode('video');

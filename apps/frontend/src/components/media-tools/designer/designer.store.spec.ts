@@ -2452,6 +2452,12 @@ describe('video output variants (add-format for video mode)', () => {
       id: 'title', startMs: 500, endMs: 4000, text: 'Headline',
       x: 460, y: 900, width: 1000, height: 140, fontSize: 64,
     } as never);
+    store.getState().addTrack(0, 'shape');
+    const shapeTrack = vo().tracks.find((track) => track.type === 'shape')!;
+    store.getState().addClip(0, shapeTrack.id, {
+      id: 'plate', startMs: 0, endMs: 4000, shape: 'rect', fill: '#ff0000',
+      x: 100, y: 100, width: 400, height: 300,
+    } as never);
     return store;
   };
   const out = (store: ReturnType<typeof createDesignerStore>, i: number) =>
@@ -2546,6 +2552,28 @@ describe('video output variants (add-format for video mode)', () => {
     expect(after1.x).toBe(999);
   });
 
+  it('propagates shape stroke edits without copying geometry, timing, or a version bump', () => {
+    const store = videoStoreWithContent();
+    store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
+    store.setState((state) => ({ doc: { ...state.doc, version: 10 } }));
+    const v0 = out(store, 0);
+    const v1 = out(store, 1);
+    const source = v0.tracks.find((track) => track.type === 'shape')!.clips[0];
+    const target = v1.tracks.find((track) => track.type === 'shape')!.clips[0];
+
+    store.getState().updateClip(1, v1.tracks.find((track) => track.type === 'shape')!.id, target.id, {
+      stroke: '#123456', strokeWidth: 6, x: 999,
+    });
+
+    const after0 = out(store, 0).tracks.find((track) => track.type === 'shape')!.clips[0];
+    const after1 = out(store, 1).tracks.find((track) => track.type === 'shape')!.clips[0];
+    expect(after0).toMatchObject({ stroke: '#123456', strokeWidth: 6, x: source.x });
+    expect(after1).toMatchObject({ stroke: '#123456', strokeWidth: 6, x: 999 });
+    expect(after0.startMs).toBe(source.startMs);
+    expect(after1.startMs).toBe(target.startMs);
+    expect(store.getState().doc.version).toBe(10);
+  });
+
   it('editFormatOnly keeps content edits local too', () => {
     const store = videoStoreWithContent();
     store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
@@ -2557,8 +2585,14 @@ describe('video output variants (add-format for video mode)', () => {
       text: 'Local only',
     } as never);
 
+    const shapeTrack = v1.tracks.find((track) => track.type === 'shape')!;
+    store.getState().updateClip(1, shapeTrack.id, shapeTrack.clips[0].id, {
+      stroke: '#123456', strokeWidth: 0,
+    });
+
     const after0 = out(store, 0).tracks.find((t) => t.type === 'text')!.clips[0];
     expect(after0.text).toBe('Headline');
+    expect(out(store, 0).tracks.find((track) => track.type === 'shape')!.clips[0].stroke).toBeUndefined();
   });
 });
 

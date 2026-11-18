@@ -62,6 +62,8 @@ interface VideoClipSnapshot {
   keyframes?: unknown[];
   shape?: string;
   fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
   crop?: CropSnapshot;
   fitMode?: 'contain' | 'cover' | 'fill';
   blendMode?: string;
@@ -1316,7 +1318,7 @@ test.describe('Designer animated stock media (local non-paid fixture)', () => {
 });
 
 test.describe('Designer video Inspector and timeline essentials (mocked local document)', () => {
-  test('shape gradients paint, reflow controls persist, and frames match preview pixels', async ({ page }) => {
+  test('shape gradients and strokes paint, persist, export, and match preview pixels', async ({ page }) => {
     const mocks = new DesignerMocks();
     mocks.doc = essentialsDoc();
     mocks.name = 'Video shape gradient E2E';
@@ -1370,6 +1372,34 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     expect(radialEdge[2]).toBeGreaterThan(80);
     expect(radialEdge[2]).toBeLessThan(180);
 
+    const stroke = page.getByRole('group', { name: 'Stroke', exact: true });
+    await stroke.getByRole('button', { name: '#ff0000', exact: true }).click();
+    const strokeHex = page.getByRole('textbox', { name: 'Hex color', exact: true });
+    await strokeHex.fill('#123456');
+    await strokeHex.press('Enter');
+    const width = stroke.getByRole('spinbutton', { name: 'Width', exact: true });
+    await width.fill('6');
+    await width.press('Tab');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 6,
+    });
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 200, 60))
+      .toEqual([18, 52, 86, 255]);
+
+    await width.fill('0');
+    await width.press('Tab');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 0,
+    });
+    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 200, 60))[0])
+      .toBeGreaterThan(240);
+
+    await width.fill('6');
+    await width.press('Tab');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 6,
+    });
+
     await saveDesign(page);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
@@ -1381,7 +1411,12 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       focalY: 0.75,
       stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000FF80' }],
     });
+    expect(mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 6,
+    });
     await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 225, 95))[0]).toBeGreaterThan(240);
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 200, 60))
+      .toEqual([18, 52, 86, 255]);
 
     const framePage = await page.context().newPage();
     await mocks.install(framePage);
@@ -1391,12 +1426,23 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     const frameEdge = await renderedFrameRgba(framePage, mocks, 290, 30);
     expect(frameEdge[2]).toBeGreaterThan(80);
     expect(frameEdge[2]).toBeLessThan(180);
+    expect(await renderedFrameRgba(framePage, mocks, 200, 60)).toEqual([18, 52, 86, 255]);
     await framePage.close();
 
     await clipOnTrack(page, 'Shape').click();
     await page.getByRole('radio', { name: 'Solid', exact: true }).click();
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient).toBeUndefined();
     await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 60)).toEqual([255, 0, 0, 255]);
+
+    await page.keyboard.press('Control+e');
+    await page.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
+    await page.getByRole('button', { name: 'Next: Export 1 file', exact: true }).click();
+    await page.getByRole('button', { name: 'Start Render', exact: true }).click();
+    await expect(page.getByText('Render Complete', { exact: true })).toBeVisible();
+    const composition = mocks.renderRequests[0].composition as DesignerDocSnapshot['outputs'][0];
+    const exportedShape = composition.tracks.find((track) => track.type === 'shape')
+      ?.clips.find((clip) => clip.id === 'shape-original');
+    expect(exportedShape).toMatchObject({ stroke: '#123456', strokeWidth: 6 });
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

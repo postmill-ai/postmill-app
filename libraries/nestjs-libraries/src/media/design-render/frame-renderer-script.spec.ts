@@ -575,6 +575,74 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     expect(state.roundRect).toHaveBeenNthCalledWith(2, 0, 0, 50, 50, [12, 12, 12, 12]);
   });
 
+  it('paints every closed shape stroke at scaled widths and suppresses explicit zero', async () => {
+    for (const shape of ['rect', 'ellipse', 'star', 'triangle', 'polygon'] as const) {
+      for (const strokeWidth of [0, 3, 12]) {
+        const state: Record<string, unknown> = {
+          canvas: { width: 100, height: 100 },
+          stroke: vi.fn(),
+        };
+        const context = new Proxy(state, {
+          get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+          set: (target, prop, value) => { target[prop as string] = value; return true; },
+        });
+        const api = run({
+          ...output,
+          renderScale: 2,
+          tracks: [{
+            ...output.tracks[0],
+            clips: [{
+              ...output.tracks[0].clips[0],
+              keyframes: undefined,
+              shape,
+              stroke: '#123456',
+              strokeWidth,
+            }],
+          }],
+        }, context as never);
+        await api.renderFrame(0);
+
+        expect(state.strokeStyle).toBe('#123456');
+        expect(state.lineWidth).toBe(strokeWidth);
+        expect(state.stroke).toHaveBeenCalledTimes(strokeWidth > 0 ? 1 : 0);
+      }
+    }
+  });
+
+  it('does not invent a non-line stroke from fill and retains the line default', async () => {
+    const renderShape = async (shape: 'rect' | 'line') => {
+      const state: Record<string, unknown> = {
+        canvas: { width: 100, height: 100 },
+        stroke: vi.fn(),
+      };
+      const context = new Proxy(state, {
+        get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+        set: (target, prop, value) => { target[prop as string] = value; return true; },
+      });
+      await run({
+        ...output,
+        tracks: [{
+          ...output.tracks[0],
+          clips: [{
+            ...output.tracks[0].clips[0],
+            keyframes: undefined,
+            shape,
+            strokeWidth: shape === 'line' ? 0 : 4,
+          }],
+        }],
+      }, context as never).renderFrame(0);
+      return state;
+    };
+
+    const rect = await renderShape('rect');
+    expect(rect.lineWidth).toBe(4);
+    expect(rect.stroke).not.toHaveBeenCalled();
+    const line = await renderShape('line');
+    expect(line.strokeStyle).toBe('#ff0000');
+    expect(line.lineWidth).toBe(2);
+    expect(line.stroke).toHaveBeenCalledOnce();
+  });
+
   it('builds shape fill gradients through the shared gradient painter', async () => {
     const stops: [number, string][] = [];
     const gradient = { addColorStop: (offset: number, color: string) => stops.push([offset, color]) };

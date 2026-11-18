@@ -110,8 +110,9 @@ via headless Chromium + FFmpeg.
   group directly below the timing fields with a **Reverse** switch; video clips also get an
   **Original audio** switch that mutes or restores the clip's own sound. Image clips can be replaced
   through the media picker, have their background removed, or use **Magic Grab / Select Subject**
-  when the required providers are configured. Shape clips have uniform or
-  per-corner radius controls; text clips have Normal, Bold, Italic, and Bold Italic styles.
+  when the required providers are configured. Shape clips have solid or gradient fills, stroke
+  color and 0–40 px width controls, and uniform or per-corner radius controls. Width **0** hides
+  the outline without losing its color. Text clips have Normal, Bold, Italic, and Bold Italic styles.
   **Animations** presets apply to text, shape, image, and sticker clips and are grouped into
   **Entrance** (such as Pop, Fade Up, Slide In Left, Zoom In), **Emphasis** (Pulse, Shake, Swing), and
   **Exit** (such as Fade Out, Slide Out Left, Spin Out) presets; text clips also get a **Typewriter**
