@@ -133,12 +133,12 @@ dilated white-subject-on-black mask so unrelated pixels remain unchanged and the
 subject's outer edge. Replicate reconstruction pins the dedicated `bria/eraser` object-removal model
 with `mask_type=automatic`, rather than asking a generative scene model to infer an empty background;
 other providers retain their resolved model and generic inpainting defaults are unchanged. The Bria
-path sends only its declared image/mask inputs and strips prompts and unrelated saved tunables. It
-persists only the reconstructed
-background and deletes both temporary mask Files server-side in `finally` (so create-only members
-do not need `media:delete`). The provider cutout URL remains a preview/mask input, not another library
-File. `POST /media/magic-grab/cleanup` accepts a `fileId` and
-uses the same `media:create` gate to delete only org-owned files named `magic-grab-background-*`.
+path sends only its declared image/mask inputs and strips prompts and unrelated saved tunables. The
+reconstruction mask and reconstructed background are `internal: 'design-asset'` Files, hidden from
+ordinary library queries. It deletes both temporary mask Files server-side in `finally` (so
+create-only members do not need `media:delete`). The provider cutout URL remains a preview/mask input,
+not another library File. `POST /media/magic-grab/cleanup` accepts a `fileId` and uses the same
+`media:create` gate to delete only org-owned internal design assets named `magic-grab-background-*`.
 The shared review modal invokes it on every unapplied close; successful Apply retains the referenced
 background, and rejected static/video inserts return false and clean up rather than reporting success.
 Both review and final subject render original source pixels through the provider alpha, never an RGB

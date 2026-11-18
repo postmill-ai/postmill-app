@@ -444,6 +444,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       if (!blob) throw new Error('Mask empty');
       const formData = new FormData();
       formData.append('file', blob, `mask-${Date.now()}.png`);
+      formData.append('internal', 'design-asset');
       const res = await fetch('/files/upload-simple', {
         method: 'POST',
         body: formData,

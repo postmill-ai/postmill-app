@@ -311,14 +311,13 @@ export interface CommitResult {
 }
 
 /**
- * Flatten a canvas to a PNG and upload it. Painted layers and generated masks
- * use the same owned-file endpoints and size switch.
+ * Flatten a canvas to a PNG and upload it as an internal design asset. Painted
+ * layers and generated masks stay out of ordinary library and picker queries.
  */
 export const commitCanvas = async (
   canvas: HTMLCanvasElement,
   id: string,
-  fetchFn: (url: string, init?: RequestInit) => Promise<Response>,
-  options?: { internal?: 'design-preview' | 'design-asset' }
+  fetchFn: (url: string, init?: RequestInit) => Promise<Response>
 ): Promise<CommitResult | null> => {
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, 'image/png')
@@ -327,7 +326,7 @@ export const commitCanvas = async (
 
   const formData = new FormData();
   formData.append('file', blob, `paint-${id}.png`);
-  if (options?.internal) formData.append('internal', options.internal);
+  formData.append('internal', 'design-asset');
   const endpoint =
     blob.size > MAX_UPLOAD_BYTES ? '/files/upload-server' : '/files/upload-simple';
 

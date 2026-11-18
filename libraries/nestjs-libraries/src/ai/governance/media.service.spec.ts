@@ -967,6 +967,22 @@ describe('AiMediaService', () => {
 
       expect(writeBuffer).toHaveBeenCalledWith(png, 'image/png');
       expect(saveFile).toHaveBeenCalledOnce();
+      expect(saveFile.mock.calls[0][6]).toEqual({ internal: undefined });
+    });
+
+    it('stamps only callers that explicitly persist a Designer working asset', async () => {
+      const service = bareService();
+      const { saveFile } = configureStorage(service);
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+
+      await service.saveUrlToFile(
+        'org-1',
+        `data:image/png;base64,${png.toString('base64')}`,
+        'magic-grab-background',
+        { internal: 'design-asset' },
+      );
+
+      expect(saveFile.mock.calls[0][6]).toEqual({ internal: 'design-asset' });
     });
   });
 
@@ -1158,6 +1174,7 @@ describe('AiMediaService', () => {
         getFileByPath: vi.fn().mockImplementation((_orgId, url) => Promise.resolve({
           id: url === '/expanded-mask.png' ? 'expanded-mask-file' : 'mask-file',
           path: url,
+          metadata: { internal: 'design-asset' },
         })),
         deleteFile: vi.fn().mockResolvedValue(undefined),
       };
@@ -1178,7 +1195,12 @@ describe('AiMediaService', () => {
       );
       expect(composite).toHaveBeenCalledWith('/original.png', 'https://x/background.png', '/expanded-mask.png', 'org-1');
       expect(save).toHaveBeenCalledOnce();
-      expect(save).toHaveBeenCalledWith('org-1', 'data:image/png;base64,Y29tcG9zaXRlZA==', 'magic-grab-background');
+      expect(save).toHaveBeenCalledWith(
+        'org-1',
+        'data:image/png;base64,Y29tcG9zaXRlZA==',
+        'magic-grab-background',
+        { internal: 'design-asset' },
+      );
       expect(result).toEqual({
         background: { url: '/uploads/org/background.png', fileId: 'background-file' },
       });
@@ -1218,6 +1240,7 @@ describe('AiMediaService', () => {
       const corner = 0;
       expect([...expandedPixels.slice(corner, corner + 3)]).toEqual([0, 0, 0]);
       expect(save.mock.calls[0][2]).toBe('magic-grab-reconstruction-mask');
+      expect(save.mock.calls[0][3]).toEqual({ internal: 'design-asset' });
     });
 
     it('persists the reconstructed empty background without the original chair or changes to unrelated pixels', async () => {
@@ -1264,7 +1287,11 @@ describe('AiMediaService', () => {
       vi.spyOn(service as any, '_prepareMagicGrabMask').mockResolvedValue('/expanded-mask.png');
       vi.spyOn(service, 'inpaintImage').mockRejectedValue(upstream);
       const fileService = {
-        getFileByPath: vi.fn().mockImplementation((_orgId, url) => Promise.resolve({ id: `${url}-file`, path: url })),
+        getFileByPath: vi.fn().mockImplementation((_orgId, url) => Promise.resolve({
+          id: `${url}-file`,
+          path: url,
+          metadata: { internal: 'design-asset' },
+        })),
         deleteFile: vi.fn().mockResolvedValue(undefined),
       };
       (service as any)._fileService = fileService;
@@ -1277,12 +1304,47 @@ describe('AiMediaService', () => {
       expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', '/expanded-mask.png-file');
     });
 
-    it('cleans up only Magic Grab background files owned by the org', async () => {
+    it('never deletes an ordinary user file supplied as the source mask', async () => {
+      const service = bareService();
+      const upstream = new Error('mask preparation failed');
+      vi.spyOn(service as any, '_prepareMagicGrabMask').mockRejectedValue(upstream);
+      const fileService = {
+        getFileByPath: vi.fn().mockResolvedValue({
+          id: 'user-mask-file',
+          path: '/user-mask.png',
+          metadata: { source: 'upload' },
+        }),
+        deleteFile: vi.fn().mockResolvedValue(undefined),
+      };
+      (service as any)._fileService = fileService;
+
+      await expect(service.magicGrab('/original.png', '/cutout.png', '/user-mask.png', { orgId: 'org-1' }))
+        .rejects.toBe(upstream);
+
+      expect(fileService.getFileByPath).toHaveBeenCalledWith('org-1', '/user-mask.png');
+      expect(fileService.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('cleans up only internal Magic Grab background files owned by the org', async () => {
       const service = bareService();
       const fileService = {
         getFileById: vi.fn()
-          .mockResolvedValueOnce({ id: 'background-file', name: 'magic-grab-background-1.png' })
-          .mockResolvedValueOnce({ id: 'other-file', name: 'user-photo.png' })
+          .mockResolvedValueOnce({
+            id: 'background-file',
+            name: 'magic-grab-background-1.png',
+            metadata: { internal: 'design-asset' },
+          })
+          .mockResolvedValueOnce({ id: 'other-file', name: 'user-photo.png', metadata: {} })
+          .mockResolvedValueOnce({
+            id: 'legacy-file',
+            name: 'magic-grab-background-legacy.png',
+            metadata: {},
+          })
+          .mockResolvedValueOnce({
+            id: 'preview-file',
+            name: 'magic-grab-background-preview.png',
+            metadata: { internal: 'design-preview' },
+          })
           .mockResolvedValueOnce(null),
         deleteFile: vi.fn().mockResolvedValue(undefined),
       };
@@ -1290,8 +1352,12 @@ describe('AiMediaService', () => {
 
       await service.cleanupMagicGrab('background-file', 'org-1');
       await service.cleanupMagicGrab('other-file', 'org-1');
+      await service.cleanupMagicGrab('legacy-file', 'org-1');
+      await service.cleanupMagicGrab('preview-file', 'org-1');
       await service.cleanupMagicGrab('missing-file', 'org-1');
 
+      expect(fileService.getFileById).toHaveBeenCalledTimes(5);
+      expect(fileService.getFileById).toHaveBeenNthCalledWith(1, 'org-1', 'background-file');
       expect(fileService.deleteFile).toHaveBeenCalledOnce();
       expect(fileService.deleteFile).toHaveBeenCalledWith('org-1', 'background-file');
     });
