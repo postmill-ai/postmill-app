@@ -200,6 +200,71 @@ describe('MobileWorkspaceSheet', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('keeps the original start when a second pointer goes down', () => {
+    const onClose = vi.fn();
+    render(
+      <MobileWorkspaceSheet open title="Inspector" onClose={onClose}>
+        <div>Panel content</div>
+      </MobileWorkspaceSheet>
+    );
+    const sheet = screen.getByRole('region', { name: 'Inspector' });
+    const handle = screen.getByRole('button', { name: 'Resize Inspector panel' });
+    const pointer = (type: string, pointerId: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, clientY });
+      Object.defineProperty(event, 'pointerId', { value: pointerId });
+      fireEvent(handle, event);
+    };
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand', exact: true }));
+    pointer('pointerdown', 1, 100);
+    pointer('pointerdown', 2, 400);
+    pointer('pointerup', 1, 160);
+    expect(sheet.className).toContain('h-[32dvh]');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('does not start a resize from a secondary mouse button', () => {
+    const onClose = vi.fn();
+    render(
+      <MobileWorkspaceSheet open title="Inspector" onClose={onClose}>
+        <div>Panel content</div>
+      </MobileWorkspaceSheet>
+    );
+    const sheet = screen.getByRole('region', { name: 'Inspector' });
+    const handle = screen.getByRole('button', { name: 'Resize Inspector panel' });
+    const pointer = (type: string, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, button: 2, clientY });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      Object.defineProperty(event, 'pointerType', { value: 'mouse' });
+      fireEvent(handle, event);
+    };
+
+    pointer('pointerdown', 100);
+    pointer('pointerup', 180);
+    expect(sheet.className).toContain('h-[32dvh]');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('keeps a drag active when another pointer is cancelled', () => {
+    const onClose = vi.fn();
+    render(
+      <MobileWorkspaceSheet open title="Inspector" onClose={onClose}>
+        <div>Panel content</div>
+      </MobileWorkspaceSheet>
+    );
+    const handle = screen.getByRole('button', { name: 'Resize Inspector panel' });
+    const pointer = (type: string, pointerId: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, clientY });
+      Object.defineProperty(event, 'pointerId', { value: pointerId });
+      fireEvent(handle, event);
+    };
+
+    pointer('pointerdown', 1, 100);
+    pointer('pointercancel', 2, 100);
+    pointer('pointerup', 1, 180);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('does not commit a cancelled or lost-capture drag', () => {
     const onClose = vi.fn();
     render(

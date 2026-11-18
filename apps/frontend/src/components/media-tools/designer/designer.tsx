@@ -1601,6 +1601,7 @@ const DesignerContent: FC<
   // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root
   // (z 200+) and stay above this z-100 layer.
   const surface = useFullscreenSurface('relative mobile:h-[calc(100dvh-200px)]');
+  const mobileWorkspaceSheetOpen = !inspectorCollapsed || mobileToolsOpen || brandPanel.state.open;
 
   return (
     <div className={`flex flex-col h-full w-full overflow-hidden bg-newBgColorInner ${surface}`}>
@@ -1835,9 +1836,10 @@ const DesignerContent: FC<
         )}
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0 mobile:overflow-y-auto">
-          <div className={`relative flex-1 flex min-h-0 min-w-0 mobile:min-h-[120px] mobile:flex-col ${inspectorCollapsed ? 'mobile:overflow-hidden' : 'mobile:overflow-y-auto'}`}>
+          <div className={`relative flex-1 flex min-h-0 min-w-0 ${mobileWorkspaceSheetOpen ? 'mobile:grid mobile:flex-none mobile:grid-rows-[120px_auto] mobile:overflow-hidden' : 'mobile:flex-[1_0_auto]'}`}>
             <DesignerCanvas
               store={store}
+              mobileSheetOpen={mobileWorkspaceSheetOpen}
               showSafeZones={showSafeZones}
               showRulers={showRulers}
               safeZonePreset={safeZonePreset}
