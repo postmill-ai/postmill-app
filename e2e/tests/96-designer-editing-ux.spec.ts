@@ -436,7 +436,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
   await page.mouse.down();
   await page.mouse.move(box.x + outputX + 400 * scale + 8, box.y + outputY + 400 * scale + 8, { steps: 12 });
   await page.mouse.up();
-  await stage.click({ button: 'right', position: { x: outputX + 200 * scale, y: outputY + 345 * scale } });
+  await stage.click({ button: 'right', position: { x: outputX + 200 * scale, y: outputY + 40 * scale } });
   await page.getByRole('button', { name: 'Group', exact: true }).click();
   await persist();
 
