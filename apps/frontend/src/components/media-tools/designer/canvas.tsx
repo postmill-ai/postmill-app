@@ -114,6 +114,7 @@ interface CanvasProps {
   showRulers?: boolean;
   safeZonePreset?: string;
   touchpadMode?: boolean;
+  mobileSheetOpen?: boolean;
   onAddImage?: () => void;
   sendImageAwareness?: (
     outputIndex: number,
@@ -142,6 +143,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   showRulers = true,
   safeZonePreset,
   touchpadMode = false,
+  mobileSheetOpen = false,
   onAddImage,
   sendImageAwareness,
 }) => {
@@ -1990,7 +1992,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       ref={containerRef}
-      className="flex-1 min-w-0 relative overflow-hidden bg-[#e5e7eb] designer-canvas-container mobile:min-h-[24dvh]"
+      className={`flex-1 min-w-0 relative overflow-hidden bg-[#e5e7eb] designer-canvas-container ${mobileSheetOpen ? 'mobile:min-h-0' : 'mobile:min-h-[24dvh]'}`}
       // Space-to-pan always wins over the tool's own cursor, so the transient
       // Hand reads correctly no matter which tool is selected.
       style={{

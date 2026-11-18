@@ -144,42 +144,49 @@ export const MobileSheetHeader: FC<{
   onClose: () => void;
 }> = ({ title, snap, onSnapChange, onClose }) => {
   const t = useT();
-  const dragStartY = useRef<number | null>(null);
+  const dragStart = useRef<{ pointerId: number; clientY: number } | null>(null);
+  const resizeLabel = t('designer_resize_sheet', 'Resize {{title}} panel', { title });
+  const snapDown = () => {
+    if (snap === 'expanded') onSnapChange('half');
+    else onClose();
+  };
+  const cancelDrag = (pointerId: number) => {
+    if (dragStart.current?.pointerId === pointerId) dragStart.current = null;
+  };
   return (
     <div className="flex items-center gap-2 border-b border-studioBorder px-3 py-2 shrink-0">
       <div
         role="button"
         tabIndex={0}
-        aria-label={t('designer_resize_sheet', 'Resize {{title}} panel', { title })}
-        className="hidden mobile:flex h-8 w-8 cursor-row-resize touch-none items-center justify-center text-textColor/50"
+        aria-label={resizeLabel}
+        title={resizeLabel}
+        className="hidden mobile:flex h-10 w-11 shrink-0 cursor-row-resize touch-none items-center justify-center rounded-sm text-textColor/70 hover:bg-studioBorder/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
         onPointerDown={(event) => {
-          dragStartY.current = event.clientY;
+          if (dragStart.current || (event.pointerType === 'mouse' && event.button !== 0)) return;
+          dragStart.current = { pointerId: event.pointerId, clientY: event.clientY };
           trySetPointerCapture(event.currentTarget, event.pointerId);
         }}
         onPointerUp={(event) => {
-          const startY = dragStartY.current;
-          dragStartY.current = null;
-          if (startY === null) return;
-          const delta = event.clientY - startY;
+          const start = dragStart.current;
+          if (!start || start.pointerId !== event.pointerId) return;
+          dragStart.current = null;
+          const delta = event.clientY - start.clientY;
           if (delta < -32) onSnapChange('expanded');
-          else if (delta > 32) {
-            if (snap === 'expanded') onSnapChange('half');
-            else onClose();
-          }
+          else if (delta > 32) snapDown();
         }}
-        onPointerCancel={() => { dragStartY.current = null; }}
+        onPointerCancel={(event) => cancelDrag(event.pointerId)}
+        onLostPointerCapture={(event) => cancelDrag(event.pointerId)}
         onKeyDown={(event) => {
           if (event.key === 'ArrowUp') {
             event.preventDefault();
             onSnapChange('expanded');
           } else if (event.key === 'ArrowDown') {
             event.preventDefault();
-            if (snap === 'expanded') onSnapChange('half');
-            else onClose();
+            snapDown();
           }
         }}
       >
-        <span aria-hidden="true" className="h-1 w-6 rounded-full bg-studioBorder" />
+        <span aria-hidden="true" className="h-1.5 w-7 rounded-full bg-textColor/40" />
       </div>
       <div className="flex-1 truncate text-[12px] font-medium uppercase tracking-wider text-textColor/60">
         {title}

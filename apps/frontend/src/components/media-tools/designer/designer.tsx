@@ -245,6 +245,14 @@ const DesignerContent: FC<
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('inspector');
   const [workspacePreferenceReady, setWorkspacePreferenceReady] = useState(false);
   const mobileLayout = useMediaQuery('(max-width: 1025px)');
+  const mobileInspectorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!mobileLayout || inspectorCollapsed) return;
+    const frame = requestAnimationFrame(() => {
+      mobileInspectorRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [inspectorCollapsed, mobileLayout]);
   // Required startup picker on a fresh editor (no deep-linked asset/design and
   // no caller-supplied size) — forces an explicit format choice instead of the
   // silent 1080² "Instagram Post" default.
@@ -1593,6 +1601,7 @@ const DesignerContent: FC<
   // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root
   // (z 200+) and stay above this z-100 layer.
   const surface = useFullscreenSurface('relative mobile:h-[calc(100dvh-200px)]');
+  const mobileWorkspaceSheetOpen = !inspectorCollapsed || mobileToolsOpen || brandPanel.state.open;
 
   return (
     <div className={`flex flex-col h-full w-full overflow-hidden bg-newBgColorInner ${surface}`}>
@@ -1827,9 +1836,10 @@ const DesignerContent: FC<
         )}
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0 mobile:overflow-y-auto">
-          <div className="relative flex-1 flex min-h-0 min-w-0 mobile:flex-col mobile:flex-[1_0_auto]">
+          <div className={`relative flex-1 flex min-h-0 min-w-0 ${mobileWorkspaceSheetOpen ? 'mobile:grid mobile:flex-none mobile:grid-rows-[120px_auto] mobile:overflow-hidden' : 'mobile:flex-[1_0_auto]'}`}>
             <DesignerCanvas
               store={store}
+              mobileSheetOpen={mobileWorkspaceSheetOpen}
               showSafeZones={showSafeZones}
               showRulers={showRulers}
               safeZonePreset={safeZonePreset}
@@ -1870,6 +1880,7 @@ const DesignerContent: FC<
 
             {!inspectorCollapsed && mobileLayout && (
               <div
+                ref={mobileInspectorRef}
                 role="region"
                 aria-label={hasInspectorTarget ? translate('inspector_panel_label', 'Inspector') : translate('canvas_panel_label', 'Canvas')}
                 className={`relative flex w-full shrink-0 flex-col rounded-t-xl border-t border-studioBorder bg-newBgColorInner ${inspectorSnap === 'half' ? 'h-[32dvh]' : 'h-[65dvh]'}`}
