@@ -5787,9 +5787,14 @@ describe('AiDesignerComposerService panel side', () => {
     expect(image.x).toBe(0);
   });
 
-  // A right sidebar's copy must stay inside both the panel and the safe area.
-  // LinkedIn's profile obstruction insets the left; the generic right margin
-  // remains. A fractional coordinate would expose a validator clamp.
+  // ROUND 8 (A3): the live 1584×396 geometry from
+  // `.tmp-r7run3-screens/doc-*.json`. A right sidebar at x=982 w=602 placed
+  // its copy at x=1002 w=562 — right edge 1564 against the format's 1504.8
+  // title-safe edge — so the doc validator clamped the box to x=942.8 (the
+  // fractional coordinate is its signature), 59.2px OUTSIDE the panel. The
+  // escaped box then failed panel containment, got no container and reflowed
+  // against the CANVAS: the seeded story spanned x=0 w=1080 across an empty
+  // sidebar.
   it('keeps a wide banner\'s sidebar copy inside both the panel and the safe area', async () => {
     const doc = await composeWith(
       makePlan({ formatTemplate: 'editorial-sidebar', panelSide: 'right' }),

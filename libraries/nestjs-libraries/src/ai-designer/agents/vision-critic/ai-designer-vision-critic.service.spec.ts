@@ -411,6 +411,18 @@ describe('AiDesignerVisionCriticService', () => {
     expect(prompt).not.toContain('Safe zones:');
   });
 
+  it('omits canvas-only feed guides from an Instagram Post critique prompt', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+
+    await handler(makeRequest({
+      outputs: [{ formatId: 'ig-post', width: 1080, height: 1080 }],
+    }), 'org1');
+
+    const prompt = aiDefaults.vision.mock.calls[0][2] as string;
+    expect(prompt).not.toContain('Feed Header');
+    expect(prompt).not.toContain('Feed Actions');
+  });
+
   it('lists each output with its 25% feed-scale pixel size', async () => {
     aiDefaults.vision.mockResolvedValue('{"findings": []}');
 

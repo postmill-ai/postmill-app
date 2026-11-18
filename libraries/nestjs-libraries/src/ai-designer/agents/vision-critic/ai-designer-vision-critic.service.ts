@@ -8,7 +8,7 @@ import {
 import type { AgentResponse, ContextPacket } from '@reaatech/agent-mesh';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
-import { getSafeZoneOverlays } from '@postmill-ai/nestjs-libraries/media/designer-doc/safe-zones';
+import { getEnforcedSafeZones } from '@postmill-ai/nestjs-libraries/media/designer-doc/safe-zones';
 import {
   isLocalStorageUrl,
   loadVisionImageBytes,
@@ -717,7 +717,7 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
 
     const outputLines = payload.outputs
       .map((o) => {
-        const safeZones = getSafeZoneOverlays(o.formatId, o.width, o.height)
+        const safeZones = getEnforcedSafeZones(o.formatId, o.width, o.height)
           .filter((zone) => zone.kind === 'obstruction')
           .map(
             (z) =>

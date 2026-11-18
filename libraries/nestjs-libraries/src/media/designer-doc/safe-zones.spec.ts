@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
-import { getSafeZoneOverlays } from './safe-zones';
+import { getEnforcedSafeZones, getSafeZoneOverlays } from './safe-zones';
 
 describe('getSafeZoneOverlays', () => {
   it.each(CHANNEL_PRESETS.map((preset) => [preset.id] as const))(
@@ -66,6 +66,14 @@ describe('getSafeZoneOverlays', () => {
     ['pinterest-pin', 'Save and More Actions'],
   ])('%s includes %s', (id, label) => {
     expect(getSafeZoneOverlays(id, 1080, 1920).some((zone) => zone.label === label)).toBe(true);
+  });
+
+  it('keeps feed guides drawable while excluding them from enforcement', () => {
+    expect(getSafeZoneOverlays('ig-post', 1080, 1080).every((zone) => zone.kind === 'obstruction')).toBe(true);
+    expect(getEnforcedSafeZones('ig-post', 1080, 1080)).toEqual([
+      expect.objectContaining({ kind: 'title-safe', label: 'Title Safe (5%)' }),
+    ]);
+    expect(getEnforcedSafeZones('ig-story', 1080, 1920).every((zone) => zone.kind === 'obstruction')).toBe(true);
   });
 
   it('keeps the generic fallback for an unknown custom format', () => {

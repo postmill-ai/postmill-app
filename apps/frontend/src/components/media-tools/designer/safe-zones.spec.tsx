@@ -5,7 +5,6 @@ import Konva from 'konva';
 import { Layer, Stage } from 'react-konva';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SafeZoneOverlay } from './safe-zones';
-import canvasSource from './canvas.tsx?raw';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
@@ -110,7 +109,4 @@ describe('SafeZoneOverlay', () => {
     expect(overlapping).toEqual([]);
   });
 
-  it('receives the live canvas zoom', () => {
-    expect(canvasSource).toMatch(/<SafeZoneOverlay[\s\S]*?zoom=\{zoom\}/);
-  });
 });

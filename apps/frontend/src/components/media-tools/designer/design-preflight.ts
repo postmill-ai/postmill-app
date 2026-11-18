@@ -1,4 +1,4 @@
-import { getSafeZoneOverlays } from '@postmill-ai/nestjs-libraries/media/designer-doc/safe-zones';
+import { getEnforcedSafeZones } from '@postmill-ai/nestjs-libraries/media/designer-doc/safe-zones';
 import { pageBackground, pageChildren, pageName } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { fitTextToBox, measureLineWidth } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import { layoutVideoText } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-text-layout';
@@ -112,7 +112,7 @@ export const analyzeDesignerPreflight = (
       return;
     }
     if (rotation) box = rotatedBox(box, rotation);
-    const zones = getSafeZoneOverlays(output.formatId, output.width, output.height);
+    const zones = getEnforcedSafeZones(output.formatId, output.width, output.height);
     const target = targetName(output, pageNumber);
     const titleSafe = zones.find((zone) => zone.kind === 'title-safe');
     if (titleSafe) {

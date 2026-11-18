@@ -110,6 +110,36 @@ describe('analyzeDesignerPreflight', () => {
     expect(result.findings[0].vars.zone).toBe('Action Rail');
   });
 
+  it('does not enforce canvas-only Instagram Post feed guides in preflight', () => {
+    const result = analyze(doc([output([
+      text('badge', { x: 64, y: 56 }),
+    ], { formatId: 'ig-post', width: 1080, height: 1080 })]));
+
+    expect(result.findings).toEqual([]);
+  });
+
+  it('uses the generic title-safe fallback for a guide-only feed format', () => {
+    const result = analyze(doc([output([
+      text('outside', { x: 64, y: 10 }),
+    ], { formatId: 'ig-post', width: 1080, height: 1080 })]));
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'outside' }),
+    ]);
+    expect(result.findings[0].vars.zone).toBe('Title Safe (5%)');
+  });
+
+  it('continues to enforce real Story overlays in preflight', () => {
+    const result = analyze(doc([output([
+      text('covered', { y: 20 }),
+    ], { formatId: 'ig-story', width: 1080, height: 1920 })]));
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'covered' }),
+    ]);
+    expect(result.findings[0].vars.zone).toBe('Top UI');
+  });
+
   it('uses the generic title-safe area for custom dimensions', () => {
     const result = analyze(doc([output([text('one', { x: 0, y: 0 })])]));
     expect(result.findings).toEqual([

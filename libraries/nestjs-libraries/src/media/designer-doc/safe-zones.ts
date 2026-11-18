@@ -36,3 +36,17 @@ export const getSafeZoneOverlays = (
     height: zone.height * scaleY,
   }));
 };
+
+/** Guide-only regions are canvas decoration, not constraints or review input. */
+export const getEnforcedSafeZones = (
+  formatId: string | undefined,
+  width: number,
+  height: number
+): ResolvedSafeZoneOverlay[] => {
+  const preset = CHANNEL_PRESETS.find((candidate) => candidate.id === formatId);
+  return getSafeZoneOverlays(
+    preset?.safeZoneLayout === 'guide-only' ? undefined : formatId,
+    width,
+    height
+  );
+};

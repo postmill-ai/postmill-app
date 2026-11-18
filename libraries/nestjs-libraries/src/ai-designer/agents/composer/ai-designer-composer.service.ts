@@ -7190,10 +7190,13 @@ export class AiDesignerComposerService implements OnModuleInit {
    * A panel's copy column, pulled inside the title-safe area — the same edge
    * contract `_footerBottom` applies to the bottom of a band.
    *
-   * A sidebar sits hard against a canvas edge, so its margin alone may not
-   * clear the platform's obstruction regions. The layout owes the validator a
-   * box it never has to move; a validator clamp can otherwise escape the panel
-   * and make a later reflow lose the column's container.
+   * A sidebar sits hard against a canvas edge, so its margin alone does not
+   * clear the safe zone: a live 1584×396 banner placed its copy at x=1002 with
+   * a 562px box (right edge 1564 against a 1504.8 safe edge), the doc validator
+   * clamped the box back to x=942.8 — 59px OUTSIDE the panel it belongs to —
+   * and the escaped box then failed panel containment and reflowed against the
+   * canvas, so the seeded story spanned the full width across an empty sidebar.
+   * The layout owes the validator a box it never has to move.
    *
    * A column that cannot keep at least half its width inside the safe area is
    * left alone: the format's chrome data would be dictating the layout.

@@ -1,5 +1,5 @@
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
-import { getSafeZoneOverlays } from './safe-zones';
+import { getEnforcedSafeZones } from './safe-zones';
 import type { DesignerBackground, DesignerElement } from './designer-doc.schema';
 import { subjectPointToFocalPoint } from './focal-point';
 import { scalePathNodes } from './path-geometry';
@@ -966,12 +966,11 @@ export const getSafeZoneInset = (
     right: width * 0.95,
     bottom: height * 0.95,
   };
-  const zones = getSafeZoneOverlays(formatId, width, height);
+  const zones = getEnforcedSafeZones(formatId, width, height);
   if (zones.some((zone) => zone.kind === 'title-safe')) {
     return fallback;
   }
   const policy = CHANNEL_PRESETS.find((preset) => preset.id === formatId)?.safeZoneLayout;
-  if (policy === 'guide-only') return fallback;
   // Existing edge-to-edge presets keep their canvas default. Newly zoned
   // formats opt into retaining generic margins on every unobstructed side.
   let left = policy === 'preserve-generic-margins' ? fallback.left : 0;

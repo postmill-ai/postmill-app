@@ -215,3 +215,23 @@ describe('DesignerCanvas gesture wiring', () => {
     ]);
   });
 });
+
+describe('DesignerCanvas safe-zone overlays', () => {
+  it('sizes safe-zone labels from the live canvas zoom', async () => {
+    const store = shapeStore();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <DesignerCanvas store={store} showRulers={false} showSafeZones safeZonePreset="ig-story" />
+      );
+    });
+    const stage = Konva.stages[Konva.stages.length - 1];
+    await act(async () => {
+      store.getState().setZoom(0.5);
+    });
+    const label = stage.findOne('.safe-zone-label') as Konva.Label;
+    expect((label.findOne('Text') as Konva.Text).fontSize()).toBe(24);
+  });
+});

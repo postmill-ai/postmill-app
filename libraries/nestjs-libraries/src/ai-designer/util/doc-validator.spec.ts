@@ -35,8 +35,8 @@ const makeDoc = (
     outputs: [
       {
         id: 'o1',
-        formatId: 'custom',
-        name: 'Custom',
+        formatId: 'ig-post',
+        name: 'IG',
         width: 1080,
         height: 1080,
         background: '#ffffff',
@@ -147,12 +147,13 @@ describe('validateDesignDoc', () => {
       // a deliberately full-bleed box must not be shrunk out of its layout —
       // while y still gets the safe treatment.
       el({ originId: 'banner', text: 'B', x: 0, y: 0, width: 1080, height: 50 }),
-    ], { formatId: 'ig-post' });
+    ]);
 
     const { doc: out, violations } = validateDesignDoc(doc);
     const [legal, banner] = (out.outputs[0] as any).children;
 
-    // Feed regions are guides only; layout retains the generic 5% inset.
+    // ig-post carries no platform chrome, so the safe area is the 5% inset:
+    // 1026 - 30.
     expect(legal.y).toBe(996);
     expect(legal.x).toBe(54);
     expect(banner.x).toBe(0);
@@ -230,7 +231,7 @@ describe('validateDesignDoc', () => {
     const { doc: out } = validateDesignDoc(doc);
     const [chip, label] = (out.outputs[0] as any).children;
 
-    // The profile obstruction insets the left; the generic 5% right margin remains.
+    // The 5% safe edge is 1504.8; the UNIT's right edge lands on it.
     expect(chip.x + chip.width).toBeCloseTo(1504.8, 6);
     expect(label.x - chip.x).toBe(14);
   });
