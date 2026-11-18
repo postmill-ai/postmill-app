@@ -325,19 +325,11 @@ test('shape insertion stays on an independent format through save, reload, and e
   };
   await openDesigner(page);
   await page.getByRole('button', { name: /Independent/ }).click();
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
-  await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
 
   const stage = page.locator('.konva-stage').first();
-  const stageBox = await stage.boundingBox();
-  if (!stageBox) throw new Error('Canvas has no bounding box');
-  const scale = Math.min(stageBox.width / 400, stageBox.height / 400) * 0.85;
-  const outputX = (stageBox.width - 400 * scale) / 2;
-  const outputY = (stageBox.height - 400 * scale) / 2;
-  await stage.click({
-    button: 'right',
-    position: { x: outputX + 10 * scale, y: outputY + 390 * scale },
-  });
+  // The canvas menu opens only on the bare stage: right of the 20px ruler,
+  // left of the artboard.
+  await stage.click({ button: 'right', position: { x: 60, y: 150 } });
   await page.getByRole('button', { name: 'Add Shape', exact: true }).click();
   const savesBeforeInsert = state.saveDocs.length;
   await page.keyboard.press('Control+s');
@@ -355,7 +347,16 @@ test('shape insertion stays on an independent format through save, reload, and e
   await page.getByRole('button', { name: /^Export \d+ files?$/ }).click();
   await expect(page.getByRole('link', { name: /\.png$/ }).first()).toBeVisible();
   expect(state.renderDocs.length).toBeGreaterThan(0);
-  for (const doc of state.renderDocs) expectLocalShape(doc);
+  const renderedShapes = (state.renderDocs as any[]).flatMap((doc) =>
+    doc.outputs.map((out: any) => [
+      out.id,
+      out.children.filter((child: any) => child.type === 'shape').length,
+    ])
+  );
+  expect(renderedShapes).toContainEqual(['independent-output', 1]);
+  expect(renderedShapes).toContainEqual(['linked-output', 0]);
+  expect(renderedShapes).not.toContainEqual(['linked-output', 1]);
+  expect(renderedShapes).not.toContainEqual(['independent-output', 0]);
 });
 
 test('text effects remain editable through Paint layers, preview, undo, reopen, and export', async ({ page }) => {
