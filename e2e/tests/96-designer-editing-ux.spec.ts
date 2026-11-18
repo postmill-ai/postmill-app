@@ -480,7 +480,8 @@ test('cross-format Paste centers a complete group at the pointer through reload 
 
   // The bare pasteboard opens the canvas menu. Its off-artboard point must clamp
   // the whole batch onto the target rather than using the keyboard fallback.
-  await stage.click({ button: 'right', position: { x: 10, y: 150 } });
+  // x=40 clears the 20 px vertical ruler, which sits over the stage's left edge.
+  await stage.click({ button: 'right', position: { x: 40, y: 150 } });
   await page.getByRole('button', { name: 'Paste', exact: true }).click();
   await persist();
   savedTarget = (state.saveDocs.at(-1) as any).outputs[1];
