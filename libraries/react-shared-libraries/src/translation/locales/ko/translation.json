@@ -4868,6 +4868,7 @@
   "designer_action_bulk_create_bulk_create": "일괄 만들기…",
   "designer_bulk_assign_elements": "디자인 요소 할당",
   "designer_bulk_assign_description": "변경할 텍스트, 이미지, 색상별로 스프레드시트 열을 선택하세요. 하나의 열을 여러 요소에 사용할 수 있습니다.",
+  "designer_bulk_gradient_stop": "그라데이션 중지점 {{number}}",
   "designer_bulk_assignment_for": "{{name}} 열 ({{kind}})",
   "designer_bulk_not_assigned": "할당하지 않음",
   "designer_bulk_apply_assignments": "변수 할당 적용",

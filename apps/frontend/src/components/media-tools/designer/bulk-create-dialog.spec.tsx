@@ -313,6 +313,33 @@ describe('BulkCreateDialog', () => {
       .toEqual(['{{gradient_start}}', '{{gradient_end}}']);
   });
 
+  it('blocks duplicate preview requests while rendering', async () => {
+    let releaseFirst!: (value: unknown) => void;
+    let first = true;
+    fetchMock.mockImplementation((url: string) => {
+      if (url !== '/media/designs/bulk-generate') return Promise.resolve(response({}));
+      if (!first) return Promise.resolve(response({ images: ['data:image/png;base64,second'] }));
+      first = false;
+      return new Promise((resolve) => { releaseFirst = resolve; });
+    });
+    render(<BulkCreateDialog store={makeStore()} onClose={vi.fn()} />);
+    await upload('headline\nAda\nGrace');
+    const preview = screen.getByRole('button', { name: 'Preview first row' });
+
+    act(() => {
+      fireEvent.click(preview);
+      fireEvent.click(preview);
+    });
+
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/media/designs/bulk-generate')).toHaveLength(1);
+    await act(async () => { releaseFirst(response({ images: ['data:image/png;base64,first'] })); });
+    expect(await screen.findByRole('img', { name: 'First Bulk Create row' })).toBeTruthy();
+    await waitFor(() => expect(preview).toHaveProperty('disabled', false));
+
+    fireEvent.click(preview);
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/media/designs/bulk-generate')).toHaveLength(2));
+  });
+
   it('blocks duplicate batch requests while starting and unlocks after an error', async () => {
     let releaseFirst!: (value: unknown) => void;
     let first = true;

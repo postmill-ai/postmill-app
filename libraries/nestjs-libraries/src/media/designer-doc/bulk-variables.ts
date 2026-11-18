@@ -229,16 +229,19 @@ export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTa
       ) {
         add('image');
       }
-      if (
-        ['text', 'shape', 'path', 'icon'].includes(element.type) &&
-        element.slot?.kind !== 'color' &&
-        (element.type === 'text' || !element.slot)
-      ) {
+      if (['text', 'shape', 'path', 'icon'].includes(element.type)) {
         if (element.fillGradient?.stops.length) {
-          element.fillGradient.stops.forEach((stop, index) => {
-            if (!hasMustache(stop.color)) add('color', index);
-          });
-        } else if (!hasMustache(element.fill)) {
+          // A legacy color slot is hidden by the gradient, so its stops remain assignable.
+          if (element.type === 'text' || !element.slot || element.slot.kind === 'color') {
+            element.fillGradient.stops.forEach((stop, index) => {
+              if (!hasMustache(stop.color)) add('color', index);
+            });
+          }
+        } else if (
+          element.slot?.kind !== 'color' &&
+          (element.type === 'text' || !element.slot) &&
+          !hasMustache(element.fill)
+        ) {
           add('color');
         }
       }

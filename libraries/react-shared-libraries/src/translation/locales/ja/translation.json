@@ -4867,6 +4867,7 @@
   "designer_action_bulk_create_bulk_create": "一括作成…",
   "designer_bulk_assign_elements": "デザイン要素を割り当て",
   "designer_bulk_assign_description": "変更するテキスト、画像、色ごとにスプレッドシートの列を選択してください。1 つの列を複数の要素に使用できます。",
+  "designer_bulk_gradient_stop": "グラデーションストップ {{number}}",
   "designer_bulk_assignment_for": "{{name}} の列 ({{kind}})",
   "designer_bulk_not_assigned": "割り当てない",
   "designer_bulk_apply_assignments": "変数の割り当てを適用",

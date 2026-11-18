@@ -68,8 +68,6 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewLoadingRef = useRef(false);
   const [error, setError] = useState('');
-  const [applying, setApplying] = useState(false);
-  const applyingRef = useRef(false);
   const [starting, setStarting] = useState(false);
   const startingRef = useRef(false);
   const [job, setJob] = useState<BulkJob | null>(null);
@@ -184,9 +182,7 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
   };
 
   const applyAssignments = () => {
-    if (applyingRef.current || startingRef.current) return;
-    applyingRef.current = true;
-    setApplying(true);
+    if (startingRef.current) return;
     setError('');
     setPreviewUrl('');
     try {
@@ -205,14 +201,11 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
       store.getState().pushHistory('Assign Bulk Create variables');
     } catch (cause) {
       setError((cause as Error).message);
-    } finally {
-      applyingRef.current = false;
-      setApplying(false);
     }
   };
 
   const generatePreview = async () => {
-    if (!sourceRows.length || previewLoadingRef.current || applyingRef.current || startingRef.current) return;
+    if (!sourceRows.length || previewLoadingRef.current || startingRef.current) return;
     previewLoadingRef.current = true;
     setPreviewLoading(true);
     setError('');
@@ -235,7 +228,7 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
   };
 
   const start = async () => {
-    if (!sourceRows.length || applyingRef.current || startingRef.current) return;
+    if (!sourceRows.length || startingRef.current) return;
     startingRef.current = true;
     setStarting(true);
     setError('');
@@ -384,7 +377,6 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
               </div>
               <Button
                 secondary
-                loading={applying}
                 disabled={!Object.values(assignments).some((column) => !!column) || starting}
                 onClick={applyAssignments}
               >
@@ -399,10 +391,10 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
           )}
           {!!rows.length && (
             <div className="flex gap-2">
-              <Button secondary loading={previewLoading} disabled={!variables.length || applying || starting} onClick={generatePreview}>
+              <Button secondary loading={previewLoading} disabled={!variables.length || starting} onClick={generatePreview}>
                 {t('designer_bulk_preview', 'Preview first row')}
               </Button>
-              <Button loading={starting} disabled={!variables.length || applying} onClick={start}>
+              <Button loading={starting} disabled={!variables.length} onClick={start}>
                 {t('designer_bulk_start', 'Create {{count}} variations', { count: rows.length })}
               </Button>
             </div>

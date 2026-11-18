@@ -4871,6 +4871,7 @@
   "designer_action_bulk_create_bulk_create": "الإنشاء الجماعي…",
   "designer_bulk_assign_elements": "تعيين عناصر التصميم",
   "designer_bulk_assign_description": "اختر عمودًا من جدول البيانات لكل نص أو صورة أو لون تريد تغييره. يمكن لعمود واحد تغذية عدة عناصر.",
+  "designer_bulk_gradient_stop": "نقطة التدرج {{number}}",
   "designer_bulk_assignment_for": "العمود الخاص بـ {{name}} ({{kind}})",
   "designer_bulk_not_assigned": "عدم التعيين",
   "designer_bulk_apply_assignments": "تطبيق تعيينات المتغيرات",

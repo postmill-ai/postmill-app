@@ -4869,6 +4869,7 @@
   "designer_action_bulk_create_bulk_create": "Массовое создание…",
   "designer_bulk_assign_elements": "Назначить элементы дизайна",
   "designer_bulk_assign_description": "Выберите столбец таблицы для каждого текста, изображения или цвета, который нужно изменять. Один столбец может использоваться несколькими элементами.",
+  "designer_bulk_gradient_stop": "точка градиента {{number}}",
   "designer_bulk_assignment_for": "Столбец для {{name}} ({{kind}})",
   "designer_bulk_not_assigned": "Не назначать",
   "designer_bulk_apply_assignments": "Применить назначения переменных",

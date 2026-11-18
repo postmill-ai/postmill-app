@@ -743,7 +743,8 @@ text/image/color slots and symbol overrides. With no preexisting variables, the 
 assignment table maps CSV columns directly to text/image/color targets on every output/page and in
 reusable symbol definitions (an instance's explicit content overrides still win); applying adds their
 slots as ONE undoable edit, then reuses the same preview/batch pipeline. Gradient stops are independently
-assignable colour targets stored as mustaches, and the shared engine substitutes them alongside solid fills.
+assignable colour targets stored as mustaches, including on legacy gradients with a hidden colour slot;
+that slot is preserved, and the shared engine substitutes the stops alongside solid fills.
 Preview and Create read the current store document and mapping at action time, so an immediate first run cannot
 use the pre-Apply render closure; synchronous guards plus loading state prevent duplicate submissions and release
 on every error. Text and colour may be assigned in separate passes without replacing either binding. One column may feed

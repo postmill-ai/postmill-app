@@ -342,8 +342,9 @@ For a static design, choose **File ▸ Bulk Create…** and upload a CSV or TSV 
 image and color slots. The dialog discovers those variables across all outputs, pages and symbols;
 map each one to a spreadsheet column, then preview the first row before starting the batch. If the
 design has no variables yet, use **Assign design elements** to map columns directly to text, images,
-or colors on any page and choose **Apply variable assignments**. One column can feed multiple
-elements. Applying is one undoable edit and keeps the resulting design fully editable.
+or colors on any page and choose **Apply variable assignments**. Each stop of a gradient fill can take
+its own spreadsheet column. One column can feed multiple elements. Applying is one undoable edit and
+keeps the resulting design fully editable.
 
 Use the first spreadsheet row for unique column headers. Text cells are plain text and colors use
 `#RRGGBB`. Image cells accept direct HTTP(S) image URLs, same-origin `/uploads/` paths, Google Drive
