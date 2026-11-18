@@ -214,6 +214,34 @@ describe('DesignerCanvas gesture wiring', () => {
       store.getState().doc.outputs[0].children.find((el) => el.type === 'group')!.id,
     ]);
   });
+
+  it('right-click keeps a multi-selection and selects an unselected element', async () => {
+    const store = shapeStore();
+    store.getState().addElement({
+      id: 'other', type: 'shape', shape: 'rect', x: 300, y: 40, width: 100, height: 80,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addElement({
+      id: 'third', type: 'shape', shape: 'rect', x: 300, y: 200, width: 100, height: 80,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    const stage = await renderCanvas(store);
+    const fire = async (id: string) => {
+      const node = stage.findOne('#' + id)!;
+      await act(async () => {
+        node.fire('contextmenu', {
+          evt: new MouseEvent('contextmenu', { button: 2, clientX: 10, clientY: 10, cancelable: true }),
+        }, true);
+      });
+    };
+    await act(async () => {
+      store.getState().setSelectedIds(['moving', 'other']);
+    });
+    await fire('other');
+    expect(store.getState().selectedIds).toEqual(['moving', 'other']);
+    await fire('third');
+    expect(store.getState().selectedIds).toEqual(['third']);
+  });
 });
 
 describe('DesignerCanvas safe-zone overlays', () => {

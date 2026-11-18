@@ -1184,8 +1184,10 @@ test('Pathfinder flyout stays visible and keyboard accessible after a viewport r
   await expectInsideContextMenuViewport(page, flyout);
   await unite.press('Enter');
   await expect(menu).toHaveCount(0);
-  await expect.poll(() => state.doc.outputs[0].children.length).toBe(1);
-  expect(state.doc.outputs[0].children[0]).toMatchObject({ type: 'path' });
+  // The fixture's shapes are disjoint, and Unite keeps disjoint regions as
+  // separate paths, so both shapes become paths.
+  await expect.poll(() => state.doc.outputs[0].children.map((child: any) => child.type))
+    .toEqual(['path', 'path']);
 });
 
 test('clip context menu duplicates the intended clip without changing another track', async ({ page }) => {
