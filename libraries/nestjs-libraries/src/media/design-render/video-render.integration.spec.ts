@@ -404,6 +404,17 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
             }],
           },
           {
+            id: 'shape-gradient', type: 'shape',
+            clips: [{
+              id: 'encoded-gradient', shape: 'rect', fill: '#112233', startMs: 0, endMs: 1000,
+              x: 240, y: 5, width: 70, height: 60,
+              fillGradient: {
+                type: 'linear', angle: 0,
+                stops: [{ offset: 0, color: '#00ffff' }, { offset: 1, color: '#ff00ff' }],
+              },
+            }],
+          },
+          {
             id: 'text', type: 'text',
             clips: [{
               id: 'gradient-outline', text: 'GRADIENT', startMs: 0, endMs: 1000,
@@ -458,6 +469,20 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
       const first = await sharp(firstPath).extract(crop).raw().toBuffer();
       const last = await sharp(lastPath).extract(crop).raw().toBuffer();
       expect(first.equals(last)).toBe(false);
+
+      const encoded = await sharp(firstPath)
+        .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const encodedPixel = (x: number, y: number) => {
+        const index = (y * encoded.info.width + x) * encoded.info.channels;
+        return [...encoded.data.subarray(index, index + 4)];
+      };
+      for (const [x, expected] of [[245, [0, 255, 255, 255]], [305, [255, 0, 255, 255]]] as const) {
+        const actual = encodedPixel(x, 30);
+        actual.forEach((channel, index) => {
+          expect(Math.abs(channel - expected[index]), `gradient pixel ${x},30 channel ${index}`)
+            .toBeLessThanOrEqual(35);
+        });
+      }
     } finally {
       if (result) encoder.cleanup(path.dirname(result.videoPath));
     }

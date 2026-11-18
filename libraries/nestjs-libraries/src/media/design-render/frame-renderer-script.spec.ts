@@ -608,6 +608,45 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     expect(stops).toEqual([[0, '#000000'], [1, 'rgba(255, 255, 255, 0.5019607843137255)']]);
   });
 
+  it('builds radial shape gradients with the stored focal point and alpha stops', async () => {
+    const stops: [number, string][] = [];
+    const gradient = { addColorStop: (offset: number, color: string) => stops.push([offset, color]) };
+    const radialArgs: number[] = [];
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      createRadialGradient: (...args: number[]) => {
+        radialArgs.push(...args);
+        return gradient;
+      },
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const gradientOutput = {
+      ...output,
+      tracks: [{
+        ...output.tracks[0],
+        clips: [{
+          ...output.tracks[0].clips[0],
+          keyframes: undefined,
+          fillGradient: {
+            type: 'radial',
+            focalX: 0.25,
+            focalY: 0.75,
+            stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#FFFFFF80' }],
+          },
+        }],
+      }],
+    };
+
+    await run(gradientOutput, context as never).renderFrame(0);
+
+    expect(radialArgs).toEqual([12.5, 37.5, 0, 25, 25, 25]);
+    expect(state.fillStyle).toBe(gradient);
+    expect(stops).toEqual([[0, '#000000'], [1, 'rgba(255, 255, 255, 0.5019607843137255)']]);
+  });
+
   it('paints a background texture with the SHARED generator, not a copy', async () => {
     // The texture overlay must come from the injected background-texture
     // source — a hand-written grain here would drift from the page render.

@@ -69,6 +69,9 @@ interface VideoClipSnapshot {
   align?: 'left' | 'center' | 'right' | 'justify';
   fillGradient?: {
     type: 'linear' | 'radial';
+    angle?: number;
+    focalX?: number;
+    focalY?: number;
     stops: Array<{ offset: number; color: string }>;
   };
   textStroke?: { color: string; width: number };
@@ -1313,6 +1316,91 @@ test.describe('Designer animated stock media (local non-paid fixture)', () => {
 });
 
 test.describe('Designer video Inspector and timeline essentials (mocked local document)', () => {
+  test('shape gradients paint, reflow controls persist, and frames match preview pixels', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = essentialsDoc();
+    mocks.name = 'Video shape gradient E2E';
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    await clipOnTrack(page, 'Shape').click();
+    await page.getByRole('radio', { name: 'Gradient', exact: true }).click();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient?.stops.length).toBe(2);
+
+    await page.getByRole('button', { name: '#FFFFFF', exact: true }).click();
+    const hex = page.getByRole('textbox', { name: 'Hex color', exact: true });
+    await hex.fill('#0000FF80');
+    await hex.press('Enter');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient?.stops[1].color).toBe('#0000FF80');
+
+    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 210, 60))[0]).toBeGreaterThan(200);
+    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 210, 60))[2]).toBeLessThan(40);
+    const middle = await canvasRgbaAtDocumentPoint(page, 400, 300, 250, 60);
+    expect(middle[0]).toBeGreaterThan(80);
+    expect(middle[2]).toBeGreaterThan(30);
+    const right = await canvasRgbaAtDocumentPoint(page, 400, 300, 290, 60);
+    expect(right[0]).toBeLessThan(40);
+    expect(right[2]).toBeGreaterThan(80);
+    expect(right[2]).toBeLessThan(180);
+
+    const setRange = async (name: string, value: number) => {
+      await page.getByRole('slider', { name, exact: true }).evaluate((element, next) => {
+        const input = element as HTMLInputElement;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, String(next));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+    };
+    await setRange('Angle', 90);
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient?.angle).toBe(90);
+    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 250, 30))[0]).toBeGreaterThan(200);
+    const bottom = await canvasRgbaAtDocumentPoint(page, 400, 300, 250, 110);
+    expect(bottom[2]).toBeGreaterThan(80);
+    expect(bottom[2]).toBeLessThan(180);
+
+    await page.getByRole('radio', { name: 'Radial', exact: true }).click();
+    await setRange('Focal X', 25);
+    await setRange('Focal Y', 75);
+    await expect.poll(() => {
+      const gradient = mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient;
+      return gradient ? [gradient.type, gradient.focalX, gradient.focalY] : [];
+    }).toEqual(['radial', 0.25, 0.75]);
+    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 225, 95))[0]).toBeGreaterThan(240);
+    const radialEdge = await canvasRgbaAtDocumentPoint(page, 400, 300, 290, 30);
+    expect(radialEdge[2]).toBeGreaterThan(80);
+    expect(radialEdge[2]).toBeLessThan(180);
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+    expect(mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient).toEqual({
+      type: 'radial',
+      angle: 90,
+      focalX: 0.25,
+      focalY: 0.75,
+      stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000FF80' }],
+    });
+    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 225, 95))[0]).toBeGreaterThan(240);
+
+    const framePage = await page.context().newPage();
+    await mocks.install(framePage);
+    const frameFocal = await renderedFrameRgba(framePage, mocks, 225, 95);
+    expect(frameFocal[0]).toBeGreaterThan(240);
+    expect(frameFocal[2]).toBeLessThan(20);
+    const frameEdge = await renderedFrameRgba(framePage, mocks, 290, 30);
+    expect(frameEdge[2]).toBeGreaterThan(80);
+    expect(frameEdge[2]).toBeLessThan(180);
+    await framePage.close();
+
+    await clipOnTrack(page, 'Shape').click();
+    await page.getByRole('radio', { name: 'Solid', exact: true }).click();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient).toBeUndefined();
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 60)).toEqual([255, 0, 0, 255]);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
   test('timeline tools, image replacement/removal, radius/text styles, and save/reload', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const mocks = new DesignerMocks();
@@ -1534,7 +1622,9 @@ async function renderedFrameRgba(
     outputLiteral: escapeForScriptTag(output),
     baseUrlLiteral: '"https://app.postmill.ai"',
     baseUrl: 'https://app.postmill.ai',
-    script: FRAME_RENDERER_SCRIPT,
+    // Playwright's transpiler leaves `(0, _module.helper)` in the serialized
+    // helpers; the backend build strips its own prefixes in `stripExportsNamespace`.
+    script: FRAME_RENDERER_SCRIPT.replace(/\(0,\s*_[A-Za-z$][\w$]*\.([\w$]+)\)/g, '$1'),
     fontLinks: '',
   }), { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => !!(window as any).__FRAME_API);

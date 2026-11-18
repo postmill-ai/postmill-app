@@ -933,8 +933,9 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
         }
 
         if (trackType === 'shape') {
+          const hasGradient = !!clip.fillGradient?.stops?.length;
           const common = {
-            fill: canvasColor(clip.fill || '#2B5CD3'),
+            fill: hasGradient ? undefined : canvasColor(clip.fill || '#2B5CD3'),
             stroke: canvasColor(clip.stroke),
             strokeWidth: clip.strokeWidth || (clip.stroke ? 1 : 0),
             globalCompositeOperation: blendGco,
