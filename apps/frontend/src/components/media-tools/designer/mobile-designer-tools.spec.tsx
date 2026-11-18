@@ -165,6 +165,71 @@ describe('MobileWorkspaceSheet', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('shares drag thresholds with keyboard controls and ignores unrelated pointers', () => {
+    const onClose = vi.fn();
+    render(
+      <MobileWorkspaceSheet open title="Inspector" onClose={onClose}>
+        <div>Panel content</div>
+      </MobileWorkspaceSheet>
+    );
+    const sheet = screen.getByRole('region', { name: 'Inspector' });
+    const handle = screen.getByRole('button', { name: 'Resize Inspector panel' });
+    const pointer = (type: string, pointerId: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, clientY });
+      Object.defineProperty(event, 'pointerId', { value: pointerId });
+      fireEvent(handle, event);
+    };
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand', exact: true }));
+    pointer('pointerdown', 1, 100);
+    pointer('pointerup', 2, 160);
+    expect(sheet.className).toContain('h-[65dvh]');
+    pointer('pointerup', 1, 132);
+    expect(sheet.className).toContain('h-[65dvh]');
+
+    pointer('pointerdown', 1, 100);
+    pointer('pointerup', 1, 133);
+    expect(sheet.className).toContain('h-[32dvh]');
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(handle, { key: 'ArrowUp' });
+    expect(sheet.className).toContain('h-[65dvh]');
+    fireEvent.keyDown(handle, { key: 'ArrowDown' });
+    expect(sheet.className).toContain('h-[32dvh]');
+    fireEvent.keyDown(handle, { key: 'ArrowDown' });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('does not commit a cancelled or lost-capture drag', () => {
+    const onClose = vi.fn();
+    render(
+      <MobileWorkspaceSheet open title="Inspector" onClose={onClose}>
+        <div>Panel content</div>
+      </MobileWorkspaceSheet>
+    );
+    const sheet = screen.getByRole('region', { name: 'Inspector' });
+    const handle = screen.getByRole('button', { name: 'Resize Inspector panel' });
+    const pointer = (type: string, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, clientY });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      fireEvent(handle, event);
+    };
+
+    pointer('pointerdown', 100);
+    pointer('pointercancel', 100);
+    pointer('pointerup', 180);
+    expect(sheet.className).toContain('h-[32dvh]');
+    expect(onClose).not.toHaveBeenCalled();
+
+    pointer('pointerdown', 100);
+    const lostCapture = new Event('lostpointercapture', { bubbles: true });
+    Object.defineProperty(lostCapture, 'pointerId', { value: 1 });
+    fireEvent(handle, lostCapture);
+    pointer('pointerup', 180);
+    expect(sheet.className).toContain('h-[32dvh]');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('continues resizing when pointer capture finds no active pointer', () => {
     const original = Element.prototype.setPointerCapture;
     Object.defineProperty(Element.prototype, 'setPointerCapture', {

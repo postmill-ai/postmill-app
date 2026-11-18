@@ -2489,11 +2489,46 @@ test.describe('Designer mobile workspace', () => {
 
     await page.getByRole('button', { name: 'Inspector', exact: true }).click();
     const canvasSheet = page.getByRole('region', { name: 'Canvas', exact: true });
+    const designCanvas = page.getByRole('application', { name: 'Design canvas', exact: true });
     await expect(canvasSheet).toHaveClass(/h-\[32dvh\]/);
+    const viewportHeight = await page.evaluate(() => window.innerHeight);
+    await expect.poll(() => canvasSheet.evaluate((element) => element.getBoundingClientRect().height))
+      .toBeCloseTo(viewportHeight * 0.32, 0);
+    await expect(canvasSheet.getByRole('button', { name: 'Expand', exact: true })).toBeInViewport();
+    await expect(designCanvas).toBeVisible();
+    const halfCanvasHeight = (await designCanvas.boundingBox())!.height;
+    const halfSheetHeight = await canvasSheet.evaluate((element) => element.getBoundingClientRect().height);
+    expect(halfCanvasHeight).toBeGreaterThan(100);
+    expect(halfCanvasHeight + halfSheetHeight).toBeLessThanOrEqual(viewportHeight);
+
     await canvasSheet.getByRole('button', { name: 'Expand', exact: true }).click();
     await expect(canvasSheet).toHaveClass(/h-\[65dvh\]/);
-    await canvasSheet.getByRole('button', { name: 'Half', exact: true }).click();
+    await expect.poll(() => canvasSheet.evaluate((element) => element.getBoundingClientRect().height))
+      .toBeCloseTo(viewportHeight * 0.65, 0);
+    const expandedHeight = await canvasSheet.evaluate((element) => element.getBoundingClientRect().height);
+    await expect(designCanvas).toBeVisible();
+    const expandedCanvasHeight = (await designCanvas.boundingBox())!.height;
+    expect(expandedCanvasHeight).toBeGreaterThan(100);
+    expect(expandedCanvasHeight + expandedHeight).toBeLessThanOrEqual(viewportHeight);
+
+    const resizeHandle = canvasSheet.getByRole('button', { name: 'Resize Canvas panel', exact: true });
+    await resizeHandle.focus();
+    await resizeHandle.press('ArrowDown');
     await expect(canvasSheet).toHaveClass(/h-\[32dvh\]/);
+    const halfHeight = await canvasSheet.evaluate((element) => element.getBoundingClientRect().height);
+    expect(expandedHeight).toBeGreaterThan(halfHeight * 1.5);
+    await resizeHandle.press('ArrowUp');
+    await expect.poll(() => canvasSheet.evaluate((element) => element.getBoundingClientRect().height))
+      .toBeCloseTo(expandedHeight, 0);
+    const handleBox = await resizeHandle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    await touchDragDocumentPoints(
+      page,
+      { x: handleBox!.x + handleBox!.width / 2, y: handleBox!.y + handleBox!.height / 2 },
+      { x: handleBox!.x + handleBox!.width / 2, y: handleBox!.y + handleBox!.height / 2 + 60 }
+    );
+    await expect.poll(() => canvasSheet.evaluate((element) => element.getBoundingClientRect().height))
+      .toBeCloseTo(halfHeight, 0);
     await canvasSheet.getByRole('button', { name: 'Collapse panel', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Canvas', exact: true })).toHaveCount(0);
 
@@ -2508,11 +2543,86 @@ test.describe('Designer mobile workspace', () => {
     await page.getByRole('region', { name: 'Tools', exact: true })
       .getByRole('button', { name: 'Brand', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Brand', exact: true })).toBeVisible();
-    await page.getByRole('region', { name: 'Brand', exact: true })
-      .getByRole('button', { name: 'Collapse panel', exact: true }).click();
+    const brandSheet = page.getByRole('region', { name: 'Brand', exact: true });
+    await expect.poll(() => brandSheet.evaluate((element) => element.getBoundingClientRect().height))
+      .toBeCloseTo(viewportHeight * 0.32, 0);
+    expect((await designCanvas.boundingBox())!.height).toBeGreaterThan(100);
+    const brandContent = brandSheet.locator(':scope > div').last();
+    expect(await brandContent.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
+      await brandContent.evaluate((element) => element.clientHeight)
+    );
+    await brandContent.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await expect.poll(() => brandContent.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect(brandSheet.getByRole('button', { name: 'Resize Brand panel', exact: true })).toBeVisible();
+    await brandSheet.getByRole('button', { name: 'Expand', exact: true }).click();
+    await expect.poll(() => brandSheet.evaluate((element) => element.getBoundingClientRect().height))
+      .toBeCloseTo(viewportHeight * 0.65, 0);
+    const brandExpandedHeight = await brandSheet.evaluate((element) => element.getBoundingClientRect().height);
+    expect((await designCanvas.boundingBox())!.height + brandExpandedHeight).toBeLessThanOrEqual(viewportHeight);
+    await brandSheet.getByRole('button', { name: 'Collapse panel', exact: true }).click();
 
     await page.getByRole('button', { name: 'Zoom to fit', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Collapse timeline', exact: true })).toBeVisible();
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('keeps a selected long Inspector expanded across workspace and timeline changes', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = motionDoc();
+    mocks.name = 'Mobile selected Inspector E2E';
+    mocks.brand = {
+      id: 'brand-e2e', name: 'E2E Brand', palette: ['#123456'],
+      fontFamilies: ['Georgia'], logoFileIds: ['replacement-image-file'], isDefault: true,
+    };
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+
+    await page.getByRole('button', { name: 'Expand timeline', exact: true }).click();
+    await clipOnTrack(page, 'Video 1').click();
+    await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+    const inspector = page.getByRole('region', { name: 'Inspector', exact: true });
+    await inspector.getByRole('button', { name: 'Expand', exact: true }).click();
+    await expect(inspector).toHaveClass(/h-\[65dvh\]/);
+    const viewportHeight = await page.evaluate(() => window.innerHeight);
+    const inspectorHeight = await inspector.evaluate((element) => element.getBoundingClientRect().height);
+    const canvasHeight = (await page.getByRole('application', { name: 'Design canvas', exact: true }).boundingBox())!.height;
+    expect(inspectorHeight).toBeCloseTo(viewportHeight * 0.65, 0);
+    expect(canvasHeight).toBeGreaterThan(100);
+    expect(inspectorHeight + canvasHeight).toBeLessThanOrEqual(viewportHeight);
+
+    const inspectorContent = inspector.locator(':scope > div').last();
+    expect(await inspectorContent.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
+      await inspectorContent.evaluate((element) => element.clientHeight)
+    );
+    await inspectorContent.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await expect.poll(() => inspectorContent.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect(inspector.getByRole('button', { name: 'Resize Inspector panel', exact: true })).toBeVisible();
+
+    await clipOnTrack(page, 'Text').click();
+    await expect(inspector).toHaveClass(/h-\[65dvh\]/);
+    await page.getByRole('menuitem', { name: 'More menus', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Layers', exact: true }).click();
+    const layers = page.getByRole('dialog', { name: 'Layers', exact: true });
+    await expect(layers).toBeVisible();
+    await expect(inspector).toHaveClass(/h-\[65dvh\]/);
+    await layers.getByRole('button', { name: 'Close', exact: true }).click();
+
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
+    await page.getByRole('region', { name: 'Tools', exact: true })
+      .getByRole('button', { name: 'Brand', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Brand', exact: true })).toBeVisible();
+    await page.getByRole('region', { name: 'Brand', exact: true })
+      .getByRole('button', { name: 'Collapse panel', exact: true }).click();
+    await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+    await expect(inspector).toHaveClass(/h-\[65dvh\]/);
+    await expect(inspector.getByRole('spinbutton', { name: 'Duration (s)', exact: true })).toHaveValue('8');
+
+    await page.getByRole('button', { name: 'Collapse timeline', exact: true }).click();
+    await expect(inspector).toHaveClass(/h-\[65dvh\]/);
+    await page.getByRole('button', { name: 'Expand timeline', exact: true }).click();
+    await expect(inspector).toHaveClass(/h-\[65dvh\]/);
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

@@ -245,6 +245,14 @@ const DesignerContent: FC<
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('inspector');
   const [workspacePreferenceReady, setWorkspacePreferenceReady] = useState(false);
   const mobileLayout = useMediaQuery('(max-width: 1025px)');
+  const mobileInspectorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!mobileLayout || inspectorCollapsed) return;
+    const frame = requestAnimationFrame(() => {
+      mobileInspectorRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [inspectorCollapsed, mobileLayout]);
   // Required startup picker on a fresh editor (no deep-linked asset/design and
   // no caller-supplied size) — forces an explicit format choice instead of the
   // silent 1080² "Instagram Post" default.
@@ -1827,7 +1835,7 @@ const DesignerContent: FC<
         )}
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0 mobile:overflow-y-auto">
-          <div className="relative flex-1 flex min-h-0 min-w-0 mobile:flex-col mobile:flex-[1_0_auto]">
+          <div className={`relative flex-1 flex min-h-0 min-w-0 mobile:min-h-[120px] mobile:flex-col ${inspectorCollapsed ? 'mobile:overflow-hidden' : 'mobile:overflow-y-auto'}`}>
             <DesignerCanvas
               store={store}
               showSafeZones={showSafeZones}
@@ -1870,6 +1878,7 @@ const DesignerContent: FC<
 
             {!inspectorCollapsed && mobileLayout && (
               <div
+                ref={mobileInspectorRef}
                 role="region"
                 aria-label={hasInspectorTarget ? translate('inspector_panel_label', 'Inspector') : translate('canvas_panel_label', 'Canvas')}
                 className={`relative flex w-full shrink-0 flex-col rounded-t-xl border-t border-studioBorder bg-newBgColorInner ${inspectorSnap === 'half' ? 'h-[32dvh]' : 'h-[65dvh]'}`}

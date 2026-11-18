@@ -396,8 +396,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   display-only. History, Versions, and Template Fields keep their persisted floating-panel positions.
   `mobile-designer-tools.tsx` keeps prominent quick actions and inline, non-modal Tools/Brand sheets;
   Workspace ▸ Layers toggles its floating panel. The mobile Inspector participates in layout at half or
-  expanded height with collapse, accessible snap buttons, and a pointer/keyboard drag handle. The main
-  mobile column scrolls when expanded panels exceed the viewport, and Brand mounts only in its active
+  expanded height with collapse, accessible snap buttons, and a pointer/keyboard drag handle. The canvas
+  keeps a usable minimum height, each canvas/sheet region contains its overflow so the canvas cannot
+  intercept sheet controls, and long sheet bodies scroll independently. Brand mounts only in its active
   mobile layout. Mobile keeps design rename and timeline collapse/zoom-to-fit available.
 - **Timeline gestures and exact timing.** Clip move/trim and ruler scrub use `trySetPointerCapture`
   from `pointer-capture.ts` (an inactive pointer returns false instead of throwing; every Designer
