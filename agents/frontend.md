@@ -742,8 +742,12 @@ preview, saved variation and renderer: it covers all outputs/pages, rich text, m
 text/image/color slots and symbol overrides. With no preexisting variables, the dialog's guided
 assignment table maps CSV columns directly to text/image/color targets on every output/page and in
 reusable symbol definitions (an instance's explicit content overrides still win); applying adds their
-slots as ONE undoable edit, then reuses the same preview/batch pipeline. Text
-and colour may be assigned in separate passes without replacing either binding. One column may feed
+slots as ONE undoable edit, then reuses the same preview/batch pipeline. Gradient stops are independently
+assignable colour targets stored as mustaches, including on legacy gradients with a hidden colour slot;
+that slot is preserved, and the shared engine substitutes the stops alongside solid fills.
+Preview and Create read the current store document and mapping at action time, so an immediate first run cannot
+use the pre-Apply render closure; synchronous guards plus loading state prevent duplicate submissions and release
+on every error. Text and colour may be assigned in separate passes without replacing either binding. One column may feed
 multiple targets, incompatible existing variable kinds are rejected, and existing mustache/slot
 bindings remain intact. Before substitution, a colour mustache renders transparent through the shared
 `canvasColor` boundary rather than inheriting the canvas's previous fill; a real row replaces it with

@@ -519,6 +519,41 @@ describe('DesignBulkCreateService processing', () => {
     expect(redis.has('design-bulk:payload:job-1')).toBe(false);
   });
 
+  it('keeps independent solid and gradient colors on every editable row', async () => {
+    const { service, designService } = makeService();
+    const doc = makeDoc();
+    doc.outputs[0].children.push({
+      id: 'solid', type: 'shape', shape: 'rect', fill: '#000000', slot: { name: 'accent', kind: 'color' },
+      x: 0, y: 20, width: 20, height: 20, rotation: 0, opacity: 1, locked: false, hidden: false,
+    }, {
+      id: 'gradient', type: 'shape', shape: 'rect', fill: '#000000',
+      fillGradient: {
+        type: 'linear',
+        stops: [{ offset: 0, color: '{{gradientStart}}' }, { offset: 1, color: '{{gradientEnd}}' }],
+      },
+      x: 20, y: 20, width: 20, height: 20, rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    const rows = [
+      { name: 'One', image: 'https://cdn.example.test/a.png', accent: '#110000', gradientStart: '#001100', gradientEnd: '#000011' },
+      { name: 'Two', image: 'https://cdn.example.test/b.png', accent: '#220000', gradientStart: '#002200', gradientEnd: '#000022' },
+      { name: 'Three', image: 'https://cdn.example.test/c.png', accent: '#330000', gradientStart: '#003300', gradientEnd: '#000033' },
+    ];
+    await service.enqueueBulkCreate('org-1', 'user-1', { doc, rows, nameBase: 'Campaign' });
+    await service.processBulkCreate('job-1');
+
+    expect(designService.createDesign).toHaveBeenCalledTimes(3);
+    designService.createDesign.mock.calls.forEach(([, , data], index) => {
+      expect(data.doc.outputs[0].children[0].text).toBe(`Hello ${rows[index].name}`);
+      expect(data.doc.outputs[0].children[2]).toMatchObject({
+        type: 'shape', fill: rows[index].accent, slot: { name: 'accent', kind: 'color' },
+      });
+      expect(data.doc.outputs[0].children[3].fillGradient.stops).toEqual([
+        { offset: 0, color: rows[index].gradientStart },
+        { offset: 1, color: rows[index].gradientEnd },
+      ]);
+    });
+  });
+
   it('resolves an existing uploads replacement and bundles its real image bytes and dimensions', async () => {
     const { service, designService, fileService, readFile, aiMediaService, writes } = makeService();
     const localFile = {

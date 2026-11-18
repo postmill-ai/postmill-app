@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { BulkCreateDialog } from './bulk-create-dialog';
 import { createDesignerStore } from './designer.store';
 
@@ -247,6 +247,128 @@ describe('BulkCreateDialog', () => {
 
     expect(screen.getByRole('button', { name: 'Create 2 variations' })).toHaveProperty('disabled', true);
     expect(screen.getByText('Add an editable text, image, or color element before creating variations.')).toBeTruthy();
+  });
+
+  it('uses new assignments for preview and creation before React re-renders', async () => {
+    const store = makeStore();
+    store.getState().addElement({
+      id: 'accent', type: 'shape', shape: 'rect', fill: '#0000ff',
+      x: 0, y: 120, width: 100, height: 100, rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addElement({
+      id: 'hero', name: 'Hero', type: 'image', src: 'https://cdn.example.test/original.png',
+      x: 120, y: 120, width: 100, height: 100, rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addElement({
+      id: 'gradient', name: 'Brand gradient', type: 'shape', shape: 'rect', fill: '#0000ff',
+      fillGradient: {
+        type: 'linear', stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }],
+      },
+      x: 240, y: 120, width: 100, height: 100, rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().setSelectedIds([]);
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/media/designs/bulk-generate') return response({ images: ['data:image/png;base64,preview'] });
+      if (url === '/media/designs/bulk-create') return response({ id: 'job-current', status: 'pending' });
+      return response({ id: 'job-current', status: 'completed', results: [] });
+    });
+    render(<BulkCreateDialog store={store} onClose={vi.fn()} />);
+    await upload('headline,accent_color,hero_image,gradient_start,gradient_end\nAda,#ff0000,https://cdn.example.test/ada.png,#110000,#000011\nGrace,#00ff00,https://cdn.example.test/grace.png,#220000,#000022');
+    const assign = (name: string, value: string) => fireEvent.change(
+      screen.getByRole('combobox', { name }), { target: { value } },
+    );
+    assign('Column for Instagram Post / Page 1: accent (color)', 'accent_color');
+    assign('Column for Instagram Post / Page 1: Hero (image)', 'hero_image');
+    assign('Column for Instagram Post / Page 1: Brand gradient gradient stop 1 (color)', 'gradient_start');
+    assign('Column for Instagram Post / Page 1: Brand gradient gradient stop 2 (color)', 'gradient_end');
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Apply variable assignments' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Preview first row' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Create 2 variations' }));
+    });
+
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/media/designs/bulk-create')).toHaveLength(1));
+    const previewCall = fetchMock.mock.calls.find(([url]) => url === '/media/designs/bulk-generate')!;
+    const preview = JSON.parse(previewCall[1].body);
+    const firstRow = {
+      headline: 'Ada', accent_color: '#ff0000', hero_image: 'https://cdn.example.test/ada.png',
+      gradient_start: '#110000', gradient_end: '#000011',
+    };
+    const secondRow = {
+      headline: 'Grace', accent_color: '#00ff00', hero_image: 'https://cdn.example.test/grace.png',
+      gradient_start: '#220000', gradient_end: '#000022',
+    };
+    expect(preview.rows).toEqual([firstRow]);
+    expect(preview.doc.outputs[0].children[1].slot).toEqual({ name: 'accent_color', kind: 'color' });
+    expect(preview.doc.outputs[0].children[2].slot).toEqual({ name: 'hero_image', kind: 'image' });
+    expect(preview.doc.outputs[0].children[3].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['{{gradient_start}}', '{{gradient_end}}']);
+    const batchCall = fetchMock.mock.calls.find(([url]) => url === '/media/designs/bulk-create')!;
+    const batch = JSON.parse(batchCall[1].body);
+    expect(batch.rows).toEqual([firstRow, secondRow]);
+    expect(batch.doc.outputs[0].children[1].slot).toEqual({ name: 'accent_color', kind: 'color' });
+    expect(batch.doc.outputs[0].children[2].slot).toEqual({ name: 'hero_image', kind: 'image' });
+    expect(batch.doc.outputs[0].children[3].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['{{gradient_start}}', '{{gradient_end}}']);
+  });
+
+  it('blocks duplicate preview requests while rendering', async () => {
+    let releaseFirst!: (value: unknown) => void;
+    let first = true;
+    fetchMock.mockImplementation((url: string) => {
+      if (url !== '/media/designs/bulk-generate') return Promise.resolve(response({}));
+      if (!first) return Promise.resolve(response({ images: ['data:image/png;base64,second'] }));
+      first = false;
+      return new Promise((resolve) => { releaseFirst = resolve; });
+    });
+    render(<BulkCreateDialog store={makeStore()} onClose={vi.fn()} />);
+    await upload('headline\nAda\nGrace');
+    const preview = screen.getByRole('button', { name: 'Preview first row' });
+
+    act(() => {
+      fireEvent.click(preview);
+      fireEvent.click(preview);
+    });
+
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/media/designs/bulk-generate')).toHaveLength(1);
+    await act(async () => { releaseFirst(response({ images: ['data:image/png;base64,first'] })); });
+    expect(await screen.findByRole('img', { name: 'First Bulk Create row' })).toBeTruthy();
+    await waitFor(() => expect(preview).toHaveProperty('disabled', false));
+
+    fireEvent.click(preview);
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/media/designs/bulk-generate')).toHaveLength(2));
+  });
+
+  it('blocks duplicate batch requests while starting and unlocks after an error', async () => {
+    let releaseFirst!: (value: unknown) => void;
+    let first = true;
+    fetchMock.mockImplementation((url: string) => {
+      if (url === '/media/designs/bulk-create') {
+        if (first) {
+          first = false;
+          return new Promise((resolve) => { releaseFirst = resolve; });
+        }
+        return Promise.resolve(response({ id: 'job-retry', status: 'pending' }));
+      }
+      return Promise.resolve(response({ id: 'job-retry', status: 'completed', results: [] }));
+    });
+    render(<BulkCreateDialog store={makeStore()} onClose={vi.fn()} />);
+    await upload('headline\nAda\nGrace');
+    const create = screen.getByRole('button', { name: 'Create 2 variations' });
+
+    act(() => {
+      fireEvent.click(create);
+      fireEvent.click(create);
+    });
+
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/media/designs/bulk-create')).toHaveLength(1);
+    await act(async () => { releaseFirst(response({ message: 'Try again' }, false)); });
+    expect((await screen.findByRole('alert')).textContent).toContain('Try again');
+    await waitFor(() => expect(create).toHaveProperty('disabled', false));
+
+    fireEvent.click(create);
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/media/designs/bulk-create')).toHaveLength(2));
   });
 
   it('shows the server row, spreadsheet schema path and remote image error', async () => {

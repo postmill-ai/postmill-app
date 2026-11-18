@@ -7,6 +7,7 @@ import {
   applyBulkAssignments,
   collectBulkAssignmentTargets,
   collectBulkVariables,
+  type BulkAssignmentTarget,
   type BulkVariable,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/bulk-variables';
 import { parseSpreadsheetText } from '@postmill-ai/frontend/components/shared/csv';
@@ -40,6 +41,19 @@ interface BulkJob {
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
+const mapBulkRows = (
+  sourceRows: Row[],
+  doc: ReturnType<Store['getState']>['doc'],
+  mapping: Record<string, string>,
+) => {
+  const variables = collectBulkVariables(doc);
+  if (!variables.length) return sourceRows;
+  return sourceRows.map((source) => Object.fromEntries(variables.map((variable) => [
+    variable.name,
+    source[mapping[variable.name]] ?? '',
+  ])));
+};
+
 export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) => {
   const t = useT();
   const fetch = useFetch();
@@ -48,11 +62,14 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
   const [headers, setHeaders] = useState<string[]>([]);
   const [sourceRows, setSourceRows] = useState<Row[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const mappingRef = useRef(mapping);
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
+  const previewLoadingRef = useRef(false);
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
+  const startingRef = useRef(false);
   const [job, setJob] = useState<BulkJob | null>(null);
   const doc = store((state) => state.doc);
   const designName = store((state) => state.designName);
@@ -60,14 +77,26 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
   const variables = useMemo(() => collectBulkVariables(doc), [doc]);
   const assignmentTargets = useMemo(() => collectBulkAssignmentTargets(doc), [doc]);
 
-  const rows = useMemo(() => sourceRows.map((source) => {
-    if (!variables.length) return source;
-    const mapped: Row = {};
-    for (const variable of variables) {
-      mapped[variable.name] = source[mapping[variable.name]] ?? '';
-    }
-    return mapped;
-  }), [sourceRows, mapping, variables]);
+  const rows = useMemo(
+    () => mapBulkRows(sourceRows, doc, mapping),
+    [sourceRows, doc, mapping],
+  );
+  const updateMapping = (next: Record<string, string>) => {
+    mappingRef.current = next;
+    setMapping(next);
+  };
+  const currentSubmission = () => {
+    const current = store.getState();
+    return {
+      doc: current.doc,
+      designName: current.designName,
+      rows: mapBulkRows(sourceRows, current.doc, mappingRef.current),
+    };
+  };
+  const assignmentTargetLabel = (target: BulkAssignmentTarget) =>
+    target.gradientStopIndex === undefined
+      ? target.label
+      : `${target.label} ${t('designer_bulk_gradient_stop', 'gradient stop {{number}}', { number: target.gradientStopIndex + 1 })}`;
 
   useEffect(() => () => {
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -96,7 +125,7 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
     if (!file) return;
     setHeaders([]);
     setSourceRows([]);
-    setMapping({});
+    updateMapping({});
     setAssignments({});
     if (file.size > MAX_FILE_BYTES) {
       setError(t('designer_bulk_file_too_large', 'The spreadsheet is too large (maximum 5 MB).'));
@@ -133,7 +162,7 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
         );
         setHeaders(nextHeaders);
         setSourceRows(nextRows);
-        setMapping(Object.fromEntries(variables.map((variable) => [
+        updateMapping(Object.fromEntries(variables.map((variable) => [
           variable.name,
           nextHeaders.includes(variable.name)
             ? variable.name
@@ -153,18 +182,22 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
   };
 
   const applyAssignments = () => {
+    if (startingRef.current) return;
     setError('');
     setPreviewUrl('');
     try {
-      const nextDoc = applyBulkAssignments(doc, assignments);
+      const currentDoc = store.getState().doc;
+      const nextDoc = applyBulkAssignments(currentDoc, assignments);
       const nextVariables = collectBulkVariables(nextDoc);
-      setMapping((current) => Object.fromEntries(nextVariables.map((variable) => [
+      const currentMapping = mappingRef.current;
+      const nextMapping = Object.fromEntries(nextVariables.map((variable) => [
         variable.name,
-        current[variable.name] || (headers.includes(variable.name) ? variable.name : headers[0]),
-      ])));
+        currentMapping[variable.name] || (headers.includes(variable.name) ? variable.name : headers[0]),
+      ]));
       if (!store.getState().setDoc(nextDoc)) {
         throw new Error(t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.'));
       }
+      updateMapping(nextMapping);
       store.getState().pushHistory('Assign Bulk Create variables');
     } catch (cause) {
       setError((cause as Error).message);
@@ -172,13 +205,15 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
   };
 
   const generatePreview = async () => {
-    if (!rows.length) return;
+    if (!sourceRows.length || previewLoadingRef.current || startingRef.current) return;
+    previewLoadingRef.current = true;
     setPreviewLoading(true);
     setError('');
     try {
+      const current = currentSubmission();
       const response = await fetch('/media/designs/bulk-generate', {
         method: 'POST',
-        body: JSON.stringify({ doc, rows: [rows[0]] }),
+        body: JSON.stringify({ doc: current.doc, rows: [current.rows[0]] }),
       });
       if (!response.ok) throw new Error(t('designer_bulk_preview_failed', 'Could not render the preview.'));
       const data = await response.json() as { images?: string[] };
@@ -187,21 +222,24 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
+      previewLoadingRef.current = false;
       setPreviewLoading(false);
     }
   };
 
   const start = async () => {
-    if (!rows.length || starting) return;
+    if (!sourceRows.length || startingRef.current) return;
+    startingRef.current = true;
     setStarting(true);
     setError('');
     try {
+      const current = currentSubmission();
       const response = await fetch('/media/designs/bulk-create', {
         method: 'POST',
         body: JSON.stringify({
-          doc,
-          rows,
-          nameBase: designName || 'Bulk variation',
+          doc: current.doc,
+          rows: current.rows,
+          nameBase: current.designName || 'Bulk variation',
         }),
       });
       if (!response.ok) {
@@ -214,6 +252,7 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
+      startingRef.current = false;
       setStarting(false);
     }
   };
@@ -292,7 +331,10 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
                   <select
                     aria-label={t('designer_bulk_mapping_for', 'Column for {{name}}', { name: variable.name })}
                     value={mapping[variable.name] || ''}
-                    onChange={(event) => setMapping((current) => ({ ...current, [variable.name]: event.target.value }))}
+                    onChange={(event) => updateMapping({
+                      ...mappingRef.current,
+                      [variable.name]: event.target.value,
+                    })}
                     className="h-[30px] px-2 rounded-md bg-newBgColor border border-studioBorder text-textColor"
                   >
                     {headers.map((header) => <option key={header} value={header}>{header}</option>)}
@@ -313,11 +355,11 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
                 {assignmentTargets.map((target) => (
                   <label key={target.id} className="grid grid-cols-[1fr_1.4fr] items-center gap-3 text-[12px]">
                     <span className="text-textColor/70">
-                      {target.label} · {t(`designer_bulk_kind_${target.kind}`, target.kind)}
+                      {assignmentTargetLabel(target)} · {t(`designer_bulk_kind_${target.kind}`, target.kind)}
                     </span>
                     <select
                       aria-label={t('designer_bulk_assignment_for', 'Column for {{name}} ({{kind}})', {
-                        name: target.label,
+                        name: assignmentTargetLabel(target),
                         kind: target.kind,
                       })}
                       value={assignments[target.id] || ''}
@@ -335,7 +377,7 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
               </div>
               <Button
                 secondary
-                disabled={!Object.values(assignments).some((column) => !!column)}
+                disabled={!Object.values(assignments).some((column) => !!column) || starting}
                 onClick={applyAssignments}
               >
                 {t('designer_bulk_apply_assignments', 'Apply variable assignments')}
@@ -349,7 +391,7 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
           )}
           {!!rows.length && (
             <div className="flex gap-2">
-              <Button secondary loading={previewLoading} disabled={!variables.length} onClick={generatePreview}>
+              <Button secondary loading={previewLoading} disabled={!variables.length || starting} onClick={generatePreview}>
                 {t('designer_bulk_preview', 'Preview first row')}
               </Button>
               <Button loading={starting} disabled={!variables.length} onClick={start}>

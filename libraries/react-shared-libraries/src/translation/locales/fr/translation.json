@@ -4867,6 +4867,7 @@
   "designer_action_bulk_create_bulk_create": "Création en masse…",
   "designer_bulk_assign_elements": "Attribuer les éléments du design",
   "designer_bulk_assign_description": "Choisissez une colonne de la feuille de calcul pour chaque texte, image ou couleur à faire varier. Une colonne peut alimenter plusieurs éléments.",
+  "designer_bulk_gradient_stop": "point de dégradé {{number}}",
   "designer_bulk_assignment_for": "Colonne pour {{name}} ({{kind}})",
   "designer_bulk_not_assigned": "Ne pas attribuer",
   "designer_bulk_apply_assignments": "Appliquer les attributions de variables",

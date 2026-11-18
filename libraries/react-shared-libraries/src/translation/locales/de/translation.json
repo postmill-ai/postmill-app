@@ -4867,6 +4867,7 @@
   "designer_action_bulk_create_bulk_create": "Massenerstellung…",
   "designer_bulk_assign_elements": "Designelemente zuweisen",
   "designer_bulk_assign_description": "Wähle für jeden Text, jedes Bild und jede Farbe eine Tabellenspalte aus. Eine Spalte kann mehrere Elemente versorgen.",
+  "designer_bulk_gradient_stop": "Farbstopp {{number}}",
   "designer_bulk_assignment_for": "Spalte für {{name}} ({{kind}})",
   "designer_bulk_not_assigned": "Nicht zuweisen",
   "designer_bulk_apply_assignments": "Variablenzuweisungen anwenden",

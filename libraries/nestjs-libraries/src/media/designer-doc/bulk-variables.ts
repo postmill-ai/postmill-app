@@ -82,6 +82,9 @@ const substituteElement = (
   if (typeof element.fill === 'string') {
     element.fill = substituteBulkValue(element.fill, row);
   }
+  for (const stop of element.fillGradient?.stops || []) {
+    stop.color = substituteBulkValue(stop.color, row);
+  }
 
   const slotName = element.slot?.name;
   if (slotName && row[slotName] !== undefined) {
@@ -156,6 +159,7 @@ export const collectBulkVariables = (doc: DesignerDoc): BulkVariable[] => {
     for (const run of element.richText || []) collectText(run.text);
     collectText(element.src, 'image');
     collectText(element.fill, 'color');
+    for (const stop of element.fillGradient?.stops || []) collectText(stop.color, 'color');
   };
   for (const output of doc.outputs || []) {
     if (!('children' in output) || doc.mode !== 'image') continue;
@@ -178,6 +182,7 @@ export interface BulkAssignmentTarget {
   pageNumber: number;
   symbolId?: string;
   kind: BulkVariableKind;
+  gradientStopIndex?: number;
   label: string;
 }
 
@@ -199,14 +204,15 @@ export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTa
   ) => {
     for (const element of children || []) {
       const elementLabel = element.name || element.text?.trim().slice(0, 40) || element.id;
-      const add = (kind: BulkVariableKind) => {
+      const add = (kind: BulkVariableKind, gradientStopIndex?: number) => {
         targets.push({
-          id: `${location.idPrefix}:${element.id}:${kind}`,
+          id: `${location.idPrefix}:${element.id}:${kind}${gradientStopIndex === undefined ? '' : `:${gradientStopIndex}`}`,
           elementId: element.id,
           outputIndex: location.outputIndex,
           pageNumber: location.pageNumber,
           symbolId: location.symbolId,
           kind,
+          gradientStopIndex,
           label: `${location.labelPrefix}: ${elementLabel}`,
         });
       };
@@ -223,13 +229,21 @@ export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTa
       ) {
         add('image');
       }
-      if (
-        ['text', 'shape', 'path', 'icon'].includes(element.type) &&
-        element.slot?.kind !== 'color' &&
-        (element.type === 'text' || !element.slot) &&
-        !hasMustache(element.fill)
-      ) {
-        add('color');
+      if (['text', 'shape', 'path', 'icon'].includes(element.type)) {
+        if (element.fillGradient?.stops.length) {
+          // A legacy color slot is hidden by the gradient, so its stops remain assignable.
+          if (element.type === 'text' || !element.slot || element.slot.kind === 'color') {
+            element.fillGradient.stops.forEach((stop, index) => {
+              if (!hasMustache(stop.color)) add('color', index);
+            });
+          }
+        } else if (
+          element.slot?.kind !== 'color' &&
+          (element.type === 'text' || !element.slot) &&
+          !hasMustache(element.fill)
+        ) {
+          add('color');
+        }
       }
     }
   };
@@ -299,7 +313,10 @@ export const applyBulkAssignments = (
         : output?.pages?.[target.pageNumber - 1]?.children;
     const element = children?.find((item) => item.id === target.elementId);
     if (!element) continue;
-    if (target.kind === 'color' && element.type === 'text') {
+    if (target.kind === 'color' && target.gradientStopIndex !== undefined) {
+      const stop = element.fillGradient?.stops[target.gradientStopIndex];
+      if (stop) stop.color = `{{${column}}}`;
+    } else if (target.kind === 'color' && element.type === 'text') {
       element.fill = `{{${column}}}`;
     } else {
       element.slot = { name: column, kind: target.kind };

@@ -211,6 +211,118 @@ describe('Bulk Create variables', () => {
     ]);
   });
 
+  it('assigns independent gradient stops across pages and symbols without changing solid fills', () => {
+    const template = makeDoc();
+    const gradient = (id: string) => element(id, {
+      type: 'shape', shape: 'rect', fill: '#123456',
+      fillGradient: {
+        type: 'linear', angle: 45,
+        stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }],
+      },
+    });
+    template.outputs[0].children = [gradient('gradient')];
+    template.outputs[0].pages[0].children = [gradient('page-gradient')];
+    template.symbols[0].children = [gradient('symbol-gradient')];
+    const targets = collectBulkAssignmentTargets(template);
+    expect(targets).toHaveLength(6);
+    expect(targets.map((target) => target.gradientStopIndex)).toEqual([0, 1, 0, 1, 0, 1]);
+
+    const result = applyBulkAssignments(template, Object.fromEntries(targets.map((target) => [
+      target.id,
+      target.gradientStopIndex === 0 ? 'gradient_start' : 'gradient_end',
+    ])));
+
+    const documents = [
+      result.outputs[0].children[0],
+      result.outputs[0].pages[0].children[0],
+      result.symbols[0].children[0],
+    ];
+    for (const item of documents) {
+      expect(item.fill).toBe('#123456');
+      expect(item.slot).toBeUndefined();
+      expect(item.fillGradient).toMatchObject({
+        type: 'linear', angle: 45,
+        stops: [{ offset: 0, color: '{{gradient_start}}' }, { offset: 1, color: '{{gradient_end}}' }],
+      });
+    }
+    expect(collectBulkVariables(result)).toEqual([
+      { name: 'gradient_end', kind: 'color' },
+      { name: 'gradient_start', kind: 'color' },
+    ]);
+    const row = applyBulkRow(result, { gradient_start: '#aa0000', gradient_end: '#00aa00' });
+    expect(row.outputs[0].children[0].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['#aa0000', '#00aa00']);
+    expect(row.outputs[0].pages[0].children[0].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['#aa0000', '#00aa00']);
+    expect(row.symbols[0].children[0].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['#aa0000', '#00aa00']);
+    expect(template.outputs[0].children[0].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['#ff0000', '#0000ff']);
+  });
+
+  it('keeps gradient stops assignable on templates saved with a legacy color slot', () => {
+    const template = makeDoc();
+    template.outputs[0].children = [element('legacy-gradient', {
+      type: 'shape', shape: 'rect', fill: '#000000', slot: { name: 'g1', kind: 'color' },
+      fillGradient: {
+        type: 'linear',
+        stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }],
+      },
+    })];
+    const targets = collectBulkAssignmentTargets(template)
+      .filter((target) => target.elementId === 'legacy-gradient');
+    expect(targets.map((target) => target.gradientStopIndex)).toEqual([0, 1]);
+
+    const assigned = applyBulkAssignments(template, {
+      [targets[0].id]: 'start', [targets[1].id]: 'end',
+    });
+    expect(assigned.outputs[0].children[0].slot).toEqual({ name: 'g1', kind: 'color' });
+    const row = applyBulkRow(assigned, { g1: '#111111', start: '#aa0000', end: '#00aa00' });
+    expect(row.outputs[0].children[0].fill).toBe('#111111');
+    expect(row.outputs[0].children[0].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['#aa0000', '#00aa00']);
+  });
+
+  it('does not offer gradient color targets on an incompatible image slot', () => {
+    const template = makeDoc();
+    template.outputs[0].children = [element('image-slotted-gradient', {
+      type: 'shape', shape: 'rect', slot: { name: 'image', kind: 'image' },
+      fillGradient: {
+        type: 'linear',
+        stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }],
+      },
+    })];
+
+    expect(collectBulkAssignmentTargets(template).filter((target) => target.elementId === 'image-slotted-gradient'))
+      .toEqual([]);
+  });
+
+  it('does not offer a solid element with an existing color slot again', () => {
+    const template = makeDoc();
+    template.outputs[0].children = [element('slotted-solid', {
+      type: 'shape', shape: 'rect', fill: '#000000', slot: { name: 'accent', kind: 'color' },
+    })];
+
+    expect(collectBulkAssignmentTargets(template).filter((target) => target.elementId === 'slotted-solid'))
+      .toEqual([]);
+  });
+
+  it('does not offer a gradient stop that already holds a mustache', () => {
+    const template = makeDoc();
+    template.outputs[0].children = [element('partially-assigned-gradient', {
+      type: 'shape', shape: 'rect',
+      fillGradient: {
+        type: 'linear',
+        stops: [{ offset: 0, color: '{{start}}' }, { offset: 1, color: '#0000ff' }],
+      },
+    })];
+    const targets = collectBulkAssignmentTargets(template)
+      .filter((target) => target.elementId === 'partially-assigned-gradient');
+
+    expect(targets).toHaveLength(1);
+    expect(targets[0].gradientStopIndex).toBe(1);
+  });
+
   it('preserves existing variables and rejects a column already used by an incompatible kind', () => {
     const template = makeDoc();
     template.outputs[0].children.push(element('plain-text', { text: 'Headline' }));
