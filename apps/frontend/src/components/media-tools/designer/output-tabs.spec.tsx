@@ -3,6 +3,7 @@ import React from 'react';
 import { act, render, screen, fireEvent } from '@testing-library/react';
 import { computePopoverLeft, computePopoverPlacement, OutputTabs } from './output-tabs';
 import { createDesignerStore } from './designer.store';
+import { MAX_OUTPUTS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 
 const toasterShow = vi.hoisted(() => vi.fn());
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
@@ -197,8 +198,16 @@ describe('OutputTabs format workflows', () => {
     const freeze = screen.getAllByRole('button', { name: 'Freeze format' })[0];
     fireEvent.click(freeze);
     expect(store.getState().doc.outputs[0].frozen).toBe(true);
-    expect(screen.getByText('Frozen').className).toContain('bg-designerAccent/15');
+    expect(screen.getByText('Frozen').className).toContain('bg-studioBorder/20');
     expect(screen.getByRole('button', { name: 'Add format' })).toHaveProperty('disabled', false);
+
+    act(() => store.getState().setCurrentOutput(1));
+    const frozenTile = document.querySelector('[data-output-index="0"] > button')!;
+    const selectedTile = document.querySelector('[data-output-index="1"] > button')!;
+    expect(frozenTile.className).not.toContain('border-designerAccent');
+    expect(frozenTile.className).not.toContain('bg-designerAccent/10');
+    expect(selectedTile.className).toContain('border-designerAccent');
+    expect(selectedTile.className).toContain('bg-designerAccent/10');
 
     fireEvent.click(screen.getByRole('button', { name: 'Unfreeze format' }));
     expect(store.getState().doc.outputs[0].frozen).toBeUndefined();
@@ -327,5 +336,37 @@ describe('OutputTabs duplication actions', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Resize or change format' }));
 
     expect(screen.getByText('Resize Format')).toBeTruthy();
+  });
+});
+
+
+describe('OutputTabs menu guards', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('disables Resize and Remove for a frozen format', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setOutputFrozen(0, true);
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Instagram Post actions' }));
+    expect(screen.getByRole('menuitem', { name: 'Resize or change format' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('menuitem', { name: 'Remove format' })).toHaveProperty('disabled', true);
+  });
+
+  it('disables both duplication choices at the format limit', () => {
+    const store = createDesignerStore();
+    const source = store.getState().doc.outputs[0];
+    store.getState().replaceDocTrusted({
+      ...store.getState().doc,
+      outputs: Array.from({ length: MAX_OUTPUTS }, (_, index) => ({ ...source, id: `output-${index}` })),
+    });
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Instagram Post actions' })[0]);
+    expect(screen.getByRole('menuitem', { name: 'Duplicate linked' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('menuitem', { name: 'Duplicate independently' })).toHaveProperty('disabled', true);
   });
 });

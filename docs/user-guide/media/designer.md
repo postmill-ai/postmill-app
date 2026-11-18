@@ -56,7 +56,8 @@ saved.
   such as Minus Front cutting through the middle of a shape) becomes one compound path with that hole.
   If the shapes cannot be combined, a warning appears and the design is left unchanged.
 - **Pages and Carousel** — image outputs can hold multiple pages (up to 20 per output). Open **View
-  → Pages / Carousel** and choose a view; adding or duplicating a page opens the strip automatically.
+  → Pages / Carousel** and choose a view; adding or duplicating a page opens the strip automatically
+  without making it always visible on later single-page designs.
   Right-click a page or use its three-dot menu to duplicate, rename, or delete it. Both use the same
   slides, with selection, reorder, duplicate, delete, and one Undo per operation. **Carousel** shows a
   side-by-side filmstrip with an
@@ -183,7 +184,7 @@ Choose a Brand Kit in **Brand Mode** to prioritize its colors, fonts, logos, ref
 preferred formats, and associated templates, with optional enforcement against that kit. Associated
 templates are prioritized before pagination, including libraries larger than one page. **General
 Mode — No brand rules** leaves the design unrestricted and disables enforcement without changing any
-layers. The default brand is labelled **Starter brand profile**. General Mode's custom
+layers. The organization-selected default brand is labelled **Default**. General Mode's custom
 font list includes all kits, with duplicate family/weight/style faces resolved in the same default-first
 order in the editor and exported files. The choice is saved in the design and survives versions,
 exports, and `.pdesign` reimports. Saving a logo to the Brand Kit and adding it to the canvas are

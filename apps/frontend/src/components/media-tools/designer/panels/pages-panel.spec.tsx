@@ -65,12 +65,15 @@ describe('PagesPanel Carousel', () => {
     expect(store.getState().doc.outputs[0].pages).toBeUndefined();
   });
 
-  it('keeps page duplication disabled while the format is frozen', () => {
+  it('disables every page mutation while the format is frozen', () => {
     const store = createDesignerStore();
+    store.getState().addPage();
     store.getState().setOutputFrozen(0, true);
     render(<PagesPanel store={store} visible />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Page 1 actions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Page 2 actions' }));
     expect(screen.getByRole('menuitem', { name: 'Duplicate page' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('menuitem', { name: 'Rename page' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('menuitem', { name: 'Delete page' })).toHaveProperty('disabled', true);
   });
 });

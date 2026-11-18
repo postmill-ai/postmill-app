@@ -423,7 +423,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
               onContextMenu={(event) => formatMenu.openAt(event, i)}
               aria-current={i === currentOutput}
               className={`relative rounded-md border-2 flex flex-col items-center justify-center text-center px-2 gap-0.5 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
-                i === currentOutput || output.frozen
+                i === currentOutput
                   ? 'border-designerAccent bg-designerAccent/10'
                   : 'border-studioBorder hover:border-studioBorder'
               }`}
@@ -451,22 +451,24 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
               <span className="text-[11px] font-medium text-textColor leading-tight truncate max-w-[80px]">
                 {output.name}
               </span>
-              <span className="text-[9px] text-textColor/50 leading-none">
-                {output.width}×{output.height}
-              </span>
-              {output.frozen && (
-                <span className="absolute bottom-1 left-1 rounded-sm bg-designerAccent/15 text-btnPrimaryAccent text-[8px] font-medium leading-none px-1 py-0.5">
-                  {t('designer_frozen_label', 'Frozen')}
+              <div className="flex max-w-[92px] flex-wrap items-center justify-center gap-0.5 leading-none">
+                <span className="text-[9px] text-textColor/50">
+                  {output.width}×{output.height}
                 </span>
-              )}
-              {mode === 'image' && pageCount(output) > 1 && (
-                <span
-                  className="absolute bottom-1 right-1 rounded-sm bg-designerAccent/15 text-btnPrimaryAccent text-[8px] leading-none px-1 py-0.5"
-                  title={t('designer_pages_count', '{{count}} pages', { count: pageCount(output) })}
-                >
-                  {pageCount(output)}p
-                </span>
-              )}
+                {output.frozen && (
+                  <span className="rounded-sm bg-studioBorder/20 px-1 py-0.5 text-[8px] font-medium text-textColor/60">
+                    {t('designer_frozen_label', 'Frozen')}
+                  </span>
+                )}
+                {mode === 'image' && pageCount(output) > 1 && (
+                  <span
+                    className="rounded-sm bg-designerAccent/15 px-1 py-0.5 text-[8px] text-btnPrimaryAccent"
+                    title={t('designer_pages_count', '{{count}} pages', { count: pageCount(output) })}
+                  >
+                    {pageCount(output)}p
+                  </span>
+                )}
+              </div>
             </button>
             <button
               onClick={(e) => {

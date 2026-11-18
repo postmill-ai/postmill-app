@@ -310,7 +310,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
           {brands.filter((brand) => brand.enabled).map((brand) => (
             <option key={brand.id} value={brand.id}>
               {brand.isDefault
-                ? t('designer_default_brand', '{{name}} — Starter brand profile', { name: brand.name })
+                ? t('designer_default_brand', '{{name}} — Default', { name: brand.name })
                 : brand.name}
             </option>
           ))}

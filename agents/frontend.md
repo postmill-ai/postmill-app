@@ -234,7 +234,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   IS page 1; `output.pages[0..n]` are the extra pages (`{ id, name?, background?, children[] }` — no
   size: pages inherit their output's canvas, capped at `MAX_PAGES_PER_OUTPUT`). This is one document
   model, not a separate carousel doc type. **View → Pages / Carousel** opens the side-by-side strip;
-  adding or duplicating page content also reopens it after a saved hide override. Every page has
+  adding or duplicating page content also reopens it after a saved hide override by clearing that
+  override, not by saving an always-on preference. Every page has
   right-click and always-visible three-dot actions. Carousel can insert after any slide and delete
   slide 1 by promoting the next slide (`allowFirst`), while ordinary Pages keeps the base-slot
   deletion restriction. Selection/reorder/duplicate/delete/insert each commit one Undo. Page

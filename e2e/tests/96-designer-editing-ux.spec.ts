@@ -324,7 +324,7 @@ test('shape insertion stays on an independent format through save, reload, and e
     expect(doc.outputs[0].contentLinkGroup).not.toBe(doc.outputs[1].contentLinkGroup);
   };
   await openDesigner(page);
-  await page.getByRole('button', { name: 'Independent 400×400', exact: true }).click();
+  await page.getByRole('button', { name: /^Independent(?! actions)/ }).click();
 
   const stage = page.locator('.konva-stage').first();
   // The canvas menu opens only on the bare stage: right of the 20px ruler,
@@ -339,7 +339,7 @@ test('shape insertion stays on an independent format through save, reload, and e
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await expect(page.locator('.konva-stage').first()).toBeVisible();
-  await page.getByRole('button', { name: 'Independent 400×400', exact: true }).click();
+  await page.getByRole('button', { name: /^Independent(?! actions)/ }).click();
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Save to Files' }).click();
   await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
@@ -406,7 +406,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   // Shortcuts are canvas-focus-scoped, so the keys go to the canvas itself.
   const canvasRegion = page.getByRole('application', { name: 'Design canvas' });
   await canvasRegion.press('Control+c');
-  await page.getByRole('button', { name: 'Paste Target 400×400', exact: true }).click();
+  await page.getByRole('button', { name: /^Paste Target(?! actions)/ }).click();
 
   // Keyboard paste retains its offset behavior and remains one atomic edit.
   await canvasRegion.press('Control+v');
@@ -503,7 +503,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
-  await page.getByRole('button', { name: 'Paste Target 400×400', exact: true }).click();
+  await page.getByRole('button', { name: /^Paste Target(?! actions)/ }).click();
   expect((state.doc as any).outputs[1].children).toHaveLength(9);
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -591,7 +591,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
     return cloned;
   };
 
-  await page.getByRole('button', { name: 'Source 400×400 2p', exact: true }).click();
+  await page.getByRole('button', { name: /^Source(?! actions)/ }).click();
   await page.getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
   const stage = page.locator('.konva-stage').first();
@@ -647,7 +647,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX', { timeout: 60_000 });
-  await page.getByRole('button', { name: /Instagram Story/ }).click();
+  await page.getByRole('button', { name: /^Instagram Story(?! actions)/ }).click();
   assertClone(state.doc);
   const rendersBeforeExport = state.renderDocs.length;
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -1408,6 +1408,7 @@ test('page and format duplication reopen Pages and preserve exact linked content
   await page.getByRole('menuitem', { name: 'Duplicate linked', exact: true }).click();
   await expect.poll(() => state.doc.outputs.length).toBe(2);
   await expect(pagesStrip).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('designer-pages-bar-e2e-org'))).toBeNull();
   expect(state.doc.outputs[1]).toMatchObject({ width: 400, height: 400, name: 'Instagram Post 2' });
   expect(state.doc.outputs[1].children.map((child: any) => child.originId))
     .toEqual(state.doc.outputs[0].children.map((child: any) => child.originId));
@@ -1473,7 +1474,7 @@ test('brand explanations and custom-size controls fit a narrow mobile layout', a
   await page.setViewportSize({ width: 390, height: 844 });
   await installMocks(page);
   await page.route('**/brands', (route) => json(route, [{
-    id: 'default-brand', name: 'Default Brand', enabled: true, isDefault: true,
+    id: 'default-brand', name: 'Acme', enabled: true, isDefault: true,
     palette: [], fontFamilies: [], logoFileIds: [],
   }]));
   await openDesigner(page);
@@ -1484,7 +1485,7 @@ test('brand explanations and custom-size controls fit a narrow mobile layout', a
   await expect(brandSelect).toBeVisible();
   expect(await brandSelect.locator('option').allTextContents()).toEqual([
     'General Mode — No brand rules',
-    'Default Brand — Starter brand profile',
+    'Acme — Default',
   ]);
   await page.getByRole('region', { name: 'Brand', exact: true })
     .getByRole('button', { name: 'Collapse panel', exact: true }).click();
@@ -1498,4 +1499,65 @@ test('brand explanations and custom-size controls fit a narrow mobile layout', a
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(390);
   expect(await addCustom.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
+
+
+test('adding a page does not make Pages always visible on later single-page designs', async ({ page }) => {
+  const doc = structuredClone(initialDoc) as any;
+  doc.outputs[0].pages = [{
+    id: 'second-page', children: [structuredClone(doc.outputs[0].children[0])],
+  }];
+  const state = await installMocks(page, doc);
+  await openDesigner(page);
+  const pagesStrip = page.locator('div[aria-label="Pages"][aria-disabled]');
+  await expect(pagesStrip).toBeVisible();
+
+  await page.getByRole('button', { name: 'Add page', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].pages.length).toBe(2);
+  expect(await page.evaluate(() => localStorage.getItem('designer-pages-bar-e2e-org'))).toBeNull();
+
+  state.doc = structuredClone(initialDoc);
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await expect(pagesStrip).toHaveCount(0);
+});
+
+test('frozen and selected formats stay visually distinct without covering dimensions', async ({ page }) => {
+  const doc = structuredClone(initialDoc) as any;
+  doc.outputs[0].name = 'Selected';
+  doc.outputs.push({
+    ...structuredClone(doc.outputs[0]), id: 'frozen-output', name: 'Frozen copy',
+  });
+  await installMocks(page, doc);
+  await openDesigner(page);
+
+  await page.getAllByRole('button', { name: 'Freeze format', exact: true })[1].click();
+  const selected = page.locator('[data-output-index="0"] > button').first();
+  const frozen = page.locator('[data-output-index="1"] > button').first();
+  const selectedStyle = await selected.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { border: style.borderTopColor, background: style.backgroundColor };
+  });
+  const frozenStyle = await frozen.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { border: style.borderTopColor, background: style.backgroundColor };
+  });
+  expect(frozenStyle).not.toEqual(selectedStyle);
+
+  const frozenLabel = frozen.getByText('Frozen', { exact: true });
+  const dimensions = frozen.getByText('400×400', { exact: true });
+  await expect(frozenLabel).toBeVisible();
+  await expect(dimensions).toBeVisible();
+  const labelBox = await frozenLabel.boundingBox();
+  const dimensionsBox = await dimensions.boundingBox();
+  expect(labelBox).not.toBeNull();
+  expect(dimensionsBox).not.toBeNull();
+  const overlaps = !(
+    labelBox!.x + labelBox!.width <= dimensionsBox!.x ||
+    dimensionsBox!.x + dimensionsBox!.width <= labelBox!.x ||
+    labelBox!.y + labelBox!.height <= dimensionsBox!.y ||
+    dimensionsBox!.y + dimensionsBox!.height <= labelBox!.y
+  );
+  expect(overlaps).toBe(false);
 });

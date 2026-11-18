@@ -6,10 +6,10 @@ import { createDesignerStore } from '../designer.store';
 
 const brandKit = vi.hoisted(() => ({
   brands: [
-    { id: 'default', name: 'Default Brand', enabled: true, isDefault: true },
+    { id: 'default', name: 'Acme', enabled: true, isDefault: true },
     { id: 'other', name: 'Campaign', enabled: true, isDefault: false },
   ],
-  activeBrand: { id: 'default', name: 'Default Brand', enabled: true, isDefault: true },
+  activeBrand: { id: 'default', name: 'Acme', enabled: true, isDefault: true },
   customFonts: [],
   brandUnavailable: false,
   selectBrand: vi.fn(),
@@ -49,7 +49,7 @@ describe('BrandPanel mode descriptions', () => {
     render(<BrandPanel store={store} />);
 
     expect(screen.getByRole('option', { name: 'General Mode — No brand rules' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: 'Default Brand — Starter brand profile' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Acme — Default' })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Campaign' })).toBeTruthy();
     fireEvent.change(screen.getByRole('combobox', { name: 'Brand / General Mode' }), {
       target: { value: '' },

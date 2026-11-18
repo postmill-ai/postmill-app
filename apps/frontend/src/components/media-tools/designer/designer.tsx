@@ -471,11 +471,11 @@ const DesignerContent: FC<
     });
   }, [showPagesBar, user?.orgId]);
   const onPagesContentAdded = useCallback(() => {
-    setPagesBarOverride(true);
+    setPagesBarOverride(null);
     try {
-      localStorage.setItem(`designer-pages-bar-${user?.orgId}`, JSON.stringify(true));
+      localStorage.removeItem(`designer-pages-bar-${user?.orgId}`);
     } catch {
-      // The strip still opens for this session when storage is unavailable.
+      // The automatic content rule still opens the strip when storage is unavailable.
     }
   }, [user?.orgId]);
   const selectedIds = store((s) => s.selectedIds);

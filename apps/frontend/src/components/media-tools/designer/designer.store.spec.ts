@@ -3682,3 +3682,129 @@ describe('exact page and output duplication', () => {
     expect(store.getState().doc).toBe(fullDoc);
   });
 });
+
+
+describe('duplication review regressions', () => {
+  it.each(['image', 'video'] as const)('inserts a %s duplicate immediately after a non-last source', (mode) => {
+    const store = createDesignerStore();
+    if (mode === 'video') store.getState().setMode('video');
+    const original = store.getState().doc.outputs[0];
+    const outputs = [
+      { ...original, id: 'before', name: 'Before' },
+      { ...original, id: 'source', name: 'Source' },
+      { ...original, id: 'after', name: 'After' },
+    ];
+    store.getState().replaceDocTrusted({ ...store.getState().doc, outputs });
+
+    expect(store.getState().duplicateOutput(1)).toBe(true);
+
+    expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
+      'Before', 'Source', 'Source 2', 'After',
+    ]);
+    expect(store.getState().currentOutput).toBe(2);
+  });
+
+  it('backfills and shares origins when duplicating a legacy static source', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'legacy-title', type: 'text', text: 'Original', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().updateElement('legacy-title', { originId: undefined });
+
+    expect(store.getState().duplicateOutput(0)).toBe(true);
+
+    const outputs = store.getState().doc.outputs;
+    const sourceTitle = outputs[0].children[0];
+    const copyTitle = outputs[1].children[0];
+    expect(sourceTitle.originId).toBeTruthy();
+    expect(copyTitle.originId).toBe(sourceTitle.originId);
+    store.getState().setCurrentOutput(0);
+    store.getState().updateElement('legacy-title', { text: 'Shared edit' });
+    expect(store.getState().doc.outputs[1].children[0].text).toBe('Shared edit');
+  });
+
+  it('backfills and shares origins when duplicating a legacy video source', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'text');
+    const track = store.getState().doc.outputs[0].tracks.find((item) => item.type === 'text')!;
+    store.getState().addClip(0, track.id, {
+      id: 'legacy-title', startMs: 0, endMs: 1000, text: 'Original',
+    } as never);
+    const withoutOrigins = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((output) => ({
+        ...output,
+        tracks: output.tracks.map((item) => ({
+          ...item,
+          clips: item.clips.map((clip) => ({ ...clip, originId: undefined })),
+        })),
+      })),
+    };
+    store.getState().replaceDocTrusted(withoutOrigins);
+
+    expect(store.getState().duplicateOutput(0)).toBe(true);
+
+    const outputs = store.getState().doc.outputs;
+    const sourceTrack = outputs[0].tracks.find((item) => item.type === 'text')!;
+    const copyTrack = outputs[1].tracks.find((item) => item.type === 'text')!;
+    expect(sourceTrack.clips[0].originId).toBeTruthy();
+    expect(copyTrack.clips[0].originId).toBe(sourceTrack.clips[0].originId);
+    store.getState().updateClip(1, copyTrack.id, copyTrack.clips[0].id, { text: 'Shared edit' });
+    expect(store.getState().doc.outputs[0].tracks.find((item) => item.type === 'text')!.clips[0].text)
+      .toBe('Shared edit');
+  });
+
+  it('stamps a duplicated legacy linked source and its eligible siblings with one link group', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'legacy-title', type: 'text', text: 'Original', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy sibling', width: 1200, height: 675 });
+    store.getState().replaceDocTrusted({
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((output) => ({ ...output, contentLinkGroup: undefined })),
+    });
+    store.getState().setCurrentOutput(0);
+
+    expect(store.getState().duplicateOutput(0)).toBe(true);
+
+    const outputs = store.getState().doc.outputs;
+    const linkGroup = outputs[0].contentLinkGroup;
+    expect(linkGroup).toBeTruthy();
+    expect(outputs.map((output) => output.contentLinkGroup)).toEqual([linkGroup, linkGroup, linkGroup]);
+  });
+
+  it('rejects frozen video origin backfill and creates an unfrozen independent copy', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const track = store.getState().doc.outputs[0].tracks[0];
+    store.getState().addClip(0, track.id, {
+      id: 'clip', startMs: 0, endMs: 1000, src: '/movie.mp4',
+    } as never);
+    const source = store.getState().doc.outputs[0];
+    store.getState().replaceDocTrusted({
+      ...store.getState().doc,
+      outputs: [{
+        ...source,
+        frozen: true,
+        tracks: source.tracks.map((item) => ({
+          ...item,
+          clips: item.clips.map((clip) => ({ ...clip, originId: undefined })),
+        })),
+      }],
+    });
+    store.getState().pushHistory('Frozen video fixture');
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+
+    expect(store.getState().duplicateOutput(0)).toBe(false);
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyBefore);
+    expect(store.getState().duplicateOutput(0, { linkContent: false })).toBe(true);
+    expect(store.getState().doc.outputs[0].frozen).toBe(true);
+    expect(store.getState().doc.outputs[1].frozen).toBeUndefined();
+  });
+});
