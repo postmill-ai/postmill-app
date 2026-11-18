@@ -334,7 +334,7 @@ test('shape insertion stays on an independent format through save, reload, and e
   const outputY = (stageBox.height - 400 * scale) / 2;
   await stage.click({
     button: 'right',
-    position: { x: outputX + 390 * scale, y: outputY + 390 * scale },
+    position: { x: outputX + 10 * scale, y: outputY + 390 * scale },
   });
   await page.getByRole('button', { name: 'Add Shape', exact: true }).click();
   const savesBeforeInsert = state.saveDocs.length;
