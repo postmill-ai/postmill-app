@@ -215,7 +215,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       : 0
   );
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetType: 'element' | 'canvas' | 'clip'; elementId?: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetType: 'element' | 'canvas' | 'clip'; elementId?: string; canvasPoint?: { x: number; y: number } } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [dragReplace, setDragReplace] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
@@ -2092,7 +2092,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         onContextMenu={(e) => {
           e.evt.preventDefault();
           if (e.target === e.target.getStage()) {
-            setContextMenu({ x: e.evt.clientX, y: e.evt.clientY, targetType: 'canvas' });
+            const point = stageRef.current?.getRelativePointerPosition();
+            setContextMenu({ x: e.evt.clientX, y: e.evt.clientY, targetType: 'canvas', canvasPoint: point });
           }
         }}
       >
@@ -2193,7 +2194,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             }
             onSelect={handleElementSelect}
             onContextMenu={(elementId, clientX, clientY) => {
-              setContextMenu({ x: clientX, y: clientY, targetType: 'element', elementId });
+              const point = stageRef.current?.getRelativePointerPosition();
+              setContextMenu({ x: clientX, y: clientY, targetType: 'element', elementId, canvasPoint: point });
             }}
             // Only the Move tool drags elements; every other tool needs the
             // press for itself. Space-pan also suspends dragging so a pan that
@@ -2775,6 +2777,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           y={contextMenu.y}
           targetType={contextMenu.targetType}
           elementId={contextMenu.elementId}
+          canvasPoint={contextMenu.canvasPoint}
           store={store}
           onClose={() => setContextMenu(null)}
           onAddImage={onAddImage}

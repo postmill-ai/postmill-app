@@ -359,6 +359,139 @@ test('shape insertion stays on an independent format through save, reload, and e
   expect(renderedShapes).not.toContainEqual(['independent-output', 0]);
 });
 
+test('cross-format Paste centers a complete group at the pointer through reload and export', async ({ page }) => {
+  const doc = {
+    version: 13,
+    mode: 'image',
+    outputs: [{
+      id: 'paste-source', formatId: 'custom', name: 'Paste Source', contentLinkGroup: 'paste-source-link',
+      width: 800, height: 600, background: '#ffffff',
+      children: [{
+        id: 'paste-group', type: 'group', name: 'Promo group', groupId: 'paste-move-source',
+        x: 0, y: 0, width: 0, height: 0, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }, {
+        id: 'paste-shape', originId: 'paste-shape-origin', parentId: 'paste-group', groupId: 'paste-move-source',
+        type: 'shape', shape: 'rect', fill: '#eeeeff', x: 80, y: 100, width: 400, height: 220,
+        rotation: 0, opacity: 1, locked: false, hidden: false,
+      }, {
+        id: 'paste-image', originId: 'paste-image-origin', parentId: 'paste-group', groupId: 'paste-move-source',
+        type: 'image', src: PNG_DATA_URL, x: 120, y: 140, width: 160, height: 100,
+        naturalWidth: 40, naturalHeight: 20, crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+        fitMode: 'contain', focalPoint: { x: 0.25, y: 0.75 }, rotation: 8,
+        opacity: 1, locked: false, hidden: false,
+      }, {
+        id: 'paste-text', originId: 'paste-text-origin', parentId: 'paste-group', groupId: 'paste-move-source',
+        type: 'text', text: 'Pointer pasted headline', fontSize: 48, x: 100, y: 350, width: 500, height: 70,
+        richText: [{ text: 'Pointer pasted headline', fontWeight: 700, fontSize: 48 }],
+        rotation: 12, opacity: 1, locked: false, hidden: false,
+      }],
+    }, {
+      id: 'paste-target', formatId: 'custom', name: 'Paste Target', contentLinkGroup: 'paste-target-link',
+      width: 400, height: 400, background: '#ffffff',
+      children: [{
+        id: 'target-sentinel', type: 'text', text: 'Target', fontSize: 16,
+        x: 160, y: 190, width: 80, height: 20, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }],
+    }],
+  };
+  const state = await installMocks(page, doc);
+  const persist = async () => {
+    const before = state.saveDocs.length;
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => state.saveDocs.length).toBeGreaterThan(before);
+  };
+  await openDesigner(page);
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+  await page.locator('[data-element-id="paste-group"]').click();
+  await page.keyboard.press('Control+c');
+  await page.getByRole('button', { name: /Paste Target/ }).click();
+
+  // Keyboard paste retains its offset behavior and remains one atomic edit.
+  await page.keyboard.press('Control+v');
+  await persist();
+  let savedTarget = (state.saveDocs.at(-1) as any).outputs[1];
+  expect(savedTarget.children).toHaveLength(5);
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await persist();
+  expect((state.saveDocs.at(-1) as any).outputs[1].children).toHaveLength(1);
+
+  const stage = page.locator('.konva-stage').first();
+  await page.getByRole('button', { name: 'Fit to screen', exact: true }).click();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('Canvas has no bounding box');
+  const fitZoom = Math.min(box.width / 400, box.height / 400) * 0.85;
+  const outputX = (box.width - 400 * fitZoom) / 2;
+  const outputY = (box.height - 400 * fitZoom) / 2;
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  const zoom = fitZoom * 1.25;
+  // Pan by a known screen-space delta; Konva must still report document coordinates.
+  await page.keyboard.down('Space');
+  await page.mouse.move(box.x + 30, box.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 45, box.y + 40, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.up('Space');
+  await stage.click({
+    button: 'right',
+    position: { x: outputX + 15 + 200 * zoom, y: outputY + 10 + 200 * zoom },
+  });
+  await page.getByRole('button', { name: 'Paste', exact: true }).click();
+  await persist();
+
+  savedTarget = (state.saveDocs.at(-1) as any).outputs[1];
+  expect(savedTarget.children).toHaveLength(5);
+  const pasted = savedTarget.children.filter((child: any) => child.id !== 'target-sentinel');
+  const pastedGroup = pasted.find((child: any) => child.type === 'group');
+  const sourceIds = new Set((doc.outputs[0].children as any[]).map((child) => child.id));
+  const sourceOrigins = new Set((doc.outputs[0].children as any[]).map((child) => child.originId));
+  expect(pasted.map((child: any) => child.type)).toEqual(['group', 'shape', 'image', 'text']);
+  for (const child of pasted) {
+    expect(sourceIds.has(child.id)).toBe(false);
+    expect(sourceOrigins.has(child.originId)).toBe(false);
+    if (child.parentId) expect(child.parentId).toBe(pastedGroup.id);
+  }
+  expect(new Set(pasted.filter((child: any) => child.groupId).map((child: any) => child.groupId)).size).toBe(1);
+  expect(pastedGroup.groupId).not.toBe('paste-move-source');
+  const leaves = pasted.filter((child: any) => child.type !== 'group');
+  const left = Math.min(...leaves.map((child: any) => child.x));
+  const right = Math.max(...leaves.map((child: any) => child.x + child.width));
+  const top = Math.min(...leaves.map((child: any) => child.y));
+  const bottom = Math.max(...leaves.map((child: any) => child.y + child.height));
+  expect((left + right) / 2).toBeCloseTo(200, 0);
+  expect((top + bottom) / 2).toBeCloseTo(200, 0);
+  expect(pasted.find((child: any) => child.type === 'image')).toMatchObject({
+    crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+    focalPoint: { x: 0.25, y: 0.75 }, rotation: 8,
+  });
+  expect(pasted.find((child: any) => child.type === 'text').fontSize).toBeLessThan(48);
+  expect((state.saveDocs.at(-1) as any).outputs[0].children).toEqual(doc.outputs[0].children);
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await persist();
+  expect((state.saveDocs.at(-1) as any).outputs[1].children).toHaveLength(1);
+  await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)', exact: true }).click();
+  await persist();
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await page.getByRole('button', { name: /Paste Target/ }).click();
+  expect((state.doc as any).outputs[1].children).toHaveLength(5);
+
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save to Files' }).click();
+  await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
+  await page.getByRole('button', { name: /Next: Export \d+ files?/ }).click();
+  await page.getByRole('button', { name: /^Export \d+ files?$/ }).click();
+  await expect(page.getByRole('link', { name: /\.png$/ }).first()).toBeVisible();
+  const targetRender = (state.renderDocs as any[]).find((rendered) =>
+    rendered.outputs.some((output: any) => output.id === 'paste-target')
+  );
+  const renderedTarget = targetRender.outputs.find((output: any) => output.id === 'paste-target');
+  expect(renderedTarget.children.map((child: any) => child.type)).toEqual(['text', 'group', 'shape', 'image', 'text']);
+  expect(renderedTarget.children.some((child: any) => child.text === 'Pointer pasted headline')).toBe(true);
+  const renderedSource = targetRender.outputs.find((output: any) => output.id === 'paste-source');
+  expect(renderedSource.children).toEqual(doc.outputs[0].children);
+});
+
 test('grouped mixed media survives Undo, independent clone, reload, and export', async ({ page }) => {
   const doc = {
     version: 13,

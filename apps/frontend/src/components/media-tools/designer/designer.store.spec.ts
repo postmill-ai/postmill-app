@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { createDesignerStore, migrateDoc, MAX_TRACKS, type DesignerDoc, type DesignerStore } from './designer.store';
+import { createDesignerStore, migrateDoc, MAX_TRACKS, type DesignerDoc, type DesignerOutput, type DesignerStore } from './designer.store';
 import { subscribeToBaseDocument } from './collaboration-doc';
 
 /**
@@ -3247,6 +3247,119 @@ describe('freeze review regressions', () => {
   });
 });
 
+
+describe('static clipboard paste placement', () => {
+  const makeGroupedClipboard = () => {
+    const store = createDesignerStore(1080, 1080);
+    store.getState().addElement({
+      id: 'copy', name: 'Headline', type: 'text', text: 'Big headline', fontSize: 64,
+      richText: [{ text: 'Big headline', fontWeight: 700, fontSize: 64 }],
+      x: 100, y: 120, width: 600, height: 100, rotation: 12,
+      opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addElement({
+      id: 'photo', name: 'Photo', type: 'image', src: 'https://cdn.example.test/photo.png',
+      x: 140, y: 260, width: 360, height: 240, naturalWidth: 720, naturalHeight: 480,
+      crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 }, fitMode: 'contain',
+      focalPoint: { x: 0.25, y: 0.75 }, rotation: 8,
+      opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addElement({
+      id: 'badge', name: 'Badge', type: 'shape', shape: 'rect', fill: '#112233',
+      x: 120, y: 540, width: 240, height: 80, rotation: 0,
+      opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().groupSelection(['copy', 'photo', 'badge']);
+    const source = store.getState().doc.outputs[0] as DesignerOutput;
+    const group = source.children.find((child) => child.type === 'group')!;
+    store.getState().setSelectedIds([group.id]);
+    store.getState().copySelection();
+    return { store, source, group };
+  };
+
+  it('keeps same-format keyboard paste at +20/+20 with the complete remapped group', () => {
+    const { store, source, group } = makeGroupedClipboard();
+    const historyBefore = store.getState().history.length;
+
+    store.getState().paste();
+
+    const children = (store.getState().doc.outputs[0] as DesignerOutput).children;
+    const pasted = children.filter((child) => !source.children.some((original) => original.id === child.id));
+    expect(pasted.map((child) => child.type)).toEqual(source.children.map((child) => child.type));
+    const sourceIds = new Set(source.children.map((child) => child.id));
+    const sourceOrigins = new Set(source.children.map((child) => child.originId));
+    const pastedGroup = pasted.find((child) => child.type === 'group')!;
+    expect(pastedGroup.id).not.toBe(group.id);
+    for (const child of pasted) {
+      expect(sourceIds.has(child.id)).toBe(false);
+      expect(sourceOrigins.has(child.originId)).toBe(false);
+      const original = source.children[pasted.indexOf(child)];
+      expect(child.x).toBe(original.x + 20);
+      expect(child.y).toBe(original.y + 20);
+      if (child.parentId) expect(child.parentId).toBe(pastedGroup.id);
+    }
+    expect(new Set(pasted.filter((child) => child.groupId).map((child) => child.groupId)).size).toBe(1);
+    expect(pasted.find((child) => child.groupId)?.groupId).not.toBe(source.children.find((child) => child.groupId)?.groupId);
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].children).toHaveLength(source.children.length);
+  });
+
+  it('reflows a complete group and centers its bounds at the cross-format pointer', () => {
+    const { store, source } = makeGroupedClipboard();
+    const target = {
+      ...source, id: 'target', name: 'Wide target', formatId: 'custom',
+      width: 600, height: 400, children: [], pages: [], contentLinkGroup: 'target-link',
+    } as DesignerOutput;
+    store.getState().replaceDocTrusted({ ...store.getState().doc, outputs: [source, target] });
+    store.getState().pushHistory('Fixture outputs');
+    store.getState().setCurrentOutput(1);
+    const sourceJson = JSON.stringify(source);
+    const clipboardJson = JSON.stringify(store.getState().clipboard);
+    const historyBefore = store.getState().history.length;
+
+    store.getState().paste({ x: 300, y: 200 } as never);
+
+    const pasted = (store.getState().doc.outputs[1] as DesignerOutput).children;
+    expect(pasted.map((child) => child.type)).toEqual(source.children.map((child) => child.type));
+    const leaves = pasted.filter((child) => child.type !== 'group');
+    const left = Math.min(...leaves.map((child) => child.x));
+    const right = Math.max(...leaves.map((child) => child.x + child.width));
+    const top = Math.min(...leaves.map((child) => child.y));
+    const bottom = Math.max(...leaves.map((child) => child.y + child.height));
+    expect((left + right) / 2).toBeCloseTo(300, 5);
+    expect((top + bottom) / 2).toBeCloseTo(200, 5);
+    expect(left).toBeGreaterThanOrEqual(0);
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(right).toBeLessThanOrEqual(600);
+    expect(bottom).toBeLessThanOrEqual(400);
+    expect(pasted.find((child) => child.id === 'copy')).toBeUndefined();
+
+    const text = pasted.find((child) => child.type === 'text')!;
+    const sourceText = source.children.find((child) => child.type === 'text')!;
+    expect(text.fontSize).toBeLessThan(sourceText.fontSize!);
+    expect(text.richText).toEqual(sourceText.richText);
+    expect(text.rotation).toBe(12);
+    const image = pasted.find((child) => child.type === 'image')!;
+    const sourceImage = source.children.find((child) => child.type === 'image')!;
+    expect(image.crop).toEqual(sourceImage.crop);
+    expect(image.focalPoint).toEqual(sourceImage.focalPoint);
+    expect(image.rotation).toBe(8);
+    expect(image.width! / image.height!).toBeCloseTo(sourceImage.width / sourceImage.height, 1);
+
+    const pastedGroup = pasted.find((child) => child.type === 'group')!;
+    const sourceGroup = source.children.find((child) => child.type === 'group')!;
+    expect(pastedGroup.id).not.toBe(sourceGroup.id);
+    for (const child of leaves) expect(child.parentId).toBe(pastedGroup.id);
+    expect(new Set(leaves.map((child) => child.groupId)).size).toBe(1);
+    expect(leaves[0].groupId).not.toBe(source.children.find((child) => child.groupId)?.groupId);
+    expect(JSON.stringify(source)).toBe(sourceJson);
+    expect(JSON.stringify(store.getState().clipboard)).toBe(clipboardJson);
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+    store.getState().undo();
+    expect(store.getState().doc.outputs[1].children).toHaveLength(0);
+  });
+});
 
 describe('frozen output read-only clipboard actions', () => {
   it('copies clips and keyframes while still rejecting paste mutations', () => {

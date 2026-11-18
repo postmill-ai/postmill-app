@@ -41,6 +41,11 @@ saved.
   still switch to a frozen output, export it, and copy clips or keyframes for use elsewhere; pasting
   into the frozen output remains blocked. Select the snowflake again to unfreeze; this is separate
   from locking an individual layer or timeline track.
+- **Copy and paste** — copying a group includes its contents. Paste into another format scales the
+  selection with the target's text and layout rules while preserving crops, focal points, rotation,
+  and relative ordering. Right-click **Paste** centers the selection at the clicked canvas point,
+  including when zoomed or panned; keyboard **Ctrl/Cmd+V** keeps the usual offset. Either paste is one
+  Undo step.
 - **Pathfinder** — select two or more unlocked shapes, paths, or icons to Unite, Minus Front,
   Intersect, Exclude, Divide, or Outline them in selection order. The whole operation is one undo
   step. Disjoint regions are preserved as separate paths, and a region enclosed by another (a hole,

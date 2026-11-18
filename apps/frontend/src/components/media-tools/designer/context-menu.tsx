@@ -16,6 +16,7 @@ interface ContextMenuProps {
   y: number;
   targetType: 'element' | 'canvas' | 'clip';
   elementId?: string;
+  canvasPoint?: { x: number; y: number };
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
   onClose: () => void;
   onAddImage?: () => void;
@@ -29,7 +30,7 @@ interface MenuItem {
   children?: { label: string; action: () => void }[];
 }
 
-export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elementId, store, onClose, onAddImage }) => {
+export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elementId, canvasPoint, store, onClose, onAddImage }) => {
   const t = useT();
   const toaster = useToaster();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -140,7 +141,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
           const elementItems: MenuItem[] = [
           { label: t('designer_action_cut_cut', 'Cut'), action: () => { ensureSelected(); s.cutSelection(); } },
           { label: t('copy', 'Copy'), action: () => { ensureSelected(); s.copySelection(); } },
-          { label: t('designer_action_paste_paste', 'Paste'), action: () => s.paste() },
+          { label: t('designer_action_paste_paste', 'Paste'), action: () => s.paste(canvasPoint) },
           { label: t('designer_action_duplicate_duplicate', 'Duplicate'), action: () => s.duplicateElement(el.id) },
           { label: '-', action: null },
           { label: t('delete', 'Delete'), action: () => s.removeElement(el.id) },
@@ -187,7 +188,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
           return elementItems;
         })()
       : [
-          { label: t('designer_action_paste_paste', 'Paste'), action: () => s.paste() },
+          { label: t('designer_action_paste_paste', 'Paste'), action: () => s.paste(canvasPoint) },
           { label: '-', action: null },
           { label: t('designer_action_select_all_select_all', 'Select All'), action: () => s.setSelectedIds(imageOut?.children.map((c) => c.id) ?? []) },
           { label: '-', action: null },

@@ -162,6 +162,7 @@ export interface DesignerState {
   /** Retries gave up after repeated failures; the next real edit re-arms them. */
   saveRetryPaused: boolean;
   clipboard: DesignerElement[];
+  clipboardSource: { width: number; height: number; typeBudget?: number } | null;
   editFormatOnly: boolean;
   brandEnforcement: boolean;
   brandAdminOverride: boolean;
@@ -297,7 +298,7 @@ export interface DesignerActions {
   // (texture sliders) write silently per tick and pushHistory once on release,
   // the same discipline `updateElementsSilent` gives element sliders.
   setOutputBackground: (bg: DesignerBackground, commit?: boolean) => void;
-  copySelection: () => void; cutSelection: () => void; paste: () => void;
+  copySelection: () => void; cutSelection: () => void; paste: (at?: { x: number; y: number }) => void;
   groupSelection: (ids?: string[]) => void; ungroupSelection: (ids?: string[]) => void;
   /** Turn the selection into a reusable symbol, replacing it with an instance. */
   createSymbol: (name?: string) => void;
@@ -651,6 +652,7 @@ export const createDesignerStore = (
       generateRequest: null,
       maskTargetId: null,
       clipboard: [],
+      clipboardSource: null,
       assistantSuggestions: {},
       setDoc: (doc) => {
         get().clearElementPreview();
@@ -1068,33 +1070,86 @@ export const createDesignerStore = (
       copySelection: () => {
         if (isVideoMode()) return;
         const { selectedIds } = get();
-        mutate({ clipboard: JSON.parse(JSON.stringify(activePageChildren().filter((el) => selectedIds.includes(el.id)))) });
+        const children = activePageChildren();
+        const picked = new Set(selectedIds);
+        for (const el of children) {
+          if (el.type === 'group' && picked.has(el.id)) {
+            descendantIds(children, el.id).forEach((id) => picked.add(id));
+          }
+        }
+        const source = activeImage();
+        mutate({
+          clipboard: JSON.parse(JSON.stringify(children.filter((el) => picked.has(el.id)))),
+          clipboardSource: { width: source.width, height: source.height, typeBudget: source.typeBudget },
+        });
       },
 
       cutSelection: () => {
         if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { selectedIds } = get();
-        const picked = activePageChildren().filter((el) => selectedIds.includes(el.id));
+        const children = activePageChildren();
+        const pickedIds = new Set(selectedIds);
+        for (const el of children) {
+          if (el.type === 'group' && pickedIds.has(el.id)) {
+            descendantIds(children, el.id).forEach((id) => pickedIds.add(id));
+          }
+        }
+        const picked = children.filter((el) => pickedIds.has(el.id));
         if (!picked.length) return;
+        const source = activeImage();
         mutate({
           clipboard: JSON.parse(JSON.stringify(picked)),
-          doc: { ...get().doc, outputs: withActiveChildren(activePageChildren().filter((el) => !selectedIds.includes(el.id))) },
+          clipboardSource: { width: source.width, height: source.height, typeBudget: source.typeBudget },
+          doc: { ...get().doc, outputs: withActiveChildren(children.filter((el) => !pickedIds.has(el.id))) },
           selectedIds: [], isDirty: true,
         });
         get().pushHistory();
-        selectedIds.forEach(disposeElementBuffers);
+        picked.forEach((el) => disposeElementBuffers(el.id));
       },
 
-      paste: () => {
+      paste: (at) => {
         if (isVideoMode() || isOutputFrozen(activeImage())) return;
-        const { clipboard } = get();
+        const { clipboard, clipboardSource } = get();
         if (!clipboard.length) return;
-        const groupRemap: Record<string, string> = {};
-        const pasted = clipboard.map((el) => {
-          let groupId = el.groupId;
-          if (groupId) { groupRemap[groupId] = groupRemap[groupId] || genId(); groupId = groupRemap[groupId]; }
-          return { ...el, id: genId(), originId: genId(), x: el.x + 20, y: el.y + 20, groupId };
+        const target = activeImage();
+        const source = clipboardSource || target;
+        const sameSize = source.width === target.width && source.height === target.height;
+        const groupRemap = new Map<string, string>();
+        let pasted: DesignerElement[];
+        if (sameSize) {
+          const idMap = new Map(clipboard.map((el) => [el.id, genId()]));
+          pasted = clipboard.map((sourceElement) => {
+            const el = JSON.parse(JSON.stringify(sourceElement)) as DesignerElement;
+            return {
+              ...el,
+              id: idMap.get(sourceElement.id)!,
+              originId: genId(),
+              parentId: el.parentId ? idMap.get(el.parentId) ?? el.parentId : el.parentId,
+            };
+          });
+        } else {
+          pasted = seedChildren(clipboard, source, target, () => genId());
+        }
+        pasted = pasted.map((el) => {
+          if (!el.groupId) return el;
+          if (!groupRemap.has(el.groupId)) groupRemap.set(el.groupId, genId());
+          return { ...el, groupId: groupRemap.get(el.groupId)! };
         });
+
+        const leaves = pasted.filter((el) => el.type !== 'group');
+        let dx = 20;
+        let dy = 20;
+        if (at && leaves.length) {
+          const left = Math.min(...leaves.map((el) => el.x));
+          const right = Math.max(...leaves.map((el) => el.x + el.width));
+          const top = Math.min(...leaves.map((el) => el.y));
+          const bottom = Math.max(...leaves.map((el) => el.y + el.height));
+          dx = at.x - (left + right) / 2;
+          dy = at.y - (top + bottom) / 2;
+          if (right - left <= target.width) dx = Math.min(Math.max(dx, -left), target.width - right);
+          if (bottom - top <= target.height) dy = Math.min(Math.max(dy, -top), target.height - bottom);
+        }
+        pasted = pasted.map((el) => ({ ...el, x: el.x + dx, y: el.y + dy }));
         mutate({ doc: { ...get().doc, outputs: withActiveChildren([...activePageChildren(), ...pasted]) }, selectedIds: pasted.map((el) => el.id), isDirty: true });
         get().pushHistory();
       },
