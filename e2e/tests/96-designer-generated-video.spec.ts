@@ -1378,22 +1378,31 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await strokeHex.fill('#123456');
     await strokeHex.press('Enter');
     const width = stroke.getByRole('spinbutton', { name: 'Width', exact: true });
+    const deselectCanvas = async () => {
+      const empty = await canvasDocumentPoint(page, 400, 300, 350, 250);
+      await page.mouse.click(empty.x, empty.y);
+      await expect(stroke).toHaveCount(0);
+    };
     await width.fill('6');
     await width.press('Tab');
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
       stroke: '#123456', strokeWidth: 6,
     });
+    await deselectCanvas();
     await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 202, 60))
       .toEqual([18, 52, 86, 255]);
 
+    await clipOnTrack(page, 'Shape').click();
     await width.fill('0');
     await width.press('Tab');
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
       stroke: '#123456', strokeWidth: 0,
     });
+    await deselectCanvas();
     await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 202, 60))[0])
       .toBeGreaterThan(240);
 
+    await clipOnTrack(page, 'Shape').click();
     await width.fill('6');
     await width.press('Tab');
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
