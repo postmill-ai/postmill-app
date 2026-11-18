@@ -156,6 +156,26 @@ describe('CommonInspector group geometry', () => {
     expect(children(store)).toEqual(original);
   });
 
+  it('rounds centred groups with odd bounds to integer coordinates', () => {
+    const store = createDesignerStore(1000, 1000);
+    store.getState().addElement({
+      ...element('shape'), id: 'a', x: 0, y: 0, width: 101, height: 101,
+    });
+    store.getState().addElement({
+      ...element('shape'), id: 'b', x: 201, y: 201, width: 100, height: 100,
+    });
+    store.getState().groupSelection(['a', 'b']);
+    const group = children(store).find((el) => el.type === 'group')!;
+    render(<CommonInspector selected={[group]} ids={[group.id]} store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Align horizontal center' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Align vertical center' }));
+    const centred = children(store);
+    expect(centred.find((el) => el.id === 'a')).toMatchObject({ x: 350, y: 350 });
+    expect(centred.find((el) => el.id === 'b')).toMatchObject({ x: 551, y: 551 });
+    expect(centred.find((el) => el.id === group.id)).toMatchObject({ x: 0, y: 0, width: 0, height: 0 });
+  });
+
   it('derives bounds from the active carousel page rather than page 1', () => {
     const store = createDesignerStore();
     store.getState().addElement({ ...element('shape'), x: 0, y: 0, width: 400, height: 400 });

@@ -207,8 +207,14 @@ export const computeGroupBoxes = (
     const groupIds = new Set(
       members.filter((el) => el.groupId).map((el) => el.groupId as string)
     );
+    const mixed = groupIds.size > 1;
+    const folderAnchor =
+      mixed && sized.every((el) => el.anchor && el.anchor === sized[0].anchor)
+        ? sized[0].anchor
+        : null;
     for (const groupId of groupIds) {
-      if (consensus.get(groupId)) continue;
+      if (mixed) consensus.set(groupId, folderAnchor ?? null);
+      else if (consensus.get(groupId)) continue;
       const existing = boxes.get(groupId);
       const left = existing ? Math.min(existing.x, x) : x;
       const top = existing ? Math.min(existing.y, y) : y;

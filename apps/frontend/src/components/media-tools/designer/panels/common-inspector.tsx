@@ -84,7 +84,7 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
         ? 0
         : pos === 'right'
           ? canvasW - derivedBounds.width
-          : (canvasW - derivedBounds.width) / 2;
+          : Math.round((canvasW - derivedBounds.width) / 2);
       setGeometry({ x });
       pushHistory();
       return;
@@ -117,7 +117,7 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
         ? 0
         : pos === 'bottom'
           ? canvasH - derivedBounds.height
-          : (canvasH - derivedBounds.height) / 2;
+          : Math.round((canvasH - derivedBounds.height) / 2);
       setGeometry({ y });
       pushHistory();
       return;

@@ -508,6 +508,79 @@ describe('smartReflow grouped pairs', () => {
     }
   });
 
+  const nestedFolderChildren = (
+    anchors: Partial<Record<'headline' | 'photo' | 'cta', DesignerElement['anchor']>> = {}
+  ): DesignerElement[] => [
+    {
+      id: 'outer', type: 'group', x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    },
+    {
+      id: 'inner', type: 'group', parentId: 'outer', groupId: 'outer-move',
+      x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    },
+    {
+      ...label, id: 'folder-headline', parentId: 'outer', groupId: 'outer-move',
+      x: 200, y: 100, width: 400, height: 80, anchor: anchors.headline,
+    },
+    {
+      ...bar, id: 'folder-photo', type: 'image', parentId: 'inner', groupId: 'inner-move',
+      x: 600, y: 250, width: 240, height: 180, anchor: anchors.photo,
+    },
+    {
+      ...bar, id: 'folder-cta', parentId: 'inner', groupId: 'inner-move',
+      x: 200, y: 800, width: 280, height: 80, anchor: anchors.cta,
+    },
+  ];
+  const nestedFolderFrame = { x: 200, y: 100, width: 640, height: 780 };
+
+  it('gives every move-unit in an unanchored nested folder the same frame', () => {
+    const boxes = computeGroupBoxes(nestedFolderChildren(), squareSource);
+    expect(boxes.get('outer-move')).toEqual(nestedFolderFrame);
+    expect(boxes.get('inner-move')).toEqual(nestedFolderFrame);
+  });
+
+  it('uses a folder-wide unanimous anchor for seeded nested formats', () => {
+    const boxes = computeGroupBoxes(nestedFolderChildren({
+      headline: 'center', photo: 'center', cta: 'center',
+    }), squareSource);
+    expect(boxes.get('outer-move')).toEqual({ ...nestedFolderFrame, anchor: 'center' });
+    expect(boxes.get('inner-move')).toEqual({ ...nestedFolderFrame, anchor: 'center' });
+  });
+
+  it('uses the shared nested frame without an anchor when folder leaves disagree', () => {
+    const boxes = computeGroupBoxes(nestedFolderChildren({
+      headline: 'top-center', photo: 'center-right', cta: 'bottom-left',
+    }), squareSource);
+    expect(boxes.get('outer-move')).toEqual(nestedFolderFrame);
+    expect(boxes.get('inner-move')).toEqual(nestedFolderFrame);
+  });
+
+  it('keeps the single-unit anchor rule inside a mixed-content folder', () => {
+    const container: DesignerElement = {
+      id: 'badge-folder', type: 'group', groupId: 'badge', x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    };
+    const chip = {
+      ...bar, id: 'single-chip', parentId: 'badge-folder', groupId: 'badge', anchor: 'top-right' as const,
+      x: 880, y: 40, width: 160, height: 60,
+    };
+    const badgeLabel = {
+      ...label, id: 'single-label', parentId: 'badge-folder', groupId: 'badge', anchor: 'top-right' as const,
+      x: 900, y: 50, width: 120, height: 40,
+    };
+    const loose = {
+      ...bar, id: 'single-loose', parentId: 'badge-folder', groupId: undefined,
+      x: 100, y: 500, width: 200, height: 200,
+    };
+    const boxes = computeGroupBoxes([container, chip, badgeLabel, loose], squareSource);
+
+    expect(boxes.get('badge')).toEqual({
+      x: 880, y: 40, width: 160, height: 60, anchor: 'top-right',
+    });
+  });
+
   it('re-derives the group anchor even when a member carries its own anchor', () => {
     const boxes = computeGroupBoxes([bar, label]);
     const anchoredBar = { ...bar, anchor: 'top-left' as const };

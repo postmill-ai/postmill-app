@@ -210,8 +210,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   the Transformer binds those leaves rather than the container, and Inspector group geometry/alignment
   edits become per-member patches. Reflow walks `parentId` links (never leaf element ids, which may
   still be blank in a headless batch) to the top-level folder, skips containers and ≥95% full-bleed
-  leaves, and gives every nested leaf that one frame while preserving unanimous explicit anchors.
-  Add Format clones the flat list in z-order and remaps every
+  leaves, and gives every nested leaf that one frame. A folder with several move-units judges
+  explicit-anchor unanimity across every sized leaf in the folder; a single-unit folder keeps its
+  own unit's anchor rule. Add Format clones the flat list in z-order and remaps every
   `parentId` through the old→new element-id map on page 1 and every later page; linked copies retain
   their intended origins and independent copies never share source origins.
 - **Blend controls share the existing compositors.** Static single/multi-selections use the Common
