@@ -79,6 +79,16 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
   const isMulti = selected.length > 1;
 
   const alignH = (pos: 'left' | 'center' | 'right') => {
+    if (isSingleGroup && derivedBounds) {
+      const x = pos === 'left'
+        ? 0
+        : pos === 'right'
+          ? canvasW - derivedBounds.width
+          : (canvasW - derivedBounds.width) / 2;
+      setGeometry({ x });
+      pushHistory();
+      return;
+    }
     if (isMulti) {
       const minX = Math.min(...selected.map((s) => s.x));
       const maxX = Math.max(...selected.map((s) => s.x + s.width));
@@ -102,6 +112,16 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
   };
 
   const alignV = (pos: 'top' | 'middle' | 'bottom') => {
+    if (isSingleGroup && derivedBounds) {
+      const y = pos === 'top'
+        ? 0
+        : pos === 'bottom'
+          ? canvasH - derivedBounds.height
+          : (canvasH - derivedBounds.height) / 2;
+      setGeometry({ y });
+      pushHistory();
+      return;
+    }
     if (isMulti) {
       const minY = Math.min(...selected.map((s) => s.y));
       const maxY = Math.max(...selected.map((s) => s.y + s.height));

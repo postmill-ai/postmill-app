@@ -125,6 +125,37 @@ describe('CommonInspector group geometry', () => {
     act(() => store.getState().undo());
     expect(children(store)).toEqual(before);
   });
+  it('aligns group members to the canvas with one Undo per click', () => {
+    const store = createDesignerStore(1000, 1000);
+    store.getState().addElement({
+      ...element('shape'), id: 'a', x: 100, y: 100, width: 100, height: 100,
+    });
+    store.getState().addElement({
+      ...element('shape'), id: 'b', x: 300, y: 200, width: 200, height: 100,
+    });
+    store.getState().groupSelection(['a', 'b']);
+    const original = children(store);
+    const group = original.find((el) => el.type === 'group')!;
+    render(<CommonInspector selected={[group]} ids={[group.id]} store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Align horizontal center' }));
+    const centered = children(store);
+    expect(centered.find((el) => el.id === 'a')).toMatchObject({ x: 300, y: 100 });
+    expect(centered.find((el) => el.id === 'b')).toMatchObject({ x: 500, y: 200 });
+    expect(centered.find((el) => el.id === group.id)).toMatchObject({ x: 0, y: 0, width: 0, height: 0 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Align bottom' }));
+    const bottom = children(store);
+    expect(bottom.find((el) => el.id === 'a')).toMatchObject({ x: 300, y: 800 });
+    expect(bottom.find((el) => el.id === 'b')).toMatchObject({ x: 500, y: 900 });
+    expect(bottom.find((el) => el.id === group.id)).toMatchObject({ x: 0, y: 0, width: 0, height: 0 });
+
+    act(() => store.getState().undo());
+    expect(children(store)).toEqual(centered);
+    act(() => store.getState().undo());
+    expect(children(store)).toEqual(original);
+  });
+
   it('derives bounds from the active carousel page rather than page 1', () => {
     const store = createDesignerStore();
     store.getState().addElement({ ...element('shape'), x: 0, y: 0, width: 400, height: 400 });

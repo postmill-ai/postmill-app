@@ -1259,12 +1259,12 @@ export const createDesignerStore = (
         );
         next.splice(Math.max(0, firstIndex), 0, groupEl);
 
-        const accepted = mutate({
+        mutate({
           doc: { ...get().doc, outputs: withActiveChildren(next) },
           isDirty: true,
           selectedIds: [groupEl.id],
         });
-        if (accepted) get().pushHistory();
+        get().pushHistory();
       },
 
       /** Dissolve the selected groups, promoting members to the group's level. */

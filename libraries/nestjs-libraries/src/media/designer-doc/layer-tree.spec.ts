@@ -6,7 +6,6 @@ import {
   descendantIds,
   groupBounds,
   groupGeometryPatches,
-  selectionBounds,
   selectionLeafIds,
   isEffectivelyHidden,
   isEffectivelyLocked,
@@ -142,10 +141,10 @@ describe('selection geometry', () => {
 
   it('uses unique leaf ids and derived bounds for nested selections', () => {
     expect(selectionLeafIds(children, ['outer', 'a'])).toEqual(['a', 'b']);
-    expect(selectionBounds(children, ['outer', 'a'])).toEqual({
+    expect(groupBounds(children, 'outer')).toEqual({
       x: 10, y: 10, width: 50, height: 50,
     });
-    expect(selectionBounds(children, ['missing'])).toBeNull();
+    expect(selectionLeafIds(children, ['missing'])).toEqual([]);
   });
 
   it('moves and scales members without patching the container or their links', () => {

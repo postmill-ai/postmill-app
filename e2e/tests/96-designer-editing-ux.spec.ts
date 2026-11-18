@@ -432,12 +432,11 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
   const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
   const outputX = (box.width - 400 * scale) / 2;
   const outputY = (box.height - 400 * scale) / 2;
-  await page.mouse.move(box.x + outputX - 8, box.y + outputY - 8);
+  await page.mouse.move(box.x + outputX - 8, box.y + outputY + 4);
   await page.mouse.down();
-  await page.mouse.move(box.x + outputX + 400 * scale + 8, box.y + outputY + 400 * scale + 8, { steps: 12 });
+  await page.mouse.move(box.x + outputX + 300 * scale, box.y + outputY + 390 * scale, { steps: 12 });
   await page.mouse.up();
-  await stage.click({ button: 'right', position: { x: outputX + 200 * scale, y: outputY + 40 * scale } });
-  await page.getByRole('button', { name: 'Group', exact: true }).click();
+  await page.keyboard.press('Control+g');
   await persist();
 
   const grouped = (state.saveDocs.at(-1) as any).outputs[1];
@@ -490,7 +489,18 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
   await page.getByRole('button', { name: /^Export \d+ files?$/ }).click();
   await expect(page.getByRole('link', { name: /\.png$/ }).first()).toBeVisible();
   expect(state.renderDocs.length).toBeGreaterThan(rendersBeforeExport);
-  assertClone(state.renderDocs.at(-1));
+  const exported = state.renderDocs
+    .slice(rendersBeforeExport)
+    .map((rendered: any) => rendered.outputs[0])
+    .find((output: any) =>
+      output.formatId === 'ig-story' && output.children.some((el: any) => el.type === 'group'));
+  expect(exported).toBeTruthy();
+  const exportedIds = new Set(exported.children.map((el: any) => el.id));
+  expect(exported.children.filter((el: any) => el.parentId)).toHaveLength(4);
+  for (const el of exported.children) {
+    expect(el.originId).toBeUndefined();
+    if (el.parentId) expect(exportedIds.has(el.parentId)).toBe(true);
+  }
 });
 
 test('text effects remain editable through Paint layers, preview, undo, reopen, and export', async ({ page }) => {

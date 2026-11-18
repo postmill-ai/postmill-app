@@ -92,6 +92,25 @@ const shapeStore = () => {
   return store;
 };
 
+const groupedStore = () => {
+  const store = shapeStore();
+  store.getState().addElement({
+    id: 'sibling',
+    type: 'shape',
+    shape: 'rect',
+    x: 300,
+    y: 40,
+    width: 100,
+    height: 80,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+  });
+  store.getState().groupSelection(['moving', 'sibling']);
+  return store;
+};
+
 const renderCanvas = async (store: ReturnType<typeof createDesignerStore>) => {
   const host = document.createElement('div');
   document.body.appendChild(host);
@@ -166,5 +185,33 @@ describe('DesignerCanvas gesture wiring', () => {
     expect(node.scaleY()).toBe(1);
     expect(store.getState().history).toHaveLength(historyDepth + 1);
     expect(store.getState().gestureDepth).toBe(0);
+  });
+
+  it('binds a selected group to its leaf Transformer nodes', async () => {
+    const store = groupedStore();
+    const stage = await renderCanvas(store);
+    const transformer = stage.findOne('Transformer') as Konva.Transformer;
+    const group = store.getState().doc.outputs[0].children.find((el) => el.type === 'group')!;
+
+    expect(transformer.nodes().map((node) => node.id())).toEqual(['moving', 'sibling']);
+    expect(transformer.nodes().some((node) => node.id() === group.id)).toBe(false);
+  });
+
+  it('does not snap a selected group to its own members or containers', async () => {
+    const store = groupedStore();
+    const stage = await renderCanvas(store);
+    const node = stage.findOne('#moving')!;
+    const transformer = stage.findOne('Transformer') as Konva.Transformer;
+
+    await act(async () => {
+      transformer.nodes([node]);
+      node.position({ x: 295, y: 40 });
+      node.getLayer()!.fire('dragmove', { target: node });
+    });
+
+    expect(node.x()).toBe(295);
+    expect(store.getState().selectedIds).toEqual([
+      store.getState().doc.outputs[0].children.find((el) => el.type === 'group')!.id,
+    ]);
   });
 });

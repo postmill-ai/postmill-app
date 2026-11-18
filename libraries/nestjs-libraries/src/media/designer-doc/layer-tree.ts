@@ -186,25 +186,6 @@ export const selectionLeafIds = (
   return children.filter((el) => leaves.has(el.id)).map((el) => el.id);
 };
 
-export const selectionBounds = (
-  children: DesignerElement[],
-  ids: string[]
-): { x: number; y: number; width: number; height: number } | null => {
-  const leaves = new Set(selectionLeafIds(children, ids));
-  const members = children.filter((el) => leaves.has(el.id));
-  if (!members.length) return null;
-  const minX = Math.min(...members.map((el) => el.x));
-  const minY = Math.min(...members.map((el) => el.y));
-  const maxX = Math.max(...members.map((el) => el.x + el.width));
-  const maxY = Math.max(...members.map((el) => el.y + el.height));
-  return {
-    x: minX,
-    y: minY,
-    width: Math.max(1, maxX - minX),
-    height: Math.max(1, maxY - minY),
-  };
-};
-
 export const groupGeometryPatches = (
   children: DesignerElement[],
   groupId: string,

@@ -463,6 +463,48 @@ describe('DesignerDocService', () => {
     expect(bar.x - label.x).toBe(0);
   });
 
+  it('keeps a blank-id badge folder centered through setDoc and addOutput in one batch', () => {
+    const service = makeService();
+    const result = service.applyOps(createBlankDoc(), [{
+      op: 'setDoc',
+      doc: {
+        version: 14,
+        mode: 'image',
+        outputs: [{
+          id: 'primary', formatId: 'custom', name: 'Primary', width: 1080, height: 1080,
+          background: '#ffffff',
+          children: [{
+            id: 'badge-folder', originId: 'badge-folder', type: 'group', groupId: 'badge',
+            x: 0, y: 0, width: 0, height: 0,
+            rotation: 0, opacity: 1, locked: false, hidden: false,
+          }, {
+            id: '', originId: 'badge-bg', type: 'shape', shape: 'rect', parentId: 'badge-folder', groupId: 'badge',
+            x: 60, y: 54, width: 91, height: 52,
+            rotation: 0, opacity: 1, locked: false, hidden: false,
+          }, {
+            id: '', originId: 'badge', type: 'text', text: 'NEW', fontSize: 20,
+            parentId: 'badge-folder', groupId: 'badge', x: 73, y: 60, width: 65, height: 40,
+            rotation: 0, opacity: 1, locked: false, hidden: false,
+          }, {
+            ...minimalImageElement, id: '', originId: 'headline', text: 'Separate blank-id content',
+            x: 200, y: 300, width: 400, height: 80,
+          }],
+        }],
+      },
+    }, {
+      op: 'addOutput',
+      preset: { formatId: 'x-post', name: 'Wide', width: 1200, height: 675 },
+    }]);
+    const added = result.outputs[1] as any;
+    const chip = added.children.find((el: any) => el.originId === 'badge-bg');
+    const badgeLabel = added.children.find((el: any) => el.originId === 'badge');
+    const chipCenter = chip.x + chip.width / 2;
+    const labelCenter = badgeLabel.x + badgeLabel.width / 2;
+
+    expect(Math.abs(labelCenter - chipCenter)).toBeLessThanOrEqual(1);
+    expect(added.children.some((el: any) => el.text === 'Separate blank-id content')).toBe(true);
+  });
+
   it.each([true, false])('addOutput remaps nested parents and clones every page (linked=%s)', (linkContent) => {
     const service = makeService();
     const group = (id: string, parentId?: string, groupId?: string) => ({

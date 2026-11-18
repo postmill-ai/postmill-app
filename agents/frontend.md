@@ -206,9 +206,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
 - **Groups are flat.** `output.children` stays a flat array; nesting is expressed by `parentId` and
   resolved by `buildLayerTree`. A group renders at the position of its **first** member. Never add a
   nested `children[]` to an element — ~87 call sites iterate the flat array. Group containers keep
-  zero placeholder geometry: selection, Inspector and reflow derive transient bounds from descendant
-  leaves, the Transformer binds those leaves rather than the container, and Inspector group geometry
-  edits become per-member patches. Add Format clones the flat list in z-order and remaps every
+  zero placeholder geometry: selection and Inspector derive transient bounds from descendant leaves,
+  the Transformer binds those leaves rather than the container, and Inspector group geometry/alignment
+  edits become per-member patches. Reflow walks `parentId` links (never leaf element ids, which may
+  still be blank in a headless batch) to the top-level folder, skips containers and ≥95% full-bleed
+  leaves, and gives every nested leaf that one frame while preserving unanimous explicit anchors.
+  Add Format clones the flat list in z-order and remaps every
   `parentId` through the old→new element-id map on page 1 and every later page; linked copies retain
   their intended origins and independent copies never share source origins.
 - **Blend controls share the existing compositors.** Static single/multi-selections use the Common
