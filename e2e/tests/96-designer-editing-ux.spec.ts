@@ -130,7 +130,8 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     if (method === 'GET' && pathname === '/media/tools/status') {
       return json(route, { operations: state.mediaOperations, tools: { 'text-to-image': { available: true } } });
     }
-    if (method === 'GET' && pathname === '/files') {
+    // Navigating to the Files page is a document request for the same path.
+    if (method === 'GET' && pathname === '/files' && request.resourceType() !== 'document') {
       const search = url.searchParams.get('search')?.toLowerCase() || '';
       const results = state.libraryFiles.filter((file) =>
         !search || String(file.originalName || file.name).toLowerCase().includes(search));
@@ -1440,6 +1441,7 @@ test('paint working files retain references but stay out of Files while exports 
   });
   const state = await installMocks(page, doc);
   await openDesigner(page);
+  await selectEditingLayer(page, 'empty-paint');
 
   const canvas = page.getByRole('application', { name: 'Design canvas' });
   await canvas.press('b');

@@ -28,8 +28,10 @@ raster stock assets use the normal URL import path. Attribution and AI Designer 
 are preserved.
 
 System artifacts are kept out of the library listing: the preview thumbnails saved with designs and
-templates, and the intermediate asset/reference files the AI Designer imports while working on a
-session, are hidden from `/files` (they stay reachable by the designs that use them).
+templates, the intermediate asset/reference files the AI Designer imports while working on a session,
+and newly created Designer working files such as paint layers, filter output, masks, Magic Grab files,
+and stored inline images are hidden from `/files` (they stay reachable by the designs that use them).
+Files of these kinds created before this release still appear in the library.
 
 ## Folder tree navigation
 
