@@ -357,6 +357,19 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   selected visible node commits through silent clip updates plus ONE history push. Shift/Ctrl/Cmd-click
   and marquee use `selectedClips`; grouped members select together, duplicate/paste remaps group ids,
   and `video-reflow.ts` supplies one group box so relative geometry survives resize/seed.
+- **Video clip arrangement is an atomic track edit.** `output.tracks` is back-to-front for the Konva
+  preview, time-zero poster projection and injected frame renderer. `designer-doc/clip-arrangement.ts`
+  plans Bring Forward, Send Backward, Bring to Front and Send to Back; the store's
+  `arrangeVideoClips` is the single commit path for the canvas menu, timeline menu and clip Inspector.
+  A multi-selection moves as one block with persistent groups expanded and internal order preserved.
+  Whole tracks reorder intact. A partial selection leaves unselected clips on its source track and
+  merges only into an unlocked same-type track with clip capacity and no effective-interval collision
+  (including `freezeAtMs`), otherwise it inserts a compatible track at the requested stack position.
+  Timing, trims, transitions, keyframes, IDs, `originId`/`groupId` and content/style objects stay
+  unchanged, and arrangement is format-local. Audio selections, locked source tracks, frozen outputs,
+  unknown refs, extremes and track-cap failures are explicit non-edits with disabled controls or a
+  warning and no empty history entry. A successful command commits ONE history entry and one Undo
+  restores every clip and track. Static-element `reorder` remains separate and unchanged.
 - **Canvas input works with mouse and touch.** Stage tools share `MouseEvent | TouchEvent` handlers,
   the canvas owns its gesture with `touchAction: none`, and a short touch tap places a default shape
   through `rectFromTap` while a drag uses the authored box. Text and caption hit surfaces cover the

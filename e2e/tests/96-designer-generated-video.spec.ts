@@ -110,7 +110,7 @@ interface DesignerDocSnapshot {
       naturalHeight?: number;
       focalPoint?: { x: number; y: number };
     };
-    tracks: Array<{ id: string; type: string; clips: VideoClipSnapshot[] }>;
+    tracks: Array<{ id: string; type: string; clips: VideoClipSnapshot[]; locked?: boolean }>;
     children?: DesignerElementSnapshot[];
   }>;
 }
@@ -1109,6 +1109,46 @@ const essentialsDoc = (): DesignerDocSnapshot => ({
   }],
 });
 
+const arrangementDoc = (): DesignerDocSnapshot => ({
+  version: 14,
+  mode: 'video',
+  outputs: [{
+    id: 'arrangement-output',
+    formatId: 'arrangement',
+    name: 'Clip arrangement',
+    width: 400,
+    height: 300,
+    durationMs: 6000,
+    tracks: [
+      {
+        id: 'shared-track', type: 'shape',
+        clips: [
+          {
+            id: 'arrange-red', originId: 'arrange-red-origin', groupId: 'arrange-red-group',
+            shape: 'rect', startMs: 0, endMs: 4000,
+            x: 0, y: 0, width: 200, height: 200, fill: '#ff0000',
+            keyframes: [
+              { tMs: 0, props: { x: 0, y: 0, width: 200, height: 200 } },
+              { tMs: 4000, props: { x: 0, y: 0, width: 200, height: 200 } },
+            ],
+          },
+          {
+            id: 'shared-resident', shape: 'rect', startMs: 4000, endMs: 6000,
+            x: 0, y: 0, width: 200, height: 200, fill: '#00ff00',
+          },
+        ],
+      },
+      {
+        id: 'target-track', type: 'shape',
+        clips: [{
+          id: 'arrange-blue', shape: 'rect', startMs: 0, endMs: 4000,
+          x: 0, y: 0, width: 200, height: 200, fill: '#0000ff',
+        }],
+      },
+    ],
+  }],
+});
+
 const motionDoc = (): DesignerDocSnapshot => ({
   version: 9,
   mode: 'video',
@@ -1557,6 +1597,136 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       textStroke: { color: '#000000', width: 6 },
     });
     expect(mocks.savedClips().find((clip) => clip.id === 'text-original')?.fillGradient?.stops).toHaveLength(2);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
+test.describe('Designer video clip arrangement (mocked local document)', () => {
+  test('arranges from both menus, preserves clips, undoes atomically, locks, reloads, and exports in preview order', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const mocks = new DesignerMocks();
+    mocks.doc = arrangementDoc();
+    mocks.name = 'Video clip arrangement E2E';
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+
+    const layout = () => mocks.doc.outputs[0].tracks.map((track) =>
+      track.clips.map((clip) => clip.id)
+    );
+    const expectLayout = async (expected: string[][]) => {
+      await expect.poll(layout).toEqual(expected);
+    };
+    const initial = [
+      ['arrange-red', 'shared-resident'],
+      ['arrange-blue'],
+    ];
+    const front = [
+      ['shared-resident'],
+      ['arrange-blue'],
+      ['arrange-red'],
+    ];
+    const middle = [
+      ['shared-resident'],
+      ['arrange-red'],
+      ['arrange-blue'],
+    ];
+    const back = [
+      ['arrange-red'],
+      ['shared-resident'],
+      ['arrange-blue'],
+    ];
+    const redBefore = mocks.savedClips().find((clip) => clip.id === 'arrange-red')!;
+    const contextCommand = async (trackLabel: string, command: string) => {
+      await clipOnTrack(page, trackLabel).first().click({ button: 'right' });
+      await page.getByRole('button', { name: command, exact: true }).click();
+    };
+    const trackRow = (label: string) => page
+      .getByTitle(label.toLowerCase(), { exact: true })
+      .first()
+      .locator('xpath=ancestor::div[contains(@class,"items-stretch")][1]');
+
+    await expectLayout(initial);
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 100, 100))
+      .toEqual([0, 0, 255, 255]);
+
+    await contextCommand('Shape 1', 'Bring Forward');
+    await expectLayout(front);
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 100, 100))
+      .toEqual([255, 0, 0, 255]);
+    await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+    await expectLayout(initial);
+
+    await contextCommand('Shape 1', 'Bring Forward');
+    await expectLayout(front);
+    await contextCommand('Shape 3', 'Send Backward');
+    await expectLayout(middle);
+    await contextCommand('Shape 2', 'Send to Back');
+    await expectLayout(back);
+    await contextCommand('Shape 1', 'Bring to Front');
+    await expectLayout(front);
+
+    await clipOnTrack(page, 'Shape 3').click();
+    await page.getByRole('button', { name: 'Send backward', exact: true }).click();
+    await expectLayout(middle);
+    await clipOnTrack(page, 'Shape 2').click();
+    await page.getByRole('button', { name: 'Bring forward', exact: true }).click();
+    await expectLayout(front);
+    await clipOnTrack(page, 'Shape 3').click();
+    await page.getByRole('button', { name: 'Send to back', exact: true }).click();
+    await expectLayout(back);
+    await clipOnTrack(page, 'Shape 1').click();
+    await page.getByRole('button', { name: 'Bring to front', exact: true }).click();
+    await expectLayout(front);
+
+    await clipOnTrack(page, 'Shape 3').click();
+    await clipOnTrack(page, 'Shape 2').click({ modifiers: ['Shift'] });
+    await page.getByRole('button', { name: 'Send backward', exact: true }).click();
+    await expectLayout([
+      ['arrange-blue'],
+      ['arrange-red'],
+      ['shared-resident'],
+    ]);
+    await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+    await expectLayout(front);
+
+    await clipOnTrack(page, 'Shape 3').click();
+    await trackRow('Shape 3').getByRole('button', { name: 'Lock track', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[2].locked).toBe(true);
+    await clipOnTrack(page, 'Shape 3').click({ button: 'right' });
+    for (const command of ['Bring to Front', 'Bring Forward', 'Send Backward', 'Send to Back']) {
+      await expect(page.getByRole('button', { name: command, exact: true })).toBeDisabled();
+    }
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await expectLayout(front);
+    await trackRow('Shape 3').getByRole('button', { name: 'Unlock track', exact: true }).click();
+
+    await saveDesign(page);
+    const redAfter = mocks.savedClips().find((clip) => clip.id === 'arrange-red')!;
+    expect(redAfter).toMatchObject({
+      startMs: redBefore.startMs,
+      endMs: redBefore.endMs,
+      originId: redBefore.originId,
+      groupId: redBefore.groupId,
+      keyframes: redBefore.keyframes,
+      x: redBefore.x,
+      y: redBefore.y,
+      width: redBefore.width,
+      height: redBefore.height,
+      fill: redBefore.fill,
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+    await expectLayout(front);
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 100, 100))
+      .toEqual([255, 0, 0, 255]);
+
+    const framePage = await page.context().newPage();
+    await mocks.install(framePage);
+    expect(await renderedFrameRgba(framePage, mocks, 100, 100)).toEqual([255, 0, 0, 255]);
+    await framePage.close();
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

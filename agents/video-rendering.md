@@ -79,6 +79,12 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      track exactly like a muted one (it also feeds no ducking sidechain).
      `VideoOutput.markers` (optional-additive v7) are editor-only ruler state —
      no renderer reads them.
+   - Visual `output.tracks` order is back-to-front in ALL visual paths: the preview composer, the
+     time-zero poster projection and the injected frame renderer. Within a track, clips still compose
+     by `startMs`; clips at different times may share that track. Clip arrangement changes only track
+     order or collision-free same-type clip membership through `designer-doc/clip-arrangement.ts` —
+     never clip timing or a renderer-private z-index. Keep all three paths reading the same document
+     order after an arrange, Undo or save/reload; exported frames must match the preview stack.
    - Clip transitions (`transitionIn`/`transitionOut`): `cut`, `fade`
      (fade-through-black — each clip owns half the window), `dissolve` (plain
      cross-fade), `slide`, `wipe` (incoming slides over a STATIC outgoing clip),
