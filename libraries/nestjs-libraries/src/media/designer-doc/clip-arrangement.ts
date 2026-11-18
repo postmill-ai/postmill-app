@@ -27,7 +27,8 @@ export type ClipArrangementFailure =
   | 'frozen'
   | 'already-front'
   | 'already-back'
-  | 'track-limit';
+  | 'track-limit'
+  | 'transition';
 
 export type ClipArrangementResult =
   | {
@@ -42,6 +43,77 @@ interface SelectionUnit {
   selectedClips: VideoClip[];
   wholeTrack: boolean;
 }
+
+interface TransitionPair {
+  trackId: string;
+  from: VideoClip;
+  to: VideoClip;
+}
+
+const activeTransitionPairs = (tracks: VideoTrack[]): TransitionPair[] => {
+  const pairs: TransitionPair[] = [];
+  for (const track of tracks) {
+    if (track.type === 'audio') continue;
+    const sorted = [...track.clips].sort((a, b) => a.startMs - b.startMs);
+    for (let index = 0; index < sorted.length - 1; index++) {
+      const from = sorted[index];
+      const to = sorted[index + 1];
+      const duration = Math.min(
+        from.transitionOut?.durationMs ?? 0,
+        to.transitionIn?.durationMs ?? 0
+      );
+      if (duration > 0 && from.endMs <= to.startMs) {
+        pairs.push({ trackId: track.id, from, to });
+      }
+    }
+  }
+  return pairs;
+};
+
+const transitionPairIds = (tracks: VideoTrack[]) =>
+  new Set(activeTransitionPairs(tracks).map((pair) => `${pair.from.id}:${pair.to.id}`));
+
+const sameTransitionPairs = (before: VideoTrack[], after: VideoTrack[]) => {
+  const previous = transitionPairIds(before);
+  const next = transitionPairIds(after);
+  return previous.size === next.size && [...previous].every((pair) => next.has(pair));
+};
+
+const refId = (trackId: string, clipId: string) => `${trackId}:${clipId}`;
+
+export const expandClipArrangementRefs = (
+  output: VideoOutput,
+  refs: ClipArrangementRef[]
+): ClipArrangementRef[] => {
+  const selected = new Set(refs.map((ref) => refId(ref.trackId, ref.clipId)));
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (const pair of activeTransitionPairs(output.tracks)) {
+      const fromId = refId(pair.trackId, pair.from.id);
+      const toId = refId(pair.trackId, pair.to.id);
+      if (selected.has(fromId) === selected.has(toId)) continue;
+      selected.add(fromId);
+      selected.add(toId);
+      expanded = true;
+    }
+  }
+
+  const resolved = output.tracks.flatMap((track) =>
+    track.clips.flatMap((clip) =>
+      selected.has(refId(track.id, clip.id))
+        ? [{ trackId: track.id, clipId: clip.id }]
+        : []
+    )
+  );
+  const resolvedIds = new Set(resolved.map((ref) => refId(ref.trackId, ref.clipId)));
+  return [
+    ...refs.filter((ref) => !resolvedIds.has(refId(ref.trackId, ref.clipId)) &&
+      !output.tracks.some((track) => track.id === ref.trackId &&
+        track.clips.some((clip) => clip.id === ref.clipId))),
+    ...resolved,
+  ];
+};
 
 const visual = (track: VideoTrack) => track.type !== 'audio';
 
@@ -70,7 +142,8 @@ export const planClipArrangement = (
   if (output.frozen) return { status: 'frozen' };
 
   const selectedByTrack = new Map<string, Set<string>>();
-  for (const ref of refs) {
+  const expandedRefs = expandClipArrangementRefs(output, refs);
+  for (const ref of expandedRefs) {
     const track = output.tracks.find((candidate) => candidate.id === ref.trackId);
     if (!track?.clips.some((clip) => clip.id === ref.clipId)) {
       return { status: 'unknown-clip' };
@@ -138,7 +211,7 @@ export const planClipArrangement = (
   const merge = canMerge(mergeCandidate, anchor) ? mergeCandidate : null;
   const insertedUnits = units.filter((unit) => unit !== merge);
 
-  if (remaining.length + insertedUnits.filter((unit) => !unit.wholeTrack).length > MAX_TRACKS) {
+  if (remaining.length + insertedUnits.length > MAX_TRACKS) {
     return { status: 'track-limit' };
   }
 
@@ -174,6 +247,16 @@ export const planClipArrangement = (
   );
   const anchorIndex = tracks.findIndex((track) => track.id === anchor.id);
   tracks.splice(insertAfter ? anchorIndex + 1 : anchorIndex, 0, ...insertedTracks);
+
+  if (
+    tracks.length === output.tracks.length &&
+    tracks.every((track, index) => track === output.tracks[index])
+  ) {
+    return { status: insertAfter ? 'already-front' : 'already-back' };
+  }
+  if (!sameTransitionPairs(output.tracks, tracks)) {
+    return { status: 'transition' };
+  }
 
   const moves = units.flatMap((unit) =>
     unit.selectedClips.map((clip) => ({

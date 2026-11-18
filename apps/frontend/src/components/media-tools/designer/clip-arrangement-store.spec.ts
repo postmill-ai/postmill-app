@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createDesignerStore } from './designer.store';
+import { createDesignerStore, MAX_TRACKS } from './designer.store';
+import { findTransitionWindows } from './video-preview';
 import type {
   VideoClip,
   VideoOutput,
@@ -152,6 +153,95 @@ describe('arrangeVideoClips store action', () => {
     expect(store.getState().doc.outputs[1]).toBe(siblingBefore);
     expect(outputAt(store, 1)).toEqual(linkedOutput);
     expect(outputAt(store, 0).tracks[1].clips[0].originId).toBe('shared');
+  });
+
+  it('moves a selected transition with its companion and preserves the rendered window', () => {
+    const store = storeWith([videoOutput([
+      track('v1', 'video', [
+        clip('a', 0, 1000, { transitionOut: { type: 'dissolve', durationMs: 300 } }),
+        clip('b', 1000, 2000, { transitionIn: { type: 'dissolve', durationMs: 300 } }),
+      ]),
+      track('v2', 'video', [clip('c', 5000, 6000)]),
+    ])]);
+    store.getState().setSelectedClip({ outputIndex: 0, trackId: 'v1', clipId: 'b' });
+    const historyBefore = store.getState().history.length;
+
+    expect(store.getState().arrangeVideoClips(0, [
+      { trackId: 'v1', clipId: 'b' },
+    ], 'forward')).toBe('ok');
+    expect(outputAt(store).tracks.map((item) => item.id)).toEqual(['v2', 'v1']);
+    expect(store.getState().selectedClips).toEqual([
+      { trackId: 'v1', clipId: 'a' },
+      { trackId: 'v1', clipId: 'b' },
+    ]);
+    const windows = findTransitionWindows(outputAt(store).tracks[1]);
+    expect(windows.map((window) => [window.fromClip.id, window.toClip.id, window.durationMs]))
+      .toEqual([['a', 'b', 300]]);
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+  });
+
+  it('refuses a merge-created transition without changing the document or history', () => {
+    const store = storeWith([videoOutput([
+      track('v1', 'video', [
+        clip('x', 0, 500),
+        clip('b', 1000, 2000, { transitionOut: { type: 'dissolve', durationMs: 300 } }),
+      ]),
+      track('v2', 'video', [
+        clip('c', 2000, 3000, { transitionIn: { type: 'wipe', durationMs: 300 } }),
+      ]),
+    ])]);
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+
+    expect(store.getState().arrangeVideoClips(0, [
+      { trackId: 'v1', clipId: 'b' },
+    ], 'forward')).toBe('transition');
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyBefore);
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it.each([
+    ['front', 'top', 'already-front'],
+    ['forward', 'top', 'already-front'],
+    ['back', 'bottom', 'already-back'],
+    ['backward', 'bottom', 'already-back'],
+  ] as const)('does not commit %s on the %s of two tracks', (direction, edge, status) => {
+    const store = storeWith([videoOutput([
+      track('bottom', 'video', [clip('bottom-clip')]),
+      track('top', 'shape', [clip('top-clip')]),
+    ])]);
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+    store.getState().setSelectedClip({ outputIndex: 0, trackId: edge, clipId: `${edge}-clip` });
+
+    expect(store.getState().arrangeVideoClips(0, [
+      { trackId: edge, clipId: `${edge}-clip` },
+    ], direction)).toBe(status);
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyBefore);
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('rejects a mixed whole/partial plan that would exceed the track limit', () => {
+    const store = storeWith([videoOutput([
+      track('whole', 'video', [clip('whole-selected')]),
+      track('partial', 'video', [clip('partial-selected'), clip('partial-resident', 2000, 3000)]),
+      ...Array.from({ length: MAX_TRACKS - 2 }, (_, index) =>
+        track(`audio-${index}`, 'audio', [clip(`audio-clip-${index}`)])
+      ),
+    ])]);
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+
+    expect(store.getState().arrangeVideoClips(0, [
+      { trackId: 'whole', clipId: 'whole-selected' },
+      { trackId: 'partial', clipId: 'partial-selected' },
+    ], 'front')).toBe('track-limit');
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyBefore);
+    expect(store.getState().isDirty).toBe(false);
+    expect(outputAt(store).tracks).toHaveLength(MAX_TRACKS);
   });
 
   it('rejects locked, frozen, audio, unknown, and extreme requests without history', () => {

@@ -59,6 +59,19 @@ const makeStore = (over: Partial<VideoOutput> = {}) => {
   return store;
 };
 
+const ReactiveClipInspector = ({ store }: { store: ReturnType<typeof createDesignerStore> }) => {
+  const selected = store((state) => state.selectedClip);
+  if (!selected) return null;
+  return (
+    <ClipInspector
+      store={store}
+      outputIndex={selected.outputIndex}
+      trackId={selected.trackId}
+      clipId={selected.clipId}
+    />
+  );
+};
+
 describe('ClipInspector layer order controls', () => {
   beforeEach(() => toasterShow.mockClear());
 
@@ -95,6 +108,66 @@ describe('ClipInspector layer order controls', () => {
     expect((store.getState().doc.outputs[0] as VideoOutput).tracks.map((item) => item.id))
       .toEqual(['b', 'd', 'a', 'c']);
     expect(store.getState().selectedClips).toHaveLength(2);
+  });
+
+  it('keeps the reactive Inspector on the primary clip after retargeting its track', () => {
+    const store = makeStore({
+      tracks: [
+        track('source', 'video', {
+          clips: [clip('selected'), clip('resident', { startMs: 2000, endMs: 3000 })],
+        }),
+        track('shape', 'shape'),
+      ],
+    });
+    store.getState().setSelectedClip({ outputIndex: 0, trackId: 'source', clipId: 'selected' });
+    render(<ReactiveClipInspector store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bring forward', exact: true }));
+    const output = store.getState().doc.outputs[0] as VideoOutput;
+    const destination = output.tracks.find((item) =>
+      item.clips.some((item) => item.id === 'selected')
+    );
+    expect(store.getState().selectedClip).toEqual({
+      outputIndex: 0,
+      trackId: destination!.id,
+      clipId: 'selected',
+    });
+    expect(destination!.id).not.toBe('source');
+    expect(screen.getByRole('button', { name: 'Bring forward', exact: true })).toBeTruthy();
+    expect(screen.getByText('Layer order', { exact: true })).toBeTruthy();
+  });
+
+  it('warns and does not commit when a merge would create a transition', () => {
+    const store = makeStore({
+      tracks: [
+        track('v1', 'video', {
+          clips: [
+            clip('x', { startMs: 0, endMs: 500 }),
+            clip('b', {
+              startMs: 1000,
+              endMs: 2000,
+              transitionOut: { type: 'dissolve', durationMs: 300 },
+            }),
+          ],
+        }),
+        track('v2', 'video', {
+          clips: [clip('c', {
+            startMs: 2000,
+            endMs: 3000,
+            transitionIn: { type: 'wipe', durationMs: 300 },
+          })],
+        }),
+      ],
+    });
+    store.getState().setSelectedClip({ outputIndex: 0, trackId: 'v1', clipId: 'b' });
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+    render(<ClipInspector store={store} outputIndex={0} trackId="v1" clipId="b" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bring forward', exact: true }));
+    expect(toasterShow).toHaveBeenCalledWith('This arrangement would change a transition', 'warning');
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyBefore);
   });
 
   it('disables every command when any selected track is locked', () => {

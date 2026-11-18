@@ -362,7 +362,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   plans Bring Forward, Send Backward, Bring to Front and Send to Back; the store's
   `arrangeVideoClips` is the single commit path for the canvas menu, timeline menu and clip Inspector.
   A multi-selection moves as one block with persistent groups expanded and internal order preserved.
-  Whole tracks reorder intact. A partial selection leaves unselected clips on its source track and
+  Active transition pairs also expand transitively into the selection, and the completed plan is
+  rejected with a `transition` outcome if extraction, neighbor bridging or merging would still add
+  or remove any rendered transition pair. Whole tracks reorder intact. A partial selection leaves unselected clips on its source track and
   merges only into an unlocked same-type track with clip capacity and no effective-interval collision
   (including `freezeAtMs`), otherwise it inserts a compatible track at the requested stack position.
   Timing, trims, transitions, keyframes, IDs, `originId`/`groupId` and content/style objects stay

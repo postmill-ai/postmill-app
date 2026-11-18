@@ -59,6 +59,8 @@ const failureCopy = (status: ClipArrangementFailure) => {
       return ['designer_arrange_already_back', 'The selection is already at the back'] as const;
     case 'track-limit':
       return ['designer_arrange_track_limit', 'The track limit prevents this arrangement'] as const;
+    case 'transition':
+      return ['designer_arrange_transition', 'This arrangement would change a transition'] as const;
     default:
       return ['designer_arrange_unknown_clip', 'Select a visual clip to arrange'] as const;
   }

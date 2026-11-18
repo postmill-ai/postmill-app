@@ -80,6 +80,7 @@ import { mergeKeyframes } from './keyframe-props';
 import { expandClipRefs, groupRefsForClip, toggleClipRefs } from './video-selection';
 import {
   planClipArrangement,
+  expandClipArrangementRefs,
   type ClipArrangementDirection,
   type ClipArrangementFailure,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/clip-arrangement';
@@ -2197,7 +2198,7 @@ export const createDesignerStore = (
         if (!vo || doc.mode !== 'video') return 'unknown-clip';
         if (isOutputFrozen(vo)) return 'frozen';
 
-        const expanded = expandClipRefs(vo, refs);
+        const expanded = expandClipArrangementRefs(vo, expandClipRefs(vo, refs));
         const planned = planClipArrangement(vo, expanded, direction, genId);
         if (planned.status !== 'ok') return planned.status;
 

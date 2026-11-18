@@ -149,6 +149,17 @@ describe('planClipArrangement', () => {
     ]);
   });
 
+  it('allows clips that only touch at an edge to share a merged track', () => {
+    const out = output([
+      track('source', 'video', [clip('selected', 0, 1000), clip('resident', 4000, 5000)]),
+      track('target', 'video', [clip('target-clip', 1000, 2000)]),
+    ]);
+
+    const result = successful(out, [{ trackId: 'source', clipId: 'selected' }], 'forward');
+    expect(ids(result)).toEqual(['source', 'target']);
+    expect(result.tracks[1].clips.map((item) => item.id)).toEqual(['target-clip', 'selected']);
+  });
+
   it('creates a track at the requested position for incompatible media', () => {
     const out = output([
       track('source', 'video', [clip('selected'), clip('resident', 4000, 5000)]),
@@ -160,6 +171,18 @@ describe('planClipArrangement', () => {
     expect(ids(result)).toEqual(['source', 'shape', 'new-1', 'text']);
     expect(result.tracks[2].type).toBe('video');
     expect(result.tracks[2].clips[0]).toBe(out.tracks[0].clips[0]);
+  });
+
+  it('does not merge into a collision-free track of another media type', () => {
+    const out = output([
+      track('source', 'video', [clip('selected'), clip('resident', 4000, 5000)]),
+      track('shape', 'shape', []),
+    ]);
+
+    const result = successful(out, [{ trackId: 'source', clipId: 'selected' }], 'forward');
+    expect(ids(result)).toEqual(['source', 'shape', 'new-1']);
+    expect(result.tracks[1].clips).toEqual([]);
+    expect(result.tracks[2].type).toBe('video');
   });
 
   it.each([
@@ -221,6 +244,74 @@ describe('planClipArrangement', () => {
     expect(result.tracks[4].type).toBe('shape');
   });
 
+  it('uses the leading selected unit when merging a forward-moving block', () => {
+    const out = output([
+      track('video', 'video', [clip('video-selected'), clip('video-resident', 4000, 5000)]),
+      track('shape', 'shape', [clip('shape-selected'), clip('shape-resident', 4000, 5000)]),
+      track('target', 'video', [clip('target-resident', 2000, 3000)]),
+    ]);
+
+    const result = successful(out, [
+      { trackId: 'shape', clipId: 'shape-selected' },
+      { trackId: 'video', clipId: 'video-selected' },
+    ], 'forward');
+    expect(ids(result)).toEqual(['video', 'shape', 'target', 'new-1']);
+    expect(result.tracks[2].clips.map((item) => item.id))
+      .toEqual(['target-resident', 'video-selected']);
+    expect(result.tracks[3].clips.map((item) => item.id)).toEqual(['shape-selected']);
+    expect(result.moves).toEqual(expect.arrayContaining([
+      { trackId: 'video', clipId: 'video-selected', toTrackId: 'target' },
+      { trackId: 'shape', clipId: 'shape-selected', toTrackId: 'new-1' },
+    ]));
+  });
+
+  it('moves both members of an existing transition pair together', () => {
+    const a = clip('a', 0, 1000, {
+      transitionOut: { type: 'dissolve', durationMs: 300 },
+    });
+    const b = clip('b', 1000, 2000, {
+      transitionIn: { type: 'dissolve', durationMs: 300 },
+    });
+    const out = output([
+      track('v1', 'video', [a, b]),
+      track('v2', 'video', [clip('c', 5000, 6000)]),
+    ]);
+
+    const result = successful(out, [{ trackId: 'v1', clipId: 'b' }], 'forward');
+    expect(ids(result)).toEqual(['v2', 'v1']);
+    expect(result.tracks[1]).toBe(out.tracks[0]);
+    expect(result.tracks[1].clips).toEqual([a, b]);
+    expect(result.moves).toEqual([
+      { trackId: 'v1', clipId: 'a', toTrackId: 'v1' },
+      { trackId: 'v1', clipId: 'b', toTrackId: 'v1' },
+    ]);
+  });
+
+  it('refuses a merge that would create a new rendered transition pair', () => {
+    const createId = vi.fn();
+    const out = output([
+      track('v1', 'video', [
+        clip('x', 0, 500),
+        clip('b', 1000, 2000, {
+          transitionOut: { type: 'dissolve', durationMs: 300 },
+        }),
+      ]),
+      track('v2', 'video', [
+        clip('c', 2000, 3000, {
+          transitionIn: { type: 'wipe', durationMs: 300 },
+        }),
+      ]),
+    ]);
+
+    expect(planClipArrangement(out, [
+      { trackId: 'v1', clipId: 'b' },
+    ], 'forward', createId)).toEqual({ status: 'transition' });
+    expect(out.tracks.map((item) => item.clips.map((clip) => clip.id))).toEqual([
+      ['x', 'b'], ['c'],
+    ]);
+    expect(createId).not.toHaveBeenCalled();
+  });
+
   it('preserves every clip field and linked identity by moving the original objects', () => {
     const selected = clip('selected', 125, 987, {
       originId: 'linked-origin',
@@ -263,6 +354,26 @@ describe('planClipArrangement', () => {
     expect(createId).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['front', 'top', 'already-front'],
+    ['forward', 'top', 'already-front'],
+    ['back', 'bottom', 'already-back'],
+    ['backward', 'bottom', 'already-back'],
+  ] as const)('reports %s on the %s of two tracks as %s', (direction, edge, status) => {
+    const createId = vi.fn();
+    const out = output([
+      track('bottom', 'video', [clip('bottom-clip')]),
+      track('top', 'shape', [clip('top-clip')]),
+    ]);
+    const before = out.tracks;
+
+    expect(planClipArrangement(out, [
+      { trackId: edge, clipId: `${edge}-clip` },
+    ], direction, createId)).toEqual({ status });
+    expect(out.tracks).toBe(before);
+    expect(createId).not.toHaveBeenCalled();
+  });
+
   it('rejects the track-limit case without changing timing or minting ids', () => {
     const createId = vi.fn(() => 'unexpected');
     const out = output([
@@ -279,6 +390,26 @@ describe('planClipArrangement', () => {
     expect(out.tracks[0].clips.map((item) => [item.startMs, item.endMs])).toEqual([
       [0, 1000], [2000, 3000],
     ]);
+  });
+
+  it('counts whole and partial inserted units together at the track limit', () => {
+    const createId = vi.fn();
+    const out = output([
+      track('whole', 'video', [clip('whole-selected')]),
+      track('partial', 'video', [clip('partial-selected'), clip('partial-resident', 2000, 3000)]),
+      ...Array.from({ length: MAX_TRACKS - 2 }, (_, index) =>
+        track(`audio-${index}`, 'audio', [clip(`audio-clip-${index}`)])
+      ),
+    ]);
+    const before = out.tracks;
+
+    expect(planClipArrangement(out, [
+      { trackId: 'whole', clipId: 'whole-selected' },
+      { trackId: 'partial', clipId: 'partial-selected' },
+    ], 'front', createId)).toEqual({ status: 'track-limit' });
+    expect(out.tracks).toBe(before);
+    expect(out.tracks).toHaveLength(MAX_TRACKS);
+    expect(createId).not.toHaveBeenCalled();
   });
 
   it('rejects invalid, audio, locked, and frozen requests atomically', () => {
