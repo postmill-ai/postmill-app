@@ -101,6 +101,21 @@ export type {
 };
 export { migrateDoc };
 
+const outputsLinkedForInsertion = (source: DesignerOutput, target: DesignerOutput) => {
+  const sourceGroup = source.contentLinkGroup;
+  const targetGroup = target.contentLinkGroup;
+  if (sourceGroup && targetGroup) return sourceGroup === targetGroup;
+  const sourceOrigins = new Set(
+    source.children.filter((el) => el.originId).map((el) => el.originId as string)
+  );
+  const sharedOrigin = target.children.some(
+    (el) => el.originId && sourceOrigins.has(el.originId)
+  );
+  return sharedOrigin || (
+    !sourceGroup && !targetGroup && (source.children.length === 0 || target.children.length === 0)
+  );
+};
+
 /** Hard cap on timeline tracks per output — unbounded track creation (the
  *  drag-below-creates-track gesture, landing on occupied tracks) would
  *  otherwise grow the doc and the render graph without limit. */
@@ -729,24 +744,12 @@ export const createDesignerStore = (
           return;
         }
         const copyIds = new Map<number, string>();
-        const activeOriginIds = new Set(
-          sourceChildren.filter((el) => el.originId).map((el) => el.originId as string)
-        );
         const outs = doc.outputs.map((out, i) => {
           if (i === currentOutput) {
             return { ...out, children: insert((out as DesignerOutput).children, baseEl) };
           }
           const target = out as DesignerOutput;
-          const sharedOrigin = target.children.some(
-            (el) => el.originId && activeOriginIds.has(el.originId)
-          );
-          const sourceGroup = sourceOutput.contentLinkGroup;
-          const targetGroup = target.contentLinkGroup;
-          const legacyEmpty = sourceChildren.length === 0 || target.children.length === 0;
-          const linked = sourceGroup && targetGroup
-            ? sourceGroup === targetGroup
-            : sharedOrigin || (!sourceGroup && !targetGroup && legacyEmpty);
-          if (!linked || isOutputFrozen(out)) return out;
+          if (!outputsLinkedForInsertion(sourceOutput, target) || isOutputFrozen(out)) return out;
           const copy = seedCopy(baseEl, sourceOutput, target, originId);
           copyIds.set(i, copy.id);
           return { ...out, children: insert(target.children, copy) };
@@ -1607,20 +1610,30 @@ export const createDesignerStore = (
               )),
           };
         });
-        const contentLinkGroup = linkContent
-          ? source.contentLinkGroup ?? genId()
-          : genId();
+        const legacyLinkedIndexes = new Set<number>();
+        let contentLinkGroup = linkContent ? source.contentLinkGroup : undefined;
+        if (linkContent && !contentLinkGroup) {
+          legacyLinkedIndexes.add(currentOutput);
+          for (let index = 0; index < doc.outputs.length; index++) {
+            const output = doc.outputs[index] as DesignerOutput;
+            if (outputsLinkedForInsertion(source, output)) {
+              contentLinkGroup ??= output.contentLinkGroup;
+              if (!output.contentLinkGroup) legacyLinkedIndexes.add(index);
+            }
+          }
+        }
+        contentLinkGroup ??= genId();
         const newOutput: DesignerOutput = {
           id: genId(), formatId: namedPreset.formatId, name: namedPreset.name,
           width: namedPreset.width, height: namedPreset.height,
           background: source.background, bg: source.bg, contentLinkGroup, children,
           ...(pages?.length ? { pages } : {}),
         };
-        const outs = doc.outputs.map((o, i) => (i === currentOutput ? {
+        const outs = doc.outputs.map((o, i) => ({
           ...o,
-          ...(linkContent && !source.contentLinkGroup ? { contentLinkGroup } : {}),
-          children: sourceChildren,
-        } : o)) as DesignerOutput[];
+          ...(legacyLinkedIndexes.has(i) ? { contentLinkGroup } : {}),
+          ...(i === currentOutput ? { children: sourceChildren } : {}),
+        })) as DesignerOutput[];
         outs.push(newOutput);
         const accepted = mutate({ doc: { ...doc, outputs: outs }, currentOutput: outs.length - 1, selectedIds: [], isDirty: true });
         if (!accepted) return false;

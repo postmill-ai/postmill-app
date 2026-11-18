@@ -278,12 +278,15 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   is local when that toggle is on. New static outputs persist an optional-additive
   `contentLinkGroup`: linked copies inherit the source's group and independent copies get a fresh
   group, so separate linked sets can coexist and empty copies retain their behavior after reload.
-  Outputs with different explicit groups never seed each other; mixed grouped/legacy pairs require
-  a shared `originId`. Two legacy outputs use shared origins plus the old empty-format fallback.
-  Already-reminted legacy documents with no shared origins intentionally stay format-local because
-  stored data cannot distinguish them from independent copies. `stripIds` captures link groups from
-  shared origins before re-minting template/import ids, preserving relationships for new instances.
-  Later-page insertion is always local. Presets include grouped
+  When a legacy source first receives a group, every output linked to it under the insertion rule
+  receives that group too, adopting an existing sibling group when present. Headless `seed: false`
+  creates an empty canvas without copying content, but it remains linked unless `linkContent` is
+  false. Outputs with different explicit groups never seed each other; mixed grouped/legacy pairs
+  require a shared `originId`. Two legacy outputs use shared origins plus the old empty-format
+  fallback. Already-reminted legacy documents with no shared origins intentionally stay format-local
+  because stored data cannot distinguish them from independent copies. `stripIds` captures link
+  groups from shared origins and the empty-format fallback before re-minting template/import ids,
+  preserving relationships for new instances. Later-page insertion is always local. Presets include grouped
   1080×1350 Instagram/Facebook/LinkedIn/Threads portraits and Facebook/LinkedIn squares with safe
   zones. `FormatThumbnail` lazily renders near-visible output/page previews through one queued,
   shared `output-thumbnail` stage and the existing video-poster projection. Its 100-entry LRU is

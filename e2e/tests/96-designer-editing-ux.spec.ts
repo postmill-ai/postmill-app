@@ -325,6 +325,8 @@ test('shape insertion stays on an independent format through save, reload, and e
   };
   await openDesigner(page);
   await page.getByRole('button', { name: /Independent/ }).click();
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
 
   const stage = page.locator('.konva-stage').first();
   const stageBox = await stage.boundingBox();

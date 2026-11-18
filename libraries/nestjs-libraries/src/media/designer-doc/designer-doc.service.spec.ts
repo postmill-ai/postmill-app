@@ -922,7 +922,7 @@ describe('DesignerDocService', () => {
     expect(added.children).toHaveLength(0);
   });
 
-  it('addOutput with seed:false appends an empty white canvas, untouched primary', () => {
+  it('addOutput with seed:false appends an empty linked white canvas without copying content', () => {
     const service = makeService();
     const doc = service.validate({
       version: 2,
@@ -953,10 +953,13 @@ describe('DesignerDocService', () => {
     const added = result.outputs[1] as any;
     // Pre-seeding semantics: no children copied, no background inherited,
     // and no fresh-UUID originId backfill on the primary output (the
-    // normalize pass still defaults originId to the element id).
+    // normalize pass still defaults originId to the element id). The new
+    // canvas remains linked unless linkContent is explicitly false.
     expect(added.background).toBe('#ffffff');
     expect(added.children).toHaveLength(0);
     expect(primary.children[0].originId).toBe('el-1');
+    expect(primary.contentLinkGroup).toBeDefined();
+    expect(added.contentLinkGroup).toBe(primary.contentLinkGroup);
   });
 
   it('applies addPage and assigns a page id', () => {
@@ -1176,6 +1179,37 @@ describe('DesignerDocService', () => {
       .toBe(legacyResult.outputs[0].contentLinkGroup);
   });
 
+  it('linked addOutput adopts a group already present on a shared-origin legacy sibling', () => {
+    const service = makeService();
+    const linkedDoc = service.applyOps(createBlankDoc(), [
+      { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 },
+      },
+    ]);
+    const legacyPrimaryDoc = {
+      ...linkedDoc,
+      outputs: linkedDoc.outputs.map((out, index) => ({
+        ...out,
+        contentLinkGroup: index === 0 ? undefined : 'existing-linked-group',
+      })),
+    } as typeof linkedDoc;
+
+    const result = service.applyOps(legacyPrimaryDoc, [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-wide', name: 'Wide', width: 1920, height: 1080 },
+      },
+    ]);
+
+    expect(result.outputs.map((out) => out.contentLinkGroup)).toEqual([
+      'existing-linked-group',
+      'existing-linked-group',
+      'existing-linked-group',
+    ]);
+  });
+
   it('stripIds preserves linked groups before shared origins are re-minted', () => {
     const service = makeService();
     const linkedDoc = service.applyOps(createBlankDoc(), [
@@ -1205,6 +1239,64 @@ describe('DesignerDocService', () => {
     expect(legacyInstantiated.outputs[0].children[0].originId)
       .not.toBe(legacyInstantiated.outputs[1].children[0].originId);
   });
+
+  it.each([true, false])(
+    'stripIds keeps independent outputs separate when explicit groups are present: %s',
+    (keepGroups) => {
+      const service = makeService();
+      const doc = service.applyOps(createBlankDoc(), [
+        { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+        {
+          op: 'addOutput',
+          preset: { formatId: 'custom-tall', name: 'Linked', width: 1080, height: 1920 },
+        },
+        {
+          op: 'addOutput',
+          preset: { formatId: 'custom-wide', name: 'Independent', width: 1920, height: 1080 },
+          linkContent: false,
+        },
+      ]);
+      const input = keepGroups ? doc : {
+        ...doc,
+        outputs: doc.outputs.map((out) => ({ ...out, contentLinkGroup: undefined })),
+      } as typeof doc;
+
+      const result = service.assignIdsAndNormalize(service.stripIds(input));
+      const groups = result.outputs.map((out) => out.contentLinkGroup);
+
+      expect(groups.every(Boolean)).toBe(true);
+      expect(groups[1]).toBe(groups[0]);
+      expect(groups[2]).not.toBe(groups[0]);
+    }
+  );
+
+  it.each(['one', 'both'])(
+    'stripIds preserves the legacy empty-format fallback with %s empty output(s)',
+    (emptyOutputs) => {
+      const service = makeService();
+      const linkedDoc = service.applyOps(createBlankDoc(), [
+        { op: 'addElement', outputIndex: 0, element: minimalImageElement },
+        {
+          op: 'addOutput',
+          preset: { formatId: 'custom-tall', name: 'Linked', width: 1080, height: 1920 },
+        },
+      ]);
+      const legacyDoc = {
+        ...linkedDoc,
+        outputs: linkedDoc.outputs.map((out, index) => ({
+          ...out,
+          contentLinkGroup: undefined,
+          children: index === 1 || emptyOutputs === 'both' ? [] : out.children,
+        })),
+      } as typeof linkedDoc;
+
+      const result = service.assignIdsAndNormalize(service.stripIds(legacyDoc));
+      const groups = result.outputs.map((out) => out.contentLinkGroup);
+
+      expect(groups[0]).toBeDefined();
+      expect(groups[1]).toBe(groups[0]);
+    }
+  );
 
   it('addOutput with seed:false on a video doc appends an empty timeline', () => {
     const doc = videoDoc();

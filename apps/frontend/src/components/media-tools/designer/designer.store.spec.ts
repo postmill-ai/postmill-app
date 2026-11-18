@@ -556,6 +556,80 @@ describe('format-local element insertion', () => {
     expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 2, 2]);
   });
 
+  it('keeps every legacy linked format together across adds from different tabs', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'source', type: 'text', x: 0, y: 0, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Original',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy B', width: 1200, height: 675 });
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out) => ({
+        ...out,
+        contentLinkGroup: undefined,
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+
+    store.getState().setCurrentOutput(1);
+    store.getState().addOutput({ formatId: 'linkedin-post', name: 'Linked E', width: 1200, height: 627 });
+    store.getState().setCurrentOutput(0);
+    store.getState().addOutput({ formatId: 'ig-story', name: 'Linked F', width: 1080, height: 1920 });
+
+    const groups = store.getState().doc.outputs.map((out) => out.contentLinkGroup);
+    expect(groups[0]).toBeDefined();
+    expect(new Set(groups).size).toBe(1);
+    store.getState().addElement(makeElement('shape', 'legacy-a-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 2, 2, 2]);
+    store.getState().setCurrentOutput(1);
+    store.getState().addElement(makeElement('shape', 'legacy-b-shape'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([3, 3, 3, 3]);
+  });
+
+  it('backfills a legacy empty format when a linked format is added', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(makeElement('text', 'legacy-source'));
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy empty', width: 1200, height: 675 });
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out, index) => ({
+        ...out,
+        contentLinkGroup: undefined,
+        children: index === 1 ? [] : out.children,
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().setCurrentOutput(0);
+
+    store.getState().addOutput({ formatId: 'linkedin-post', name: 'Linked new', width: 1200, height: 627 });
+    const groups = store.getState().doc.outputs.map((out) => out.contentLinkGroup);
+    expect(groups[0]).toBeDefined();
+    expect(groups).toEqual([groups[0], groups[0], groups[0]]);
+    store.getState().addElement(makeElement('shape', 'legacy-empty-after-add'));
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 1, 2]);
+  });
+
+  it('seeds a legacy empty format without explicit groups', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(makeElement('text', 'legacy-source'));
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy empty', width: 1200, height: 675 });
+    const legacyDoc = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((out, index) => ({
+        ...out,
+        contentLinkGroup: undefined,
+        children: index === 1 ? [] : out.children,
+      })),
+    } as DesignerDoc;
+    store.getState().replaceDocTrusted(legacyDoc);
+    store.getState().setCurrentOutput(0);
+
+    store.getState().addElement(makeElement('shape', 'legacy-empty-shape'));
+
+    expect(store.getState().doc.outputs.map((out) => out.children.length)).toEqual([2, 1]);
+  });
+
   it('keeps a linked copy made from an independent copy in that independent link group', () => {
     const store = createDesignerStore();
     store.getState().addElement({
