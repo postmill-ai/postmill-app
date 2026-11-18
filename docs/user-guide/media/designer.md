@@ -30,8 +30,10 @@ saved.
   1 is added to the linked formats; it stays on the current format when **Unlink** is on or the
   format is an independent copy. Linked formats remain
   the default. Grouped presets include 1080×1350 portraits for Instagram, Facebook, LinkedIn, and
-  Threads, plus Facebook and LinkedIn squares; their safe zones are available through **View → Safe
-  Zones**, and custom dimensions remain available.
+  Threads, plus Facebook and LinkedIn squares. **View → Safe Zones** shows approximate platform UI
+  regions scaled to the active format: shaded areas may be covered, so keep important content outside
+  them. Custom and other formats without platform regions show an unshaded 5% title-safe outline.
+  These guides are editor-only and never appear in exports; custom dimensions remain available.
 - **Freeze a format** — select the snowflake on an output tab to prevent canvas, Inspector, page,
   timeline, resize, and incoming linked edits to that output. Other formats remain editable. You can
   still switch to a frozen output, export it, and copy clips or keyframes for use elsewhere; pasting

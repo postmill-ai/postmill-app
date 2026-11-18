@@ -18,7 +18,6 @@ import type { DesignerElement } from './designer-doc.schema';
 // the inset box is the canvas minus the edge-hugging zones.
 describe('getSafeZoneInset', () => {
   it('derives insets from the overlay strips on ig-story', () => {
-    // Top Safe Zone y:0 h:80, CTA Bar y:1780 h:140 (both full-width).
     expect(getSafeZoneInset('ig-story', 1080, 1920)).toEqual({
       left: 0,
       top: 80,
@@ -27,27 +26,51 @@ describe('getSafeZoneInset', () => {
     });
   });
 
-  it('derives insets for ig-reel and tiktok', () => {
+  it('derives top, right, and bottom insets for ig-reel and tiktok', () => {
     expect(getSafeZoneInset('ig-reel', 1080, 1920)).toEqual({
       left: 0,
       top: 120,
-      right: 1080,
-      bottom: 1720,
+      right: 900,
+      bottom: 1450,
     });
     expect(getSafeZoneInset('tiktok', 1080, 1920)).toEqual({
       left: 0,
       top: 100,
-      right: 1080,
-      bottom: 1700,
+      right: 900,
+      bottom: 1450,
     });
   });
 
-  it('leaves un-covered edges full-bleed (fb-story has no top overlay)', () => {
+  it('includes Facebook Story profile and system UI at the top', () => {
     expect(getSafeZoneInset('fb-story', 1080, 1920)).toEqual({
       left: 0,
-      top: 0,
+      top: 140,
       right: 1080,
       bottom: 1780,
+    });
+  });
+
+  it('scales Story insets to enlarged and reduced outputs', () => {
+    const enlarged = getSafeZoneInset('ig-story', 2118, 3763);
+    expect(enlarged.left).toBe(0);
+    expect(enlarged.top).toBeCloseTo(80 * 3763 / 1920, 8);
+    expect(enlarged.right).toBe(2118);
+    expect(enlarged.bottom).toBeCloseTo(1780 * 3763 / 1920, 8);
+
+    expect(getSafeZoneInset('ig-story', 540, 960)).toEqual({
+      left: 0,
+      top: 40,
+      right: 540,
+      bottom: 890,
+    });
+  });
+
+  it('ignores a small corner timestamp when deriving edge insets', () => {
+    expect(getSafeZoneInset('yt-thumbnail', 1280, 720)).toEqual({
+      left: 0,
+      top: 0,
+      right: 1280,
+      bottom: 720,
     });
   });
 

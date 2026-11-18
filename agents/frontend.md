@@ -652,6 +652,7 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   output/page/selection, rejects stale or video-mode layout actions, and applies all element patches
   with one history entry. The request context is bounded to 50 geometry-only selected elements;
   copy and whitelisted font/color styles continue to work for static and video text/caption clips.
+- **Safe zones are scaled, editor-only obstruction guides.** `designer-doc/safe-zones.ts` resolves the reference-space `ChannelPreset.safeZones` onto the active output with independent x/y scaling; the canvas, export preflight, reflow insets, and AI vision-critic context must all use that resolver. Preset zones are approximate platform UI that may cover artwork, so every obstruction is shaded and the generic custom/unknown-format fallback is an unshaded 5%-inset title-safe outline. Labels and the `Shaded = may be covered · Platform UI is approximate` legend are zoom-compensated and non-listening. Overlays never enter the document or PNG, PDF, SVG, poster, or video renderers.
 - **Export preflight is scoped, conservative, and non-blocking.** `design-preflight.ts` audits only
   the selected outputs/pages and returns stable element/clip targets for low solid-background
   contrast, unsafe-zone text, structurally missing media, and measured text overflow. Static text

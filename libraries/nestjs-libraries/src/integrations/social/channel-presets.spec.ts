@@ -33,6 +33,36 @@ describe('channel format presets', () => {
     }
   );
 
+  it('keeps every platform obstruction inside its reference canvas', () => {
+    for (const preset of CHANNEL_PRESETS) {
+      for (const zone of preset.safeZones ?? []) {
+        expect(zone.x, `${preset.id} ${zone.label} x`).toBeGreaterThanOrEqual(0);
+        expect(zone.y, `${preset.id} ${zone.label} y`).toBeGreaterThanOrEqual(0);
+        expect(zone.x + zone.width, `${preset.id} ${zone.label} right`).toBeLessThanOrEqual(preset.width);
+        expect(zone.y + zone.height, `${preset.id} ${zone.label} bottom`).toBeLessThanOrEqual(preset.height);
+      }
+    }
+  });
+
+  it.each([
+    ['ig-reel', 'reel'],
+    ['tiktok', 'tiktok-video'],
+  ])('keeps static %s and video %s obstruction geometry aligned', (staticId, videoId) => {
+    const staticPreset = CHANNEL_PRESETS.find((preset) => preset.id === staticId);
+    const videoPreset = CHANNEL_PRESETS.find((preset) => preset.id === videoId);
+    expect(videoPreset?.safeZones).toEqual(staticPreset?.safeZones);
+  });
+
+  it('models the requested platform UI regions', () => {
+    const labels = (id: string) => CHANNEL_PRESETS.find((preset) => preset.id === id)
+      ?.safeZones?.map((zone) => zone.label) ?? [];
+    expect(labels('fb-story')).toContain('Profile and System UI');
+    expect(labels('linkedin-banner')).toContain('Profile Photo');
+    expect(labels('yt-thumbnail')).toContain('Duration Timestamp');
+    expect(labels('ig-reel')).toContain('Action Rail');
+    expect(labels('tiktok')).toContain('Action Rail');
+  });
+
   it('keeps one existing YouTube Short preset', () => {
     expect(CHANNEL_PRESETS.filter((preset) => preset.id === 'short')).toHaveLength(1);
     expect(CHANNEL_PRESETS.find((preset) => preset.id === 'short')).toMatchObject({

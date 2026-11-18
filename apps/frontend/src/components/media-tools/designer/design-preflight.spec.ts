@@ -88,6 +88,28 @@ describe('analyzeDesignerPreflight', () => {
     expect(result.findings[0].vars.zone).toBe('CTA Bar');
   });
 
+  it('checks scaled unsafe zones on an enlarged Story', () => {
+    const result = analyze(doc([output([
+      text('covered', { y: 3500 }),
+    ], { formatId: 'ig-story', width: 2118, height: 3763 })]));
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'covered' }),
+    ]);
+    expect(result.findings[0].vars.zone).toBe('CTA Bar');
+  });
+
+  it('checks the Reel action rail', () => {
+    const result = analyze(doc([output([
+      text('covered', { x: 920, y: 1000, width: 100, height: 80 }),
+    ], { formatId: 'ig-reel', width: 1080, height: 1920 })]));
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'covered' }),
+    ]);
+    expect(result.findings[0].vars.zone).toBe('Action Rail');
+  });
+
   it('uses the generic title-safe area for custom dimensions', () => {
     const result = analyze(doc([output([text('one', { x: 0, y: 0 })])]));
     expect(result.findings).toEqual([

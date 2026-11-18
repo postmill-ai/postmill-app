@@ -54,6 +54,29 @@ const makeDoc = (): any => ({
 });
 
 describe('DesignRenderService', () => {
+  it('keeps safe-zone overlays and labels out of PNG and PDF exports', async () => {
+    const service = makeService();
+    const doc = makeDoc();
+    doc.outputs = [{
+      id: 'story', formatId: 'ig-story', name: 'Story',
+      width: 540, height: 960, background: '#ffffff', children: [],
+    }];
+
+    const png = await service.renderPage(doc, 0, { pixelRatio: 1 });
+    const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const at = (x: number, y: number) => {
+      const index = (y * info.width + x) * info.channels;
+      return [...data.subarray(index, index + 4)];
+    };
+    expect(at(100, 20)).toEqual([255, 255, 255, 255]);
+    expect(at(100, 920)).toEqual([255, 255, 255, 255]);
+
+    const pdf = await service.renderPdf(doc);
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(pdf.toString('latin1')).not.toContain('CTA Bar');
+    expect(pdf.toString('latin1')).not.toContain('Top UI');
+  });
+
   it('loads an org-owned background through its storage adapter when the URL fails', async () => {
     const png = await sharp({
       create: { width: 2, height: 2, channels: 4, background: '#ff0000' },

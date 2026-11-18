@@ -28,11 +28,12 @@ const makeRequest = (overrides?: {
   referenceCues?: string[];
   referenceFileIds?: string[];
   briefIntent?: string;
+  outputs?: { formatId: string; width: number; height: number }[];
 }) =>
   JSON.stringify({
     type: 'critique-request',
     contactSheetUrl: overrides?.contactSheetUrl ?? 'https://example.com/contact.png',
-    outputs: [{ formatId: 'ig-square', width: 1080, height: 1080 }],
+    outputs: overrides?.outputs ?? [{ formatId: 'ig-square', width: 1080, height: 1080 }],
     rubric: {
       criteria: [
         { name: 'Legibility', description: 'Text is readable', weight: 1 },
@@ -385,6 +386,18 @@ describe('AiDesignerVisionCriticService', () => {
     expect(vocabulary).toContain('brand_safety');
     expect(vocabulary).toContain('branded product');
     expect(vocabulary).toContain('never with a text fix');
+  });
+
+  it('scales platform obstruction coordinates to the output in the critique prompt', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+
+    await handler(makeRequest({
+      outputs: [{ formatId: 'ig-story', width: 540, height: 960 }],
+    }), 'org1');
+
+    const prompt = aiDefaults.vision.mock.calls[0][2] as string;
+    expect(prompt).toContain('Top UI: x=0 y=0 w=540 h=40');
+    expect(prompt).toContain('CTA Bar: x=0 y=890 w=540 h=70');
   });
 
   it('lists each output with its 25% feed-scale pixel size', async () => {

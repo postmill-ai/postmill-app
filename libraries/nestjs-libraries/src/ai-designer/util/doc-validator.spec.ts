@@ -35,8 +35,8 @@ const makeDoc = (
     outputs: [
       {
         id: 'o1',
-        formatId: 'ig-post',
-        name: 'IG',
+        formatId: 'custom',
+        name: 'Custom',
         width: 1080,
         height: 1080,
         background: '#ffffff',
@@ -147,18 +147,17 @@ describe('validateDesignDoc', () => {
       // a deliberately full-bleed box must not be shrunk out of its layout —
       // while y still gets the safe treatment.
       el({ originId: 'banner', text: 'B', x: 0, y: 0, width: 1080, height: 50 }),
-    ]);
+    ], { formatId: 'ig-post' });
 
     const { doc: out, violations } = validateDesignDoc(doc);
     const [legal, banner] = (out.outputs[0] as any).children;
 
-    // ig-post carries no platform chrome, so the safe area is the 5% inset:
-    // 1026 - 30.
-    expect(legal.y).toBe(996);
+    // Instagram Post's feed actions begin at 920: 920 - 30.
+    expect(legal.y).toBe(890);
     expect(legal.x).toBe(54);
     expect(banner.x).toBe(0);
     expect(banner.width).toBe(1080);
-    expect(banner.y).toBe(54);
+    expect(banner.y).toBe(120);
     expect(violations.some((v) => v.includes('title-safe area'))).toBe(true);
 
     // Idempotent: the repaired doc is clean on a second pass.
@@ -218,12 +217,12 @@ describe('validateDesignDoc', () => {
           originId: 'badge-bg',
           type: 'shape',
           shape: 'rect',
-          x: 1411,
+          x: 1450,
           y: 40,
           width: 150,
           height: 48,
         }),
-        el({ originId: 'badge', text: 'SALE', x: 1425, y: 40, width: 122, height: 48 }),
+        el({ originId: 'badge', text: 'SALE', x: 1464, y: 40, width: 122, height: 48 }),
       ],
       { formatId: 'linkedin-banner', width: 1584, height: 396 }
     );
@@ -231,8 +230,8 @@ describe('validateDesignDoc', () => {
     const { doc: out } = validateDesignDoc(doc);
     const [chip, label] = (out.outputs[0] as any).children;
 
-    // The 5% safe edge is 1504.8; the UNIT's right edge lands on it.
-    expect(chip.x + chip.width).toBeCloseTo(1504.8, 6);
+    // The profile obstruction only insets the left; the right stays full-bleed.
+    expect(chip.x + chip.width).toBeCloseTo(1584, 6);
     expect(label.x - chip.x).toBe(14);
   });
 

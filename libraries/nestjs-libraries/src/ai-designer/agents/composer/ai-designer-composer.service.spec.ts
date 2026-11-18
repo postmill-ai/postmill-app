@@ -4701,7 +4701,7 @@ describe('AiDesignerComposerService LLM revise protections', () => {
     const post = (revised.outputs[0] as any).children[0];
     const story = (revised.outputs[1] as any).children[0];
     // The leak onto the unrequested format was dropped…
-    expect(post.y).toBe(100);
+    expect(post.y).toBe(120);
     // …while the in-scope op applied.
     expect(story.y).toBe(940);
   });
@@ -5787,14 +5787,9 @@ describe('AiDesignerComposerService panel side', () => {
     expect(image.x).toBe(0);
   });
 
-  // ROUND 8 (A3): the live 1584×396 geometry from
-  // `.tmp-r7run3-screens/doc-*.json`. A right sidebar at x=982 w=602 placed
-  // its copy at x=1002 w=562 — right edge 1564 against the format's 1504.8
-  // title-safe edge — so the doc validator clamped the box to x=942.8 (the
-  // fractional coordinate is its signature), 59.2px OUTSIDE the panel. The
-  // escaped box then failed panel containment, got no container and reflowed
-  // against the CANVAS: the seeded story spanned x=0 w=1080 across an empty
-  // sidebar.
+  // A right sidebar's copy must stay inside both the panel and the safe area.
+  // LinkedIn's profile obstruction insets the left, while the right stays
+  // full-bleed; a fractional coordinate would expose a validator clamp.
   it('keeps a wide banner\'s sidebar copy inside both the panel and the safe area', async () => {
     const doc = await composeWith(
       makePlan({ formatTemplate: 'editorial-sidebar', panelSide: 'right' }),
@@ -5802,9 +5797,10 @@ describe('AiDesignerComposerService panel side', () => {
     );
 
     const sidebar = byOrigin(doc, 'editorial-sidebar-bg');
-    const safeRight = 1584 * 0.95;
+    const safeRight = 1584;
     for (const originId of ['headline', 'sub']) {
       const el = byOrigin(doc, originId);
+      expect(el.x).toBeGreaterThanOrEqual(400);
       expect(el.x).toBeGreaterThanOrEqual(sidebar.x);
       expect(el.x + el.width).toBeLessThanOrEqual(sidebar.x + sidebar.width);
       // Inside the title-safe area, so the validator never has to clamp it.

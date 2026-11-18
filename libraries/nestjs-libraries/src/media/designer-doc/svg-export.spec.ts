@@ -46,6 +46,19 @@ const wellFormed = (svg: string) => {
 };
 
 describe('outputToSvg', () => {
+  it('keeps editor safe-zone overlays and labels out of SVG export', () => {
+    const platformOutput = output([]);
+    platformOutput.formatId = 'ig-story';
+    platformOutput.width = 540;
+    platformOutput.height = 960;
+    const svg = outputToSvg(platformOutput);
+
+    expect(svg).not.toContain('safe-zone');
+    expect(svg).not.toContain('CTA Bar');
+    expect(svg).not.toContain('Top UI');
+    expect(svg).not.toContain('rgba(255, 0, 0');
+  });
+
   it('emits a standalone, well-formed document', () => {
     const svg = outputToSvg(output([el({})]));
     expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
