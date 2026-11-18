@@ -44,9 +44,10 @@ export const getEnforcedSafeZones = (
   height: number
 ): ResolvedSafeZoneOverlay[] => {
   const preset = CHANNEL_PRESETS.find((candidate) => candidate.id === formatId);
-  return getSafeZoneOverlays(
-    preset?.safeZoneLayout === 'guide-only' ? undefined : formatId,
-    width,
-    height
-  );
+  const generic = getSafeZoneOverlays(undefined, width, height);
+  if (preset?.safeZoneLayout === 'guide-only') return generic;
+  const zones = getSafeZoneOverlays(formatId, width, height);
+  return preset?.safeZoneLayout === 'preserve-generic-margins'
+    ? [...zones, ...generic]
+    : zones;
 };

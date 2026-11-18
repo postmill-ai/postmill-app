@@ -967,7 +967,7 @@ export const getSafeZoneInset = (
     bottom: height * 0.95,
   };
   const zones = getEnforcedSafeZones(formatId, width, height);
-  if (zones.some((zone) => zone.kind === 'title-safe')) {
+  if (zones.every((zone) => zone.kind === 'title-safe')) {
     return fallback;
   }
   const policy = CHANNEL_PRESETS.find((preset) => preset.id === formatId)?.safeZoneLayout;
@@ -980,6 +980,7 @@ export const getSafeZoneInset = (
   // Full-width UI bands inset the top/bottom. A substantial edge rail or
   // profile region also insets its side; small corner badges stay local.
   for (const z of zones) {
+    if (z.kind !== 'obstruction') continue;
     const spansWidth = z.x <= 0 && z.x + z.width >= width;
     const coversVerticalEdge = z.height >= height * 0.25;
     if (spansWidth && z.y <= 0) top = Math.max(top, z.y + z.height);

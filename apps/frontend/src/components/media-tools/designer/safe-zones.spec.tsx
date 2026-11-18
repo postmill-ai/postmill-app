@@ -75,6 +75,15 @@ describe('SafeZoneOverlay', () => {
     expect(layer.findOne('.safe-zone-legend')).toBeTruthy();
   });
 
+  it('still draws feed guides on a guide-only format', async () => {
+    const layer = await renderOverlay('ig-post', 1080, 1080, 1);
+    const zones = layer.find('.safe-zone-obstruction');
+
+    expect(zones.map((zone) => zone.height())).toEqual([120, 160]);
+    expect(layer.findOne('.safe-zone-title-safe')).toBeFalsy();
+    expect(layer.findOne('.safe-zone-legend')).toBeTruthy();
+  });
+
   it('keeps the generic title-safe guide unshaded', async () => {
     const layer = await renderOverlay('custom', 400, 300, 2);
     const guide = layer.findOne('.safe-zone-title-safe') as Konva.Rect;

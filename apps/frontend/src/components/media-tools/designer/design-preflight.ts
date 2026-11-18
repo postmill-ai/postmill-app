@@ -118,10 +118,9 @@ export const analyzeDesignerPreflight = (
     if (titleSafe) {
       const unsafe = box.x < titleSafe.x || box.y < titleSafe.y || box.x + box.width > titleSafe.x + titleSafe.width || box.y + box.height > titleSafe.y + titleSafe.height;
       if (unsafe) add('safe-zone', 'designer_preflight_safe_zone', { zone: titleSafe.label, target }, outputIndex, pageNumber, elementId, clip);
-      return;
     }
     for (const zone of zones) {
-      if (intersects(box, zone)) {
+      if (zone.kind === 'obstruction' && intersects(box, zone)) {
         add('safe-zone', 'designer_preflight_safe_zone', { zone: zone.label, target }, outputIndex, pageNumber, elementId, clip);
       }
     }

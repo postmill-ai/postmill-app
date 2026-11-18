@@ -140,6 +140,44 @@ describe('analyzeDesignerPreflight', () => {
     expect(result.findings[0].vars.zone).toBe('Top UI');
   });
 
+  it('retains the generic edge warning for a margin-preserving YouTube format', () => {
+    const result = analyze(doc([output([
+      text('edge', { x: 4, y: 300, width: 100, height: 30 }),
+    ], { formatId: 'yt-thumbnail', width: 1280, height: 720 })]));
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'edge' }),
+    ]);
+    expect(result.findings[0].vars.zone).toBe('Title Safe (5%)');
+  });
+
+  it('does not warn for YouTube text inside both the generic and platform zones', () => {
+    const result = analyze(doc([output([
+      text('safe', { x: 100, y: 300, width: 100, height: 30 }),
+    ], { formatId: 'yt-thumbnail', width: 1280, height: 720 })]));
+
+    expect(result.findings).toEqual([]);
+  });
+
+  it('still checks YouTube text against the timestamp obstruction', () => {
+    const result = analyze(doc([output([
+      text('covered', { x: 1080, y: 650, width: 100, height: 30 }),
+    ], { formatId: 'yt-thumbnail', width: 1280, height: 720 })]));
+
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ rule: 'safe-zone', elementId: 'covered' }),
+    ]));
+    expect(result.findings.map((finding) => finding.vars.zone)).toContain('Duration Timestamp');
+  });
+
+  it('does not add a generic edge warning to an existing Story preset', () => {
+    const result = analyze(doc([output([
+      text('edge', { x: 4, y: 900, width: 100, height: 30 }),
+    ], { formatId: 'ig-story', width: 1080, height: 1920 })]));
+
+    expect(result.findings).toEqual([]);
+  });
+
   it('uses the generic title-safe area for custom dimensions', () => {
     const result = analyze(doc([output([text('one', { x: 0, y: 0 })])]));
     expect(result.findings).toEqual([
