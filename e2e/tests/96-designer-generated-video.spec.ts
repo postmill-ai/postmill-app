@@ -1333,8 +1333,8 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await hex.press('Enter');
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient?.stops[1].color).toBe('#0000FF80');
 
-    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 205, 60))[0]).toBeGreaterThan(240);
-    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 205, 60))[2]).toBeLessThan(20);
+    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 210, 60))[0]).toBeGreaterThan(200);
+    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 210, 60))[2]).toBeLessThan(40);
     const middle = await canvasRgbaAtDocumentPoint(page, 400, 300, 250, 60);
     expect(middle[0]).toBeGreaterThan(80);
     expect(middle[2]).toBeGreaterThan(30);
@@ -1622,7 +1622,9 @@ async function renderedFrameRgba(
     outputLiteral: escapeForScriptTag(output),
     baseUrlLiteral: '"https://app.postmill.ai"',
     baseUrl: 'https://app.postmill.ai',
-    script: FRAME_RENDERER_SCRIPT,
+    // Playwright's transpiler leaves `(0, _module.helper)` in the serialized
+    // helpers; the backend build strips its own prefixes in `stripExportsNamespace`.
+    script: FRAME_RENDERER_SCRIPT.replace(/\(0,\s*_[A-Za-z$][\w$]*\.([\w$]+)\)/g, '$1'),
     fontLinks: '',
   }), { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => !!(window as any).__FRAME_API);

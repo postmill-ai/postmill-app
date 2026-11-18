@@ -440,6 +440,53 @@ describe('video overlay styles and keyframed text', () => {
     expect(node.getAttr('fill')).toBe('#112233');
   });
 
+  it('keeps the stored or default solid fill without usable gradient stops', async () => {
+    const store = createDesignerStore(500, 500);
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'shape');
+    const output = store.getState().doc.outputs[0] as VideoOutput;
+    const track = output.tracks.find((item) => item.type === 'shape')!;
+    store.getState().addClip(0, track.id, {
+      id: 'empty-gradient',
+      startMs: 0,
+      endMs: 1000,
+      shape: 'rect',
+      width: 120,
+      height: 80,
+      fill: '#112233',
+      fillGradient: { type: 'linear', stops: [] },
+    } as never);
+    store.getState().addClip(0, track.id, {
+      id: 'default-solid',
+      startMs: 0,
+      endMs: 1000,
+      shape: 'rect',
+      width: 120,
+      height: 80,
+    } as never);
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={500} height={500}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={500} height={500} />
+          </Layer>
+        </Stage>
+      );
+    });
+
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const stored = stage.findOne('#empty-gradient')!.findOne('Rect') as Konva.Rect;
+    const defaulted = stage.findOne('#default-solid')!.findOne('Rect') as Konva.Rect;
+    expect(stored.getAttr('fill')).toBe('#112233');
+    expect(defaulted.getAttr('fill')).toBe('#2B5CD3');
+  });
+
   it('renders text extrusion behind the original text clip', async () => {
     const store = createDesignerStore(500, 500);
     store.getState().setMode('video');
