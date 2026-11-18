@@ -324,7 +324,7 @@ test('shape insertion stays on an independent format through save, reload, and e
     expect(doc.outputs[0].contentLinkGroup).not.toBe(doc.outputs[1].contentLinkGroup);
   };
   await openDesigner(page);
-  await page.getByRole('button', { name: /Independent/ }).click();
+  await page.getByRole('button', { name: 'Independent 400×400', exact: true }).click();
 
   const stage = page.locator('.konva-stage').first();
   // The canvas menu opens only on the bare stage: right of the 20px ruler,
@@ -339,7 +339,7 @@ test('shape insertion stays on an independent format through save, reload, and e
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await expect(page.locator('.konva-stage').first()).toBeVisible();
-  await page.getByRole('button', { name: /Independent/ }).click();
+  await page.getByRole('button', { name: 'Independent 400×400', exact: true }).click();
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Save to Files' }).click();
   await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
@@ -406,7 +406,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   // Shortcuts are canvas-focus-scoped, so the keys go to the canvas itself.
   const canvasRegion = page.getByRole('application', { name: 'Design canvas' });
   await canvasRegion.press('Control+c');
-  await page.getByRole('button', { name: /Paste Target/ }).click();
+  await page.getByRole('button', { name: 'Paste Target 400×400', exact: true }).click();
 
   // Keyboard paste retains its offset behavior and remains one atomic edit.
   await canvasRegion.press('Control+v');
@@ -503,7 +503,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
-  await page.getByRole('button', { name: /Paste Target/ }).click();
+  await page.getByRole('button', { name: 'Paste Target 400×400', exact: true }).click();
   expect((state.doc as any).outputs[1].children).toHaveLength(9);
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -591,7 +591,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
     return cloned;
   };
 
-  await page.getByRole('button', { name: /Source/ }).click();
+  await page.getByRole('button', { name: 'Source 400×400 2p', exact: true }).click();
   await page.getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
   const stage = page.locator('.konva-stage').first();
@@ -1424,7 +1424,8 @@ test('page and format duplication reopen Pages and preserve exact linked content
   await page.getByRole('menuitem', { name: 'Duplicate page', exact: true }).click();
   await expect.poll(() => state.doc.outputs[1].pages.length).toBe(2);
   expect(state.doc.outputs[0].pages).toHaveLength(1);
-  expect(state.doc.outputs[1].pages[1].children[0].text).toBe('Hello world');
+  expect(state.doc.outputs[1].pages[0].children[0].text).toBe('Hello world');
+  expect(state.doc.outputs[1].pages[1].children[0].text).toBe('Details page');
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
   await expect.poll(() => state.doc.outputs[1].pages.length).toBe(1);
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
@@ -1479,7 +1480,7 @@ test('brand explanations and custom-size controls fit a narrow mobile layout', a
 
   await page.getByRole('button', { name: 'Tools', exact: true }).click();
   await page.getByRole('button', { name: 'Brand', exact: true }).click();
-  const brandSelect = page.getByRole('combobox', { name: 'Brand / General Mode', exact: true });
+  const brandSelect = page.getByRole('combobox', { name: 'Brand Profile', exact: true });
   await expect(brandSelect).toBeVisible();
   expect(await brandSelect.locator('option').allTextContents()).toEqual([
     'General Mode — No brand rules',
