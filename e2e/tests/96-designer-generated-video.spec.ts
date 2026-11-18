@@ -1383,7 +1383,7 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
       stroke: '#123456', strokeWidth: 6,
     });
-    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 200, 60))
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 202, 60))
       .toEqual([18, 52, 86, 255]);
 
     await width.fill('0');
@@ -1391,7 +1391,7 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
       stroke: '#123456', strokeWidth: 0,
     });
-    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 200, 60))[0])
+    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 202, 60))[0])
       .toBeGreaterThan(240);
 
     await width.fill('6');
@@ -1415,7 +1415,7 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       stroke: '#123456', strokeWidth: 6,
     });
     await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 225, 95))[0]).toBeGreaterThan(240);
-    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 200, 60))
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 202, 60))
       .toEqual([18, 52, 86, 255]);
 
     const framePage = await page.context().newPage();
@@ -1426,7 +1426,7 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     const frameEdge = await renderedFrameRgba(framePage, mocks, 290, 30);
     expect(frameEdge[2]).toBeGreaterThan(80);
     expect(frameEdge[2]).toBeLessThan(180);
-    expect(await renderedFrameRgba(framePage, mocks, 200, 60)).toEqual([18, 52, 86, 255]);
+    expect(await renderedFrameRgba(framePage, mocks, 202, 60)).toEqual([18, 52, 86, 255]);
     await framePage.close();
 
     await clipOnTrack(page, 'Shape').click();

@@ -459,7 +459,7 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
       for (const scale of [1, 2]) {
         const dir = path.join(frameRoot, `${scale}x`);
         fs.mkdirSync(dir);
-        expect(await capture.captureFrames(output, 1, dir, scale)).toBe(1);
+        expect(await capture.captureFrames(output, 1, dir, undefined, undefined, scale)).toBe(1);
         const { data, info } = await sharp(path.join(dir, 'frame-00001.png'))
           .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
         expect(info.width).toBe(320 * scale);
