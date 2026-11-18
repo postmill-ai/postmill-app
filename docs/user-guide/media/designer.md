@@ -26,7 +26,10 @@ saved.
 - **Output tabs** — a design can carry several formats (sizes) at once. **Add format** adds another
   size; linked elements stay in sync across formats unless you choose **Unlink** beside the tabs.
   **Link** resumes shared edits without changing any existing element links. Choose **Independent
-  copies** when adding repeated dimensions that should be edited separately. A new element on page
+  copies** when adding repeated dimensions that should be edited separately. Right-click a format or
+  use its three-dot menu to resize, remove, **Duplicate linked**, or **Duplicate independently**.
+  Duplication keeps the same dimensions and every page or timeline clip without reflow, and one Undo
+  removes the copy. A new element on page
   1 is added to the linked formats; it stays on the current format when **Unlink** is on or the
   format is an independent copy. Linked formats remain
   the default. Grouped presets include 1080×1350 portraits for Instagram, Facebook, LinkedIn, and
@@ -39,8 +42,9 @@ saved.
 - **Freeze a format** — select the snowflake on an output tab to prevent canvas, Inspector, page,
   timeline, resize, and incoming linked edits to that output. Other formats remain editable. You can
   still switch to a frozen output, export it, and copy clips or keyframes for use elsewhere; pasting
-  into the frozen output remains blocked. Select the snowflake again to unfreeze; this is separate
-  from locking an individual layer or timeline track.
+  into the frozen output remains blocked. Frozen tabs show a tinted background and **Frozen** label.
+  Duplicating a frozen format creates an editable copy. Select the snowflake again to unfreeze; this
+  is separate from locking an individual layer or timeline track.
 - **Copy and paste** — copying a group includes its contents. Paste into another format scales the
   selection with the target's text and layout rules while preserving crops, focal points, rotation,
   and relative ordering. Right-click **Paste** centers the selection at the clicked canvas point,
@@ -52,8 +56,10 @@ saved.
   such as Minus Front cutting through the middle of a shape) becomes one compound path with that hole.
   If the shapes cannot be combined, a warning appears and the design is left unchanged.
 - **Pages and Carousel** — image outputs can hold multiple pages (up to 20 per output). Open **View
-  → Pages / Carousel** and choose a view. Both use the same slides, with selection, reorder,
-  duplicate, delete, and one Undo per operation. **Carousel** shows a side-by-side filmstrip with an
+  → Pages / Carousel** and choose a view; adding or duplicating a page opens the strip automatically.
+  Right-click a page or use its three-dot menu to duplicate, rename, or delete it. Both use the same
+  slides, with selection, reorder, duplicate, delete, and one Undo per operation. **Carousel** shows a
+  side-by-side filmstrip with an
   Add button after every slide; deleting slide 1 promotes the next slide. Page selection is preserved
   in the export dialog, raster exports create one file per selected slide, and PDF export combines
   an output's pages into one file.
@@ -176,7 +182,8 @@ timeline as an image clip.
 Choose a Brand Kit in **Brand Mode** to prioritize its colors, fonts, logos, reference images,
 preferred formats, and associated templates, with optional enforcement against that kit. Associated
 templates are prioritized before pagination, including libraries larger than one page. **General
-Mode** leaves the design unrestricted and disables enforcement without changing any layers. Its custom
+Mode — No brand rules** leaves the design unrestricted and disables enforcement without changing any
+layers. The default brand is labelled **Starter brand profile**. General Mode's custom
 font list includes all kits, with duplicate family/weight/style faces resolved in the same default-first
 order in the editor and exported files. The choice is saved in the design and survives versions,
 exports, and `.pdesign` reimports. Saving a logo to the Brand Kit and adding it to the canvas are

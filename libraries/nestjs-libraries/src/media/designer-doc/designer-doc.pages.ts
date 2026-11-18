@@ -174,6 +174,29 @@ export const movePage = (
   };
 };
 
+export const cloneElementsForDuplication = (
+  children: DesignerElement[],
+  origins: 'fresh' | 'preserve' | 'remove',
+  idGen: () => string = genId
+): DesignerElement[] => {
+  const ids = new Map(children.map((el) => [el.id, idGen()]));
+  const groups = new Map<string, string>();
+  for (const el of children) {
+    if (el.groupId && !groups.has(el.groupId)) groups.set(el.groupId, idGen());
+  }
+  return children.map((el) => ({
+    ...JSON.parse(JSON.stringify(el)),
+    id: ids.get(el.id)!,
+    originId: origins === 'fresh'
+      ? idGen()
+      : origins === 'preserve'
+        ? el.originId
+        : undefined,
+    parentId: el.parentId ? ids.get(el.parentId) : undefined,
+    groupId: el.groupId ? groups.get(el.groupId) : undefined,
+  }));
+};
+
 /**
  * Deep-clone a page into a NEW page inserted right after it. Every element
  * gets a fresh id AND a fresh originId — a duplicate that kept the source's
@@ -195,11 +218,7 @@ export const duplicatePageAt = (
   const copy: DesignerPageContent = {
     id: newPageId ?? genId(),
     background: sourceBg ? JSON.parse(JSON.stringify(sourceBg)) : undefined,
-    children: pageChildren(output, pageNumber).map((el) => ({
-      ...JSON.parse(JSON.stringify(el)),
-      id: genId(),
-      originId: genId(),
-    })),
+    children: cloneElementsForDuplication(pageChildren(output, pageNumber), 'fresh'),
   };
   const pages = [...(output.pages ?? [])];
   // pageNumber 0 inserts at the head of the extras array (as page 2).

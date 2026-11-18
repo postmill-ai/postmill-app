@@ -18,23 +18,59 @@ vi.mock('../format-thumbnail', () => ({
 describe('PagesPanel Carousel', () => {
   it('adds after the selected slide and deletes slide 1 with one Undo', () => {
     const store = createDesignerStore();
-    render(<PagesPanel store={store} visible />);
+    const onContentAdded = vi.fn();
+    render(<PagesPanel store={store} visible onContentAdded={onContentAdded} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Carousel' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add slide after 1' }));
     expect(store.getState().doc.outputs[0].pages).toHaveLength(1);
     expect(store.getState().currentPage).toBe(1);
+    expect(onContentAdded).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Duplicate page' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Page 1 actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate page' }));
     expect(store.getState().doc.outputs[0].pages).toHaveLength(2);
+    expect(onContentAdded).toHaveBeenCalledTimes(2);
 
     const historyLength = store.getState().history.length;
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete page' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Page 1 actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete page' }));
     expect(store.getState().doc.outputs[0].pages).toHaveLength(1);
     expect(store.getState().history).toHaveLength(historyLength + 1);
     expect(store.getState().currentPage).toBe(0);
 
     act(() => store.getState().undo());
     expect(store.getState().doc.outputs[0].pages).toHaveLength(2);
+  });
+
+  it('duplicates from right-click, reopens the strip, and explains both views', () => {
+    const store = createDesignerStore();
+    const onContentAdded = vi.fn();
+    render(<PagesPanel store={store} visible onContentAdded={onContentAdded} />);
+    const historyLength = store.getState().history.length;
+
+    expect(screen.getByRole('button', { name: 'Pages' }).getAttribute('data-tooltip-content'))
+      .toBe('Manage pages in this format');
+    expect(screen.getByRole('button', { name: 'Carousel' }).getAttribute('data-tooltip-content'))
+      .toBe('Arrange slides; insert or delete at any position');
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Page 1' }), {
+      clientX: 40, clientY: 50,
+    });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate page' }));
+
+    expect(store.getState().doc.outputs[0].pages).toHaveLength(1);
+    expect(store.getState().history).toHaveLength(historyLength + 1);
+    expect(onContentAdded).toHaveBeenCalledTimes(1);
+    act(() => store.getState().undo());
+    expect(store.getState().doc.outputs[0].pages).toBeUndefined();
+  });
+
+  it('keeps page duplication disabled while the format is frozen', () => {
+    const store = createDesignerStore();
+    store.getState().setOutputFrozen(0, true);
+    render(<PagesPanel store={store} visible />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Page 1 actions' }));
+    expect(screen.getByRole('menuitem', { name: 'Duplicate page' })).toHaveProperty('disabled', true);
   });
 });

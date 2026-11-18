@@ -9,10 +9,14 @@ import {
   type ChannelPreset,
 } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { pageChildren, pageCount } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import { MAX_OUTPUTS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { ContextMenu, type ContextMenuItem } from '../../ui/context-menu';
+import { useContextMenu } from '../../ui/use-context-menu';
 import { FormatThumbnail } from './format-thumbnail';
 
 interface OutputTabsProps {
   store: any;
+  onPagesContentAdded?: () => void;
 }
 
 const CHANNEL_GROUPS: Record<
@@ -188,7 +192,7 @@ const PortalPopover: React.FC<PortalPopoverProps> = ({
   );
 };
 
-export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsProps) {
+export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContentAdded }: OutputTabsProps) {
   const t = useT();
   const toaster = useToaster();
   const doc = store((s: any) => s.doc);
@@ -217,6 +221,8 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
   const [linkContent, setLinkContent] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const formatTileRefs = useRef(new Map<string, HTMLDivElement>());
+  const formatMenu = useContextMenu<number>();
   const addBtnRef = useRef<HTMLButtonElement>(null);
   const overflowBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -241,10 +247,62 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
     }
   }, [currentOutput, reduceMotion]);
 
-  const handleRemove = (e: React.MouseEvent, i: number) => {
-    e.stopPropagation();
-    if (outputs.length <= 1) return;
-    store.getState().removeOutput(i);
+  const openResize = (index: number) => {
+    const output = outputs[index];
+    const anchor = output ? formatTileRefs.current.get(output.id) : undefined;
+    if (anchor) openPopover('resize', anchor, { resizeIndex: index });
+  };
+
+  const notifyPagesContentAdded = () => {
+    const state = store.getState();
+    const output = state.doc.outputs[state.currentOutput];
+    if (output && 'children' in output && pageCount(output) > 1) {
+      onPagesContentAdded?.();
+    }
+  };
+
+  const duplicateFormat = (index: number, linkContent: boolean) => {
+    if (store.getState().duplicateOutput(index, { linkContent })) {
+      notifyPagesContentAdded();
+      return;
+    }
+    const source = store.getState().doc.outputs[index];
+    toaster.show(
+      outputs.length >= MAX_OUTPUTS
+        ? t('designer_format_limit', 'Format limit reached')
+        : source?.frozen
+          ? t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.')
+          : t('something_went_wrong', 'Something went wrong'),
+      'warning'
+    );
+  };
+
+  const actionsFor = (index: number): ContextMenuItem[] => {
+    const output = outputs[index];
+    return [
+      {
+        label: t('designer_resize_or_change_format_aria', 'Resize or change format'),
+        onClick: () => openResize(index),
+        disabled: output.frozen === true,
+      },
+      {
+        label: t('designer_duplicate_linked', 'Duplicate linked'),
+        onClick: () => duplicateFormat(index, true),
+        disabled: outputs.length >= MAX_OUTPUTS,
+      },
+      {
+        label: t('designer_duplicate_independent', 'Duplicate independently'),
+        onClick: () => duplicateFormat(index, false),
+        disabled: outputs.length >= MAX_OUTPUTS,
+      },
+      { divider: true },
+      {
+        label: t('designer_remove_format', 'Remove format'),
+        onClick: () => store.getState().removeOutput(index),
+        disabled: output.frozen === true || outputs.length <= 1,
+        danger: true,
+      },
+    ];
   };
 
   const toggleFormat = (id: string) => {
@@ -284,6 +342,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
       if (preset) applied.push(id);
     }
     setPendingFormats(new Set());
+    notifyPagesContentAdded();
     closePopover();
   };
 
@@ -307,6 +366,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
         );
         return;
       }
+      notifyPagesContentAdded();
       closePopover();
       setCW('1080');
       setCH('1080');
@@ -351,13 +411,19 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
         {outputs.map((output: any, i: number) => (
           <div
             key={output.id}
-            className="relative group shrink-0"
+            data-output-index={i}
+            ref={(element) => {
+              if (element) formatTileRefs.current.set(output.id, element);
+              else formatTileRefs.current.delete(output.id);
+            }}
+            className="relative shrink-0"
           >
             <button
               onClick={() => store.getState().setCurrentOutput(i)}
+              onContextMenu={(event) => formatMenu.openAt(event, i)}
               aria-current={i === currentOutput}
               className={`relative rounded-md border-2 flex flex-col items-center justify-center text-center px-2 gap-0.5 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
-                i === currentOutput
+                i === currentOutput || output.frozen
                   ? 'border-designerAccent bg-designerAccent/10'
                   : 'border-studioBorder hover:border-studioBorder'
               }`}
@@ -388,6 +454,11 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
               <span className="text-[9px] text-textColor/50 leading-none">
                 {output.width}×{output.height}
               </span>
+              {output.frozen && (
+                <span className="absolute bottom-1 left-1 rounded-sm bg-designerAccent/15 text-btnPrimaryAccent text-[8px] font-medium leading-none px-1 py-0.5">
+                  {t('designer_frozen_label', 'Frozen')}
+                </span>
+              )}
               {mode === 'image' && pageCount(output) > 1 && (
                 <span
                   className="absolute bottom-1 right-1 rounded-sm bg-designerAccent/15 text-btnPrimaryAccent text-[8px] leading-none px-1 py-0.5"
@@ -417,31 +488,23 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
             >
               ❄
             </button>
-            <div className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center gap-0.5 z-10">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openPopover('resize', e.currentTarget as HTMLElement, { resizeIndex: i });
-                }}
-                disabled={output.frozen === true}
-                title={t('designer_resize_change_format_title', 'Resize / change format')}
-                aria-label={t('designer_resize_or_change_format_aria', 'Resize or change format')}
-                className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[8px] text-textColor/60 hover:text-textColor disabled:opacity-30"
-              >
-                ⋮
-              </button>
-              {outputs.length > 1 && (
-                <button
-                  onClick={(e) => handleRemove(e, i)}
-                  disabled={output.frozen === true}
-                  title={t('designer_remove_format', 'Remove format')}
-                  aria-label={t('designer_remove_format', 'Remove format')}
-                  className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[9px] text-dangerText hover:bg-red-500/20 disabled:opacity-30"
-                >
-                  ×
-                </button>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                formatMenu.openAt({
+                  clientX: rect.right,
+                  clientY: rect.bottom,
+                  currentTarget: event.currentTarget,
+                }, i);
+              }}
+              aria-label={t('designer_format_actions', '{{name}} actions', { name: output.name })}
+              aria-haspopup="menu"
+              aria-expanded={formatMenu.menu?.target === i}
+              className="absolute -top-1.5 -right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[10px] text-textColor/60 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+            >
+              ⋮
+            </button>
           </div>
         ))}
 
@@ -472,13 +535,14 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
                 {outputs.map((output: any, i: number) => (
                   <div
                     key={output.id}
-                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-studioBorder/10 group/item"
+                    className={`flex items-center gap-2 px-3 py-1.5 hover:bg-studioBorder/10 ${output.frozen ? 'bg-designerAccent/10' : ''}`}
                   >
                     <button
                       onClick={() => {
                         store.getState().setCurrentOutput(i);
                         closePopover();
                       }}
+                      onContextMenu={(event) => formatMenu.openAt(event, i)}
                       className={`flex-1 text-left text-[12px] ${
                         i === currentOutput
                           ? 'text-btnPrimaryAccent font-medium'
@@ -489,30 +553,29 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
                       <span className="text-[10px] text-textColor/50 ml-1">
                         {output.width}×{output.height}
                       </span>
+                      {output.frozen && (
+                        <span className="ms-1 rounded-sm bg-designerAccent/15 px-1 py-0.5 text-[9px] text-btnPrimaryAccent">
+                          {t('designer_frozen_label', 'Frozen')}
+                        </span>
+                      )}
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openPopover('resize', e.currentTarget as HTMLElement, { resizeIndex: i });
+                      type="button"
+                      onClick={(event) => {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        formatMenu.openAt({
+                          clientX: rect.right,
+                          clientY: rect.bottom,
+                          currentTarget: event.currentTarget,
+                        }, i);
                       }}
-                      title={t('designer_resize_change_format_title', 'Resize / change format')}
-                      aria-label={t('designer_resize_or_change_format_aria', 'Resize or change format')}
-                      className="w-5 h-5 flex items-center justify-center rounded-sm text-[10px] text-textColor/40 hover:text-textColor opacity-0 group-hover/item:opacity-100"
+                      aria-label={t('designer_format_actions', '{{name}} actions', { name: output.name })}
+                      aria-haspopup="menu"
+                      aria-expanded={formatMenu.menu?.target === i}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-[12px] text-textColor/50 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
                     >
                       ⋮
                     </button>
-                    {outputs.length > 1 && (
-                      <button
-                        onClick={(e) => {
-                          handleRemove(e, i);
-                          closePopover();
-                        }}
-                        aria-label={t('designer_remove_format', 'Remove format')}
-                        className="w-5 h-5 flex items-center justify-center rounded-sm text-[10px] text-dangerText hover:bg-red-500/20 opacity-0 group-hover/item:opacity-100"
-                      >
-                        ×
-                      </button>
-                    )}
                   </div>
                 ))}
               </div>
@@ -566,7 +629,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           open={showAddFormats}
           onClose={closePopover}
           align="right"
-          className="bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl overflow-hidden w-72 p-3"
+          className="bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl overflow-hidden w-72 max-w-[calc(100vw-1rem)] p-3"
         >
           <div className="text-[12px] font-medium text-textColor mb-2">
             {mode === 'video'
@@ -658,7 +721,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
             <div className="text-[10px] font-semibold text-textColor/30 uppercase tracking-wider px-1 mb-1">
               {t('designer_custom_size_heading', 'Custom Size')}
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <input
                 type="number"
                 value={cW}
@@ -678,7 +741,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
               />
               <button
                 onClick={handleAddCustom}
-                className="h-7 px-2 rounded-sm text-[11px] border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10 shrink-0"
+                className="h-7 w-full px-2 rounded-sm text-[11px] border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10 shrink-0"
               >
                 {t('designer_add_custom_size', 'Add custom size')}
               </button>
@@ -702,7 +765,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
         anchorEl={showResize ? popoverAnchor : null}
         open={showResize}
         onClose={closePopover}
-        className="bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl overflow-hidden w-64 p-3"
+        className="bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl overflow-hidden w-64 max-w-[calc(100vw-1rem)] p-3"
       >
         <div className="text-[12px] font-medium text-textColor mb-2">
           {t('designer_resize_format_heading', 'Resize Format')}
@@ -728,7 +791,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           )}
         </div>
         <div className="border-t border-studioBorder mt-2 pt-2">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <input
               type="number"
               value={cW}
@@ -750,13 +813,24 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
               onClick={() =>
                 handleResizeCustom(resizeIndex!)
               }
-              className="h-7 px-2 rounded-sm text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80 shrink-0"
+              className="h-7 w-full px-2 rounded-sm text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80 shrink-0"
             >
               {t('apply', 'Apply')}
             </button>
           </div>
         </div>
       </PortalPopover>
+      {formatMenu.menu && (
+        <ContextMenu
+          x={formatMenu.menu.x}
+          y={formatMenu.menu.y}
+          items={actionsFor(formatMenu.menu.target)}
+          onClose={formatMenu.close}
+          ariaLabel={t('designer_format_actions', '{{name}} actions', {
+            name: outputs[formatMenu.menu.target]?.name ?? '',
+          })}
+        />
+      )}
     </div>
   );
 });

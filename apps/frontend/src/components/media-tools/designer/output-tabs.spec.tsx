@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { computePopoverLeft, computePopoverPlacement, OutputTabs } from './output-tabs';
 import { createDesignerStore } from './designer.store';
 
@@ -197,10 +197,12 @@ describe('OutputTabs format workflows', () => {
     const freeze = screen.getAllByRole('button', { name: 'Freeze format' })[0];
     fireEvent.click(freeze);
     expect(store.getState().doc.outputs[0].frozen).toBe(true);
+    expect(screen.getByText('Frozen').className).toContain('bg-designerAccent/15');
     expect(screen.getByRole('button', { name: 'Add format' })).toHaveProperty('disabled', false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Unfreeze format' }));
     expect(store.getState().doc.outputs[0].frozen).toBeUndefined();
+    expect(screen.queryByText('Frozen')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /X 1200×675/ }));
     expect(store.getState().currentOutput).toBe(1);
   });
@@ -259,5 +261,71 @@ describe('OutputTabs format workflows', () => {
     expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
     fireEvent.click(screen.getByRole('button', { name: 'Link edits across formats' }));
     expect(store.getState().editFormatOnly).toBe(false);
+  });
+});
+
+
+describe('OutputTabs duplication actions', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('duplicates a page-bearing format from its three-dot menu and reopens Pages', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', text: 'Linked', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addPage();
+    const onPagesContentAdded = vi.fn();
+    const historyLength = store.getState().history.length;
+    render(<OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Instagram Post actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate linked' }));
+
+    expect(store.getState().doc.outputs).toHaveLength(2);
+    expect(store.getState().currentOutput).toBe(1);
+    expect(store.getState().doc.outputs[1].children[0].originId)
+      .toBe(store.getState().doc.outputs[0].children[0].originId);
+    expect(store.getState().history).toHaveLength(historyLength + 1);
+    expect(onPagesContentAdded).toHaveBeenCalledTimes(1);
+    act(() => store.getState().undo());
+    expect(store.getState().doc.outputs).toHaveLength(1);
+  });
+
+  it('duplicates a video format independently from right-click without reflow', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const track = store.getState().doc.outputs[0].tracks[0];
+    store.getState().addClip(0, track.id, {
+      id: 'clip', startMs: 100, endMs: 2000, src: '/movie.mp4', x: 12, y: 24, width: 320, height: 180,
+    } as never);
+    const historyLength = store.getState().history.length;
+    render(<OutputTabs store={store} />);
+
+    fireEvent.contextMenu(screen.getAllByRole('button', { name: /Instagram Post/ })[0], {
+      clientX: 30, clientY: 40,
+    });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate independently' }));
+
+    const outputs = store.getState().doc.outputs;
+    expect(outputs).toHaveLength(2);
+    const sourceClip = outputs[0].tracks[0].clips[0];
+    const copyClip = outputs[1].tracks[0].clips[0];
+    expect(copyClip).toMatchObject({ x: 12, y: 24, width: 320, height: 180, startMs: 100, endMs: 2000 });
+    expect(copyClip.id).not.toBe(sourceClip.id);
+    expect(copyClip.originId).toBeUndefined();
+    expect(store.getState().history).toHaveLength(historyLength + 1);
+  });
+
+  it('opens the existing resize popover from the format action menu', () => {
+    const store = createDesignerStore();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Instagram Post actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Resize or change format' }));
+
+    expect(screen.getByText('Resize Format')).toBeTruthy();
   });
 });

@@ -1381,3 +1381,120 @@ test('clip context menu duplicates the intended clip without changing another tr
   expect(state.doc.outputs[0].tracks[0].clips).toHaveLength(1);
   expect(state.doc.outputs[0].tracks[0].clips[0]).toMatchObject({ id: 'video-clip', src: '/video.mp4' });
 });
+
+
+test('page and format duplication reopen Pages and preserve exact linked content with Undo', async ({ page }) => {
+  const doc = structuredClone(initialDoc) as any;
+  Object.assign(doc.outputs[0], { formatId: 'ig-post', name: 'Instagram Post' });
+  doc.outputs[0].children.forEach((child: any, index: number) => {
+    child.originId = `source-origin-${index}`;
+  });
+  doc.outputs[0].pages = [{
+    id: 'details-page', name: 'Details', background: { type: 'color', color: '#eef2ff' },
+    children: [{
+      ...structuredClone(doc.outputs[0].children[0]), id: 'details-copy', originId: 'details-origin',
+      text: 'Details page',
+    }],
+  }];
+  const state = await installMocks(page, doc);
+  await page.addInitScript(() => {
+    localStorage.setItem('designer-pages-bar-e2e-org', 'false');
+  });
+  await openDesigner(page);
+  const pagesStrip = page.locator('div[aria-label="Pages"][aria-disabled]');
+  await expect(pagesStrip).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Instagram Post actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Duplicate linked', exact: true }).click();
+  await expect.poll(() => state.doc.outputs.length).toBe(2);
+  await expect(pagesStrip).toBeVisible();
+  expect(state.doc.outputs[1]).toMatchObject({ width: 400, height: 400, name: 'Instagram Post 2' });
+  expect(state.doc.outputs[1].children.map((child: any) => child.originId))
+    .toEqual(state.doc.outputs[0].children.map((child: any) => child.originId));
+  expect(state.doc.outputs[1].pages[0].children[0]).toMatchObject({ text: 'Details page' });
+  expect(state.doc.outputs[1].pages[0].children[0].originId).not.toBe('details-origin');
+  expect(state.doc.outputs[1].pages[0].background).toEqual({ type: 'color', color: '#eef2ff' });
+
+  await page.getByRole('button', { name: 'Pages', exact: true }).hover();
+  await expect(page.getByText('Manage pages in this format', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Carousel', exact: true }).hover();
+  await expect(page.getByText('Arrange slides; insert or delete at any position', { exact: true })).toBeVisible();
+
+  await page.locator('[data-page-index="0"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Duplicate page', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[1].pages.length).toBe(2);
+  expect(state.doc.outputs[0].pages).toHaveLength(1);
+  expect(state.doc.outputs[1].pages[1].children[0].text).toBe('Hello world');
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[1].pages.length).toBe(1);
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs.length).toBe(1);
+
+  await page.getByRole('button', { name: 'Freeze format', exact: true }).click();
+  await expect(page.getByText('Frozen', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Add format', exact: true }).click();
+  const addCustom = page.getByRole('button', { name: 'Add custom size', exact: true });
+  await addCustom.scrollIntoViewIfNeeded();
+  await expect(addCustom).toBeVisible();
+  const customBox = await addCustom.boundingBox();
+  expect(customBox).not.toBeNull();
+  expect(customBox!.x).toBeGreaterThanOrEqual(0);
+  expect(customBox!.x + customBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(await addCustom.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
+
+test('video format right-click duplicates exact timing independently with one Undo', async ({ page }) => {
+  const state = await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+
+  await page.locator('[data-output-index="0"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Duplicate independently', exact: true }).click();
+
+  await expect.poll(() => state.doc.outputs.length).toBe(2);
+  const source = state.doc.outputs[0];
+  const copy = state.doc.outputs[1];
+  expect(copy).toMatchObject({ width: 400, height: 400, durationMs: 5000 });
+  expect(copy.tracks).toHaveLength(source.tracks.length);
+  expect(copy.tracks[0].clips[0]).toMatchObject({
+    startMs: 0, endMs: 5000, x: 220, y: 40, width: 140, height: 100,
+  });
+  expect(copy.tracks[1].clips[0].crop).toEqual(source.tracks[1].clips[0].crop);
+  expect(copy.tracks[1].clips[0].fileId).toBe('old-still-file');
+  expect(copy.tracks[0].clips[0].id).not.toBe(source.tracks[0].clips[0].id);
+  expect(copy.tracks[0].clips[0].originId).toBeUndefined();
+  expect(copy.tracks[0].id).not.toBe(source.tracks[0].id);
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs.length).toBe(1);
+});
+
+test('brand explanations and custom-size controls fit a narrow mobile layout', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installMocks(page);
+  await page.route('**/brands', (route) => json(route, [{
+    id: 'default-brand', name: 'Default Brand', enabled: true, isDefault: true,
+    palette: [], fontFamilies: [], logoFileIds: [],
+  }]));
+  await openDesigner(page);
+
+  await page.getByRole('button', { name: 'Tools', exact: true }).click();
+  await page.getByRole('button', { name: 'Brand', exact: true }).click();
+  const brandSelect = page.getByRole('combobox', { name: 'Brand / General Mode', exact: true });
+  await expect(brandSelect).toBeVisible();
+  expect(await brandSelect.locator('option').allTextContents()).toEqual([
+    'General Mode — No brand rules',
+    'Default Brand — Starter brand profile',
+  ]);
+  await page.getByRole('region', { name: 'Brand', exact: true })
+    .getByRole('button', { name: 'Collapse panel', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Add format', exact: true }).click();
+  const addCustom = page.getByRole('button', { name: 'Add custom size', exact: true });
+  await addCustom.scrollIntoViewIfNeeded();
+  await expect(addCustom).toBeVisible();
+  const box = await addCustom.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  expect(await addCustom.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
