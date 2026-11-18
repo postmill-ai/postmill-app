@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
 import { DesignRenderService } from './design-render.service';
+import { videoOutputToPosterOutput } from '../designer-doc/video-poster';
 
 /**
  * Parity fixtures — the tests that would have caught this whole round.
@@ -174,6 +175,48 @@ describe('parity: geometry', () => {
     // Angle 0 runs left to right: dark on the left, light on the right.
     expect(pixels.at(4, 100)[0]).toBeLessThan(60);
     expect(pixels.at(196, 100)[0]).toBeGreaterThan(195);
+  });
+
+  it('renders a video shape gradient through the static poster projection', async () => {
+    const poster = videoOutputToPosterOutput({
+      id: 'video-poster',
+      formatId: 'square',
+      name: 'Video poster',
+      width: 200,
+      height: 200,
+      fps: 30,
+      durationMs: 1000,
+      background: '#ffffff',
+      tracks: [{
+        id: 'shape-track',
+        type: 'shape',
+        clips: [{
+          id: 'gradient-shape',
+          startMs: 0,
+          endMs: 1000,
+          shape: 'rect',
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 200,
+          fill: '#112233',
+          fillGradient: {
+            type: 'linear',
+            angle: 0,
+            stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }],
+          },
+        }],
+      }],
+    });
+
+    const pixels = await render({ ...doc([]), outputs: [poster] });
+
+    expect(pixels.at(4, 100)[0]).toBeGreaterThan(240);
+    expect(pixels.at(4, 100)[2]).toBeLessThan(20);
+    expect(pixels.at(100, 100)[0]).toBeGreaterThan(100);
+    expect(pixels.at(100, 100)[2]).toBeGreaterThan(100);
+    expect(pixels.at(196, 100)[0]).toBeLessThan(20);
+    expect(pixels.at(196, 100)[2]).toBeGreaterThan(240);
   });
 
   it('rounds each corner separately when given four radii', async () => {

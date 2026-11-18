@@ -438,7 +438,9 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
   is part of the canvas font shorthand in Konva, `drawVideoText`, captions, and poster projection;
   italic catalog faces must be included in `fontLinksForOutput` and `fontPreloadsForOutput`. Shape
   gradients use injected `buildStyleGradient`; doc v9 `fillGradient`/`align` also project through
-  `video-poster.ts`. Rect clips accept scalar or `[tl,tr,br,bl]` radii through injected `cornerRadii`
+  `video-poster.ts`. The Konva preview omits a shape's solid `fill` whenever gradient stops exist —
+  Konva's default `fillPriority: color` otherwise paints the solid and hides the gradient. Rect clips
+  accept scalar or `[tl,tr,br,bl]` radii through injected `cornerRadii`
   and Canvas `roundRect` — never coerce a tuple to a scalar. Doc v10 `groupId` is editor/reflow
   metadata, not a nested render container: it is format-local, remapped on duplicate/paste/seed, and
   grouped clips reflow through one shared bounding box. `originId` linked-variant semantics are

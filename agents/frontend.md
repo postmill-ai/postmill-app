@@ -539,7 +539,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `video-text-layout.ts`: paragraphs, long-token splitting, fixed-box overflow, one-fontSize line
   height, centred baselines and justified offsets. The frame script receives it through
   `videoTextLayoutSource()`; never reintroduce a second `wrapText` there. Shape clips use the same
-  `buildStyleGradient` and `gradientFillProps` as image shapes. Text and compatible caption clips use
+  `buildStyleGradient` and `gradientFillProps` as image shapes. A shape with gradient stops must omit
+  Konva's solid `fill`, whose default color priority otherwise hides the gradient; solid mode restores
+  the stored/default color. Text and compatible caption clips use
   those same gradients plus optional v14 `textStroke`; the shared Inspector exposes solid/multi-stop
   fills and outline color/width. Chromium strokes before filling through `drawVideoText` with Konva's
   miter limit 2, composites the resulting text/caption bitmap once at transition opacity, and Konva uses

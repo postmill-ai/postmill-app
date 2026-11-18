@@ -257,8 +257,10 @@ describe('applyLinkedVideoClip styles', () => {
       })),
     } as unknown as DesignerDoc;
     const fillGradient = {
-      type: 'linear' as const,
-      stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }],
+      type: 'radial' as const,
+      focalX: 0.25,
+      focalY: 0.75,
+      stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff80' }],
     };
 
     const { outputs, affected } = applyLinkedVideoClip(
@@ -285,6 +287,20 @@ describe('applyLinkedVideoClip styles', () => {
     expect(sibling.groupId).toBe('group-1');
     expect(sibling.x).toBe(100);
     expect(sibling.startMs).toBe(500);
+
+    const cleared = applyLinkedVideoClip(
+      { ...doc, outputs },
+      0,
+      'track-0',
+      'clip-0',
+      { fillGradient: undefined, fill: '#123456' },
+      false
+    );
+    const solidSibling = (cleared.outputs[1] as any).tracks[0].clips[0];
+    expect(solidSibling.fillGradient).toBeUndefined();
+    expect(solidSibling.fill).toBe('#123456');
+    expect(solidSibling.x).toBe(100);
+    expect(solidSibling.startMs).toBe(500);
   });
 
   it('clears stale crop and focal points on linked clips when their media is replaced', () => {

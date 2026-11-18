@@ -125,6 +125,29 @@ describe('reflowVideoClip', () => {
     expect(out.keyframes![0].props.opacity).toBe(1);
   });
 
+  it('preserves the complete gradient while reflowing shape geometry', () => {
+    const fillGradient = {
+      type: 'radial' as const,
+      focalX: 0.25,
+      focalY: 0.75,
+      stops: [
+        { offset: 0, color: '#ff0000' },
+        { offset: 0.5, color: '#00ff0080' },
+        { offset: 1, color: '#0000ff' },
+      ],
+    };
+    const source = clip({
+      shape: 'rect', x: 100, y: 100, width: 400, height: 300, rotation: 30, fillGradient,
+    });
+
+    const out = reflowVideoClip(source, 'shape', LANDSCAPE, PORTRAIT);
+
+    expect(out.width).toBe(225);
+    expect(out.height).toBe(169);
+    expect(out.rotation).toBe(30);
+    expect(out.fillGradient).toEqual(fillGradient);
+  });
+
   it('never touches audio clips', () => {
     const c = clip({ x: 1, y: 2, width: 3, height: 4, volume: 0.7 });
     expect(reflowVideoClip(c, 'audio', LANDSCAPE, PORTRAIT)).toMatchObject({

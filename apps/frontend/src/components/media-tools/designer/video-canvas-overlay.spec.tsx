@@ -211,6 +211,8 @@ describe('video overlay paint invalidation', () => {
 });
 
 
+const FILL_SHAPES = ['rect', 'ellipse', 'star', 'triangle', 'polygon'] as const;
+
 describe('video overlay styles and keyframed text', () => {
   it('passes gradient, alignment, italic weight, and interpolated font size to Konva', async () => {
     const store = createDesignerStore(500, 500);
@@ -229,6 +231,7 @@ describe('video overlay styles and keyframed text', () => {
       y: 0,
       width: 100,
       height: 100,
+      fill: '#ff0000',
       fillGradient: {
         type: 'linear',
         angle: 0,
@@ -281,6 +284,7 @@ describe('video overlay styles and keyframed text', () => {
     const shape = stage.findOne('#gradient-shape')!.findOne('Rect') as Konva.Rect;
     const text = stage.findOne('#aligned-text') as Konva.Text;
     expect(shape.fillLinearGradientColorStops()).toEqual([0, '#000000', 1, '#ffffff']);
+    expect(shape.getAttr('fill')).toBeUndefined();
     expect(text.align()).toBe('justify');
     expect(text.fontStyle()).toBe('italic 700');
     expect(text.fontSize()).toBe(48);
@@ -292,6 +296,148 @@ describe('video overlay styles and keyframed text', () => {
     expect(text.stroke()).toBe('#123456');
     expect(text.strokeWidth()).toBe(3);
     expect(text.fillAfterStrokeEnabled()).toBe(true);
+  });
+
+  it.each(['linear', 'radial'] as const)(
+    'omits solid fill and maps %s gradients for every fill-bearing shape',
+    async (type) => {
+      const store = createDesignerStore(500, 500);
+      store.getState().setMode('video');
+      store.getState().addTrack(0, 'shape');
+      const output = store.getState().doc.outputs[0] as VideoOutput;
+      const track = output.tracks.find((item) => item.type === 'shape')!;
+      const stops = [
+        { offset: 0, color: '#ff0000' },
+        { offset: 0.5, color: '#00ff0080' },
+        { offset: 1, color: '#0000ff' },
+      ];
+      for (const shape of FILL_SHAPES) {
+        store.getState().addClip(0, track.id, {
+          id: `gradient-${shape}`,
+          startMs: 0,
+          endMs: 1000,
+          shape,
+          x: 0,
+          y: 0,
+          width: 120,
+          height: 80,
+          rotation: shape === 'rect' ? 25 : 0,
+          fill: '#112233',
+          fillGradient: type === 'linear'
+            ? { type, angle: 90, stops }
+            : { type, focalX: 0.25, focalY: 0.75, stops },
+        } as never);
+      }
+      vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+        return this;
+      });
+
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      root = createRoot(host);
+      await act(async () => {
+        root!.render(
+          <Stage width={500} height={500}>
+            <Layer>
+              <VideoCanvasOverlay store={store} width={500} height={500} />
+            </Layer>
+          </Stage>
+        );
+      });
+
+      const stage = Konva.stages[Konva.stages.length - 1];
+      for (const shapeName of FILL_SHAPES) {
+        const group = stage.findOne(`#gradient-${shapeName}`)!;
+        const node = group.findOne(
+          shapeName === 'rect' ? 'Rect' : shapeName === 'ellipse' ? 'Ellipse' : 'Line'
+        ) as Konva.Shape;
+        const origin = shapeName === 'ellipse' ? { x: 60, y: 40 } : { x: 0, y: 0 };
+        expect(node.getAttr('fill')).toBeUndefined();
+        if (type === 'linear') {
+          expect(node.fillLinearGradientColorStops()).toEqual([
+            0, '#ff0000',
+            0.5, 'rgba(0, 255, 0, 0.5019607843137255)',
+            1, '#0000ff',
+          ]);
+          expect(node.fillLinearGradientStartPoint().x).toBeCloseTo(origin.x + 60);
+          expect(node.fillLinearGradientStartPoint().y).toBeCloseTo(origin.y);
+          expect(node.fillLinearGradientEndPoint().x).toBeCloseTo(origin.x + 60);
+          expect(node.fillLinearGradientEndPoint().y).toBeCloseTo(origin.y + 80);
+        } else {
+          expect(node.fillRadialGradientStartPoint()).toEqual({ x: origin.x + 30, y: origin.y + 60 });
+          expect(node.fillRadialGradientEndPoint()).toEqual({ x: origin.x + 60, y: origin.y + 40 });
+          expect(node.fillRadialGradientStartRadius()).toBe(0);
+          expect(node.fillRadialGradientEndRadius()).toBe(60);
+          expect(node.fillRadialGradientColorStops()).toEqual([
+            0, '#ff0000',
+            0.5, 'rgba(0, 255, 0, 0.5019607843137255)',
+            1, '#0000ff',
+          ]);
+        }
+      }
+
+      if (type === 'linear') {
+        const rect = stage.findOne('#gradient-rect')!;
+        expect(rect.rotation()).toBe(25);
+        await act(async () => {
+          store.getState().updateClipSilent(0, track.id, 'gradient-rect', {
+            width: 240,
+            height: 160,
+          });
+        });
+        const node = rect.findOne('Rect') as Konva.Rect;
+        expect(node.fillLinearGradientStartPoint().x).toBeCloseTo(120);
+        expect(node.fillLinearGradientStartPoint().y).toBeCloseTo(0);
+        expect(node.fillLinearGradientEndPoint().x).toBeCloseTo(120);
+        expect(node.fillLinearGradientEndPoint().y).toBeCloseTo(160);
+        expect(node.getAttr('fill')).toBeUndefined();
+      }
+    }
+  );
+
+  it('restores the solid fill when a shape gradient is removed', async () => {
+    const store = createDesignerStore(500, 500);
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'shape');
+    const output = store.getState().doc.outputs[0] as VideoOutput;
+    const track = output.tracks.find((item) => item.type === 'shape')!;
+    store.getState().addClip(0, track.id, {
+      id: 'solid-toggle',
+      startMs: 0,
+      endMs: 1000,
+      shape: 'rect',
+      width: 120,
+      height: 80,
+      fill: '#112233',
+      fillGradient: {
+        type: 'linear',
+        stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }],
+      },
+    } as never);
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={500} height={500}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={500} height={500} />
+          </Layer>
+        </Stage>
+      );
+    });
+
+    await act(async () => {
+      store.getState().updateClipSilent(0, track.id, 'solid-toggle', {
+        fillGradient: undefined,
+      });
+    });
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const node = stage.findOne('#solid-toggle')!.findOne('Rect') as Konva.Rect;
+    expect(node.getAttr('fill')).toBe('#112233');
   });
 
   it('renders text extrusion behind the original text clip', async () => {

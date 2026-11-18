@@ -256,8 +256,10 @@ describe('videoOutputToPosterOutput', () => {
     text.textStroke = { color: '#123456', width: 4 };
     const shape = out.tracks[2].clips[0];
     shape.fillGradient = {
-      type: 'linear',
-      stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }],
+      type: 'radial',
+      focalX: 0.25,
+      focalY: 0.75,
+      stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff80' }],
     };
     const poster = videoOutputToPosterOutput(out);
     expect(poster.children.find((el) => el.id === text.id)?.align).toBe('justify');
