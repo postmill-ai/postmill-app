@@ -211,6 +211,55 @@ describe('Bulk Create variables', () => {
     ]);
   });
 
+  it('assigns independent gradient stops across pages and symbols without changing solid fills', () => {
+    const template = makeDoc();
+    const gradient = (id: string) => element(id, {
+      type: 'shape', shape: 'rect', fill: '#123456',
+      fillGradient: {
+        type: 'linear', angle: 45,
+        stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }],
+      },
+    });
+    template.outputs[0].children = [gradient('gradient')];
+    template.outputs[0].pages[0].children = [gradient('page-gradient')];
+    template.symbols[0].children = [gradient('symbol-gradient')];
+    const targets = collectBulkAssignmentTargets(template);
+    expect(targets).toHaveLength(6);
+    expect(targets.map((target) => target.gradientStopIndex)).toEqual([0, 1, 0, 1, 0, 1]);
+
+    const result = applyBulkAssignments(template, Object.fromEntries(targets.map((target) => [
+      target.id,
+      target.gradientStopIndex === 0 ? 'gradient_start' : 'gradient_end',
+    ])));
+
+    const documents = [
+      result.outputs[0].children[0],
+      result.outputs[0].pages[0].children[0],
+      result.symbols[0].children[0],
+    ];
+    for (const item of documents) {
+      expect(item.fill).toBe('#123456');
+      expect(item.slot).toBeUndefined();
+      expect(item.fillGradient).toMatchObject({
+        type: 'linear', angle: 45,
+        stops: [{ offset: 0, color: '{{gradient_start}}' }, { offset: 1, color: '{{gradient_end}}' }],
+      });
+    }
+    expect(collectBulkVariables(result)).toEqual([
+      { name: 'gradient_end', kind: 'color' },
+      { name: 'gradient_start', kind: 'color' },
+    ]);
+    const row = applyBulkRow(result, { gradient_start: '#aa0000', gradient_end: '#00aa00' });
+    expect(row.outputs[0].children[0].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['#aa0000', '#00aa00']);
+    expect(row.outputs[0].pages[0].children[0].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['#aa0000', '#00aa00']);
+    expect(row.symbols[0].children[0].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['#aa0000', '#00aa00']);
+    expect(template.outputs[0].children[0].fillGradient.stops.map((stop: any) => stop.color))
+      .toEqual(['#ff0000', '#0000ff']);
+  });
+
   it('preserves existing variables and rejects a column already used by an incompatible kind', () => {
     const template = makeDoc();
     template.outputs[0].children.push(element('plain-text', { text: 'Headline' }));
