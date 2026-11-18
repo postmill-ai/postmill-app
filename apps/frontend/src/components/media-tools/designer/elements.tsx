@@ -723,6 +723,7 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, inter
       onContextMenu={(e) => {
         e.evt.preventDefault();
         e.evt.stopPropagation();
+        onSelect(element.id, e);
         onContextMenu?.(element.id, e.evt.clientX, e.evt.clientY);
       }}
       onTransformStart={() => setIsTransforming(true)}
@@ -829,6 +830,7 @@ const IconNode: FC<IconNodeProps> = ({ element, onSelect, onContextMenu, interac
       onContextMenu={(e) => {
         e.evt.preventDefault();
         e.evt.stopPropagation();
+        onSelect(element.id, e);
         onContextMenu?.(element.id, e.evt.clientX, e.evt.clientY);
       }}
     >
@@ -1073,6 +1075,7 @@ const SymbolHitRect: FC<{
     onContextMenu={(e) => {
       e.evt.preventDefault();
       e.evt.stopPropagation();
+      onSelect(instance.id, e);
       onContextMenu?.(instance.id, e.evt.clientX, e.evt.clientY);
     }}
   />
@@ -1185,6 +1188,7 @@ export const CanvasElements: FC<ElementsProps> = ({
           onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => {
             e.evt.preventDefault();
             e.evt.stopPropagation();
+            onSelect(el.id, e);
             onContextMenu?.(el.id, e.evt.clientX, e.evt.clientY);
           },
         };

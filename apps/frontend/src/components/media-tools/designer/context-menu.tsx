@@ -1,5 +1,6 @@
 'use client';
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { defaultTextBox } from './measure-text';
@@ -10,6 +11,11 @@ import {
 } from './layer-actions';
 import type { DesignerElement, DesignerOutput } from './designer.store';
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import {
+  getContextMenuPlacement,
+  getSubmenuPlacement,
+  type MenuPlacement,
+} from './context-menu-position';
 
 interface ContextMenuProps {
   x: number;
@@ -24,8 +30,8 @@ interface ContextMenuProps {
 interface MenuItem {
   label: string;
   action: (() => void) | null;
-  /** A hover flyout — the canvas context menu's answer to the menu bar's
-      submenuPath (used by Pathfinder). */
+  /** A hover/focus/touch flyout — the canvas context menu's answer to the
+      menu bar's submenuPath (used by Pathfinder). */
   children?: { label: string; action: () => void }[];
 }
 
@@ -33,6 +39,15 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
   const t = useT();
   const toaster = useToaster();
   const menuRef = useRef<HTMLDivElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const flyoutTriggerRefs = useRef(new Map<number, HTMLButtonElement>());
+  const flyoutCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flyoutFocusReturn = useRef(false);
+  const menuSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const flyoutSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const [openFlyout, setOpenFlyout] = useState<number | null>(null);
+  const [menuPlacement, setMenuPlacement] = useState<MenuPlacement | null>(null);
+  const [flyoutPlacement, setFlyoutPlacement] = useState<MenuPlacement | null>(null);
   const s = store.getState();
   const out = s.doc.outputs[s.currentOutput];
   const pageEls: DesignerElement[] = 'children' in out ? pageChildren(out as DesignerOutput, s.currentPage) : [];
@@ -53,47 +68,127 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
     .filter(Boolean) || []) as DesignerElement[];
   const pathfinderReady = combinableElements(selectedEls).length >= 2;
 
+  const cancelFlyoutClose = useCallback(() => {
+    if (flyoutCloseTimer.current) clearTimeout(flyoutCloseTimer.current);
+    flyoutCloseTimer.current = null;
+  }, []);
+
+  const scheduleFlyoutClose = useCallback(() => {
+    cancelFlyoutClose();
+    flyoutCloseTimer.current = setTimeout(() => setOpenFlyout(null), 120);
+  }, [cancelFlyoutClose]);
+
+  const showFlyout = useCallback((index: number) => {
+    cancelFlyoutClose();
+    if (index !== openFlyout) {
+      flyoutSizeRef.current = null;
+      setFlyoutPlacement(null);
+    }
+    setOpenFlyout(index);
+  }, [cancelFlyoutClose, openFlyout]);
+
+  const updatePlacements = useCallback(() => {
+    const menu = menuRef.current;
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    if (menu) {
+      const rect = menu.getBoundingClientRect();
+      const borderWidth = Math.max(0, rect.width - menu.clientWidth);
+      const borderHeight = Math.max(0, rect.height - menu.clientHeight);
+      const measured = menuSizeRef.current ?? { width: 0, height: 0 };
+      menuSizeRef.current = {
+        width: Math.max(measured.width, menu.scrollWidth + borderWidth),
+        height: Math.max(measured.height, menu.scrollHeight + borderHeight),
+      };
+      setMenuPlacement(getContextMenuPlacement({ x, y }, menuSizeRef.current, viewport));
+    }
+
+    const flyout = flyoutRef.current;
+    const trigger = openFlyout === null ? null : flyoutTriggerRefs.current.get(openFlyout);
+    if (flyout && trigger) {
+      const rect = flyout.getBoundingClientRect();
+      const borderWidth = Math.max(0, rect.width - flyout.clientWidth);
+      const borderHeight = Math.max(0, rect.height - flyout.clientHeight);
+      const measured = flyoutSizeRef.current ?? { width: 0, height: 0 };
+      flyoutSizeRef.current = {
+        width: Math.max(measured.width, flyout.scrollWidth + borderWidth),
+        height: Math.max(measured.height, flyout.scrollHeight + borderHeight),
+      };
+      setFlyoutPlacement(getSubmenuPlacement(
+        trigger.getBoundingClientRect(),
+        flyoutSizeRef.current,
+        viewport
+      ));
+    }
+  }, [openFlyout, x, y]);
+
+  useLayoutEffect(() => {
+    updatePlacements();
+  }, [targetType, elementId, pathfinderReady, updatePlacements]);
+
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+    const handler = () => updatePlacements();
+    window.addEventListener('resize', handler);
+    window.addEventListener('scroll', handler, true);
+    return () => {
+      window.removeEventListener('resize', handler);
+      window.removeEventListener('scroll', handler, true);
+    };
+  }, [updatePlacements]);
+
+  useEffect(() => {
+    const downHandler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(target) &&
+        !flyoutRef.current?.contains(target)
+      ) {
         onClose();
       }
     };
-    const escHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !menuRef.current) return;
+
+      const rootItems = Array.from(menuRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      ));
+      const trigger = openFlyout === null ? null : flyoutTriggerRefs.current.get(openFlyout);
+      const flyoutItems = flyoutRef.current
+        ? Array.from(flyoutRef.current.querySelectorAll<HTMLElement>('button:not([disabled])'))
+        : [];
+      const triggerIndex = trigger ? rootItems.indexOf(trigger) : -1;
+      const focusable = triggerIndex >= 0
+        ? [...rootItems.slice(0, triggerIndex + 1), ...flyoutItems, ...rootItems.slice(triggerIndex + 1)]
+        : rootItems;
+      if (!focusable.length) return;
+
+      const current = focusable.indexOf(document.activeElement as HTMLElement);
+      const direction = e.shiftKey ? -1 : 1;
+      const next = current < 0
+        ? (e.shiftKey ? focusable.length - 1 : 0)
+        : (current + direction + focusable.length) % focusable.length;
+      e.preventDefault();
+      focusable[next].focus();
     };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('keydown', escHandler);
+    document.addEventListener('mousedown', downHandler);
+    document.addEventListener('keydown', keyHandler, true);
     return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('keydown', escHandler);
+      document.removeEventListener('mousedown', downHandler);
+      document.removeEventListener('keydown', keyHandler, true);
     };
-  }, [onClose]);
+  }, [onClose, openFlyout]);
 
   useEffect(() => {
-    const el = menuRef.current;
-    if (!el) return;
-    const focusable = el.querySelectorAll(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    const first = focusable[0] as HTMLElement | undefined;
-    const last = focusable[focusable.length - 1] as HTMLElement | undefined;
-
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') {
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
-      }
+    menuRef.current?.querySelector<HTMLElement>('button')?.focus();
+    return () => {
+      if (flyoutCloseTimer.current) clearTimeout(flyoutCloseTimer.current);
     };
-
-    el.addEventListener('keydown', handler);
-    first?.focus();
-    return () => el.removeEventListener('keydown', handler);
   }, []);
 
   const items: MenuItem[] =
@@ -199,37 +294,99 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
   return (
     <div
       ref={menuRef}
-      className="fixed z-150 bg-newBgColorInner border border-studioBorder rounded-lg py-1 min-w-[200px] shadow-xl"
-      style={{ left: Math.min(x, window.innerWidth - 220), top: Math.min(y, window.innerHeight - 400) }}
+      data-testid="designer-context-menu"
+      className="fixed z-150 bg-newBgColorInner border border-studioBorder rounded-lg py-1 shadow-xl overflow-y-auto overflow-x-hidden overscroll-contain"
+      style={{
+        left: menuPlacement?.left ?? x,
+        top: menuPlacement?.top ?? y,
+        minWidth: menuPlacement ? Math.min(200, menuPlacement.maxWidth) : 'min(200px, calc(100vw - 16px))',
+        maxWidth: menuPlacement?.maxWidth,
+        maxHeight: menuPlacement?.maxHeight ?? 'calc(100vh - 16px)',
+      }}
     >
       {items.map((item, i) => {
         if (item.label === '-')
           return <div key={`divider-${i}`} className="border-t border-studioBorder my-1" />;
         if (item.children) {
           return (
-            <div key={item.label} className="relative group">
+            <div key={item.label}>
               <button
+                ref={(node) => {
+                  if (node) flyoutTriggerRefs.current.set(i, node);
+                  else flyoutTriggerRefs.current.delete(i);
+                }}
                 type="button"
                 aria-haspopup="menu"
+                aria-expanded={openFlyout === i}
+                aria-controls={openFlyout === i ? 'designer-context-flyout' : undefined}
                 className="w-full text-left px-3 py-1.5 text-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor focus-visible:bg-studioBorder/40 focus-visible:text-textColor focus-visible:outline-hidden flex items-center justify-between gap-3"
+                onMouseEnter={() => showFlyout(i)}
+                onMouseLeave={scheduleFlyoutClose}
+                onFocus={() => {
+                  if (flyoutFocusReturn.current) {
+                    flyoutFocusReturn.current = false;
+                    cancelFlyoutClose();
+                    return;
+                  }
+                  showFlyout(i);
+                }}
+                onBlur={scheduleFlyoutClose}
+                onClick={() => showFlyout(i)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'ArrowRight') return;
+                  e.preventDefault();
+                  showFlyout(i);
+                  requestAnimationFrame(() => flyoutRef.current?.querySelector<HTMLElement>('button')?.focus());
+                }}
               >
                 {item.label}
                 <span aria-hidden="true">▸</span>
               </button>
-              <div className="absolute left-full top-[-4px] hidden group-hover:block group-focus-within:block bg-newBgColorInner border border-studioBorder rounded-lg py-1 min-w-[160px] shadow-xl">
-                {item.children.map((child) => (
-                  <button
-                    key={child.label}
-                    className="w-full text-left px-3 py-1.5 text-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
-                    onClick={() => {
-                      child.action();
-                      onClose();
-                    }}
-                  >
-                    {child.label}
-                  </button>
-                ))}
-              </div>
+              {openFlyout === i && createPortal(
+                <div
+                  id="designer-context-flyout"
+                  ref={flyoutRef}
+                  role="menu"
+                  tabIndex={-1}
+                  aria-label={item.label}
+                  data-testid="designer-context-flyout"
+                  className="fixed z-150 bg-newBgColorInner border border-studioBorder rounded-lg py-1 shadow-xl overflow-y-auto overflow-x-hidden overscroll-contain"
+                  style={{
+                    left: flyoutPlacement?.left ?? 0,
+                    top: flyoutPlacement?.top ?? 0,
+                    minWidth: flyoutPlacement ? Math.min(160, flyoutPlacement.maxWidth) : 160,
+                    maxWidth: flyoutPlacement?.maxWidth,
+                    maxHeight: flyoutPlacement?.maxHeight ?? 'calc(100vh - 16px)',
+                    visibility: flyoutPlacement ? 'visible' : 'hidden',
+                  }}
+                  onMouseEnter={cancelFlyoutClose}
+                  onMouseLeave={scheduleFlyoutClose}
+                  onFocus={cancelFlyoutClose}
+                  onBlur={scheduleFlyoutClose}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'ArrowLeft') return;
+                    e.preventDefault();
+                    flyoutFocusReturn.current = true;
+                    setOpenFlyout(null);
+                    flyoutTriggerRefs.current.get(i)?.focus();
+                  }}
+                >
+                  {item.children.map((child) => (
+                    <button
+                      key={child.label}
+                      role="menuitem"
+                      className="w-full text-left px-3 py-1.5 text-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
+                      onClick={() => {
+                        child.action();
+                        onClose();
+                      }}
+                    >
+                      {child.label}
+                    </button>
+                  ))}
+                </div>,
+                document.body
+              )}
             </div>
           );
         }

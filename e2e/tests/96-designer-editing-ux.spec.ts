@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect, type Page, type Route, type Locator } from '@playwright/test';
 
 const DESIGN_ID = 'designer-editing-ux-e2e';
 
@@ -1042,4 +1042,174 @@ test('safe zones scale to platform formats and keep the custom guide unshaded', 
   await expect.poll(() => sampleSafeZonePixels(page, 400, 300, [
     { x: 200, y: 150, expected: 'clear' },
   ])).toEqual(['clear']);
+});
+
+
+const contextMenuDoc = {
+  version: 13,
+  mode: 'image',
+  outputs: [{
+    id: 'context-menu-output',
+    width: 400,
+    height: 400,
+    background: '#ffffff',
+    children: [{
+      id: 'shape-one', name: 'Shape one', type: 'shape', shape: 'rect', fill: '#ff0000',
+      x: 40, y: 260, width: 120, height: 120,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    }, {
+      id: 'shape-two', name: 'Shape two', type: 'shape', shape: 'rect', fill: '#00ff00',
+      x: 260, y: 260, width: 120, height: 120,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    }],
+  }],
+};
+
+async function fitContextMenuCanvas(page: Page) {
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+}
+
+async function contextMenuCanvasPoint(page: Page, x: number, y: number) {
+  const stage = await page.locator('.konva-stage').first().boundingBox();
+  if (!stage) throw new Error('Canvas has no bounding box');
+  const scale = Math.min(stage.width / 400, stage.height / 400) * 0.85;
+  return {
+    x: stage.x + (stage.width - 400 * scale) / 2 + x * scale,
+    y: stage.y + (stage.height - 400 * scale) / 2 + y * scale,
+  };
+}
+
+async function expectInsideContextMenuViewport(page: Page, locator: Locator) {
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('Viewport is unavailable');
+  await expect.poll(async () => {
+    const box = await locator.boundingBox();
+    if (!box) return false;
+    return box.x >= 7 && box.y >= 7 &&
+      box.x + box.width <= viewport.width - 7 &&
+      box.y + box.height <= viewport.height - 7;
+  }).toBe(true);
+}
+
+test('context menus scroll to reachable element and canvas actions on a short viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 520 });
+  const state = await installMocks(page, contextMenuDoc);
+  await openDesigner(page);
+  await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+  await fitContextMenuCanvas(page);
+
+  const point = await contextMenuCanvasPoint(page, 320, 320);
+  await page.mouse.click(point.x, point.y, { button: 'right' });
+  const menu = page.getByTestId('designer-context-menu');
+  await expect(menu).toBeVisible();
+  await expectInsideContextMenuViewport(page, menu);
+  const overflow = await menu.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(overflow.scrollHeight).toBeGreaterThan(overflow.clientHeight);
+
+  const cut = menu.getByRole('button', { name: 'Cut', exact: true });
+  const apply = menu.getByRole('button', { name: 'Apply to All Formats', exact: true });
+  await expect(cut).toBeFocused();
+  await cut.press('Shift+Tab');
+  await expect(apply).toBeFocused();
+  await apply.press('Enter');
+  await expect(menu).toHaveCount(0);
+  await expect.poll(() => state.doc.outputs[0].children
+    .find((child: any) => child.id === 'shape-two')?.originId).toBe('relink-shape-two');
+  expect(state.doc.outputs[0].children.find((child: any) => child.id === 'shape-one')?.originId)
+    .toBeUndefined();
+
+  const stage = page.locator('.konva-stage').first();
+  await stage.click({ button: 'right', position: { x: 60, y: 150 } });
+  await expect(menu).toBeVisible();
+  await menu.getByRole('button', { name: 'Add Shape', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
+  expect(state.doc.outputs[0].children.filter((child: any) => child.type === 'shape')).toHaveLength(3);
+
+  await stage.click({ button: 'right', position: { x: 60, y: 150 } });
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await stage.click({ button: 'right', position: { x: 60, y: 150 } });
+  await expect(menu).toBeVisible();
+  await page.getByRole('textbox', { name: 'Design name' }).click();
+  await expect(menu).toHaveCount(0);
+});
+
+test('Pathfinder flyout stays visible and keyboard accessible after a viewport resize', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 600 });
+  const state = await installMocks(page, contextMenuDoc);
+  await openDesigner(page);
+  await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+  await fitContextMenuCanvas(page);
+  await page.getByRole('menuitem', { name: 'Select', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'All Layers', exact: false }).click();
+
+  const point = await contextMenuCanvasPoint(page, 320, 320);
+  await page.mouse.click(point.x, point.y, { button: 'right' });
+  const menu = page.getByTestId('designer-context-menu');
+  await expect(menu).toBeVisible();
+  await expectInsideContextMenuViewport(page, menu);
+
+  const pathfinder = menu.getByRole('button', { name: 'Pathfinder', exact: true });
+  await menu.getByRole('button', { name: 'Cut', exact: true }).press('Shift+Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(pathfinder).toBeFocused();
+  await expect(pathfinder).toHaveAttribute('aria-expanded', 'true');
+  const flyout = page.getByTestId('designer-context-flyout');
+  await expect(flyout).toBeVisible();
+  await expectInsideContextMenuViewport(page, flyout);
+  const triggerBox = await pathfinder.boundingBox();
+  const flyoutBox = await flyout.boundingBox();
+  if (!triggerBox || !flyoutBox) throw new Error('Pathfinder geometry is unavailable');
+  expect(flyoutBox.x + flyoutBox.width).toBeLessThanOrEqual(triggerBox.x + 1);
+
+  const unite = flyout.getByRole('menuitem', { name: 'Unite', exact: true });
+  await pathfinder.press('ArrowRight');
+  await expect(unite).toBeFocused();
+  await unite.press('ArrowLeft');
+  await expect(pathfinder).toBeFocused();
+  await expect(flyout).toHaveCount(0);
+  await pathfinder.press('ArrowRight');
+  await expect(unite).toBeFocused();
+
+  await page.setViewportSize({ width: 1050, height: 480 });
+  await expectInsideContextMenuViewport(page, menu);
+  await expectInsideContextMenuViewport(page, flyout);
+  await unite.press('Enter');
+  await expect(menu).toHaveCount(0);
+  // The fixture's shapes are disjoint, and Unite keeps disjoint regions as
+  // separate paths, so both shapes become paths.
+  await expect.poll(() => state.doc.outputs[0].children.map((child: any) => child.type))
+    .toEqual(['path', 'path']);
+});
+
+test('clip context menu duplicates the intended clip without changing another track', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 600 });
+  const state = await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+  await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Collapse timeline', exact: true }).click();
+  await fitContextMenuCanvas(page);
+
+  const point = await contextMenuCanvasPoint(page, 120, 260);
+  await page.mouse.click(point.x, point.y, { button: 'right' });
+  const menu = page.getByTestId('designer-context-menu');
+  await expect(menu).toBeVisible();
+  await menu.getByRole('button', { name: 'Duplicate', exact: true }).click();
+
+  await expect.poll(() => state.doc.outputs[0].tracks[1].clips.length).toBe(2);
+  const source = state.doc.outputs[0].tracks[1].clips.find((clip: any) => clip.id === 'still-clip');
+  const duplicate = state.doc.outputs[0].tracks[1].clips.find((clip: any) => clip.id !== 'still-clip');
+  expect(source).toBeTruthy();
+  expect(duplicate).toMatchObject({ startMs: 5000, endMs: 10000, src: PNG_DATA_URL });
+  expect(duplicate.id).not.toBe(source.id);
+  expect(state.doc.outputs[0].tracks[0].clips).toHaveLength(1);
+  expect(state.doc.outputs[0].tracks[0].clips[0]).toMatchObject({ id: 'video-clip', src: '/video.mp4' });
 });

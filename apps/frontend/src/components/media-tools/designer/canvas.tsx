@@ -689,6 +689,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         ? children.filter((c) => c.groupId === groupId).map((c) => c.id)
         : [id];
       const native = evt?.evt as MouseEvent | undefined;
+      if (native && (native.button ?? 0) !== 0) {
+        if (!selectedIds.includes(id)) setSelectedIds(groupIds);
+        return;
+      }
       const additive = !!(native && (native.shiftKey || native.metaKey || native.ctrlKey));
       if (additive) {
         const set = new Set(selectedIds);
