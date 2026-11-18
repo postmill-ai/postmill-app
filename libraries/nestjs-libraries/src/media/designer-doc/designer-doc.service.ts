@@ -26,18 +26,13 @@ import {
 } from './designer-doc-ops.schema';
 import { DesignerDocOpError } from './designer-doc.errors';
 import { MAX_OPS_PER_REQUEST } from './designer-doc.limits';
-import { seedCopy } from './seed-copy';
+import { seedCopy, seedChildren } from './seed-copy';
 import {
   seedVideoOutput,
   reflowVideoOutputInPlace,
 } from './video-reflow';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
-import {
-  computeContainerBoxes,
-  computeGroupBoxes,
-  computeTextStackBoxes,
-  reflowBackground,
-} from './reflow';
+import { reflowBackground } from './reflow';
 import { applyLinked, outputsLinkedForInsertion } from './apply-linked';
 import {
   hasFrozenOutputMutation,
@@ -339,31 +334,23 @@ export class DesignerDocService {
               ? { ...el, originId: `origin-${randomUUID()}` }
               : el
           );
-          // Copy stacks (headline/subhead columns, plus any grouped CTA that
-          // sits in the same column rhythm) seed through one synthetic shared
-          // frame so the thirds-bucketing can't split them apart — stack
-          // membership WINS, because a group inside a stack must follow the
-          // stack (its own members still share that one frame, so the pair
-          // stays glued). A group outside any stack falls back to its own
-          // combined bbox.
-          const groupBoxes = computeGroupBoxes(sourceChildren, source);
-          const stackBoxes = computeTextStackBoxes(sourceChildren, source);
-          // Elements inside a layout panel (split-panel / editorial-sidebar)
-          // reflow horizontally against the PANEL — which scales per-axis —
-          // instead of the canvas, whose uniform ratio shrank the copy away
-          // from the panel's margins and left a dead gutter.
-          const containerBoxes = computeContainerBoxes(sourceChildren);
-          newOutput.children = sourceChildren.map((el) =>
-            seedCopy(
-              el,
+          newOutput.children = seedChildren(
+            sourceChildren,
+            source,
+            newOutput,
+            (el) => linkContent ? el.originId : undefined
+          );
+          const pages = source.pages?.map((page) => ({
+            ...page,
+            id: `page-${randomUUID()}`,
+            children: seedChildren(
+              page.children,
               source,
               newOutput,
-              linkContent ? el.originId : undefined,
-              stackBoxes.get(el) ??
-                (el.groupId ? groupBoxes.get(el.groupId) : undefined),
-              containerBoxes.get(el)
-            )
-          );
+              () => linkContent ? `origin-${randomUUID()}` : undefined
+            ),
+          }));
+          if (pages?.length) newOutput.pages = pages;
           const outputs = linkedOutputs.map((out, i) =>
             i === 0 && isImageOutput(out)
               ? { ...out, children: sourceChildren }

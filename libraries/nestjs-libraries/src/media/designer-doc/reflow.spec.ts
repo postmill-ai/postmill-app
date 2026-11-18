@@ -376,6 +376,29 @@ describe('smartReflow grouped pairs', () => {
     });
   });
 
+  it('derives parent-group reflow bounds from every member, including full-bleed media', () => {
+    const container: DesignerElement = {
+      id: 'folder', type: 'group', x: 0, y: 0, width: 0, height: 0,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    };
+    const fullBleed = {
+      ...bar, parentId: 'folder', x: 0, y: 0, width: 1080, height: 1080,
+    };
+    const groupedLabel = { ...label, parentId: 'folder' };
+    const boxes = computeGroupBoxes([container, fullBleed, groupedLabel], squareSource);
+
+    expect(boxes.get('cta')).toEqual({ x: 0, y: 0, width: 1080, height: 1080 });
+    const anchored = computeGroupBoxes([
+      container,
+      { ...fullBleed, anchor: 'top-right' as const },
+      { ...groupedLabel, anchor: 'top-right' as const },
+    ], squareSource);
+    expect(anchored.get('cta')).toEqual({
+      x: 400, y: 500, width: 280, height: 60, anchor: 'top-right',
+    });
+    expect(smartReflow(container, squareSource, storyTarget, boxes.get('cta'))).toEqual({});
+  });
+
   it('re-derives the group anchor even when a member carries its own anchor', () => {
     const boxes = computeGroupBoxes([bar, label]);
     const anchoredBar = { ...bar, anchor: 'top-left' as const };

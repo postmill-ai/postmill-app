@@ -2,6 +2,9 @@ import type { DesignerElement, DesignerOutput } from './designer-doc.schema';
 import {
   smartReflow,
   estimateFocalPoint,
+  computeContainerBoxes,
+  computeGroupBoxes,
+  computeTextStackBoxes,
   type GroupBox,
   type TypeBasisCanvas,
 } from './reflow';
@@ -53,4 +56,30 @@ export const seedCopy = (
     copy.focalPoint = estimateFocalPoint(copy.naturalWidth, copy.naturalHeight);
   }
   return copy;
+};
+
+export const seedChildren = (
+  elements: DesignerElement[],
+  sourceOutput: TypeBasisCanvas,
+  targetOutput: TypeBasisCanvas & { formatId?: string },
+  originIdFor: (el: DesignerElement) => string | undefined
+): DesignerElement[] => {
+  const groupBoxes = computeGroupBoxes(elements, sourceOutput);
+  const stackBoxes = computeTextStackBoxes(elements, sourceOutput);
+  const containerBoxes = computeContainerBoxes(elements);
+  const copies = elements.map((el) =>
+    seedCopy(
+      el,
+      sourceOutput,
+      targetOutput,
+      originIdFor(el),
+      stackBoxes.get(el) ?? (el.groupId ? groupBoxes.get(el.groupId) : undefined),
+      containerBoxes.get(el)
+    )
+  );
+  const idMap = new Map(elements.map((el, index) => [el.id, copies[index].id]));
+  return copies.map((copy, index) => {
+    const parentId = elements[index].parentId;
+    return parentId ? { ...copy, parentId: idMap.get(parentId) ?? parentId } : copy;
+  });
 };

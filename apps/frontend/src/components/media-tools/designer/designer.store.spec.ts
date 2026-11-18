@@ -904,6 +904,99 @@ describe('format-local element insertion', () => {
   });
 });
 
+describe('grouped output cloning', () => {
+  it('clones every page from a non-first active source with target-local parents and one Undo', () => {
+    const store = createDesignerStore(400, 400);
+    const mixed = [
+      { id: 'background', type: 'shape', x: 0, y: 0, width: 400, height: 400, fill: '#fff' },
+      { id: 'logo', type: 'image', x: 20, y: 30, width: 80, height: 40, src: '/logo.png', crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 } },
+      { id: 'phone', type: 'image', x: 160, y: 80, width: 120, height: 220, src: '/phone.png' },
+      { id: 'copy', type: 'text', x: 40, y: 320, width: 300, height: 50, text: 'Grouped copy' },
+    ] as const;
+    for (const el of mixed) {
+      store.getState().addElement({
+        rotation: 0, opacity: 1, locked: false, hidden: false, ...el,
+      } as any);
+    }
+    store.getState().addPage();
+    store.getState().addElement({
+      id: 'page-two-copy', type: 'text', x: 30, y: 40, width: 240, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Page two',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Source', width: 600, height: 300 });
+    store.getState().setCurrentOutput(1);
+    store.getState().setCurrentPage(0);
+    store.getState().groupSelection(store.getState().doc.outputs[1].children.map((el) => el.id));
+    store.getState().setCurrentPage(1);
+    store.getState().groupSelection(store.getState().doc.outputs[1].pages![0].children.map((el) => el.id));
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+
+    expect(store.getState().addOutput(
+      { formatId: 'ig-story', name: 'Independent carousel', width: 300, height: 500 },
+      { linkContent: false }
+    )).toBe(true);
+
+    const cloned = store.getState().doc.outputs[2];
+    expect(cloned.children.filter((el) => el.type !== 'group')).toHaveLength(4);
+    expect(cloned.pages).toHaveLength(1);
+    expect(cloned.pages![0].children.filter((el) => el.type !== 'group')).toHaveLength(1);
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+    for (const page of [cloned.children, cloned.pages![0].children]) {
+      const ids = new Set(page.map((el) => el.id));
+      expect(page.some((el) => el.type === 'group')).toBe(true);
+      for (const el of page) {
+        expect(el.originId).toBeUndefined();
+        if (el.parentId) expect(ids.has(el.parentId)).toBe(true);
+      }
+    }
+    const sourceLogo = before.outputs[1].children.find((el) => el.type === 'image' && el.src === '/logo.png');
+    const clonedLogo = cloned.children.find((el) => el.type === 'image' && el.src === '/logo.png');
+    expect(clonedLogo?.crop).toEqual(sourceLogo?.crop);
+
+    store.getState().undo();
+    expect(store.getState().doc).toEqual(before);
+  });
+
+  it('keeps linked origins and move units intact with atomic grouping and cloning', () => {
+    const store = createDesignerStore(400, 400);
+    store.getState().addElement({
+      id: 'logo', type: 'image', src: '/logo.png', x: 20, y: 30, width: 80, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addElement({
+      id: 'copy', type: 'text', text: 'Linked', x: 40, y: 120, width: 240, height: 50,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Source', width: 600, height: 300 });
+    const beforeGroup = store.getState().doc;
+    const groupHistory = store.getState().history.length;
+    store.getState().groupSelection(beforeGroup.outputs[1].children.map((el) => el.id));
+    const grouped = store.getState().doc;
+    expect(store.getState().history).toHaveLength(groupHistory + 1);
+    store.getState().undo();
+    expect(store.getState().doc).toEqual(beforeGroup);
+    store.getState().redo();
+    expect(store.getState().doc).toEqual(grouped);
+
+    const cloneHistory = store.getState().history.length;
+    store.getState().addOutput({ formatId: 'ig-story', name: 'Linked clone', width: 300, height: 500 });
+    const source = store.getState().doc.outputs[1];
+    const cloned = store.getState().doc.outputs[2];
+    const clonedIds = new Set(cloned.children.map((el) => el.id));
+    expect(store.getState().history).toHaveLength(cloneHistory + 1);
+    for (const sourceEl of source.children) {
+      const copy = cloned.children.find((el) => el.originId === sourceEl.originId);
+      expect(copy).toBeTruthy();
+      expect(copy?.id).not.toBe(sourceEl.id);
+      expect(copy?.groupId).toBe(sourceEl.groupId);
+      if (copy?.parentId) expect(clonedIds.has(copy.parentId)).toBe(true);
+    }
+    store.getState().undo();
+    expect(store.getState().doc).toEqual(grouped);
+  });
+});
+
 describe('repeated output dimensions', () => {
   it('allows repeated presets and custom sizes with unique names and format-local geometry', () => {
     const store = createDesignerStore();

@@ -2,6 +2,7 @@ import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/soci
 import type { DesignerBackground, DesignerElement } from './designer-doc.schema';
 import { subjectPointToFocalPoint } from './focal-point';
 import { scalePathNodes } from './path-geometry';
+import { groupBounds } from './layer-tree';
 
 // Scale (natW × natH) down to fit inside (maxW × maxH) using a single uniform
 // factor, so the image's real aspect ratio (and orientation) is preserved.
@@ -176,6 +177,29 @@ export const computeGroupBoxes = (
       continue;
     }
     consensus.set(el.groupId, el.anchor);
+  }
+  for (const group of elements) {
+    if (group.type !== 'group') continue;
+    const bounds = groupBounds(elements, group.id);
+    if (!bounds) continue;
+    const groupIds = new Set(
+      elements
+        .filter((el) => el.parentId === group.id && el.groupId)
+        .map((el) => el.groupId as string)
+    );
+    for (const groupId of groupIds) {
+      if (consensus.get(groupId)) continue;
+      const existing = boxes.get(groupId);
+      if (!existing) {
+        boxes.set(groupId, { ...bounds });
+        continue;
+      }
+      const x = Math.min(existing.x, bounds.x);
+      const y = Math.min(existing.y, bounds.y);
+      const right = Math.max(existing.x + existing.width, bounds.x + bounds.width);
+      const bottom = Math.max(existing.y + existing.height, bounds.y + bounds.height);
+      boxes.set(groupId, { x, y, width: right - x, height: bottom - y });
+    }
   }
   for (const [groupId, anchor] of consensus) {
     const box = boxes.get(groupId);

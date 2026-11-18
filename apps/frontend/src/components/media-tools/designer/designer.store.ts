@@ -31,7 +31,7 @@ import {
   computeGroupBoxes,
   computeTextStackBoxes,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
-import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
+import { seedCopy, seedChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
 import { canSplitClipAt } from './timeline-split';
 import { TEXT_ANIMATION_PRESETS, buildTextAnimationUpdate, matchTextAnimationPreset } from './text-animation-presets';
 import {
@@ -1259,12 +1259,12 @@ export const createDesignerStore = (
         );
         next.splice(Math.max(0, firstIndex), 0, groupEl);
 
-        mutate({
+        const accepted = mutate({
           doc: { ...get().doc, outputs: withActiveChildren(next) },
           isDirty: true,
           selectedIds: [groupEl.id],
         });
-        get().pushHistory();
+        if (accepted) get().pushHistory();
       },
 
       /** Dissolve the selected groups, promoting members to the group's level. */
@@ -1570,37 +1570,22 @@ export const createDesignerStore = (
           linkContent && !el.originId ? { ...el, originId: genId() } : el
         );
         const targetBasis = { ...namedPreset, id: '', background: '#fff', children: [] } as DesignerOutput;
-        const groupBoxes = computeGroupBoxes(sourceChildren, source);
-        const stackBoxes = computeTextStackBoxes(sourceChildren, source);
-        const containerBoxes = computeContainerBoxes(sourceChildren);
-        const children = sourceChildren.map((el) =>
-          seedCopy(
-            el,
+        const children = seedChildren(
+          sourceChildren,
+          source,
+          targetBasis,
+          (el) => linkContent ? el.originId : undefined
+        );
+        const pages = source.pages?.map((page) => ({
+          ...page,
+          id: genId(),
+          children: seedChildren(
+            page.children,
             source,
             targetBasis,
-            linkContent ? el.originId : undefined,
-            stackBoxes.get(el) ?? (el.groupId ? groupBoxes.get(el.groupId) : undefined),
-            containerBoxes.get(el)
-          )
-        );
-        const pages = source.pages?.map((page) => {
-          const pageBoxes = computeGroupBoxes(page.children, source);
-          const pageStacks = computeTextStackBoxes(page.children, source);
-          const pageContainers = computeContainerBoxes(page.children);
-          return {
-            ...page,
-            id: genId(),
-            children: page.children.map((el) =>
-              seedCopy(
-                el,
-                source,
-                targetBasis,
-                linkContent ? genId() : undefined,
-                pageStacks.get(el) ?? (el.groupId ? pageBoxes.get(el.groupId) : undefined),
-                pageContainers.get(el)
-              )),
-          };
-        });
+            () => linkContent ? genId() : undefined
+          ),
+        }));
         const legacyLinkedIndexes = new Set<number>();
         let contentLinkGroup = linkContent ? source.contentLinkGroup : undefined;
         if (linkContent && !contentLinkGroup) {
