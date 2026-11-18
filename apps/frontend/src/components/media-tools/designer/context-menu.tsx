@@ -148,6 +148,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
     };
     const keyHandler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
         e.stopPropagation();
         onClose();
         return;
@@ -176,10 +177,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
       focusable[next].focus();
     };
     document.addEventListener('mousedown', downHandler);
-    document.addEventListener('keydown', keyHandler);
+    document.addEventListener('keydown', keyHandler, true);
     return () => {
       document.removeEventListener('mousedown', downHandler);
-      document.removeEventListener('keydown', keyHandler);
+      document.removeEventListener('keydown', keyHandler, true);
     };
   }, [onClose, openFlyout]);
 

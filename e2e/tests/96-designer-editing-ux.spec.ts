@@ -1147,9 +1147,9 @@ test('Pathfinder flyout stays visible and keyboard accessible after a viewport r
   const state = await installMocks(page, contextMenuDoc);
   await openDesigner(page);
   await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+  await fitContextMenuCanvas(page);
   await page.getByRole('menuitem', { name: 'Select', exact: true }).click();
   await page.getByRole('menuitem', { name: 'All Layers', exact: false }).click();
-  await fitContextMenuCanvas(page);
 
   const point = await contextMenuCanvasPoint(page, 320, 320);
   await page.mouse.click(point.x, point.y, { button: 'right' });
@@ -1193,6 +1193,7 @@ test('clip context menu duplicates the intended clip without changing another tr
   const state = await installMocks(page, initialVideoDoc);
   await openDesigner(page);
   await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+  await page.getByRole('button', { name: 'Collapse timeline', exact: true }).click();
   await fitContextMenuCanvas(page);
 
   const point = await contextMenuCanvasPoint(page, 120, 260);
