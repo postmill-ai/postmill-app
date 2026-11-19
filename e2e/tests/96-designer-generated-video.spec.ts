@@ -1480,6 +1480,8 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(7);
 
     const separator = page.getByRole('separator', { name: 'Resize timeline', exact: true });
+    await separator.press('Home');
+    await expect.poll(regionHeight).toBe(120);
     const beforeKeyboard = await regionHeight();
     await separator.press('ArrowUp');
     await expect.poll(regionHeight).toBe(beforeKeyboard + 16);
