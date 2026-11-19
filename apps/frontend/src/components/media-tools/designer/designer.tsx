@@ -71,7 +71,8 @@ import { fetchDesignForEditor } from './load-design';
 import { downloadPdesignArtifact, replaceDesignerDesignId } from './pdesign-file';
 import { BulkCreateDialog } from './bulk-create-dialog';
 import { MobileQuickActions, MobileSheetHeader, MobileToolsDialog, MobileWorkspaceSheet, type MobileSheetSnap } from './mobile-designer-tools';
-import { addImageClipToTimeline, addMediaToTimeline, timelineMediaTypeForPick } from './add-media-to-timeline';
+import { addMediaToTimeline } from './add-media-to-timeline';
+import { useDesignerMediaInsertion, type DesignerMediaKind } from './use-designer-media-insertion';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
@@ -1068,56 +1069,6 @@ const DesignerContent: FC<
   // Reusable image-from-media placement (centered + aspect-correct) — shared by
   // the Insert/Import media modal and the canvas "Add Image" (D-8).
   /**
-   * Insert > Stock Icon.
-   *
-   * An Iconify pick used to go through `addImageFromMedia`, which stored the
-   * API URL as a raster `src` at the icon's own 24x24 — `fitWithin` never
-   * upscales, so it landed as a tiny black square with no fill control. The
-   * Designer already has the right element for this: `icon` holds SVG markup
-   * and paints in `fill`, which is what the icons panel and the AI composer
-   * both emit. The markup comes from the server resolver, the same one the
-   * composer uses.
-   */
-  const addStockIcon = useCallback(
-    async (item: { url: string }) => {
-      const name = /\/([a-z0-9-]+)\/([a-z0-9-]+)\.svg/.exec(item.url);
-      const resolved = name
-        ? await fetch(
-            `/media/icons/resolve?name=${encodeURIComponent(`${name[1]}:${name[2]}`)}`
-          )
-            .then((r) => (r.ok ? r.json() : null))
-            .catch(() => null)
-        : null;
-      if (!resolved?.body) {
-        toaster.show(
-          translate('couldnt_add_icon', "Couldn't add that icon"),
-          'warning'
-        );
-        return;
-      }
-      const state = store.getState();
-      const active = state.doc.outputs[state.currentOutput];
-      const size = Math.round(Math.min(active.width, active.height) * 0.2);
-      state.addElement({
-        id: '',
-        type: 'icon',
-        x: (active.width - size) / 2,
-        y: (active.height - size) / 2,
-        width: size,
-        height: size,
-        rotation: 0,
-        opacity: 1,
-        locked: false,
-        hidden: false,
-        src: resolved.body,
-        viewBox: resolved.viewBox,
-        fill: '#2B5CD3',
-      } as never);
-    },
-    [store, fetch, toaster, translate]
-  );
-
-  /**
    * Convert the selected text layer to `path` outlines.
    *
    * Server-side: glyph contours live in the font file, which no canvas API
@@ -1182,8 +1133,9 @@ const DesignerContent: FC<
    * `addImageClipToTimeline`; videos (including animated stickers) and audio go
    * to `addMediaToTimeline`, which finds the track and probes real duration.
    */
+  const insertMedia = useDesignerMediaInsertion(store);
   const onInsertMedia = useCallback(
-    (kind: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio') => {
+    (kind: DesignerMediaKind) => {
       const TABS = {
         image: ['My Files', 'Stock Photos'],
         sticker: ['Stock Stickers'],
@@ -1202,64 +1154,14 @@ const DesignerContent: FC<
         video: translate('insert_video', 'Insert video'),
         audio: translate('insert_audio', 'Insert audio'),
       };
-      const isTimelineMedia = kind === 'video' || kind === 'audio';
-      // Static image/sticker/icon picks become image clips in a video document;
-      // an MP4 sticker is rerouted to the video path in onSelect below.
-      const isTimelineImage =
-        !isTimelineMedia && store.getState().doc.mode === 'video';
-
       mediaPicker.openWith({
         title: TITLES[kind],
         tabs: TABS[kind],
         requireFile: kind === 'vector',
-        onSelect: (item) => {
-          const timelineType = timelineMediaTypeForPick(kind, item.type);
-          if (isTimelineMedia || (isTimelineImage && timelineType === 'video')) {
-            void addMediaToTimeline(store, {
-              type: timelineType === 'audio' ? 'audio' : 'video',
-              url: item.url,
-              fileId: item.fileId,
-              width: item.width,
-              height: item.height,
-              sticker: kind === 'sticker',
-            })
-              .then((landed) => {
-                if (landed?.probeFailed) {
-                  toaster.show(
-                    translate('couldnt_read_video_metadata', "Couldn't read the video's metadata — placed with a default duration"),
-                    'warning'
-                  );
-                }
-              })
-              .catch(() => {
-                toaster.show(
-                  translate('couldnt_add_to_timeline', "Couldn't add that to the timeline"),
-                  'warning'
-                );
-              });
-            return;
-          }
-          if (isTimelineImage) {
-            // Iconify picks have no useful intrinsic size (24×24 SVGs), so they
-            // take a square badge box instead of the aspect probe.
-            addImageClipToTimeline(store, {
-              url: item.url,
-              fileId: item.fileId,
-              width: item.width,
-              height: item.height,
-              square: kind === 'icon',
-            });
-            return;
-          }
-          if (kind === 'icon') {
-            void addStockIcon(item as never);
-            return;
-          }
-          addImageFromMedia(item as never);
-        },
+        onSelect: (item) => insertMedia(kind, item),
       });
     },
-    [mediaPicker, translate, addImageFromMedia, addStockIcon, store, toaster]
+    [mediaPicker, translate, insertMedia]
   );
 
   const selectedImageId = useCallback(() => {
@@ -1845,6 +1747,7 @@ const DesignerContent: FC<
               safeZonePreset={safeZonePreset}
               touchpadMode={touchpadMode}
               onAddImage={onOpenMedia}
+              onInsertMedia={insertMedia}
               sendImageAwareness={collabEnabled ? collabData.sendImageAwareness : undefined}
             />
             <SelectionToolbar
@@ -1874,6 +1777,7 @@ const DesignerContent: FC<
                 hasInspectorTarget={hasInspectorTarget}
                 currentOutput={currentOutput}
                 currentOutputSizeKey={currentOutputSizeKey}
+                onInsertMedia={insertMedia}
                 collapsed={inspectorCollapsed}
               />
             )}

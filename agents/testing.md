@@ -122,7 +122,7 @@ For Designer specs 96 and 97, optional `E2E_FRONTEND_ORIGIN` proxies only docume
 stay unchanged. It must be `http://localhost`, `127.0.0.1`, or `::1`; API/provider calls are never
 proxied by this setting. `E2E_BACKEND_ORIGIN` remains the separate opt-in loopback API proxy.
 Spec 96's animated-sticker case uses only `fixtures/motion.mp4` and a mocked stock response: it checks
-video-track insertion, source-capped geometry, real playback/seek, save/reopen, and zero generation calls.
+Elements click/drag insertion, video-track routing, source-capped geometry, real playback/seek, save/reopen, and zero generation calls. Its Elements cases also cover provider search/filter requests, static click insertion, aspect-correct drag geometry, and duplicate-import prevention.
 The essentials case also covers real trim-edge pointer hit-testing, visible Split/transition controls,
 and text gradient/outline persistence with v14 stamping. These are non-paid acceptance paths; do not
 replace their local media with provider generation.

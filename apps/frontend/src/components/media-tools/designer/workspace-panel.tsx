@@ -6,11 +6,13 @@ import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs'
 import { AiPanel } from './panels/ai-panel';
 import { BrandPanel } from './panels/brand-panel';
 import { CanvasInspector } from './panels/canvas-inspector';
+import { ElementsPanel } from './panels/elements-panel';
 import { InspectorPanel } from './panels/inspector-panel';
 import { LayersFooter } from './panels/layers-footer';
 import { LayersPanel } from './panels/layers-panel';
+import type { InsertDesignerMedia } from './use-designer-media-insertion';
 
-export type WorkspaceTab = 'inspector' | 'layers' | 'brand' | 'ai';
+export type WorkspaceTab = 'inspector' | 'layers' | 'elements' | 'brand' | 'ai';
 
 export interface DesktopWorkspacePreference {
   activeTab: WorkspaceTab;
@@ -19,7 +21,7 @@ export interface DesktopWorkspacePreference {
 
 type PreferenceStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
-const workspaceTabs = new Set<WorkspaceTab>(['inspector', 'layers', 'brand', 'ai']);
+const workspaceTabs = new Set<WorkspaceTab>(['inspector', 'layers', 'elements', 'brand', 'ai']);
 const storageSuffix = (orgId?: string | null) => orgId ? `-${orgId}` : '';
 
 export const isMobileDesignerViewport = () =>
@@ -77,6 +79,7 @@ interface DesktopWorkspacePanelProps {
   hasInspectorTarget: boolean;
   currentOutput: number;
   currentOutputSizeKey: string;
+  onInsertMedia: InsertDesignerMedia;
   collapsed?: boolean;
 }
 
@@ -88,12 +91,13 @@ export const DesktopWorkspacePanel: FC<DesktopWorkspacePanelProps> = ({
   hasInspectorTarget,
   currentOutput,
   currentOutputSizeKey,
+  onInsertMedia,
   collapsed = false,
 }) => {
   const t = useT();
-  const [activated, setActivated] = useState<ReadonlySet<'brand' | 'ai'>>(() => new Set());
+  const [activated, setActivated] = useState<ReadonlySet<'elements' | 'brand' | 'ai'>>(() => new Set());
   useEffect(() => {
-    if (collapsed || (activeTab !== 'brand' && activeTab !== 'ai')) return;
+    if (collapsed || (activeTab !== 'elements' && activeTab !== 'brand' && activeTab !== 'ai')) return;
     const activation = setTimeout(() => {
       setActivated((current) => current.has(activeTab)
         ? current
@@ -106,6 +110,7 @@ export const DesktopWorkspacePanel: FC<DesktopWorkspacePanelProps> = ({
       ? t('inspector_panel_label', 'Inspector')
       : t('canvas_panel_label', 'Canvas'),
     layers: t('panel_layers', 'Layers'),
+    elements: t('elements_label', 'Elements'),
     brand: t('brand_label', 'Brand'),
     ai: t('ai', 'AI'),
   }[activeTab];
@@ -123,6 +128,7 @@ export const DesktopWorkspacePanel: FC<DesktopWorkspacePanelProps> = ({
           items={[
             { key: 'inspector', label: t('inspector_panel_label', 'Inspector') },
             { key: 'layers', label: t('panel_layers', 'Layers') },
+            { key: 'elements', label: t('elements_label', 'Elements') },
             { key: 'brand', label: t('brand_label', 'Brand') },
             { key: 'ai', label: t('ai', 'AI') },
           ]}
@@ -164,6 +170,11 @@ export const DesktopWorkspacePanel: FC<DesktopWorkspacePanelProps> = ({
             />
           )}
         </div>
+        {activated.has('elements') && (
+          <div hidden={activeTab !== 'elements'}>
+            <ElementsPanel onInsertMedia={onInsertMedia} />
+          </div>
+        )}
         {activated.has('brand') && (
           <div hidden={activeTab !== 'brand'}>
             <BrandPanel store={store} />

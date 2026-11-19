@@ -5,11 +5,17 @@ import type { createDesignerStore, DesignerOutput } from './designer.store';
 
 type Store = ReturnType<typeof createDesignerStore>;
 
+export interface MediaPoint {
+  x: number;
+  y: number;
+}
+
 export interface MediaImageItem {
   url: string;
   fileId?: string;
   width?: number;
   height?: number;
+  at?: MediaPoint;
 }
 
 /**
@@ -21,7 +27,8 @@ export interface MediaImageItem {
  * element lands at the canvas fit right away and its box is corrected to the
  * real aspect once the probe resolves — the probe runs through the shared
  * image cache (`loadImage` in elements.tsx), so the Konva loader reuses that
- * same download rather than fetching again.
+ * same download rather than fetching again. A supplied drop point centers the
+ * fitted element there; ordinary click insertion remains canvas-centered.
  */
 export const addImageElementFromMedia = (store: Store, item: MediaImageItem): void => {
   const state = store.getState();
@@ -38,8 +45,8 @@ export const addImageElementFromMedia = (store: Store, item: MediaImageItem): vo
     state.addElement({
       id,
       type: 'image',
-      x: (active.width - w) / 2,
-      y: (active.height - h) / 2,
+      x: item.at ? item.at.x - w / 2 : (active.width - w) / 2,
+      y: item.at ? item.at.y - h / 2 : (active.height - h) / 2,
       width: w,
       height: h,
       rotation: 0,

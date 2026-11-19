@@ -4,7 +4,7 @@ import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { useDebounce } from 'use-debounce';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { SaveToFilesModal } from './save-to-files-modal';
-import { StockAudioItem, stockSourceLabel } from './stock.types';
+import { StockAudioItem, StockMediaSelection, stockSourceLabel } from './stock.types';
 import { useStockSearch } from './use-stock-search';
 import { AudioPlayer } from './audio-player';
 import { decodeEntities } from '@postmill-ai/frontend/components/shared/decode-entities';
@@ -20,18 +20,11 @@ interface StockAudioProps {
    * Audio has no dimensions, so width/height are 0 — callers that lay media out
    * must treat that as "unknown", not as an empty box.
    */
-  onSelectFull?: (item: {
-    url: string;
-    width: number;
-    height: number;
-    type: 'audio';
-    name?: string;
-    source?: string;
-    attribution?: Record<string, unknown>;
-  }) => void;
+  onSelectFull?: (item: StockMediaSelection) => void;
+  onDragStart?: (item: StockMediaSelection, event: React.DragEvent<HTMLButtonElement>) => void;
 }
 
-export const StockAudio: FC<StockAudioProps> = ({ mode = 'browse', onSelect, onSelectFull }) => {
+export const StockAudio: FC<StockAudioProps> = ({ mode = 'browse', onSelect, onSelectFull, onDragStart }) => {
   const t = useT();
   const modal = useModals();
   const [query, setQuery] = useState('');
@@ -214,6 +207,16 @@ export const StockAudio: FC<StockAudioProps> = ({ mode = 'browse', onSelect, onS
                 </div>
                 <button
                   type="button"
+                  draggable={!!onDragStart}
+                  onDragStart={(event) => onDragStart?.({
+                    url: item.downloadUrl || item.url,
+                    width: 0,
+                    height: 0,
+                    type: 'audio',
+                    name: decodeEntities(item.name),
+                    source: item.source || 'jamendo',
+                    attribution: item.attribution as Record<string, unknown> | undefined,
+                  }, event)}
                   onClick={() => {
                     if (mode !== 'select' || (!onSelect && !onSelectFull)) {
                       saveToFiles(item);

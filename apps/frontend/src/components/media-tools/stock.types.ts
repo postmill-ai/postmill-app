@@ -53,6 +53,18 @@ export interface StockAudioItem {
   attribution?: Record<string, unknown>;
 }
 
+export interface StockMediaSelection {
+  url: string;
+  width: number;
+  height: number;
+  thumbnail?: string;
+  type: 'image' | 'video' | 'audio';
+  source?: string;
+  attribution?: Record<string, unknown>;
+  downloadLocation?: string | null;
+  name?: string;
+}
+
 export interface StockSearchResponse<T> {
   results: T[];
   page: number;

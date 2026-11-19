@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react';
+import { fireEvent } from '@testing-library/react';
 import { createRoot, type Root } from 'react-dom/client';
 import Konva from 'konva';
 import { DesignerCanvas } from './canvas';
 import { createDesignerStore } from './designer.store';
+import { writeStockMediaDrag } from './stock-media-drag';
+import type { InsertDesignerMedia } from './use-designer-media-insertion';
 
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
@@ -111,12 +114,12 @@ const groupedStore = () => {
   return store;
 };
 
-const renderCanvas = async (store: ReturnType<typeof createDesignerStore>) => {
+const renderCanvas = async (store: ReturnType<typeof createDesignerStore>, onInsertMedia?: InsertDesignerMedia) => {
   const host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
   await act(async () => {
-    root!.render(<DesignerCanvas store={store} showRulers={false} />);
+    root!.render(<DesignerCanvas store={store} showRulers={false} onInsertMedia={onInsertMedia} />);
   });
   return Konva.stages[Konva.stages.length - 1];
 };
@@ -241,6 +244,32 @@ describe('DesignerCanvas gesture wiring', () => {
     expect(store.getState().selectedIds).toEqual(['moving', 'other']);
     await fire('third');
     expect(store.getState().selectedIds).toEqual(['third']);
+  });
+});
+
+describe('DesignerCanvas stock drops', () => {
+  it('routes stock metadata to the shared inserter once before OS-file handling', async () => {
+    const store = createDesignerStore(500, 400);
+    const onInsertMedia = vi.fn().mockResolvedValue(undefined);
+    await renderCanvas(store, onInsertMedia);
+    const data = new Map<string, string>();
+    writeStockMediaDrag({ setData: (mime, value) => data.set(mime, value) }, 'image', {
+      url: 'https://cdn.example.test/photo.png', width: 800, height: 600, type: 'image', source: 'unsplash',
+    });
+
+    fireEvent.drop(document.querySelector('.designer-canvas-container')!, {
+      clientX: 100,
+      clientY: 100,
+      dataTransfer: {
+        getData: (mime: string) => data.get(mime) || '',
+        files: [new File(['not an upload'], 'duplicate.png', { type: 'image/png' })],
+      },
+    });
+
+    expect(onInsertMedia).toHaveBeenCalledTimes(1);
+    expect(onInsertMedia).toHaveBeenCalledWith('image', expect.objectContaining({
+      url: 'https://cdn.example.test/photo.png', source: 'stock',
+    }), expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }));
   });
 });
 

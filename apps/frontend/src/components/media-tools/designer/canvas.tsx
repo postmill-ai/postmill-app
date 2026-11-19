@@ -92,6 +92,8 @@ import {
   movingNodesForSnap,
 } from './canvas-snap';
 import { selectionLeafIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
+import { readStockMediaDrag } from './stock-media-drag';
+import type { InsertDesignerMedia } from './use-designer-media-insertion';
 
 /**
  * How much of the viewport a fitted artboard fills, leaving the rest as margin.
@@ -116,6 +118,7 @@ interface CanvasProps {
   touchpadMode?: boolean;
   mobileSheetOpen?: boolean;
   onAddImage?: () => void;
+  onInsertMedia?: InsertDesignerMedia;
   sendImageAwareness?: (
     outputIndex: number,
     mouseX: number,
@@ -145,6 +148,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   touchpadMode = false,
   mobileSheetOpen = false,
   onAddImage,
+  onInsertMedia,
   sendImageAwareness,
 }) => {
   const stageRef = useRef<Konva.Stage>(null);
@@ -1835,6 +1839,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       const px = (e.clientX - rect.left - viewportX) / zoom;
       const py = (e.clientY - rect.top - viewportY) / zoom;
 
+      const stock = readStockMediaDrag(e.dataTransfer);
+      if (stock) {
+        void onInsertMedia?.(stock.kind, stock.item, { x: px, y: py });
+        return;
+      }
+
       const raw = e.dataTransfer.getData('application/x-designer-element');
       if (raw) {
         if (isVideo) return;
@@ -1977,7 +1987,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           toaster.show(t('failed_to_upload_file', 'Failed to upload file'), 'warning');
         });
     },
-    [addElement, viewportX, viewportY, zoom, store, output, outputFrozen, toaster, fetch, isVideo, t, findImageDropTarget]
+    [addElement, viewportX, viewportY, zoom, store, output, outputFrozen, toaster, fetch, isVideo, t, findImageDropTarget, onInsertMedia]
   );
 
   const bg = pageOutput?.bg;

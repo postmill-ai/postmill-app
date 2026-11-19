@@ -112,6 +112,33 @@ const HeroPair: React.FC = () => {
   );
 };
 
+const FREE_ASSET_DESCRIPTIONS: Record<string, { key: string; fallback: string }> = {
+  '/media/stock-photos': {
+    key: 'search_free_photos_unsplash',
+    fallback: 'Search millions of free, high-quality photos from Unsplash to get started.',
+  },
+  '/media/stock-videos': {
+    key: 'search_free_videos_pexels',
+    fallback: 'Search thousands of free, high-quality stock videos from Pexels to get started.',
+  },
+  '/media/stock-vectors': {
+    key: 'search_free_vectors_pixabay',
+    fallback: 'Search millions of free vector illustrations from Pixabay to get started.',
+  },
+  '/media/stock-icons': {
+    key: 'search_free_svg_icons_iconify',
+    fallback: 'Search thousands of free SVG icons from Iconify to get started.',
+  },
+  '/media/stock-stickers': {
+    key: 'search_free_stickers_giphy',
+    fallback: 'Search thousands of free stickers from GIPHY to get started.',
+  },
+  '/media/stock-audio': {
+    key: 'search_free_tracks_jamendo',
+    fallback: 'Search thousands of free tracks from Jamendo to get started.',
+  },
+};
+
 const StudioCard: React.FC<{ tab: MediaTab }> = ({ tab }) => {
   const t = useT();
   // Pass the resolved identifier, not the raw slug — `google-ai` has no icon
@@ -201,6 +228,45 @@ export const MediaIndex: React.FC = () => {
 
       <HeroPair />
 
+      <section className="flex flex-col gap-[12px]">
+        <div className="flex flex-col gap-[4px]">
+          <h2 className="text-[11px] font-[600] uppercase tracking-[0.14em] text-newTableText">
+            {t('media_section_free_assets', 'Free assets')}
+          </h2>
+          <p className="text-[13px] text-newTableText">
+            {t('media_free_assets_description', 'Search the Content Pack and add free media to your next design.')}
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[10px]">
+          {stockTabs.map((tab) => {
+            const description = FREE_ASSET_DESCRIPTIONS[tab.href];
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className="group flex min-h-[132px] flex-col gap-[12px] rounded-[12px] border border-newTableBorder bg-newBgColorInner p-[16px] hover:border-btnPrimary/50 transition-colors"
+              >
+                <span className="flex items-center gap-[10px]">
+                  <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[8px] bg-btnPrimary/12 text-btnPrimaryAccent">
+                    {tab.icon}
+                  </span>
+                  <span className="text-[15px] font-[600] text-textColor">
+                    {tab.labelKey ? t(tab.labelKey, tab.label) : tab.label}
+                  </span>
+                </span>
+                <span className="flex-1 text-[12px] leading-[1.5] text-newTableText">
+                  {description ? t(description.key, description.fallback) : ''}
+                </span>
+                <span className="inline-flex items-center gap-[6px] text-[12px] font-[600] text-btnPrimaryAccent">
+                  {t('media_free_assets_browse', 'Browse free assets')}
+                  <ArrowIcon />
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
       {/* Renders in flight or recently finished — hidden entirely when there are none. */}
       <MediaQueuePanel />
 
@@ -264,25 +330,6 @@ export const MediaIndex: React.FC = () => {
         )}
       </section>
 
-      <section className="flex flex-col gap-[12px]">
-        <h2 className="text-[11px] font-[600] uppercase tracking-[0.14em] text-newTableText">
-          {t('media_section_content_pack', 'Content Pack')}
-        </h2>
-        <div className="flex flex-wrap gap-[8px]">
-          {stockTabs.map((tab) => (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className="inline-flex items-center gap-[8px] rounded-[10px] border border-newTableBorder bg-newBgColorInner ps-[12px] pe-[14px] py-[9px] text-[13px] text-textColor hover:border-[#2B5CD3]/50 transition-colors"
-            >
-              <span className="w-[18px] h-[18px] flex items-center justify-center shrink-0 text-newTableText">
-                {tab.icon}
-              </span>
-              {tab.labelKey ? t(tab.labelKey, tab.label) : tab.label}
-            </Link>
-          ))}
-        </div>
-      </section>
     </div>
   );
 };

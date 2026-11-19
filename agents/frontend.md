@@ -385,7 +385,7 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   at the new size. Unset caption sizes start at the renderer's 28px fallback. Inline blur serialization
   applies shortcut deltas instead of restoring stale run sizes.
 - **Desktop/mobile workspace shares one store and tool registry.** Desktop docks Inspector, Layers,
-  Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; AI and Brand mount on their first visible
+  Elements, Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; Elements, AI, and Brand mount on their first visible
   activation, then stay mounted under hidden wrappers so results and in-flight work survive tab and
   collapse changes without eager fetches or hidden job adoption. Selection never changes the user's tab
   or collapsed state; Layers multi-select/rename and Brand/AI workflows stay sticky, and Expand restores
@@ -519,6 +519,7 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   and name-only saves reuse the persisted preview. Video saves still omit client snapshots. Create
   and update saves drive the Saving indicator, including the first create.
 
+- **Elements shares the existing stock and insertion paths.** `panels/elements-panel.tsx` reuses all six stock browsers in a compact, opt-in draggable mode, lazy-mounting each visited category and keeping its search state alive. Click and drag selections both go through `use-designer-media-insertion.ts`, the same callback used by the Insert picker; direct stock vectors import once only while still stock-sourced. Canvas stock drops carry a validated metadata-only MIME payload and return before OS-file upload handling. Drop-point geometry preserves each asset's aspect/default sizing and late-probe corrections preserve the drop center. Do not add a second provider search, import, or media-routing implementation.
 - **Animated stock stickers are video media.** `stock-stickers.tsx` marks an MP4 pick as `type: 'video'`;
   video-mode `onInsertMedia` must route that pick through `addMediaToTimeline` (real duration/dimensions,
   `mediaType: 'video'`, playback/seek/poster/export), never `addImageClipToTimeline`. Animated stickers

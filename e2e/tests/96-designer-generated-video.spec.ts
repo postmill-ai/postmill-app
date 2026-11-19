@@ -18,6 +18,8 @@ const CUSTOM_POSTER_URL = '/mock-storage/custom-poster.png';
 const STOCK_VECTOR_URL = '/mock-storage/outline-vector.svg';
 const STOCK_ICON_URL = '/mock-storage/outline-icon.svg';
 const STOCK_STICKER_URL = '/mock-storage/animated-sticker.mp4';
+const STOCK_PHOTO_URL = ASYMMETRIC_URL;
+const STOCK_VIDEO_URL = GENERATED_URL;
 const STOCK_VECTOR_THUMB_URL = '/mock-storage/vector-thumb.png';
 const IMPORTED_VECTOR_URL = '/mock-storage/imported-vector.png';
 const GENERATED_POSTER_URL = 'https://app.postmill.ai/mock-storage/generated-poster.jpg';
@@ -126,6 +128,21 @@ const blankDoc = (): DesignerDocSnapshot => ({
       tracks: [],
     },
   ],
+});
+
+const staticElementsDoc = (): DesignerDocSnapshot => ({
+  version: 13,
+  mode: 'image',
+  outputs: [{
+    id: 'elements-output',
+    formatId: 'elements-static',
+    name: 'Elements static',
+    width: 400,
+    height: 300,
+    background: '#ffffff',
+    tracks: [],
+    children: [],
+  }],
 });
 
 const staticCropDoc = (): DesignerDocSnapshot => ({
@@ -246,6 +263,8 @@ class DesignerMocks {
   readonly renderRequests: Array<Record<string, unknown>> = [];
   readonly fileInformationUpdates: Array<Record<string, unknown>> = [];
   readonly fontUploads: string[] = [];
+  readonly stockSearches: string[] = [];
+  stockVectorUploads = 0;
   readonly customFonts: Array<Record<string, unknown>> = [];
   dashboardJobReads = 0;
   studioStatusReads = 0;
@@ -602,6 +621,56 @@ class DesignerMocks {
         return;
       }
 
+      if (pathname === '/media/stock/photos' && method === 'GET') {
+        this.stockSearches.push(`${pathname}?${new URL(request.url()).searchParams}`);
+        await json(route, {
+          results: [{
+            id: 'photo-1',
+            url: STOCK_PHOTO_URL,
+            thumbUrl: STOCK_PHOTO_URL,
+            description: 'QA stock photo',
+            author: 'QA Photos',
+            authorUrl: 'https://example.com/photos',
+            sourceUrl: 'https://example.com/photo',
+            width: 1600,
+            height: 400,
+            source: 'unsplash',
+            downloadLocation: null,
+            attribution: { provider: 'Unsplash' },
+          }],
+          page: 1,
+          totalPages: 1,
+          configured: true,
+          source: 'unsplash',
+        });
+        return;
+      }
+
+      if (pathname === '/media/stock/videos' && method === 'GET') {
+        this.stockSearches.push(`${pathname}?${new URL(request.url()).searchParams}`);
+        await json(route, {
+          results: [{
+            id: 'video-1',
+            url: STOCK_VIDEO_URL,
+            thumbUrl: ASYMMETRIC_URL,
+            description: 'QA stock video',
+            author: 'QA Videos',
+            authorUrl: 'https://example.com/videos',
+            sourceUrl: 'https://example.com/video',
+            width: 720,
+            height: 1280,
+            duration: 4,
+            source: 'pexels',
+            attribution: { provider: 'Pexels' },
+          }],
+          page: 1,
+          totalPages: 1,
+          configured: true,
+          source: 'pexels',
+        });
+        return;
+      }
+
       if (pathname === '/media/stock/stickers' && method === 'GET') {
         await json(route, {
           results: [{
@@ -754,6 +823,7 @@ class DesignerMocks {
       if (pathname === '/files/upload-simple' && method === 'POST') {
         const multipart = request.postDataBuffer()?.toString('latin1') || '';
         if (multipart.includes('QA outline vector.png')) {
+          this.stockVectorUploads++;
           await json(route, { id: 'vector-file-1', path: IMPORTED_VECTOR_URL });
           return;
         }
@@ -1268,26 +1338,80 @@ test.describe('Designer motion graphics editing (mocked local document)', () => 
   });
 });
 
+test.describe('Designer Elements workspace (mocked stock and storage)', () => {
+  test('static search, click insertion, vector import, and drag placement share one path', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticElementsDoc();
+    mocks.name = 'Static Elements E2E';
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await openElements(page);
+
+    const search = page.getByPlaceholder('Search photos...');
+    await search.fill('mountain');
+    await page.getByLabel('Filter by orientation').selectOption('landscape');
+    await expect.poll(() => mocks.stockSearches.some((request) =>
+      request.includes('query=mountain') && request.includes('orientation=landscape')
+    )).toBe(true);
+
+    await page.getByRole('button', { name: 'QA stock photo', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(1);
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({
+      type: 'image', src: STOCK_PHOTO_URL, x: 40, y: 110, width: 320, height: 80,
+      naturalWidth: 1600, naturalHeight: 400,
+    });
+    expect(mocks.stockVectorUploads).toBe(0);
+
+    await openElements(page, 'Vectors');
+    await page.getByRole('button', { name: 'QA outline vector', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(2);
+    expect(mocks.doc.outputs[0].children![1]).toMatchObject({
+      type: 'image', src: IMPORTED_VECTOR_URL, fileId: 'vector-file-1',
+    });
+    expect(mocks.stockVectorUploads).toBe(1);
+
+    await openElements(page);
+    await expect(search).toHaveValue('mountain');
+    await fitDesignerCanvas(page);
+    await dragStockAssetToDocumentPoint(page, 'QA stock photo', 400, 300, 100, 100);
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(3);
+    const draggedPhoto = mocks.doc.outputs[0].children![2];
+    expect(draggedPhoto).toMatchObject({
+      type: 'image', src: STOCK_PHOTO_URL, width: 320, height: 80,
+    });
+    expect(draggedPhoto.y).toBeGreaterThanOrEqual(55);
+    expect(draggedPhoto.y).toBeLessThanOrEqual(65);
+    expect(draggedPhoto.x).toBeGreaterThanOrEqual(-65);
+    expect(draggedPhoto.x).toBeLessThanOrEqual(-55);
+    expect(mocks.stockVectorUploads, 'drag must not repeat the vector import').toBe(1);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
 test.describe('Designer animated stock media (local non-paid fixture)', () => {
-  test('MP4 sticker insertion plays, seeks, saves and reopens as a video clip', async ({ page }) => {
+  test('MP4 sticker drag insertion plays, seeks, saves and reopens as a video clip', async ({ page }) => {
     const mocks = new DesignerMocks();
     await mocks.install(page);
     await openDesigner(page, mocks);
 
-    await page.getByRole('menuitem', { name: 'Insert', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Sticker…', exact: true }).click();
-    await page.getByRole('button', { name: 'QA animated sticker', exact: true }).click();
+    await openElements(page, 'Stickers');
+    await fitDesignerCanvas(page);
+    await dragStockAssetToDocumentPoint(page, 'QA animated sticker', 1080, 1920, 400, 500);
     await expect.poll(() => mocks.savedClips()[0]?.mediaType).toBe('video');
     expect(mocks.doc.outputs[0].tracks[0]).toMatchObject({ type: 'video' });
     expect(mocks.savedClips()[0]).toMatchObject({
       src: STOCK_STICKER_URL,
       startMs: 0,
       endMs: 4000,
+      y: -140,
       width: 720,
       height: 1280,
       naturalWidth: 720,
       naturalHeight: 1280,
     });
+    expect(mocks.savedClips()[0].x).toBeGreaterThanOrEqual(35);
+    expect(mocks.savedClips()[0].x).toBeLessThanOrEqual(45);
     expect(mocks.doc.outputs[0].tracks.some((track) => track.type === 'image')).toBe(false);
 
     await expectRealPlayback(page);
@@ -1589,6 +1713,29 @@ async function canvasDocumentPoint(
     x: stage!.x + (stage!.width - outputWidth * zoom) / 2 + x * zoom,
     y: stage!.y + (stage!.height - outputHeight * zoom) / 2 + y * zoom,
   };
+}
+
+async function openElements(page: Page, category: 'Photos' | 'Videos' | 'Vectors' | 'Icons' | 'Stickers' | 'Audio' = 'Photos') {
+  await page.getByRole('tab', { name: 'Elements', exact: true }).click();
+  await page.getByRole('tab', { name: category, exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="elements"]')).toBeVisible();
+}
+
+async function dragStockAssetToDocumentPoint(
+  page: Page,
+  name: string,
+  outputWidth: number,
+  outputHeight: number,
+  x: number,
+  y: number
+) {
+  const point = await canvasDocumentPoint(page, outputWidth, outputHeight, x, y);
+  const canvas = page.locator('.designer-canvas-container');
+  const bounds = await canvas.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.getByRole('button', { name, exact: true }).dragTo(canvas, {
+    targetPosition: { x: point.x - bounds!.x, y: point.y - bounds!.y },
+  });
 }
 
 async function canvasRgbaAtDocumentPoint(
