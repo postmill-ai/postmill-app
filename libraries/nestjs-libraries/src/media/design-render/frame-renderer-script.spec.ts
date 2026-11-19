@@ -610,7 +610,7 @@ describe('FRAME_RENDERER_SCRIPT', () => {
   });
 
   it('does not invent a non-line stroke from fill and retains the line default', async () => {
-    const renderShape = async (shape: 'rect' | 'line') => {
+    const renderShape = async (shape: 'rect' | 'ellipse' | 'polygon' | 'line') => {
       const state: Record<string, unknown> = {
         canvas: { width: 100, height: 100 },
         stroke: vi.fn(),
@@ -634,9 +634,11 @@ describe('FRAME_RENDERER_SCRIPT', () => {
       return state;
     };
 
-    const rect = await renderShape('rect');
-    expect(rect.lineWidth).toBe(4);
-    expect(rect.stroke).not.toHaveBeenCalled();
+    for (const shape of ['rect', 'ellipse', 'polygon'] as const) {
+      const closedShape = await renderShape(shape);
+      expect(closedShape.lineWidth).toBe(4);
+      expect(closedShape.stroke).not.toHaveBeenCalled();
+    }
     const line = await renderShape('line');
     expect(line.strokeStyle).toBe('#ff0000');
     expect(line.lineWidth).toBe(2);

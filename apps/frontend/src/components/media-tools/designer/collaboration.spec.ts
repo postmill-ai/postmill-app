@@ -257,6 +257,8 @@ describe('collaboration Yjs contract', () => {
     const doc = makeVideoDoc();
     const clip = (doc.outputs[0] as VideoOutput).tracks[0].clips[0];
     clip.shape = 'star';
+    clip.sides = 7;
+    clip.innerRatio = 0.3;
     clip.stroke = '#123456';
     clip.strokeWidth = 0;
     clip.fillGradient = {
@@ -269,12 +271,16 @@ describe('collaboration Yjs contract', () => {
 
     let rebuiltClip = (rebuildDocFromY(ydoc.getMap(Y_DOC))!.outputs[0] as VideoOutput).tracks[0].clips[0];
     expect(rebuiltClip.shape).toBe('star');
+    expect(rebuiltClip.sides).toBe(7);
+    expect(rebuiltClip.innerRatio).toBe(0.3);
     expect(rebuiltClip.stroke).toBe('#123456');
     expect(rebuiltClip.strokeWidth).toBe(0);
     expect(rebuiltClip.fillGradient).toEqual(clip.fillGradient);
     expect(rebuiltClip.textStroke).toEqual(clip.textStroke);
 
     clip.shape = undefined;
+    clip.sides = undefined;
+    clip.innerRatio = undefined;
     clip.stroke = undefined;
     clip.strokeWidth = 4;
     clip.fillGradient = undefined;
@@ -282,6 +288,8 @@ describe('collaboration Yjs contract', () => {
     sendUpdate(ydoc, doc, last);
     rebuiltClip = (rebuildDocFromY(ydoc.getMap(Y_DOC))!.outputs[0] as VideoOutput).tracks[0].clips[0];
     expect(rebuiltClip.shape).toBeUndefined();
+    expect(rebuiltClip.sides).toBeUndefined();
+    expect(rebuiltClip.innerRatio).toBeUndefined();
     expect(rebuiltClip.stroke).toBeUndefined();
     expect(rebuiltClip.strokeWidth).toBe(4);
     expect(rebuiltClip.fillGradient).toBeUndefined();

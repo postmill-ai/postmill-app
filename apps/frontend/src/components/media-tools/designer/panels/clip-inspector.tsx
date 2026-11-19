@@ -1402,7 +1402,10 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
               <ColorSwatch
                 label={translate('color', 'Color')}
                 value={clip.stroke || clip.fill || '#2B5CD3'}
-                onChange={(stroke) => updateClip({ stroke })}
+                onChange={(stroke) => updateClip({
+                  stroke,
+                  ...(clip.strokeWidth === undefined ? { strokeWidth: 0 } : {}),
+                })}
                 brandEnforcement={brandEnforcement}
               />
               <Stepper

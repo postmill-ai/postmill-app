@@ -284,6 +284,8 @@ const CLIP_SCALAR_KEYS: (keyof VideoClip)[] = [
   'fontSize',
   'fontWeight',
   'shape',
+  'sides',
+  'innerRatio',
   'fill',
   'stroke',
   'strokeWidth',

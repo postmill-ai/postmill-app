@@ -447,6 +447,16 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
             fill: '#ff0000', stroke: '#ff00ff', strokeWidth: 6,
           },
           {
+            id: 'missing-color-ellipse', shape: 'ellipse', startMs: 0, endMs: 1000,
+            x: 10, y: 190, width: 80, height: 40,
+            fill: '#00ffff', strokeWidth: 6,
+          },
+          {
+            id: 'missing-color-polygon', shape: 'polygon', startMs: 0, endMs: 1000,
+            x: 110, y: 190, width: 90, height: 40,
+            fill: '#00ffff', strokeWidth: 6,
+          },
+          {
             id: 'missing-color', shape: 'rect', startMs: 0, endMs: 1000,
             x: 220, y: 190, width: 80, height: 40,
             fill: '#00ffff', strokeWidth: 6,
@@ -471,6 +481,10 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
         expect(at(10, 40)).toEqual([0, 0, 0, 255]);
         expect(at(50, 40)).toEqual([255, 0, 0, 255]);
         expect(at(155, 10)).toEqual([0, 0, 255, 255]);
+        expect(at(50, 187)).toEqual([255, 255, 255, 255]);
+        expect(at(50, 210)).toEqual([0, 255, 255, 255]);
+        expect(at(155, 187)).toEqual([255, 255, 255, 255]);
+        expect(at(155, 210)).toEqual([0, 255, 255, 255]);
         expect(at(217, 210)).toEqual([255, 255, 255, 255]);
         expect(at(220, 210)).toEqual([0, 255, 255, 255]);
 

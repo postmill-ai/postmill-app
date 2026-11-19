@@ -126,6 +126,36 @@ describe('ClipInspector shape stroke controls', () => {
     expect(store.getState().history).toHaveLength(initialHistory + 3);
   });
 
+  it('keeps a newly colored shape at explicit zero width and shows its effective fill', () => {
+    const store = makeStore('rect', {});
+    render(<ClipInspector store={store} outputIndex={0} trackId="track-shape" clipId="clip-shape" />);
+    const initialHistory = store.getState().history.length;
+    const swatch = within(strokeGroup()).getByRole('button', { name: /#ff0000/i });
+    expect(swatch).toBeTruthy();
+
+    fireEvent.click(swatch);
+    const color = screen.getByRole('textbox', { name: 'Hex color', exact: true });
+    fireEvent.change(color, { target: { value: '#abcdef' } });
+    fireEvent.keyDown(color, { key: 'Enter' });
+
+    expect(currentClip(store)).toMatchObject({ stroke: '#ABCDEF', strokeWidth: 0 });
+    expect(store.getState().history).toHaveLength(initialHistory + 1);
+  });
+
+  it('steps a reflowed over-maximum width down by one', () => {
+    const store = makeStore('rect', { stroke: '#123456', strokeWidth: 80 });
+    render(<ClipInspector store={store} outputIndex={0} trackId="track-shape" clipId="clip-shape" />);
+    const initialHistory = store.getState().history.length;
+    const group = strokeGroup();
+
+    expect(within(group).getByRole('spinbutton', { name: 'Width', exact: true })).toHaveProperty('value', '80');
+    expect(within(group).getByRole('button', { name: 'Increase', exact: true })).toHaveProperty('disabled', true);
+    fireEvent.click(within(group).getByRole('button', { name: 'Decrease', exact: true }));
+
+    expect(currentClip(store).strokeWidth).toBe(79);
+    expect(store.getState().history).toHaveLength(initialHistory + 1);
+  });
+
   it('clamps width and commits a typed edit once on blur', () => {
     const store = makeStore();
     render(<ClipInspector store={store} outputIndex={0} trackId="track-shape" clipId="clip-shape" />);

@@ -1379,8 +1379,7 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await strokeHex.press('Enter');
     const width = stroke.getByRole('spinbutton', { name: 'Width', exact: true });
     const deselectCanvas = async () => {
-      const empty = await canvasDocumentPoint(page, 400, 300, 350, 250);
-      await page.mouse.click(empty.x, empty.y);
+      await page.getByRole('application', { name: 'Design canvas', exact: true }).press('Escape');
       await expect(stroke).toHaveCount(0);
     };
     await width.fill('6');
