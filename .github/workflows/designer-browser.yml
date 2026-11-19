@@ -207,6 +207,7 @@ jobs:
       - name: Run production Brand Studio browser specs
         run: pnpm --dir e2e exec playwright test --config playwright.brand-studio-ci.config.ts
         env:
+          NEXT_PUBLIC_BACKEND_URL: https://api.postmill.ai
           NEXT_TELEMETRY_DISABLED: '1'
 
       - name: Upload Playwright failure artifacts
