@@ -471,13 +471,15 @@ const DesignerContent: FC<
     });
   }, [showPagesBar, user?.orgId]);
   const onPagesContentAdded = useCallback(() => {
+    // Only a saved hide stops the automatic rule; a saved "show" already shows the strip.
+    if (pagesBarOverride !== false) return;
     setPagesBarOverride(null);
     try {
       localStorage.removeItem(`designer-pages-bar-${user?.orgId}`);
     } catch {
       // The automatic content rule still opens the strip when storage is unavailable.
     }
-  }, [user?.orgId]);
+  }, [pagesBarOverride, user?.orgId]);
   const selectedIds = store((s) => s.selectedIds);
   const selectedClip = store((s) => s.selectedClip);
   const brandEnforcement = store((s) => s.brandEnforcement);

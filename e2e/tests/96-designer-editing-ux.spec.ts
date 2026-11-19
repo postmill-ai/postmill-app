@@ -1523,6 +1523,28 @@ test('adding a page does not make Pages always visible on later single-page desi
   await expect(pagesStrip).toHaveCount(0);
 });
 
+test('adding a page preserves an explicit always-show Pages choice on later single-page designs', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+  const pagesStrip = page.locator('div[aria-label="Pages"][aria-disabled]');
+  await expect(pagesStrip).toHaveCount(0);
+
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Pages / Carousel', exact: true }).click();
+  await expect(pagesStrip).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('designer-pages-bar-e2e-org'))).toBe('true');
+
+  await page.getByRole('button', { name: 'Add page', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].pages?.length).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('designer-pages-bar-e2e-org'))).toBe('true');
+
+  state.doc = structuredClone(initialDoc);
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await expect(pagesStrip).toBeVisible();
+});
+
 test('frozen and selected formats stay visually distinct without covering dimensions', async ({ page }) => {
   const doc = structuredClone(initialDoc) as any;
   doc.outputs[0].name = 'Selected';
@@ -1532,7 +1554,7 @@ test('frozen and selected formats stay visually distinct without covering dimens
   await installMocks(page, doc);
   await openDesigner(page);
 
-  await page.getAllByRole('button', { name: 'Freeze format', exact: true })[1].click();
+  await page.getByRole('button', { name: 'Freeze format', exact: true }).nth(1).click();
   const selected = page.locator('[data-output-index="0"] > button').first();
   const frozen = page.locator('[data-output-index="1"] > button').first();
   const selectedStyle = await selected.evaluate((element) => {
