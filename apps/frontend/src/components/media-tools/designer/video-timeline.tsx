@@ -94,7 +94,6 @@ interface VideoTimelineProps {
 }
 
 const RULER_HEIGHT = 22;
-const LABEL_WIDTH = 96;
 const MS_PER_PIXEL_DEFAULT = 4;
 const TRANSITION_MIN_MS = 100;
 const TRANSITION_MAX_MS = 2000;
@@ -415,15 +414,16 @@ const PlayheadTimecode: FC<{ store: VideoTimelineProps['store'] }> = ({ store })
 };
 
 /** The red playhead line over the tracks — repaints per playhead tick. */
-const PlayheadIndicator: FC<{ store: VideoTimelineProps['store']; pixelsPerMs: number }> = ({
+const PlayheadIndicator: FC<{ store: VideoTimelineProps['store']; pixelsPerMs: number; labelWidth: number }> = ({
   store,
   pixelsPerMs,
+  labelWidth,
 }) => {
   const playheadMs = store((s) => s.playheadMs);
   return (
     <div
       className="absolute top-0 bottom-0 z-20 pointer-events-none"
-      style={{ left: LABEL_WIDTH + playheadMs * pixelsPerMs }}
+      style={{ left: labelWidth + playheadMs * pixelsPerMs }}
     >
       <div className="w-0.5 h-full bg-red-500" />
       <div
@@ -635,6 +635,7 @@ interface TrackRowProps {
   trackHeight: number;
   trackGap: number;
   clipTop: number;
+  labelWidth: number;
   onToggleCollapsed: (trackId: string) => void;
   pairs: { from: VideoClip; to: VideoClip }[];
   durationMs: number;
@@ -676,6 +677,7 @@ export const TrackRow = React.memo(function TrackRow({
   trackHeight,
   trackGap,
   clipTop,
+  labelWidth,
   onToggleCollapsed,
   pairs,
   durationMs,
@@ -710,7 +712,7 @@ export const TrackRow = React.memo(function TrackRow({
       {/* Track label */}
       <div
         className={`flex px-1.5 text-[10px] font-medium uppercase tracking-wider shrink-0 border-r border-studioBorder/30 gap-0.5 ${collapsed ? 'flex-row items-center' : 'flex-col items-end justify-center'}`}
-        style={{ width: LABEL_WIDTH }}
+        style={{ width: labelWidth }}
       >
         <div className="flex min-w-0 w-full items-center gap-0.5">
           <button
@@ -1477,6 +1479,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const collapsedTrackIds = store((s) => s.collapsedTimelineTrackIds);
   const timelineCollapsed = store((s) => s.timelineCollapsed);
   const layout = TIMELINE_DENSITY_LAYOUT[timelineDensity];
+  const labelWidth = layout.labelWidth;
   useTimelineWorkspacePreferences(
     store,
     typeof window !== 'undefined' && window.innerWidth <= 1025
@@ -1591,14 +1594,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     trackHeights,
   }), [layout, trackHeights]);
   const heightBounds = timelineWorkspaceHeightBounds(workspaceHeight);
+  const designTrackIds = useMemo(() => doc.outputs.flatMap((output) =>
+    'tracks' in output ? output.tracks.map((track) => track.id) : []
+  ), [doc.outputs]);
 
   useEffect(() => {
-    const validIds = new Set(vo?.tracks.map((track) => track.id));
+    const validIds = new Set(designTrackIds);
     const next = collapsedTrackIds.filter((id) => validIds.has(id));
     if (next.length !== collapsedTrackIds.length) {
       store.getState().setCollapsedTimelineTrackIds(next);
     }
-  }, [vo?.tracks, collapsedTrackIds, store]);
+  }, [designTrackIds, collapsedTrackIds, store]);
 
   useEffect(() => {
     const workspace = timelineRootRef.current?.parentElement;
@@ -1814,17 +1820,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (!followPlaybackRef.current) return;
       const el = scrollRef.current;
       if (!el) return;
-      const playheadPx = LABEL_WIDTH + state.playheadMs * pixelsPerMs;
+      const playheadPx = labelWidth + state.playheadMs * pixelsPerMs;
       // Chase only when the playhead leaves the visible window (with a small
       // margin so it doesn't hug the edge); otherwise the user's scroll wins.
       const margin = 60;
-      const viewStart = el.scrollLeft + LABEL_WIDTH;
+      const viewStart = el.scrollLeft + labelWidth;
       const viewEnd = el.scrollLeft + el.clientWidth;
       if (playheadPx < viewStart + margin || playheadPx > viewEnd - margin) {
-        setScrollLeft(playheadPx - LABEL_WIDTH - 200);
+        setScrollLeft(playheadPx - labelWidth - 200);
       }
     });
-  }, [isPlaying, scrollToPlayhead, store, pixelsPerMs, setScrollLeft]);
+  }, [isPlaying, scrollToPlayhead, store, pixelsPerMs, setScrollLeft, labelWidth]);
 
   // A scroll NOT caused by our own follow/anchor writes detaches the follow
   // for the rest of this playback run (seeking or pressing play re-arms it).
@@ -1859,7 +1865,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     (clientX: number) => {
       if (!scrollRef.current) return;
       const rect = scrollRef.current.getBoundingClientRect();
-      const x = clientX - rect.left + scrollRef.current.scrollLeft - LABEL_WIDTH;
+      const x = clientX - rect.left + scrollRef.current.scrollLeft - labelWidth;
       let ms = Math.max(0, Math.min(vo?.durationMs ?? MAX_VIDEO_DURATION_MS, x / pixelsPerMs));
       // Scrubbing snaps to markers while timeline snapping is on (same
       // threshold a clip edge snaps with).
@@ -1879,7 +1885,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       setPlayhead(ms);
       if (previewRef.current) previewRef.current.seek(ms);
     },
-    [pixelsPerMs, setPlayhead, vo?.durationMs, store, currentOutput],
+    [pixelsPerMs, setPlayhead, vo?.durationMs, store, currentOutput, labelWidth],
   );
 
   // Ruler drag-scrub uses pointer capture so touch and mouse share one path.
@@ -1949,10 +1955,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const handleZoomToFit = useCallback(() => {
     const el = scrollRef.current;
     if (!el || !vo) return;
-    const available = el.clientWidth - LABEL_WIDTH - 40;
+    const available = el.clientWidth - labelWidth - 40;
     setZoomPxPerMs(Math.max(0.01, Math.min(4, available / vo.durationMs)));
     setScrollLeft(0);
-  }, [vo, setScrollLeft]);
+  }, [vo, setScrollLeft, labelWidth]);
 
   // Ctrl/Cmd+wheel zooms anchored at the cursor: the time under the pointer
   // stays put across the zoom (standard NLE behavior). Attached natively —
@@ -1964,20 +1970,20 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
       const rect = el.getBoundingClientRect();
-      const msAtCursor = Math.max(0, (e.clientX - rect.left + el.scrollLeft - LABEL_WIDTH) / pixelsPerMs);
+      const msAtCursor = Math.max(0, (e.clientX - rect.left + el.scrollLeft - labelWidth) / pixelsPerMs);
       const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
       const next = Math.max(0.01, Math.min(4, pixelsPerMs * factor));
       if (next === pixelsPerMs) return;
       setZoomPxPerMs(next);
       // Re-anchor after the zoom re-render has applied the new content width.
       requestAnimationFrame(() => {
-        setScrollLeft(LABEL_WIDTH + msAtCursor * next - (e.clientX - rect.left));
+        setScrollLeft(labelWidth + msAtCursor * next - (e.clientX - rect.left));
       });
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
     // isVideo: the scroll container only exists once video mode renders.
-  }, [isVideo, pixelsPerMs, setScrollLeft]);
+  }, [isVideo, pixelsPerMs, setScrollLeft, labelWidth]);
 
   const SLIDER_STEP_MS = 100;
   const SLIDER_BIG_STEP_MS = 1000;
@@ -2507,8 +2513,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   // rect; clips/edges/ruler/buttons stopPropagation or are excluded by the
   // closest() guard, so this never fights a clip drag or a ruler scrub.
   const MARQUEE_GEOM = useMemo(
-    () => ({ ...rowGeometry, labelWidth: LABEL_WIDTH, collapsedTrackIds: collapsedTrackIdSet }),
-    [rowGeometry, collapsedTrackIdSet],
+    () => ({ ...rowGeometry, labelWidth, collapsedTrackIds: collapsedTrackIdSet }),
+    [rowGeometry, collapsedTrackIdSet, labelWidth],
   );
 
   // Attached natively on the scroll container: a JSX onMouseDown on the
@@ -2869,13 +2875,13 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       e.preventDefault();
       if (!scrollRef.current) return;
       const rect = scrollRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left + scrollRef.current.scrollLeft - LABEL_WIDTH;
+      const x = e.clientX - rect.left + scrollRef.current.scrollLeft - labelWidth;
       const ms = Math.max(0, Math.min(vo?.durationMs ?? MAX_VIDEO_DURATION_MS, x / pixelsPerMs));
       const threshold = timelineSnapThresholdMs(pixelsPerMs);
       const near = (vo?.markers || []).find((m) => Math.abs(m.tMs - ms) <= threshold);
       setRulerMenu({ x: e.clientX, y: e.clientY, ms: near ? near.tMs : Math.round(ms), markerId: near?.id ?? null });
     },
-    [vo, pixelsPerMs],
+    [vo, pixelsPerMs, labelWidth],
   );
 
   const handleRulerMenuAddMarker = useCallback(() => {
@@ -2920,9 +2926,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     const allCollapsed = vo.tracks.length > 0 && vo.tracks.every(
       (track) => collapsedTrackIdSet.has(track.id)
     );
-    store.getState().setCollapsedTimelineTrackIds(
-      allCollapsed ? [] : vo.tracks.map((track) => track.id)
-    );
+    const next = new Set(store.getState().collapsedTimelineTrackIds);
+    for (const track of vo.tracks) {
+      if (allCollapsed) next.delete(track.id);
+      else next.add(track.id);
+    }
+    store.getState().setCollapsedTimelineTrackIds([...next]);
   }, [collapsedTrackIdSet, store, vo]);
 
   const resizeTimeline = useCallback((height: number) => {
@@ -4022,7 +4031,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         style={{ height: timelineCollapsed ? 0 : timelineHeight }}
         aria-hidden={timelineCollapsed}
       >
-        <div style={{ position: 'relative', width: LABEL_WIDTH + totalPixels + 40, minWidth: '100%' }}>
+        <div style={{ position: 'relative', width: labelWidth + totalPixels + 40, minWidth: '100%' }}>
           {/* Ruler */}
           <div
             ref={rulerRef}
@@ -4035,7 +4044,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             aria-valuetext={formatTime(store.getState().playheadMs)}
             tabIndex={0}
             className="sticky top-0 z-10 bg-newBgColorInner border-b border-studioBorder/40 select-none touch-none"
-            style={{ height: RULER_HEIGHT, marginLeft: LABEL_WIDTH }}
+            style={{ height: RULER_HEIGHT, marginLeft: labelWidth }}
             onPointerDown={handleRulerPointerDown}
             onKeyDown={handleRulerKeyDown}
             onKeyUp={handleSliderKeyUp}
@@ -4086,6 +4095,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               trackHeight={layout.trackHeight}
               trackGap={layout.trackGap}
               clipTop={layout.clipTop}
+              labelWidth={labelWidth}
               onToggleCollapsed={handleToggleTrackCollapsed}
               pairs={sortedAdjacentPairs[track.id] || []}
               durationMs={vo.durationMs}
@@ -4120,7 +4130,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             >
               <div
                 className="flex items-center justify-end px-2 text-[10px] font-medium uppercase tracking-wider shrink-0 border-r border-studioBorder/30 text-designerAccent"
-                style={{ width: LABEL_WIDTH }}
+                style={{ width: labelWidth }}
               >
                 {translate('new_track_drop_indicator', '+ {{type}}', { type: trackTypeLabel(dragging.trackType) })}
               </div>
@@ -4137,7 +4147,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             <KeyframeLane
               store={store}
               pixelsPerMs={pixelsPerMs}
-              labelWidth={LABEL_WIDTH}
+              labelWidth={labelWidth}
               contentWidth={totalPixels + 40}
             />
           )}
@@ -4156,7 +4166,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           )}
 
           {/* Playhead */}
-          <PlayheadIndicator store={store} pixelsPerMs={pixelsPerMs} />
+          <PlayheadIndicator store={store} pixelsPerMs={pixelsPerMs} labelWidth={labelWidth} />
         </div>
       </div>
 

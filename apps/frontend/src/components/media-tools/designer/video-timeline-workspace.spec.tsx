@@ -98,6 +98,19 @@ const makeStore = () => {
   return store;
 };
 
+const addSecondFormat = (store: ReturnType<typeof makeStore>) => {
+  const doc = structuredClone(store.getState().doc);
+  doc.outputs.push({
+    ...doc.outputs[0],
+    id: 'out-two',
+    tracks: [{
+      id: 'track-other', type: 'text', name: 'Other format',
+      clips: [{ id: 'clip-other', text: 'Other', startMs: 0, endMs: 4000 }],
+    }],
+  } as any);
+  store.getState().loadDesign(doc, 'workspace', 'Workspace');
+};
+
 const row = (id: string) => document.querySelector(`[data-track-id="${id}"]`) as HTMLElement;
 
 describe('video timeline workspace', () => {
@@ -105,12 +118,14 @@ describe('video timeline workspace', () => {
     const store = makeStore();
     render(<VideoTimeline store={store} />);
     expect(row('track-a').style.height).toBe('56px');
+    expect((row('track-a').firstElementChild as HTMLElement).style.width).toBe('64px');
     expect(within(row('track-a')).getByRole('button', { name: 'Cut transition' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Compact tracks' }));
 
     expect(screen.getByRole('button', { name: 'Compact tracks' }).getAttribute('aria-pressed')).toBe('true');
     expect(row('track-a').style.height).toBe('38px');
+    expect((row('track-a').firstElementChild as HTMLElement).style.width).toBe('96px');
     expect(store.getState().timelineHeight).toBe(204);
     expect(within(row('track-a')).getAllByRole('slider', { name: 'Clip' })).toHaveLength(2);
     expect(within(row('track-a')).getAllByRole('slider', { name: 'Trim clip start' })).toHaveLength(2);
@@ -135,6 +150,37 @@ describe('video timeline workspace', () => {
     expect(tracks.scrollTop).toBe(17);
   });
 
+  it('preserves each format\'s collapsed tracks and scopes all-track actions to the visible format', () => {
+    const store = makeStore();
+    addSecondFormat(store);
+    render(<VideoTimeline store={store} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse track: First' }));
+
+    act(() => store.getState().setCurrentOutput(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all tracks' }));
+    expect(store.getState().collapsedTimelineTrackIds).toEqual(['track-a', 'track-other']);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all tracks' }));
+    expect(store.getState().collapsedTimelineTrackIds).toEqual(['track-a']);
+
+    act(() => store.getState().setCurrentOutput(0));
+    expect(row('track-a').dataset.collapsed).toBe('true');
+    expect(store.getState().collapsedTimelineTrackIds).toEqual(['track-a']);
+  });
+
+  it('prunes only a track genuinely removed from the whole design', () => {
+    const store = makeStore();
+    render(<VideoTimeline store={store} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse track: First' }));
+    const doc = structuredClone(store.getState().doc);
+    (doc.outputs[0] as VideoOutput).tracks = (doc.outputs[0] as VideoOutput).tracks
+      .filter((track) => track.id !== 'track-a');
+
+    act(() => store.getState().loadDesign(doc, 'workspace', 'Workspace'));
+
+    expect(store.getState().collapsedTimelineTrackIds).toEqual([]);
+    expect(row('track-b').dataset.collapsed).toBe('false');
+  });
+
   it('collapses and expands every track from one toolbar action', () => {
     const store = makeStore();
     render(<VideoTimeline store={store} />);
@@ -145,6 +191,41 @@ describe('video timeline workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Expand all tracks' }));
     expect(store.getState().collapsedTimelineTrackIds).toEqual([]);
     expect(screen.getAllByRole('slider', { name: 'Clip' })).toHaveLength(3);
+  });
+
+  it('re-clamps a stored tall panel when the observer reports a smaller workspace', () => {
+    let availableHeight = 900;
+    let observerCallback: (() => void) | undefined;
+    const resizeObserverDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      value: class {
+        constructor(callback: () => void) { observerCallback = callback; }
+        observe() {}
+        disconnect() {}
+      },
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      () => ({ height: availableHeight }) as DOMRect
+    );
+    localStorage.setItem('designer-video-timeline-org-a', JSON.stringify({
+      density: 'comfortable', height: 600, collapsedTrackIds: [], timelineCollapsed: false,
+    }));
+
+    try {
+      const store = makeStore();
+      render(<VideoTimeline store={store} />);
+      expect(store.getState().timelineHeight).toBe(600);
+      availableHeight = 400;
+      act(() => observerCallback?.());
+      expect(store.getState().timelineHeight).toBe(160);
+    } finally {
+      if (resizeObserverDescriptor) {
+        Object.defineProperty(globalThis, 'ResizeObserver', resizeObserverDescriptor);
+      } else {
+        delete (globalThis as any).ResizeObserver;
+      }
+    }
   });
 
   it('resizes by pointer and removes the gesture listeners on release', () => {

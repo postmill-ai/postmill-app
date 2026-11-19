@@ -3,6 +3,7 @@ import {
   clampTimelineWorkspaceHeight,
   COLLAPSED_TIMELINE_TRACK_HEIGHT,
   defaultTimelineWorkspacePreference,
+  MAX_COLLAPSED_TIMELINE_TRACKS,
   readTimelineWorkspacePreference,
   TIMELINE_DENSITY_LAYOUT,
   timelineTrackHeights,
@@ -30,6 +31,28 @@ describe('timeline workspace preferences', () => {
     expect(readTimelineWorkspacePreference(localStorage, 'org-b')).toEqual(
       defaultTimelineWorkspacePreference()
     );
+  });
+
+  it('keeps the mobile collapsed default separate from a desktop visit', () => {
+    writeTimelineWorkspacePreference(localStorage, 'org', defaultTimelineWorkspacePreference(false));
+    expect(readTimelineWorkspacePreference(localStorage, 'org', false).timelineCollapsed).toBe(false);
+    expect(readTimelineWorkspacePreference(localStorage, 'org', true).timelineCollapsed).toBe(true);
+    writeTimelineWorkspacePreference(localStorage, 'org', {
+      ...defaultTimelineWorkspacePreference(true), timelineCollapsed: false,
+    }, true);
+    expect(readTimelineWorkspacePreference(localStorage, 'org', true).timelineCollapsed).toBe(false);
+    expect(readTimelineWorkspacePreference(localStorage, 'org', false).timelineCollapsed).toBe(false);
+  });
+
+  it('bounds collapsed IDs by every permitted output and track', () => {
+    const ids = Array.from({ length: MAX_COLLAPSED_TIMELINE_TRACKS + 1 }, (_, index) => `track-${index}`);
+    localStorage.setItem('designer-video-timeline-org', JSON.stringify({
+      density: 'compact', height: 240, collapsedTrackIds: ids, timelineCollapsed: false,
+    }));
+    const saved = readTimelineWorkspacePreference(localStorage, 'org');
+    expect(saved.collapsedTrackIds).toHaveLength(MAX_COLLAPSED_TIMELINE_TRACKS);
+    expect(saved.collapsedTrackIds[0]).toBe('track-0');
+    expect(saved.collapsedTrackIds.at(-1)).toBe(`track-${MAX_COLLAPSED_TIMELINE_TRACKS - 1}`);
   });
 
   it('sanitizes malformed or partial values without disabling the workspace', () => {

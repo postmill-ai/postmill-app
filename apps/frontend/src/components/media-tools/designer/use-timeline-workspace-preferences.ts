@@ -41,12 +41,13 @@ export const useTimelineWorkspacePreferences = (store: Store, mobile: boolean) =
       height,
       collapsedTrackIds,
       timelineCollapsed,
-    });
+    }, mobile);
   }, [
     collapsedTrackIds,
     context,
     density,
     height,
+    mobile,
     orgId,
     timelineCollapsed,
   ]);

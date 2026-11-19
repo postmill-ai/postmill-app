@@ -1,14 +1,16 @@
-import type { DesignerState, VideoTrack } from './designer.store';
+import { MAX_OUTPUTS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { MAX_TRACKS, type DesignerState, type VideoTrack } from './designer.store';
 
 export const MIN_TIMELINE_HEIGHT = 120;
 export const MAX_TIMELINE_HEIGHT = 600;
 export const DEFAULT_TIMELINE_HEIGHT = 240;
 export const MIN_TIMELINE_CANVAS_HEIGHT = 240;
 export const COLLAPSED_TIMELINE_TRACK_HEIGHT = 28;
+export const MAX_COLLAPSED_TIMELINE_TRACKS = MAX_OUTPUTS * MAX_TRACKS;
 
 export const TIMELINE_DENSITY_LAYOUT = {
-  comfortable: { trackHeight: 52, trackGap: 4, clipTop: 20 },
-  compact: { trackHeight: 36, trackGap: 2, clipTop: 16 },
+  comfortable: { trackHeight: 52, trackGap: 4, clipTop: 20, labelWidth: 64 },
+  compact: { trackHeight: 36, trackGap: 2, clipTop: 16, labelWidth: 96 },
 } as const;
 
 export interface TimelineWorkspacePreference {
@@ -20,8 +22,8 @@ export interface TimelineWorkspacePreference {
 
 type PreferenceStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
-const preferenceKey = (orgId?: string | null) =>
-  `designer-video-timeline${orgId ? `-${orgId}` : ''}`;
+const preferenceKey = (orgId?: string | null, mobile = false) =>
+  `designer-video-timeline${orgId ? `-${orgId}` : ''}${mobile ? '-mobile' : ''}`;
 
 export const defaultTimelineWorkspacePreference = (
   mobile = false
@@ -34,7 +36,7 @@ export const defaultTimelineWorkspacePreference = (
 
 const validCollapsedIds = (value: unknown): string[] | undefined =>
   Array.isArray(value)
-    ? [...new Set(value.filter((id): id is string => typeof id === 'string'))].slice(0, 40)
+    ? [...new Set(value.filter((id): id is string => typeof id === 'string'))].slice(0, MAX_COLLAPSED_TIMELINE_TRACKS)
     : undefined;
 
 export const timelineWorkspaceHeightBounds = (availableHeight: number) => ({
@@ -73,7 +75,7 @@ export const readTimelineWorkspacePreference = (
 ): TimelineWorkspacePreference => {
   const defaults = defaultTimelineWorkspacePreference(mobile);
   try {
-    const saved = JSON.parse(storage.getItem(preferenceKey(orgId)) || 'null');
+    const saved = JSON.parse(storage.getItem(preferenceKey(orgId, mobile)) || 'null');
     if (!saved || typeof saved !== 'object') return defaults;
     return {
       density: saved.density === 'compact' || saved.density === 'comfortable'
@@ -95,10 +97,11 @@ export const readTimelineWorkspacePreference = (
 export const writeTimelineWorkspacePreference = (
   storage: PreferenceStorage,
   orgId: string | null | undefined,
-  preference: TimelineWorkspacePreference
+  preference: TimelineWorkspacePreference,
+  mobile = false
 ) => {
   try {
-    storage.setItem(preferenceKey(orgId), JSON.stringify(preference));
+    storage.setItem(preferenceKey(orgId, mobile), JSON.stringify(preference));
   } catch {
     return;
   }

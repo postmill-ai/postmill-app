@@ -1459,12 +1459,18 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     const imageClip = timelineTrackRow(page, 'Image main').getByRole('slider', { name: 'Clip', exact: true });
     await imageClip.click();
     await trackRegion.evaluate((element) => { element.scrollTop = 24; });
-    await page.getByRole('button', { name: 'Collapse track: Image main', exact: true }).click();
+    const collapseImage = page.getByRole('button', { name: 'Collapse track: Image main', exact: true });
+    await collapseImage.scrollIntoViewIfNeeded();
+    const beforeCollapse = await trackRegion.evaluate((element) => element.scrollTop);
+    await collapseImage.click();
     await expect(timelineTrackRow(page, 'Image main')).toHaveAttribute('data-collapsed', 'true');
-    expect(await trackRegion.evaluate((element) => element.scrollTop)).toBe(24);
+    expect(await trackRegion.evaluate((element) => element.scrollTop)).toBe(beforeCollapse);
     await expect(page.getByRole('button', { name: 'Split clip', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Expand track: Image main', exact: true }).click();
-    expect(await trackRegion.evaluate((element) => element.scrollTop)).toBe(24);
+    const expandImage = page.getByRole('button', { name: 'Expand track: Image main', exact: true });
+    await expandImage.scrollIntoViewIfNeeded();
+    const beforeExpand = await trackRegion.evaluate((element) => element.scrollTop);
+    await expandImage.click();
+    expect(await trackRegion.evaluate((element) => element.scrollTop)).toBe(beforeExpand);
     await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(7);
 
     await page.getByRole('button', { name: 'Collapse all tracks', exact: true }).click();
