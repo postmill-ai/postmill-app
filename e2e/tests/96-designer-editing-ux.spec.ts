@@ -334,12 +334,14 @@ test('canvas-aware text defaults and auto-fit survive variants, reload, and expo
 
   await page.getByRole('button', { name: /Story/ }).click();
   await addDefaultText();
-  expect((state.saveDocs.at(-1) as any).outputs[1].children.find((child: any) => child.text === 'Text')).toMatchObject({
+  // Adding text on Small also placed a linked copy on Story, so the text added here is the last one.
+  expect((state.saveDocs.at(-1) as any).outputs[1].children.filter((child: any) => child.text === 'Text').at(-1)).toMatchObject({
     fontSize: 43,
     autoFit: false,
   });
 
-  await page.getByRole('button', { name: /Small/ }).click();
+  // The selected text's Inspector also has a "Body Small" style button, so match the format tile.
+  await page.getByRole('button', { name: /Small 400×400/ }).click();
   await selectBodyCopy(page);
   const autoFit = page.getByRole('switch', { name: 'Auto-fit text', exact: true });
   await expect(autoFit).toHaveAttribute('aria-checked', 'false');

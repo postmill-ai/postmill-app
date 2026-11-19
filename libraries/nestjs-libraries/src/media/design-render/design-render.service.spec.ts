@@ -1739,6 +1739,28 @@ describe('DesignRenderService flat text layout', () => {
     expect(ctx.font).toContain('700');
   });
 
+  it.each([
+    { verticalAlign: 'middle', expectedY: 98 },
+    { verticalAlign: 'bottom', expectedY: 186 },
+  ])('aligns rich auto-fit text to $verticalAlign', async ({ verticalAlign, expectedY }) => {
+    const service = makeService();
+    const ctx = await makeCtx();
+    const spy = vi.spyOn(ctx, 'fillText');
+
+    (service as any).drawText(ctx as any, makeEl({
+      text: '',
+      richText: [{ text: 'Hi' }],
+      fontSize: 20,
+      width: 200,
+      height: 200,
+      autoFit: true,
+      verticalAlign,
+    }));
+
+    expect(spy).toHaveBeenCalled();
+    expect(spy.mock.calls[0][2]).toBeCloseTo(expectedY, 0);
+  });
+
   it('centers the wrapped block vertically when verticalAlign is middle', async () => {
     const service = makeService();
     const ctx = await makeCtx();

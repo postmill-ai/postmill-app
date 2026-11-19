@@ -88,6 +88,21 @@ describe('applyLinked fontSize propagation', () => {
     expect(affected).toEqual([1]);
   });
 
+  it('keeps linked scaling proportional below the new-text default floor', () => {
+    const doc = makeDoc();
+    Object.assign(doc.outputs[1], { width: 400, height: 400 });
+
+    const { outputs } = applyLinked(
+      doc,
+      0,
+      new Set(['e1']),
+      { fontSize: 64 },
+      false
+    );
+
+    expect((outputs[1] as any).children[0].fontSize).toBe(24);
+  });
+
   it('never re-imposes short-edge type on a wider linked output', () => {
     const { outputs } = applyLinked(
       makeDoc(),

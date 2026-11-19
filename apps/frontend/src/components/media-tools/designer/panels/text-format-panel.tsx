@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useMemo } from 'react';
+import React, { FC, useCallback, useMemo, useRef } from 'react';
 import type {
   DesignerElement,
   DesignerTextShadow,
@@ -234,6 +234,12 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
 
   const element = textElements[0] ?? null;
   const pathMode = useMemo(() => detectPathMode(element), [element]);
+  const autoFitBeforeEnable = useRef(
+    new Map<
+      string,
+      Pick<DesignerElement, 'autoFit' | 'autoFitMinFontSize'>
+    >()
+  );
 
   const brandColors = useBrandColors();
   const brandEnforcement = store((s) => s.brandEnforcement);
@@ -271,6 +277,33 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
     },
     [store, textElements, element, out.width, out.height]
   );
+
+  const toggleAutoFit = useCallback(() => {
+    if (!textElements.length) return;
+    const enabling = element?.autoFit !== true;
+    for (const el of textElements) {
+      if (enabling) {
+        autoFitBeforeEnable.current.set(el.id, {
+          autoFit: el.autoFit,
+          autoFitMinFontSize: el.autoFitMinFontSize,
+        });
+      }
+      const hasPrevious = autoFitBeforeEnable.current.has(el.id);
+      const previous = autoFitBeforeEnable.current.get(el.id);
+      store.getState().updateElement(
+        el.id,
+        enabling
+          ? { autoFit: true }
+          : {
+              autoFit: hasPrevious ? previous?.autoFit : false,
+              autoFitMinFontSize: hasPrevious
+                ? previous?.autoFitMinFontSize
+                : el.autoFitMinFontSize,
+            }
+      );
+    }
+    store.getState().pushHistory();
+  }, [store, textElements, element?.autoFit]);
 
   const currentFont = element?.fontFamily || 'Arial';
 
@@ -406,7 +439,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
           role="switch"
           aria-label={t('designer_auto_fit_text', 'Auto-fit text')}
           aria-checked={element.autoFit === true}
-          onClick={() => update({ autoFit: element.autoFit !== true })}
+          onClick={toggleAutoFit}
           className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
             element.autoFit === true ? 'bg-designerAccent' : 'bg-studioBorder'
           }`}

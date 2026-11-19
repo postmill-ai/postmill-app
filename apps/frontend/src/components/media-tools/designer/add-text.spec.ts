@@ -1,8 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { addText } from './add-text';
 import { createDesignerStore } from './designer.store';
+import { defaultTextBox } from './measure-text';
 
 vi.mock('./fonts', () => ({ ensureFontLoaded: () => Promise.resolve() }));
+vi.mock('./measure-text', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./measure-text')>();
+  return { ...actual, defaultTextBox: vi.fn(actual.defaultTextBox) };
+});
 
 const videoStore = () => {
   const store = createDesignerStore(1080, 1080);
@@ -90,6 +95,17 @@ describe('addText — image documents', () => {
     const [el] = store.getState().doc.outputs[0].children;
     expect(el.fontSize).toBe(36);
     expect(el.letterSpacing).toBe(-1);
+  });
+
+  it('passes the active type scale to new-box padding', () => {
+    const store = createDesignerStore(400, 400);
+    vi.mocked(defaultTextBox).mockClear();
+
+    addText(store);
+
+    expect(defaultTextBox).toHaveBeenCalledWith(
+      expect.objectContaining({ paddingScale: 0.5 })
+    );
   });
 });
 

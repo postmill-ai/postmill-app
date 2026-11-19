@@ -386,7 +386,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   applies shortcut deltas instead of restoring stale run sizes.
 - **Text defaults and auto-fit are output-aware and opt-in.** `add-text.ts` scales every new-text
   preset and measured starting box through `textStyleScale`/`typeBasisPx`, including video text;
-  context-menu insertion must use that same helper. Static elements carry optional `autoFit` and
+  this creation/preset scale is clamped to 0.5–4, while linked copies deliberately keep the
+  unclamped `typeScaleRatio` so existing variants remain proportional. Context-menu insertion must
+  use that same helper. Static elements carry optional `autoFit` and
   `autoFitMinFontSize`: absent preserves legacy height-only fitting, explicit false disables
   shrinking, and true uses shared `fit-text.ts` layout to fit both dimensions (including long
   unbroken words and straight rich runs) without changing the authored box. The minimum defaults to

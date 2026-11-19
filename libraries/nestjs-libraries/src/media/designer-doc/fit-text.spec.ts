@@ -169,14 +169,39 @@ describe('opt-in auto-fit', () => {
     expect(impossible.lines.length * impossible.lineHeight).toBeGreaterThan(box.height);
   });
 
-  it('never grows text smaller than the default minimum', () => {
+  it('uses the 8px default rather than the legacy 60% floor', () => {
     expect(
       fitTextToBox(
-        { text: 'tiny', width: 100, height: 100, fontSize: 4, autoFit: true },
+        {
+          text: 'internationalization',
+          width: 50,
+          height: 100,
+          fontSize: 20,
+          autoFit: true,
+        },
         measure
       ).fontSize
-    ).toBe(4);
+    ).toBe(8);
   });
+
+  it.each([undefined, 12])(
+    'never grows text smaller than the requested minimum (%s)',
+    (minFontSize) => {
+      expect(
+        fitTextToBox(
+          {
+            text: 'tiny',
+            width: 1,
+            height: 1,
+            fontSize: 4,
+            autoFit: true,
+            minFontSize,
+          },
+          measure
+        ).fontSize
+      ).toBe(4);
+    }
+  );
 });
 
 describe('rich text auto-fit', () => {
@@ -237,6 +262,36 @@ describe('rich text auto-fit', () => {
     expect(fitted.fontSize).toBe(18);
     expect(fitted.fits).toBe(false);
     expect(fitted.segments[0].x).toBe((30 - fitted.segments[0].width) / 2);
+  });
+
+  it('never grows a small run to the fitting floor', () => {
+    const fitted = fitRichTextToBox(
+      {
+        text: '',
+        width: 30,
+        height: 20,
+        fontSize: 40,
+        minFontSize: 30,
+        autoFit: true,
+      },
+      [{ text: 'x', fontSize: 4 }, { text: 'unbreakable', fontSize: 40 }],
+      (text, run) => text.length * run.fontSize * 0.5
+    );
+
+    expect(fitted.fontSize).toBe(30);
+    expect(fitted.runs[0].fontSize).toBe(4);
+  });
+
+  it('leaves a justified paragraph last line at natural spacing', () => {
+    const layout = layoutRichText(
+      [{ text: 'aa bb cc' }],
+      { width: 100, fontSize: 20, align: 'justify' },
+      (text, run) => text.length * run.fontSize * 0.5
+    );
+
+    expect(layout.lines).toHaveLength(1);
+    expect(layout.lines[0].endsParagraph).toBe(true);
+    expect(layout.segments.map((segment) => segment.x)).toEqual([0, 30, 60]);
   });
 });
 
