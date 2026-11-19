@@ -487,7 +487,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   existing keyframe times stay unchanged except exit presets), and split retains the original timing
   domain/easing, adds an interpolated boundary, and carries displacement/tangent offsets so rendered
   geometry is continuous even on repeated splits. Reflow scales relative geometry by the clip's final
-  box factors and anchors the trail to the reflowed clip. Fewer than two usable points are inert.
+  box factors and anchors the trail to the reflowed rendered start, including split-half displacement
+  offsets. Points can be selected on canvas or in the Inspector and deleted there for touch/keyboard;
+  right-click deletion remains available. Fewer than two usable points are inert.
   Editor trails/handles never enter exports. Copying animation between clips remains a
   separate feature.
 

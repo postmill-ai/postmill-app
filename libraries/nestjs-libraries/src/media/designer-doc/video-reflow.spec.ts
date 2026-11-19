@@ -5,6 +5,7 @@ import {
   seedVideoOutput,
 } from './video-reflow';
 import type { VideoClip, VideoOutput } from './designer-doc.schema';
+import { interpolateClipWithMotionPath, splitMotionPath } from './motion-path';
 
 /**
  * Video variant reflow (add-format / resize for video docs). The important
@@ -353,5 +354,29 @@ describe('motion path reflow', () => {
       .toBeCloseTo(800 * (out.width! / 400), 6);
     expect(out.motionPath?.points[1].y - out.motionPath!.points[0].y)
       .toBeCloseTo(500 * (out.height! / 300), 6);
+  });
+
+  it('anchors a split second half trail to its scaled rendered start', () => {
+    const source = clip({
+      startMs: 0, endMs: 2000,
+      x: 100, y: 200, width: 400, height: 300, shape: 'rect',
+      motionPath: {
+        points: [
+          { x: 100, y: 200, tMs: 0 },
+          { x: 900, y: 600, tMs: 1000 },
+          { x: 900, y: 900, tMs: 2000 },
+        ],
+      },
+    });
+    const split = splitMotionPath(source.motionPath, 1000, 2000);
+    const second = { ...source, startMs: 1000, motionPath: split.second };
+
+    const out = reflowVideoClip(second, 'shape', LANDSCAPE, PORTRAIT);
+    const renderedStart = interpolateClipWithMotionPath(out, 0);
+
+    expect(out.motionPath?.startDx).toBeCloseTo(split.second!.startDx! * (out.width! / 400), 6);
+    expect(out.motionPath?.startDy).toBeCloseTo(split.second!.startDy! * (out.height! / 300), 6);
+    expect(out.motionPath?.points[0].x).toBeCloseTo(renderedStart.x, 6);
+    expect(out.motionPath?.points[0].y).toBeCloseTo(renderedStart.y, 6);
   });
 });

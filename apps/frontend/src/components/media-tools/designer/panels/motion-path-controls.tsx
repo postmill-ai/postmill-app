@@ -57,7 +57,7 @@ export const MotionPathControls: React.FC<MotionPathControlsProps> = ({
       <div className="text-[10px] leading-relaxed text-textColor/50">
         {active
           ? t('designer_motion_recording_hint', 'Drag the clip around the canvas. Stop dragging to finish.')
-          : t('designer_motion_edit_hint', 'Drag the clip to record. Drag points to edit; click a segment to insert; right-click a point to delete.')}
+          : t('designer_motion_edit_hint', 'Drag the clip to record. Drag points to edit; click a segment to insert. Delete a point with right-click, or select it and use Delete selected point in the Inspector.')}
       </div>
       <label className="flex items-center justify-between gap-2 text-[11px] text-textColor/70">
         <span>{t('designer_path_easing', 'Path easing')}</span>

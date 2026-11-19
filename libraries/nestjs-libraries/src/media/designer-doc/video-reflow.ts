@@ -24,12 +24,14 @@ const reflowClipMotionPath = (
   if (!path?.points.length) return;
   const firstX = path.points[0].x;
   const firstY = path.points[0].y;
-  const targetX = anchorToClip ? (next.x ?? firstX) : firstX;
-  const targetY = anchorToClip ? (next.y ?? firstY) : firstY;
+  const startDx = path.startDx === undefined ? undefined : path.startDx * scaleX;
+  const startDy = path.startDy === undefined ? undefined : path.startDy * scaleY;
+  const targetX = anchorToClip ? (next.x ?? firstX) + (startDx ?? 0) : firstX;
+  const targetY = anchorToClip ? (next.y ?? firstY) + (startDy ?? 0) : firstY;
   next.motionPath = {
     ...path,
-    startDx: path.startDx === undefined ? undefined : path.startDx * scaleX,
-    startDy: path.startDy === undefined ? undefined : path.startDy * scaleY,
+    startDx,
+    startDy,
     points: path.points.map((point) => ({
       ...point,
       x: targetX + (point.x - firstX) * scaleX,

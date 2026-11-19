@@ -124,6 +124,27 @@ describe('motion path editing geometry', () => {
     expect(rescaleMotionPathTimes(path, 1000, 1000)).toBe(path);
   });
 
+  it('rescales a split second half without changing its rendered path', () => {
+    const easedPath = { ...path, ease: 'easeInOut' as const };
+    const split = splitMotionPath(easedPath, 500, 1000);
+    const trimmedPath = rescaleMotionPathTimes(split.second, 500, 250);
+    const original = {
+      id: 'clip', startMs: 0, endMs: 1000, x: 0, y: 0, motionPath: easedPath,
+    } as VideoClip;
+    const trimmed = {
+      ...original, startMs: 500, endMs: 750, motionPath: trimmedPath,
+    };
+
+    expect(trimmedPath).toMatchObject({ timeOffsetMs: 250, timeDurationMs: 500 });
+    expect(trimmedPath?.points.map((point) => point.tMs)).toEqual([250, 500]);
+    for (const relativeMs of [0, 60, 125, 200, 249]) {
+      const expected = interpolateClipWithMotionPath(original, 500 + relativeMs * 2);
+      const actual = interpolateClipWithMotionPath(trimmed, relativeMs);
+      expect(actual.x).toBeCloseTo(expected.x, 6);
+      expect(actual.y).toBeCloseTo(expected.y, 6);
+    }
+  });
+
   it('splits at an interpolated boundary and retains the original timing domain', () => {
     const split = splitMotionPath(path, 500, 1000);
     expect(split.first?.points).toEqual([

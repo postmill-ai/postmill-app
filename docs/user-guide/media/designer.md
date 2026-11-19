@@ -98,7 +98,9 @@ via headless Chromium + FFmpeg.
   (**Shift+Delete**). Split is enabled only inside a selected, unlocked clip with room on both
   sides. The duration stepper beside the timecode sets 1–180 seconds. **Motion Path** in the clip
   Inspector records a custom route by dragging the clip through the canvas. Drag its points to edit,
-  click a segment to insert a point, or right-click a point to delete it. Path easing and optional
+  click a segment to insert a point, or right-click a point to delete it. For touch or keyboard
+  editing, select a point on the canvas or with the Inspector's **Path point** menu, then choose
+  **Delete selected point**. Path easing and optional
   **Rotate with path** share the clip's duration; recording and each edit are one Undo, and paths save,
   reload, and export with the clip. Changing clip duration rescales path-point timestamps, while
   ordinary existing keyframe timestamps stay unchanged (except the existing exit-preset behavior).

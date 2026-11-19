@@ -907,6 +907,41 @@ describe('motion path recording and editing', () => {
     await act(async () => store.getState().undo());
     expect(store.getState().doc.outputs[0].tracks[0].clips[0].motionPath?.points).toHaveLength(4);
   });
+
+  it('selects a path point on tap for Inspector editing', async () => {
+    const store = videoStore({
+      motionPath: {
+        points: [
+          { x: 0, y: 0, tMs: 0 },
+          { x: 100, y: 100, tMs: 1000 },
+          { x: 200, y: 50, tMs: 2000 },
+        ],
+      },
+    });
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'c1' });
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={1080} height={1080}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={1080} height={1080} interactive />
+          </Layer>
+        </Stage>
+      );
+    });
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const point = stage.find('Ellipse').find((node) => node.name() === 'motion-path-point')!;
+
+    expect(store.getState().motionPathPointIndex).toBeNull();
+    await act(async () => point.fire('tap'));
+    expect(store.getState().motionPathPointIndex).toBe(0);
+  });
 });
 
 
