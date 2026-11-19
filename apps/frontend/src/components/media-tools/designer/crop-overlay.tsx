@@ -1,38 +1,18 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useState } from 'react';
+import React, { FC, useCallback, useEffect } from 'react';
 import { Group, Rect, Line as KonvaLine } from 'react-konva';
 import type Konva from 'konva';
 import type { DesignerElement } from './designer.store';
 import {
-  cropFromBoxFraction,
-  constrainFractionToRatio,
-  normaliseFraction,
-  parseCropRatio,
   cropDisplayBox,
   type BoxFraction,
+  type CropResizeHandle,
 } from './crop-geometry';
 
-/**
- * On-canvas crop overlay for the Crop tool.
- *
- * The Designer had crop DATA (`DesignerCrop`) and inspector sliders but no
- * direct manipulation — this is the missing handle-drag UI. It renders inside
- * the Konva stage in document coordinates, so it lines up with the element at
- * any zoom.
- *
- * Enter or a double-click commits; Escape cancels. Committing composes the new
- * crop onto any existing one (see `crop-geometry`).
- */
-
 const HANDLE = 8;
-const FULL: BoxFraction = { x: 0, y: 0, width: 1, height: 1 };
 
-type HandleId =
-  | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
-  | 'top' | 'bottom' | 'left' | 'right';
-
-const HANDLES: HandleId[] = [
+const HANDLES: CropResizeHandle[] = [
   'top-left', 'top', 'top-right',
   'right', 'bottom-right', 'bottom',
   'bottom-left', 'left',
@@ -40,11 +20,11 @@ const HANDLES: HandleId[] = [
 
 interface CropOverlayProps {
   element: DesignerElement;
-  natural: { width: number; height: number } | null;
+  natural: { width: number; height: number };
   zoom: number;
-  /** Aspect ratio string from the options bar (`free`, `1:1`, `16:9`, …). */
-  ratio?: string;
-  onCommit: (patch: Partial<DesignerElement>) => void;
+  fraction: BoxFraction;
+  onDraftChange: (fraction: BoxFraction, handle: CropResizeHandle) => void;
+  onCommit: () => void;
   onCancel: () => void;
 }
 
@@ -52,32 +32,18 @@ export const CropOverlay: FC<CropOverlayProps> = ({
   element,
   natural,
   zoom,
-  ratio,
+  fraction,
+  onDraftChange,
   onCommit,
   onCancel,
 }) => {
-  // Starts at the full box every mount. The caller keys this component by
-  // element id, so targeting a different element remounts it and the crop
-  // resets — no reset-in-effect needed.
-  const [frac, setFrac] = useState<BoxFraction>(FULL);
-  const [lastHandle, setLastHandle] = useState<HandleId>();
-  const ratioValue = parseCropRatio(ratio);
-
-  const commit = useCallback(() => {
-    const f = normaliseFraction(frac);
-    // A full-box crop is a no-op; don't dirty the document for nothing.
-    if (f.x === 0 && f.y === 0 && f.width === 1 && f.height === 1) {
-      onCancel();
-      return;
-    }
-    onCommit(cropFromBoxFraction(element, natural, f, lastHandle));
-  }, [frac, lastHandle, element, natural, onCommit, onCancel]);
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
+      const target = e.target as HTMLElement | null;
+      const editing = target?.matches('input, textarea, select, button, [contenteditable="true"]');
+      if (e.key === 'Enter' && !editing) {
         e.preventDefault();
-        commit();
+        onCommit();
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onCancel();
@@ -85,30 +51,17 @@ export const CropOverlay: FC<CropOverlayProps> = ({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [commit, onCancel]);
+  }, [onCommit, onCancel]);
 
   const display = cropDisplayBox(element, natural);
   const box = {
-    x: display.x + frac.x * display.width,
-    y: display.y + frac.y * display.height,
-    width: frac.width * display.width,
-    height: frac.height * display.height,
+    x: display.x + fraction.x * display.width,
+    y: display.y + fraction.y * display.height,
+    width: fraction.width * display.width,
+    height: fraction.height * display.height,
   };
 
-  const moveHandle = (id: HandleId, dxFrac: number, dyFrac: number) => {
-    setLastHandle(id);
-    setFrac((prev) => {
-      let { x, y, width, height } = prev;
-      if (id.includes('left')) { x += dxFrac; width -= dxFrac; }
-      if (id.includes('right')) { width += dxFrac; }
-      if (id.includes('top')) { y += dyFrac; height -= dyFrac; }
-      if (id.includes('bottom')) { height += dyFrac; }
-      const next = normaliseFraction({ x, y, width, height });
-      return constrainFractionToRatio(next, ratioValue, display.width, display.height);
-    });
-  };
-
-  const handlePos = (id: HandleId) => {
+  const handlePos = useCallback((id: CropResizeHandle) => {
     const midX = box.x + box.width / 2;
     const midY = box.y + box.height / 2;
     const left = box.x;
@@ -125,82 +78,88 @@ export const CropOverlay: FC<CropOverlayProps> = ({
       case 'bottom-left': return { x: left, y: bottom };
       case 'left': return { x: left, y: midY };
     }
+  }, [box.x, box.y, box.width, box.height]);
+
+  const moveHandle = (id: CropResizeHandle, dxFrac: number, dyFrac: number) => {
+    let { x, y, width, height } = fraction;
+    if (id.includes('left')) { x += dxFrac; width -= dxFrac; }
+    if (id.includes('right')) { width += dxFrac; }
+    if (id.includes('top')) { y += dyFrac; height -= dyFrac; }
+    if (id.includes('bottom')) { height += dyFrac; }
+    onDraftChange({ x, y, width, height }, id);
   };
 
-  const s = 1 / zoom; // keep chrome a constant on-screen size at any zoom
+  const s = 1 / zoom;
 
   return (
-    <Group listening={true}>
-      {/* Dim everything outside the crop box, in four bands. */}
-      <Rect x={element.x} y={element.y} width={element.width} height={box.y - element.y}
-        fill="rgba(0,0,0,0.5)" listening={false} />
-      <Rect x={element.x} y={box.y + box.height} width={element.width}
-        height={element.y + element.height - (box.y + box.height)}
-        fill="rgba(0,0,0,0.5)" listening={false} />
-      <Rect x={element.x} y={box.y} width={box.x - element.x} height={box.height}
-        fill="rgba(0,0,0,0.5)" listening={false} />
-      <Rect x={box.x + box.width} y={box.y}
-        width={element.x + element.width - (box.x + box.width)} height={box.height}
-        fill="rgba(0,0,0,0.5)" listening={false} />
+    <Group x={element.x} y={element.y} rotation={element.rotation || 0} listening={true}>
+      <Group x={-element.x} y={-element.y}>
+        <Rect x={element.x} y={element.y} width={element.width} height={box.y - element.y}
+          fill="rgba(0,0,0,0.5)" listening={false} />
+        <Rect x={element.x} y={box.y + box.height} width={element.width}
+          height={element.y + element.height - (box.y + box.height)}
+          fill="rgba(0,0,0,0.5)" listening={false} />
+        <Rect x={element.x} y={box.y} width={box.x - element.x} height={box.height}
+          fill="rgba(0,0,0,0.5)" listening={false} />
+        <Rect x={box.x + box.width} y={box.y}
+          width={element.x + element.width - (box.x + box.width)} height={box.height}
+          fill="rgba(0,0,0,0.5)" listening={false} />
 
-      <Rect
-        x={box.x} y={box.y} width={box.width} height={box.height}
-        stroke="#ffffff" strokeWidth={1.5 * s} listening={false}
-      />
+        <Rect
+          x={box.x} y={box.y} width={box.width} height={box.height}
+          stroke="#ffffff" strokeWidth={1.5 * s} listening={false}
+        />
 
-      {/* Rule-of-thirds guides. */}
-      {[1, 2].map((i) => (
-        <KonvaLine key={`v${i}`} listening={false}
-          points={[box.x + (box.width * i) / 3, box.y, box.x + (box.width * i) / 3, box.y + box.height]}
-          stroke="rgba(255,255,255,0.45)" strokeWidth={1 * s} />
-      ))}
-      {[1, 2].map((i) => (
-        <KonvaLine key={`h${i}`} listening={false}
-          points={[box.x, box.y + (box.height * i) / 3, box.x + box.width, box.y + (box.height * i) / 3]}
-          stroke="rgba(255,255,255,0.45)" strokeWidth={1 * s} />
-      ))}
+        {[1, 2].map((i) => (
+          <KonvaLine key={`v${i}`} listening={false}
+            points={[box.x + (box.width * i) / 3, box.y, box.x + (box.width * i) / 3, box.y + box.height]}
+            stroke="rgba(255,255,255,0.45)" strokeWidth={1 * s} />
+        ))}
+        {[1, 2].map((i) => (
+          <KonvaLine key={`h${i}`} listening={false}
+            points={[box.x, box.y + (box.height * i) / 3, box.x + box.width, box.y + (box.height * i) / 3]}
+            stroke="rgba(255,255,255,0.45)" strokeWidth={1 * s} />
+        ))}
 
-      {/* Double-click anywhere inside to commit, matching Photoshop. */}
-      <Rect
-        x={box.x} y={box.y} width={box.width} height={box.height}
-        fill="transparent"
-        onDblClick={commit}
-        onDblTap={commit}
-      />
+        <Rect
+          x={box.x} y={box.y} width={box.width} height={box.height}
+          fill="transparent"
+          onDblClick={onCommit}
+          onDblTap={onCommit}
+        />
 
-      {HANDLES.map((id) => {
-        const p = handlePos(id);
-        return (
-          <Rect
-            key={id}
-            x={p.x - (HANDLE * s) / 2}
-            y={p.y - (HANDLE * s) / 2}
-            width={HANDLE * s}
-            height={HANDLE * s}
-            fill="#ffffff"
-            stroke="#2B5CD3"
-            strokeWidth={1 * s}
-            draggable={true}
-            onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => {
-              const node = e.target;
-              const nx = node.x() + (HANDLE * s) / 2;
-              const ny = node.y() + (HANDLE * s) / 2;
-              const target = handlePos(id);
-              moveHandle(
-                id,
-                (nx - target.x) / display.width,
-                (ny - target.y) / display.height
-              );
-              // The overlay re-renders from state, so snap the node back and let
-              // the derived position win — otherwise it drifts from the box.
-              node.position({
-                x: target.x - (HANDLE * s) / 2,
-                y: target.y - (HANDLE * s) / 2,
-              });
-            }}
-          />
-        );
-      })}
+        {HANDLES.map((id) => {
+          const p = handlePos(id);
+          return (
+            <Rect
+              key={id}
+              x={p.x - (HANDLE * s) / 2}
+              y={p.y - (HANDLE * s) / 2}
+              width={HANDLE * s}
+              height={HANDLE * s}
+              fill="#ffffff"
+              stroke="#2B5CD3"
+              strokeWidth={1 * s}
+              draggable={true}
+              onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => {
+                const node = e.target;
+                const nx = node.x() + (HANDLE * s) / 2;
+                const ny = node.y() + (HANDLE * s) / 2;
+                const target = handlePos(id);
+                moveHandle(
+                  id,
+                  (nx - target.x) / display.width,
+                  (ny - target.y) / display.height
+                );
+                node.position({
+                  x: target.x - (HANDLE * s) / 2,
+                  y: target.y - (HANDLE * s) / 2,
+                });
+              }}
+            />
+          );
+        })}
+      </Group>
     </Group>
   );
 };

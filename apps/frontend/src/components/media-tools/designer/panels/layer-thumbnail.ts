@@ -35,11 +35,12 @@ const remember = (id: string, entry: { key: string; url: string }): void => {
  * NOT the whole element: `selected`/`collapsed` churn would blow the cache on
  * every click.
  */
-const thumbKey = (el: DesignerElement): string =>
+export const layerThumbnailKey = (el: DesignerElement): string =>
   JSON.stringify([
     el.x, el.y, el.width, el.height, el.rotation, el.opacity, el.hidden,
     el.src, el.fill, el.text, el.fontSize, el.shape, el.blendMode,
     el.fillStyle, el.adjustment, el.styles?.length, el.nodes?.length,
+    el.crop, el.fitMode, el.focalPoint, el.filters, el.maskSrc, el.maskEnabled,
   ]);
 
 /**
@@ -53,7 +54,7 @@ export const layerThumbnail = (
   // Groups and adjustments have no standalone pixels of their own.
   if (el.type === 'group' || el.type === 'adjustment') return null;
 
-  const key = thumbKey(el);
+  const key = layerThumbnailKey(el);
   const hit = cache.get(el.id);
   if (hit && hit.key === key) return hit.url;
 

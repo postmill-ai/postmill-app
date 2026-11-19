@@ -121,6 +121,94 @@ const renderCanvas = async (store: ReturnType<typeof createDesignerStore>) => {
   return Konva.stages[Konva.stages.length - 1];
 };
 
+const imageCropStore = () => {
+  const store = createDesignerStore(500, 400);
+  store.getState().addElement({
+    id: 'crop-image',
+    type: 'image',
+    src: 'data:image/png;base64,',
+    x: 20,
+    y: 30,
+    width: 200,
+    height: 100,
+    naturalWidth: 400,
+    naturalHeight: 200,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+  });
+  store.getState().setActiveTool('crop');
+  return store;
+};
+
+describe('DesignerCanvas crop session', () => {
+  it('keeps ratio drafts and cancellation out of the document and history', async () => {
+    const store = imageCropStore();
+    const before = store.getState().doc.outputs[0].children[0];
+    const history = store.getState().history;
+    store.getState().setToolOption('crop', 'ratio', '1:1');
+    await renderCanvas(store);
+
+    expect(document.querySelector('[data-testid="crop-actions"]')).not.toBeNull();
+    expect(store.getState().doc.outputs[0].children[0]).toBe(before);
+    expect(store.getState().history).toBe(history);
+
+    const cancel = Array.from(document.querySelectorAll('button')).find((button) => button.textContent === 'Cancel')!;
+    await act(async () => {
+      cancel.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(store.getState().activeTool).toBe('move');
+    expect(store.getState().doc.outputs[0].children[0]).toBe(before);
+    expect(store.getState().history).toBe(history);
+  });
+
+  it('commits a ratio draft once and ignores a full-box Done', async () => {
+    const store = imageCropStore();
+    store.getState().setToolOption('crop', 'ratio', '1:1');
+    await renderCanvas(store);
+    const historyDepth = store.getState().history.length;
+    const done = () => Array.from(document.querySelectorAll('button')).find((button) => button.textContent === 'Done')!;
+
+    await act(async () => {
+      done().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(store.getState().doc.outputs[0].children[0]).toMatchObject({
+      x: 70,
+      y: 30,
+      width: 100,
+      height: 100,
+      crop: { x: 100, y: 0, width: 200, height: 200 },
+    });
+    expect(store.getState().history).toHaveLength(historyDepth + 1);
+    expect(store.getState().historyLabels.at(-1)).toBe('Crop image');
+
+    const depthAfterCrop = store.getState().history.length;
+    await act(async () => {
+      store.getState().setActiveTool('crop');
+      store.getState().setToolOption('crop', 'ratio', 'free');
+    });
+    await act(async () => {
+      done().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(store.getState().history).toHaveLength(depthAfterCrop);
+  });
+
+  it('does not expose crop editing for frozen, locked, or non-image targets', async () => {
+    const frozen = imageCropStore();
+    frozen.getState().setOutputFrozen(0, true);
+    await renderCanvas(frozen);
+    expect(document.querySelector('[data-testid="crop-actions"]')).toBeNull();
+    await act(async () => root?.unmount());
+    root = null;
+
+    const shape = shapeStore();
+    shape.getState().setActiveTool('crop');
+    await renderCanvas(shape);
+    expect(document.querySelector('[data-testid="crop-actions"]')).toBeNull();
+  });
+});
+
 describe('DesignerCanvas gesture wiring', () => {
   it('snaps the Konva node synchronously and commits it when release shares the frame', async () => {
     const store = shapeStore();

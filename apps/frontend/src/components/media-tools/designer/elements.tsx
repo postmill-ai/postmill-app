@@ -679,7 +679,7 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, inter
       node.cache();
       node.getLayer()?.batchDraw();
     }
-  }, [filterKey, image]);
+  }, [filterKey, image, element.filters?.length]);
 
   const textMask = element.mask?.type === 'text' ? element.mask : undefined;
   const shapeMask = element.mask?.type === 'shape' ? element.mask : undefined;
@@ -983,8 +983,14 @@ export const styledLeafCacheKey = (
   const mask = element.maskEnabled === false || !element.maskSrc
     ? 'unmasked'
     : element.maskFileId || element.maskSrc;
+  const media = element.type === 'image' || element.type === 'raster'
+    ? `:${JSON.stringify([
+        element.src || '', element.crop || null, element.fitMode || null,
+        element.focalPoint || null, element.filters || [],
+      ])}`
+    : '';
   return `${element.id}:${image ? 'ready' : 'pending'}:${leafGeometryKey(element)}:${mask}` +
-    `:mask-${maskReady ? 'ready' : 'pending'}` +
+    `:mask-${maskReady ? 'ready' : 'pending'}${media}` +
     `${geometryGen != null ? `:${geometryGen}` : ''}`;
 };
 

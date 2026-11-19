@@ -39,6 +39,16 @@ import { getTool, resolveToolShortcut } from './tools';
 import { rectFromDrag, rectFromTap, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
 import { addText } from './add-text';
 import { CropOverlay } from './crop-overlay';
+import {
+  centeredCropFraction,
+  constrainFractionToRatio,
+  cropDisplayBox,
+  cropFromBoxFraction,
+  normaliseFraction,
+  parseCropRatio,
+  type BoxFraction,
+  type CropResizeHandle,
+} from './crop-geometry';
 import { ensureFontsUsed } from './fonts';
 import { getImageNaturalSize } from './elements';
 import { computeCoverCrop } from './reflow';
@@ -197,6 +207,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const gradientStart = useRef<{ x: number; y: number } | null>(null);
   /** Live outline while the Artboard tool resizes the frame. */
   const [artboardPreview, setArtboardPreview] = useState<{ w: number; h: number } | null>(null);
+  const [cropDraft, setCropDraft] = useState<{
+    key: string;
+    fraction: BoxFraction;
+    lastHandle?: CropResizeHandle;
+  } | null>(null);
   /** In-progress Pen path, in document space, until it is finished. */
   const [penDraft, setPenDraft] = useState<PenDraft | null>(null);
   /** True between an anchor's mousedown and mouseup, while handles can be pulled. */
@@ -335,6 +350,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           ?.find((tr) => tr.id === selectedClip.trackId)
           ?.clips.find((c) => c.id === selectedClip.clipId)
       : undefined;
+  const cropTrack = isVideo && selectedClip
+    ? (output as unknown as VideoOutput | undefined)?.tracks?.find((tr) => tr.id === selectedClip.trackId)
+    : undefined;
   const cropTarget = isVideo
     ? cropClip
       ? ({
@@ -346,7 +364,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           height: cropClip.height ?? 100,
           rotation: cropClip.rotation ?? 0,
           opacity: 1,
-          locked: false,
+          locked: cropTrack?.locked ?? false,
           hidden: false,
           src: cropClip.src,
           crop: cropClip.crop,
@@ -358,9 +376,53 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       : undefined
     : effectiveTool === 'crop' && selectedIds.length === 1
       ? ((pageOutput as DesignerOutput | undefined)?.children || []).find(
-          (c) => c.id === selectedIds[0]
+          (c) => c.id === selectedIds[0] && (c.type === 'image' || c.type === 'raster')
         )
       : undefined;
+  const cropNatural = cropTarget
+    ? cropTarget.naturalWidth && cropTarget.naturalHeight
+      ? { width: cropTarget.naturalWidth, height: cropTarget.naturalHeight }
+      : getImageNaturalSize(cropTarget.src)
+    : null;
+  const cropEnabled = !!cropTarget && !!cropNatural && cropNatural.width > 0 && cropNatural.height > 0 &&
+    !cropTarget.locked && !cropTarget.hidden && !outputFrozen;
+  const cropRatio = store((s) => String(s.toolOptions['crop']?.ratio ?? 'free'));
+  const cropSessionKey = cropTarget
+    ? `${currentOutput}:${currentPage}:${isVideo ? selectedClip?.trackId : 'element'}:${cropTarget.id}:${cropRatio}`
+    : '';
+  const cropInitialFraction = cropTarget && cropNatural
+    ? centeredCropFraction(
+        parseCropRatio(cropRatio),
+        cropDisplayBox(cropTarget, cropNatural).width,
+        cropDisplayBox(cropTarget, cropNatural).height
+      )
+    : { x: 0, y: 0, width: 1, height: 1 };
+  const cropFraction = cropDraft?.key === cropSessionKey ? cropDraft.fraction : cropInitialFraction;
+  const cancelCrop = useCallback(() => store.getState().setActiveTool('move'), [store]);
+  const commitCrop = () => {
+    if (!cropTarget || !cropNatural || !cropEnabled) return;
+    const fraction = normaliseFraction(cropFraction);
+    if (fraction.x === 0 && fraction.y === 0 && fraction.width === 1 && fraction.height === 1) {
+      cancelCrop();
+      return;
+    }
+    const patch = cropFromBoxFraction(
+      cropTarget,
+      cropNatural,
+      fraction,
+      cropDraft?.key === cropSessionKey ? cropDraft.lastHandle : undefined
+    );
+    const accepted = isVideo && selectedClip
+      ? store.getState().updateClipSilent(
+          selectedClip.outputIndex,
+          selectedClip.trackId,
+          selectedClip.clipId,
+          patch as never
+        )
+      : store.getState().updateElement(cropTarget.id, patch);
+    if (accepted) store.getState().pushHistory('Crop image');
+    store.getState().setActiveTool('move');
+  };
   /** The selected path, for the anchor-editing pens and Direct Selection. */
   const penEditTarget =
     selectedIds.length === 1
@@ -1625,6 +1687,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (editingTextId) return;
+      if (store.getState().activeTool === 'crop' && (e.key === 'Enter' || e.key === 'Escape')) return;
       store.getState().clearElementPreview();
       const st = store.getState();
       const mod = e.ctrlKey || e.metaKey;
@@ -2481,32 +2544,29 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           {/* Crop tool: direct-manipulation overlay over the selected element.
               The inspector's percentage sliders remain the numeric route; both
               compose onto any existing crop through crop-geometry. */}
-          {effectiveTool === 'crop' && cropTarget && (
+          {effectiveTool === 'crop' && cropTarget && cropNatural && cropEnabled && (
             <CropOverlay
-              key={cropTarget.id}
+              key={cropSessionKey}
               element={cropTarget}
-              natural={
-                cropTarget.naturalWidth && cropTarget.naturalHeight
-                  ? { width: cropTarget.naturalWidth, height: cropTarget.naturalHeight }
-                  : getImageNaturalSize(cropTarget.src)
-              }
+              natural={cropNatural}
               zoom={zoom}
-              ratio={String(store.getState().toolOptions['crop']?.ratio ?? 'free')}
-              onCommit={(patch) => {
-                if (isVideo && selectedClip) {
-                  store.getState().updateClipSilent(
-                    selectedClip.outputIndex,
-                    selectedClip.trackId,
-                    selectedClip.clipId,
-                    patch as never
-                  );
-                } else {
-                  updateElement(cropTarget.id, patch);
-                }
-                pushHistory();
-                store.getState().setActiveTool('move');
+              fraction={cropFraction}
+              onDraftChange={(fraction, lastHandle) => {
+                const display = cropDisplayBox(cropTarget, cropNatural);
+                setCropDraft({
+                  key: cropSessionKey,
+                  fraction: constrainFractionToRatio(
+                    normaliseFraction(fraction),
+                    parseCropRatio(cropRatio),
+                    display.width,
+                    display.height,
+                    lastHandle
+                  ),
+                  lastHandle,
+                });
               }}
-              onCancel={() => store.getState().setActiveTool('move')}
+              onCommit={commitCrop}
+              onCancel={cancelCrop}
             />
           )}
 
@@ -2539,6 +2599,39 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           )}
         </Layer>
       </Stage>
+
+      {effectiveTool === 'crop' && cropEnabled && (
+        <div
+          data-testid="crop-actions"
+          className="absolute bottom-4 start-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-md border border-studioBorder bg-newBgColorInner p-1 shadow-menu"
+        >
+          <button
+            type="button"
+            className="min-h-[32px] px-3 rounded-sm bg-designerAccent text-[12px] font-medium text-white hover:bg-designerAccent/90"
+            onClick={commitCrop}
+          >
+            {t('done', 'Done')}
+          </button>
+          <button
+            type="button"
+            className="min-h-[32px] px-3 rounded-sm text-[12px] text-textColor hover:bg-boxHover"
+            onClick={cancelCrop}
+          >
+            {t('cancel', 'Cancel')}
+          </button>
+          <button
+            type="button"
+            className="min-h-[32px] px-3 rounded-sm text-[12px] text-textColor hover:bg-boxHover"
+            onClick={() => setCropDraft({
+              key: cropSessionKey,
+              fraction: cropInitialFraction,
+              lastHandle: undefined,
+            })}
+          >
+            {t('reset', 'Reset')}
+          </button>
+        </div>
+      )}
 
       {outputFrozen && (
         <div

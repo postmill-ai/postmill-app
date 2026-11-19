@@ -532,6 +532,21 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   Icon wrappers set both `fill` and inherited `color`, so outline
   artwork using `stroke="currentColor"` follows the selected fill in Konva, server PNG/PDF and SVG export.
 
+- **Crop drafts commit once.** The Crop tool's handles, ratio choices, Done/Cancel/Reset and
+  Inspector inset sliders share `crop-geometry.ts`. Canvas draft changes stay out of the document,
+  autosave and history until Done; accepted static/video writes create one Undo, while Cancel and
+  full-box Done create none. Ratio choices center an immediate draft, handle drags retain the
+  opposite-edge anchor, and rotation/flips use the displayed media geometry. Reset restores the
+  current session's entry rectangle; the Inspector separately clears an already-committed crop.
+- **Static and video looks share filter tokens.** `filter-presets.ts` owns the twelve preset
+  bundles used by both Inspectors. Static preset/Reset all actions commit once; continuous
+  Brightness/Contrast/Saturation (percentage UI) and Blur (px UI) use silent linked writes and one
+  release commit. Exact token matching controls the active look. Ordinary filters participate in
+  styled/layer-thumbnail cache keys and force SVG rasterization rather than dropping their pixels.
+  Selected-image AI operations are target-scoped expandable cards; direct Upscale/Inpaint/Image to
+  Image responses must pass the source/history/sequence guards in `ai-image-actions.ts` before one
+  labeled history commit.
+
 - **Effects, warp and text metrics are SHARED code, not two implementations.** `designer-doc/`
   carries the painter (`layer-style-render.ts`), the deformation (`warp.ts`), the fitter
   (`fit-text.ts` — which owns `textTransform`, because case changes what a line measures), the

@@ -6,6 +6,7 @@ import {
   normaliseFraction,
   parseCropRatio,
   constrainFractionToRatio,
+  centeredCropFraction,
 } from './crop-geometry';
 
 const el = { x: 100, y: 200, width: 400, height: 300 };
@@ -210,5 +211,55 @@ describe('constrainFractionToRatio', () => {
     expect(f.width).toBeLessThanOrEqual(1);
     expect(f.height).toBeLessThanOrEqual(1);
     expect((f.width * 400) / (f.height * 300)).toBeCloseTo(16 / 9);
+  });
+});
+
+
+describe('crop session ratio drafts', () => {
+  it.each([
+    ['1:1', 1],
+    ['4:5', 4 / 5],
+    ['9:16', 9 / 16],
+    ['16:9', 16 / 9],
+  ])('centers an immediate %s selection', (value, ratio) => {
+    const result = centeredCropFraction(parseCropRatio(value), 400, 300);
+    expect(result.x).toBeCloseTo((1 - result.width) / 2, 10);
+    expect(result.y).toBeCloseTo((1 - result.height) / 2, 10);
+    expect((result.width * 400) / (result.height * 300)).toBeCloseTo(ratio, 10);
+  });
+
+  it('keeps the opposite corner fixed while constraining a drag', () => {
+    const initial = { x: 0.2, y: 0.2, width: 0.6, height: 0.6 };
+    const result = constrainFractionToRatio(initial, 1, 400, 300, 'top-left');
+    expect(result.x + result.width).toBeCloseTo(initial.x + initial.width, 10);
+    expect(result.y + result.height).toBeCloseTo(initial.y + initial.height, 10);
+    expect((result.width * 400) / (result.height * 300)).toBeCloseTo(1, 10);
+  });
+
+  it('keeps the opposite vertical edge fixed for a side handle', () => {
+    const initial = { x: 0.1, y: 0.1, width: 0.8, height: 0.5 };
+    const result = constrainFractionToRatio(initial, 16 / 9, 400, 300, 'left');
+    expect(result.x + result.width).toBeCloseTo(initial.x + initial.width, 10);
+    expect(result.y).toBeCloseTo(initial.y + (initial.height - result.height) / 2, 10);
+  });
+});
+
+describe('flipped image cropping', () => {
+  it('maps a visual left crop to the right side of a horizontally flipped source', () => {
+    const result = cropFromBoxFraction(
+      { ...el, flipX: true },
+      natural,
+      { x: 0, y: 0, width: 0.5, height: 1 }
+    );
+    expect(result.crop).toEqual({ x: 400, y: 0, width: 400, height: 600 });
+  });
+
+  it('maps a visual top crop to the bottom of a vertically flipped source', () => {
+    const result = cropFromBoxFraction(
+      { ...el, flipY: true },
+      natural,
+      { x: 0, y: 0, width: 1, height: 0.5 }
+    );
+    expect(result.crop).toEqual({ x: 0, y: 300, width: 800, height: 300 });
   });
 });

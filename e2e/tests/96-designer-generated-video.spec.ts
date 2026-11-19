@@ -236,6 +236,7 @@ const json = (route: Route, body: unknown, status = 200) =>
 class DesignerMocks {
   readonly generatePosts: string[] = [];
   readonly backgroundRemovalPosts: string[] = [];
+  readonly directImagePosts: Array<{ path: string; body: Record<string, unknown> }> = [];
   readonly maskUploads = new Map<string, Buffer>();
   readonly assistantCopyPosts: string[] = [];
   readonly assistantSuggestionPosts: string[] = [];
@@ -448,6 +449,10 @@ class DesignerMocks {
             tts: { available: true },
             stt: { available: true },
             'bg-remove': { available: true },
+            upscale: { available: true },
+            image: { available: true },
+            inpaint: { available: true },
+            outpaint: { available: true },
           },
           tools: Object.fromEntries(
             [
@@ -564,6 +569,12 @@ class DesignerMocks {
               ? CUTOUT_RESULT_URL
               : TRANSPARENT_IMAGE_URL,
         });
+        return;
+      }
+
+      if (['/media/upscale', '/media/inpaint', '/media/image-to-image'].includes(pathname) && method === 'POST') {
+        this.directImagePosts.push({ path: pathname, body: request.postDataJSON() as Record<string, unknown> });
+        await json(route, { url: REPLACEMENT_IMAGE_URL });
         return;
       }
 
@@ -1728,8 +1739,19 @@ test.describe('Designer crop and browser export artifacts (mocked local document
     const imageCenter = await canvasDocumentPoint(page, 400, 300, 150, 100);
     await page.mouse.click(imageCenter.x, imageCenter.y);
     await page.getByRole('button', { name: 'Crop (C)', exact: true }).click();
+    await page.getByLabel('Ratio', { exact: true }).selectOption('1:1');
+    await expect(page.getByTestId('crop-actions')).toBeVisible();
+    expect(mocks.doc.outputs[0].children?.[0]?.crop).toBeUndefined();
+    await page.getByRole('button', { name: 'Reset', exact: true }).click();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByTestId('crop-actions')).toHaveCount(0);
+    expect(mocks.doc.outputs[0].children?.[0]?.crop).toBeUndefined();
+
+    await page.getByRole('button', { name: 'Crop (C)', exact: true }).click();
+    await page.getByLabel('Ratio', { exact: true }).selectOption('free');
     await cropFromRightHandle(page, 400, 300, 300, 100, 200);
-    await page.keyboard.press('Enter');
+    expect(mocks.doc.outputs[0].children?.[0]?.crop).toBeUndefined();
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
 
     await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.crop?.width).toBeCloseTo(2, 0);
     const cropped = mocks.doc.outputs[0].children![0];
@@ -1787,6 +1809,85 @@ test.describe('Designer crop and browser export artifacts (mocked local document
     expect(pixels.cropBottomLeft[1]).toBeGreaterThan(pixels.cropBottomLeft[2] + 50);
     expect(pixels.cropBottomRight[0]).toBeGreaterThan(pixels.cropBottomRight[2] + 50);
     expect(pixels.cropBottomRight[1]).toBeGreaterThan(pixels.cropBottomRight[2] + 50);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('static looks and adjustments persist and export their filtered pixels', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    const imageCenter = await canvasDocumentPoint(page, 400, 300, 150, 100);
+    await page.mouse.click(imageCenter.x, imageCenter.y);
+
+    await page.getByRole('button', { name: 'Mono', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.filters).toEqual(['grayscale']);
+    const brightness = page.getByRole('slider', { name: 'Brightness', exact: true });
+    await brightness.focus();
+    await brightness.press('ArrowRight');
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.filters).toEqual(['grayscale', 'brightness:1.05']);
+    await page.getByRole('button', { name: 'Reset all', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.filters).toEqual([]);
+
+    await page.getByRole('button', { name: 'Mono', exact: true }).click();
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+    const reopenedCenter = await canvasDocumentPoint(page, 400, 300, 150, 100);
+    await page.mouse.click(reopenedCenter.x, reopenedCenter.y);
+    await expect(page.getByRole('button', { name: 'Mono', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+    await page.keyboard.press('Control+e');
+    await page.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
+    await page.getByRole('button', { name: 'Next: Export 1 file', exact: true }).click();
+    await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
+    await expect(page.getByText('Exports are saved in Media → Files. Download a copy to your computer:', { exact: true }))
+      .toBeVisible({ timeout: 60_000 });
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('link', { name: /\.png$/ }).click();
+    const download = await downloadPromise;
+    const png = fs.readFileSync((await download.path())!);
+    const pixels = await analyzeDownloadedPng(page, png);
+    for (const pixel of [pixels.cropTopLeft, pixels.cropTopRight, pixels.cropBottomLeft, pixels.cropBottomRight]) {
+      expect(pixel[0]).toBe(pixel[1]);
+      expect(pixel[1]).toBe(pixel[2]);
+    }
+    mocks.expectClean();
+  });
+
+  test('AI tool cards keep prompts with one Generate request and apply the selected image result', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    const imageCenter = await canvasDocumentPoint(page, 400, 300, 150, 100);
+    await page.mouse.click(imageCenter.x, imageCenter.y);
+
+    await page.getByRole('button', { name: 'Image to Image', exact: true }).click();
+    const prompt = page.getByRole('textbox', { name: 'Image to Image', exact: true });
+    const generate = page.getByRole('button', { name: 'Generate', exact: true });
+    await expect(generate).toBeDisabled();
+    await prompt.fill('  watercolor sketch  ');
+    await generate.click();
+    await expect.poll(() => mocks.directImagePosts.length).toBe(1);
+    expect(mocks.directImagePosts[0]).toEqual({
+      path: '/media/image-to-image',
+      body: { imageUrl: ASYMMETRIC_URL, prompt: 'watercolor sketch' },
+    });
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.src).toBe(REPLACEMENT_IMAGE_URL);
+
+    await page.getByRole('button', { name: 'Upscale', exact: true }).click();
+    await page.getByLabel('Upscale', { exact: true }).selectOption('4');
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect.poll(() => mocks.directImagePosts.length).toBe(2);
+    expect(mocks.directImagePosts[1]).toEqual({
+      path: '/media/upscale',
+      body: { imageUrl: REPLACEMENT_IMAGE_URL, scale: 4 },
+    });
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });
