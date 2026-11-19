@@ -106,7 +106,7 @@ describe('FileList', () => {
     fireEvent.dragStart(row, { dataTransfer });
 
     expect(row.getAttribute('draggable')).toBe('true');
-    expect(dataTransfer.effectAllowed).toBe('copy');
+    expect(dataTransfer.effectAllowed).toBe('copyMove');
     expect(onFileDragStart).toHaveBeenCalledWith(target, expect.anything());
   });
 });

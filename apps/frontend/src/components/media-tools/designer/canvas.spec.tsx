@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react';
-import { fireEvent } from '@testing-library/react';
+import { createEvent, fireEvent } from '@testing-library/react';
 import { createRoot, type Root } from 'react-dom/client';
 import Konva from 'konva';
 import { DesignerCanvas } from './canvas';
@@ -330,6 +330,60 @@ describe('DesignerCanvas stock drops', () => {
       naturalWidth: 1600, naturalHeight: 800,
     });
     expect(onInsertMedia).not.toHaveBeenCalled();
+  });
+
+  it('Shift-drop inserts a still image over a compatible target', async () => {
+    const store = imageStore();
+    const onInsertMedia = vi.fn().mockResolvedValue(undefined);
+    const stage = await renderCanvas(store, onInsertMedia);
+    vi.spyOn(stage, 'getIntersection').mockReturnValue(stage.findOne('#target-image')!);
+    const data = new Map<string, string>();
+    writeStockMediaDrag({ setData: (mime, value) => data.set(mime, value) }, 'image', {
+      url: 'https://cdn.example.test/insert.png', width: 100, height: 100,
+      type: 'image', source: 'unsplash',
+    });
+
+    await act(async () => {
+      const container = document.querySelector('.designer-canvas-container')!;
+      const event = createEvent.drop(container, {
+        clientX: 100, clientY: 100,
+        dataTransfer: { getData: (mime: string) => data.get(mime) || '', files: [] },
+      });
+      Object.defineProperty(event, 'shiftKey', { value: true });
+      fireEvent(container, event);
+    });
+
+    expect(store.getState().doc.outputs[0].children[0].src).toBe('/old.png');
+    expect(onInsertMedia).toHaveBeenCalledWith('image', expect.objectContaining({
+      url: 'https://cdn.example.test/insert.png',
+    }), expect.anything());
+  });
+
+  it.each([
+    { kind: 'video' as const, mediaType: 'video' as const },
+    { kind: 'audio' as const, mediaType: 'audio' as const },
+    { kind: 'vector' as const, mediaType: 'image' as const },
+  ])('routes $kind over an image to insertion instead of replacement', async ({ kind, mediaType }) => {
+    const store = imageStore();
+    const onInsertMedia = vi.fn().mockResolvedValue(undefined);
+    const stage = await renderCanvas(store, onInsertMedia);
+    vi.spyOn(stage, 'getIntersection').mockReturnValue(stage.findOne('#target-image')!);
+    const data = new Map<string, string>();
+    writeStockMediaDrag({ setData: (mime, value) => data.set(mime, value) }, kind, {
+      url: `https://cdn.example.test/${kind}`, width: 100, height: 100,
+      type: mediaType, source: 'unsplash',
+    });
+
+    await act(async () => {
+      fireEvent.drop(document.querySelector('.designer-canvas-container')!, {
+        clientX: 100,
+        clientY: 100,
+        dataTransfer: { getData: (mime: string) => data.get(mime) || '', files: [] },
+      });
+    });
+
+    expect(store.getState().doc.outputs[0].children[0].src).toBe('/old.png');
+    expect(onInsertMedia).toHaveBeenCalledWith(kind, expect.objectContaining({ type: mediaType }), expect.anything());
   });
 
   it('previews the target bounds and Drop to replace label during dragover', async () => {

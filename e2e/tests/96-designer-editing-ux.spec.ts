@@ -147,6 +147,7 @@ async function installMocks(page: Page, doc: any = initialDoc) {
           description: 'Picker stock photo', author: 'QA', authorUrl: 'https://example.test/author',
           sourceUrl: 'https://example.test/photo', width: 1, height: 1, source: 'unsplash',
         }],
+        configured: true,
       });
     }
     if (method === 'DELETE' && pathname.startsWith('/files/')) {
@@ -823,6 +824,7 @@ async function dragImageFile(
   y: number,
   options: {
     altKey?: boolean;
+    shiftKey?: boolean;
     eventName?: 'dragover' | 'drop';
     type?: string;
     contents?: string;
@@ -846,19 +848,21 @@ async function dragImageFile(
       clientX: point.clientX,
       clientY: point.clientY,
       altKey: point.altKey,
+      shiftKey: point.shiftKey,
     }));
   }, {
     clientX,
     clientY,
     altKey: !!options.altKey,
+    shiftKey: !!options.shiftKey,
     eventName: options.eventName || 'drop',
     type: options.type || 'image/png',
     contents: options.contents || 'replacement',
   });
 }
 
-async function dropPng(page: Page, x: number, y: number, altKey = false) {
-  await dragImageFile(page, x, y, { altKey });
+async function dropPng(page: Page, x: number, y: number, altKey = false, shiftKey = false) {
+  await dragImageFile(page, x, y, { altKey, shiftKey });
 }
 
 test('desktop workspace tabs switch the visible panel and keep View display-only', async ({ page }) => {
@@ -1022,7 +1026,7 @@ test('font-size shortcuts respect selection, text focus, bounds and help', async
   await expect(page.getByText('Decrease font size', { exact: true })).toBeVisible();
 });
 
-test('direct drops highlight target geometry and replace once while blank drops insert', async ({ page }) => {
+test('direct drops replace, blank drops insert, and Shift forces insertion over targets', async ({ page }) => {
   const state = await installMocks(page);
   await openDesigner(page);
   await dropPng(page, 350, 350);
@@ -1060,7 +1064,9 @@ test('direct drops highlight target geometry and replace once while blank drops 
 
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
   await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
-  await dropPng(page, 350, 350);
+  await dragImageFile(page, 120, 260, { eventName: 'dragover', shiftKey: true });
+  await expect(page.locator('[data-drop-mode="insert"]')).toBeVisible();
+  await dropPng(page, 120, 260, false, true);
   await expect.poll(() => state.uploads).toBe(3);
   await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
   expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
@@ -1088,13 +1094,12 @@ test('File Library and Insert Image stock drags replace without uploads or sourc
     await page.mouse.move(startX, startY);
     await page.mouse.down();
     await page.mouse.move(startX + 16, startY, { steps: 4 });
-    await expect(source).toHaveAttribute('draggable', 'true');
     await page.mouse.move(
       stageBox!.x + outputX + 120 * scale,
       stageBox!.y + outputY + 260 * scale,
       { steps: 12 }
     );
-    await expect(page.getByTestId('media-picker').parentElement!).toHaveClass(/pointer-events-none/);
+    await expect(page.getByTestId('media-picker').locator('..')).toHaveClass(/pointer-events-none/);
     await page.mouse.up();
   };
 

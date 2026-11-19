@@ -1161,7 +1161,7 @@ const DesignerContent: FC<
         tabs: TABS[kind],
         requireFile: kind === 'vector',
         onMediaDragStart: (item, event) => {
-          event.dataTransfer.effectAllowed = 'copy';
+          event.dataTransfer.effectAllowed = 'copyMove';
           writeDesignerMediaDrag(event.dataTransfer, kind, item);
         },
         onSelect: (item) => insertMedia(kind, item),

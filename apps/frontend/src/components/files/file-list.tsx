@@ -289,7 +289,7 @@ export const FileList: FC<{
               draggable: true,
               onDragStart: (event: React.DragEvent<HTMLTableRowElement>) => {
                 event.dataTransfer.setData('text/plain', file.id);
-                event.dataTransfer.effectAllowed = 'copy';
+                event.dataTransfer.effectAllowed = 'copyMove';
                 onFileDragStart(file, event);
               },
             }

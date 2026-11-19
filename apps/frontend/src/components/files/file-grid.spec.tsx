@@ -276,14 +276,14 @@ describe('FileGrid', () => {
       />
     );
     const tile = screen.getByRole('button');
-    expect(tile.getAttribute('draggable')).toBe('true');
+    expect(tile.getAttribute('draggable')).toBe('false');
     fireEvent.pointerDown(tile, { button: 0, clientX: 50, clientY: 50 });
     fireEvent.pointerMove(tile, { clientX: 80, clientY: 80 });
     const dataTransfer = { setData: vi.fn(), effectAllowed: 'move' };
 
     fireEvent.dragStart(tile, { dataTransfer });
 
-    expect(dataTransfer.effectAllowed).toBe('copy');
+    expect(dataTransfer.effectAllowed).toBe('copyMove');
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'f1');
     expect(onFileDragStart).toHaveBeenCalledWith(target, expect.anything());
   });

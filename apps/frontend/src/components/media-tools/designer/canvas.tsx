@@ -44,6 +44,7 @@ import { getImageNaturalSize } from './elements';
 import { computeCoverCrop } from './reflow';
 import {
   imageDropErrorMessage,
+  isReplaceableImageMime,
   replaceMediaImageAtDropTarget,
   replaceUploadedImageAtDropTarget,
   resolveImageDropTarget,
@@ -1843,7 +1844,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
       const stock = readStockMediaDrag(e.dataTransfer);
       if (stock) {
-        const replacement = isStillImageMedia(stock.kind, stock.item)
+        const replacement = !e.shiftKey && isStillImageMedia(stock.kind, stock.item)
           ? findImageDropTarget(e.clientX, e.clientY, rect)
           : null;
         if (replacement) {
@@ -1899,7 +1900,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       const file = files[0];
       if (!file.type.startsWith('image/')) return;
 
-      const replacementTarget = file.type !== 'image/svg+xml'
+      const replacementTarget = !e.shiftKey && isReplaceableImageMime(file.type)
         ? findImageDropTarget(e.clientX, e.clientY, rect)
         : null;
       if (replacementTarget) {
@@ -2069,10 +2070,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         const fileTypes = e.dataTransfer.files.length
           ? Array.from(e.dataTransfer.files, (file) => file.type)
           : Array.from(e.dataTransfer.items, (item) => item.kind === 'file' ? item.type : '');
-        const replacementSource = hasStillImageDrag(e.dataTransfer) || fileTypes.some(
-          (type) => type.startsWith('image/') && type !== 'image/svg+xml'
-        );
-        const replacement = rect && replacementSource
+        const replacementSource = hasStillImageDrag(e.dataTransfer) || fileTypes.some(isReplaceableImageMime);
+        const replacement = rect && !e.shiftKey && replacementSource
           ? findImageDropTarget(e.clientX, e.clientY, rect)
           : null;
         setDragReplacement(replacement);

@@ -124,7 +124,7 @@ return <><Button onClick={picker.open} />{picker.element}</>;
 - The picker opens on **My Files**, not stock. `FileManager` embedded there renders no page chrome —
   that is gated on its `standalone` prop.
 - Designer's docked **Elements** tab is the intentional inline-browsing exception, not another modal picker. It reuses the six stock browser components and `use-designer-media-insertion.ts` for click and drag; do not create a parallel stock search/import path or render `MediaSelectorModal` inline.
-- Designer media pickers may enable outbound metadata drags through `onMediaDragStart`. My Files grid/list and stock tiles emit the same validated payload; the picker remains mounted but pointer-transparent during the drag so the canvas can highlight and accept a target. A cancelled drag restores the picker, an accepted copy drop closes it, and drag never also fires click selection.
+- Designer media pickers may enable outbound metadata drags through `onMediaDragStart`. My Files grid/list and stock tiles emit the same validated payload with `copyMove` negotiation; the picker remains mounted and becomes pointer-transparent only in a macrotask after `dragstart`, so Chromium does not cancel the origin before the canvas can highlight and accept a target. A cancelled drag restores the picker, an accepted copy drop closes it, and drag never also fires click selection. While that outbound gesture routes to the canvas, the transparent picker cannot also be an in-dialog folder target; ordinary folder organization and standalone `/files` drag-to-folder are unchanged.
 
 Name collisions to be aware of:
 

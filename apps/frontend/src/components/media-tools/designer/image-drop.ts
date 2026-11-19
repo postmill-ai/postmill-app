@@ -93,6 +93,9 @@ export const resolveImageDropTarget = ({
   return null;
 };
 
+export const isReplaceableImageMime = (type: string) =>
+  type.startsWith('image/') && type !== 'image/svg+xml';
+
 export const uploadDroppedImage = async (
   fetch: Fetch,
   file: File,

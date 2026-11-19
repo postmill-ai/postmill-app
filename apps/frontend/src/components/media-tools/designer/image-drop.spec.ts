@@ -5,6 +5,7 @@ import {
   UploadedImageCleanupError,
   imageDropErrorMessage,
   imageDropTargetById,
+  isReplaceableImageMime,
   replaceMediaImageAtDropTarget,
   replaceUploadedImageAtDropTarget,
   resolveImageDropTarget,
@@ -135,6 +136,16 @@ describe('resolveImageDropTarget', () => {
     expect(resolveImageDropTarget({
       stage, store, clientX: 10, clientY: 10, containerRect: { left: 0, top: 0 } as DOMRect,
     })).toBeNull();
+  });
+});
+
+describe('isReplaceableImageMime', () => {
+  it('accepts raster images but never editable SVG or non-image media', () => {
+    expect(isReplaceableImageMime('image/png')).toBe(true);
+    expect(isReplaceableImageMime('image/webp')).toBe(true);
+    expect(isReplaceableImageMime('image/svg+xml')).toBe(false);
+    expect(isReplaceableImageMime('video/mp4')).toBe(false);
+    expect(isReplaceableImageMime('application/pdf')).toBe(false);
   });
 });
 

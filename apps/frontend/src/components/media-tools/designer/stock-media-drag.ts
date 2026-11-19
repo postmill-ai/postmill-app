@@ -23,8 +23,10 @@ export const mediaItemFromStockSelection = (item: StockMediaSelection): MediaSel
 });
 
 export const mediaItemFromFileSelection = (file: FileItem): MediaSelectorItem => {
-  const rawType = file.metadata?.mimeType || file.metadata?.mime || file.type;
-  const normalizedType = rawType.split('/')[0];
+  const mediaType = [file.type, file.metadata?.mimeType, file.metadata?.mime]
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.split('/')[0])
+    .find((value) => mediaTypes.has(value));
   const extensionType = /\.(mp3|wav|ogg|m4a)$/i.test(file.name || '') ? 'audio' : undefined;
   const dimensions = file.metadata?.dimensions;
   return {
@@ -34,7 +36,7 @@ export const mediaItemFromFileSelection = (file: FileItem): MediaSelectorItem =>
     width: dimensions?.width || 0,
     height: dimensions?.height || 0,
     thumbnail: file.thumbnail || undefined,
-    type: (mediaTypes.has(normalizedType) ? normalizedType : extensionType || file.type) as MediaSelectorItem['type'],
+    type: (mediaType || extensionType || 'image') as MediaSelectorItem['type'],
     name: file.name,
   };
 };

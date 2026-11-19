@@ -218,7 +218,7 @@ describe('MediaSelectorModal selection', () => {
 });
 
 describe('MediaSelectorModal outbound drags', () => {
-  it('routes a File Library drag without selecting and restores the picker on cancel', () => {
+  it('routes a File Library drag without selecting and restores the picker on cancel', async () => {
     const onMediaDragStart = vi.fn();
     const onSelect = vi.fn();
     const onClose = vi.fn();
@@ -240,7 +240,8 @@ describe('MediaSelectorModal outbound drags', () => {
       expect.anything()
     );
     expect(onSelect).not.toHaveBeenCalled();
-    expect(overlay.className).toContain('pointer-events-none');
+    expect(overlay.className).not.toContain('pointer-events-none');
+    await waitFor(() => expect(overlay.className).toContain('pointer-events-none'));
     expect(overlay.className).toContain('opacity-0');
 
     fireEvent.dragEnd(overlay, { dataTransfer: { dropEffect: 'none' } });
@@ -248,7 +249,7 @@ describe('MediaSelectorModal outbound drags', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('supports stock-photo drags and closes after an accepted copy drop', () => {
+  it('supports stock-photo drags and closes after an accepted copy drop', async () => {
     const onMediaDragStart = vi.fn();
     const onClose = vi.fn();
     render(
@@ -269,10 +270,25 @@ describe('MediaSelectorModal outbound drags', () => {
       expect.anything()
     );
 
+    await waitFor(() => expect(screen.getByTestId('media-picker').parentElement!.className).toContain('pointer-events-none'));
     fireEvent.dragEnd(screen.getByTestId('media-picker').parentElement!, {
       dataTransfer: { dropEffect: 'copy' },
     });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('never hides the picker after a drag ends before the deferred transition', async () => {
+    render(<MediaSelectorModal open onClose={noop} onMediaDragStart={vi.fn()} />);
+    fireEvent.dragStart(screen.getByTestId('my-file'), {
+      dataTransfer: { effectAllowed: 'copy', dropEffect: 'none' },
+    });
+    const overlay = screen.getByTestId('media-picker').parentElement!;
+
+    fireEvent.dragEnd(overlay, { dataTransfer: { dropEffect: 'none' } });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(overlay.className).not.toContain('pointer-events-none');
+    expect(overlay.className).not.toContain('opacity-0');
   });
 });
 

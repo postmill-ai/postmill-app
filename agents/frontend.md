@@ -428,9 +428,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   and commits one Undo. OS files, Insert Image/My Files, and Elements still images share one validated
   metadata drop route. A compatible unlocked, visible static image or image/sticker clip is outlined at
   its own bounds with **Drop to replace**; a direct drop or Alt/Option-drop replaces it exactly once,
-  while blank and unsupported targets retain insertion/SVG-import routing. The media picker stays
-  mounted during an outbound drag but becomes pointer-transparent so the canvas receives dragover/drop;
-  cancellation restores it and only an accepted copy drop closes it. Video/audio clips are never targets,
+  while Shift-drop forces insertion over a compatible target and blank/unsupported targets retain
+  insertion/SVG-import routing. The media picker stays mounted during an outbound drag but becomes
+  pointer-transparent in a macrotask after `dragstart` returns (synchronous hit-test removal cancels
+  the drag in Chromium), so the canvas receives dragover/drop; cancellation restores it and only an
+  accepted copy drop closes it. Video/audio clips are never targets,
   undecodable sources leave the old target untouched, and target failures are not reported as upload
   failures. Existing library/stock source Files are never deleted. Only a newly uploaded OS File is
   cleaned up after decode/apply failure, and refused cleanup reports that the upload remains in the

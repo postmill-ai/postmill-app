@@ -84,6 +84,21 @@ describe('stock media drag payloads', () => {
     expect(readStockMediaDrag(dataTransfer)).toEqual({ kind: 'image', item });
   });
 
+  it('keeps every picker file type inside the legacy media union', () => {
+    const file = {
+      id: 'document-1', name: 'brief.pdf', originalName: 'brief.pdf', path: '/uploads/brief.pdf',
+      thumbnail: null, type: 'document', metadata: { mimeType: 'application/pdf' },
+    } as FileItem;
+
+    expect(mediaItemFromFileSelection(file).type).toBe('image');
+    expect(mediaItemFromFileSelection({
+      ...file, name: 'clip.bin', metadata: { mimeType: 'video/mp4' },
+    }).type).toBe('video');
+    expect(mediaItemFromFileSelection({
+      ...file, name: 'voice.mp3', metadata: null,
+    }).type).toBe('audio');
+  });
+
   it('does not mark vectors, videos, or audio as replacement sources', () => {
     const data = new Map<string, string>();
     const dataTransfer = {

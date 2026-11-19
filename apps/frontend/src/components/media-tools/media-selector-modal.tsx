@@ -235,6 +235,8 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
   const [isResolving, setIsResolving] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isMediaDragging, setIsMediaDragging] = useState(false);
+  const mediaDragActiveRef = useRef(false);
+  const mediaDragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   useFocusTrap(containerRef, open, onClose);
@@ -250,6 +252,11 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
       setActiveTab(tabs[0]);
     }
   }, [tabs, activeTab]);
+
+  useEffect(() => () => {
+    mediaDragActiveRef.current = false;
+    if (mediaDragTimerRef.current !== null) clearTimeout(mediaDragTimerRef.current);
+  }, []);
 
   if (!open) return null;
 
@@ -297,7 +304,13 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
   const startMediaDrag = (item: MediaSelectorItem, event: React.DragEvent) => {
     if (!onMediaDragStart) return;
     onMediaDragStart(item, event);
-    setIsMediaDragging(true);
+    mediaDragActiveRef.current = true;
+    if (mediaDragTimerRef.current !== null) clearTimeout(mediaDragTimerRef.current);
+    // Chromium cancels the drag if its origin stops hit-testing during dragstart.
+    mediaDragTimerRef.current = setTimeout(() => {
+      mediaDragTimerRef.current = null;
+      if (mediaDragActiveRef.current) setIsMediaDragging(true);
+    }, 0);
   };
   const stockDragProps = onMediaDragStart ? {
     onDragStart: (item: StockMediaSelection, event: React.DragEvent<HTMLButtonElement>) =>
@@ -418,7 +431,12 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
         isMediaDragging && 'pointer-events-none opacity-0'
       )}
       onDragEnd={(event) => {
-        if (!isMediaDragging) return;
+        if (!mediaDragActiveRef.current) return;
+        mediaDragActiveRef.current = false;
+        if (mediaDragTimerRef.current !== null) {
+          clearTimeout(mediaDragTimerRef.current);
+          mediaDragTimerRef.current = null;
+        }
         setIsMediaDragging(false);
         if (event.dataTransfer.dropEffect === 'copy') onClose();
       }}
