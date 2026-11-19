@@ -237,6 +237,7 @@ class DesignerMocks {
   readonly generatePosts: string[] = [];
   readonly backgroundRemovalPosts: string[] = [];
   readonly directImagePosts: Array<{ path: string; body: Record<string, unknown> }> = [];
+  directImageTools = false;
   readonly maskUploads = new Map<string, Buffer>();
   readonly assistantCopyPosts: string[] = [];
   readonly assistantSuggestionPosts: string[] = [];
@@ -449,10 +450,12 @@ class DesignerMocks {
             tts: { available: true },
             stt: { available: true },
             'bg-remove': { available: true },
-            upscale: { available: true },
-            image: { available: true },
-            inpaint: { available: true },
-            outpaint: { available: true },
+            ...(this.directImageTools ? {
+              upscale: { available: true },
+              image: { available: true },
+              inpaint: { available: true },
+              outpaint: { available: true },
+            } : {}),
           },
           tools: Object.fromEntries(
             [
@@ -1860,6 +1863,7 @@ test.describe('Designer crop and browser export artifacts (mocked local document
 
   test('AI tool cards keep prompts with one Generate request and apply the selected image result', async ({ page }) => {
     const mocks = new DesignerMocks();
+    mocks.directImageTools = true;
     mocks.doc = staticCropDoc();
     await mocks.install(page);
     await openStaticDesigner(page, mocks);
