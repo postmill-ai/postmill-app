@@ -7643,6 +7643,35 @@ paths:
           description: ""
       tags:
         - Design
+  /media/designs/{id}/convert-to-video:
+    post:
+      operationId: DesignController_convertToVideo
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: x-idempotency-key
+          required: true
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConvertDesignToVideoDto"
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - Design
   /media/designs/import:
     post:
       operationId: DesignController_import
@@ -12784,6 +12813,16 @@ components:
       required:
         - name
         - doc
+    ConvertDesignToVideoDto:
+      type: object
+      properties:
+        pageDurationMs:
+          type: number
+          minimum: 100
+          maximum: 180000
+          example: 5000
+      required:
+        - pageDurationMs
     ImportLibraryDesignDto:
       type: object
       properties:
