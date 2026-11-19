@@ -681,3 +681,19 @@ describe('VideoPreviewEngine — failed media demotion', () => {
     engine.destroy();
   });
 });
+
+
+describe('motion path preview composition', () => {
+  it('applies path displacement at several preview timestamps', () => {
+    const moving = clip({
+      x: 10, y: 20,
+      motionPath: {
+        points: [{ x: 10, y: 20, tMs: 0 }, { x: 110, y: 120, tMs: 4000 }],
+      },
+    });
+    for (const [time, x, y] of [[0, 10, 20], [1000, 35, 45], [2000, 60, 70], [4000, 110, 120]]) {
+      const composed = composeClipsAtPlayhead(voWith([moving]), time);
+      expect(composed[0].props).toMatchObject({ x, y });
+    }
+  });
+});

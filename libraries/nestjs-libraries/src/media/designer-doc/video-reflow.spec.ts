@@ -322,7 +322,7 @@ describe('persistent video group reflow', () => {
 
 
 describe('motion path reflow', () => {
-  it('scales canvas-space points without changing timestamps or easing', () => {
+  it('anchors path trails to fill-fit clips and preserves timestamps and easing', () => {
     const source = clip({
       x: 100, y: 200, width: 400, height: 300, fitMode: 'fill',
       motionPath: {
@@ -332,11 +332,26 @@ describe('motion path reflow', () => {
       },
     });
     const out = reflowVideoClip(source, 'video', LANDSCAPE, PORTRAIT);
-    expect(out.motionPath?.points).toEqual([
-      { x: 100 * (1080 / 1920), y: 200 * (1920 / 1080), tMs: 0 },
-      { x: 800 * (1080 / 1920), y: 600 * (1920 / 1080), tMs: 3000 },
-    ]);
+    expect(out).toMatchObject({ x: Math.round(100 * (1080 / 1920)), y: Math.round(200 * (1920 / 1080)) });
+    expect(out.motionPath?.points[0]).toMatchObject({ x: out.x, y: out.y, tMs: 0 });
+    expect(out.motionPath?.points[1].x).toBeCloseTo(out.x! + (800 - 100) * (out.width! / 400), 6);
+    expect(out.motionPath?.points[1].y).toBeCloseTo(out.y! + (600 - 200) * (out.height! / 300), 6);
+    expect(out.motionPath?.points[1].tMs).toBe(3000);
     expect(out.motionPath?.ease).toBe('easeInOut');
     expect(out.motionPath?.followRotation).toBe(true);
+  });
+
+  it.each(['text', 'shape'] as const)('anchors a %s clip path to its smart-reflowed position without canvas aspect distortion', (trackType) => {
+    const source = clip({
+      x: 100, y: 200, width: 400, height: 300,
+      motionPath: { points: [{ x: 100, y: 200, tMs: 0 }, { x: 900, y: 700, tMs: 3000 }] },
+      ...(trackType === 'text' ? { text: 'Path' } : { shape: 'rect' as const }),
+    });
+    const out = reflowVideoClip(source, trackType, LANDSCAPE, PORTRAIT);
+    expect(out.motionPath?.points[0]).toMatchObject({ x: out.x, y: out.y });
+    expect(out.motionPath?.points[1].x - out.motionPath!.points[0].x)
+      .toBeCloseTo(800 * (out.width! / 400), 6);
+    expect(out.motionPath?.points[1].y - out.motionPath!.points[0].y)
+      .toBeCloseTo(500 * (out.height! / 300), 6);
   });
 });

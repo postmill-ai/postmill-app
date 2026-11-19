@@ -186,6 +186,8 @@ export interface DesignerState {
     startedAtMs: number;
     originalPath?: VideoClip['motionPath'];
   } | null;
+  /** Selected editable point on the active motion path; editor state only. */
+  motionPathPointIndex: number | null;
   /**
    * Multi-select on the video timeline. Editor state, deliberately NOT part of
    * history (snapshots carry only `doc`). Members carry no outputIndex — track
@@ -413,6 +415,7 @@ export interface DesignerActions {
   startMotionPathRecording: (outputIndex: number, trackId: string, clipId: string) => boolean;
   cancelMotionPathRecording: () => void;
   finishMotionPathRecording: () => void;
+  setMotionPathPointIndex: (index: number | null) => void;
   setIsPlaying: (playing: boolean) => void;
   setSelectedClip: (clip: { outputIndex: number; trackId: string; clipId: string } | null) => void;
   /**
@@ -645,6 +648,7 @@ export const createDesignerStore = (
       gestureDepth: 0,
       selectedClip: null,
       motionPathRecording: null,
+      motionPathPointIndex: null,
       selectedClips: [],
       clipClipboard: [],
       keyframeClipboard: null,
@@ -2008,6 +2012,7 @@ export const createDesignerStore = (
           gestureDepth: 0,
           selectedClip: null,
           motionPathRecording: null,
+          motionPathPointIndex: null,
           selectedClips: [],
           linkedUpdateFlash: {},
           assistantSuggestions: {},
@@ -2036,6 +2041,7 @@ export const createDesignerStore = (
           gestureDepth: 0,
           selectedClip: null,
           motionPathRecording: null,
+          motionPathPointIndex: null,
           selectedClips: [],
           linkedUpdateFlash: {},
           brandAdminOverride: false,
@@ -2459,6 +2465,7 @@ export const createDesignerStore = (
             startedAtMs: Date.now(),
             originalPath: clip.motionPath,
           },
+          motionPathPointIndex: 0,
         });
         get().setSelectedClip({ outputIndex, trackId, clipId });
         get().setSelectedClips([{ trackId, clipId }], { trackId, clipId });
@@ -2480,10 +2487,12 @@ export const createDesignerStore = (
             { motionPath: recording.originalPath }
           );
         }
-        set({ motionPathRecording: null });
+        set({ motionPathRecording: null, motionPathPointIndex: null });
       },
 
-      finishMotionPathRecording: () => set({ motionPathRecording: null }),
+      finishMotionPathRecording: () => set({ motionPathRecording: null, motionPathPointIndex: null }),
+
+      setMotionPathPointIndex: (index) => set({ motionPathPointIndex: index }),
 
       setIsPlaying: (playing) => mutate({ isPlaying: playing }),
 

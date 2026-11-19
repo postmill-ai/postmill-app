@@ -483,9 +483,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   from the first point to keyframed x/y, so opening frames do not jump; rotation adds normalized tangent
   delta only when enabled. Preview, poster, motion-blur subsamples, and Chromium export all use the same
   injected evaluator. Paths are format-local like keyframes. Recording and point edits use silent writes
-  plus one Undo; whole-clip/group drags translate paths, duration edits rescale timestamps, split adds an
-  interpolated boundary and rebases the second side, and reflow scales x/y only. Fewer than two usable
-  points are inert. Editor trails/handles never enter exports. Copying animation between clips remains a
+  plus one Undo; whole-clip/group drags translate paths, duration edits rescale timestamps (ordinary
+  existing keyframe times stay unchanged except exit presets), and split retains the original timing
+  domain/easing, adds an interpolated boundary, and carries displacement/tangent offsets so rendered
+  geometry is continuous even on repeated splits. Reflow scales relative geometry by the clip's final
+  box factors and anchors the trail to the reflowed clip. Fewer than two usable points are inert.
+  Editor trails/handles never enter exports. Copying animation between clips remains a
   separate feature.
 
 - **Gesture commits and history stay immutable.** Static drag frames batch every moved node into one

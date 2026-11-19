@@ -336,3 +336,23 @@ describe('docWithVideoPosters', () => {  it('returns the same doc object when th
     expect(children.some((el: any) => el.id === 'clip-vid' && el.type === 'image')).toBe(true);
   });
 });
+
+
+describe('poster rotation evaluation', () => {
+  it('uses keyframed rotation at t=0 with and without a motion path', () => {
+    for (const withPath of [false, true]) {
+      const out = makeVideoOutput();
+      const clip = out.tracks.flatMap((track) => track.clips).find((item) => item.id === 'clip-vid') as any;
+      clip.rotation = 10;
+      clip.keyframes = [{ tMs: 0, props: { rotation: 30 } }];
+      if (withPath) {
+        clip.motionPath = {
+          followRotation: true,
+          points: [{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 0, tMs: 1000 }],
+        };
+      }
+      const poster = videoOutputToPosterOutput(out, new Map([['clip-vid', '/poster.jpg']]));
+      expect(poster.children.find((element) => element.id === 'clip-vid')?.rotation).toBe(30);
+    }
+  });
+});

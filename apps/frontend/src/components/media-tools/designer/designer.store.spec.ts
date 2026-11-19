@@ -3508,9 +3508,13 @@ describe('motion path recording and document history', () => {
     const clips = store.getState().doc.outputs[0].tracks[0].clips;
     expect(clips).toHaveLength(2);
     expect(clips[0].motionPath?.points.at(-1)).toMatchObject({ x: 100, y: 100, tMs: 1000 });
-    expect(clips[1].motionPath?.points[0]).toMatchObject({ x: 100, y: 100, tMs: 0 });
-    expect(clips[1].motionPath?.points.at(-1)).toMatchObject({ x: 200, y: 50, tMs: 1000 });
-    expect(clips[1].motionPath?.followRotation).toBe(true);
+    expect(clips[1].motionPath?.points[0]).toMatchObject({ x: 100, y: 100, tMs: 1000 });
+    expect(clips[1].motionPath?.points.at(-1)).toMatchObject({ x: 200, y: 50, tMs: 2000 });
+    expect(clips[1].motionPath).toMatchObject({
+      timeOffsetMs: 1000,
+      timeDurationMs: 2000,
+      followRotation: true,
+    });
     expect(store.getState().history).toHaveLength(historyBefore + 2);
     store.getState().undo();
     expect(store.getState().doc.outputs[0].tracks[0].clips).toHaveLength(1);
@@ -3524,5 +3528,41 @@ describe('motion path recording and document history', () => {
       motionPath: { points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 200, tMs: 4000 }] },
     });
     expect(store.getState().doc.outputs[1].tracks[0].clips[0].motionPath).toBeUndefined();
+  });
+});
+
+
+describe('motion path versioning and trim contract', () => {
+  it('stamps a real v14 document when a path is written through updateClipSilent', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'clip', startMs: 0, endMs: 1000, src: '/movie.mp4',
+    } as never);
+    store.getState().replaceDocTrusted({ ...store.getState().doc, version: 14 });
+    expect(store.getState().doc.version).toBe(14);
+
+    expect(store.getState().updateClipSilent(0, trackId, 'clip', {
+      motionPath: { points: [{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 100, tMs: 1000 }] },
+    })).toBe(true);
+    expect(store.getState().doc.version).toBe(15);
+  });
+
+  it('rescales path times on trim while preserving ordinary keyframe timestamps', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'clip', startMs: 0, endMs: 4000, src: '/movie.mp4',
+      keyframes: [{ tMs: 0, props: { opacity: 1 } }, { tMs: 4000, props: { opacity: 0.5 } }],
+      motionPath: { points: [{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 100, tMs: 4000 }] },
+    } as never);
+
+    store.getState().updateClip(0, trackId, 'clip', { endMs: 2000 });
+
+    const clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(clip.motionPath?.points.map((point) => point.tMs)).toEqual([0, 2000]);
+    expect(clip.keyframes?.map((keyframe) => keyframe.tMs)).toEqual([0, 4000]);
   });
 });

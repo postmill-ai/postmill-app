@@ -124,19 +124,104 @@ describe('motion path editing geometry', () => {
     expect(rescaleMotionPathTimes(path, 1000, 1000)).toBe(path);
   });
 
-  it('splits at an interpolated boundary and rebases the second path', () => {
+  it('splits at an interpolated boundary and retains the original timing domain', () => {
     const split = splitMotionPath(path, 500, 1000);
     expect(split.first?.points).toEqual([
       { x: 0, y: 0, tMs: 0 },
       { x: 100, y: 0, tMs: 500 },
     ]);
     expect(split.second?.points).toEqual([
-      { x: 100, y: 0, tMs: 0 },
-      { x: 100, y: 100, tMs: 500 },
+      { x: 100, y: 0, tMs: 500 },
+      { x: 100, y: 100, tMs: 1000 },
     ]);
+    expect(split.second).toMatchObject({
+      timeOffsetMs: 500,
+      timeDurationMs: 1000,
+      startDx: 100,
+      startDy: 0,
+    });
+    expect(split.second?.startRotation).toBeUndefined();
     const midpoint = splitMotionPath(path, 250, 1000);
     expect(midpoint.first?.points.at(-1)).toEqual({ x: 50, y: 0, tMs: 250 });
-    expect(midpoint.second?.points[0]).toEqual({ x: 50, y: 0, tMs: 0 });
-    expect(midpoint.second?.points.at(-1)).toEqual({ x: 100, y: 100, tMs: 750 });
+    expect(midpoint.second?.points[0]).toEqual({ x: 50, y: 0, tMs: 250 });
+    expect(midpoint.second?.points.at(-1)).toEqual({ x: 100, y: 100, tMs: 1000 });
+    expect(midpoint.second?.timeOffsetMs).toBe(250);
+  });
+
+  it.each([
+    ['linear', undefined, false],
+    ['eased', 'easeInOut' as const, false],
+    ['linear rotated', undefined, true],
+    ['eased rotated', 'easeInOut' as const, true],
+  ] as const)('split continuity preserves rendered geometry (%s)', (_name, ease, followRotation) => {
+    const sourcePath: MotionPath = {
+      points: [
+        { x: 100, y: 100, tMs: 0 },
+        { x: 900, y: 100, tMs: 1000 },
+        { x: 900, y: 900, tMs: 2000 },
+      ],
+      ...(ease ? { ease } : {}),
+      ...(followRotation ? { followRotation } : {}),
+    };
+    const original = {
+      id: 'clip', startMs: 0, endMs: 2000, x: 100, y: 100, motionPath: sourcePath,
+    } as VideoClip;
+    const split = splitMotionPath(sourcePath, 1000, 2000);
+    const first = { ...original, endMs: 1000, motionPath: split.first };
+    const second = { ...original, startMs: 1000, motionPath: split.second };
+    for (const absoluteMs of [0, 400, 999, 1000, 1500, 1999]) {
+      const expected = interpolateClipWithMotionPath(original, absoluteMs);
+      const actual = absoluteMs < 1000
+        ? interpolateClipWithMotionPath(first, absoluteMs)
+        : interpolateClipWithMotionPath(second, absoluteMs - 1000);
+      expect(actual.x).toBeCloseTo(expected.x, 6);
+      expect(actual.y).toBeCloseTo(expected.y, 6);
+      expect(actual.rotation).toBeCloseTo(expected.rotation, 6);
+    }
+    const secondSplit = splitMotionPath(split.second, 500, 1000);
+    const third = { ...original, startMs: 1500, endMs: 2000, motionPath: secondSplit.second };
+    for (const absoluteMs of [1500, 1750, 1999]) {
+      const expected = interpolateClipWithMotionPath(original, absoluteMs);
+      const actual = interpolateClipWithMotionPath(third, absoluteMs - 1500);
+      expect(actual.x).toBeCloseTo(expected.x, 6);
+      expect(actual.y).toBeCloseTo(expected.y, 6);
+      expect(actual.rotation).toBeCloseTo(expected.rotation, 6);
+    }
+  });
+});
+
+
+describe('motion path rotation and injected alias coverage', () => {
+  it('uses delta from a nonzero initial tangent and normalizes across the wrap boundary', () => {
+    const turning: MotionPath = {
+      followRotation: true,
+      points: [
+        { x: 0, y: 0, tMs: 0 },
+        { x: 100, y: 100, tMs: 500 },
+        { x: 200, y: 100, tMs: 1000 },
+      ],
+    };
+    expect(motionPathDisplacement(turning, 1000, 1000).rotation).toBe(-45);
+
+    const radians = (degrees: number) => degrees * Math.PI / 180;
+    const wrapping: MotionPath = {
+      followRotation: true,
+      points: [
+        { x: 0, y: 0, tMs: 0 },
+        { x: Math.cos(radians(170)), y: Math.sin(radians(170)), tMs: 500 },
+        {
+          x: Math.cos(radians(170)) + Math.cos(radians(-170)),
+          y: Math.sin(radians(170)) + Math.sin(radians(-170)),
+          tMs: 1000,
+        },
+      ],
+    };
+    expect(motionPathDisplacement(wrapping, 1000, 1000).rotation).toBeCloseTo(20, 6);
+  });
+
+  it('emits a self-contained point cap without an imported binding', () => {
+    expect(motionPathSource()).toContain('const POINT_CAP = 200');
+    expect(motionPathSource()).not.toContain('MAX_MOTION_PATH_POINTS');
+    expect(motionPathSource()).not.toContain('designerDoc.');
   });
 });

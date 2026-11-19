@@ -908,3 +908,43 @@ describe('motion path recording and editing', () => {
     expect(store.getState().doc.outputs[0].tracks[0].clips[0].motionPath?.points).toHaveLength(4);
   });
 });
+
+
+describe('motion path recording clock', () => {
+  it('starts elapsed time at dragstart rather than the Inspector click', async () => {
+    const store = videoStore();
+    let now = 1000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={1080} height={1080}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={1080} height={1080} interactive />
+          </Layer>
+        </Stage>
+      );
+    });
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    expect(store.getState().startMotionPathRecording(0, trackId, 'c1')).toBe(true);
+    now += 1500;
+    const node = stage.findOne('#c1')!;
+    await act(async () => node.fire('dragstart'));
+    await act(async () => {
+      now += 500;
+      node.position({ x: 100, y: 100 });
+      node.fire('dragmove');
+    });
+    await act(async () => node.fire('dragend'));
+
+    expect(store.getState().doc.outputs[0].tracks[0].clips[0].motionPath?.points)
+      .toEqual([{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 100, tMs: 500 }]);
+    expect(store.getState().motionPathRecording).toBeNull();
+  });
+});

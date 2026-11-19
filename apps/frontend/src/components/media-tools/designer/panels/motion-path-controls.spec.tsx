@@ -55,3 +55,33 @@ describe('MotionPathControls', () => {
     expect(screen.getByRole('switch', { name: 'Rotate with path' })).toHaveProperty('disabled', true);
   });
 });
+
+
+describe('MotionPathControls point accessibility', () => {
+  it('deletes a selected point through a keyboard/touch-accessible control with one Undo', () => {
+    const { store, trackId } = videoStore();
+    store.getState().updateClip(0, trackId, 'clip', {
+      motionPath: {
+        points: [
+          { x: 0, y: 0, tMs: 0 },
+          { x: 100, y: 100, tMs: 1000 },
+          { x: 200, y: 50, tMs: 2000 },
+        ],
+      },
+    });
+    const clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    render(<MotionPathControls store={store} outputIndex={0} trackId={trackId} clipId="clip" clip={clip} disabled={false} />);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Path point' }), { target: { value: '1' } });
+    expect(store.getState().motionPathPointIndex).toBe(1);
+    const historyBefore = store.getState().history.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete selected point' }));
+
+    const points = store.getState().doc.outputs[0].tracks[0].clips[0].motionPath?.points;
+    expect(points?.map((point) => point.x)).toEqual([0, 200]);
+    expect(store.getState().motionPathPointIndex).toBeNull();
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].tracks[0].clips[0].motionPath?.points).toHaveLength(3);
+  });
+});

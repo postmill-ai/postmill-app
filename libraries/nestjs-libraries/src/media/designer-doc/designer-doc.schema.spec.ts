@@ -807,6 +807,12 @@ describe('motion path document contract', () => {
     points: [{ x: 10, y: 20, tMs: 0 }, { x: 200, y: 300, tMs: 15000 }],
     ease: 'easeInOut',
     followRotation: true,
+    timeOffsetMs: 0,
+    timeDurationMs: 15000,
+    startDx: 0,
+    startDy: 0,
+    startRotation: 0,
+    startAngle: 0,
   };
 
   it('accepts optional v15 motion paths in strict and lenient parsers', () => {

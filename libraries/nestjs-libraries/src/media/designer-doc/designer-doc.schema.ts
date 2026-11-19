@@ -724,6 +724,13 @@ export interface MotionPath {
   ease?: 'linear' | 'easeInOut' | 'easeIn' | 'easeOut';
   /** Optional-additive doc v15; absent keeps the authored/base rotation. */
   followRotation?: boolean;
+  /** Internal split origin metadata; ordinary recordings omit these fields. */
+  timeOffsetMs?: number;
+  timeDurationMs?: number;
+  startDx?: number;
+  startDy?: number;
+  startRotation?: number;
+  startAngle?: number;
 }
 
 export interface VideoClip {
@@ -1735,6 +1742,12 @@ export const MotionPathSchema = z.object({
   points: z.array(MotionPathPointSchema).max(MAX_MOTION_PATH_POINTS),
   ease: z.enum(['linear', 'easeInOut', 'easeIn', 'easeOut']).optional(),
   followRotation: z.boolean().optional(),
+  timeOffsetMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
+  timeDurationMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
+  startDx: strictNum(-2 * MAX_DIMENSION, 2 * MAX_DIMENSION).optional(),
+  startDy: strictNum(-2 * MAX_DIMENSION, 2 * MAX_DIMENSION).optional(),
+  startRotation: strictNum(-360, 360).optional(),
+  startAngle: strictNum(-360, 360).optional(),
 }).strict();
 
 // ---------------------------------------------------------------------------

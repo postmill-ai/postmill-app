@@ -3,6 +3,8 @@
 import React from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { VideoClip } from '../designer.store';
+import type { MotionPathPoint } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { deleteMotionPathPoint } from '@postmill-ai/nestjs-libraries/media/designer-doc/motion-path';
 
 interface MotionPathControlsProps {
   store: any;
@@ -26,8 +28,12 @@ export const MotionPathControls: React.FC<MotionPathControlsProps> = ({
   const currentClip = store((state: any) => state.doc.outputs[outputIndex]?.tracks
     ?.find((track: any) => track.id === trackId)?.clips
     .find((item: VideoClip) => item.id === clipId)) ?? clip;
+  const pointIndex = store((state: any) => state.motionPathPointIndex);
   const active = recording?.clipId === clipId && recording.trackId === trackId && recording.outputIndex === outputIndex;
   const path = currentClip.motionPath;
+  const selectedPointIndex = path && pointIndex !== null && pointIndex < path.points.length
+    ? pointIndex
+    : null;
   const update = (motionPath: VideoClip['motionPath']) =>
     store.getState().updateClip(outputIndex, trackId, clipId, { motionPath });
 
@@ -82,6 +88,43 @@ export const MotionPathControls: React.FC<MotionPathControlsProps> = ({
           <span className={`absolute top-[2px] h-[18px] w-[18px] rounded-full bg-white transition-transform ${path?.followRotation ? 'translate-x-[20px]' : 'translate-x-[2px]'}`} />
         </button>
       </div>
+      {path && path.points.length > 0 && (
+        <label className="flex items-center justify-between gap-2 text-[11px] text-textColor/70">
+          <span>{t('designer_motion_path_point', 'Path point')}</span>
+          <select
+            aria-label={t('designer_motion_path_point', 'Path point')}
+            value={selectedPointIndex ?? ''}
+            disabled={disabled}
+            onChange={(event) => store.getState().setMotionPathPointIndex(
+              event.target.value === '' ? null : Number(event.target.value)
+            )}
+            className="h-7 rounded-sm border border-studioBorder bg-newBgColor px-2 text-[11px] text-textColor disabled:opacity-40"
+          >
+            <option value="">{t('designer_no_motion_point_selected', 'None')}</option>
+            {path.points.map((point: MotionPathPoint, index: number) => (
+              <option key={`${point.tMs}-${index}`} value={index}>
+                {t('designer_motion_point_number', 'Point {{number}}', { number: index + 1 })}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {selectedPointIndex !== null && (
+        <button
+          type="button"
+          disabled={disabled || path.points.length <= 2}
+          onClick={() => {
+            const nextPath = deleteMotionPathPoint(path, selectedPointIndex);
+            if (nextPath !== path) {
+              store.getState().updateClip(outputIndex, trackId, clipId, { motionPath: nextPath });
+              store.getState().setMotionPathPointIndex(null);
+            }
+          }}
+          className="w-full rounded-sm border border-studioBorder px-3 py-1.5 text-[11px] text-dangerText hover:bg-red-500/10 disabled:opacity-40"
+        >
+          {t('designer_delete_motion_path_point', 'Delete selected point')}
+        </button>
+      )}
       {path && (
         <button
           type="button"

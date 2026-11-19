@@ -13,7 +13,30 @@ import {
   type TypeBasisCanvas,
 } from './reflow';
 import { genId } from './designer-doc.migrate';
-import { scaleMotionPath } from './motion-path';
+const reflowClipMotionPath = (
+  source: VideoClip,
+  next: VideoClip,
+  scaleX: number,
+  scaleY: number,
+  anchorToClip: boolean
+): void => {
+  const path = source.motionPath;
+  if (!path?.points.length) return;
+  const firstX = path.points[0].x;
+  const firstY = path.points[0].y;
+  const targetX = anchorToClip ? (next.x ?? firstX) : firstX;
+  const targetY = anchorToClip ? (next.y ?? firstY) : firstY;
+  next.motionPath = {
+    ...path,
+    startDx: path.startDx === undefined ? undefined : path.startDx * scaleX,
+    startDy: path.startDy === undefined ? undefined : path.startDy * scaleY,
+    points: path.points.map((point) => ({
+      ...point,
+      x: targetX + (point.x - firstX) * scaleX,
+      y: targetY + (point.y - firstY) * scaleY,
+    })),
+  };
+};
 
 /**
  * Smart reflow for VIDEO outputs (the add-format/resize path for video-mode
@@ -116,9 +139,9 @@ export const reflowVideoClip = (
 
   const scaleX = target.width / source.width;
   const scaleY = target.height / source.height;
-  next.motionPath = scaleMotionPath(next.motionPath, scaleX, scaleY);
 
   if (!hasExplicitBox(clip)) {
+    reflowClipMotionPath(clip, next, scaleX, scaleY, false);
     // Fullscreen clip: the box IS the canvas, so it follows the resize for
     // free. The only canvas-dependent state is the cover-crop focal estimate.
     const fit = clip.fitMode || 'fill';
@@ -143,6 +166,7 @@ export const reflowVideoClip = (
     next.width = Math.max(1, Math.round(clip.width! * scaleX));
     next.height = Math.max(1, Math.round(clip.height! * scaleY));
     next.keyframes = scaleClipKeyframes(clip, scaleX, scaleY, 1);
+    reflowClipMotionPath(clip, next, next.width / clip.width!, next.height / clip.height!, true);
     return next;
   }
 
@@ -200,6 +224,7 @@ export const reflowVideoClip = (
   const ff =
     clip.fontSize && next.fontSize ? next.fontSize / clip.fontSize : 1;
   next.keyframes = scaleClipKeyframes(clip, fx, fy, ff);
+  reflowClipMotionPath(clip, next, fx, fy, true);
   if (next.textExtrusion) {
     next.textExtrusion = {
       ...next.textExtrusion,

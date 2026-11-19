@@ -1423,8 +1423,10 @@ test('records, edits, and reloads a custom motion path with easing and Undo', as
   await page.mouse.down();
   await page.mouse.move(moved.x, moved.y, { steps: 6 });
   await page.mouse.up();
-  await expect.poll(() => state.doc.outputs[0].tracks[0].clips[0].motionPath.points[0].x)
-    .toBe(recorded[0].x + 20);
+  // Screen-to-canvas mapping is fractional, so allow one canvas unit either way.
+  await expect.poll(() => Math.abs(
+    state.doc.outputs[0].tracks[0].clips[0].motionPath.points[0].x - (recorded[0].x + 20)
+  )).toBeLessThanOrEqual(1);
 
   const latest = state.doc.outputs[0].tracks[0].clips[0].motionPath.points;
   const midpoint = point((latest[0].x + latest[1].x) / 2, (latest[0].y + latest[1].y) / 2);

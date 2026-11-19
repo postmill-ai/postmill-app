@@ -753,6 +753,10 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
 
   const startRecordingDrag = (clip: VideoClip, trackId: string, node: Konva.Node) => {
     recordingMovedRef.current = false;
+    // Time the recording from the drag, not from the Record button click.
+    store.setState((state) => state.motionPathRecording
+      ? { motionPathRecording: { ...state.motionPathRecording, startedAtMs: Date.now() } }
+      : {});
     recordingLastPointRef.current = { x: node.x(), y: node.y() };
     store.getState().updateClipSilent(currentOutput, trackId, clip.id, {
       motionPath: {
@@ -1280,7 +1284,16 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               onDragStart={(event) => {
                 event.cancelBubble = true;
                 pointMovedRef.current = false;
+                store.getState().setMotionPathPointIndex(index);
                 beginClipGesture(pathClip.id);
+              }}
+              onClick={(event) => {
+                event.cancelBubble = true;
+                store.getState().setMotionPathPointIndex(index);
+              }}
+              onTap={(event) => {
+                event.cancelBubble = true;
+                store.getState().setMotionPathPointIndex(index);
               }}
               onDragMove={(event) => {
                 const state = store.getState();
@@ -1305,6 +1318,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               onContextMenu={(event) => {
                 event.evt.preventDefault();
                 event.cancelBubble = true;
+                store.getState().setMotionPathPointIndex(index);
                 if (!pathClip.motionPath) return;
                 commitPathEdit(
                   pathTrack.id,
@@ -1312,16 +1326,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
                   deleteMotionPathPoint(pathClip.motionPath, index),
                   'Delete motion path point'
                 );
-              }}
-              onKeyDown={(event: Konva.KonvaEventObject<KeyboardEvent>) => {
-                if (event.evt.key !== 'Delete' && event.evt.key !== 'Backspace') return;
-                if (!pathClip.motionPath) return;
-                commitPathEdit(
-                  pathTrack.id,
-                  pathClip,
-                  deleteMotionPathPoint(pathClip.motionPath, index),
-                  'Delete motion path point'
-                );
+                store.getState().setMotionPathPointIndex(null);
               }}
             />
           ))}

@@ -5,12 +5,16 @@ import { applyEasePreset, interpolateClipKeyframes, type InterpolatedProps } fro
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
+// Injected functions must not read an imported binding: transpilers rewrite it
+// to a module reference that does not exist in the frame page.
+const POINT_CAP = MAX_MOTION_PATH_POINTS;
+
 const usablePoints = (path?: MotionPath): MotionPathPoint[] =>
   (path?.points ?? [])
     .filter((point) =>
       Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.tMs)
     )
-    .slice(0, MAX_MOTION_PATH_POINTS)
+    .slice(0, POINT_CAP)
     .map((point, index) => ({ ...point, order: index }))
     .sort((a, b) => a.tMs - b.tMs || a.order - b.order)
     .map(({ order: _order, ...point }) => point);
@@ -41,8 +45,9 @@ export const motionPathPointAt = (
 ): MotionPathPoint & { angle: number } => {
   const points = usablePoints(path);
   if (!points.length) return { x: 0, y: 0, tMs: 0, angle: 0 };
-  const duration = Math.max(0, durationMs);
-  const rawTime = clamp(relativeMs, 0, duration);
+  const duration = Math.max(0, path?.timeDurationMs ?? durationMs);
+  const offset = Math.max(0, path?.timeOffsetMs ?? 0);
+  const rawTime = clamp(relativeMs + offset, 0, duration);
   const time = duration > 0
     ? applyEasePreset(rawTime / duration, path?.ease) * duration
     : 0;
@@ -76,11 +81,14 @@ export const motionPathDisplacement = (
   const points = usablePoints(path);
   if (points.length < 2) return { x: 0, y: 0, rotation: 0 };
   const point = motionPathPointAt(path, relativeMs, durationMs);
+  const angle = relativeMs <= 0 && path?.startAngle !== undefined
+    ? path.startAngle
+    : point.angle;
   return {
-    x: point.x - points[0].x,
-    y: point.y - points[0].y,
+    x: (path?.startDx ?? 0) + point.x - points[0].x,
+    y: (path?.startDy ?? 0) + point.y - points[0].y,
     rotation: path?.followRotation
-      ? normalizeAngleDelta(point.angle - firstAngle(points))
+      ? (path.startRotation ?? 0) + normalizeAngleDelta(angle - (path.startAngle ?? firstAngle(points)))
       : 0,
   };
 };
@@ -118,6 +126,8 @@ export const scaleMotionPath = (
   scaleY: number
 ): MotionPath | undefined => path ? {
   ...path,
+  startDx: path.startDx === undefined ? undefined : path.startDx * scaleX,
+  startDy: path.startDy === undefined ? undefined : path.startDy * scaleY,
   points: path.points.map((point) => ({
     ...point,
     x: point.x * scaleX,
@@ -137,9 +147,15 @@ export const rescaleMotionPathTimes = (
   const ratio = Math.max(0, nextDurationMs) / previousDurationMs;
   return {
     ...path,
+    ...(path.timeOffsetMs !== undefined
+      ? { timeOffsetMs: clamp(Math.round(path.timeOffsetMs * ratio), 0, MAX_VIDEO_DURATION_MS) }
+      : {}),
+    ...(path.timeDurationMs !== undefined
+      ? { timeDurationMs: clamp(Math.round(path.timeDurationMs * ratio), 0, MAX_VIDEO_DURATION_MS) }
+      : {}),
     points: path.points.map((point) => ({
       ...point,
-      tMs: clamp(Math.round(point.tMs * ratio), 0, Math.max(0, nextDurationMs)),
+      tMs: clamp(Math.round(point.tMs * ratio), 0, MAX_VIDEO_DURATION_MS),
     })),
   };
 };
@@ -151,20 +167,31 @@ export const splitMotionPath = (
 ): { first: MotionPath | undefined; second: MotionPath | undefined } => {
   if (!path) return { first: undefined, second: undefined };
   const cut = clamp(cutMs, 0, durationMs);
+  const timeOffset = Math.max(0, path.timeOffsetMs ?? 0);
+  const timeDuration = Math.max(0, path.timeDurationMs ?? durationMs);
+  const rawCut = clamp(timeOffset + cut, 0, timeDuration);
   const boundary = motionPathPointAt(path, cut, durationMs);
+  const boundaryDisplacement = motionPathDisplacement(path, cut, durationMs);
   const firstPoints = [
-    ...path.points.filter((point) => point.tMs < cut),
-    { x: boundary.x, y: boundary.y, tMs: cut },
+    ...path.points.filter((point) => point.tMs < boundary.tMs),
+    { x: boundary.x, y: boundary.y, tMs: boundary.tMs },
   ];
   const secondPoints = [
-    { x: boundary.x, y: boundary.y, tMs: 0 },
-    ...path.points
-      .filter((point) => point.tMs > cut)
-      .map((point) => ({ ...point, tMs: point.tMs - cut })),
+    { x: boundary.x, y: boundary.y, tMs: boundary.tMs },
+    ...path.points.filter((point) => point.tMs > boundary.tMs),
   ];
   return {
-    first: { ...path, points: firstPoints },
-    second: { ...path, points: secondPoints },
+    first: { ...path, points: firstPoints, timeDurationMs: timeDuration },
+    second: {
+      ...path,
+      points: secondPoints,
+      timeOffsetMs: rawCut,
+      timeDurationMs: timeDuration,
+      startDx: boundaryDisplacement.x,
+      startDy: boundaryDisplacement.y,
+      startRotation: path.followRotation ? boundaryDisplacement.rotation : undefined,
+      startAngle: path.followRotation ? boundary.angle : undefined,
+    },
   };
 };
 
@@ -172,7 +199,7 @@ export const insertMotionPathPoint = (
   path: MotionPath,
   segmentIndex: number
 ): MotionPath => {
-  if (path.points.length >= MAX_MOTION_PATH_POINTS || segmentIndex < 0 || segmentIndex >= path.points.length - 1) {
+  if (path.points.length >= POINT_CAP || segmentIndex < 0 || segmentIndex >= path.points.length - 1) {
     return path;
   }
   const from = path.points[segmentIndex];
@@ -216,7 +243,7 @@ export const appendMotionPathPoint = (
   point: MotionPathPoint,
   durationMs: number
 ): MotionPath => {
-  if (path.points.length >= MAX_MOTION_PATH_POINTS) return path;
+  if (path.points.length >= POINT_CAP) return path;
   const next: MotionPathPoint = {
     x: clamp(point.x, -MAX_DIMENSION, MAX_DIMENSION),
     y: clamp(point.y, -MAX_DIMENSION, MAX_DIMENSION),
@@ -233,7 +260,7 @@ export const appendMotionPathPoint = (
 export const motionPathSource = (): string => {
   const decl = (name: string, value: unknown) => `const ${name} = ${String(value)};`;
   return [
-    `const MAX_MOTION_PATH_POINTS = ${MAX_MOTION_PATH_POINTS};`,
+    `const POINT_CAP = ${MAX_MOTION_PATH_POINTS};`,
     decl('clamp', clamp),
     decl('usablePoints', usablePoints),
     decl('segmentAngle', segmentAngle),

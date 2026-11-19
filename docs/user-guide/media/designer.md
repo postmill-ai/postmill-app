@@ -100,7 +100,10 @@ via headless Chromium + FFmpeg.
   Inspector records a custom route by dragging the clip through the canvas. Drag its points to edit,
   click a segment to insert a point, or right-click a point to delete it. Path easing and optional
   **Rotate with path** share the clip's duration; recording and each edit are one Undo, and paths save,
-  reload, and export with the clip. Multi-select (Shift/Ctrl/Cmd-click
+  reload, and export with the clip. Changing clip duration rescales path-point timestamps, while
+  ordinary existing keyframe timestamps stay unchanged (except the existing exit-preset behavior).
+  Split preserves the rendered path, including its easing and rotation, on both sides of the cut.
+  Multi-select (Shift/Ctrl/Cmd-click
   or marquee, on both canvas and timeline), copy/paste, timeline markers, zoom, and loop playback are
   also available. Canvas drag, resize, rotation, arrow-key nudge, and Delete apply to all selected
   visible clips as one undo step. **Ctrl/Cmd+G** groups selected clips and **Ctrl/Cmd+Shift+G** ungroups
