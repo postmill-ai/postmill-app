@@ -1292,7 +1292,7 @@ const animationClipboardDoc = (): DesignerDocSnapshot => ({
     durationMs: 4000,
     tracks: [
       {
-        id: 'shape-target-track', type: 'shape', name: 'Shape target',
+        id: 'shape-target-track', type: 'shape', name: 'shape target',
         clips: [{
           id: 'shape-target', shape: 'rect', fill: '#ff0000', fileId: 'shape-file',
           startMs: 0, endMs: 2000, x: 220, y: 180, width: 50, height: 30,
@@ -1300,7 +1300,7 @@ const animationClipboardDoc = (): DesignerDocSnapshot => ({
         }],
       },
       {
-        id: 'text-target-track', type: 'text', name: 'Target',
+        id: 'text-target-track', type: 'text', name: 'target',
         clips: [{
           id: 'text-target', text: 'TARGET', fileId: 'target-file',
           startMs: 0, endMs: 2000, x: 180, y: 100, width: 120, height: 40,
@@ -1308,7 +1308,7 @@ const animationClipboardDoc = (): DesignerDocSnapshot => ({
         }],
       },
       {
-        id: 'animation-source-track', type: 'text', name: 'Source',
+        id: 'animation-source-track', type: 'text', name: 'source',
         clips: [{
           id: 'animation-source', text: 'SOURCE', fileId: 'source-file',
           startMs: 0, endMs: 4000, x: 20, y: 20, width: 80, height: 40, fontSize: 20,
