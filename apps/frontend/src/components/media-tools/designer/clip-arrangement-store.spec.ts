@@ -180,6 +180,62 @@ describe('arrangeVideoClips store action', () => {
     expect(store.getState().history).toHaveLength(historyBefore + 1);
   });
 
+  it("expands a transition partner's group until both closures are stable", () => {
+    const groupedTracks = () => [
+      track('g', 'shape', [clip('g', 0, 1000, { groupId: 'group' })]),
+      track('v1', 'video', [
+        clip('a', 0, 1000, {
+          groupId: 'group',
+          transitionOut: { type: 'dissolve', durationMs: 300 },
+        }),
+        clip('b', 1000, 2000, {
+          transitionIn: { type: 'dissolve', durationMs: 300 },
+        }),
+        clip('q', 3000, 4000),
+      ]),
+      track('top', 'text', [clip('t')]),
+    ];
+    const arrangeFrom = (clipId: string) => {
+      const store = storeWith([videoOutput(groupedTracks())]);
+      const before = store.getState().doc;
+      const historyBefore = store.getState().history.length;
+      store.getState().setSelectedClip({ outputIndex: 0, trackId: 'v1', clipId });
+
+      expect(store.getState().arrangeVideoClips(0, [
+        { trackId: 'v1', clipId },
+      ], 'front')).toBe('ok');
+      return {
+        store,
+        before,
+        historyBefore,
+        stack: outputAt(store).tracks.map((item) => item.clips.map((clip) => clip.id)),
+      };
+    };
+
+    const fromA = arrangeFrom('a');
+    const fromB = arrangeFrom('b');
+    expect(fromB.stack).toEqual(fromA.stack);
+    expect(fromB.stack).toEqual([['q'], ['t'], ['g'], ['a', 'b']]);
+    expect(fromB.store.getState().selectedClips.map((ref) => ref.clipId)).toEqual(['g', 'a', 'b']);
+    const pairTrack = outputAt(fromB.store).tracks.find((track) =>
+      track.clips.some((clip) => clip.id === 'b')
+    )!;
+    expect(fromB.store.getState().selectedClip).toEqual({
+      outputIndex: 0,
+      trackId: pairTrack.id,
+      clipId: 'b',
+    });
+    expect(findTransitionWindows(pairTrack).map((window) => [
+      window.fromClip.id,
+      window.toClip.id,
+      window.durationMs,
+    ])).toEqual([['a', 'b', 300]]);
+    expect(fromB.store.getState().history).toHaveLength(fromB.historyBefore + 1);
+
+    fromB.store.getState().undo();
+    expect(fromB.store.getState().doc).toBe(fromB.before);
+  });
+
   it('refuses a merge-created transition without changing the document or history', () => {
     const store = storeWith([videoOutput([
       track('v1', 'video', [

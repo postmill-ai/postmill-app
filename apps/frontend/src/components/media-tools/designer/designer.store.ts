@@ -2198,7 +2198,13 @@ export const createDesignerStore = (
         if (!vo || doc.mode !== 'video') return 'unknown-clip';
         if (isOutputFrozen(vo)) return 'frozen';
 
-        const expanded = expandClipArrangementRefs(vo, expandClipRefs(vo, refs));
+        // Groups and transition pairs can pull each other in, so expand both until stable.
+        let expanded = expandClipRefs(vo, refs);
+        for (;;) {
+          const next = expandClipRefs(vo, expandClipArrangementRefs(vo, expanded));
+          if (next.length === expanded.length) break;
+          expanded = next;
+        }
         const planned = planClipArrangement(vo, expanded, direction, genId);
         if (planned.status !== 'ok') return planned.status;
 

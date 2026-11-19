@@ -85,9 +85,10 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      order or collision-free same-type clip membership through `designer-doc/clip-arrangement.ts` —
      never clip timing or a renderer-private z-index. Keep all three paths reading the same document
      order after an arrange, Undo or save/reload; exported frames must match the preview stack.
-     Arrangement expands active transition pairs into the moving selection and refuses any completed
-     plan whose before/after transition-pair sets differ, so track edits never create or remove a
-     rendered transition window.
+     Arrangement expands persistent groups and active transition pairs together until stable,
+     including groups introduced by transition partners. It refuses any completed plan whose
+     before/after transition-pair sets differ, so track edits never create or remove a rendered
+     transition window.
    - Clip transitions (`transitionIn`/`transitionOut`): `cut`, `fade`
      (fade-through-black — each clip owns half the window), `dissolve` (plain
      cross-fade), `slide`, `wipe` (incoming slides over a STATIC outgoing clip),

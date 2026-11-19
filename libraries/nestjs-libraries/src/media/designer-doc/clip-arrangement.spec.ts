@@ -287,6 +287,32 @@ describe('planClipArrangement', () => {
     ]);
   });
 
+  it('moves an entire transition chain when its last clip is selected', () => {
+    const a = clip('a', 0, 1000, {
+      transitionOut: { type: 'dissolve', durationMs: 300 },
+    });
+    const b = clip('b', 1000, 2000, {
+      transitionIn: { type: 'dissolve', durationMs: 300 },
+      transitionOut: { type: 'wipe', durationMs: 200 },
+    });
+    const c = clip('c', 2000, 3000, {
+      transitionIn: { type: 'wipe', durationMs: 200 },
+    });
+    const out = output([
+      track('v1', 'video', [a, b, c]),
+      track('v2', 'video', [clip('resident', 5000, 6000)]),
+    ]);
+
+    const result = successful(out, [{ trackId: 'v1', clipId: 'c' }], 'forward');
+    expect(ids(result)).toEqual(['v2', 'v1']);
+    expect(result.tracks[1]).toBe(out.tracks[0]);
+    expect(result.moves).toEqual([
+      { trackId: 'v1', clipId: 'a', toTrackId: 'v1' },
+      { trackId: 'v1', clipId: 'b', toTrackId: 'v1' },
+      { trackId: 'v1', clipId: 'c', toTrackId: 'v1' },
+    ]);
+  });
+
   it('refuses a merge that would create a new rendered transition pair', () => {
     const createId = vi.fn();
     const out = output([
@@ -310,6 +336,56 @@ describe('planClipArrangement', () => {
       ['x', 'b'], ['c'],
     ]);
     expect(createId).not.toHaveBeenCalled();
+  });
+
+  it('refuses replacing a rendered pair with a different pair at the same count', () => {
+    const createId = vi.fn();
+    const out = output([
+      track('source', 'video', [
+        clip('m', 1000, 2000, {
+          transitionIn: { type: 'dissolve', durationMs: 300 },
+        }),
+        clip('resident', 4000, 5000),
+      ]),
+      track('target', 'video', [
+        clip('x', 0, 1000, {
+          transitionOut: { type: 'dissolve', durationMs: 300 },
+        }),
+        clip('y', 2000, 3000, {
+          transitionIn: { type: 'wipe', durationMs: 300 },
+        }),
+      ]),
+    ]);
+
+    expect(planClipArrangement(out, [
+      { trackId: 'source', clipId: 'm' },
+    ], 'forward', createId)).toEqual({ status: 'transition' });
+    expect(out.tracks.map((item) => item.clips.map((clip) => clip.id))).toEqual([
+      ['m', 'resident'], ['x', 'y'],
+    ]);
+    expect(createId).not.toHaveBeenCalled();
+  });
+
+  it('does not treat overlapping clips with transitions as a rendered pair', () => {
+    const a = clip('a', 0, 1500, {
+      transitionOut: { type: 'dissolve', durationMs: 300 },
+    });
+    const b = clip('b', 1000, 2000, {
+      transitionIn: { type: 'dissolve', durationMs: 300 },
+    });
+    const c = clip('c', 5000, 6000);
+    const out = output([
+      track('v1', 'video', [a, b]),
+      track('v2', 'video', [c]),
+    ]);
+
+    const result = successful(out, [{ trackId: 'v1', clipId: 'b' }], 'forward');
+    expect(ids(result)).toEqual(['v1', 'v2']);
+    expect(result.tracks[0].clips).toEqual([a]);
+    expect(result.tracks[1].clips).toEqual([c, b]);
+    expect(result.moves).toEqual([
+      { trackId: 'v1', clipId: 'b', toTrackId: 'v2' },
+    ]);
   });
 
   it('preserves every clip field and linked identity by moving the original objects', () => {
