@@ -110,7 +110,7 @@ const resizePathNodes = (
 };
 
 /**
- * Non-geometry updates propagate raw — except `fontSize`, `autoFitMinFontSize`
+ * Non-geometry updates propagate raw — except `fontSize`, the auto-fit minima
  * and `textStroke.width`: px values authored against one canvas are wrong on another, so linked copies
  * get them re-fit through the shared aspect-aware basis (`typeScaleRatio`, the
  * same rule as smartReflow and the conductor's variant re-fit), with font size
@@ -127,7 +127,10 @@ const scaledForOutput = (
   const hasFitMinimum =
     typeof shared.autoFitMinFontSize === 'number' &&
     Number.isFinite(shared.autoFitMinFontSize);
-  if (!hasFontSize && !hasFitMinimum && !shared.textStroke) return shared;
+  const hasPreviousFitMinimum =
+    typeof shared.autoFitPreviousMinFontSize === 'number' &&
+    Number.isFinite(shared.autoFitPreviousMinFontSize);
+  if (!hasFontSize && !hasFitMinimum && !hasPreviousFitMinimum && !shared.textStroke) return shared;
   const ratio = typeScaleRatio(source, target);
   return {
     ...shared,
@@ -136,6 +139,14 @@ const scaledForOutput = (
       : {}),
     ...(hasFitMinimum
       ? { autoFitMinFontSize: Math.max(1, Math.round(shared.autoFitMinFontSize! * ratio)) }
+      : {}),
+    ...(hasPreviousFitMinimum
+      ? {
+          autoFitPreviousMinFontSize: Math.max(
+            1,
+            Math.round(shared.autoFitPreviousMinFontSize! * ratio)
+          ),
+        }
       : {}),
     ...(shared.textStroke
       ? {

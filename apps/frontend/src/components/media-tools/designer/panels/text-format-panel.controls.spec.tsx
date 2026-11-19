@@ -60,6 +60,18 @@ const fitted = (element: DesignerElement) =>
     measure
   );
 
+const mountPanel = async (store: ReturnType<typeof createDesignerStore>) => {
+  const view = render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <TextFormatPanel store={store} />
+    </SWRConfig>
+  );
+  await act(async () => {
+    await Promise.resolve();
+  });
+  return view;
+};
+
 const renderPanel = async (overrides: Partial<DesignerElement> = {}) => {
   const store = createDesignerStore();
   store.getState().addElement({
@@ -80,15 +92,8 @@ const renderPanel = async (overrides: Partial<DesignerElement> = {}) => {
     ...overrides,
   } as DesignerElement);
   store.getState().setSelectedIds(['copy']);
-  render(
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <TextFormatPanel store={store} />
-    </SWRConfig>
-  );
-  await act(async () => {
-    await Promise.resolve();
-  });
-  return store;
+  const view = await mountPanel(store);
+  return { store, view };
 };
 
 const element = (store: ReturnType<typeof createDesignerStore>) =>
@@ -100,38 +105,57 @@ const autoFitSwitch = () =>
 afterEach(cleanup);
 
 describe('TextFormatPanel auto-fit controls', () => {
-  it('restores legacy fitting after enabling and disabling auto-fit', async () => {
-    const store = await renderPanel();
+  it('restores legacy fitting after enabling, remounting, and disabling auto-fit', async () => {
+    const { store, view } = await renderPanel();
     const before = element(store);
     expect(before.autoFit).toBeUndefined();
     const beforeFit = fitted(before);
 
     fireEvent.click(autoFitSwitch());
     expect(element(store).autoFit).toBe(true);
+    expect(element(store).autoFitPrevious).toBeNull();
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Minimum font size' }), {
       target: { value: '6' },
     });
     expect(element(store).autoFitMinFontSize).toBe(6);
 
+    view.unmount();
+    await mountPanel(store);
     fireEvent.click(autoFitSwitch());
     const after = element(store);
     expect(after.autoFit).toBeUndefined();
     expect(after.autoFitMinFontSize).toBeUndefined();
+    expect(after.autoFitPrevious).toBeUndefined();
+    expect(after.autoFitPreviousMinFontSize).toBeUndefined();
     expect(fitted(after)).toEqual(beforeFit);
   });
 
-  it('returns newly created explicit-off text to false', async () => {
-    const store = await renderPanel({ autoFit: false });
+  it('returns newly created explicit-off text to false after a remount', async () => {
+    const { store, view } = await renderPanel({
+      autoFit: false,
+      autoFitMinFontSize: 12,
+    });
 
     fireEvent.click(autoFitSwitch());
     expect(element(store).autoFit).toBe(true);
+    expect(element(store).autoFitPrevious).toBe(false);
+    expect(element(store).autoFitPreviousMinFontSize).toBe(12);
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Minimum font size' }), {
+      target: { value: '6' },
+    });
+
+    view.unmount();
+    await mountPanel(store);
     fireEvent.click(autoFitSwitch());
 
     expect(element(store).autoFit).toBe(false);
+    expect(element(store).autoFitMinFontSize).toBe(12);
+    expect(element(store).autoFitPrevious).toBeUndefined();
+    expect(element(store).autoFitPreviousMinFontSize).toBeUndefined();
   });
 
   it('clamps the minimum to the authored font size', async () => {
-    const store = await renderPanel({ autoFit: true, fontSize: 16 });
+    const { store } = await renderPanel({ autoFit: true, fontSize: 16 });
     const minimum = screen.getByRole('spinbutton', { name: 'Minimum font size' });
 
     fireEvent.change(minimum, { target: { value: '99' } });

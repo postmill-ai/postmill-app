@@ -392,9 +392,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `autoFitMinFontSize`: absent preserves legacy height-only fitting, explicit false disables
   shrinking, and true uses shared `fit-text.ts` layout to fit both dimensions (including long
   unbroken words and straight rich runs) without changing the authored box. The minimum defaults to
-  8px, never grows small runs, and scales with linked/reflowed/corner-resized variants. Auto-fit
-  font-size edits change only the authored ceiling. Konva, node-canvas, SVG, preflight, previews and
-  Bulk Create consume the shared result; curved/on-path and video/caption layout stay separate.
+  8px, never grows small runs, and scales with linked/reflowed/corner-resized variants. The Inspector
+  persists the pre-enable state in optional `autoFitPrevious` (`null` means absent) and
+  `autoFitPreviousMinFontSize`, so disabling after deselection, reload or collaboration restores the
+  exact earlier behavior; the saved minimum scales with the same geometry rules, both snapshot fields
+  clear on restore, and neither is read by renderers. Auto-fit font-size edits change only the authored ceiling. Konva,
+  node-canvas, SVG, preflight, previews and Bulk Create consume the shared result; curved/on-path and
+  video/caption layout stay separate.
 - **Desktop/mobile workspace shares one store and tool registry.** Desktop docks Inspector, Layers,
   Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; AI and Brand mount on their first visible
   activation, then stay mounted under hidden wrappers so results and in-flight work survive tab and

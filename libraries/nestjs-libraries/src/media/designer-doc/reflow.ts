@@ -740,6 +740,12 @@ export const smartReflow = (
         Math.round(el.autoFitMinFontSize * contentScale)
       );
     }
+    if (el.autoFitPreviousMinFontSize) {
+      result.autoFitPreviousMinFontSize = Math.max(
+        1,
+        Math.round(el.autoFitPreviousMinFontSize * contentScale)
+      );
+    }
   }
 
   // Cover images and full-bleed shapes keep their fractional position

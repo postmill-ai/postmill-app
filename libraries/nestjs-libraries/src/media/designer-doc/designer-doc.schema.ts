@@ -570,6 +570,10 @@ export interface DesignerElement {
   autoFit?: boolean;
   /** Absolute lower bound for auto-fit, in output px. Never grows smaller runs. */
   autoFitMinFontSize?: number;
+  /** Pre-enable state used to restore Auto-fit; null means it was absent. */
+  autoFitPrevious?: boolean | null;
+  /** Pre-enable minimum restored with `autoFitPrevious`. */
+  autoFitPreviousMinFontSize?: number;
 
   // image
   src?: string;
@@ -1380,6 +1384,7 @@ const elementCommon = {
   paragraphSpacing: z.number().min(0).max(500).optional(),
   firstLineIndent: z.number().min(0).max(500).optional(),
   autoFit: z.boolean().optional(),
+  autoFitPrevious: z.boolean().nullable().optional(),
 
   // image
   src: SrcSchema.optional(),
@@ -1475,6 +1480,7 @@ const elementStrictNumeric = {
 const elementStrictOptionalNumeric = {
   fontSize: strictNum(1, MAX_FONT_SIZE).optional(),
   autoFitMinFontSize: strictNum(1, MAX_FONT_SIZE).optional(),
+  autoFitPreviousMinFontSize: strictNum(1, MAX_FONT_SIZE).optional(),
   fontWeight: strictNum(1, 1000).optional(),
   lineHeight: strictNum(0, 100).optional(),
   letterSpacing: strictNum(-MAX_DIMENSION, MAX_DIMENSION).optional(),
@@ -1507,6 +1513,7 @@ const elementLenientNumeric = {
   hidden: z.boolean().catch(false),
   fontSize: lenientOptionalNum(1, MAX_FONT_SIZE),
   autoFitMinFontSize: lenientOptionalNum(1, MAX_FONT_SIZE),
+  autoFitPreviousMinFontSize: lenientOptionalNum(1, MAX_FONT_SIZE),
   fontWeight: lenientOptionalNum(1, 1000),
   lineHeight: lenientOptionalNum(0, 100),
   letterSpacing: lenientOptionalNum(-MAX_DIMENSION, MAX_DIMENSION),

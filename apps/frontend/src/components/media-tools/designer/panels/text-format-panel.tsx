@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useMemo, useRef } from 'react';
+import React, { FC, useCallback, useMemo } from 'react';
 import type {
   DesignerElement,
   DesignerTextShadow,
@@ -234,12 +234,6 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
 
   const element = textElements[0] ?? null;
   const pathMode = useMemo(() => detectPathMode(element), [element]);
-  const autoFitBeforeEnable = useRef(
-    new Map<
-      string,
-      Pick<DesignerElement, 'autoFit' | 'autoFitMinFontSize'>
-    >()
-  );
 
   const brandColors = useBrandColors();
   const brandEnforcement = store((s) => s.brandEnforcement);
@@ -282,23 +276,22 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
     if (!textElements.length) return;
     const enabling = element?.autoFit !== true;
     for (const el of textElements) {
-      if (enabling) {
-        autoFitBeforeEnable.current.set(el.id, {
-          autoFit: el.autoFit,
-          autoFitMinFontSize: el.autoFitMinFontSize,
-        });
-      }
-      const hasPrevious = autoFitBeforeEnable.current.has(el.id);
-      const previous = autoFitBeforeEnable.current.get(el.id);
+      const hasPrevious = el.autoFitPrevious !== undefined;
       store.getState().updateElement(
         el.id,
         enabling
-          ? { autoFit: true }
+          ? {
+              autoFit: true,
+              autoFitPrevious: el.autoFit ?? null,
+              autoFitPreviousMinFontSize: el.autoFitMinFontSize,
+            }
           : {
-              autoFit: hasPrevious ? previous?.autoFit : false,
+              autoFit: hasPrevious ? el.autoFitPrevious ?? undefined : false,
               autoFitMinFontSize: hasPrevious
-                ? previous?.autoFitMinFontSize
+                ? el.autoFitPreviousMinFontSize
                 : el.autoFitMinFontSize,
+              autoFitPrevious: undefined,
+              autoFitPreviousMinFontSize: undefined,
             }
       );
     }
