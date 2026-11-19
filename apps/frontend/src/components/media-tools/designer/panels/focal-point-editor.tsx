@@ -142,15 +142,20 @@ export const FocalPointEditor: React.FC<FocalPointEditorProps> = ({ element, ids
 
   const updateFromPointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!source) return;
-    const rect = event.currentTarget.getBoundingClientRect();
+    const currentTarget = event.currentTarget;
+    const rect = currentTarget.getBoundingClientRect();
+    const currentSourceRect = containPreviewRect({
+      width: currentTarget.clientWidth,
+      height: currentTarget.clientHeight,
+    }, source);
     const sourcePoint = sourcePointForPreviewPointer({
       x: event.clientX - rect.left,
       y: event.clientY - rect.top,
-    }, sourceRect, view);
+    }, currentSourceRect, view);
     const next = focalPointForSourcePoint(sourcePoint, source, element);
     const accepted = updateElementsSilent(ids, { focalPoint: next });
     if (accepted) dragEndRef.current = next;
-  }, [source, sourceRect, view, element, ids, updateElementsSilent]);
+  }, [source, view, element, ids, updateElementsSilent]);
 
   const finishDrag = useCallback((pointerId: number) => {
     if (pointerIdRef.current !== pointerId) return;

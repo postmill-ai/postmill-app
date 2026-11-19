@@ -61,13 +61,16 @@ const makeStore = (element = image) => {
   return { store, state };
 };
 
+let viewportWidth: number;
+
 beforeEach(() => {
-  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300);
+  viewportWidth = 300;
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => viewportWidth);
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(180);
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-    x: 0, y: 0, left: 0, top: 0, width: 300, height: 180,
-    right: 300, bottom: 180, toJSON: () => ({}),
-  } as DOMRect);
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({
+    x: 0, y: 0, left: 0, top: 0, width: viewportWidth, height: 180,
+    right: viewportWidth, bottom: 180, toJSON: () => ({}),
+  }) as DOMRect);
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -105,6 +108,24 @@ describe('FocalPointEditor', () => {
       focalPoint: { x: expect.closeTo(0.9, 8), y: 0.5 },
     });
     expect(store.getState().pushHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses current DOM geometry when the preview resizes during a drag', () => {
+    const { store } = makeStore();
+    render(<FocalPointEditor element={image} ids={[image.id]} store={store} />);
+    const preview = screen.getByRole('group', { name: 'Focal point preview' });
+    const pointerEvent = (type: string, clientX: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY: 90 });
+      Object.defineProperty(event, 'pointerId', { value: 6 });
+      return event;
+    };
+    fireEvent(preview, pointerEvent('pointerdown', 60));
+    viewportWidth = 400;
+    fireEvent(preview, pointerEvent('pointermove', 320));
+    fireEvent(preview, pointerEvent('pointerup', 320));
+    expect(store.getState().updateElementsSilent).toHaveBeenLastCalledWith([image.id], {
+      focalPoint: { x: expect.closeTo(17 / 18, 8), y: 0.5 },
+    });
   });
 
   it('does not add history for a click that leaves the crop unchanged', () => {
