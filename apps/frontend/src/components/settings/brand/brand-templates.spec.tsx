@@ -5,9 +5,15 @@ import { BrandTemplates, BrandTemplatePage, BrandTemplate, reconcileTemplatePage
 
 const mockFetch = vi.fn();
 const mockToasterShow = vi.fn();
-const mockT = (_key: string, fallback: string, params?: Record<string, string | number>) =>
-  Object.entries(params || {}).reduce(
-    (text, [key, value]) => text.replaceAll(`{{${key}}}`, String(value)),
+const mockT = (_key: string, fallback: string, params?: Record<string, any>) =>
+  Object.entries(params || {}).filter(([key]) => key !== 'interpolation').reduce(
+    (text, [key, value]) => {
+      const raw = String(value);
+      const escaped = params?.interpolation?.escapeValue === false
+        ? raw
+        : raw.replaceAll('&', '&amp;').replaceAll("'", '&#39;').replaceAll('/', '&#x2F;');
+      return text.replaceAll(`{{${key}}}`, escaped);
+    },
     fallback,
   );
 
@@ -90,6 +96,26 @@ describe('BrandTemplates', () => {
     expect(within(assignedCard).getByRole('button', { name: `Unassign ${longName}` })).toBeTruthy();
     expect(screen.getByText('VIDEO')).toBeTruthy();
     expect(screen.getByText('No preview available')).toBeTruthy();
+  });
+
+  it('keeps template names and search queries literal instead of rendering HTML entities', async () => {
+    const name = "Q&A Summer '26 1/2";
+    mockFetch.mockImplementation(async (url: string) => {
+      const query = new URL(url, 'https://app.postmill.ai').searchParams.get('query');
+      return response(query ? page([]) : page([
+        template('assigned-special', name, 'brand-a'),
+        template('available-special', name),
+      ]));
+    });
+
+    renderBrowser();
+    expect((await screen.findAllByRole('img', { name: `${name} preview` })).length).toBe(2);
+    expect(screen.getByRole('button', { name: `Assign ${name}` })).toBeTruthy();
+    expect(screen.getByRole('button', { name: `Unassign ${name}` })).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search templates' }), { target: { value: 'R&D' } });
+    expect(await screen.findByText('No templates match “R&D”.')).toBeTruthy();
+    expect(screen.queryByText(/&amp;|&#39;|&#x2F;/)).toBeNull();
   });
 
   it('uses bounded pages, loads more, and never renders duplicate template ids', async () => {

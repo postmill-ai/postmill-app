@@ -165,7 +165,7 @@ const BrandTemplateResults: FC<{ brandId: string; canEdit: boolean; query: strin
     <>
       {!templates.length && query ? (
         <div className="rounded-[8px] border border-newTableBorder p-[16px] text-[12px] text-newTableText">
-          {t('brand_templates_no_search_results', 'No templates match “{{query}}”.', { query })}
+          {t('brand_templates_no_search_results', 'No templates match “{{query}}”.', { query, interpolation: { escapeValue: false } })}
         </div>
       ) : (
         <>
@@ -248,15 +248,15 @@ const TemplateCard: FC<{
   const t = useT();
   const mode = template.doc?.mode === 'video' ? 'video' : 'image';
   const action = assigned
-    ? t('unassign_template', 'Unassign {{name}}', { name: template.name })
-    : t('assign_template', 'Assign {{name}}', { name: template.name });
+    ? t('unassign_template', 'Unassign {{name}}', { name: template.name, interpolation: { escapeValue: false } })
+    : t('assign_template', 'Assign {{name}}', { name: template.name, interpolation: { escapeValue: false } });
 
   return (
     <article role="listitem" data-template-id={template.id} className="flex min-w-0 flex-col overflow-hidden rounded-[10px] border border-newTableBorder bg-newBgColor">
       <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-newBgColorInner text-newTableText">
         <DesignPreviewImage
           src={template.thumbnail}
-          alt={t('brand_template_preview', '{{name}} preview', { name: template.name })}
+          alt={t('brand_template_preview', '{{name}} preview', { name: template.name, interpolation: { escapeValue: false } })}
           className="h-full w-full object-cover"
           draggable={false}
           fallback={(
