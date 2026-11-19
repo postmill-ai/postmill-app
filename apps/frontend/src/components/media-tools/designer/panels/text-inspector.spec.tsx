@@ -144,9 +144,20 @@ describe('TextInspector paged text', () => {
     expect(screen.getByText('Text Styles')).toBeTruthy();
     expect(screen.getByText('Pairings')).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Text formatting' })).toBeTruthy();
-    expect(screen.getByText(/Low contrast/)).toBeTruthy();
+    const warning = screen.getByRole('alert');
+    expect(warning.textContent).toContain('Text is hard to read on this background');
+    expect(warning.textContent).not.toContain('Low contrast');
+    expect(warning.textContent).not.toMatch(/\d+\.\d+:1/);
+    expect(warning.className).toContain('text-yellow-800');
+    expect(warning.className).toContain('dark:text-yellow-200');
+    expect(screen.getByTestId('designer-contrast-fixes').className).toContain('flex-nowrap');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Darken background' }));
+    expect(output(store, 1).pages?.[0].children[0].fill).toBe('#000000');
     await clickStyle(/Heading 1/);
-    fireEvent.click(screen.getByRole('button', { name: '#123456' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Text color' }));
+    const colorTrigger = screen.getByRole('button', { name: '#000000', expanded: true });
+    expect(colorTrigger.getAttribute('aria-expanded')).toBe('true');
     const color = screen.getByRole('textbox', { name: 'Hex color' });
     fireEvent.change(color, { target: { value: '#abcdef' } });
     fireEvent.blur(color);
@@ -162,11 +173,18 @@ describe('TextInspector paged text', () => {
     expect(output(store, 0).pages).toBeUndefined();
   });
 
-  it('adds and groups a backdrop with the primary text on page 2 only', async () => {
+  it('toggles and groups a backdrop with the primary text on page 2 only', async () => {
     const store = createSecondOutputPageTwoSelection();
     await renderInspector(store);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Text Backdrop' }));
+    expect(screen.getByRole('group', { name: 'Readability' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add Text Backdrop' })).toBeNull();
+    const description = 'Adds a solid or see-through box behind the text, so it stays readable on busy photos.';
+    expect(screen.getByText(description)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'About Text backdrop' }).getAttribute('data-tooltip-content')).toBe(description);
+    const toggle = screen.getByRole('switch', { name: 'Text backdrop' });
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(toggle);
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
@@ -187,6 +205,17 @@ describe('TextInspector paged text', () => {
     expect(pageOne).toHaveLength(1);
     expect(pageOne[0].name).not.toBe('Text Backdrop');
     expect(output(store, 0).pages).toBeUndefined();
+
+    act(() => store.getState().setSelectedIds(['page-two']));
+    const enabledToggle = screen.getByRole('switch', { name: 'Text backdrop' });
+    expect(enabledToggle.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(enabledToggle);
+
+    const afterRemoval = output(store, 1).pages?.[0].children ?? [];
+    expect(afterRemoval.some((element) => element.name === 'Text Backdrop')).toBe(false);
+    expect(afterRemoval.some((element) => element.id === 'page-two')).toBe(true);
+    expect(output(store, 1).children).toHaveLength(1);
+    expect(screen.getByRole('switch', { name: 'Text backdrop' }).getAttribute('aria-checked')).toBe('false');
   });
 
   it('preserves colors and rich-run typography when applying a style', async () => {

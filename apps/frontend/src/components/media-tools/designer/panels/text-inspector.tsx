@@ -27,6 +27,19 @@ interface TextInspectorProps {
   store: any;
 }
 
+const findTextBackdrop = (
+  children: DesignerElement[],
+  primary: DesignerElement | undefined
+) =>
+  primary?.parentId
+    ? children.find(
+        (element) =>
+          element.type === 'shape' &&
+          element.name === 'Text Backdrop' &&
+          element.parentId === primary.parentId
+      )
+    : undefined;
+
 const averageColor = (data: Uint8ClampedArray): string => {
   let r = 0;
   let g = 0;
@@ -104,6 +117,7 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
   }, [selectedIds, out, currentPage]);
 
   const { previewAsync, applyAsync, cancel } = usePresetPreview(store);
+  const textColorTriggerRef = useRef<HTMLButtonElement>(null);
   const grownHeights = useRef(
     new Map<string, { grownHeight: number; authoredHeight: number }>()
   );
@@ -205,10 +219,11 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
   const handleAddBackdrop = useCallback(() => {
     const state = store.getState();
     const output = state.doc.outputs[state.currentOutput];
-    const primary = pageChildren(output, state.currentPage).find(
+    const children = pageChildren(output, state.currentPage);
+    const primary = children.find(
       (c: DesignerElement) => state.selectedIds.includes(c.id) && c.type === 'text'
     );
-    if (!primary) return;
+    if (!primary || findTextBackdrop(children, primary)) return;
 
     const backdrop: DesignerElement = {
       id: `backdrop-${Date.now()}`,
@@ -232,7 +247,32 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
     setTimeout(() => store.getState().groupSelection(), 0);
   }, [store]);
 
+  const handleToggleBackdrop = useCallback(() => {
+    const state = store.getState();
+    const output = state.doc.outputs[state.currentOutput];
+    const children = pageChildren(output, state.currentPage);
+    const selected = children.find(
+      (element: DesignerElement) => state.selectedIds.includes(element.id) && element.type === 'text'
+    );
+    const backdrop = findTextBackdrop(children, selected);
+    if (backdrop) {
+      state.removeElement(backdrop.id);
+      return;
+    }
+    handleAddBackdrop();
+  }, [handleAddBackdrop, store]);
+
+  const openTextColor = useCallback(() => {
+    const trigger = textColorTriggerRef.current;
+    trigger?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    trigger?.click();
+  }, []);
+
   const primary = textElements[0];
+  const textBackdrop = findTextBackdrop(
+    out ? pageChildren(out, currentPage) : [],
+    primary
+  );
   const textFill = primary?.fill || '#000000';
   const background = out ? pageBackground(out, currentPage) : undefined;
   const heuristicBg =
@@ -366,39 +406,96 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <button
-              className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
-              onClick={handleAddBackdrop}
-            >
-              {t('designer_add_text_backdrop', 'Add Text Backdrop')}
-            </button>
-
+          <div
+            role="group"
+            aria-label={t('designer_readability', 'Readability')}
+            className="flex flex-col gap-2"
+          >
             {isLowContrast && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-sm text-sm text-yellow-400">
-                <span>{t('designer_low_contrast', '⚠ Low contrast ({{ratio}}:1)', { ratio: ratio.toFixed(1) })}</span>
-                <button
-                  className="px-2 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-xs"
-                  onClick={handleAddBackdrop}
-                >
-                  {t('designer_add_backdrop', 'Add backdrop')}
-                </button>
-                <button
-                  className="px-2 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-xs"
-                  onClick={() => {
-                    store.getState().updateElement(primary.id, { fill: '#000000' });
-                  }}
-                >
-                  {t('designer_darken', 'Darken')}
-                </button>
+              <div
+                role="alert"
+                className="flex flex-col gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-sm text-yellow-800 dark:text-yellow-200"
+              >
+                <div className="flex items-center gap-2 text-sm">
+                  <span aria-hidden="true">⚠</span>
+                  <span>{t('designer_low_contrast', 'Text is hard to read on this background')}</span>
+                </div>
+                <div data-testid="designer-contrast-fixes" className="flex flex-nowrap items-center gap-1">
+                  <button
+                    type="button"
+                    className="flex-1 min-w-0 whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-50 rounded-sm text-[10px]"
+                    onClick={handleAddBackdrop}
+                    disabled={!!textBackdrop}
+                  >
+                    {t('designer_add_backdrop', 'Add backdrop')}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 min-w-0 whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-[10px]"
+                    onClick={() => {
+                      store.getState().updateElement(primary.id, { fill: '#000000' });
+                    }}
+                  >
+                    {t('designer_darken_background', 'Darken background')}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 min-w-0 whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-[10px]"
+                    onClick={openTextColor}
+                  >
+                    {t('designer_text_color', 'Text color')}
+                  </button>
+                </div>
               </div>
             )}
+
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1 text-[12px] text-textColor/80">
+                  <span>{t('designer_text_backdrop', 'Text backdrop')}</span>
+                  <button
+                    type="button"
+                    aria-label={t('designer_text_backdrop_info', 'About Text backdrop')}
+                    data-tooltip-id="tooltip"
+                    data-tooltip-content={t(
+                      'designer_text_backdrop_description',
+                      'Adds a solid or see-through box behind the text, so it stays readable on busy photos.'
+                    )}
+                    className="text-textColor/50 hover:text-textColor"
+                  >
+                    ⓘ
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-label={t('designer_text_backdrop', 'Text backdrop')}
+                  aria-checked={!!textBackdrop}
+                  onClick={handleToggleBackdrop}
+                  className={`relative w-[40px] h-[22px] rounded-full transition-colors shrink-0 ${
+                    textBackdrop ? 'bg-designerAccent' : 'bg-studioBorder'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
+                      textBackdrop ? 'translate-x-[18px]' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="text-[10px] leading-[14px] text-textColor/50">
+                {t(
+                  'designer_text_backdrop_description',
+                  'Adds a solid or see-through box behind the text, so it stays readable on busy photos.'
+                )}
+              </p>
+            </div>
           </div>
         </div>
       )}
 
       <TextEffectPresets store={store} textElements={textElements} />
-      <TextFormatPanel store={store} />
+      <TextFormatPanel store={store} colorTriggerRef={textColorTriggerRef} />
       {primary && (
         <DesignerAssistantPanel
           store={store}

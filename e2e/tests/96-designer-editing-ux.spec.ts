@@ -1381,3 +1381,65 @@ test('clip context menu duplicates the intended clip without changing another tr
   expect(state.doc.outputs[0].tracks[0].clips).toHaveLength(1);
   expect(state.doc.outputs[0].tracks[0].clips[0]).toMatchObject({ id: 'video-clip', src: '/video.mp4' });
 });
+
+test('text readability warning keeps fixes on one row and toggles the backdrop', async ({ page }) => {
+  const lowContrastDoc = structuredClone(initialDoc) as any;
+  lowContrastDoc.outputs[0].children[0].fill = '#ffffff';
+  await installMocks(page, lowContrastDoc);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openDesigner(page);
+  await selectBodyCopy(page);
+
+  const description = 'Adds a solid or see-through box behind the text, so it stays readable on busy photos.';
+  const expectSingleRow = async () => {
+    const warning = page.getByRole('alert');
+    await expect(warning).toContainText('Text is hard to read on this background');
+    await expect(warning).not.toContainText('Low contrast');
+    await warning.scrollIntoViewIfNeeded();
+    const row = page.getByTestId('designer-contrast-fixes');
+    await expect(row.getByRole('button', { name: 'Add backdrop', exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Darken background', exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Text color', exact: true })).toBeVisible();
+    const tops = await row.getByRole('button').evaluateAll((buttons) =>
+      buttons.map((button) => button.getBoundingClientRect().top)
+    );
+    expect(new Set(tops).size).toBe(1);
+    expect(await row.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  };
+  await expectSingleRow();
+
+  const readability = page.getByRole('group', { name: 'Readability', exact: true });
+  const info = readability.getByRole('button', { name: 'About Text backdrop', exact: true });
+  await expect(info).toHaveAttribute('data-tooltip-content', description);
+  await info.hover();
+  await expect(page.locator('#tooltip')).toContainText(description);
+  await expect(readability).toContainText(description);
+
+  await page.getByTestId('designer-contrast-fixes').getByRole('button', { name: 'Text color', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Hex color', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('designer-contrast-fixes').getByRole('button', { name: 'Darken background', exact: true }).click();
+  await expect(page.getByRole('button', { name: '#000000', exact: true })).toBeVisible();
+
+  const toggle = readability.getByRole('switch', { name: 'Text backdrop', exact: true });
+  await expect(toggle).toHaveAttribute('aria-checked', 'false');
+  await toggle.click();
+  await selectBodyCopy(page);
+  await expect(readability.getByRole('switch', { name: 'Text backdrop', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await readability.getByRole('switch', { name: 'Text backdrop', exact: true }).click();
+  await expect(readability.getByRole('switch', { name: 'Text backdrop', exact: true })).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByRole('button', { name: 'Add Text Backdrop', exact: true })).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await openDesigner(page);
+  await page.getByRole('menuitem', { name: 'More menus', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Layers', exact: true }).click();
+  const layers = page.getByRole('dialog', { name: 'Layers', exact: true });
+  await layers.locator('[data-element-id="body-copy"]').click();
+  if (await layers.count()) {
+    await layers.getByRole('button', { name: 'Close', exact: true }).click();
+  }
+  await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+  await expectSingleRow();
+});
