@@ -4898,5 +4898,6 @@
   "designer_focal_y_percent": "Y lấy nét (%)",
   "designer_reset_focal_format": "Đặt lại định dạng này",
   "designer_format_crops": "Phần cắt theo định dạng",
-  "designer_format_crop_preview": "Xem trước phần cắt {{format}}"
+  "designer_format_crop_preview": "Xem trước phần cắt {{format}}",
+  "designer_reset_focal_zoom": "Đặt lại thu phóng xem trước"
 }

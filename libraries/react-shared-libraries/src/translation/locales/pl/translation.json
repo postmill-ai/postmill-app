@@ -4941,5 +4941,6 @@
   "designer_focal_y_percent": "Ostrość Y (%)",
   "designer_reset_focal_format": "Zresetuj ten format",
   "designer_format_crops": "Przycięcia formatów",
-  "designer_format_crop_preview": "Podgląd przycięcia {{format}}"
+  "designer_format_crop_preview": "Podgląd przycięcia {{format}}",
+  "designer_reset_focal_zoom": "Zresetuj powiększenie podglądu"
 }

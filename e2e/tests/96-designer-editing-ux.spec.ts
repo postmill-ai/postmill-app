@@ -331,6 +331,7 @@ test('focal editor changes cached canvas crops and preserves per-format settings
   await expect(page.getByRole('img', { name: 'Second crop preview' }).locator('img')).toHaveAttribute('style', /left:\s*-75%/);
 
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await selectImage();
   await expect.poll(() => canvasCenterPixel(page)).toEqual([255, 0, 0, 255]);
 
   const preview = page.getByRole('group', { name: 'Focal point preview' });
@@ -343,6 +344,7 @@ test('focal editor changes cached canvas crops and preserves per-format settings
   await expect.poll(() => canvasCenterPixel(page)).toEqual([0, 0, 255, 255]);
   await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('83');
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await selectImage();
   await expect.poll(() => canvasCenterPixel(page)).toEqual([255, 0, 0, 255]);
   await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('0');
 
@@ -357,8 +359,15 @@ test('focal editor changes cached canvas crops and preserves per-format settings
     clientX: previewBox.x + previewBox.width / 2,
     clientY: previewBox.y + previewBox.height / 2,
   });
-  await expect(preview.getByText(/\d+%/)).toBeVisible();
+  const resetZoom = page.getByRole('button', { name: 'Reset preview zoom' });
+  await expect(resetZoom).toHaveText('272%');
   await expect(focalX).toHaveValue('80');
+  await resetZoom.click();
+  await expect(resetZoom).toHaveText('100%');
+  await preview.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await expect(resetZoom).toHaveText('125%');
+  await preview.getByRole('button', { name: 'Zoom out', exact: true }).click();
+  await expect(resetZoom).toHaveText('100%');
 
   await page.getByRole('radio', { name: 'Fit', exact: true }).click();
   await expect(page.getByText('Focal point applies when the image is cropped (Cover).')).toBeVisible();

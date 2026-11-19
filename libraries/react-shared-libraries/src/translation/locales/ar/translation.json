@@ -4902,5 +4902,6 @@
   "designer_focal_y_percent": "Y للنقطة المحورية (%)",
   "designer_reset_focal_format": "إعادة تعيين هذا التنسيق",
   "designer_format_crops": "اقتصاصات التنسيقات",
-  "designer_format_crop_preview": "معاينة اقتصاص {{format}}"
+  "designer_format_crop_preview": "معاينة اقتصاص {{format}}",
+  "designer_reset_focal_zoom": "إعادة تعيين تكبير المعاينة"
 }

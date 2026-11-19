@@ -4897,5 +4897,6 @@
   "designer_focal_y_percent": "Y fokus (%)",
   "designer_reset_focal_format": "Atur ulang format ini",
   "designer_format_crops": "Pangkasan format",
-  "designer_format_crop_preview": "Pratinjau pangkasan {{format}}"
+  "designer_format_crop_preview": "Pratinjau pangkasan {{format}}",
+  "designer_reset_focal_zoom": "Atur ulang zoom pratinjau"
 }

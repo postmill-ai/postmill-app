@@ -4898,5 +4898,6 @@
   "designer_focal_y_percent": "焦点 Y（%）",
   "designer_reset_focal_format": "重置此格式",
   "designer_format_crops": "格式裁剪",
-  "designer_format_crop_preview": "{{format}} 裁剪预览"
+  "designer_format_crop_preview": "{{format}} 裁剪预览",
+  "designer_reset_focal_zoom": "重置预览缩放"
 }

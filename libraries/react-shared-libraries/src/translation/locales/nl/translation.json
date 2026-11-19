@@ -4897,5 +4897,6 @@
   "designer_focal_y_percent": "Brandpunt Y (%)",
   "designer_reset_focal_format": "Dit formaat herstellen",
   "designer_format_crops": "Formaatuitsneden",
-  "designer_format_crop_preview": "Uitsnedevoorbeeld van {{format}}"
+  "designer_format_crop_preview": "Uitsnedevoorbeeld van {{format}}",
+  "designer_reset_focal_zoom": "Voorbeeldzoom herstellen"
 }

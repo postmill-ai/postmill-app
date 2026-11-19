@@ -162,6 +162,11 @@ export const FocalPointEditor: React.FC<FocalPointEditorProps> = ({ element, ids
   }, [store]);
 
   const setFocal = (next: PreviewPoint) => updateElements(ids, { focalPoint: next });
+  const zoomAtCenter = (factor: number) => setView((current) => zoomFocalPreview(
+    current,
+    { x: viewport.width / 2, y: viewport.height / 2 },
+    current.zoom * factor
+  ));
 
   const detect = async () => {
     if (!element.src) return;
@@ -280,10 +285,41 @@ export const FocalPointEditor: React.FC<FocalPointEditorProps> = ({ element, ids
             {t('designer_loading_image', 'Loading image…')}
           </div>
         )}
-        {view.zoom > 1 && (
-          <span className="absolute bottom-1 end-1 px-1.5 py-0.5 rounded-sm bg-newBgColorInner/90 text-[10px] text-textColor pointer-events-none">
-            {Math.round(view.zoom * 100)}%
-          </span>
+        {interactive && (
+          <div
+            className="absolute top-1 end-1 flex items-center rounded-sm border border-studioBorder bg-newBgColorInner/90 text-[10px] text-textColor"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              aria-label={t('zoom_out', 'Zoom out')}
+              title={t('zoom_out', 'Zoom out')}
+              disabled={view.zoom <= 1}
+              onClick={() => zoomAtCenter(1 / 1.25)}
+              className="w-6 h-6 disabled:opacity-40"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              aria-label={t('designer_reset_focal_zoom', 'Reset preview zoom')}
+              title={t('designer_reset_focal_zoom', 'Reset preview zoom')}
+              onClick={() => setView(DEFAULT_VIEW)}
+              className="min-w-10 h-6 px-1 border-x border-studioBorder"
+            >
+              {Math.round(view.zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              aria-label={t('zoom_in', 'Zoom in')}
+              title={t('zoom_in', 'Zoom in')}
+              disabled={view.zoom >= 4}
+              onClick={() => zoomAtCenter(1.25)}
+              className="w-6 h-6 disabled:opacity-40"
+            >
+              +
+            </button>
+          </div>
         )}
       </div>
 
@@ -374,7 +410,10 @@ export const FocalPointEditor: React.FC<FocalPointEditorProps> = ({ element, ids
                   <div className="h-16 flex items-center justify-center">
                     <div
                       role="img"
-                      aria-label={t('designer_format_crop_preview', '{{format}} crop preview', { format: name })}
+                      aria-label={t('designer_format_crop_preview', '{{format}} crop preview', {
+                        format: name,
+                        interpolation: { escapeValue: false },
+                      })}
                       data-focal-format={output.id || index}
                       className={`relative overflow-hidden rounded-sm border bg-newBgColor ${
                         index === currentOutput ? 'border-designerAccent' : 'border-studioBorder'

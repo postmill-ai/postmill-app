@@ -4898,5 +4898,6 @@
   "designer_focal_y_percent": "Y focal (%)",
   "designer_reset_focal_format": "Restablecer este formato",
   "designer_format_crops": "Recortes por formato",
-  "designer_format_crop_preview": "Vista previa del recorte de {{format}}"
+  "designer_format_crop_preview": "Vista previa del recorte de {{format}}",
+  "designer_reset_focal_zoom": "Restablecer zoom de vista previa"
 }

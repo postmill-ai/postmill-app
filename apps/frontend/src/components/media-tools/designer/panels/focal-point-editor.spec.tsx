@@ -8,8 +8,13 @@ import { detectFocalPoint } from '../reflow';
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({ useFetch: () => vi.fn() }));
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({ useToaster: () => ({ show: vi.fn() }) }));
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
-  useT: () => (_key: string, fallback: string, vars?: Record<string, unknown>) => vars
-    ? fallback.replace(/\{\{(\w+)\}\}/g, (_match, name) => String(vars[name]))
+  useT: () => (_key: string, fallback: string, vars?: Record<string, any>) => vars
+    ? fallback.replace(/\{\{(\w+)\}\}/g, (_match, name) => {
+        const value = String(vars[name]);
+        return vars.interpolation?.escapeValue === false
+          ? value
+          : value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
+      })
     : fallback,
 }));
 vi.mock('../elements', () => ({
@@ -137,6 +142,21 @@ describe('FocalPointEditor', () => {
     });
   });
 
+  it('provides keyboard- and touch-reachable zoom in, out, and reset controls', () => {
+    const { store } = makeStore();
+    render(<FocalPointEditor element={image} ids={[image.id]} store={store} />);
+    const reset = screen.getByRole('button', { name: 'Reset preview zoom' });
+    expect(reset.textContent).toBe('100%');
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(reset.textContent).toBe('125%');
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(reset.textContent).toBe('100%');
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    fireEvent.click(reset);
+    expect(reset.textContent).toBe('100%');
+    expect(store.getState().updateElementsSilent).not.toHaveBeenCalled();
+  });
+
   it.each(['contain', 'fill'] as const)('explains why focal controls are inactive in %s mode', (fitMode) => {
     const element = { ...image, fitMode } as DesignerElement;
     const { store } = makeStore(element);
@@ -161,6 +181,14 @@ describe('FocalPointEditor', () => {
     const thumbnail = screen.getByRole('img', { name: 'Portrait crop preview' }).querySelector('img');
     expect(thumbnail?.style.left).toBe('-300%');
     expect(thumbnail?.style.width).toBe('400%');
+  });
+
+  it('keeps literal output names in thumbnail accessible labels', () => {
+    const { store, state } = makeStore();
+    state.doc.outputs[0].name = 'Q&A';
+    render(<FocalPointEditor element={image} ids={[image.id]} store={store} />);
+    expect(screen.getByRole('img', { name: 'Q&A crop preview' })).toBeTruthy();
+    expect(screen.queryByRole('img', { name: 'Q&amp;A crop preview' })).toBeNull();
   });
 
   it('keeps auto-detection as a compact title action', async () => {

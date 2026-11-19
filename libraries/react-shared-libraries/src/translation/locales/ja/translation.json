@@ -4898,5 +4898,6 @@
   "designer_focal_y_percent": "焦点 Y（%）",
   "designer_reset_focal_format": "このフォーマットをリセット",
   "designer_format_crops": "フォーマットのクロップ",
-  "designer_format_crop_preview": "{{format}} のクロッププレビュー"
+  "designer_format_crop_preview": "{{format}} のクロッププレビュー",
+  "designer_reset_focal_zoom": "プレビューのズームをリセット"
 }

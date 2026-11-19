@@ -4899,5 +4899,6 @@
   "designer_focal_y_percent": "초점 Y(%)",
   "designer_reset_focal_format": "이 형식 재설정",
   "designer_format_crops": "형식별 자르기",
-  "designer_format_crop_preview": "{{format}} 자르기 미리보기"
+  "designer_format_crop_preview": "{{format}} 자르기 미리보기",
+  "designer_reset_focal_zoom": "미리보기 확대/축소 재설정"
 }

@@ -4898,5 +4898,6 @@
   "designer_focal_y_percent": "Odak Y (%)",
   "designer_reset_focal_format": "Bu formatı sıfırla",
   "designer_format_crops": "Format kırpmaları",
-  "designer_format_crop_preview": "{{format}} kırpma önizlemesi"
+  "designer_format_crop_preview": "{{format}} kırpma önizlemesi",
+  "designer_reset_focal_zoom": "Önizleme yakınlaştırmasını sıfırla"
 }
