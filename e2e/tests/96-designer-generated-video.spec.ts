@@ -110,7 +110,7 @@ interface DesignerDocSnapshot {
       naturalHeight?: number;
       focalPoint?: { x: number; y: number };
     };
-    tracks: Array<{ id: string; type: string; clips: VideoClipSnapshot[] }>;
+    tracks: Array<{ id: string; type: string; name?: string; clips: VideoClipSnapshot[] }>;
     children?: DesignerElementSnapshot[];
   }>;
 }
@@ -1109,6 +1109,37 @@ const essentialsDoc = (): DesignerDocSnapshot => ({
   }],
 });
 
+const manyTracksDoc = (): DesignerDocSnapshot => {
+  const doc = essentialsDoc();
+  const tracks = doc.outputs[0].tracks;
+  tracks[0].name = 'Image main';
+  tracks[1].name = 'Shape main';
+  tracks[2].name = 'Text main';
+  tracks[2].clips = [
+    { ...tracks[2].clips[0], id: 'text-original', endMs: 3000 },
+    { ...tracks[2].clips[0], id: 'text-next', startMs: 3000, endMs: 6000 },
+  ];
+  for (let index = 1; index <= 3; index++) {
+    tracks.push({
+      id: `extra-track-${index}`,
+      type: 'text',
+      name: `Extra ${index}`,
+      clips: [{
+        id: `extra-clip-${index}`,
+        text: `Extra ${index}`,
+        startMs: 0,
+        endMs: 6000,
+        x: 20,
+        y: 180,
+        width: 250,
+        height: 50,
+        fontSize: 32,
+      }],
+    });
+  }
+  return doc;
+};
+
 const motionDoc = (): DesignerDocSnapshot => ({
   version: 9,
   mode: 'video',
@@ -1170,11 +1201,14 @@ const motionDoc = (): DesignerDocSnapshot => ({
   }],
 });
 
-const clipOnTrack = (page: Page, label: string) =>
+const timelineTrackRow = (page: Page, label: string) =>
   page
-    .getByTitle(label.toLowerCase(), { exact: true })
+    .getByTitle(label, { exact: true })
     .first()
-    .locator('xpath=ancestor::div[contains(@class,"items-stretch")][1]')
+    .locator('xpath=ancestor::div[contains(@class,"items-stretch")][1]');
+
+const clipOnTrack = (page: Page, label: string) =>
+  timelineTrackRow(page, label.toLowerCase())
     .getByRole('slider', { name: 'Clip', exact: true });
 
 test.describe('Designer motion graphics editing (mocked local document)', () => {
@@ -1398,6 +1432,141 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient).toBeUndefined();
     await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 60)).toEqual([255, 0, 0, 255]);
     expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('keeps six-track compact, collapsed, resized, and editing workflows intact', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    const mocks = new DesignerMocks();
+    mocks.doc = manyTracksDoc();
+    mocks.name = 'Video timeline workspace E2E';
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+
+    const canvas = page.locator('.designer-canvas-container').first();
+    const trackRegion = page.getByRole('region', { name: 'Timeline tracks', exact: true });
+    const canvasHeight = async () => (await canvas.boundingBox())!.height;
+    const regionHeight = async () => (await trackRegion.boundingBox())!.height;
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(7);
+    const comfortableCanvas = await canvasHeight();
+
+    await page.getByRole('button', { name: 'Compact tracks', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Compact tracks', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(canvasHeight).toBeGreaterThan(comfortableCanvas + 60);
+    await expect(timelineTrackRow(page, 'Text main')).toHaveAttribute('style', /height: 38px/);
+
+    const imageClip = timelineTrackRow(page, 'Image main').getByRole('slider', { name: 'Clip', exact: true });
+    await imageClip.click();
+    await trackRegion.evaluate((element) => { element.scrollTop = 24; });
+    await page.getByRole('button', { name: 'Collapse track: Image main', exact: true }).click();
+    await expect(timelineTrackRow(page, 'Image main')).toHaveAttribute('data-collapsed', 'true');
+    expect(await trackRegion.evaluate((element) => element.scrollTop)).toBe(24);
+    await expect(page.getByRole('button', { name: 'Split clip', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Expand track: Image main', exact: true }).click();
+    expect(await trackRegion.evaluate((element) => element.scrollTop)).toBe(24);
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(7);
+
+    await page.getByRole('button', { name: 'Collapse all tracks', exact: true }).click();
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Split clip', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Expand all tracks', exact: true }).click();
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(7);
+
+    const separator = page.getByRole('separator', { name: 'Resize timeline', exact: true });
+    const beforeKeyboard = await regionHeight();
+    await separator.press('ArrowUp');
+    await expect.poll(regionHeight).toBe(beforeKeyboard + 16);
+    const separatorBox = await separator.boundingBox();
+    expect(separatorBox).not.toBeNull();
+    const splitterStart = {
+      x: separatorBox!.x + separatorBox!.width / 2,
+      y: separatorBox!.y + separatorBox!.height / 2,
+    };
+    await page.mouse.move(splitterStart.x, splitterStart.y);
+    await page.mouse.down();
+    await page.mouse.move(splitterStart.x, splitterStart.y - 40, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(regionHeight).toBe(beforeKeyboard + 56);
+
+    await page.getByRole('button', { name: 'Collapse track: Image main', exact: true }).click();
+    const savedHeight = await regionHeight();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('button', { name: 'Compact tracks', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(timelineTrackRow(page, 'Image main')).toHaveAttribute('data-collapsed', 'true');
+    await expect.poll(regionHeight).toBe(savedHeight);
+    await page.getByRole('button', { name: 'Expand track: Image main', exact: true }).click();
+
+    await page.setViewportSize({ width: 1100, height: 700 });
+    await separator.press('End');
+    const maximum = Number(await separator.getAttribute('aria-valuemax'));
+    await expect.poll(regionHeight).toBe(maximum);
+    expect(await canvasHeight()).toBeGreaterThan(100);
+    await page.getByRole('button', { name: 'Enter full screen', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Exit full screen', exact: true })).toBeVisible();
+    await expect(separator).toBeVisible();
+    expect(await canvasHeight()).toBeGreaterThan(100);
+    await page.getByRole('button', { name: 'Exit full screen', exact: true }).click();
+
+    await imageClip.click();
+    const split = page.getByRole('button', { name: 'Split clip', exact: true });
+    const seek = page.getByRole('slider', { name: 'Seek timeline', exact: true });
+    await seek.press('Home');
+    await seek.press('Shift+ArrowRight');
+    await expect(split).toBeEnabled();
+    await split.click();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips.length).toBe(2);
+
+    const trimEnd = timelineTrackRow(page, 'Image main')
+      .getByRole('slider', { name: 'Trim clip end', exact: true }).first();
+    const trimBox = await trimEnd.boundingBox();
+    expect(trimBox).not.toBeNull();
+    await page.mouse.move(trimBox!.x + trimBox!.width / 2, trimBox!.y + trimBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(trimBox!.x - 20, trimBox!.y + trimBox!.height / 2, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[0].clips[0].endMs).toBeLessThan(1000);
+
+    await timelineTrackRow(page, 'Text main').getByRole('button', { name: 'Cut transition', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Transition', exact: true })
+      .getByRole('button', { name: 'Fade', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[2].clips[0].transitionOut?.type).toBe('fade');
+
+    await page.getByRole('button', { name: 'Collapse track: Image main', exact: true }).click();
+    const source = timelineTrackRow(page, 'Extra 1').getByRole('slider', { name: 'Clip', exact: true });
+    const target = timelineTrackRow(page, 'Extra 2');
+    await source.scrollIntoViewIfNeeded();
+    const sourceBox = await source.boundingBox();
+    const targetBox = await target.boundingBox();
+    expect(sourceBox).not.toBeNull();
+    expect(targetBox).not.toBeNull();
+    await page.keyboard.down('Alt');
+    await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(targetBox!.x + 180, targetBox!.y + targetBox!.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await page.keyboard.up('Alt');
+    await expect.poll(() => mocks.doc.outputs[0].tracks[4].clips.some((clip) => clip.id === 'extra-clip-1')).toBe(true);
+    await page.getByRole('button', { name: 'Expand track: Image main', exact: true }).click();
+
+    const autoScrollClip = timelineTrackRow(page, 'Extra 3').getByRole('slider', { name: 'Clip', exact: true });
+    await autoScrollClip.scrollIntoViewIfNeeded();
+    await trackRegion.evaluate((element) => { element.scrollLeft = 0; });
+    const autoScrollBox = await autoScrollClip.boundingBox();
+    const scrollRect = await trackRegion.boundingBox();
+    expect(autoScrollBox).not.toBeNull();
+    expect(scrollRect).not.toBeNull();
+    await page.mouse.move(autoScrollBox!.x + autoScrollBox!.width / 2, autoScrollBox!.y + autoScrollBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(scrollRect!.x + scrollRect!.width - 4, autoScrollBox!.y + autoScrollBox!.height / 2);
+    await page.waitForTimeout(800);
+    await page.mouse.up();
+    await expect.poll(() => trackRegion.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+
+    await saveDesign(page);
+    expect(mocks.generatePosts).toHaveLength(0);
+    expect(mocks.renderRequests).toHaveLength(0);
     mocks.expectClean();
   });
 
@@ -2164,6 +2333,48 @@ test.describe('Designer mobile touch editing (mocked local document)', () => {
       y: moved.y,
     });
     expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('keeps compact track and selected-clip controls usable beside mobile sheets', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = manyTracksDoc();
+    mocks.name = 'Mobile timeline workspace E2E';
+    await mocks.install(page);
+    await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+
+    await page.getByRole('button', { name: 'Expand timeline', exact: true }).click();
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(7);
+    await page.getByRole('button', { name: 'Compact tracks', exact: true }).click();
+    await expect(timelineTrackRow(page, 'Text main')).toHaveAttribute('style', /height: 38px/);
+    await expect(page.getByRole('separator', { name: 'Resize timeline', exact: true })).toBeHidden();
+
+    await timelineTrackRow(page, 'Image main').getByRole('slider', { name: 'Clip', exact: true }).click();
+    await page.getByRole('button', { name: 'Collapse track: Image main', exact: true }).click();
+    const duration = page.getByRole('toolbar', { name: 'Video timeline', exact: true })
+      .getByRole('spinbutton', { name: 'Duration (s)', exact: true });
+    await expect(duration).toBeVisible();
+    await duration.fill('1.5');
+    await duration.press('Enter');
+    await expect.poll(() => {
+      const clip = mocks.doc.outputs[0].tracks[0].clips[0];
+      return clip.endMs - clip.startMs;
+    }).toBe(1500);
+
+    await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+    const inspector = page.getByRole('region', { name: 'Inspector', exact: true });
+    await inspector.getByRole('button', { name: 'Expand', exact: true }).click();
+    await expect(inspector).toHaveClass(/h-\[65dvh\]/);
+    await inspector.getByRole('button', { name: 'Half', exact: true }).click();
+    await expect(inspector).toHaveClass(/h-\[32dvh\]/);
+    await inspector.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Compact tracks', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Collapse timeline', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Expand timeline', exact: true })).toBeVisible();
+
+    expect(mocks.generatePosts).toHaveLength(0);
+    expect(mocks.renderRequests).toHaveLength(0);
     mocks.expectClean();
   });
 

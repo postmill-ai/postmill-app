@@ -4888,5 +4888,16 @@
   "designer_carousel": "Atlıkarınca",
   "designer_add_slide_after": "{{number}} sonrasına slayt ekle",
   "designer_frozen_read_only": "Bu biçim dondurulmuş. Düzenlemek için dondurmayı çözün.",
-  "designer_bulk_no_variables": "Varyasyonlar oluşturmadan önce düzenlenebilir bir metin, görsel veya renk öğesi ekleyin."
+  "designer_bulk_no_variables": "Varyasyonlar oluşturmadan önce düzenlenebilir bir metin, görsel veya renk öğesi ekleyin.",
+  "compact_tracks": "Compact tracks",
+  "compact": "Compact",
+  "collapse_all_tracks": "Collapse all tracks",
+  "expand_all_tracks": "Expand all tracks",
+  "collapse_all": "Collapse all",
+  "expand_all": "Expand all",
+  "collapse_track": "Collapse track",
+  "expand_track": "Expand track",
+  "collapse_track_for": "Collapse track: {{name}}",
+  "expand_track_for": "Expand track: {{name}}",
+  "timeline_tracks": "Timeline tracks"
 }

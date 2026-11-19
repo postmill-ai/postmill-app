@@ -75,19 +75,27 @@ import {
 import { TimelineTransportControls } from './timeline-transport-controls';
 import { canSplitClipAt } from './timeline-split';
 import { ClipTimingControls } from './panels/clip-timing-controls';
-import { CLIP_TOP_PX, transitionPairs, transitionBadgeGeometry } from './timeline-transitions';
+import { transitionPairs, transitionBadgeGeometry } from './timeline-transitions';
+import { ChevronDownIcon } from '@postmill-ai/frontend/components/ui/icons';
+import { useTimelineWorkspacePreferences } from './use-timeline-workspace-preferences';
+import {
+  clampTimelineWorkspaceHeight,
+  COLLAPSED_TIMELINE_TRACK_HEIGHT,
+  MAX_TIMELINE_HEIGHT,
+  MIN_TIMELINE_HEIGHT,
+  TIMELINE_DENSITY_LAYOUT,
+  timelineTrackHeights,
+  timelineWorkspaceHeightBounds,
+} from './timeline-workspace';
 
 interface VideoTimelineProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
   sendTimelineAwareness?: (playheadMs: number, selectedClipId: string | null) => void;
 }
 
-const TRACK_HEIGHT = 52;
-const TRACK_GAP = 4;
 const RULER_HEIGHT = 22;
-const LABEL_WIDTH = 64;
+const LABEL_WIDTH = 96;
 const MS_PER_PIXEL_DEFAULT = 4;
-const TIMELINE_ROW_GEOMETRY = { rulerHeight: RULER_HEIGHT, trackHeight: TRACK_HEIGHT, trackGap: TRACK_GAP };
 const TRANSITION_MIN_MS = 100;
 const TRANSITION_MAX_MS = 2000;
 const TRANSITION_DEFAULT_MS = 500;
@@ -435,6 +443,9 @@ interface ClipRowProps {
   selected: boolean;
   primary: boolean;
   locked: boolean;
+  compact: boolean;
+  trackHeight: number;
+  clipTop: number;
   translate: ReturnType<typeof useT>;
   dragMovedRef: { current: boolean };
   onSelectClip: (trackId: string, clipId: string) => void;
@@ -465,6 +476,9 @@ const ClipRow = React.memo(function ClipRow({
   selected,
   primary,
   locked,
+  compact,
+  trackHeight,
+  clipTop,
   translate,
   dragMovedRef,
   onSelectClip,
@@ -483,6 +497,7 @@ const ClipRow = React.memo(function ClipRow({
   const showFileName =
     !!fileName && width >= 96 &&
     (trackType === 'video' || trackType === 'image' || trackType === 'audio');
+  const clipHeight = Math.max(16, trackHeight - clipTop - 4);
 
   return (
     <div
@@ -502,10 +517,10 @@ const ClipRow = React.memo(function ClipRow({
         primary ? 'ring-2 ring-white/60 z-10' : selected ? 'ring-2 ring-designerAccent/80 z-10' : ''
       }`}
       style={{
-        top: CLIP_TOP_PX,
+        top: clipTop,
         left,
         width,
-        height: TRACK_HEIGHT - 24,
+        height: clipHeight,
         backgroundColor: TRACK_COLORS[trackType],
         opacity: clip.opacity ?? 0.9,
       }}
@@ -528,8 +543,11 @@ const ClipRow = React.memo(function ClipRow({
     >
       {trackType === 'video' && <ClipFilmstrip src={clip.src} />}
       <div
-        className="relative text-[9px] text-white/90 px-1.5 truncate leading-[28px] select-none"
-        style={showFileName ? { textShadow: '0 1px 2px rgba(0,0,0,0.8)' } : undefined}
+        className="relative text-[9px] text-white/90 px-1.5 truncate select-none"
+        style={{
+          lineHeight: `${clipHeight}px`,
+          ...(showFileName ? { textShadow: '0 1px 2px rgba(0,0,0,0.8)' } : {}),
+        }}
       >
         {showFileName ? (
           fileName
@@ -549,7 +567,7 @@ const ClipRow = React.memo(function ClipRow({
         {formatTime(effectiveEnd - clip.startMs)}
       </div>
       {trackType === 'audio' && (
-        <div className="absolute inset-x-1 bottom-1 flex items-end gap-px h-3 opacity-60">
+        <div className={`absolute inset-x-1 bottom-0.5 flex items-end gap-px opacity-60 ${compact ? 'h-1.5' : 'h-3'}`}>
           <WaveformBars src={clip.src} width={width} />
         </div>
       )}
@@ -612,6 +630,12 @@ interface TrackRowProps {
   track: VideoTrack;
   /** Disambiguated header label (custom name, or numbered among same-type tracks). */
   label: string;
+  collapsed: boolean;
+  compact: boolean;
+  trackHeight: number;
+  trackGap: number;
+  clipTop: number;
+  onToggleCollapsed: (trackId: string) => void;
   pairs: { from: VideoClip; to: VideoClip }[];
   durationMs: number;
   totalPixels: number;
@@ -647,6 +671,12 @@ interface TrackRowProps {
 export const TrackRow = React.memo(function TrackRow({
   track,
   label,
+  collapsed,
+  compact,
+  trackHeight,
+  trackGap,
+  clipTop,
+  onToggleCollapsed,
   pairs,
   durationMs,
   totalPixels,
@@ -670,27 +700,43 @@ export const TrackRow = React.memo(function TrackRow({
 }: TrackRowProps) {
   return (
     <div
+      data-track-id={track.id}
+      data-collapsed={collapsed ? 'true' : 'false'}
       className={`flex items-stretch border-b border-studioBorder/20 transition-colors ${
         dragOver ? 'bg-designerAccent/10' : ''
       }`}
-      style={{ height: TRACK_HEIGHT + TRACK_GAP }}
+      style={{ height: (collapsed ? COLLAPSED_TIMELINE_TRACK_HEIGHT : trackHeight) + trackGap }}
     >
       {/* Track label */}
       <div
-        className="flex flex-col items-end justify-center px-2 text-[10px] font-medium uppercase tracking-wider shrink-0 border-r border-studioBorder/30 gap-0.5"
+        className={`flex px-1.5 text-[10px] font-medium uppercase tracking-wider shrink-0 border-r border-studioBorder/30 gap-0.5 ${collapsed ? 'flex-row items-center' : 'flex-col items-end justify-center'}`}
         style={{ width: LABEL_WIDTH }}
       >
-        <span
-          style={{ color: TRACK_COLORS[track.type] }}
-          className={`truncate max-w-full ${track.name ? 'normal-case' : ''}`}
-          title={label}
-        >
-          {label}
-          {track.type === 'audio' && track.muted ? ' \uD83D\uDD07' : ''}
-        </span>
+        <div className="flex min-w-0 w-full items-center gap-0.5">
+          <button
+            type="button"
+            className="w-4 h-4 shrink-0 flex items-center justify-center text-textColor/60 hover:text-textColor"
+            title={collapsed ? translate('expand_track', 'Expand track') : translate('collapse_track', 'Collapse track')}
+            aria-label={collapsed
+              ? translate('expand_track_for', 'Expand track: {{name}}', { name: label })
+              : translate('collapse_track_for', 'Collapse track: {{name}}', { name: label })}
+            aria-expanded={!collapsed}
+            onClick={() => onToggleCollapsed(track.id)}
+          >
+            <ChevronDownIcon size={12} className={collapsed ? '-rotate-90' : ''} />
+          </button>
+          <span
+            style={{ color: TRACK_COLORS[track.type] }}
+            className={`min-w-0 flex-1 truncate text-right ${track.name ? 'normal-case' : ''}`}
+            title={label}
+          >
+            {label}
+            {track.type === 'audio' && track.muted ? ' \uD83D\uDD07' : ''}
+          </span>
+        </div>
         <div className="flex items-center gap-1">
           <button
-            className={`text-[9px] ${track.locked ? 'text-designerAccent' : 'text-textColor/40 hover:text-textColor'}`}
+            className={`text-[11px] ${track.locked ? 'text-designerAccent' : 'text-textColor/40 hover:text-textColor'}`}
             title={track.locked ? translate('unlock_track', 'Unlock track') : translate('lock_track', 'Lock track')}
             aria-label={track.locked ? translate('unlock_track', 'Unlock track') : translate('lock_track', 'Lock track')}
             aria-pressed={!!track.locked}
@@ -699,7 +745,7 @@ export const TrackRow = React.memo(function TrackRow({
             {track.locked ? '🔒' : '🔓'}
           </button>
           <button
-            className={`text-[9px] ${track.hidden ? 'text-designerAccent' : 'text-textColor/40 hover:text-textColor'}`}
+            className={`text-[11px] ${track.hidden ? 'text-designerAccent' : 'text-textColor/40 hover:text-textColor'}`}
             title={track.hidden ? translate('show_track', 'Show track') : translate('hide_track', 'Hide track')}
             aria-label={track.hidden ? translate('show_track', 'Show track') : translate('hide_track', 'Hide track')}
             aria-pressed={!!track.hidden}
@@ -708,7 +754,7 @@ export const TrackRow = React.memo(function TrackRow({
             👁
           </button>
           <button
-            className="text-[9px] text-textColor/40 hover:text-textColor"
+            className="text-[11px] text-textColor/40 hover:text-textColor"
             title={translate('track_settings', 'Track settings')}
             aria-label={translate('track_settings_for', 'Track settings: {{name}}', { name: label })}
             aria-haspopup="menu"
@@ -727,7 +773,7 @@ export const TrackRow = React.memo(function TrackRow({
         className={`relative flex-1 ${track.hidden ? 'opacity-40' : ''}`}
         style={{ width: totalPixels + 40 }}
       >
-        {track.clips.map((clip) => (
+        {!collapsed && track.clips.map((clip) => (
           <ClipRow
             key={clip.id}
             trackId={track.id}
@@ -738,6 +784,9 @@ export const TrackRow = React.memo(function TrackRow({
             selected={isSelected(track.id, clip.id)}
             primary={isPrimary(track.id, clip.id)}
             locked={!!track.locked}
+            compact={compact}
+            trackHeight={trackHeight}
+            clipTop={clipTop}
             translate={translate}
             dragMovedRef={dragMovedRef}
             onSelectClip={onSelectClip}
@@ -750,7 +799,7 @@ export const TrackRow = React.memo(function TrackRow({
         ))}
 
         {/* Transition handles for sequential clips, including across gaps */}
-        {pairs.map(({ from, to }) => {
+        {!collapsed && pairs.map(({ from, to }) => {
           const handleX = from.endMs * pixelsPerMs;
           const tType = from.transitionOut?.type || to.transitionIn?.type || 'cut';
           const isTransitioning = tType !== 'cut';
@@ -1424,6 +1473,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const hasKeyframeClipboard = store((s) => !!s.keyframeClipboard?.length);
   const timelineSnap = store((s) => s.timelineSnap);
   const timelineHeight = store((s) => s.timelineHeight);
+  const timelineDensity = store((s) => s.timelineDensity);
+  const collapsedTrackIds = store((s) => s.collapsedTimelineTrackIds);
+  const timelineCollapsed = store((s) => s.timelineCollapsed);
+  const layout = TIMELINE_DENSITY_LAYOUT[timelineDensity];
+  useTimelineWorkspacePreferences(
+    store,
+    typeof window !== 'undefined' && window.innerWidth <= 1025
+  );
   const setPlayhead = useCallback(
     (ms: number) => store.getState().setPlayhead(ms),
     [store],
@@ -1436,9 +1493,6 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   const [zoomPxPerMs, setZoomPxPerMs] = useState(1 / MS_PER_PIXEL_DEFAULT);
   const [keyframeLaneOpen, setKeyframeLaneOpen] = useState(false);
-  const [timelineCollapsed, setTimelineCollapsed] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth <= 1025
-  );
   const [isPlaying, setIsPlaying] = useState(false);
   // Mirror playback state into the store so sibling subtrees (the canvas
   // overlay's repaint loop) can gate per-frame work on it — the timeline owns
@@ -1513,6 +1567,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     dragOverNewTrackRef.current = dragOverNewTrack;
   }, [dragOverNewTrack]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const timelineRootRef = useRef<HTMLDivElement>(null);
+  const [workspaceHeight, setWorkspaceHeight] = useState(0);
   const previewRef = useRef<VideoPreviewEngine | null>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
 
@@ -1523,6 +1579,47 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
   const isVideo = doc.mode === 'video' && !!vo;
+  const collapsedTrackIdSet = useMemo(() => new Set(collapsedTrackIds), [collapsedTrackIds]);
+  const trackHeights = useMemo(
+    () => timelineTrackHeights(vo?.tracks || [], timelineDensity, collapsedTrackIds),
+    [vo?.tracks, timelineDensity, collapsedTrackIds]
+  );
+  const rowGeometry = useMemo(() => ({
+    rulerHeight: RULER_HEIGHT,
+    trackHeight: layout.trackHeight,
+    trackGap: layout.trackGap,
+    trackHeights,
+  }), [layout, trackHeights]);
+  const heightBounds = timelineWorkspaceHeightBounds(workspaceHeight);
+
+  useEffect(() => {
+    const validIds = new Set(vo?.tracks.map((track) => track.id));
+    const next = collapsedTrackIds.filter((id) => validIds.has(id));
+    if (next.length !== collapsedTrackIds.length) {
+      store.getState().setCollapsedTimelineTrackIds(next);
+    }
+  }, [vo?.tracks, collapsedTrackIds, store]);
+
+  useEffect(() => {
+    const workspace = timelineRootRef.current?.parentElement;
+    if (!workspace || !isVideo) return;
+    const update = () => {
+      const available = workspace.getBoundingClientRect().height;
+      setWorkspaceHeight(available);
+      const bounds = timelineWorkspaceHeightBounds(available);
+      const current = store.getState().timelineHeight;
+      if (current > bounds.max) store.getState().setTimelineHeight(bounds.max);
+    };
+    update();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    observer?.observe(workspace);
+    window.addEventListener('resize', update);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [isVideo, store]);
+
   const selectedTimingTrack = selectedClip?.outputIndex === currentOutput
     ? vo?.tracks.find((track) => track.id === selectedClip.trackId)
     : undefined;
@@ -2080,7 +2177,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         clientY,
         viewport.getBoundingClientRect().top,
         viewport.scrollTop,
-        TIMELINE_ROW_GEOMETRY
+        rowGeometry
       );
     };
     // Exactly one virtual row below the last track is the "drop here to create
@@ -2093,7 +2190,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         clientY,
         viewport.getBoundingClientRect().top,
         viewport.scrollTop,
-        TIMELINE_ROW_GEOMETRY
+        rowGeometry
       );
     };
 
@@ -2393,7 +2490,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       window.removeEventListener('blur', handleBlur);
       if (autoScrollRaf !== null) cancelAnimationFrame(autoScrollRaf);
     };
-  }, [dragging, isVideo, vo, pixelsPerMs, store, currentOutput, toaster, translate]);
+  }, [dragging, isVideo, vo, pixelsPerMs, store, currentOutput, toaster, translate, rowGeometry]);
 
   useEffect(() => () => {
     setDragging(null);
@@ -2410,8 +2507,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   // rect; clips/edges/ruler/buttons stopPropagation or are excluded by the
   // closest() guard, so this never fights a clip drag or a ruler scrub.
   const MARQUEE_GEOM = useMemo(
-    () => ({ rulerHeight: RULER_HEIGHT, trackHeight: TRACK_HEIGHT, trackGap: TRACK_GAP, labelWidth: LABEL_WIDTH }),
-    [],
+    () => ({ ...rowGeometry, labelWidth: LABEL_WIDTH, collapsedTrackIds: collapsedTrackIdSet }),
+    [rowGeometry, collapsedTrackIdSet],
   );
 
   // Attached natively on the scroll container: a JSX onMouseDown on the
@@ -2810,7 +2907,41 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     setRulerMenu(null);
   }, [rulerMenu, store, currentOutput]);
 
-  // Timeline height drag-splitter (the panel grows upward from the bottom).
+  const handleToggleTrackCollapsed = useCallback((trackId: string) => {
+    const state = store.getState();
+    const next = new Set(state.collapsedTimelineTrackIds);
+    if (next.has(trackId)) next.delete(trackId);
+    else next.add(trackId);
+    state.setCollapsedTimelineTrackIds([...next]);
+  }, [store]);
+
+  const handleToggleAllTracks = useCallback(() => {
+    if (!vo) return;
+    const allCollapsed = vo.tracks.length > 0 && vo.tracks.every(
+      (track) => collapsedTrackIdSet.has(track.id)
+    );
+    store.getState().setCollapsedTimelineTrackIds(
+      allCollapsed ? [] : vo.tracks.map((track) => track.id)
+    );
+  }, [collapsedTrackIdSet, store, vo]);
+
+  const resizeTimeline = useCallback((height: number) => {
+    store.getState().setTimelineHeight(clampTimelineWorkspaceHeight(height, workspaceHeight));
+  }, [store, workspaceHeight]);
+
+  const handleToggleDensity = useCallback(() => {
+    if (!vo) return;
+    const nextDensity = timelineDensity === 'compact' ? 'comfortable' : 'compact';
+    const nextLayout = TIMELINE_DENSITY_LAYOUT[nextDensity];
+    const nextHeights = timelineTrackHeights(vo.tracks, nextDensity, collapsedTrackIds);
+    const currentRowsHeight = trackHeights.reduce((sum, height) => sum + height, 0)
+      + layout.trackGap * trackHeights.length;
+    const nextRowsHeight = nextHeights.reduce((sum, height) => sum + height, 0)
+      + nextLayout.trackGap * nextHeights.length;
+    resizeTimeline(store.getState().timelineHeight - currentRowsHeight + nextRowsHeight);
+    store.getState().setTimelineDensity(nextDensity);
+  }, [collapsedTrackIds, layout, resizeTimeline, store, timelineDensity, trackHeights, vo]);
+
   const handleSplitterPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
@@ -2818,7 +2949,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const startY = e.clientY;
       const startHeight = store.getState().timelineHeight;
       const onMove = (ev: PointerEvent) => {
-        store.getState().setTimelineHeight(startHeight + (startY - ev.clientY));
+        resizeTimeline(startHeight + (startY - ev.clientY));
       };
       const onUp = () => {
         window.removeEventListener('pointermove', onMove);
@@ -2831,8 +2962,26 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       window.addEventListener('pointercancel', onUp);
       window.addEventListener('blur', onUp);
     },
-    [store],
+    [store, resizeTimeline],
   );
+
+  const handleSplitterKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    const current = store.getState().timelineHeight;
+    const bounds = timelineWorkspaceHeightBounds(workspaceHeight);
+    const next = e.key === 'ArrowUp'
+      ? current + 16
+      : e.key === 'ArrowDown'
+        ? current - 16
+        : e.key === 'Home'
+          ? bounds.min
+          : e.key === 'End'
+            ? bounds.max
+            : undefined;
+    if (next === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resizeTimeline(next);
+  }, [resizeTimeline, store, workspaceHeight]);
 
   const handleAddTrack = useCallback(
     (type: VideoTrack['type']) => {
@@ -3593,9 +3742,13 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   if (!isVideo || !vo) {
     return null;
   }
+  const allTracksCollapsed = vo.tracks.length > 0 && vo.tracks.every(
+    (track) => collapsedTrackIdSet.has(track.id)
+  );
 
   return (
     <div
+      ref={timelineRootRef}
       className="shrink-0 border-t border-studioBorder bg-newBgColorInner flex flex-col"
       role="toolbar"
       tabIndex={0}
@@ -3604,12 +3757,18 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       onKeyDown={handleKeyDown}
     >
       {/* Height splitter — drag to resize the timeline panel (persisted). */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <div
         role="separator"
         aria-orientation="horizontal"
         aria-label={translate('resize_timeline', 'Resize timeline')}
-        className={`${timelineCollapsed ? 'hidden' : ''} h-2 shrink-0 cursor-row-resize touch-none bg-studioBorder/40 hover:bg-designerAccent/60`}
+        aria-valuemin={MIN_TIMELINE_HEIGHT}
+        aria-valuemax={heightBounds.max}
+        aria-valuenow={timelineHeight}
+        tabIndex={0} // eslint-disable-line jsx-a11y/no-noninteractive-tabindex
+        className={`${timelineCollapsed ? 'hidden' : ''} mobile:hidden h-2 shrink-0 cursor-row-resize touch-none bg-studioBorder/40 hover:bg-designerAccent/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent`}
         onPointerDown={handleSplitterPointerDown}
+        onKeyDown={handleSplitterKeyDown}
       />
       {/* Caption import picker — opened from the Captions menu. */}
       <input
@@ -3653,7 +3812,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <TimelineTransportControls store={store} outputIndex={currentOutput} />
         <button
           type="button"
-          onClick={() => setTimelineCollapsed((collapsed) => !collapsed)}
+          onClick={() => store.getState().setTimelineCollapsed(!timelineCollapsed)}
           aria-expanded={!timelineCollapsed}
           aria-label={timelineCollapsed ? translate('expand_timeline', 'Expand timeline') : translate('collapse_timeline', 'Collapse timeline')}
           title={timelineCollapsed ? translate('expand_timeline', 'Expand timeline') : translate('collapse_timeline', 'Collapse timeline')}
@@ -3661,11 +3820,34 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         >
           {timelineCollapsed ? '⌃' : '⌄'}
         </button>
+        <button
+          type="button"
+          onClick={handleToggleDensity}
+          aria-pressed={timelineDensity === 'compact'}
+          aria-label={translate('compact_tracks', 'Compact tracks')}
+          title={translate('compact_tracks', 'Compact tracks')}
+          className={`px-2 h-8 rounded-sm text-[10px] ${timelineDensity === 'compact' ? 'bg-designerAccent/20 text-textColor' : 'text-textColor/60 hover:text-textColor hover:bg-studioBorder/30'}`}
+        >
+          {translate('compact', 'Compact')}
+        </button>
+        <button
+          type="button"
+          onClick={handleToggleAllTracks}
+          aria-label={allTracksCollapsed
+            ? translate('expand_all_tracks', 'Expand all tracks')
+            : translate('collapse_all_tracks', 'Collapse all tracks')}
+          title={allTracksCollapsed
+            ? translate('expand_all_tracks', 'Expand all tracks')
+            : translate('collapse_all_tracks', 'Collapse all tracks')}
+          className="px-2 h-8 rounded-sm text-[10px] text-textColor/60 hover:text-textColor hover:bg-studioBorder/30"
+        >
+          {allTracksCollapsed ? translate('expand_all', 'Expand all') : translate('collapse_all', 'Collapse all')}
+        </button>
         <div className="flex-1" />
         <button
           type="button"
           onClick={() => {
-            setTimelineCollapsed(false);
+            store.getState().setTimelineCollapsed(false);
             handleZoomToFit();
           }}
           className="hidden mobile:flex w-8 h-8 items-center justify-center rounded-sm text-textColor/70 hover:bg-studioBorder/30 hover:text-textColor"
@@ -3834,6 +4016,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
       <div
         ref={scrollRef}
+        role="region"
+        aria-label={translate('timeline_tracks', 'Timeline tracks')}
         className={`flex-1 overflow-auto ${timelineCollapsed ? 'hidden' : ''}`}
         style={{ height: timelineCollapsed ? 0 : timelineHeight }}
         aria-hidden={timelineCollapsed}
@@ -3897,6 +4081,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               key={track.id}
               track={track}
               label={trackLabels[track.id] ?? trackTypeLabel(track.type)}
+              collapsed={collapsedTrackIdSet.has(track.id)}
+              compact={timelineDensity === 'compact'}
+              trackHeight={layout.trackHeight}
+              trackGap={layout.trackGap}
+              clipTop={layout.clipTop}
+              onToggleCollapsed={handleToggleTrackCollapsed}
               pairs={sortedAdjacentPairs[track.id] || []}
               durationMs={vo.durationMs}
               totalPixels={totalPixels}
@@ -3925,7 +4115,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           {dragOverNewTrack && dragging && (
             <div
               className="flex items-stretch"
-              style={{ height: TRACK_HEIGHT + TRACK_GAP }}
+              style={{ height: layout.trackHeight + layout.trackGap }}
               aria-hidden={true}
             >
               <div
@@ -3936,7 +4126,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               </div>
               <div
                 className="relative flex-1 self-center rounded-xs border border-dashed border-designerAccent/60 bg-designerAccent/10"
-                style={{ width: totalPixels + 40, height: TRACK_HEIGHT }}
+                style={{ width: totalPixels + 40, height: layout.trackHeight }}
               />
             </div>
           )}

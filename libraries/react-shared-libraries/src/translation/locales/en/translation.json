@@ -4887,5 +4887,16 @@
   "designer_carousel": "Carousel",
   "designer_add_slide_after": "Add slide after {{number}}",
   "designer_frozen_read_only": "This format is frozen. Unfreeze it to edit.",
-  "designer_bulk_no_variables": "Add an editable text, image, or color element before creating variations."
+  "designer_bulk_no_variables": "Add an editable text, image, or color element before creating variations.",
+  "compact_tracks": "Compact tracks",
+  "compact": "Compact",
+  "collapse_all_tracks": "Collapse all tracks",
+  "expand_all_tracks": "Expand all tracks",
+  "collapse_all": "Collapse all",
+  "expand_all": "Expand all",
+  "collapse_track": "Collapse track",
+  "expand_track": "Expand track",
+  "collapse_track_for": "Collapse track: {{name}}",
+  "expand_track_for": "Expand track: {{name}}",
+  "timeline_tracks": "Timeline tracks"
 }

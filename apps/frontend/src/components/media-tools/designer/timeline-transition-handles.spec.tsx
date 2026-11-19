@@ -26,6 +26,12 @@ describe('timeline transition handles', () => {
       <TrackRow
         track={track}
         label="Text"
+        collapsed={false}
+        compact={false}
+        trackHeight={52}
+        trackGap={4}
+        clipTop={20}
+        onToggleCollapsed={vi.fn()}
         pairs={[{ from, to }]}
         durationMs={4000}
         totalPixels={400}

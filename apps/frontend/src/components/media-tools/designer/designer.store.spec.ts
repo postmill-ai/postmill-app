@@ -2167,9 +2167,10 @@ describe('track lock / hide, markers, and timeline view prefs', () => {
     expect(vo(store).markers).toBeUndefined();
   });
 
-  it('timelineSnap toggles and timelineHeight clamps, without touching history', () => {
+  it('keeps timeline view preferences out of history and the document', () => {
     const store = videoStore();
     const historyBefore = store.getState().historyIndex;
+    const docBefore = JSON.stringify(store.getState().doc);
 
     expect(store.getState().timelineSnap).toBe(true);
     store.getState().setTimelineSnap(false);
@@ -2179,8 +2180,15 @@ describe('track lock / hide, markers, and timeline view prefs', () => {
     expect(store.getState().timelineHeight).toBe(120);
     store.getState().setTimelineHeight(9999);
     expect(store.getState().timelineHeight).toBe(600);
+    store.getState().setTimelineDensity('compact');
+    store.getState().setCollapsedTimelineTrackIds(['a', 'a', 'b']);
+    store.getState().setTimelineCollapsed(true);
+    expect(store.getState().timelineDensity).toBe('compact');
+    expect(store.getState().collapsedTimelineTrackIds).toEqual(['a', 'b']);
+    expect(store.getState().timelineCollapsed).toBe(true);
 
     expect(store.getState().historyIndex).toBe(historyBefore);
+    expect(JSON.stringify(store.getState().doc)).toBe(docBefore);
   });
 });
 

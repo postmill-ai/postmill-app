@@ -30,6 +30,17 @@ describe('timeline row geometry', () => {
     expect(timelineIsNewTrackZone(2, 40, 260, 100, 0, geometry)).toBe(false);
     expect(timelineIsNewTrackZone(40, 40, 220, 100, 0, geometry)).toBe(false);
   });
+
+  it('uses cumulative compact and collapsed heights for tracks and the new-track zone', () => {
+    const variable = { ...geometry, trackHeight: 36, trackGap: 2, trackHeights: [36, 28, 36] };
+    expect(timelineTrackAtClientY(['a', 'b', 'c'], 140, 100, 0, variable)).toBe('a');
+    expect(timelineTrackAtClientY(['a', 'b', 'c'], 175, 100, 0, variable)).toBe('b');
+    expect(timelineTrackAtClientY(['a', 'b', 'c'], 200, 100, 0, variable)).toBe('c');
+    expect(timelineTrackIndexAtClientY(230, 100, 0, variable)).toBe(3);
+    expect(timelineTrackIndexAtClientY(270, 100, 0, variable)).toBe(4);
+    expect(timelineIsNewTrackZone(3, 40, 230, 100, 0, variable)).toBe(true);
+    expect(timelineIsNewTrackZone(3, 40, 270, 100, 0, variable)).toBe(false);
+  });
 });
 
 describe('timeline thresholds', () => {

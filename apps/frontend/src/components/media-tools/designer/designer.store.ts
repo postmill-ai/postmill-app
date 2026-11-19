@@ -204,6 +204,9 @@ export interface DesignerState {
   timelineSnap: boolean;
   /** Video timeline panel height in px (drag-resized); view pref, clamped on write. */
   timelineHeight: number;
+  timelineDensity: 'comfortable' | 'compact';
+  collapsedTimelineTrackIds: string[];
+  timelineCollapsed: boolean;
   /** Grid overlay — a view pref, like snapping, not part of the document. */
   showGrid: boolean;
   gridSize: number;
@@ -347,6 +350,9 @@ export interface DesignerActions {
   setSnapEnabled: (v: boolean) => void;
   setTimelineSnap: (v: boolean) => void;
   setTimelineHeight: (px: number) => void;
+  setTimelineDensity: (density: DesignerState['timelineDensity']) => void;
+  setCollapsedTimelineTrackIds: (trackIds: string[]) => void;
+  setTimelineCollapsed: (collapsed: boolean) => void;
   setShowGrid: (v: boolean) => void;
   setGridSize: (n: number) => void;
   setSnapToGrid: (v: boolean) => void;
@@ -640,6 +646,9 @@ export const createDesignerStore = (
       snapEnabled: true,
       timelineSnap: true,
       timelineHeight: 240,
+      timelineDensity: 'comfortable',
+      collapsedTimelineTrackIds: [],
+      timelineCollapsed: false,
       showGrid: false,
       gridSize: 50,
       snapToGrid: false,
@@ -1803,6 +1812,11 @@ export const createDesignerStore = (
       setSnapEnabled: (v) => mutate({ snapEnabled: v }),
       setTimelineSnap: (v) => mutate({ timelineSnap: v }),
       setTimelineHeight: (px) => mutate({ timelineHeight: Math.max(120, Math.min(600, Math.round(px))) }),
+      setTimelineDensity: (density) => mutate({ timelineDensity: density }),
+      setCollapsedTimelineTrackIds: (trackIds) => mutate({
+        collapsedTimelineTrackIds: [...new Set(trackIds)],
+      }),
+      setTimelineCollapsed: (collapsed) => mutate({ timelineCollapsed: collapsed }),
       setShowGrid: (v) => mutate({ showGrid: v }),
       setGridSize: (n) => mutate({ gridSize: Math.max(2, Math.min(500, Math.round(n))) }),
       setSnapToGrid: (v) => mutate({ snapToGrid: v }),
