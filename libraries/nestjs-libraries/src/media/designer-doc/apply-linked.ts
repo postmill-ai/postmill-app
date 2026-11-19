@@ -3,6 +3,7 @@ import type {
   DesignerElement,
   DesignerOutput,
   SymbolOverrides,
+  TextRun,
   VideoClip,
   VideoOutput,
 } from './designer-doc.schema';
@@ -109,14 +110,30 @@ const resizePathNodes = (
   };
 };
 
+interface RichTextRange {
+  run: TextRun;
+  start: number;
+  end: number;
+}
+
+const richTextRanges = (runs: TextRun[] | undefined): RichTextRange[] => {
+  let offset = 0;
+  return (runs ?? []).map((run) => {
+    const start = offset;
+    offset += run.text.length;
+    return { run, start, end: offset };
+  });
+};
+
 /**
  * Non-geometry updates propagate raw — except `fontSize`, explicit rich-text
  * run sizes and `textStroke.width`: px values authored against one canvas are
  * wrong on another, so linked copies get them re-fit through the shared
  * aspect-aware basis (`typeScaleRatio`, the same rule as smartReflow and the
  * conductor's variant re-fit), with font size floored at 10px. Rich runs keep
- * their authored size when it is already below that floor, and an unchanged run
- * retains its target's existing size rather than round-tripping through a scale.
+ * their authored size when it is already below that floor. Unchanged runs are
+ * matched by character range through splits and merges, retaining the target's
+ * existing size rather than round-tripping through a scale.
  * The old
  * `min(scaleX, scaleY)` here silently re-imposed short-edge typography on
  * every linked edit — undoing the per-format type of every wider output.
@@ -132,12 +149,8 @@ const scaledForOutput = (
   if (!hasFontSize && !shared.textStroke && !shared.richText) return shared;
   const ratio = typeScaleRatio(source, target);
   const sharedRuns = shared.richText;
-  const sourceRuns = sourceElement?.richText;
-  const targetRuns = targetElement?.richText;
-  const preserveUnchangedRuns =
-    !!sharedRuns &&
-    sourceRuns?.length === sharedRuns.length &&
-    targetRuns?.length === sharedRuns.length;
+  const sourceRanges = richTextRanges(sourceElement?.richText);
+  const targetRanges = richTextRanges(targetElement?.richText);
   return {
     ...shared,
     ...(hasFontSize
@@ -145,16 +158,26 @@ const scaledForOutput = (
       : {}),
     ...(sharedRuns
       ? {
-          richText: sharedRuns.map((run, index) => {
-            const targetRun = targetRuns?.[index];
-            if (
-              preserveUnchangedRuns &&
-              targetRun &&
-              run.fontSize === sourceRuns?.[index]?.fontSize
-            ) {
+          richText: richTextRanges(sharedRuns).map(({ run, start, end }) => {
+            const sourceMatches = sourceRanges.filter(
+              (range) => range.start < end && range.end > start
+            );
+            const targetMatches = targetRanges.filter(
+              (range) => range.start < end && range.end > start
+            );
+            const unchanged =
+              sourceMatches.length > 0 &&
+              sourceMatches.every(
+                (range) => range.run.fontSize === run.fontSize
+              );
+            const targetSizes = new Set(
+              targetMatches.map((range) => range.run.fontSize)
+            );
+            if (unchanged && targetSizes.size === 1) {
               const preserved = { ...run };
-              if (targetRun.fontSize === undefined) delete preserved.fontSize;
-              else preserved.fontSize = targetRun.fontSize;
+              const targetSize = targetMatches[0].run.fontSize;
+              if (targetSize === undefined) delete preserved.fontSize;
+              else preserved.fontSize = targetSize;
               return preserved;
             }
             return run.fontSize === undefined

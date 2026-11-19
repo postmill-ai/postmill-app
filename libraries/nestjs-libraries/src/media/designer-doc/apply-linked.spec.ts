@@ -231,6 +231,75 @@ describe('applyLinked fontSize propagation', () => {
     ]);
   });
 
+  const splitFirstRun = (element: any) => {
+    const [first, ...rest] = element.richText;
+    return [
+      { ...first, text: 'B', fontWeight: 700 },
+      { ...first, text: 'ig ' },
+      ...rest.map((run: any) => ({ ...run })),
+    ];
+  };
+
+  it('preserves target sizes by character range when a run splits', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: splitFirstRun(smaller) },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 64, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      32, 32, 16, 8,
+    ]);
+    expect((outputs[0] as any).children[0].richText[0].fontWeight).toBe(700);
+    expect((outputs[1] as any).children[0].richText[0].fontWeight).toBe(700);
+  });
+
+  it('preserves target sizes by character range when split runs merge', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+    const split = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: splitFirstRun(smaller) },
+      false
+    );
+    const splitDoc = { ...doc, outputs: split.outputs } as DesignerDoc;
+    const splitSmaller = (splitDoc.outputs[1] as any).children[0];
+    const [first, second, ...rest] = splitSmaller.richText;
+    const mergedFirst = { ...first, text: `${first.text}${second.text}` };
+    delete mergedFirst.fontWeight;
+
+    const { outputs } = applyLinked(
+      splitDoc,
+      1,
+      new Set(['e9']),
+      {
+        richText: [
+          mergedFirst,
+          ...rest.map((run: any) => ({ ...run })),
+        ],
+      },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      32, 16, 8,
+    ]);
+    expect((outputs[0] as any).children[0].richText[0]).not.toHaveProperty('fontWeight');
+  });
+
   it('keeps the edit on the current output when editFormatOnly is set', () => {
     const { outputs, affected } = applyLinked(
       makeDoc(),
