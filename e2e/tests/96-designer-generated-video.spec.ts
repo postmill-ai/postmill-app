@@ -1356,16 +1356,18 @@ test.describe('Designer animation clipboard (mocked local document)', () => {
     await clipOnTrack(page, 'Target').click();
     await page.getByRole('button', { name: 'Paste Animation', exact: true }).click();
     await expect(page.getByText('Animation pasted to 1 clip(s)', { exact: true })).toBeVisible();
-    expect(mocks.savedClips().find((clip) => clip.id === 'text-target')?.motionPath).toBeDefined();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.motionPath).toBeDefined();
     await page.keyboard.press('Control+z');
-    expect(mocks.savedClips().find((clip) => clip.id === 'text-target')?.keyframes).toBeUndefined();
-    expect(mocks.savedClips().find((clip) => clip.id === 'text-target')?.motionPath).toBeUndefined();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.keyframes).toBeUndefined();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.motionPath).toBeUndefined();
 
     await clipOnTrack(page, 'Target').click();
     await clipOnTrack(page, 'Shape target').click({ modifiers: ['Control'] });
     await clipOnTrack(page, 'Target').click({ button: 'right' });
     await page.getByRole('button', { name: 'Paste Animation', exact: true }).click();
     await expect(page.getByText(/Animation pasted to 2 clip\(s\)\. Skipped:/)).toBeVisible();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.textReveal?.durationMs).toBe(1000);
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-target')?.motionPath).toBeDefined();
 
     const textTarget = mocks.savedClips().find((clip) => clip.id === 'text-target');
     expect(textTarget).toMatchObject({
