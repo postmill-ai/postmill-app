@@ -115,33 +115,55 @@ const resizePathNodes = (
  * wrong on another, so linked copies get them re-fit through the shared
  * aspect-aware basis (`typeScaleRatio`, the same rule as smartReflow and the
  * conductor's variant re-fit), with font size floored at 10px. Rich runs keep
- * their authored size when it is already below that floor. The old
+ * their authored size when it is already below that floor, and an unchanged run
+ * retains its target's existing size rather than round-tripping through a scale.
+ * The old
  * `min(scaleX, scaleY)` here silently re-imposed short-edge typography on
  * every linked edit — undoing the per-format type of every wider output.
  */
 const scaledForOutput = (
   shared: Partial<DesignerElement>,
   source: { width: number; height: number },
-  target: { width: number; height: number }
+  target: { width: number; height: number },
+  sourceElement?: DesignerElement,
+  targetElement?: DesignerElement
 ): Partial<DesignerElement> => {
   const hasFontSize = typeof shared.fontSize === 'number' && Number.isFinite(shared.fontSize);
   if (!hasFontSize && !shared.textStroke && !shared.richText) return shared;
   const ratio = typeScaleRatio(source, target);
+  const sharedRuns = shared.richText;
+  const sourceRuns = sourceElement?.richText;
+  const targetRuns = targetElement?.richText;
+  const preserveUnchangedRuns =
+    !!sharedRuns &&
+    sourceRuns?.length === sharedRuns.length &&
+    targetRuns?.length === sharedRuns.length;
   return {
     ...shared,
     ...(hasFontSize
       ? { fontSize: Math.max(10, Math.round(shared.fontSize! * ratio)) }
       : {}),
-    ...(shared.richText
+    ...(sharedRuns
       ? {
-          richText: shared.richText.map((run) =>
-            run.fontSize === undefined
+          richText: sharedRuns.map((run, index) => {
+            const targetRun = targetRuns?.[index];
+            if (
+              preserveUnchangedRuns &&
+              targetRun &&
+              run.fontSize === sourceRuns?.[index]?.fontSize
+            ) {
+              const preserved = { ...run };
+              if (targetRun.fontSize === undefined) delete preserved.fontSize;
+              else preserved.fontSize = targetRun.fontSize;
+              return preserved;
+            }
+            return run.fontSize === undefined
               ? { ...run }
               : {
                   ...run,
                   fontSize: scaleRichTextRunFontSize(run.fontSize, ratio, 10),
-                }
-          ),
+                };
+          }),
         }
       : {}),
     ...(shared.textStroke
@@ -192,10 +214,19 @@ export const applyLinked = (
     if (!propagate || !isImageOutput(out) || isOutputFrozen(out)) return out;
 
     let changed = false;
-    const scaled = scaledForOutput(shared, current, out as DesignerOutput);
     const newChildren = (out as DesignerOutput).children.map((el) => {
       if (el.originId && origins.has(el.originId)) {
         changed = true;
+        const sourceElement = current.children.find(
+          (candidate) => idSet.has(candidate.id) && candidate.originId === el.originId
+        );
+        const scaled = scaledForOutput(
+          shared,
+          current,
+          out as DesignerOutput,
+          sourceElement,
+          el
+        );
         return applyPatch(el, scaled);
       }
       return el;

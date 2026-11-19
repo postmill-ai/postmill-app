@@ -164,6 +164,73 @@ describe('applyLinked fontSize propagation', () => {
     expect(affected).toEqual([1]);
   });
 
+  const makeLinkedSizeDoc = () => {
+    const doc = makeDoc();
+    Object.assign(doc.outputs[1], { width: 540, height: 540 });
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    larger.richText = [
+      { text: 'Big ', fontSize: 64, fill: '#112233' },
+      { text: 'rich ', fontSize: 32 },
+      { text: '™', fontSize: 8 },
+    ];
+    smaller.richText = [
+      { text: 'Big ', fontSize: 32, fill: '#112233' },
+      { text: 'rich ', fontSize: 16 },
+      { text: '™', fontSize: 8 },
+    ];
+    return { doc };
+  };
+
+  it('keeps target run sizes unchanged for a style-only edit from the smaller format', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+    const editedRuns = smaller.richText.map((run: any, index: number) =>
+      index === 0 ? { ...run, fill: '#abcdef' } : { ...run }
+    );
+
+    const { outputs, affected } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: editedRuns },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      32, 16, 8,
+    ]);
+    expect((outputs[0] as any).children[0].richText[0].fill).toBe('#abcdef');
+    expect((outputs[1] as any).children[0].richText[0].fill).toBe('#abcdef');
+    expect(affected).toEqual([0]);
+  });
+
+  it('scales only the run whose size actually changed', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+    const editedRuns = smaller.richText.map((run: any, index: number) =>
+      index === 0 ? { ...run, fontSize: 40 } : { ...run }
+    );
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: editedRuns },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      80, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      40, 16, 8,
+    ]);
+  });
+
   it('keeps the edit on the current output when editFormatOnly is set', () => {
     const { outputs, affected } = applyLinked(
       makeDoc(),
