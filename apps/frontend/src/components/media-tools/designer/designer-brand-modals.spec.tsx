@@ -160,7 +160,7 @@ describe('Designer brand context in app-root modals', () => {
 
     expect(await screen.findByText('No templates yet')).toBeTruthy();
     expect(mocks.fetch).toHaveBeenCalledWith(
-      '/media/design-templates?page=1&limit=24&brandId=brand-a'
+      '/media/design-templates?page=1&limit=24&sort=newest&brandId=brand-a'
     );
   });
 });

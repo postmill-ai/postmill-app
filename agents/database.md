@@ -6,7 +6,7 @@ against the production DB at boot, so every schema change must be backward-compa
 
 | Fact | Value |
 |---|---|
-| Schema | `libraries/nestjs-libraries/src/database/prisma/schema.prisma` (91 models) |
+| Schema | `libraries/nestjs-libraries/src/database/prisma/schema.prisma` (92 models) |
 | Migrations | `libraries/nestjs-libraries/src/database/prisma/migrations/` — committed, from the `0_init` baseline |
 | Client access | `PrismaService` / `PrismaRepository<T>` / `PrismaTransaction` in `libraries/nestjs-libraries/src/database/prisma/prisma.service.ts` |
 | Canonical apply path | `prisma migrate deploy` (CI, backend boot, production) |
@@ -110,7 +110,7 @@ sanctioned exceptions (seeders, cross-domain leaf-reads) are enumerated in
 | Org | `Organization`, `UserOrganization`, `OrgPortabilityJob` |
 | Channels | `Integration`, `OrgProviderConfiguration` |
 | Posts / comments | `Post`, `Comments`, `PostCommentRead`, `Media` |
-| Designer | `Design`, `DesignVersion`, `DesignTemplate`, `DesignTemplateFolder`, `AiDesignerSession` |
+| Designer | `Design`, `DesignVersion`, `DesignTemplate`, `DesignTemplateFolder`, `DesignerRecentOpen`, `AiDesignerSession` |
 | Provider configs | `AIOrgProviderConfig`, `MediaProviderConfig`, `StorageProviderConfig`, `OrgShortLinkConfig`, `OrgVpnConfig`, `ContentPackConfig`, `AuthProviderConfig`, `CommsProviderConfig` (+ per-user `CommsUserLink`) |
 | Billing | `Subscription`, `Credits` |
 | Notifications | `Notifications`, `NotificationRead`, `NotificationPreference`, `NotificationDigestQueue` |

@@ -41,10 +41,13 @@ describe('DesignService', () => {
     setTemplateThumbnail: ReturnType<typeof vi.fn>;
     findById: ReturnType<typeof vi.fn>;
     findTemplateForOrg: ReturnType<typeof vi.fn>;
+    markDesignOpened: ReturnType<typeof vi.fn>;
+    markTemplateOpened: ReturnType<typeof vi.fn>;
     findByOrg: ReturnType<typeof vi.fn>;
     countByOrg: ReturnType<typeof vi.fn>;
     findTemplatesByOrg: ReturnType<typeof vi.fn>;
     countTemplatesByOrg: ReturnType<typeof vi.fn>;
+    listTemplateCategories: ReturnType<typeof vi.fn>;
     findDesignsForPreviewRegen: ReturnType<typeof vi.fn>;
     findTemplatesForPreviewRegen: ReturnType<typeof vi.fn>;
     createFolder: ReturnType<typeof vi.fn>;
@@ -95,10 +98,13 @@ describe('DesignService', () => {
       setTemplateThumbnail: vi.fn(),
       findById: vi.fn(),
       findTemplateForOrg: vi.fn(),
+      markDesignOpened: vi.fn(),
+      markTemplateOpened: vi.fn(),
       findByOrg: vi.fn(),
       countByOrg: vi.fn(),
       findTemplatesByOrg: vi.fn(),
       countTemplatesByOrg: vi.fn(),
+      listTemplateCategories: vi.fn().mockResolvedValue([]),
       findDesignsForPreviewRegen: vi.fn(),
       findTemplatesForPreviewRegen: vi.fn(),
       createFolder: vi.fn(),
@@ -202,6 +208,28 @@ describe('DesignService', () => {
       });
       expect(fileService.saveGeneratedMedia).toHaveBeenCalledTimes(1);
       expect(fileService.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('records a successful template apply without persisting sourceTemplateId on Design', async () => {
+      repository.findTemplateForOrg.mockResolvedValue({ id: 'template-1', isSystem: true });
+      repository.create.mockImplementation((payload: any) => payload);
+      fileService.getFileById.mockResolvedValue({ id: 'preview-1' });
+
+      await service.createDesign('org-1', 'user-1', {
+        name: 'From template', doc: makeDoc(), previewFileId: 'preview-1', sourceTemplateId: 'template-1',
+      });
+
+      expect(repository.markTemplateOpened).toHaveBeenCalledWith('org-1', 'user-1', 'template-1');
+      expect(repository.create).toHaveBeenCalledWith(expect.not.objectContaining({ sourceTemplateId: 'template-1' }));
+    });
+
+    it('rejects a cross-org source template before creating a design', async () => {
+      repository.findTemplateForOrg.mockResolvedValue(null);
+      await expect(service.createDesign('org-1', 'user-1', {
+        name: 'Invalid', doc: makeDoc(), sourceTemplateId: 'foreign',
+      })).rejects.toThrow(NotFoundException);
+      expect(repository.create).not.toHaveBeenCalled();
+      expect(repository.markTemplateOpened).not.toHaveBeenCalled();
     });
 
     it('cleans a new inline File when the design save fails', async () => {
@@ -561,6 +589,19 @@ describe('DesignService', () => {
           outputIndex: 0,
         })
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('design open history', () => {
+    it('records only successful org-scoped reads and keeps history failures non-blocking', async () => {
+      repository.findById.mockResolvedValue({ id: 'd1' });
+      repository.markDesignOpened.mockRejectedValue(new Error('history unavailable'));
+      await expect(service.getDesign('org-1', 'd1', 'user-1')).resolves.toEqual({ id: 'd1' });
+      expect(repository.markDesignOpened).toHaveBeenCalledWith('org-1', 'user-1', 'd1');
+
+      repository.findById.mockResolvedValue(null);
+      await service.getDesign('org-1', 'missing', 'user-1');
+      expect(repository.markDesignOpened).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1074,7 +1115,7 @@ describe('DesignService', () => {
 
       expect(Array.isArray(out)).toBe(true);
       expect((out as any[])[0]).toMatchObject({ id: 't1', thumbnail: null });
-      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', undefined, undefined, undefined, undefined);
+      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', undefined, undefined, undefined, undefined, {});
       expect(repository.countTemplatesByOrg).not.toHaveBeenCalled();
     });
 
@@ -1086,8 +1127,8 @@ describe('DesignService', () => {
 
       const out = await service.listTemplates('org-1', 2, 24);
 
-      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 2, 24, undefined, undefined);
-      expect(repository.countTemplatesByOrg).toHaveBeenCalledWith('org-1', undefined);
+      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 2, 24, undefined, undefined, {});
+      expect(repository.countTemplatesByOrg).toHaveBeenCalledWith('org-1', undefined, {});
       expect(out).toMatchObject({ total: 42, page: 2, limit: 24 });
       // Same slimmed mapping as the plain-array shape.
       expect((out as any).templates[0]).toMatchObject({
@@ -1101,15 +1142,44 @@ describe('DesignService', () => {
       repository.findTemplatesByOrg.mockResolvedValue([]);
       repository.countTemplatesByOrg.mockResolvedValue(0);
       await service.listTemplates('org-1', 1, 24, 'brand-1');
-      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1', undefined);
+      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1', undefined, {});
     });
 
     it('passes the org-only scope through to list and count', async () => {
       repository.findTemplatesByOrg.mockResolvedValue([]);
       repository.countTemplatesByOrg.mockResolvedValue(0);
       await service.listTemplates('org-1', 1, 24, 'brand-1', 'org');
-      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1', 'org');
-      expect(repository.countTemplatesByOrg).toHaveBeenCalledWith('org-1', 'org');
+      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1', 'org', {});
+      expect(repository.countTemplatesByOrg).toHaveBeenCalledWith('org-1', 'org', {});
+    });
+
+    it('passes full-library filters and returns canonical facets with an independent no-folder count', async () => {
+      repository.findTemplatesByOrg.mockResolvedValue([]);
+      repository.countTemplatesByOrg.mockResolvedValue(3);
+      repository.listTemplateCategories.mockResolvedValue([
+        { category: 'instagram-post', mode: 'image' },
+        { category: 'IG Post', mode: 'image' },
+        { category: null, mode: 'video' },
+        { category: '', mode: 'image' },
+      ]);
+      repository.getFolder.mockResolvedValue({ id: 'folder-1' });
+      const options = { query: 'launch', sort: 'recent' as const, userId: 'user-1', folderId: 'folder-1', category: 'ig-post' };
+
+      const out = await service.listTemplates('org-1', 1, 24, 'brand-1', undefined, options);
+
+      expect(repository.getFolder).toHaveBeenCalledWith('org-1', 'folder-1');
+      expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1', undefined, options);
+      expect(repository.countTemplatesByOrg).toHaveBeenCalledWith('org-1', undefined, options);
+      expect(repository.countTemplatesByOrg).toHaveBeenCalledWith('org-1', 'org', { folderId: null });
+      expect(out).toMatchObject({
+        categories: expect.arrayContaining([
+          { key: 'ig-post', label: 'IG Post' },
+          { key: 'video', label: 'Video' },
+          { key: 'other', label: 'Other' },
+        ]),
+        unfiledCount: 3,
+      });
+      expect((out as any).categories.filter((entry: any) => entry.key === 'ig-post')).toHaveLength(1);
     });
   });
 

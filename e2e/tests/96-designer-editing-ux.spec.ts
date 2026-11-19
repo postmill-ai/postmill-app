@@ -77,6 +77,34 @@ const initialVideoDoc = {
   }],
 };
 
+const galleryDesigns = [
+  ...Array.from({ length: 25 }, (_, index) => ({
+    id: `gallery-design-${index + 1}`,
+    name: `Gallery design ${String(index + 1).padStart(2, '0')}`,
+    createdAt: new Date(Date.UTC(2026, 0, 25 - index)).toISOString(),
+    updatedAt: new Date(Date.UTC(2026, 0, 25 - index)).toISOString(),
+    previewUrl: PNG_DATA_URL,
+    mode: 'image',
+  })),
+  {
+    id: 'gallery-design-unloaded', name: 'R&D launch', createdAt: '2020-01-01T00:00:00.000Z',
+    updatedAt: '2020-01-01T00:00:00.000Z', previewUrl: null, previewDataUrl: null, mode: 'image',
+  },
+];
+
+const galleryTemplates = [
+  ...Array.from({ length: 25 }, (_, index) => ({
+    id: `gallery-template-${index + 1}`, name: `Gallery template ${String(index + 1).padStart(2, '0')}`,
+    category: 'Social', isSystem: false, folderId: null, brandProfileId: null,
+    doc: { mode: 'image' }, thumbnail: PNG_DATA_URL, createdAt: new Date(Date.UTC(2026, 0, 25 - index)).toISOString(),
+  })),
+  {
+    id: 'gallery-template-unloaded', name: 'Unloaded launch', category: 'instagram-post', isSystem: false,
+    folderId: null, brandProfileId: null, doc: { mode: 'image' }, thumbnail: null,
+    createdAt: '2020-01-01T00:00:00.000Z',
+  },
+];
+
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
@@ -96,6 +124,9 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     generationCalls: 0,
     uploads: 0,
     uploadPath: PNG_DATA_URL,
+    recentDesignIds: [] as string[],
+    recentTemplateIds: [] as string[],
+    templateRequests: [] as string[],
   };
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -125,6 +156,77 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     }
     if (method === 'GET' && pathname === '/media/tools/status') {
       return json(route, { operations: {}, tools: { 'text-to-image': { available: true } } });
+    }
+    if (method === 'GET' && pathname === '/media/designs') {
+      const query = (url.searchParams.get('query') || '').toLowerCase();
+      const sort = url.searchParams.get('sort') || 'newest';
+      const filtered = galleryDesigns.filter((design) => !query || design.name.toLowerCase().includes(query));
+      const ordered = [...filtered].sort((a, b) => {
+        if (sort === 'name') return a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id.localeCompare(b.id);
+        if (sort === 'recent') {
+          const recent = state.recentDesignIds.indexOf(a.id) - state.recentDesignIds.indexOf(b.id);
+          if (state.recentDesignIds.includes(a.id) || state.recentDesignIds.includes(b.id)) {
+            if (!state.recentDesignIds.includes(a.id)) return 1;
+            if (!state.recentDesignIds.includes(b.id)) return -1;
+            return recent;
+          }
+        }
+        return b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
+      });
+      const pageNumber = Number(url.searchParams.get('page')) || 1;
+      const limit = Number(url.searchParams.get('limit')) || 24;
+      const start = (pageNumber - 1) * limit;
+      return json(route, { designs: ordered.slice(start, start + limit), total: ordered.length, page: pageNumber, limit });
+    }
+    if (method === 'GET' && pathname === '/media/design-templates/folders') return json(route, []);
+    if (method === 'GET' && pathname === '/media/design-templates') {
+      state.templateRequests.push(`${pathname}${url.search}`);
+      const query = (url.searchParams.get('query') || '').toLowerCase();
+      const category = url.searchParams.get('category');
+      const sort = url.searchParams.get('sort') || 'newest';
+      const filtered = galleryTemplates.filter((template) => {
+        const searchable = `${template.name} ${template.category} ${template.category === 'instagram-post' ? 'ig post instagram post' : ''}`.toLowerCase();
+        return (!query || searchable.includes(query)) &&
+          (!category || (category === 'ig-post' ? template.category === 'instagram-post' : template.category.toLowerCase() === category)) &&
+          (url.searchParams.get('folderId') !== 'none' || !template.folderId);
+      });
+      const ordered = [...filtered].sort((a, b) => {
+        if (sort === 'name') return a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id.localeCompare(b.id);
+        if (sort === 'recent') {
+          const aIndex = state.recentTemplateIds.indexOf(a.id);
+          const bIndex = state.recentTemplateIds.indexOf(b.id);
+          if (aIndex >= 0 || bIndex >= 0) {
+            if (aIndex < 0) return 1;
+            if (bIndex < 0) return -1;
+            return aIndex - bIndex;
+          }
+        }
+        return b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
+      });
+      const pageNumber = Number(url.searchParams.get('page')) || 1;
+      const limit = Number(url.searchParams.get('limit')) || 24;
+      const start = (pageNumber - 1) * limit;
+      return json(route, {
+        templates: ordered.slice(start, start + limit), total: ordered.length, page: pageNumber, limit,
+        categories: [{ key: 'social', label: 'Social' }, { key: 'ig-post', label: 'IG Post' }], unfiledCount: galleryTemplates.length,
+      });
+    }
+    if (method === 'GET' && /^\/media\/designs\/gallery-design-/.test(pathname)) {
+      const id = pathname.split('/').pop()!;
+      state.recentDesignIds = [id, ...state.recentDesignIds.filter((entry) => entry !== id)];
+      const design = galleryDesigns.find((entry) => entry.id === id)!;
+      return json(route, { id, name: design.name, doc: initialDoc });
+    }
+    if (method === 'GET' && /^\/media\/design-templates\/gallery-template-/.test(pathname)) {
+      const id = pathname.split('/').pop()!;
+      return json(route, galleryTemplates.find((entry) => entry.id === id));
+    }
+    if (method === 'POST' && pathname === '/media/designs') {
+      const body = request.postDataJSON() as { name: string; doc: unknown; sourceTemplateId?: string };
+      if (body.sourceTemplateId) {
+        state.recentTemplateIds = [body.sourceTemplateId, ...state.recentTemplateIds.filter((id) => id !== body.sourceTemplateId)];
+      }
+      return json(route, { id: 'gallery-created-design', name: body.name, doc: body.doc }, 201);
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}`) {
       return json(route, { id: DESIGN_ID, name: 'Editing UX', doc: state.doc });
@@ -1380,4 +1482,100 @@ test('clip context menu duplicates the intended clip without changing another tr
   expect(duplicate.id).not.toBe(source.id);
   expect(state.doc.outputs[0].tracks[0].clips).toHaveLength(1);
   expect(state.doc.outputs[0].tracks[0].clips[0]).toMatchObject({ id: 'video-clip', src: '/video.mp4' });
+});
+
+
+async function openDesignGallery(page: Page) {
+  await page.getByRole('menuitem', { name: 'File', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Open Design…', exact: true }).click();
+  return page.getByRole('dialog', { name: 'Open design', exact: true });
+}
+
+async function openTemplateGallery(page: Page) {
+  await page.getByRole('menuitem', { name: 'File', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Browse Templates…', exact: true }).click();
+  return page.getByRole('dialog', { name: 'Browse templates', exact: true });
+}
+
+const galleryColumnCount = (list: Locator) => list.evaluate((element) =>
+  getComputedStyle(element).gridTemplateColumns.split(' ').filter(Boolean).length
+);
+
+test('Open Design searches and sorts the full library with persistent compact sizing', async ({ page }) => {
+  await installMocks(page);
+  await openDesigner(page);
+  let dialog = await openDesignGallery(page);
+  let list = dialog.getByRole('list');
+  await expect(list.getByRole('listitem')).toHaveCount(24);
+  const mediumColumns = await galleryColumnCount(list);
+  expect(mediumColumns).toBe(5);
+
+  await dialog.getByRole('button', { name: 'Size S', exact: true }).click();
+  expect(await galleryColumnCount(list)).toBeGreaterThan(mediumColumns);
+  await expect(dialog.getByRole('button', { name: 'Size S', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+  await dialog.getByRole('textbox', { name: 'Search designs' }).fill('R&D');
+  await expect(list.getByRole('listitem')).toHaveCount(1);
+  await expect(list).toContainText('R&D launch');
+  await expect(list).toContainText('No preview available');
+  await dialog.getByRole('textbox', { name: 'Search designs' }).fill('');
+  await expect(list.getByRole('listitem')).toHaveCount(24);
+  await dialog.getByRole('button', { name: 'Load more', exact: true }).click();
+  await expect(list.getByRole('listitem')).toHaveCount(26);
+  expect(await list.getByRole('listitem').evaluateAll((cards) => new Set(cards.map((card) => card.getAttribute('data-design-id'))).size)).toBe(26);
+
+  await dialog.getByRole('combobox', { name: 'Sort by' }).selectOption('name');
+  await expect(list.getByRole('listitem').first()).toContainText('Gallery design 01');
+  await dialog.getByRole('textbox', { name: 'Search designs' }).fill('R&D');
+  await expect(list.getByRole('listitem')).toHaveCount(1);
+  await dialog.getByRole('button', { name: 'Open R&D launch', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+
+  dialog = await openDesignGallery(page);
+  list = dialog.getByRole('list');
+  await expect(dialog.getByRole('button', { name: 'Size S', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await dialog.getByRole('button', { name: 'Size L', exact: true }).click();
+  expect(await galleryColumnCount(list)).toBeLessThan(mediumColumns);
+  await dialog.getByRole('combobox', { name: 'Sort by' }).selectOption('recent');
+  await expect(list.getByRole('listitem').first()).toContainText('R&D launch');
+  const open = list.getByRole('button', { name: 'Open R&D launch', exact: true });
+  await open.focus();
+  await expect.poll(() => open.evaluate((button) => getComputedStyle(button.parentElement!).opacity)).toBe('1');
+  await page.keyboard.press('Enter');
+  await expect(dialog).toHaveCount(0);
+});
+
+test('Browse Templates filters canonical categories and records Apply for recent ordering', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+  let dialog = await openTemplateGallery(page);
+  let list = dialog.getByRole('list');
+  await expect(list.getByRole('listitem')).toHaveCount(24);
+  expect(await galleryColumnCount(list)).toBe(5);
+  await expect(dialog.getByRole('button', { name: 'No folder', exact: true })).toBeVisible();
+
+  await dialog.locator('button[data-overflow-slot="inline"]').filter({ hasText: /^IG Post$/ }).click();
+  await expect.poll(() => state.templateRequests.some((request) => request.includes('category=ig-post'))).toBe(true);
+  await dialog.locator('button[data-overflow-slot="inline"]').filter({ hasText: /^All$/ }).click();
+  await dialog.getByRole('textbox', { name: 'Search templates' }).fill('IG Post');
+  await expect(list.getByRole('listitem')).toHaveCount(1);
+  await expect(list).toContainText('Unloaded launch');
+  await expect(list).toContainText('IG Post');
+  await expect(list).toContainText('No preview available');
+
+  const card = list.getByRole('listitem').first();
+  await card.hover();
+  await dialog.getByRole('button', { name: 'Preview Unloaded launch', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Unloaded launch', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Unloaded launch', exact: true })).toHaveCount(0);
+  await dialog.getByRole('combobox', { name: 'Sort by' }).selectOption('recent');
+  await dialog.getByRole('button', { name: 'Apply template Unloaded launch', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(state.recentTemplateIds[0]).toBe('gallery-template-unloaded');
+
+  dialog = await openTemplateGallery(page);
+  list = dialog.getByRole('list');
+  await dialog.getByRole('combobox', { name: 'Sort by' }).selectOption('recent');
+  await expect(list.getByRole('listitem').first()).toContainText('Unloaded launch');
 });

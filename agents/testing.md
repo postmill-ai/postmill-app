@@ -152,6 +152,8 @@ playwright.designer-editing.config.ts` from `e2e/`. The `production-editing` job
 `.github/workflows/designer-browser.yml` builds the frontend, starts that production bundle only on
 the GitHub runner, and executes this config with the skip flag and mocked routes. Never use the mock cookie or
 skip flag for unmocked/live tests, and never start the server or Playwright on the production host.
+Its gallery cases cover full-library search/sort/pagination, S/M/L density, recent open/apply ordering,
+keyboard/touch-safe actions, and preview fallbacks against the production frontend build with mocked APIs.
 
 ### Opt-in live provider playback (never default CI)
 

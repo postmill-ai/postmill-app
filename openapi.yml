@@ -7578,6 +7578,16 @@ paths:
           in: query
           schema:
             type: string
+        - name: query
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: sort
+          required: false
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: ""
@@ -7595,6 +7605,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Design
   /media/designs/{id}:
@@ -7650,6 +7664,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       summary: |-
         Import a `.pdesign` (zip, format v1 or v2) or raw `.json` DesignerDoc as a
         NEW design. Static segment declared before the parameterized `/:id` routes
@@ -7672,6 +7690,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Design
   /media/designs/{id}/export:
@@ -8117,6 +8139,26 @@ paths:
           schema:
             type: string
         - name: scope
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: query
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: sort
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: folderId
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: category
           required: false
           in: query
           schema:
@@ -12780,6 +12822,8 @@ components:
         previewFileId:
           type: string
         campaignId:
+          type: string
+        sourceTemplateId:
           type: string
       required:
         - name

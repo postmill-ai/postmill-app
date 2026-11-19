@@ -72,6 +72,7 @@ import { parseByteRange } from '@postmill-ai/nestjs-libraries/media/design-rende
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
+import type { DesignerGallerySort } from '@postmill-ai/nestjs-libraries/media/designer-doc/template-category';
 import { DesignExportService } from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
 import {
   DESIGN_IMPORT_MAX_BYTES,
@@ -92,6 +93,18 @@ import {
 // same pattern as files.controller.ts.
 const TMP_UPLOAD_DIR = path.join(tmpdir(), 'postmill-uploads');
 try { fs.mkdirSync(TMP_UPLOAD_DIR, { recursive: true }); } catch {}
+
+const galleryPage = (value?: string) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : 1;
+};
+const galleryLimit = (value?: string, fallback = 24) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.min(100, Math.floor(parsed)) : fallback;
+};
+const galleryQuery = (value?: string) => value?.trim().slice(0, 200) || undefined;
+const gallerySort = (value?: string): DesignerGallerySort | undefined =>
+  value === 'newest' || value === 'name' || value === 'recent' ? value : undefined;
 
 @ApiTags('Design')
 @Controller('/media/designs')
@@ -115,8 +128,16 @@ export class DesignController {
     @GetOrgFromRequest() org: Organization,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('query') query?: string,
+    @Query('sort') sort?: string,
+    @GetUserFromRequest() user?: User,
   ) {
-    return this._designService.listDesigns(org.id, Number(page) || 1, Number(limit) || 20);
+    return this._designService.listDesigns(
+      org.id,
+      galleryPage(page),
+      galleryLimit(limit, 20),
+      { query: galleryQuery(query), sort: gallerySort(sort), userId: user?.id },
+    );
   }
 
   @Get('/:id')
@@ -125,8 +146,9 @@ export class DesignController {
   async get(
     @GetOrgFromRequest() org: Organization,
     @Param('id') id: string,
+    @GetUserFromRequest() user?: User,
   ) {
-    return this._designService.getDesign(org.id, id);
+    return this._designService.getDesign(org.id, id, user?.id);
   }
 
   @Post('/')
@@ -668,20 +690,31 @@ export class DesignTemplateController {
     @Query('limit') limit?: string,
     @Query('brandId') brandId?: string,
     @Query('scope') scope?: 'org',
+    @Query('query') query?: string,
+    @Query('sort') sort?: string,
+    @Query('folderId') folderId?: string,
+    @Query('category') category?: string,
+    @GetUserFromRequest() user?: User,
   ) {
-    // No params = the historical plain-array response (older clients and other
-    // callers depend on the shape). Either param present = one bounded page.
+    const options = {
+      query: galleryQuery(query),
+      sort: gallerySort(sort),
+      folderId: folderId === 'none' ? null : folderId?.trim() || undefined,
+      category: galleryQuery(category),
+      userId: user?.id,
+    };
+    // No pagination params retains the historical plain-array response.
     if (page === undefined && limit === undefined) {
-      return this._designService.listTemplates(org.id, undefined, undefined, brandId, scope);
+      return this._designService.listTemplates(org.id, undefined, undefined, brandId, scope, options);
     }
-    const pageNum = Number(page);
-    const limitNum = Number(limit);
-    const safePage = Number.isFinite(pageNum) && pageNum >= 1 ? Math.floor(pageNum) : 1;
-    const safeLimit =
-      Number.isFinite(limitNum) && limitNum >= 1
-        ? Math.min(100, Math.floor(limitNum))
-        : 24;
-    return this._designService.listTemplates(org.id, safePage, safeLimit, brandId, scope);
+    return this._designService.listTemplates(
+      org.id,
+      galleryPage(page),
+      galleryLimit(limit),
+      brandId,
+      scope,
+      options,
+    );
   }
 
   @Get('/:id')

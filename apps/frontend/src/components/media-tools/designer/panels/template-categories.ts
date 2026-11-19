@@ -7,6 +7,10 @@
  */
 
 import { templateModeOf } from './template-mode';
+import {
+  templateCategoryKey,
+  templateCategoryLabel,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/template-category';
 
 export interface CategorizedTemplate {
   category?: string | null;
@@ -45,24 +49,8 @@ export interface TemplateSection<T extends CategorizedTemplate> {
   templates: T[];
 }
 
-const normalize = (category?: string | null): string => (category ?? '').trim();
-
-const keyFor = (category?: string | null): string => {
-  const normalized = normalize(category);
-  return normalized ? normalized.toLowerCase() : OTHER_CATEGORY_KEY;
-};
-
-/**
- * Uncategorized video templates bucket under 'video' instead of 'other' so the
- * gallery stays mode-filterable for templates saved before the Video category
- * existed. An explicit category always wins, for either mode.
- */
-const sectionKeyFor = (template: CategorizedTemplate): string => {
-  if (!normalize(template.category) && templateModeOf(template) === 'video') {
-    return VIDEO_CATEGORY_KEY;
-  }
-  return keyFor(template.category);
-};
+const sectionKeyFor = (template: CategorizedTemplate): string =>
+  templateCategoryKey(template.category, templateModeOf(template));
 
 /** Seed-order rank for system categories; everything else ties after them. */
 const systemRank = (key: string): number => {
@@ -89,7 +77,7 @@ export const groupTemplatesByCategory = <T extends CategorizedTemplate>(
         label:
           key === OTHER_CATEGORY_KEY
             ? null
-            : normalize(template.category) || VIDEO_CATEGORY_LABEL,
+            : templateCategoryLabel(template.category, templateModeOf(template)),
         templates: [],
       };
       byKey.set(key, section);

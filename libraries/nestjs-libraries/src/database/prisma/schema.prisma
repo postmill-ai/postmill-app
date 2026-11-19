@@ -78,6 +78,7 @@ model Organization {
   designVersions       DesignVersion[]
   designTemplates      DesignTemplate[]
   designTemplateFolders DesignTemplateFolder[]
+  designerRecentOpens  DesignerRecentOpen[]
   aiDesignerSessions   AiDesignerSession[]
   commsProviderConfigs CommsProviderConfig[]
   commsUserLinks       CommsUserLink[]
@@ -146,6 +147,7 @@ model User {
   sessions              Session[]
   designs               Design[]
   designVersions        DesignVersion[]
+  designerRecentOpens   DesignerRecentOpen[]
   notificationReads     NotificationRead[]
   notificationPreference NotificationPreference?
   notificationDigestQueues NotificationDigestQueue[]
@@ -1854,6 +1856,7 @@ model Design {
   campaign        Campaign?     @relation(fields: [campaignId], references: [id])
   previewFile     File?         @relation(fields: [previewFileId], references: [id])
   versions        DesignVersion[]
+  recentOpens     DesignerRecentOpen[]
 
   @@index([organizationId])
   @@index([createdById])
@@ -1905,6 +1908,7 @@ model DesignTemplate {
   thumbnailFile   File?         @relation(fields: [thumbnailFileId], references: [id])
   folder          DesignTemplateFolder? @relation(fields: [folderId], references: [id])
   brandProfile    AIBrandProfile? @relation(fields: [brandProfileId], references: [id], onDelete: SetNull)
+  recentOpens     DesignerRecentOpen[]
 
   @@index([organizationId])
   @@index([category])
@@ -1913,9 +1917,32 @@ model DesignTemplate {
   @@index([deletedAt])
 }
 
+// Per-user gallery history. A row points at either a Design or a DesignTemplate;
+// the two nullable compound uniques deduplicate each target type in PostgreSQL.
+model DesignerRecentOpen {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  designId       String?
+  templateId     String?
+  openedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  design       Design?        @relation(fields: [designId], references: [id], onDelete: Cascade)
+  template     DesignTemplate? @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, designId])
+  @@unique([organizationId, userId, templateId])
+  @@index([organizationId, userId, openedAt])
+  @@index([designId])
+  @@index([templateId])
+}
+
 // Org-defined folders for grouping design templates in the Templates panel.
 // Adjacency list, same shape as FileFolder; null DesignTemplate.folderId =
-// unfiled (root). System templates are never foldered.
+// no folder (root). System templates are never foldered.
 model DesignTemplateFolder {
   id             String   @id @default(cuid())
   organizationId String

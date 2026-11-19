@@ -12,6 +12,7 @@ describe('DesignRepository Brand Kit template ordering (integration)', () => {
       new PrismaRepository<'designTemplateFolder'>(prisma as unknown as PrismaService),
       new PrismaRepository<'designVersion'>(prisma as unknown as PrismaService),
       new PrismaRepository<'file'>(prisma as unknown as PrismaService),
+      new PrismaRepository<'designerRecentOpen'>(prisma as unknown as PrismaService),
     );
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const organizationId = `template-org-${suffix}`;

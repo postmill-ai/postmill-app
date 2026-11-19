@@ -17,7 +17,10 @@ function makeModel() {
       update: vi.fn(),
       count: vi.fn(),
     },
-    $queryRawUnsafe: vi.fn(),
+    $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+    designerRecentOpen: {
+      upsert: vi.fn(),
+    },
     designTemplateFolder: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
@@ -42,6 +45,7 @@ function makeModel() {
 function makeRepo(model = makeModel()) {
   return {
     repo: new DesignRepository(
+      { model } as any,
       { model } as any,
       { model } as any,
       { model } as any,
@@ -205,30 +209,26 @@ describe('DesignRepository — design versions', () => {
 });
 
 describe('DesignRepository — templates pagination', () => {
-  it('findTemplatesByOrg without pagination returns the full list (no skip/take)', async () => {
+  it('findTemplatesByOrg without pagination returns the full list (no LIMIT/OFFSET)', async () => {
     const { repo, model } = makeRepo();
-    model.designTemplate.findMany.mockResolvedValue([]);
 
     await repo.findTemplatesByOrg('org-1');
 
-    const args = model.designTemplate.findMany.mock.calls[0][0];
-    expect(args.where).toEqual({
-      deletedAt: null,
-      OR: [{ organizationId: 'org-1' }, { isSystem: true }],
-    });
-    expect(args).not.toHaveProperty('skip');
-    expect(args).not.toHaveProperty('take');
+    const [sql, orgId] = model.$queryRawUnsafe.mock.calls[0];
+    expect(sql).toContain('(t."organizationId" = $1 OR t."isSystem" = true)');
+    expect(sql).not.toContain('LIMIT');
+    expect(sql).not.toContain('OFFSET');
+    expect(orgId).toBe('org-1');
   });
 
-  it('findTemplatesByOrg with page/limit applies skip/take', async () => {
+  it('findTemplatesByOrg with page/limit applies bounded SQL pagination', async () => {
     const { repo, model } = makeRepo();
-    model.designTemplate.findMany.mockResolvedValue([]);
 
     await repo.findTemplatesByOrg('org-1', 3, 24);
 
-    expect(model.designTemplate.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 48, take: 24 })
-    );
+    const [sql, ...params] = model.$queryRawUnsafe.mock.calls[0];
+    expect(sql).toContain('LIMIT $2 OFFSET $3');
+    expect(params).toEqual(['org-1', 24, 48]);
   });
 
   it('prioritizes the selected brand in SQL before applying pagination', async () => {
@@ -242,22 +242,53 @@ describe('DesignRepository — templates pagination', () => {
     const result = await repo.findTemplatesByOrg('org-1', 1, 24, 'brand-1');
 
     expect(model.$queryRawUnsafe).toHaveBeenCalledWith(
-      expect.stringContaining('CASE WHEN "brandProfileId" = $2 THEN 0 ELSE 1 END'),
+      expect.stringContaining('CASE WHEN t."brandProfileId" = $2 THEN 0 ELSE 1 END'),
       'org-1', 'brand-1', 24, 0,
     );
     expect(result.map((template) => template.id)).toEqual(['brand-template', 'shared-template']);
   });
 
-  it('countTemplatesByOrg counts the same org/system scope as the list', async () => {
+  it('countTemplatesByOrg counts the same org/system scope and filters as the list', async () => {
     const { repo, model } = makeRepo();
-    model.designTemplate.count.mockResolvedValue(7);
+    model.$queryRawUnsafe.mockResolvedValue([{ total: 7 }]);
 
-    expect(await repo.countTemplatesByOrg('org-1')).toBe(7);
-    expect(model.designTemplate.count).toHaveBeenCalledWith({
-      where: {
-        deletedAt: null,
-        OR: [{ organizationId: 'org-1' }, { isSystem: true }],
-      },
+    expect(await repo.countTemplatesByOrg('org-1', undefined, { query: 'Launch' })).toBe(7);
+    const [sql, ...params] = model.$queryRawUnsafe.mock.calls[0];
+    expect(sql).toContain('SELECT COUNT(*)::int AS total');
+    expect(sql).toContain('(t."organizationId" = $1 OR t."isSystem" = true)');
+    expect(sql).toContain('POSITION');
+    expect(params).toEqual(['org-1', 'Launch', 'Launch']);
+  });
+
+  it('uses per-user history for recent design ordering and stable name ordering', async () => {
+    const { repo, model } = makeRepo();
+    model.$queryRawUnsafe.mockResolvedValue([{ id: 'd1' }]);
+    model.design.findMany.mockResolvedValue([{ id: 'd1', name: 'One' }]);
+
+    await repo.findByOrg('org-1', 1, 24, { sort: 'recent', userId: 'user-1', query: 'one' });
+    const [recentSql, ...recentParams] = model.$queryRawUnsafe.mock.calls[0];
+    expect(recentSql).toContain('LEFT JOIN "DesignerRecentOpen"');
+    expect(recentSql).toContain('r."openedAt" DESC NULLS LAST');
+    expect(recentSql).toContain('d."id" ASC');
+    expect(recentParams).toContain('user-1');
+
+    await repo.findByOrg('org-1', 1, 24, { sort: 'name' });
+    expect(model.$queryRawUnsafe.mock.calls[1][0]).toContain('LOWER(d."name") ASC');
+  });
+
+  it('filters templates by no folder and canonical category without system rows', async () => {
+    const { repo, model } = makeRepo();
+
+    await repo.findTemplatesByOrg('org-1', 1, 24, undefined, undefined, {
+      folderId: null,
+      category: 'ig-post',
+      sort: 'newest',
     });
+
+    const [sql, ...params] = model.$queryRawUnsafe.mock.calls[0];
+    expect(sql).toContain('t."organizationId" = $1');
+    expect(sql).toContain('t."folderId" IS NULL');
+    expect(params).toEqual(expect.arrayContaining(['ig-post', 'instagram-post', 'instagram post', 'ig post']));
+    expect(sql).toContain('t."createdAt" DESC');
   });
 });

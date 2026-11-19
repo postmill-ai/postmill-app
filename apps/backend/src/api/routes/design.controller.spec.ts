@@ -62,6 +62,13 @@ import * as path from 'path';
 
 const org = { id: 'org-1' } as any;
 const user = { id: 'user-1' } as any;
+const emptyTemplateGalleryOptions = {
+  query: undefined,
+  sort: undefined,
+  folderId: undefined,
+  category: undefined,
+  userId: undefined,
+};
 
 describe('DesignController', () => {
   let designService: {
@@ -285,14 +292,22 @@ describe('DesignController', () => {
       designService.listDesigns.mockResolvedValue(result);
 
       expect(await controller.list(org)).toBe(result);
-      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 20);
+      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 20, { query: undefined, sort: undefined, userId: undefined });
     });
 
     it('passes explicit page and limit', async () => {
       designService.listDesigns.mockResolvedValue({ designs: [], total: 0, page: 2, limit: 10 });
 
       await controller.list(org, '2', '10');
-      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 2, 10);
+      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 2, 10, { query: undefined, sort: undefined, userId: undefined });
+    });
+
+    it('passes bounded search and recent sort with the current user', async () => {
+      designService.listDesigns.mockResolvedValue({ designs: [], total: 0, page: 1, limit: 100 });
+      await controller.list(org, '1', '500', `  ${'x'.repeat(210)}  `, 'recent', user);
+      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 100, {
+        query: 'x'.repeat(200), sort: 'recent', userId: 'user-1',
+      });
     });
   });
 
@@ -302,7 +317,7 @@ describe('DesignController', () => {
       designService.getDesign.mockResolvedValue(design);
 
       expect(await controller.get(org, 'd1')).toBe(design);
-      expect(designService.getDesign).toHaveBeenCalledWith('org-1', 'd1');
+      expect(designService.getDesign).toHaveBeenCalledWith('org-1', 'd1', undefined);
     });
   });
 
@@ -781,7 +796,7 @@ describe('DesignController', () => {
       designService.listTemplates.mockResolvedValue(templates);
 
       expect(await templateController.list(org)).toBe(templates);
-      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', undefined, undefined, undefined, undefined);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', undefined, undefined, undefined, undefined, emptyTemplateGalleryOptions);
     });
 
     it('passes page/limit through and returns the envelope when paginating', async () => {
@@ -789,29 +804,43 @@ describe('DesignController', () => {
       designService.listTemplates.mockResolvedValue(envelope);
 
       expect(await templateController.list(org, '2', '24')).toBe(envelope);
-      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 2, 24, undefined, undefined);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 2, 24, undefined, undefined, emptyTemplateGalleryOptions);
     });
 
     it('clamps out-of-range pagination params', async () => {
       designService.listTemplates.mockResolvedValue({ templates: [], total: 0, page: 1, limit: 100 });
 
       await templateController.list(org, '0', '99999');
-      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 100, undefined, undefined);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 100, undefined, undefined, emptyTemplateGalleryOptions);
 
       await templateController.list(org, 'abc', undefined);
-      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24, undefined, undefined);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24, undefined, undefined, emptyTemplateGalleryOptions);
     });
 
     it('passes the selected brand through for server-side priority', async () => {
       designService.listTemplates.mockResolvedValue({ templates: [], total: 0, page: 1, limit: 24 });
       await templateController.list(org, '1', '24', 'brand-1');
-      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1', undefined);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1', undefined, emptyTemplateGalleryOptions);
     });
 
     it('passes the org-only scope through for Brand Studio', async () => {
       designService.listTemplates.mockResolvedValue({ templates: [], total: 0, page: 1, limit: 24 });
       await templateController.list(org, '1', '24', 'brand-1', 'org');
-      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1', 'org');
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1', 'org', emptyTemplateGalleryOptions);
+    });
+
+    it('passes search, sort, no-folder, and category filters with the current user', async () => {
+      designService.listTemplates.mockResolvedValue({ templates: [], total: 0, page: 1, limit: 24 });
+      await templateController.list(org, '1', '24', 'brand-1', undefined, ' launch ', 'recent', 'none', 'ig-post', user);
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24, 'brand-1', undefined, {
+        query: 'launch', sort: 'recent', folderId: null, category: 'ig-post', userId: 'user-1',
+      });
+    });
+
+    it('ignores unsupported sort values', async () => {
+      designService.listTemplates.mockResolvedValue({ templates: [], total: 0, page: 1, limit: 24 });
+      await templateController.list(org, '1', '24', undefined, undefined, undefined, 'unsafe');
+      expect(designService.listTemplates).toHaveBeenCalledWith('org-1', 1, 24, undefined, undefined, emptyTemplateGalleryOptions);
     });
   });
 

@@ -39,7 +39,7 @@ export const useTemplateFolders = (orgId: string | undefined) => {
  * the Files library's FolderTree, minus storage-provider mounting (template
  * folders have no color/provider). One GET returns the whole tree; the panel
  * filters templates client-side. Drop targets accept dragged template cards
- * (template id as text/plain) and call the move endpoint; the "Unfiled" row is
+ * (template id as text/plain) and call the move endpoint; the "No folder" row is
  * the null-folder target.
  */
 export const TemplateFolderTree: FC<{
@@ -104,14 +104,14 @@ export const TemplateFolderTree: FC<{
     if (!res.ok) {
       const message = await readErrorMessage(res, t('cannot_delete_non_empty_folder', 'Cannot delete non-empty folder'));
       // A non-empty folder gets one readable follow-up: delete it anyway and
-      // send its templates back to Unfiled (the backend's ?force=true path).
+      // send its templates back to No folder (the backend's ?force=true path).
       if (!isFolderNotEmptyError(res.status, message)) {
         toaster.show(message, 'warning');
         return;
       }
       const confirmed = await decision.open({
         title: t('delete_folder', 'Delete folder'),
-        description: t('delete_folder_unfile_contents', 'Delete folder and move its contents back to Unfiled?'),
+        description: t('delete_folder_unfile_contents', 'Delete folder and move its contents back to No folder?'),
         approveLabel: t('delete', 'Delete'),
       });
       if (!confirmed) return;
@@ -127,7 +127,7 @@ export const TemplateFolderTree: FC<{
     onRefresh();
     if (force) {
       // Force-deleting unfiles the folder's templates — the panel's list (and
-      // the Unfiled count) is stale until refetched.
+      // the No folder count) is stale until refetched.
       onTemplateMoved();
     }
   }, [fetch, onRefresh, onTemplateMoved, toaster, decision, selection, onSelect, t]);
@@ -296,6 +296,7 @@ export const TemplateFolderTree: FC<{
         <div
           role="button"
           tabIndex={0}
+          aria-label={t('template_folder_unfiled', 'No folder')}
           aria-pressed={selection === UNFILED_FOLDER_KEY}
           onClick={() => onSelect(UNFILED_FOLDER_KEY)}
           onKeyDown={(e) => {
@@ -318,7 +319,7 @@ export const TemplateFolderTree: FC<{
             <path d="M2 4.5C2 3.39543 2.89543 2.5 4 2.5H5.93934C6.46977 2.5 6.97848 2.71071 7.35355 3.08579L8 3.73223C8.18935 3.92156 8.44705 4.02708 8.71573 4.02708H12C13.1046 4.02708 14 4.92251 14 6.02708V11.5C14 12.6046 13.1046 13.5 12 13.5H4C2.89543 13.5 2 12.6046 2 11.5V4.5Z"
               fill="none" stroke="currentColor" strokeWidth="1.3" strokeDasharray="2.5 2" />
           </svg>
-          <span className="flex-1 truncate">{t('template_folder_unfiled', 'Unfiled')}</span>
+          <span className="flex-1 truncate">{t('template_folder_unfiled', 'No folder')}</span>
           <span className="text-[10px] text-newTextColor/60">{unfiledCount}</span>
         </div>
       </div>

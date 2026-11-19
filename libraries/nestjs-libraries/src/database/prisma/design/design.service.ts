@@ -3,7 +3,12 @@ import { createReadStream, promises as fs } from 'fs';
 import { resolve, relative, isAbsolute } from 'path';
 import { tmpdir } from 'os';
 import { Readable } from 'stream';
-import { DesignRepository } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.repository';
+import {
+  DesignGalleryOptions,
+  DesignRepository,
+  TemplateGalleryOptions,
+} from '@postmill-ai/nestjs-libraries/database/prisma/design/design.repository';
+import { templateCategoryKey, templateCategoryLabel } from '@postmill-ai/nestjs-libraries/media/designer-doc/template-category';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
@@ -108,14 +113,27 @@ export class DesignService {
     private readonly _videoThumbnailService: VideoThumbnailService,
   ) {}
 
-  async getDesign(orgId: string, id: string) {
-    return this._designRepository.findById(orgId, id);
+  async getDesign(orgId: string, id: string, userId?: string) {
+    const design = await this._designRepository.findById(orgId, id);
+    if (design && userId) {
+      try {
+        await this._designRepository.markDesignOpened(orgId, userId, id);
+      } catch {
+        this._logger.warn('Could not update design open history');
+      }
+    }
+    return design;
   }
 
-  async listDesigns(orgId: string, page: number = 1, limit: number = 20) {
+  async listDesigns(
+    orgId: string,
+    page: number = 1,
+    limit: number = 20,
+    options: DesignGalleryOptions = {},
+  ) {
     const [designs, total] = await Promise.all([
-      this._designRepository.findByOrg(orgId, page, limit),
-      this._designRepository.countByOrg(orgId),
+      this._designRepository.findByOrg(orgId, page, limit, options),
+      this._designRepository.countByOrg(orgId, options.query),
     ]);
     return {
       designs: designs.map((design) => ({
@@ -137,19 +155,34 @@ export class DesignService {
     previewDataUrl?: string;
     previewFileId?: string;
     campaignId?: string;
+    sourceTemplateId?: string;
   }) {
+    const { sourceTemplateId, ...designData } = data;
+    if (sourceTemplateId) {
+      const template = await this._designRepository.findTemplateForOrg(sourceTemplateId, orgId);
+      if (!template) throw new NotFoundException('Template not found');
+    }
     const { doc, createdFileIds } = await materializeDesignerInlineAssets(
       orgId,
-      data.doc,
+      designData.doc,
       this._fileService,
       this._storageService
     );
+    let created;
     try {
-      return await this.createDesignPersisted(orgId, userId, { ...data, doc });
+      created = await this.createDesignPersisted(orgId, userId, { ...designData, doc });
     } catch (error) {
       await cleanupDesignerInlineFiles(orgId, createdFileIds, this._fileService);
       throw error;
     }
+    if (sourceTemplateId) {
+      try {
+        await this._designRepository.markTemplateOpened(orgId, userId, sourceTemplateId);
+      } catch {
+        this._logger.warn('Could not update template apply history');
+      }
+    }
+    return created;
   }
 
   private async createDesignPersisted(orgId: string, userId: string, data: {
@@ -394,29 +427,52 @@ export class DesignService {
     return { success: true };
   }
 
-  async listTemplates(orgId: string, page?: number, limit?: number, brandProfileId?: string, scope?: 'org') {
-    // Backward compatible: no pagination params = the historical plain array
-    // (other callers depend on the shape). Both present = one page wrapped in
-    // { templates, total, page, limit }.
+  async listTemplates(
+    orgId: string,
+    page?: number,
+    limit?: number,
+    brandProfileId?: string,
+    scope?: 'org',
+    options: TemplateGalleryOptions = {},
+  ) {
+    if (options.folderId) await this.getFolder(orgId, options.folderId);
     const paginated = page !== undefined && limit !== undefined;
-    const [templates, total] = paginated
+    const [templates, total, categoryRows, unfiledCount] = paginated
       ? await Promise.all([
-          this._designRepository.findTemplatesByOrg(orgId, page, limit, brandProfileId, scope),
-          this._designRepository.countTemplatesByOrg(orgId, scope),
+          this._designRepository.findTemplatesByOrg(orgId, page, limit, brandProfileId, scope, options),
+          this._designRepository.countTemplatesByOrg(orgId, scope, options),
+          this._designRepository.listTemplateCategories(orgId, scope, options),
+          this._designRepository.countTemplatesByOrg(orgId, 'org', { folderId: null }),
         ])
-      : ([await this._designRepository.findTemplatesByOrg(orgId, undefined, undefined, brandProfileId, scope), undefined] as const);
+      : ([await this._designRepository.findTemplatesByOrg(orgId, undefined, undefined, brandProfileId, scope, options), undefined, undefined, undefined] as const);
     const mapped = templates.map((t) => ({
       ...t,
-      // The gallery list is chrome: it reads the mode (badge, uncategorized
-      // bucketing, cross-mode confirm) but never the document — shipping every
-      // template's full doc made the panel download megabytes up front. The
-      // apply flow fetches the doc via getTemplate on demand.
       doc: { mode: (t.doc as any)?.mode ?? 'image' },
       thumbnail: (t as any).thumbnailFile?.path ?? null,
     }));
-    return paginated
-      ? { templates: mapped, total: total as number, page: page as number, limit: limit as number }
-      : mapped;
+    if (!paginated) return mapped;
+
+    const categoryMap = new Map<string, string>();
+    for (const row of categoryRows || []) {
+      const key = templateCategoryKey(row.category, row.mode);
+      if (!categoryMap.has(key)) categoryMap.set(key, templateCategoryLabel(row.category, row.mode));
+    }
+    const systemOrder = ['basic', 'social', 'marketing', 'video'];
+    const categories = [...categoryMap].map(([key, label]) => ({ key, label })).sort((a, b) => {
+      if (a.key === 'other') return 1;
+      if (b.key === 'other') return -1;
+      const rankFor = (key: string) => systemOrder.includes(key) ? systemOrder.indexOf(key) : systemOrder.length;
+      const rank = rankFor(a.key) - rankFor(b.key);
+      return rank || a.label.localeCompare(b.label);
+    });
+    return {
+      templates: mapped,
+      total: total as number,
+      page: page as number,
+      limit: limit as number,
+      categories,
+      unfiledCount: unfiledCount as number,
+    };
   }
 
   async getTemplate(orgId: string, id: string) {
