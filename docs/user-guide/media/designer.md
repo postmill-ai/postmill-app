@@ -235,8 +235,9 @@ default to Cover when no fit was saved. Image backgrounds, thumbnails, SVG, and 
 the same crop and focal-point geometry as the canvas.
 
 For static images, **Looks** applies a one-click filter preset using the selected image's own
-thumbnails. **Adjust** exposes Brightness, Contrast, and Saturation as percentages and Blur in
-pixels. Manual edits deselect the exact preset match, and **Reset all** clears every look and
+thumbnails. **Adjust** exposes standalone Grayscale and Sepia switches, Brightness, Contrast, and
+Saturation as percentages, and Blur in pixels. On a multi-selection, sliders and switches preserve
+each image's other filters. Manual edits deselect the exact preset match, and **Reset all** clears every look and
 adjustment. Static images and video clips share the same preset definitions and export filters.
 
 ### QR codes

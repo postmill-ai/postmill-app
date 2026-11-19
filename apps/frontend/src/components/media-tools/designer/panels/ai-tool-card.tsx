@@ -25,7 +25,7 @@ export const AiToolCard: FC<AiToolCardProps> = ({
       <button
         type="button"
         aria-expanded={expanded}
-        aria-controls={`ai-tool-${id}`}
+        aria-controls={expanded ? `ai-tool-${id}` : undefined}
         onClick={onToggle}
         className="w-full min-h-[40px] flex items-center justify-between gap-2 px-3 py-2 text-start text-[12px] font-medium text-textColor hover:bg-boxHover"
       >

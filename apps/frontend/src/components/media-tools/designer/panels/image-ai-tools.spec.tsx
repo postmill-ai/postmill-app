@@ -73,10 +73,13 @@ describe('ImageAiTools', () => {
     render(<ImageAiTools element={element()} store={store} />);
     const trigger = screen.getByRole('button', { name: 'Image to Image', exact: true });
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(trigger.getAttribute('aria-controls')).toBeNull();
     expect(screen.queryByText('Transform the selected image with a prompt while using it as the source.')).toBeNull();
 
     fireEvent.click(trigger);
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(trigger.getAttribute('aria-controls')).toBe('ai-tool-image-to-image');
+    expect(document.getElementById('ai-tool-image-to-image')).not.toBeNull();
     expect(screen.getByText('Transform the selected image with a prompt while using it as the source.')).toBeTruthy();
     const generate = screen.getByRole('button', { name: 'Generate', exact: true }) as HTMLButtonElement;
     expect(generate.disabled).toBe(true);

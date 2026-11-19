@@ -1687,7 +1687,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (editingTextId) return;
-      if (store.getState().activeTool === 'crop' && (e.key === 'Enter' || e.key === 'Escape')) return;
+      if (cropEnabled && (e.key === 'Enter' || e.key === 'Escape')) return;
       store.getState().clearElementPreview();
       const st = store.getState();
       const mod = e.ctrlKey || e.metaKey;
@@ -1839,7 +1839,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         }
       }
     },
-    [editingTextId, selectedIds, setSelectedIds, updateElement, output, pageOutput, doc, store, pushHistory, isVideo]
+    [editingTextId, selectedIds, setSelectedIds, updateElement, output, pageOutput, doc, store, pushHistory, isVideo, cropEnabled]
   );
 
   const handleStageDblClick = useCallback(

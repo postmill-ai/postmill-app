@@ -539,9 +539,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   opposite-edge anchor, and rotation/flips use the displayed media geometry. Reset restores the
   current session's entry rectangle; the Inspector separately clears an already-committed crop.
 - **Static and video looks share filter tokens.** `filter-presets.ts` owns the twelve preset
-  bundles used by both Inspectors. Static preset/Reset all actions commit once; continuous
-  Brightness/Contrast/Saturation (percentage UI) and Blur (px UI) use silent linked writes and one
-  release commit. Exact token matching controls the active look. Ordinary filters participate in
+  bundles used by both Inspectors. Static preset/Reset all actions commit once; standalone
+  Grayscale/Sepia switches and continuous Brightness/Contrast/Saturation (percentage UI) and Blur
+  (px UI) update each selected image's own tokens without copying the primary's other filters,
+  using silent linked writes and one release/action commit. Exact token matching controls the active look. Ordinary filters participate in
   styled/layer-thumbnail cache keys and force SVG rasterization rather than dropping their pixels.
   Selected-image AI operations are target-scoped expandable cards; direct Upscale/Inpaint/Image to
   Image responses must pass the source/history/sequence guards in `ai-image-actions.ts` before one

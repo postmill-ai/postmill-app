@@ -4,6 +4,7 @@ import React, { FC, useRef } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { Slider } from '../controls';
 import type { DesignerElement } from '../designer.store';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import {
   FILTER_PRESETS,
   activeFilterPreset,
@@ -22,6 +23,22 @@ const filterValue = (filters: string[], prefix: string, fallback: number) => {
   return match ? Number.parseFloat(match.slice(prefix.length + 1)) : fallback;
 };
 
+export const withFilterValue = (
+  filters: string[],
+  prefix: string,
+  value: number,
+  neutral: number
+): string[] => {
+  const rest = filters.filter((filter) => filter !== prefix && !filter.startsWith(`${prefix}:`));
+  return value === neutral ? rest : [...rest, `${prefix}:${value}`];
+};
+
+export const withFilterEnabled = (filters: string[], token: string, enabled: boolean): string[] => {
+  const rest = filters.filter((filter) => filter !== token);
+  return enabled ? [...rest, token] : rest;
+};
+
+
 export const ImageFilterControls: FC<ImageFilterControlsProps> = ({ element, ids, store }) => {
   const t = useT();
   const changed = useRef(false);
@@ -33,10 +50,24 @@ export const ImageFilterControls: FC<ImageFilterControlsProps> = ({ element, ids
     store.getState().updateElements(ids, { filters: next });
   };
 
+  const applyIndividualFilters = (update: (filters: string[]) => string[]): boolean => {
+    const state = store.getState();
+    const output = state.doc.outputs[state.currentOutput];
+    const children = pageChildren(output, state.currentPage) as DesignerElement[];
+    let accepted = false;
+    for (const id of ids) {
+      const target = children.find((child) => child.id === id);
+      if (!target) continue;
+      const current = target.filters || [];
+      const next = update(current);
+      if (next.length === current.length && next.every((token, index) => token === current[index])) continue;
+      accepted = state.updateElementsSilent([id], { filters: next }) || accepted;
+    }
+    return accepted;
+  };
+
   const setFilterValue = (prefix: string, value: number, neutral: number) => {
-    const rest = filters.filter((filter) => filter !== prefix && !filter.startsWith(`${prefix}:`));
-    const next = value === neutral ? rest : [...rest, `${prefix}:${value}`];
-    const accepted = store.getState().updateElementsSilent(ids, { filters: next });
+    const accepted = applyIndividualFilters((current) => withFilterValue(current, prefix, value, neutral));
     changed.current = accepted || changed.current;
   };
 
@@ -44,6 +75,31 @@ export const ImageFilterControls: FC<ImageFilterControlsProps> = ({ element, ids
     if (!changed.current) return;
     changed.current = false;
     store.getState().pushHistory('Adjust image filters');
+  };
+
+  const toggleFilter = (token: string) => {
+    const enabled = !filters.includes(token);
+    changed.current = applyIndividualFilters((current) => withFilterEnabled(current, token, enabled)) || changed.current;
+    commit();
+  };
+
+  const filterSwitch = (token: 'grayscale' | 'sepia', label: string) => {
+    const enabled = filters.includes(token);
+    return (
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-textColor/70">{label}</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label={label}
+          onClick={() => toggleFilter(token)}
+          className={`relative w-[40px] h-[22px] rounded-full transition-colors ${enabled ? 'bg-designerAccent' : 'bg-studioBorder'}`}
+        >
+          <span className={`absolute top-[2px] start-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${enabled ? 'translate-x-[18px] rtl:-translate-x-[18px]' : ''}`} />
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -98,6 +154,8 @@ export const ImageFilterControls: FC<ImageFilterControlsProps> = ({ element, ids
             {t('designer_reset_all_filters', 'Reset all')}
           </button>
         </div>
+        {filterSwitch('grayscale', t('designer_label_grayscale', 'Grayscale'))}
+        {filterSwitch('sepia', t('designer_label_sepia', 'Sepia'))}
         <Slider
           label={t('designer_label_brightness', 'Brightness')}
           suffix="%"

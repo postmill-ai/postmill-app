@@ -143,7 +143,7 @@ const imageCropStore = () => {
 };
 
 describe('DesignerCanvas crop session', () => {
-  it('keeps ratio drafts and cancellation out of the document and history', async () => {
+  it('keeps ratio drafts and Escape cancellation out of the document and history', async () => {
     const store = imageCropStore();
     const before = store.getState().doc.outputs[0].children[0];
     const history = store.getState().history;
@@ -154,16 +154,17 @@ describe('DesignerCanvas crop session', () => {
     expect(store.getState().doc.outputs[0].children[0]).toBe(before);
     expect(store.getState().history).toBe(history);
 
-    const cancel = Array.from(document.querySelectorAll('button')).find((button) => button.textContent === 'Cancel')!;
     await act(async () => {
-      cancel.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      document.querySelector('[role="application"]')!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
     });
     expect(store.getState().activeTool).toBe('move');
     expect(store.getState().doc.outputs[0].children[0]).toBe(before);
     expect(store.getState().history).toBe(history);
   });
 
-  it('commits a ratio draft once and ignores a full-box Done', async () => {
+  it('commits a ratio draft with Enter and ignores a full-box Done', async () => {
     const store = imageCropStore();
     store.getState().setToolOption('crop', 'ratio', '1:1');
     await renderCanvas(store);
@@ -171,7 +172,9 @@ describe('DesignerCanvas crop session', () => {
     const done = () => Array.from(document.querySelectorAll('button')).find((button) => button.textContent === 'Done')!;
 
     await act(async () => {
-      done().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      document.querySelector('[role="application"]')!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+      );
     });
     expect(store.getState().doc.outputs[0].children[0]).toMatchObject({
       x: 70,
@@ -206,6 +209,12 @@ describe('DesignerCanvas crop session', () => {
     shape.getState().setActiveTool('crop');
     await renderCanvas(shape);
     expect(document.querySelector('[data-testid="crop-actions"]')).toBeNull();
+    await act(async () => {
+      document.querySelector('[role="application"]')!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
+    });
+    expect(shape.getState().selectedIds).toEqual([]);
   });
 });
 

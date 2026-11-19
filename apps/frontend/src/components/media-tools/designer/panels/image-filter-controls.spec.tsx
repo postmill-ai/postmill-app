@@ -8,8 +8,8 @@ vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
 }));
 
-const element = (filters: string[] = []) => ({
-  id: 'image-1',
+const element = (filters: string[] = [], id = 'image-1') => ({
+  id,
   type: 'image',
   src: 'https://cdn.example.com/photo.png',
   x: 0,
@@ -26,11 +26,20 @@ const element = (filters: string[] = []) => ({
 const updateElements = vi.fn();
 const updateElementsSilent = vi.fn(() => true);
 const pushHistory = vi.fn();
+let selectedElements: DesignerElement[] = [];
 const store = {
-  getState: () => ({ updateElements, updateElementsSilent, pushHistory }),
+  getState: () => ({
+    doc: { outputs: [{ children: selectedElements }] },
+    currentOutput: 0,
+    currentPage: 0,
+    updateElements,
+    updateElementsSilent,
+    pushHistory,
+  }),
 };
 
 beforeEach(() => {
+  selectedElements = [element()];
   updateElements.mockClear();
   updateElementsSilent.mockClear();
   pushHistory.mockClear();
@@ -74,5 +83,37 @@ describe('ImageFilterControls', () => {
   it('disables Reset all when the image has no filters', () => {
     render(<ImageFilterControls element={element()} ids={['image-1']} store={store} />);
     expect((screen.getByRole('button', { name: 'Reset all', exact: true }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('changes only the adjusted token on each selected image', () => {
+    selectedElements = [
+      element(['grayscale']),
+      element(['sepia', 'contrast:1.2'], 'image-2'),
+    ];
+    render(<ImageFilterControls element={selectedElements[0]} ids={['image-1', 'image-2']} store={store} />);
+    const brightness = screen.getByRole('slider', { name: 'Brightness', exact: true });
+    fireEvent.change(brightness, { target: { value: '105' } });
+
+    expect(updateElementsSilent).toHaveBeenCalledTimes(2);
+    expect(updateElementsSilent).toHaveBeenNthCalledWith(1, ['image-1'], {
+      filters: ['grayscale', 'brightness:1.05'],
+    });
+    expect(updateElementsSilent).toHaveBeenNthCalledWith(2, ['image-2'], {
+      filters: ['sepia', 'contrast:1.2', 'brightness:1.05'],
+    });
+    fireEvent.pointerUp(brightness);
+    expect(pushHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows standalone sepia and removes it without clearing other adjustments', () => {
+    selectedElements = [element(['sepia', 'brightness:1.1'])];
+    render(<ImageFilterControls element={selectedElements[0]} ids={['image-1']} store={store} />);
+    const sepia = screen.getByRole('switch', { name: 'Sepia', exact: true });
+    expect(sepia.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(sepia);
+
+    expect(updateElementsSilent).toHaveBeenCalledWith(['image-1'], { filters: ['brightness:1.1'] });
+    expect(pushHistory).toHaveBeenCalledTimes(1);
+    expect(pushHistory).toHaveBeenCalledWith('Adjust image filters');
   });
 });
