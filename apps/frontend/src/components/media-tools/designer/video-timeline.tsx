@@ -4027,7 +4027,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         ref={scrollRef}
         role="region"
         aria-label={translate('timeline_tracks', 'Timeline tracks')}
-        className={`flex-1 overflow-auto ${timelineCollapsed ? 'hidden' : ''}`}
+        className={`flex-none overflow-auto ${timelineCollapsed ? 'hidden' : ''}`}
         style={{ height: timelineCollapsed ? 0 : timelineHeight }}
         aria-hidden={timelineCollapsed}
       >
