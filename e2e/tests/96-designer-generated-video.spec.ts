@@ -1320,7 +1320,7 @@ const animationClipboardDoc = (): DesignerDocSnapshot => ({
             },
             {
               tMs: 2000,
-              props: { x: 60, y: 40, width: 40, height: 20, rotation: 20, opacity: 1, fontSize: 40 },
+              props: { x: 60, y: 40, width: 40, height: 20, rotation: 0, opacity: 1, fontSize: 40 },
               ease: { in: [0.7, 0.1] },
             },
             {
@@ -1329,7 +1329,7 @@ const animationClipboardDoc = (): DesignerDocSnapshot => ({
             },
           ],
           motionPath: {
-            points: [{ x: 60, y: 40, tMs: 0 }, { x: 100, y: 80, tMs: 4000 }],
+            points: [{ x: 60, y: 40, tMs: 0 }, { x: 100, y: 40, tMs: 4000 }],
             ease: 'easeInOut', followRotation: true,
           },
           textReveal: { mode: 'chars', durationMs: 2000 },
@@ -1376,7 +1376,7 @@ test.describe('Designer animation clipboard (mocked local document)', () => {
       volume: 0.8, fadeInMs: 100, fadeOutMs: 200,
       textReveal: { mode: 'chars', durationMs: 1000 },
       motionPath: {
-        points: [{ x: 240, y: 120, tMs: 0 }, { x: 280, y: 160, tMs: 2000 }],
+        points: [{ x: 240, y: 120, tMs: 0 }, { x: 280, y: 120, tMs: 2000 }],
         ease: 'easeInOut', followRotation: true,
       },
     });
@@ -1390,7 +1390,7 @@ test.describe('Designer animation clipboard (mocked local document)', () => {
       fileId: 'shape-file', startMs: 0, endMs: 2000,
       x: 220, y: 180, width: 50, height: 30, speed: 1.5,
       motionPath: {
-        points: [{ x: 245, y: 195, tMs: 0 }, { x: 285, y: 235, tMs: 2000 }],
+        points: [{ x: 245, y: 195, tMs: 0 }, { x: 285, y: 195, tMs: 2000 }],
         ease: 'easeInOut', followRotation: true,
       },
     });
