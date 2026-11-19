@@ -8010,6 +8010,90 @@ paths:
                 $ref: "#/components/schemas/RenderVideoStatusDto"
       tags:
         - Design
+  /media/designs/{id}/share:
+    get:
+      operationId: DesignShareController_getShare
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design sharing
+    put:
+      operationId: DesignShareController_saveShare
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDesignShareDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design sharing
+    delete:
+      operationId: DesignShareController_disableShare
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design sharing
+  /media/designs/{id}/preview:
+    get:
+      operationId: DesignShareController_getTeamPreview
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design sharing
+  /media/designs/{id}/preview/{outputIndex}/{pageNumber}:
+    get:
+      operationId: DesignShareController_renderTeamPreview
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: outputIndex
+          required: true
+          in: path
+          schema:
+            type: number
+        - name: pageNumber
+          required: true
+          in: path
+          schema:
+            type: number
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design sharing
   /media/design-templates/folders:
     get:
       operationId: DesignTemplateController_getFolderTree
@@ -10193,6 +10277,84 @@ paths:
           description: ""
       tags:
         - PublicAnalytics
+  /public/design-share/{token}:
+    get:
+      operationId: PublicDesignShareController_getPublicPreview
+      parameters:
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Public design sharing
+  /public/design-share/{token}/preview/{outputIndex}/{pageNumber}:
+    get:
+      operationId: PublicDesignShareController_renderPublicPreview
+      parameters:
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: outputIndex
+          required: true
+          in: path
+          schema:
+            type: number
+        - name: pageNumber
+          required: true
+          in: path
+          schema:
+            type: number
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Public design sharing
+  /public/design-share/{token}/comments:
+    post:
+      operationId: PublicDesignShareController_addComment
+      parameters:
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDesignShareCommentDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Public design sharing
+  /public/design-share/{token}/approve:
+    post:
+      operationId: PublicDesignShareController_approve
+      parameters:
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveDesignShareDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Public design sharing
 info:
   title: Postmill API
   description: OpenAPI description of the Postmill backend (NestJS). Generated from the controllers — do not hand-edit; run `pnpm run openapi:generate`.
@@ -13010,6 +13172,15 @@ components:
         - alt
         - thumbnailTimestamp
         - progress
+    UpdateDesignShareDto:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        commentsEnabled:
+          type: boolean
+        expiresAt:
+          type: string
     CreateTemplateFolderDto:
       type: object
       properties:
@@ -13676,3 +13847,23 @@ components:
           maxLength: 100
         enabled:
           type: boolean
+    CreateDesignShareCommentDto:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 80
+        content:
+          type: string
+          maxLength: 2000
+      required:
+        - name
+        - content
+    ApproveDesignShareDto:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 80
+      required:
+        - name
