@@ -1,7 +1,11 @@
 name: Generate KAN-38 OpenAPI
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - feat/kan-38-compact-design-browser
+    paths:
+      - .github/workflows/openapi-pr-468.yml
 
 jobs:
   generate:
