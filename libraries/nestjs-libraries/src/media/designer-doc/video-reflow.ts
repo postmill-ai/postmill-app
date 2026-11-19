@@ -13,6 +13,7 @@ import {
   type TypeBasisCanvas,
 } from './reflow';
 import { genId } from './designer-doc.migrate';
+import { scaleMotionPath } from './motion-path';
 
 /**
  * Smart reflow for VIDEO outputs (the add-format/resize path for video-mode
@@ -115,6 +116,7 @@ export const reflowVideoClip = (
 
   const scaleX = target.width / source.width;
   const scaleY = target.height / source.height;
+  next.motionPath = scaleMotionPath(next.motionPath, scaleX, scaleY);
 
   if (!hasExplicitBox(clip)) {
     // Fullscreen clip: the box IS the canvas, so it follows the resize for

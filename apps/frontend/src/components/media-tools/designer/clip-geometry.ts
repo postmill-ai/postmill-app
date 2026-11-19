@@ -1,6 +1,7 @@
 import type { VideoClip, VideoTrack } from './designer.store';
 import { MAX_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { MIN_FIT_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
+import { translateMotionPath } from '@postmill-ai/nestjs-libraries/media/designer-doc/motion-path';
 
 /**
  * Writing a canvas drag or resize back onto a video clip.
@@ -179,7 +180,7 @@ export const planTrackDrop = (
 };
 
 export type ClipGeometry = Partial<
-  Pick<VideoClip, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'fontSize' | 'keyframes'>
+  Pick<VideoClip, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'fontSize' | 'keyframes' | 'motionPath'>
 >;
 
 export interface ClipGeometryOptions {
@@ -356,6 +357,7 @@ export const clipGeometryUpdate = (
     width: Math.max(1, (clip.width ?? before.width) + dw),
     height: Math.max(1, (clip.height ?? before.height) + dh),
     rotation: (clip.rotation ?? 0) + dr,
+    ...(clip.motionPath ? { motionPath: translateMotionPath(clip.motionPath, dx, dy) } : {}),
     ...(scaleFont
       ? {
           fontSize: Math.min(

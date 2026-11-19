@@ -1381,3 +1381,74 @@ test('clip context menu duplicates the intended clip without changing another tr
   expect(state.doc.outputs[0].tracks[0].clips).toHaveLength(1);
   expect(state.doc.outputs[0].tracks[0].clips[0]).toMatchObject({ id: 'video-clip', src: '/video.mp4' });
 });
+
+
+test('records, edits, and reloads a custom motion path with easing and Undo', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const state = await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+  const stage = page.locator('.konva-stage').first();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('Canvas has no bounding box');
+  const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
+  const offsetX = (box.width - 400 * scale) / 2;
+  const offsetY = (box.height - 400 * scale) / 2;
+  const point = (x: number, y: number) => ({
+    x: box.x + offsetX + x * scale,
+    y: box.y + offsetY + y * scale,
+  });
+
+  await stage.click({ position: { x: offsetX + 290 * scale, y: offsetY + 90 * scale } });
+  const record = page.getByRole('button', { name: 'Record motion path', exact: true });
+  await record.scrollIntoViewIfNeeded();
+  await record.click();
+
+  const start = point(290, 90);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  for (const [x, y] of [[300, 180], [160, 240], [300, 300]]) {
+    const next = point(x, y);
+    await page.mouse.move(next.x, next.y, { steps: 8 });
+    await page.waitForTimeout(60);
+  }
+  await page.mouse.up();
+
+  await expect.poll(() => state.doc.outputs[0].tracks[0].clips[0].motionPath?.points.length).toBeGreaterThanOrEqual(3);
+  expect(state.doc.version).toBe(15);
+  expect(state.doc.outputs[0].tracks[0].clips[0]).toMatchObject({ x: 220, y: 40 });
+  const recorded = state.doc.outputs[0].tracks[0].clips[0].motionPath.points;
+  const first = point(recorded[0].x, recorded[0].y);
+  const moved = point(recorded[0].x + 20, recorded[0].y + 30);
+  await page.mouse.move(first.x, first.y);
+  await page.mouse.down();
+  await page.mouse.move(moved.x, moved.y, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => state.doc.outputs[0].tracks[0].clips[0].motionPath.points[0].x)
+    .toBe(recorded[0].x + 20);
+
+  const latest = state.doc.outputs[0].tracks[0].clips[0].motionPath.points;
+  const midpoint = point((latest[0].x + latest[1].x) / 2, (latest[0].y + latest[1].y) / 2);
+  await page.mouse.click(midpoint.x, midpoint.y);
+  await expect.poll(() => state.doc.outputs[0].tracks[0].clips[0].motionPath.points.length)
+    .toBe(latest.length + 1);
+  const inserted = state.doc.outputs[0].tracks[0].clips[0].motionPath.points;
+  const deleted = point(inserted[1].x, inserted[1].y);
+  await page.mouse.click(deleted.x, deleted.y, { button: 'right' });
+  await expect.poll(() => state.doc.outputs[0].tracks[0].clips[0].motionPath.points.length)
+    .toBe(inserted.length - 1);
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].tracks[0].clips[0].motionPath.points.length)
+    .toBe(inserted.length);
+
+  await page.getByRole('combobox', { name: 'Path easing', exact: true }).selectOption('easeInOut');
+  await page.getByRole('switch', { name: 'Rotate with path', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].tracks[0].clips[0].motionPath?.followRotation).toBe(true);
+  await page.getByRole('button', { name: 'Save (Ctrl+S)', exact: true }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await page.reload();
+  await openDesigner(page);
+  const persisted = state.doc.outputs[0].tracks[0].clips[0].motionPath;
+  expect(persisted.ease).toBe('easeInOut');
+  expect(persisted.followRotation).toBe(true);
+  expect(persisted.points.length).toBeGreaterThanOrEqual(3);
+});

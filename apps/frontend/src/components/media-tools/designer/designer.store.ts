@@ -24,7 +24,8 @@ import {
   genId,
   matchPreset,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
-import { withTextStrokeVersion } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.version';
+import { withMotionPathVersion, withTextStrokeVersion } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.version';
+import { rescaleMotionPathTimes, splitMotionPath } from '@postmill-ai/nestjs-libraries/media/designer-doc/motion-path';
 import {
   smartReflow,
   computeContainerBoxes,
@@ -178,6 +179,13 @@ export interface DesignerState {
   gestureDepth: number;
   /** The primary selection — drives the inspector. Always a member of `selectedClips`. */
   selectedClip: { outputIndex: number; trackId: string; clipId: string } | null;
+  motionPathRecording: {
+    outputIndex: number;
+    trackId: string;
+    clipId: string;
+    startedAtMs: number;
+    originalPath?: VideoClip['motionPath'];
+  } | null;
   /**
    * Multi-select on the video timeline. Editor state, deliberately NOT part of
    * history (snapshots carry only `doc`). Members carry no outputIndex — track
@@ -402,6 +410,9 @@ export interface DesignerActions {
   splitClip: (outputIndex: number, trackId: string, clipId: string, atMs: number) => void;
   setMode: (mode: 'image' | 'video') => void;
   setPlayhead: (ms: number) => void;
+  startMotionPathRecording: (outputIndex: number, trackId: string, clipId: string) => boolean;
+  cancelMotionPathRecording: () => void;
+  finishMotionPathRecording: () => void;
   setIsPlaying: (playing: boolean) => void;
   setSelectedClip: (clip: { outputIndex: number; trackId: string; clipId: string } | null) => void;
   /**
@@ -633,6 +644,7 @@ export const createDesignerStore = (
       isPlaying: false,
       gestureDepth: 0,
       selectedClip: null,
+      motionPathRecording: null,
       selectedClips: [],
       clipClipboard: [],
       keyframeClipboard: null,
@@ -1995,6 +2007,7 @@ export const createDesignerStore = (
           playheadMs: 0,
           gestureDepth: 0,
           selectedClip: null,
+          motionPathRecording: null,
           selectedClips: [],
           linkedUpdateFlash: {},
           assistantSuggestions: {},
@@ -2022,6 +2035,7 @@ export const createDesignerStore = (
           playheadMs: 0,
           gestureDepth: 0,
           selectedClip: null,
+          motionPathRecording: null,
           selectedClips: [],
           linkedUpdateFlash: {},
           brandAdminOverride: false,
@@ -2250,6 +2264,15 @@ export const createDesignerStore = (
           patched = { ...patched, startMs: nextStart, endMs: nextEnd };
           const previousDuration = clip.endMs - clip.startMs;
           const nextDuration = nextEnd - nextStart;
+          if (
+            previousDuration !== nextDuration && clip.motionPath &&
+            patched.motionPath === undefined
+          ) {
+            patched = {
+              ...patched,
+              motionPath: rescaleMotionPathTimes(clip.motionPath, previousDuration, nextDuration),
+            };
+          }
           if (previousDuration !== nextDuration && clip.keyframes?.length) {
             const textClip = track.type === 'text' || track.type === 'caption';
             const presetName = matchTextAnimationPreset(
@@ -2290,7 +2313,10 @@ export const createDesignerStore = (
           patched,
           editFormatOnly
         );
-        const nextDoc = withTextStrokeVersion({ ...doc, outputs }, patched);
+        const nextDoc = withMotionPathVersion(
+          withTextStrokeVersion({ ...doc, outputs }, patched),
+          patched
+        );
         if (affected.length) {
           const now = Date.now();
           const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
@@ -2333,10 +2359,16 @@ export const createDesignerStore = (
             // splitSpeedCurveForClip — it also handles the reverse mirror).
             // Without a curve the legacy trim advance applies unchanged.
             const curveSplit = splitSpeedCurveForClip(original, splitPoint - original.startMs);
+            const motionSplit = splitMotionPath(
+              original.motionPath,
+              splitPoint - original.startMs,
+              original.endMs - original.startMs
+            );
             const first: VideoClip = {
               ...original,
               id: genId(),
               endMs: splitPoint,
+              motionPath: motionSplit.first,
               ...(curveSplit ? { speedCurve: curveSplit.first.speedCurve, trimInMs: curveSplit.first.trimInMs } : {}),
             };
             // The second half must advance its source trim-in so it continues from
@@ -2347,6 +2379,7 @@ export const createDesignerStore = (
               ...original,
               id: genId(),
               startMs: splitPoint,
+              motionPath: motionSplit.second,
               ...(curveSplit
                 ? { speedCurve: curveSplit.second.speedCurve, trimInMs: curveSplit.second.trimInMs }
                 : { trimInMs: (original.trimInMs ?? 0) + (splitPoint - original.startMs) }),
@@ -2408,6 +2441,49 @@ export const createDesignerStore = (
       },
 
       setPlayhead: (ms) => mutate({ playheadMs: ms }),
+
+      startMotionPathRecording: (outputIndex, trackId, clipId) => {
+        const { doc } = get();
+        const output = doc.outputs[outputIndex] as VideoOutput | undefined;
+        const track = output?.tracks.find((item) => item.id === trackId);
+        const clip = track?.clips.find((item) => item.id === clipId);
+        if (
+          doc.mode !== 'video' || !output || isOutputFrozen(output) ||
+          !track || track.locked || track.type === 'audio' || !clip
+        ) return false;
+        set({
+          motionPathRecording: {
+            outputIndex,
+            trackId,
+            clipId,
+            startedAtMs: Date.now(),
+            originalPath: clip.motionPath,
+          },
+        });
+        get().setSelectedClip({ outputIndex, trackId, clipId });
+        get().setSelectedClips([{ trackId, clipId }], { trackId, clipId });
+        get().setPlayhead(clip.startMs);
+        return true;
+      },
+
+      cancelMotionPathRecording: () => {
+        const recording = get().motionPathRecording;
+        if (!recording) return;
+        const output = get().doc.outputs[recording.outputIndex] as VideoOutput | undefined;
+        const clip = output?.tracks.find((track) => track.id === recording.trackId)?.clips
+          .find((item) => item.id === recording.clipId);
+        if (clip && clip.motionPath !== recording.originalPath) {
+          get().updateClipSilent(
+            recording.outputIndex,
+            recording.trackId,
+            recording.clipId,
+            { motionPath: recording.originalPath }
+          );
+        }
+        set({ motionPathRecording: null });
+      },
+
+      finishMotionPathRecording: () => set({ motionPathRecording: null }),
 
       setIsPlaying: (playing) => mutate({ isPlaying: playing }),
 

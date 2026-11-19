@@ -477,6 +477,17 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   other's element. Same-id `src` changes must reload the shared element.
 
 - **Static clipboard paste is source-aware and atomic.** Copy/Cut captures the source output's type basis and the complete selected group subtree in z-order. Cross-size paste uses `seedChildren`/`smartReflow` with fresh element/origin/group IDs and remapped included parents. Right-click Paste receives Konva document coordinates (including zoom/pan), centers the complete post-reflow leaf bounds at that point, and translates/clamps the batch together; keyboard paste retains +20/+20 after any required reflow. One Undo removes the whole batch. Video clip clipboard timing is a separate, unchanged path.
+- **Custom motion paths extend the shared keyframe evaluator (doc v15).** A visual clip may carry
+  `motionPath` with bounded canvas-space `{x,y,tMs}` points, path-level easing, and off-by-default
+  `followRotation`. `designer-doc/motion-path.ts` samples clip-relative timestamps and adds displacement
+  from the first point to keyframed x/y, so opening frames do not jump; rotation adds normalized tangent
+  delta only when enabled. Preview, poster, motion-blur subsamples, and Chromium export all use the same
+  injected evaluator. Paths are format-local like keyframes. Recording and point edits use silent writes
+  plus one Undo; whole-clip/group drags translate paths, duration edits rescale timestamps, split adds an
+  interpolated boundary and rebases the second side, and reflow scales x/y only. Fewer than two usable
+  points are inert. Editor trails/handles never enter exports. Copying animation between clips remains a
+  separate feature.
+
 - **Gesture commits and history stay immutable.** Static drag frames batch every moved node into one
   current-output-only write through `updateElementsEphemeral`; `commitElementGesture` then applies
   linked edits once and pushes one Undo. Transform frames synchronously bake Konva scale into geometry,

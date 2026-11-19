@@ -11,7 +11,7 @@ import {
   VideoClip,
 } from './designer-doc.schema';
 import { migrateDoc } from './designer-doc.migrate';
-import { withTextStrokeVersion } from './designer-doc.version';
+import { withMotionPathVersion, withTextStrokeVersion } from './designer-doc.version';
 import {
   appendPage,
   duplicatePageAt,
@@ -442,12 +442,15 @@ export class DesignerDocService {
               `clip ${clip.id}: [${startMs}, ${endMs}) exceeds the output duration ${output.durationMs}ms`
             );
           }
-          return withTextStrokeVersion(
-            this._patchVideoClip(doc, op.outputIndex, track.id, clip.id, {
-              ...op.patch,
-              startMs,
-              endMs,
-            }),
+          return withMotionPathVersion(
+            withTextStrokeVersion(
+              this._patchVideoClip(doc, op.outputIndex, track.id, clip.id, {
+                ...op.patch,
+                startMs,
+                endMs,
+              }),
+              op.patch
+            ),
             op.patch
           );
         }

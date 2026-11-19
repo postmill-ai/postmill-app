@@ -47,6 +47,12 @@ import {
 } from './background-removal-mask';
 import { runGestureCommit } from './gesture-lifecycle';
 import { seedBufferFromCanvas } from './raster-layers';
+import {
+  appendMotionPathPoint,
+  deleteMotionPathPoint,
+  insertMotionPathPoint,
+  moveMotionPathPoint,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/motion-path';
 
 interface VideoCanvasOverlayProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -504,6 +510,8 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
 }) => {
   const doc = store((s) => s.doc);
   const currentOutput = store((s) => s.currentOutput);
+  const selectedClip = store((s) => s.selectedClip);
+  const motionPathRecording = store((s) => s.motionPathRecording);
   const [tick, setTick] = useState(0);
   const mediaConsumer = useRef({});
 
@@ -711,6 +719,9 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
 
   const gestureCommitPending = useRef(false);
   const gestureClipRef = useRef<{ clipId: string; token: number } | null>(null);
+  const recordingMovedRef = useRef(false);
+  const recordingLastPointRef = useRef({ x: 0, y: 0 });
+  const pointMovedRef = useRef(false);
   const gestureSequenceRef = useRef(0);
   const commitTokenRef = useRef<number | null>(null);
   const endClipGesture = useCallback(() => {
@@ -740,6 +751,72 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     }
   }, [store]);
 
+  const startRecordingDrag = (clip: VideoClip, trackId: string, node: Konva.Node) => {
+    recordingMovedRef.current = false;
+    recordingLastPointRef.current = { x: node.x(), y: node.y() };
+    store.getState().updateClipSilent(currentOutput, trackId, clip.id, {
+      motionPath: {
+        points: [{ x: node.x(), y: node.y(), tMs: 0 }],
+        ...(clip.motionPath?.ease ? { ease: clip.motionPath.ease } : {}),
+        ...(clip.motionPath?.followRotation ? { followRotation: true } : {}),
+      },
+    });
+  };
+
+  const recordDragMovement = (clipId: string, node: Konva.Node) => {
+    const state = store.getState();
+    const recording = state.motionPathRecording;
+    if (!recording || recording.clipId !== clipId) return;
+    const output = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+    const clip = output?.tracks.find((track) => track.id === recording.trackId)?.clips
+      .find((item) => item.id === clipId);
+    if (!clip?.motionPath) return;
+    const point = { x: node.x(), y: node.y() };
+    const last = recordingLastPointRef.current;
+    const distance = Math.hypot(point.x - last.x, point.y - last.y);
+    const duration = Math.max(0, clip.endMs - clip.startMs);
+    const elapsed = Math.min(duration, Math.max(0, Date.now() - recording.startedAtMs));
+    if (distance < 4 && elapsed < duration) return;
+    if (distance > 2) recordingMovedRef.current = true;
+    const motionPath = appendMotionPathPoint(clip.motionPath, {
+      ...point,
+      tMs: elapsed,
+    }, duration);
+    if (motionPath !== clip.motionPath) {
+      state.updateClipSilent(currentOutput, recording.trackId, clipId, { motionPath });
+      recordingLastPointRef.current = point;
+    }
+  };
+
+  const finishRecordingDrag = (clipId: string) => {
+    const state = store.getState();
+    const recording = state.motionPathRecording;
+    if (!recording || recording.clipId !== clipId) return;
+    const output = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+    const clip = output?.tracks.find((track) => track.id === recording.trackId)?.clips
+      .find((item) => item.id === clipId);
+    if (recordingMovedRef.current && (clip?.motionPath?.points.length ?? 0) >= 2) {
+      state.pushHistory('Record motion path');
+      state.finishMotionPathRecording();
+    } else {
+      state.cancelMotionPathRecording();
+    }
+    endClipGesture();
+    gestureClipRef.current = null;
+  };
+
+  const commitPathEdit = (
+    trackId: string,
+    clip: VideoClip,
+    motionPath: VideoClip['motionPath'],
+    label: string
+  ) => {
+    if (motionPath === clip.motionPath) return;
+    if (store.getState().updateClipSilent(currentOutput, trackId, clip.id, { motionPath })) {
+      store.getState().pushHistory(label);
+    }
+  };
+
   const commitGesture = async (target: Konva.Node) => {
     // Konva broadcasts transformend/dragend for every attached node. Commit the
     // gesture once; a second event would restore the stale pre-gesture sizes.
@@ -751,6 +828,10 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     const clipId = target.id();
     const gesture = gestureClipRef.current;
     if (!gesture || gesture.clipId !== clipId) return;
+    if (store.getState().motionPathRecording?.clipId === clipId) {
+      finishRecordingDrag(clipId);
+      return;
+    }
     const token = gesture.token;
     commitTokenRef.current = token;
     return runGestureCommit(store, async () => {
@@ -861,6 +942,18 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   if (!isVideo) return null;
 
   const playheadMs = playheadRef.current;
+  const activeRecording = motionPathRecording?.outputIndex === currentOutput
+    ? motionPathRecording
+    : null;
+  const pathTarget = activeRecording ?? (
+    selectedClip?.outputIndex === currentOutput ? selectedClip : null
+  );
+  const pathTrack = pathTarget
+    ? vo.tracks.find((track) => track.id === pathTarget.trackId)
+    : undefined;
+  const pathClip = pathTrack?.clips.find((clip) => clip.id === pathTarget.clipId);
+  const pathPoints = pathClip?.motionPath?.points ?? [];
+  const pathEditable = interactive && !vo.frozen && !pathTrack?.locked;
 
   return (
     <>
@@ -876,9 +969,17 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           draggable: interactive && !trackLocked,
           onClick: (e: Konva.KonvaEventObject<MouseEvent>) => selectClip(trackId, clip.id, e),
           onTap: (e: Konva.KonvaEventObject<TouchEvent>) => selectClip(trackId, clip.id, e),
-          onDragStart: () => {
+          onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => {
             selectClip(trackId, clip.id, undefined, true);
             beginClipGesture(clip.id);
+            if (store.getState().motionPathRecording?.clipId === clip.id) {
+              startRecordingDrag(clip, trackId, event.target);
+            }
+          },
+          onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => {
+            if (store.getState().motionPathRecording?.clipId === clip.id) {
+              recordDragMovement(clip.id, event.target);
+            }
           },
           onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => {
             e.evt.preventDefault();
@@ -1121,6 +1222,111 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           </Group>
         );
       })}
+      {pathClip && pathTarget && pathTrack && pathPoints.length > 0 && (
+        <>
+          {pathPoints.length > 1 && (
+            <KonvaLine
+              name="motion-path-trail"
+              points={pathPoints.flatMap((point) => [point.x, point.y])}
+              stroke={canvasColor('#2B5CD3')}
+              strokeWidth={1.5}
+              dash={[6, 6]}
+              listening={false}
+            />
+          )}
+          {pathEditable && pathPoints.slice(0, -1).map((point, index) => {
+            const next = pathPoints[index + 1];
+            const insert = () => {
+              if (!pathClip.motionPath) return;
+              commitPathEdit(
+                pathTrack.id,
+                pathClip,
+                insertMotionPathPoint(pathClip.motionPath, index),
+                'Insert motion path point'
+              );
+            };
+            return (
+              <KonvaLine
+                key={`segment-${index}`}
+                name="motion-path-segment"
+                points={[point.x, point.y, next.x, next.y]}
+                stroke={canvasColor('#2B5CD3')}
+                strokeWidth={1}
+                opacity={0}
+                hitStrokeWidth={16}
+                onClick={(event) => {
+                  event.cancelBubble = true;
+                  insert();
+                }}
+                onTap={(event) => {
+                  event.cancelBubble = true;
+                  insert();
+                }}
+              />
+            );
+          })}
+          {pathPoints.map((point, index) => (
+            <KonvaEllipse
+              key={`point-${index}`}
+              name="motion-path-point"
+              x={point.x}
+              y={point.y}
+              radiusX={5}
+              radiusY={5}
+              fill={canvasColor('#ffffff')}
+              stroke={canvasColor('#2B5CD3')}
+              strokeWidth={2}
+              draggable={pathEditable}
+              onDragStart={(event) => {
+                event.cancelBubble = true;
+                pointMovedRef.current = false;
+                beginClipGesture(pathClip.id);
+              }}
+              onDragMove={(event) => {
+                const state = store.getState();
+                const output = state.doc.outputs[currentOutput] as VideoOutput;
+                const current = output.tracks.find((track) => track.id === pathTrack.id)?.clips
+                  .find((clip) => clip.id === pathClip.id);
+                if (!current?.motionPath) return;
+                const motionPath = moveMotionPathPoint(current.motionPath, index, {
+                  x: event.target.x(),
+                  y: event.target.y(),
+                });
+                if (state.updateClipSilent(currentOutput, pathTrack.id, pathClip.id, { motionPath })) {
+                  pointMovedRef.current = true;
+                }
+              }}
+              onDragEnd={() => {
+                if (pointMovedRef.current) store.getState().pushHistory('Move motion path point');
+                pointMovedRef.current = false;
+                endClipGesture();
+                gestureClipRef.current = null;
+              }}
+              onContextMenu={(event) => {
+                event.evt.preventDefault();
+                event.cancelBubble = true;
+                if (!pathClip.motionPath) return;
+                commitPathEdit(
+                  pathTrack.id,
+                  pathClip,
+                  deleteMotionPathPoint(pathClip.motionPath, index),
+                  'Delete motion path point'
+                );
+              }}
+              onKeyDown={(event: Konva.KonvaEventObject<KeyboardEvent>) => {
+                if (event.evt.key !== 'Delete' && event.evt.key !== 'Backspace') return;
+                if (!pathClip.motionPath) return;
+                commitPathEdit(
+                  pathTrack.id,
+                  pathClip,
+                  deleteMotionPathPoint(pathClip.motionPath, index),
+                  'Delete motion path point'
+                );
+              }}
+            />
+          ))}
+        </>
+      )}
     </>
   );
 };

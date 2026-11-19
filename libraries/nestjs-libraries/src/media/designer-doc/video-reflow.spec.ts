@@ -319,3 +319,24 @@ describe('persistent video group reflow', () => {
     expect(seeded.tracks[1].clips[0].originId).toBe(sourceTracks[1].clips[0].originId);
   });
 });
+
+
+describe('motion path reflow', () => {
+  it('scales canvas-space points without changing timestamps or easing', () => {
+    const source = clip({
+      x: 100, y: 200, width: 400, height: 300, fitMode: 'fill',
+      motionPath: {
+        ease: 'easeInOut',
+        followRotation: true,
+        points: [{ x: 100, y: 200, tMs: 0 }, { x: 800, y: 600, tMs: 3000 }],
+      },
+    });
+    const out = reflowVideoClip(source, 'video', LANDSCAPE, PORTRAIT);
+    expect(out.motionPath?.points).toEqual([
+      { x: 100 * (1080 / 1920), y: 200 * (1920 / 1080), tMs: 0 },
+      { x: 800 * (1080 / 1920), y: 600 * (1920 / 1080), tMs: 3000 },
+    ]);
+    expect(out.motionPath?.ease).toBe('easeInOut');
+    expect(out.motionPath?.followRotation).toBe(true);
+  });
+});

@@ -64,7 +64,8 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
 // v12 adds 3D extrusion layer styles and text-clip extrusion.
 // v13 adds editable QR settings to image elements and still-image clips.
 // v14 adds optional textStroke to video text/caption clips.
-export const DESIGNER_DOC_VERSION = 14;
+// v15 adds optional timestamped canvas-space motionPath data to video clips.
+export const DESIGNER_DOC_VERSION = 15;
 
 /**
  * Maximum pages per image output, INCLUDING page 1 (`output.children` itself).
@@ -96,6 +97,9 @@ export const MAX_SRC_LEN = 2048;
  * to reject every save of a design carrying a complex icon.
  */
 export const MAX_INLINE_SRC_LEN = 262144;
+
+/** Maximum recorded/editable points on one clip's motion path. */
+export const MAX_MOTION_PATH_POINTS = 200;
 
 /**
  * Maximum bezier nodes on a `path` element. Generous for hand-drawn Pen work

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrgImportService } from './org-import.service';
 import { readOrgDomainRows } from './org-import-archive';
+import { DESIGNER_DOC_VERSION } from '../../../media/designer-doc/designer-doc.limits';
 
 vi.mock('./org-import-archive', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -50,10 +51,10 @@ describe('OrgImportService DesignerDoc version guard', () => {
     'rejects newer %s documents before normalization or insertion',
     async (model) => {
       const instance = service();
-      readRows.mockResolvedValue([{ id: 'source-id', doc: { version: 15, mode: 'video', outputs: [] } }]);
+      readRows.mockResolvedValue([{ id: 'source-id', doc: { version: DESIGNER_DOC_VERSION + 1, mode: 'video', outputs: [] } }]);
 
       await expect(instance._importModel({} as never, model, {} as never, mapsFor() as never, new Map()))
-        .rejects.toThrow('DesignerDoc v15 is newer than this deployment supports (v14)');
+        .rejects.toThrow(`DesignerDoc v${DESIGNER_DOC_VERSION + 1} is newer than this deployment supports (v${DESIGNER_DOC_VERSION})`);
       expect(instance._designerDoc.assignIdsAndNormalize).not.toHaveBeenCalled();
       expect(instance._repository.createManyModel).not.toHaveBeenCalled();
     }
@@ -63,7 +64,7 @@ describe('OrgImportService DesignerDoc version guard', () => {
     const instance = service();
     readRows.mockResolvedValue([{
       id: 'source-id',
-      doc: JSON.stringify({ version: 15, mode: 'video', outputs: [] }),
+      doc: JSON.stringify({ version: DESIGNER_DOC_VERSION + 1, mode: 'video', outputs: [] }),
     }]);
 
     await expect(instance._importModel({} as never, 'Design', {} as never, mapsFor() as never, new Map()))
@@ -73,7 +74,7 @@ describe('OrgImportService DesignerDoc version guard', () => {
 
   it('imports a same-version document normally', async () => {
     const instance = service();
-    readRows.mockResolvedValue([{ id: 'source-id', doc: { version: 14, mode: 'video', outputs: [] } }]);
+    readRows.mockResolvedValue([{ id: 'source-id', doc: { version: DESIGNER_DOC_VERSION, mode: 'video', outputs: [] } }]);
 
     await instance._importModel({} as never, 'Design', {} as never, mapsFor() as never, new Map());
 
