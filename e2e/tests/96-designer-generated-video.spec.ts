@@ -1350,7 +1350,7 @@ test.describe('Designer animation clipboard (mocked local document)', () => {
     await fitDesignerCanvas(page);
 
     await clipOnTrack(page, 'Source').click({ button: 'right' });
-    await page.getByRole('button', { name: 'Copy Animation', exact: true }).click();
+    await page.getByLabel('Video timeline').getByRole('button', { name: 'Copy Animation', exact: true }).click();
     await expect(page.getByText('Animation copied', { exact: true })).toBeVisible();
 
     await clipOnTrack(page, 'Target').click();
@@ -1364,7 +1364,7 @@ test.describe('Designer animation clipboard (mocked local document)', () => {
     await clipOnTrack(page, 'Target').click();
     await clipOnTrack(page, 'Shape target').click({ modifiers: ['Control'] });
     await clipOnTrack(page, 'Target').click({ button: 'right' });
-    await page.getByRole('button', { name: 'Paste Animation', exact: true }).click();
+    await page.getByLabel('Video timeline').getByRole('button', { name: 'Paste Animation', exact: true }).click();
     await expect(page.getByText(/Animation pasted to 2 clip\(s\)\. Skipped:/)).toBeVisible();
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.textReveal?.durationMs).toBe(1000);
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-target')?.motionPath).toBeDefined();
