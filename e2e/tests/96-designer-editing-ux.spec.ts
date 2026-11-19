@@ -265,8 +265,8 @@ async function editBodyCopyWithPointer(page: Page) {
 test('selected words retain independent colors through autosave and reopen', async ({ page }) => {
   const state = await installMocks(page);
   await openDesigner(page);
+  await selectBodyCopy(page);
   await editText(page);
-  await page.getByRole('tab', { name: 'Text', exact: true }).click();
 
   await page.locator('[data-text-editor-id="body-copy"]').evaluate((editor) => {
     const range = document.createRange();
@@ -1425,12 +1425,12 @@ test('inspector task tabs keep image AI drafts mounted and persist across reload
 test('text task tabs keep formatting and effects reachable and persist across reload', async ({ page }) => {
   await installMocks(page);
   await openDesigner(page);
-  await editText(page);
-  await page.getByRole('textbox', { name: 'Design name' }).click();
-
-  await page.getByRole('tab', { name: 'Text', exact: true }).click();
+  await selectBodyCopy(page);
   await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
+
+  await editText(page);
   await expect(page.getByLabel('Text color', { exact: true })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Design name' }).click();
 
   await page.getByRole('tab', { name: 'Effects', exact: true }).click();
   await expect(page.getByText('Text Effects', { exact: true })).toBeVisible();
