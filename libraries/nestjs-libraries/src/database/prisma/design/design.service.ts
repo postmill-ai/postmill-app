@@ -437,12 +437,17 @@ export class DesignService {
   ) {
     if (options.folderId) await this.getFolder(orgId, options.folderId);
     const paginated = page !== undefined && limit !== undefined;
+    const includeGalleryMetadata = page === 1;
     const [templates, total, categoryRows, unfiledCount] = paginated
       ? await Promise.all([
           this._designRepository.findTemplatesByOrg(orgId, page, limit, brandProfileId, scope, options),
           this._designRepository.countTemplatesByOrg(orgId, scope, options),
-          this._designRepository.listTemplateCategories(orgId, scope, options),
-          this._designRepository.countTemplatesByOrg(orgId, 'org', { folderId: null }),
+          includeGalleryMetadata
+            ? this._designRepository.listTemplateCategories(orgId, scope, options)
+            : Promise.resolve(undefined),
+          includeGalleryMetadata
+            ? this._designRepository.countTemplatesByOrg(orgId, 'org', { folderId: null })
+            : Promise.resolve(undefined),
         ])
       : ([await this._designRepository.findTemplatesByOrg(orgId, undefined, undefined, brandProfileId, scope, options), undefined, undefined, undefined] as const);
     const mapped = templates.map((t) => ({
@@ -470,8 +475,7 @@ export class DesignService {
       total: total as number,
       page: page as number,
       limit: limit as number,
-      categories,
-      unfiledCount: unfiledCount as number,
+      ...(includeGalleryMetadata ? { categories, unfiledCount: unfiledCount as number } : {}),
     };
   }
 

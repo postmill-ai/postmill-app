@@ -25,6 +25,10 @@ describe('DesignRepository gallery queries (integration)', () => {
       oldDesign: `gallery-old-${suffix}`,
       systemTemplate: `gallery-system-${suffix}`,
       categoryTemplate: `gallery-category-${suffix}`,
+      explicitVideo: `gallery-explicit-video-${suffix}`,
+      explicitOther: `gallery-explicit-other-${suffix}`,
+      legacyVideo: `gallery-legacy-video-${suffix}`,
+      legacyImage: `gallery-legacy-image-${suffix}`,
     };
     try {
       await prisma.organization.createMany({ data: [{ id: ids.org1, name: 'Gallery 1' }, { id: ids.org2, name: 'Gallery 2' }] });
@@ -51,6 +55,10 @@ describe('DesignRepository gallery queries (integration)', () => {
         })),
         { id: ids.systemTemplate, name: 'System oldest', category: 'Social', doc: { mode: 'image' }, isSystem: true, createdAt: new Date('2020-01-01T00:00:00.000Z') },
         { id: ids.categoryTemplate, organizationId: ids.org1, name: 'Feed', category: 'instagram-post', doc: { mode: 'image' } },
+        { id: ids.explicitVideo, organizationId: ids.org1, name: 'Explicit video', category: 'Video', doc: { mode: 'image' } },
+        { id: ids.explicitOther, organizationId: ids.org1, name: 'Explicit other', category: 'Other', doc: { mode: 'video' } },
+        { id: ids.legacyVideo, organizationId: ids.org1, name: 'Legacy video', category: '', doc: { mode: 'video' } },
+        { id: ids.legacyImage, organizationId: ids.org1, name: 'Legacy image', category: '', doc: { mode: 'image' } },
       ] });
 
       await repository.markDesignOpened(ids.org1, ids.user1, ids.oldDesign);
@@ -77,6 +85,18 @@ describe('DesignRepository gallery queries (integration)', () => {
       const canonicalSearch = await repository.findTemplatesByOrg(ids.org1, 1, 24, undefined, undefined, { query: 'IG Post' });
       expect(canonicalSearch.map((template) => template.id)).toEqual([ids.categoryTemplate]);
       expect(await repository.countTemplatesByOrg(ids.org1, undefined, { query: 'IG Post' })).toBe(1);
+
+      const videos = await repository.findTemplatesByOrg(ids.org1, 1, 24, undefined, undefined, { category: 'video' });
+      expect(videos.map((template) => template.id).sort()).toEqual([ids.explicitVideo, ids.legacyVideo].sort());
+      const other = await repository.findTemplatesByOrg(ids.org1, 1, 24, undefined, undefined, { category: 'other' });
+      expect(other.map((template) => template.id).sort()).toEqual([ids.explicitOther, ids.legacyImage].sort());
+      const facetRows = await repository.listTemplateCategories(ids.org1);
+      expect(facetRows).toEqual(expect.arrayContaining([
+        { category: 'Video', mode: 'image' },
+        { category: 'Other', mode: 'image' },
+        { category: '', mode: 'video' },
+        { category: '', mode: 'image' },
+      ]));
     } finally {
       await prisma.designerRecentOpen.deleteMany({ where: { organizationId: { in: [ids.org1, ids.org2] } } });
       await prisma.design.deleteMany({ where: { organizationId: ids.org1 } });

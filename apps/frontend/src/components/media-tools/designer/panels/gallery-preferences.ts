@@ -33,10 +33,13 @@ export const useDesignerGallerySize = (orgId?: string) => {
       window.removeEventListener(EVENT, onChange);
     };
   }, []);
-  const getSnapshot = useCallback(
-    () => readDesignerGallerySize(localStorage, orgId),
-    [orgId],
-  );
+  const getSnapshot = useCallback(() => {
+    try {
+      return readDesignerGallerySize(window.localStorage, orgId);
+    } catch {
+      return 'm' as const;
+    }
+  }, [orgId]);
   const storedSize = useSyncExternalStore(subscribe, getSnapshot, () => 'm' as const);
   const [override, setOverride] = useState<{ orgId?: string; size: DesignerGallerySize } | null>(null);
   const size = override?.orgId === orgId ? override.size : storedSize;

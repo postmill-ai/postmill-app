@@ -22,6 +22,9 @@ interface QueryWhere {
   params: any[];
 }
 
+const templateCategoryIsBlank = 'TRIM(COALESCE(t."category", \'\')) = \'\'';
+const templateModeForCategory = `CASE WHEN ${templateCategoryIsBlank} THEN COALESCE(t.doc->>'mode', 'image') ELSE 'image' END`;
+
 const designWhere = (orgId: string, query?: string): QueryWhere => {
   const params: any[] = [orgId];
   const clauses = ['d."organizationId" = $1', 'd."deletedAt" IS NULL'];
@@ -69,9 +72,9 @@ const templateWhere = (
   if (includeCategory && options.category) {
     const key = templateCategoryKey(options.category);
     if (key === 'other') {
-      clauses.push(`(LOWER(TRIM(COALESCE(t."category", ''))) = 'other' OR (TRIM(COALESCE(t."category", '')) = '' AND COALESCE(t.doc->>'mode', 'image') <> 'video'))`);
+      clauses.push(`(LOWER(TRIM(COALESCE(t."category", ''))) = 'other' OR (${templateCategoryIsBlank} AND ${templateModeForCategory} <> 'video'))`);
     } else if (key === 'video') {
-      clauses.push(`(LOWER(TRIM(COALESCE(t."category", ''))) = 'video' OR (TRIM(COALESCE(t."category", '')) = '' AND COALESCE(t.doc->>'mode', 'image') = 'video'))`);
+      clauses.push(`(LOWER(TRIM(COALESCE(t."category", ''))) = 'video' OR (${templateCategoryIsBlank} AND ${templateModeForCategory} = 'video'))`);
     } else {
       const aliases = key === 'custom'
         ? ['custom', 'custom-video', 'custom video']
@@ -342,7 +345,7 @@ export class DesignRepository {
   ) {
     const where = templateWhere(orgId, scope, options, false);
     return (this._designTemplate.model as any).$queryRawUnsafe(
-      `SELECT DISTINCT t."category", COALESCE(t.doc->>'mode', 'image') AS mode
+      `SELECT DISTINCT t."category", ${templateModeForCategory} AS mode
        FROM "DesignTemplate" t WHERE ${where.sql}`,
       ...where.params,
     ) as Promise<Array<{ category: string | null; mode: string }>>;

@@ -91,9 +91,17 @@ describe('TemplatesPanel', () => {
     const initial = new URL(mockFetch.mock.calls.find(([url]) => String(url).startsWith('/media/design-templates?'))![0], 'https://app.postmill.ai');
     expect(initial.searchParams.get('brandId')).toBe('brand-a');
     expect(initial.searchParams.get('sort')).toBe('newest');
+    const firstPageRequests = mockFetch.mock.calls.filter(([url]) => {
+      const request = new URL(String(url), 'https://app.postmill.ai');
+      return request.pathname === '/media/design-templates' && request.searchParams.get('page') === '1';
+    }).length;
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(25));
     expect(new Set(screen.getAllByRole('listitem').map((card) => card.getAttribute('data-template-id'))).size).toBe(25);
+    expect(mockFetch.mock.calls.filter(([url]) => {
+      const request = new URL(String(url), 'https://app.postmill.ai');
+      return request.pathname === '/media/design-templates' && request.searchParams.get('page') === '1';
+    })).toHaveLength(firstPageRequests);
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Search templates' }), { target: { value: ' launch ' } });
     expect(await screen.findByText('Launch template')).toBeTruthy();
@@ -133,6 +141,27 @@ describe('TemplatesPanel', () => {
       const last = new URL(mockFetch.mock.calls.at(-1)![0], 'https://app.postmill.ai');
       expect(last.searchParams.get('category')).toBe('ig-post');
     });
+  });
+
+  it('renders with the default size when localStorage access is blocked', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url === '/media/design-templates/folders') return response([]);
+      return response({ templates: [template('t1')], total: 1, page: 1, limit: 24, categories: [], unfiledCount: 1 });
+    });
+    const storage = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    try {
+      Object.defineProperty(window, 'localStorage', {
+        configurable: true,
+        get: () => { throw new DOMException('Storage is blocked', 'SecurityError'); },
+      });
+
+      renderPanel();
+
+      expect(await screen.findByRole('list')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Size M', exact: true }).getAttribute('aria-pressed')).toBe('true');
+    } finally {
+      if (storage) Object.defineProperty(window, 'localStorage', storage);
+    }
   });
 
   it('previews and applies through accessible overlay actions, recording the source template', async () => {

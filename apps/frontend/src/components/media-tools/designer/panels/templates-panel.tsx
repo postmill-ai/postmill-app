@@ -96,7 +96,7 @@ export const TemplatesPanel: FC<{
       const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to load templates');
       return res.json() as Promise<TemplatePage>;
-    }, { revalidateOnFocus: false, revalidateFirstPage: true });
+    }, { revalidateOnFocus: false, revalidateFirstPage: false });
 
   const templates = useMemo(() => {
     const byId = new Map<string, DesignTemplate>();

@@ -20,7 +20,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Organization, User } from '@prisma/client';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
-import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
 import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import {
@@ -124,6 +124,12 @@ export class DesignController {
   @Get('/')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Maximum number of designs to return (1–100). Values above 100 are capped at 100. Defaults to 20.',
+    schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+  })
   async list(
     @GetOrgFromRequest() org: Organization,
     @Query('page') page?: string,
@@ -684,6 +690,12 @@ export class DesignTemplateController {
   @Get('/')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Maximum number of templates to return (1–100). Values above 100 are capped at 100. Defaults to 24.',
+    schema: { type: 'integer', minimum: 1, maximum: 100, default: 24 },
+  })
   async list(
     @GetOrgFromRequest() org: Organization,
     @Query('page') page?: string,

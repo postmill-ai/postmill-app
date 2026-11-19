@@ -219,7 +219,10 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     }
     if (method === 'GET' && /^\/media\/design-templates\/gallery-template-/.test(pathname)) {
       const id = pathname.split('/').pop()!;
-      return json(route, galleryTemplates.find((entry) => entry.id === id));
+      return json(route, {
+        ...galleryTemplates.find((entry) => entry.id === id)!,
+        doc: structuredClone(initialDoc),
+      });
     }
     if (method === 'POST' && pathname === '/media/designs') {
       const body = request.postDataJSON() as { name: string; doc: unknown; sourceTemplateId?: string };

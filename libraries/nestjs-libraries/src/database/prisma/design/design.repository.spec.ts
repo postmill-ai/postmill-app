@@ -291,4 +291,18 @@ describe('DesignRepository — templates pagination', () => {
     expect(params).toEqual(expect.arrayContaining(['ig-post', 'instagram-post', 'instagram post', 'ig post']));
     expect(sql).toContain('t."createdAt" DESC');
   });
+
+  it('reads document mode only for uncategorized facet and video/other filter rows', async () => {
+    const { repo, model } = makeRepo();
+
+    await repo.listTemplateCategories('org-1');
+    await repo.findTemplatesByOrg('org-1', 1, 24, undefined, undefined, { category: 'video' });
+    await repo.countTemplatesByOrg('org-1', undefined, { category: 'other' });
+
+    const guardedMode = "CASE WHEN TRIM(COALESCE(t.\"category\", '')) = '' THEN COALESCE(t.doc->>'mode', 'image') ELSE 'image' END";
+    for (const [sql] of model.$queryRawUnsafe.mock.calls) {
+      expect(sql).toContain(guardedMode);
+    }
+    expect(model.$queryRawUnsafe.mock.calls[0][0]).toContain(`${guardedMode} AS mode`);
+  });
 });

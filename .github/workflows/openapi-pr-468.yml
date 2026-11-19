@@ -1,0 +1,75 @@
+name: Generate KAN-38 OpenAPI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postmill
+          POSTGRES_PASSWORD: postmill
+          POSTGRES_DB: postmill
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postmill"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postmill:postmill@localhost:5432/postmill
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-openapi-generation-not-a-real-secret
+      FRONTEND_URL: http://localhost:4200
+      MAIN_URL: http://localhost:4200
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:3000
+      BACKEND_INTERNAL_URL: http://localhost:3000
+      INNGEST_DEV: '1'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install native dependencies for node-canvas
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations to the ephemeral DB
+        run: pnpm run prisma-migrate-deploy-safe
+
+      - name: Build backend
+        run: pnpm run build:backend
+
+      - name: Generate OpenAPI
+        run: pnpm run openapi:generate
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openapi-kan-38
+          path: openapi.yml

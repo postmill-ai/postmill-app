@@ -1128,8 +1128,12 @@ describe('DesignService', () => {
       const out = await service.listTemplates('org-1', 2, 24);
 
       expect(repository.findTemplatesByOrg).toHaveBeenCalledWith('org-1', 2, 24, undefined, undefined, {});
+      expect(repository.countTemplatesByOrg).toHaveBeenCalledOnce();
       expect(repository.countTemplatesByOrg).toHaveBeenCalledWith('org-1', undefined, {});
+      expect(repository.listTemplateCategories).not.toHaveBeenCalled();
       expect(out).toMatchObject({ total: 42, page: 2, limit: 24 });
+      expect(out).not.toHaveProperty('categories');
+      expect(out).not.toHaveProperty('unfiledCount');
       // Same slimmed mapping as the plain-array shape.
       expect((out as any).templates[0]).toMatchObject({
         id: 't2',
