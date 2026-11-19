@@ -1586,12 +1586,19 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     const source = timelineTrackRow(page, 'Extra 1').getByRole('slider', { name: 'Clip', exact: true });
     const target = timelineTrackRow(page, 'Extra 2');
     await source.scrollIntoViewIfNeeded();
+    await target.scrollIntoViewIfNeeded();
     const sourceBox = await source.boundingBox();
     const targetBox = await target.boundingBox();
+    const dragViewport = await trackRegion.boundingBox();
     expect(sourceBox).not.toBeNull();
     expect(targetBox).not.toBeNull();
+    expect(dragViewport).not.toBeNull();
+    const sourceX = Math.max(
+      sourceBox!.x + 8,
+      Math.min(sourceBox!.x + sourceBox!.width / 2, dragViewport!.x + dragViewport!.width - 24)
+    );
     await page.keyboard.down('Alt');
-    await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
+    await page.mouse.move(sourceX, sourceBox!.y + sourceBox!.height / 2);
     await page.mouse.down();
     await page.mouse.move(targetBox!.x + 180, targetBox!.y + targetBox!.height / 2, { steps: 8 });
     await page.mouse.up();
