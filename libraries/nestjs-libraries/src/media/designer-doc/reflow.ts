@@ -726,13 +726,21 @@ export const smartReflow = (
     result.width = newW;
     result.height = newH;
 
+    // Role-aware floor: a badge/CTA group label must stay legible — 12px
+    // at a 1080 canvas (scaled with the output), vs the flat 10px floor
+    // for ungrouped text.
+    const floor = roleFontFloorPx(el, target.width, target.height);
+    const scaleFontSize = (fontSize: number) =>
+      Math.max(floor, Math.round(fontSize * contentScale));
     if (el.fontSize) {
-      const newFontSize = Math.round(el.fontSize * contentScale);
-      // Role-aware floor: a badge/CTA group label must stay legible — 12px
-      // at a 1080 canvas (scaled with the output), vs the flat 10px floor
-      // for ungrouped text.
-      const floor = roleFontFloorPx(el, target.width, target.height);
-      result.fontSize = Math.max(floor, newFontSize);
+      result.fontSize = scaleFontSize(el.fontSize);
+    }
+    if (el.type === 'text' && el.richText) {
+      result.richText = el.richText.map((run) =>
+        run.fontSize === undefined
+          ? { ...run }
+          : { ...run, fontSize: scaleFontSize(run.fontSize) }
+      );
     }
   }
 
