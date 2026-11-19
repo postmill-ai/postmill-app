@@ -425,7 +425,7 @@ test('Edit as Video preserves the source and opens a timed editable design throu
   await expect(page.locator('.konva-stage').first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Add format', exact: true }).click();
-  await page.getByRole('checkbox', { name: /Instagram Story/ }).check();
+  await page.getByRole('checkbox', { name: /Instagram Reel \(Video\)/ }).check();
   await page.getByRole('button', { name: 'Add 1 format', exact: true }).click();
   await expect.poll(() => state.videoSaveDocs.length).toBeGreaterThan(0);
   const savedVideo = state.videoSaveDocs.at(-1) as any;
