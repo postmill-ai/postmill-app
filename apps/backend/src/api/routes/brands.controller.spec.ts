@@ -1,13 +1,13 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { HttpException } from '@nestjs/common';
+import { HttpException, ValidationPipe } from '@nestjs/common';
 import { Organization } from '@prisma/client';
 
 vi.mock('@postmill-ai/nestjs-libraries/brands/brands.service', () => ({
   BrandsService: class {},
 }));
 
-import { BrandsController } from './brands.controller';
+import { BrandsController, UpdateBrandDto } from './brands.controller';
 import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import type { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 
@@ -121,6 +121,26 @@ describe('BrandsController', () => {
         status: 404,
         message: 'Brand not found',
       });
+    });
+  });
+
+  describe('visual role DTO validation', () => {
+    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+    const metadata = { type: 'body' as const, metatype: UpdateBrandDto };
+
+    it('accepts legacy strings and valid color/logo role entries', async () => {
+      const body = {
+        palette: ['#111111', { hex: '#222222', role: 'primary' }],
+        logoFileIds: ['legacy-logo', { fileId: 'main-logo', role: 'main' }],
+      };
+      await expect(pipe.transform(body, metadata)).resolves.toEqual(body);
+    });
+
+    it('rejects malformed roles and unknown entry keys', async () => {
+      await expect(pipe.transform({ palette: [{ hex: '#222222', role: 'other' }] }, metadata))
+        .rejects.toMatchObject({ status: 400 });
+      await expect(pipe.transform({ logoFileIds: [{ fileId: 'logo', role: 'main', unexpected: true }] }, metadata))
+        .rejects.toMatchObject({ status: 400 });
     });
   });
 

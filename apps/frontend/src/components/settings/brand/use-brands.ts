@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import type { BrandColorRoleAssignment, BrandLogoRoleAssignment } from '@postmill-ai/nestjs-libraries/brands/brand-kit';
 
 export interface BrandAsset {
   fileId?: string;
@@ -29,10 +30,12 @@ export interface Brand {
   isDefault: boolean;
   createdAt: string;
   palette?: string[];
+  colorRoles?: BrandColorRoleAssignment[];
   fontFamilies?: string[];
   customFonts?: BrandCustomFont[];
   preferredFormats?: string[];
   logoFileIds?: string[];
+  logoRoles?: BrandLogoRoleAssignment[];
   introFileId?: string | null;
   outroFileId?: string | null;
   assets?: BrandAsset[];

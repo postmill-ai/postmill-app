@@ -7,6 +7,10 @@ on:
     branches: [main]
     paths:
       - 'apps/frontend/src/components/media-tools/designer/**'
+      - 'apps/frontend/src/components/settings/brand/**'
+      - 'apps/frontend/src/app/(app)/(site)/brands/**'
+      - 'apps/backend/src/api/routes/brands.controller.ts'
+      - 'apps/backend/src/api/routes/ai-user.controller.ts'
       - 'libraries/**'
       - 'e2e/**'
       - 'pnpm-lock.yaml'
@@ -15,6 +19,10 @@ on:
   pull_request:
     paths:
       - 'apps/frontend/src/components/media-tools/designer/**'
+      - 'apps/frontend/src/components/settings/brand/**'
+      - 'apps/frontend/src/app/(app)/(site)/brands/**'
+      - 'apps/backend/src/api/routes/brands.controller.ts'
+      - 'apps/backend/src/api/routes/ai-user.controller.ts'
       - 'libraries/**'
       - 'e2e/**'
       - 'pnpm-lock.yaml'
@@ -148,6 +156,65 @@ jobs:
         with:
           name: designer-browser-results
           path: e2e/test-results-designer-ci
+          if-no-files-found: ignore
+          retention-days: 7
+
+  production-brand-studio:
+    needs: frontend-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml', 'e2e/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download production frontend build
+        uses: actions/download-artifact@v8
+        with:
+          name: designer-frontend-build-${{ github.sha }}
+          path: apps/frontend/.next
+
+      - name: Install Playwright dependencies
+        run: pnpm --dir e2e install --ignore-workspace --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm --dir e2e exec playwright install --with-deps chromium
+
+      - name: Run production Brand Studio browser specs
+        run: pnpm --dir e2e exec playwright test --config playwright.brand-studio-ci.config.ts
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: brand-studio-browser-results
+          path: e2e/test-results-brand-studio-ci
           if-no-files-found: ignore
           retention-days: 7
 

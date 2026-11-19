@@ -37,6 +37,11 @@ New authenticated pages go under `(app)/(site)/<feature>/page.tsx`.
 - `apps/frontend/src/components/<feature>/` — feature components (`composer/`, `dashboard/`, `settings/`,
   `media-tools/`, `layout/`, `shared/`, `errors/`, …).
 - **Check existing components before building a new one**; reuse over new.
+- **Brand Kit navigation keeps one mounted form.** `/brands/:id/kit#colors|fonts|logos|images|formats|templates`
+  uses `OverflowTabs` with navigation semantics and stable section anchors; do not turn the sections
+  into unmounting panels that discard unsaved edits. `FontCatalogPicker` owns the context-independent
+  Designer font search/previews. `FontFamilyPicker` supplies Designer BrandKit/upload context, while
+  Brand Studio passes its explicitly scoped custom fonts and selected families directly.
 
 ## Data fetching — SWR via `useFetch`
 
