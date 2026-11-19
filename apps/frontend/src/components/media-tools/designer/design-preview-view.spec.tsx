@@ -1,13 +1,32 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { DesignPreviewView } from './design-preview-view';
+import { DesignPreviewView, PublicDesignPreview, TeamDesignPreview } from './design-preview-view';
 import { backendResourceUrl, formatDesignShareDate, type DesignPreviewData } from './design-sharing';
 
 const imageMocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   createObjectURL: vi.fn(),
   revokeObjectURL: vi.fn(),
+}));
+const previewHooks = vi.hoisted(() => ({
+  team: vi.fn(),
+  public: vi.fn(),
+  actionFetch: vi.fn(),
+}));
+
+vi.mock('./design-sharing', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./design-sharing')>()),
+  useTeamDesignPreview: previewHooks.team,
+  usePublicDesignPreview: previewHooks.public,
+}));
+
+vi.mock('@postmill-ai/react/helpers/variable.context', () => ({
+  useVariables: () => ({ backendUrl: 'http://localhost:4007/api' }),
+}));
+
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
+  useFetch: () => previewHooks.actionFetch,
 }));
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
@@ -72,6 +91,9 @@ describe('DesignPreviewView', () => {
     });
     imageMocks.createObjectURL.mockReset().mockImplementation(() => `blob:preview-${imageMocks.createObjectURL.mock.calls.length}`);
     imageMocks.revokeObjectURL.mockReset();
+    previewHooks.team.mockReset().mockReturnValue({ data: preview(), error: undefined, isLoading: false });
+    previewHooks.public.mockReset().mockReturnValue({ data: preview(), error: undefined, isLoading: false, mutate: vi.fn() });
+    previewHooks.actionFetch.mockReset();
     vi.stubGlobal('fetch', imageMocks.fetch);
     Object.defineProperty(URL, 'createObjectURL', { value: imageMocks.createObjectURL, configurable: true });
     Object.defineProperty(URL, 'revokeObjectURL', { value: imageMocks.revokeObjectURL, configurable: true });
@@ -181,6 +203,26 @@ describe('DesignPreviewView', () => {
       .toBe('https://api.postmill.ai/public/design-share/token/preview');
     expect(backendResourceUrl('', 'https://app.example', '/media/designs/design-1/preview'))
       .toBe('https://app.example/media/designs/design-1/preview');
+  });
+
+  it('preserves the backend path in the rendered team preview request', async () => {
+    render(<TeamDesignPreview designId="design-1" />);
+
+    expect(await screen.findByRole('img', { name: 'Spring campaign — Page 1' })).toBeTruthy();
+    expect(imageMocks.fetch).toHaveBeenCalledWith(
+      'http://localhost:4007/api/media/designs/design-1/preview/0/0',
+      { credentials: 'include', signal: expect.any(AbortSignal) },
+    );
+  });
+
+  it('preserves the backend path in the rendered public preview request', async () => {
+    render(<PublicDesignPreview token="token" />);
+
+    expect(await screen.findByRole('img', { name: 'Spring campaign — Page 1' })).toBeTruthy();
+    expect(imageMocks.fetch).toHaveBeenCalledWith(
+      'http://localhost:4007/api/public/design-share/token/preview/0/0',
+      { credentials: 'include', signal: expect.any(AbortSignal) },
+    );
   });
 
   it('formats dates for the active locale', () => {

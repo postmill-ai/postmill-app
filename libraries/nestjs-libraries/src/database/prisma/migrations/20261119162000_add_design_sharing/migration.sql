@@ -56,4 +56,3 @@ ALTER TABLE "DesignShareComment" ADD CONSTRAINT "DesignShareComment_shareId_fkey
 
 -- AddForeignKey
 ALTER TABLE "DesignShareComment" ADD CONSTRAINT "DesignShareComment_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

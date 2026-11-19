@@ -1,7 +1,6 @@
 'use client';
 
 import React, { FC, useEffect, useMemo, useRef, useState } from 'react';
-import SafeImage from '@postmill-ai/react/helpers/safe.image';
 import { Button } from '@postmill-ai/react/form/button';
 import { Input } from '@postmill-ai/react/form/input';
 import { Textarea } from '@postmill-ai/react/form/textarea';
