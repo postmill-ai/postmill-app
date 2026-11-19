@@ -2,7 +2,7 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DesignPreviewView } from './design-preview-view';
-import { formatDesignShareDate, type DesignPreviewData } from './design-sharing';
+import { backendResourceUrl, formatDesignShareDate, type DesignPreviewData } from './design-sharing';
 
 const imageMocks = vi.hoisted(() => ({
   fetch: vi.fn(),
@@ -170,6 +170,17 @@ describe('DesignPreviewView', () => {
     );
     expect(await screen.findByRole('img', { name: 'Smith & Co — Page 1', exact: true })).toBeTruthy();
     expect(screen.getByText(/^Approved by O'Brien & Co on .+\.$/)).toBeTruthy();
+  });
+
+  it('preserves backend paths for team and public image URLs', () => {
+    expect(backendResourceUrl('http://localhost:4007/api', 'https://app.example', '/public/design-share/token/preview'))
+      .toBe('http://localhost:4007/api/public/design-share/token/preview');
+    expect(backendResourceUrl('http://localhost:4007/api', 'https://app.example', '/media/designs/design-1/preview'))
+      .toBe('http://localhost:4007/api/media/designs/design-1/preview');
+    expect(backendResourceUrl('https://api.postmill.ai', 'https://app.example', '/public/design-share/token/preview'))
+      .toBe('https://api.postmill.ai/public/design-share/token/preview');
+    expect(backendResourceUrl('', 'https://app.example', '/media/designs/design-1/preview'))
+      .toBe('https://app.example/media/designs/design-1/preview');
   });
 
   it('formats dates for the active locale', () => {

@@ -59,6 +59,9 @@ export const designPreviewImageUrl = (baseUrl: string, outputIndex: number, page
 export const formatDesignShareDate = (value: string, language = 'en'): string =>
   new Intl.DateTimeFormat(language, { dateStyle: 'medium' }).format(new Date(value));
 
+export const backendResourceUrl = (backendUrl: string, origin: string, path: string): string =>
+  `${backendUrl || origin}${path}`;
+
 const usePreviewResource = (key: string | null, url: string) => {
   const fetch = useFetch();
   const load = useCallback(async () => {

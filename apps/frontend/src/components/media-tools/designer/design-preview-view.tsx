@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useEffect, useMemo, useState } from 'react';
+import React, { FC, useEffect, useMemo, useRef, useState } from 'react';
 import SafeImage from '@postmill-ai/react/helpers/safe.image';
 import { Button } from '@postmill-ai/react/form/button';
 import { Input } from '@postmill-ai/react/form/input';
@@ -9,8 +9,9 @@ import { useT, useTranslationSettings } from '@postmill-ai/react/translation/get
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
-import { usePreviewImage } from './preview-image-cache';
+import { PreviewImage } from './preview-image-cache';
 import {
+  backendResourceUrl,
   designPreviewImageUrl,
   formatDesignShareDate,
   usePublicDesignPreview,
@@ -33,6 +34,7 @@ export const DesignPreviewView: FC<{
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState<'comment' | 'approve' | null>(null);
   const [actionError, setActionError] = useState('');
+  const imageCache = useRef(new Map<string, Blob>());
   const output = data.outputs.find((item) => item.outputIndex === outputIndex) ?? data.outputs[0];
   const page = output?.pages.find((item) => item.pageNumber === pageNumber) ?? output?.pages[0];
 
@@ -44,7 +46,6 @@ export const DesignPreviewView: FC<{
   const imageUrl = output && page
     ? designPreviewImageUrl(imageBaseUrl, output.outputIndex, page.pageNumber)
     : '';
-  const { src: imageSrc, failed: imageFailed, retry: retryImage, fail: failImage } = usePreviewImage(imageUrl);
 
   const outputItems = useMemo(() => data.outputs.map((item) => ({
     key: String(item.outputIndex),
@@ -131,10 +132,11 @@ export const DesignPreviewView: FC<{
             </div>
           )}
           <div className="mt-4 flex min-h-[320px] items-center justify-center overflow-hidden rounded-md bg-studioCanvas p-3">
-            {imageUrl && imageSrc && !imageFailed ? (
-              <SafeImage
-                key={imageSrc}
-                src={imageSrc}
+            {imageUrl ? (
+              <PreviewImage
+                key={imageUrl}
+                imageUrl={imageUrl}
+                cache={imageCache.current}
                 alt={t('designer_preview_alt', '{{name}} — {{page}}', {
                   name: data.name,
                   page: page?.name || t('designer_poster', 'Poster'),
@@ -142,14 +144,7 @@ export const DesignPreviewView: FC<{
                 })}
                 width={output?.width ?? 1080}
                 height={output?.height ?? 1080}
-                className="max-h-[75vh] max-w-full object-contain"
-                onError={failImage}
               />
-            ) : imageFailed ? (
-              <div className="flex flex-col items-center gap-3">
-                <p className="text-[13px] text-newTextColor/60">{t('designer_preview_image_unavailable', 'This preview image is unavailable.')}</p>
-                <Button secondary onClick={retryImage}>{t('retry', 'Retry')}</Button>
-              </div>
             ) : (
               <p className="text-[13px] text-newTextColor/60">{t('loading_ellipsis', 'Loading…')}</p>
             )}
@@ -260,7 +255,7 @@ export const TeamDesignPreview: FC<{ designId?: string }> = ({ designId }) => {
   const { backendUrl } = useVariables();
   if (error) return <PreviewUnavailable />;
   if (isLoading || !data) return <PreviewLoading />;
-  const base = new URL(`/media/designs/${designId}/preview`, backendUrl || window.location.origin).toString();
+  const base = backendResourceUrl(backendUrl, window.location.origin, `/media/designs/${designId}/preview`);
   return <DesignPreviewView data={data} imageBaseUrl={base} />;
 };
 
@@ -270,7 +265,7 @@ export const PublicDesignPreview: FC<{ token?: string }> = ({ token }) => {
   const { backendUrl } = useVariables();
   if (error) return <PreviewUnavailable />;
   if (isLoading || !data || !token) return <PreviewLoading />;
-  const base = new URL(`/public/design-share/${token}/preview`, backendUrl || window.location.origin).toString();
+  const base = backendResourceUrl(backendUrl, window.location.origin, `/public/design-share/${token}/preview`);
   const mutatePreview = async (response: Response) => {
     if (!response.ok) throw new Error('Preview action failed');
     await mutate();
