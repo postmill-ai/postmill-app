@@ -82,4 +82,31 @@ describe('FileList', () => {
     fireEvent.loadedMetadata(probe);
     expect(screen.queryByTestId('video-duration-badge')).toBeNull();
   });
+
+  it('emits copy drags from list rows when picker drag routing is enabled', () => {
+    const onFileDragStart = vi.fn();
+    const target = file({
+      name: 'alpha.png', originalName: 'alpha.png', path: '/uploads/alpha.png', type: 'image',
+    });
+    render(
+      <FileList
+        files={[target]}
+        selectedFiles={[]}
+        onToggleSelect={vi.fn()}
+        onFileClick={vi.fn()}
+        onFileDragStart={onFileDragStart}
+        sortField="createdAt"
+        sortOrder="desc"
+        onSort={vi.fn()}
+      />
+    );
+    const row = screen.getByText('alpha.png').closest('tr')!;
+    const dataTransfer = { setData: vi.fn(), effectAllowed: 'move' };
+
+    fireEvent.dragStart(row, { dataTransfer });
+
+    expect(row.getAttribute('draggable')).toBe('true');
+    expect(dataTransfer.effectAllowed).toBe('copy');
+    expect(onFileDragStart).toHaveBeenCalledWith(target, expect.anything());
+  });
 });

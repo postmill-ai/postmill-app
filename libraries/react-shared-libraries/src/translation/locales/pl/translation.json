@@ -3628,6 +3628,7 @@
   "designer_mask_upload_failed": "Przesyłanie maski nie powiodło się",
   "designer_image_heading": "Obraz",
   "designer_replace_image": "Zastąp obraz…",
+  "designer_drop_to_replace": "Upuść, aby zastąpić",
   "designer_label_fit_mode": "Tryb dopasowania",
   "designer_fit_option_fit": "Dopasuj",
   "designer_fit_option_cover": "Wypełnij",

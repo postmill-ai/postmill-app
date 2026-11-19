@@ -425,12 +425,17 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   and derives a bounded frame-aspect cover crop around the old relative center when source aspects differ
   (or clears an unmeasurable incompatible crop), so explicit crops never letterbox the frame. It adopts
   the new owned File, clears original/smart-filter and painted-mask state, propagates linked content,
-  and commits one Undo. Ordinary file drops always retain insertion/SVG-import routing. Alt/Option-drop
-  on an unlocked, visible static image or image/sticker clip shows a distinct Replace indicator and uses
-  those same actions with `dropEffect: 'copy'` for OS drag negotiation; locked targets fall through to
-  insertion, video/audio clips are never targets, undecodable uploads are rejected, target failures are
-  not reported as upload failures, and a failed replacement deletes its newly uploaded File. Generation
-  returns a review candidate and does not edit the doc; Apply commits once after the before/after dialog. Static
+  and commits one Undo. OS files, Insert Image/My Files, and Elements still images share one validated
+  metadata drop route. A compatible unlocked, visible static image or image/sticker clip is outlined at
+  its own bounds with **Drop to replace**; a direct drop or Alt/Option-drop replaces it exactly once,
+  while blank and unsupported targets retain insertion/SVG-import routing. The media picker stays
+  mounted during an outbound drag but becomes pointer-transparent so the canvas receives dragover/drop;
+  cancellation restores it and only an accepted copy drop closes it. Video/audio clips are never targets,
+  undecodable sources leave the old target untouched, and target failures are not reported as upload
+  failures. Existing library/stock source Files are never deleted. Only a newly uploaded OS File is
+  cleaned up after decode/apply failure, and refused cleanup reports that the upload remains in the
+  library. Generation returns a review candidate and does not edit the doc; Apply commits once after the
+  before/after dialog. Static
   (`ai-image-actions.ts`) and clip paths share `background-removal.ts` geometry: preserve the existing
   crop/fit/focal geometry by default, with preserve-frame contain and aspect-correct canvas fitting
   as options. Apply keeps original pixels as `src`, rasterizes the reviewed alpha into the final

@@ -3,6 +3,8 @@ import { test, expect, type Page, type Route, type Locator } from '@playwright/t
 const DESIGN_ID = 'designer-editing-ux-e2e';
 
 const PNG_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg==';
+const LIBRARY_IMAGE_URL = '/mock-export/library.png';
+const STOCK_IMAGE_URL = '/mock-export/stock.png';
 
 const initialDoc = {
   version: 13,
@@ -95,6 +97,7 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     renderDocs: [] as unknown[],
     generationCalls: 0,
     uploads: 0,
+    deletedFiles: [] as string[],
     uploadPath: PNG_DATA_URL,
   };
   await page.route('**/*', async (route) => {
@@ -125,6 +128,30 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     }
     if (method === 'GET' && pathname === '/media/tools/status') {
       return json(route, { operations: {}, tools: { 'text-to-image': { available: true } } });
+    }
+    if (method === 'GET' && pathname === '/files') {
+      return json(route, {
+        results: [{
+          id: 'library-image-file', name: 'library-image.png', originalName: 'library-image.png',
+          path: LIBRARY_IMAGE_URL, thumbnail: PNG_DATA_URL, alt: null, thumbnailTimestamp: null,
+          fileSize: 100, type: 'image', tags: null, description: null, folderId: null,
+          createdAt: '2026-11-19T00:00:00.000Z', metadata: { dimensions: { width: 1, height: 1 } },
+        }],
+        total: 1, page: 1, limit: 24,
+      });
+    }
+    if (method === 'GET' && pathname === '/media/stock/photos') {
+      return json(route, {
+        results: [{
+          id: 'picker-stock', url: STOCK_IMAGE_URL, thumbUrl: PNG_DATA_URL,
+          description: 'Picker stock photo', author: 'QA', authorUrl: 'https://example.test/author',
+          sourceUrl: 'https://example.test/photo', width: 1, height: 1, source: 'unsplash',
+        }],
+      });
+    }
+    if (method === 'DELETE' && pathname.startsWith('/files/')) {
+      state.deletedFiles.push(pathname.slice('/files/'.length));
+      return json(route, {});
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}`) {
       return json(route, { id: DESIGN_ID, name: 'Editing UX', doc: state.doc });
@@ -162,7 +189,7 @@ async function installMocks(page: Page, doc: any = initialDoc) {
         id: 'paid-generation', path: PNG_DATA_URL, name: 'Paid generation result',
       });
     }
-    if (method === 'GET' && pathname === '/mock-export/editing.png') {
+    if (method === 'GET' && ['/mock-export/editing.png', LIBRARY_IMAGE_URL, STOCK_IMAGE_URL].includes(pathname)) {
       return route.fulfill({
         status: 200,
         contentType: 'image/png',
@@ -995,21 +1022,35 @@ test('font-size shortcuts respect selection, text focus, bounds and help', async
   await expect(page.getByText('Decrease font size', { exact: true })).toBeVisible();
 });
 
-test('ordinary drops insert while Alt-drop shows Replace and replaces once', async ({ page }) => {
+test('direct drops highlight target geometry and replace once while blank drops insert', async ({ page }) => {
   const state = await installMocks(page);
   await openDesigner(page);
-  await dropPng(page, 120, 260);
+  await dropPng(page, 350, 350);
   await expect.poll(() => state.uploads).toBe(1);
   await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
   expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
   await expect.poll(() => state.doc.outputs[0].children.length).toBe(2);
 
-  await dragImageFile(page, 120, 260, { eventName: 'dragover', altKey: true });
-  await expect(page.locator('[data-drop-mode="replace"]')).toHaveText('Replace image…');
-  await dropPng(page, 120, 260, true);
+  await dragImageFile(page, 120, 260, { eventName: 'dragover' });
+  const preview = page.locator('[data-drop-mode="replace"]');
+  await expect(preview).toHaveText('Drop to replace');
+  const stageBox = await page.locator('.konva-stage').first().boundingBox();
+  const previewBox = await preview.boundingBox();
+  expect(stageBox).not.toBeNull();
+  expect(previewBox).not.toBeNull();
+  const scale = Math.min(stageBox!.width / 400, stageBox!.height / 400) * 0.85;
+  const outputX = (stageBox!.width - 400 * scale) / 2;
+  const outputY = (stageBox!.height - 400 * scale) / 2;
+  expect(previewBox!.x).toBeCloseTo(stageBox!.x + outputX + 40 * scale, 0);
+  expect(previewBox!.y).toBeCloseTo(stageBox!.y + outputY + 200 * scale, 0);
+  expect(previewBox!.width).toBeCloseTo(160 * scale, 0);
+  expect(previewBox!.height).toBeCloseTo(120 * scale, 0);
+
+  await dropPng(page, 120, 260);
   await expect.poll(() => state.uploads).toBe(2);
   await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('dropped-file-2');
+  expect(state.doc.outputs[0].children).toHaveLength(2);
   expect(state.doc.outputs[0].children[1]).toMatchObject({
     x: 40, y: 200, width: 160, height: 120,
     naturalWidth: 1, naturalHeight: 1,
@@ -1023,6 +1064,54 @@ test('ordinary drops insert while Alt-drop shows Replace and replaces once', asy
   await expect.poll(() => state.uploads).toBe(3);
   await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
   expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
+});
+
+test('File Library and Insert Image stock drags replace without uploads or source deletion', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+
+  const openPicker = async () => {
+    await page.getByRole('menuitem', { name: 'Insert', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Image…', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Insert image', exact: true })).toBeVisible();
+  };
+  const dragToImage = async (source: Locator) => {
+    const stageBox = await page.locator('.konva-stage').first().boundingBox();
+    const canvas = page.locator('.designer-canvas-container');
+    const canvasBox = await canvas.boundingBox();
+    expect(stageBox).not.toBeNull();
+    expect(canvasBox).not.toBeNull();
+    const scale = Math.min(stageBox!.width / 400, stageBox!.height / 400) * 0.85;
+    const outputX = (stageBox!.width - 400 * scale) / 2;
+    const outputY = (stageBox!.height - 400 * scale) / 2;
+    await source.dragTo(canvas, {
+      targetPosition: {
+        x: stageBox!.x + outputX + 120 * scale - canvasBox!.x,
+        y: stageBox!.y + outputY + 260 * scale - canvasBox!.y,
+      },
+    });
+  };
+
+  await openPicker();
+  const libraryFile = page.getByRole('button', { name: /library-image\.png/ });
+  await expect(libraryFile).toBeVisible();
+  await dragToImage(libraryFile);
+  await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('library-image-file');
+  expect(state.doc.outputs[0].children).toHaveLength(2);
+  expect(state.uploads).toBe(0);
+  await expect(page.getByRole('dialog', { name: 'Insert image', exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
+  await openPicker();
+  await page.getByRole('tab', { name: 'Photos', exact: true }).click();
+  await dragToImage(page.getByRole('button', { name: 'Picker stock photo', exact: true }));
+  await expect.poll(() => state.doc.outputs[0].children[1].src).toBe(STOCK_IMAGE_URL);
+  expect(state.doc.outputs[0].children).toHaveLength(2);
+  expect(state.doc.outputs[0].children[1].fileId).toBeUndefined();
+  expect(state.uploads).toBe(0);
+  expect(state.deletedFiles).toEqual([]);
+  await expect(page.getByRole('dialog', { name: 'Insert image', exact: true })).toHaveCount(0);
 });
 
 test('Alt-drop replaces a still clip but never a video clip', async ({ page }) => {
@@ -1086,6 +1175,7 @@ test('an undecodable Alt-drop keeps the old target and reports decode failure', 
   await expect(page.getByText('Failed to load dropped image', { exact: true })).toBeVisible();
   expect(state.doc.outputs[0].children).toHaveLength(2);
   expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
+  expect(state.deletedFiles).toEqual(['dropped-file-1']);
 });
 
 type SafeZoneSample = { x: number; y: number; expected: 'shaded' | 'clear' };

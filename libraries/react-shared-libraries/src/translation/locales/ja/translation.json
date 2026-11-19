@@ -3611,6 +3611,7 @@
   "designer_mask_upload_failed": "マスクのアップロードに失敗しました",
   "designer_image_heading": "画像",
   "designer_replace_image": "画像を置き換え…",
+  "designer_drop_to_replace": "ドロップして置き換え",
   "designer_label_fit_mode": "フィットモード",
   "designer_fit_option_fit": "フィット",
   "designer_fit_option_cover": "カバー",

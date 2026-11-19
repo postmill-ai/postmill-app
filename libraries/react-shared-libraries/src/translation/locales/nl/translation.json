@@ -3624,6 +3624,7 @@
   "designer_mask_upload_failed": "Masker uploaden mislukt",
   "designer_image_heading": "Afbeelding",
   "designer_replace_image": "Afbeelding vervangen…",
+  "designer_drop_to_replace": "Neerzetten om te vervangen",
   "designer_label_fit_mode": "Passingsmodus",
   "designer_fit_option_fit": "Passend",
   "designer_fit_option_cover": "Vullend",

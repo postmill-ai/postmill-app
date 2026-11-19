@@ -57,6 +57,7 @@ export const FileGrid: FC<{
   onFileClick: (file: FileItem) => void;
   standalone?: boolean;
   onSelect?: (items: FileItem[]) => void;
+  onFileDragStart?: (file: FileItem, event: React.DragEvent) => void;
   /**
    * Render the file tiles inert (no pointer interaction, dimmed). Used while
    * the visible files are the PREVIOUS folder's keepPreviousData set — a click
@@ -77,6 +78,7 @@ export const FileGrid: FC<{
   onToggleSelect,
   onFileClick,
   onSelect,
+  onFileDragStart,
   filesInert,
   folders = [],
   onFolderOpen,
@@ -86,10 +88,11 @@ export const FileGrid: FC<{
   onFolderMenu,
 }) => {
   const t = useT();
-  const handleDragStart = useCallback((e: React.DragEvent, fileId: string) => {
-    e.dataTransfer.setData('text/plain', fileId);
-    e.dataTransfer.effectAllowed = 'move';
-  }, []);
+  const handleDragStart = useCallback((e: React.DragEvent, file: FileItem) => {
+    e.dataTransfer.setData('text/plain', file.id);
+    e.dataTransfer.effectAllowed = onFileDragStart ? 'copy' : 'move';
+    onFileDragStart?.(file, e);
+  }, [onFileDragStart]);
 
   // One hook instance per grid: only one touch press can be in flight at a time.
   const fileLongPress = useLongPress<FileItem>((point, file) =>
@@ -158,7 +161,7 @@ export const FileGrid: FC<{
 const FileTile: FC<{
   file: FileItem;
   isSelected: boolean;
-  onDragStart: (e: React.DragEvent, fileId: string) => void;
+  onDragStart: (e: React.DragEvent, file: FileItem) => void;
   onActivate: () => void;
   onPreview?: () => void;
   onMenu?: (e: MenuEvent) => void;
@@ -191,7 +194,7 @@ const FileTile: FC<{
       role="button"
       tabIndex={0}
       draggable={dragArmed}
-      onDragStart={(e) => onDragStart(e, file.id)}
+      onDragStart={(e) => onDragStart(e, file)}
       onDragEnd={() => {
         justDragged.current = true;
         disarmDrag();

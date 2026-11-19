@@ -49,6 +49,7 @@ export const FileList: FC<{
   selectedFiles: FileItem[];
   onToggleSelect: (file: FileItem) => void;
   onFileClick: (file: FileItem) => void;
+  onFileDragStart?: (file: FileItem, event: React.DragEvent) => void;
   sortField: string;
   sortOrder: string;
   onSort: (field: string) => void;
@@ -66,6 +67,7 @@ export const FileList: FC<{
   selectedFiles,
   onToggleSelect,
   onFileClick,
+  onFileDragStart,
   sortField,
   sortOrder,
   onSort,
@@ -274,15 +276,25 @@ export const FileList: FC<{
       columns={columns}
       data={files}
       leadingRows={folderRows}
-      rowProps={(file: FileItem) =>
-        onFileMenu
+      rowProps={(file: FileItem) => ({
+        ...(onFileMenu
           ? {
               onContextMenu: (e: React.MouseEvent) => onFileMenu(e, file),
               style: { WebkitTouchCallout: 'none' },
               ...fileLongPress.bind(file),
             }
-          : {}
-      }
+          : {}),
+        ...(onFileDragStart
+          ? {
+              draggable: true,
+              onDragStart: (event: React.DragEvent<HTMLTableRowElement>) => {
+                event.dataTransfer.setData('text/plain', file.id);
+                event.dataTransfer.effectAllowed = 'copy';
+                onFileDragStart(file, event);
+              },
+            }
+          : {}),
+      })}
       keyExtractor={(file: FileItem) => file.id}
       selectedIds={selectedFiles.map((f) => f.id)}
       onSelectionChange={(ids) => {

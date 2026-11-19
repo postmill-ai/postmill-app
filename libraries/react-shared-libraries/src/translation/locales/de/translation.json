@@ -3611,6 +3611,7 @@
   "designer_mask_upload_failed": "Masken-Upload fehlgeschlagen",
   "designer_image_heading": "Bild",
   "designer_replace_image": "Bild ersetzen…",
+  "designer_drop_to_replace": "Zum Ersetzen ablegen",
   "designer_label_fit_mode": "Anpassungsmodus",
   "designer_fit_option_fit": "Einpassen",
   "designer_fit_option_cover": "Ausfüllen",

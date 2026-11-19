@@ -1399,20 +1399,10 @@ test.describe('Designer Elements workspace (mocked stock and storage)', () => {
     });
     expect(mocks.stockVectorUploads).toBe(0);
 
-    await openElements(page, 'Vectors');
-    await page.getByRole('button', { name: 'QA outline vector', exact: true }).click();
-    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(3);
-    expect(mocks.doc.outputs[0].children![2]).toMatchObject({
-      type: 'image', src: IMPORTED_VECTOR_URL, fileId: 'vector-file-1',
-    });
-    expect(mocks.stockVectorUploads).toBe(1);
-
-    await openElements(page);
-    await expect(search).toHaveValue('mountain');
     await fitDesignerCanvas(page);
     await dragStockAssetToDocumentPoint(page, 'QA stock photo', 400, 300, 100, 100);
-    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(4);
-    const draggedPhoto = mocks.doc.outputs[0].children![3];
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(3);
+    const draggedPhoto = mocks.doc.outputs[0].children![2];
     expect(draggedPhoto).toMatchObject({
       type: 'image', src: STOCK_PHOTO_URL, width: 320, height: 80,
     });
@@ -1420,7 +1410,15 @@ test.describe('Designer Elements workspace (mocked stock and storage)', () => {
     expect(draggedPhoto.y).toBeLessThanOrEqual(65);
     expect(draggedPhoto.x).toBeGreaterThanOrEqual(-65);
     expect(draggedPhoto.x).toBeLessThanOrEqual(-55);
-    expect(mocks.stockVectorUploads, 'drag must not repeat the vector import').toBe(1);
+    await openElements(page, 'Vectors');
+    await page.getByRole('button', { name: 'QA outline vector', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(4);
+    expect(mocks.doc.outputs[0].children![3]).toMatchObject({
+      type: 'image', src: IMPORTED_VECTOR_URL, fileId: 'vector-file-1',
+    });
+    expect(mocks.stockVectorUploads).toBe(1);
+    await openElements(page);
+    await expect(search).toHaveValue('mountain');
 
     const imageModeWarning = 'This media requires a video design. Your image design has not been changed.';
     await openElements(page, 'Videos');
@@ -1455,6 +1453,31 @@ test.describe('Designer Elements workspace (mocked stock and storage)', () => {
     });
     expect(mocks.doc.mode).toBe('image');
     expect(mocks.doc.outputs[0].children![0]).toMatchObject({ id: 'existing-text', text: 'Keep this image design' });
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+  test('Elements photo drag replaces the highlighted static image without inserting', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    mocks.doc.outputs[0].children![0].src = TRANSPARENT_IMAGE_URL;
+    mocks.doc.outputs[0].children![0].fileId = 'elements-old-file';
+    mocks.name = 'Static Elements Replace E2E';
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await openElements(page);
+    await fitDesignerCanvas(page);
+
+    await dragStockAssetToDocumentPoint(page, 'QA stock photo', 400, 300, 200, 100);
+
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.src).toBe(STOCK_PHOTO_URL);
+    expect(mocks.doc.outputs[0].children).toHaveLength(1);
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({
+      id: 'static-image', src: STOCK_PHOTO_URL,
+      x: 100, y: 50, width: 200, height: 100,
+      naturalWidth: 1600, naturalHeight: 400,
+      fitMode: 'cover', focalPoint: { x: 0.75, y: 0.5 },
+    });
+    expect(mocks.stockVectorUploads).toBe(0);
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });

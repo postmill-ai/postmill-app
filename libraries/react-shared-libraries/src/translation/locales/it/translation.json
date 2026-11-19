@@ -3611,6 +3611,7 @@
   "designer_mask_upload_failed": "Caricamento della maschera non riuscito",
   "designer_image_heading": "Immagine",
   "designer_replace_image": "Sostituisci immagine…",
+  "designer_drop_to_replace": "Rilascia per sostituire",
   "designer_label_fit_mode": "Modalità adattamento",
   "designer_fit_option_fit": "Adatta",
   "designer_fit_option_cover": "Copri",

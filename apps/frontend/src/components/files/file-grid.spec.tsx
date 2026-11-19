@@ -264,6 +264,29 @@ describe('FileGrid', () => {
     expect(onToggleSelect).toHaveBeenCalledWith(target);
   });
 
+  it('emits the full file as a copy drag in picker mode', () => {
+    const onFileDragStart = vi.fn();
+    const target = file('f1', 'alpha.png');
+    render(
+      <FileGrid
+        {...baseProps}
+        files={[target]}
+        folders={[]}
+        onFileDragStart={onFileDragStart}
+      />
+    );
+    const tile = screen.getByRole('button');
+    fireEvent.pointerDown(tile, { button: 0, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(tile, { clientX: 80, clientY: 80 });
+    const dataTransfer = { setData: vi.fn(), effectAllowed: 'move' };
+
+    fireEvent.dragStart(tile, { dataTransfer });
+
+    expect(dataTransfer.effectAllowed).toBe('copy');
+    expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'f1');
+    expect(onFileDragStart).toHaveBeenCalledWith(target, expect.anything());
+  });
+
   it('renders the play overlay on video tiles but not on image tiles', () => {
     const video = {
       ...file('v1', 'clip.webm'),

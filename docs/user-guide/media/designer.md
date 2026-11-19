@@ -200,13 +200,15 @@ An already shrunk box keeps its geometry; an unshrunk box grows within the outpu
 increase remains visible. Mixed rich-text sizes adjust independently, and the shortcuts also work in
 the inline editor without running in ordinary fields.
 
-A normal image-file drop always inserts a new image, and an SVG drop imports editable paths. Hold
-**Alt/Option** while dropping onto an unlocked static image or still-image clip to show the distinct
-**Replace image** indicator and replace that target. The frame, fit mode, and focal point are retained;
-a cross-aspect source gets a cover crop centered on the old crop's relative center, so the frame never
-gains empty bands. The new file's intrinsic dimensions are adopted and linked formats update in one
-Undo step. Locked targets, video clips, and audio clips are not replacement targets, and files that the
-browser cannot decode are rejected.
+Drag an image from your computer, **Insert → Image…** (My Files or stock photos), or **Elements** onto
+an unlocked static image or still-image/sticker clip. The compatible target is outlined at its own
+bounds with **Drop to replace**; drop directly, or hold **Alt/Option**, to replace it without adding a
+duplicate layer. Drops on blank canvas or unsupported targets still insert, and an OS SVG drop imports
+editable paths. The frame, fit mode, and focal point are retained; a cross-aspect source gets a cover
+crop centered on the old crop's relative center, so the frame never gains empty bands. The new source's
+intrinsic dimensions are adopted and linked formats update in one Undo step. Locked targets, video
+clips, and audio clips are not replacement targets, and images that cannot be decoded leave the old
+target unchanged. Existing File Library sources are never deleted after a failed replacement.
 
 With a text element selected, the Inspector's **Text Effects** presets apply **Arc text**, **Wave
 text**, **Circle text**, **Gradient text**, **Text outline**, **Text shadow**, or **3D Extrusion** in

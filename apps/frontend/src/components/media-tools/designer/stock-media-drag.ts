@@ -1,8 +1,10 @@
 import type { MediaSelectorItem } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
 import type { StockMediaSelection } from '@postmill-ai/frontend/components/media-tools/stock.types';
+import type { FileItem } from '@postmill-ai/frontend/components/files/file-manager';
 import type { DesignerMediaKind } from './use-designer-media-insertion';
 
 export const STOCK_MEDIA_DRAG_MIME = 'application/x-postmill-stock-media';
+export const STILL_IMAGE_DRAG_MIME = 'application/x-postmill-still-image';
 
 const kinds = new Set<DesignerMediaKind>(['image', 'sticker', 'vector', 'icon', 'video', 'audio']);
 const mediaTypes = new Set(['image', 'video', 'audio']);
@@ -20,17 +22,50 @@ export const mediaItemFromStockSelection = (item: StockMediaSelection): MediaSel
   downloadLocation: item.downloadLocation,
 });
 
-export const writeStockMediaDrag = (
+export const mediaItemFromFileSelection = (file: FileItem): MediaSelectorItem => {
+  const rawType = file.metadata?.mimeType || file.metadata?.mime || file.type;
+  const normalizedType = rawType.split('/')[0];
+  const extensionType = /\.(mp3|wav|ogg|m4a)$/i.test(file.name || '') ? 'audio' : undefined;
+  const dimensions = file.metadata?.dimensions;
+  return {
+    source: 'file',
+    url: file.path,
+    fileId: file.id,
+    width: dimensions?.width || 0,
+    height: dimensions?.height || 0,
+    thumbnail: file.thumbnail || undefined,
+    type: (mediaTypes.has(normalizedType) ? normalizedType : extensionType || file.type) as MediaSelectorItem['type'],
+    name: file.name,
+  };
+};
+
+export const isStillImageMedia = (kind: DesignerMediaKind, item: MediaSelectorItem) =>
+  (kind === 'image' || kind === 'sticker') && item.type === 'image';
+
+export const writeDesignerMediaDrag = (
   dataTransfer: Pick<DataTransfer, 'setData'>,
   kind: DesignerMediaKind,
-  item: StockMediaSelection
+  item: MediaSelectorItem
 ) => {
   dataTransfer.setData(STOCK_MEDIA_DRAG_MIME, JSON.stringify({
     version: 1,
     kind,
-    item: mediaItemFromStockSelection(item),
+    item,
   }));
+  if (isStillImageMedia(kind, item)) {
+    dataTransfer.setData(STILL_IMAGE_DRAG_MIME, '1');
+  }
 };
+
+export const hasStillImageDrag = (
+  dataTransfer: Pick<DataTransfer, 'types'>
+) => Array.from(dataTransfer.types).includes(STILL_IMAGE_DRAG_MIME);
+
+export const writeStockMediaDrag = (
+  dataTransfer: Pick<DataTransfer, 'setData'>,
+  kind: DesignerMediaKind,
+  item: StockMediaSelection
+) => writeDesignerMediaDrag(dataTransfer, kind, mediaItemFromStockSelection(item));
 
 export const readStockMediaDrag = (
   dataTransfer: Pick<DataTransfer, 'getData'>
