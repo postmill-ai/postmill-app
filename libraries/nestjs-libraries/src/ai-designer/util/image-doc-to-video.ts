@@ -528,7 +528,9 @@ const preservedClipForElement = (
         ...(el.fill ? { fill: el.fill } : {}),
         ...(el.fillGradient ? { fillGradient: el.fillGradient } : {}),
         ...(el.stroke ? { stroke: el.stroke } : {}),
-        ...(el.strokeWidth ? { strokeWidth: el.strokeWidth } : {}),
+        ...(el.stroke || el.strokeWidth !== undefined
+          ? { strokeWidth: el.strokeWidth ?? 0 }
+          : {}),
         ...(el.borderRadius ? { borderRadius: el.borderRadius } : {}),
       },
     };

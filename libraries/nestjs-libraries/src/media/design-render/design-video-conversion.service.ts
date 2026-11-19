@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import sharp from 'sharp';
 import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
@@ -56,9 +57,20 @@ export interface VideoConversionSummary {
 }
 
 type CreatedAsset = { id: string; path: string };
-type BakedAsset = { fileId: string; src: string };
+type BakedAsset = {
+  fileId: string;
+  src: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  naturalWidth: number;
+  naturalHeight: number;
+};
 
 const IDEMPOTENCY_TTL_SECONDS = 86400;
+const PENDING_IDEMPOTENCY_TTL_SECONDS = 900;
+const MAX_FALLBACK_RENDERS_PER_CONVERSION = 200;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 200;
 
 const visuallySignificantGroup = (el: DesignerElement) =>
@@ -108,7 +120,7 @@ export class DesignVideoConversionService {
         key,
         JSON.stringify({ status: 'pending', pageDurationMs }),
         'EX',
-        IDEMPOTENCY_TTL_SECONDS,
+        PENDING_IDEMPOTENCY_TTL_SECONDS,
         'NX',
       )) === 'OK';
     } catch {
@@ -339,6 +351,8 @@ export class DesignVideoConversionService {
         renderChildren,
         false,
         createdAssets,
+        true,
+        { x: group.x, y: group.y },
       );
       const replacement = this._rasterElement(group, baked, output, group.hidden);
       const firstMember = children.findIndex((el) => ids.has(el.id));
@@ -440,6 +454,8 @@ export class DesignVideoConversionService {
         [{ ...element, hidden: false, parentId: undefined }],
         false,
         createdAssets,
+        true,
+        { x: element.x, y: element.y },
       );
       children[index] = this._rasterElement(element, baked, output, element.hidden);
       fallbacks.push({
@@ -463,10 +479,10 @@ export class DesignVideoConversionService {
       id: source.id,
       type: 'raster',
       name: source.name,
-      x: 0,
-      y: 0,
-      width: output.width,
-      height: output.height,
+      x: baked.x,
+      y: baked.y,
+      width: baked.width,
+      height: baked.height,
       rotation: 0,
       opacity: 1,
       locked: source.locked,
@@ -476,8 +492,8 @@ export class DesignVideoConversionService {
       ...(source.originId ? { originId: source.originId } : {}),
       src: baked.src,
       fileId: baked.fileId,
-      naturalWidth: output.width,
-      naturalHeight: output.height,
+      naturalWidth: baked.naturalWidth,
+      naturalHeight: baked.naturalHeight,
       fitMode: 'fill',
     };
   }
@@ -490,7 +506,14 @@ export class DesignVideoConversionService {
     children: DesignerElement[],
     includeBackground: boolean,
     createdAssets: CreatedAsset[],
+    cropToContent = false,
+    transparentOrigin = { x: 0, y: 0 },
   ): Promise<BakedAsset> {
+    if (createdAssets.length >= MAX_FALLBACK_RENDERS_PER_CONVERSION) {
+      throw new BadRequestException(
+        `This design needs more than ${MAX_FALLBACK_RENDERS_PER_CONVERSION} raster fallbacks. Simplify it and try again.`,
+      );
+    }
     const background = pageNumber === 0
       ? output.bg
       : output.pages?.[pageNumber - 1]?.background ?? output.bg;
@@ -511,8 +534,54 @@ export class DesignVideoConversionService {
       { orgId, transparent: !includeBackground },
       0,
     );
+    let storedBuffer = buffer;
+    let bounds = {
+      x: 0,
+      y: 0,
+      width: output.width,
+      height: output.height,
+      naturalWidth: output.width,
+      naturalHeight: output.height,
+    };
+    if (cropToContent) {
+      try {
+        const stats = await sharp(buffer).stats();
+        if (stats.channels[3]?.max === 0) throw new Error('fully transparent');
+        const trimmed = await sharp(buffer)
+          .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 1 })
+          .png()
+          .toBuffer({ resolveWithObject: true });
+        storedBuffer = trimmed.data;
+        bounds = {
+          x: -trimmed.info.trimOffsetLeft,
+          y: -trimmed.info.trimOffsetTop,
+          width: trimmed.info.width,
+          height: trimmed.info.height,
+          naturalWidth: trimmed.info.width,
+          naturalHeight: trimmed.info.height,
+        };
+      } catch (error) {
+        if (!/fully transparent/i.test((error as Error)?.message || '')) throw error;
+        storedBuffer = await sharp({
+          create: {
+            width: 1,
+            height: 1,
+            channels: 4,
+            background: { r: 0, g: 0, b: 0, alpha: 0 },
+          },
+        }).png().toBuffer();
+        bounds = {
+          x: transparentOrigin.x,
+          y: transparentOrigin.y,
+          width: 1,
+          height: 1,
+          naturalWidth: 1,
+          naturalHeight: 1,
+        };
+      }
+    }
     const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
-    const path = await adapter.writeBuffer(buffer, 'image/png');
+    const path = await adapter.writeBuffer(storedBuffer, 'image/png');
     const fileName = `design-video-fallback-${Date.now()}-${++this._fallbackSequence}.png`;
     try {
       const file = await this._fileService.saveFile(
@@ -521,11 +590,11 @@ export class DesignVideoConversionService {
         path,
         fileName,
         undefined,
-        buffer.length,
+        storedBuffer.length,
         { internal: 'design-asset', source: 'design-video-conversion' },
       );
       createdAssets.push({ id: file.id, path });
-      return { fileId: file.id, src: file.path };
+      return { fileId: file.id, src: file.path, ...bounds };
     } catch (error) {
       await adapter.removeFile(path).catch(() => undefined);
       throw error;

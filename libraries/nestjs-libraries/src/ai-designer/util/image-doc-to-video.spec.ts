@@ -739,6 +739,24 @@ describe('Edit as Video content preservation', () => {
     expect(StrictVideoOutputSchema.safeParse(output).success).toBe(true);
   });
 
+  it('keeps zero and missing stroke widths explicit without inventing an outline', () => {
+    const output = imageOutputToVideo(
+      makeOutput({
+        children: [
+          layer('zero-stroke', 'shape', { shape: 'rect', stroke: '#000000', strokeWidth: 0 }),
+          layer('missing-stroke-width', 'shape', { shape: 'rect', stroke: '#000000' }),
+          layer('unstroked', 'shape', { shape: 'rect', fill: '#ffffff' }),
+        ],
+      }),
+      { preserveContent: true, pageDurationMs: 5000 },
+    );
+    const clips = output.tracks.flatMap((track) => track.clips);
+    expect(clips[0].strokeWidth).toBe(0);
+    expect(clips[1].strokeWidth).toBe(0);
+    expect(clips[2].strokeWidth).toBeUndefined();
+    expect(StrictVideoOutputSchema.safeParse(output).success).toBe(true);
+  });
+
   it('requires a fallback for every unsupported construct instead of dropping it', () => {
     const unsupported = [
       layer('icon', 'icon'),
