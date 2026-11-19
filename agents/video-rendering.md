@@ -427,6 +427,12 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
 
 ## Key rules
 
+- Edit as Video conversion lives in `DesignVideoConversionService` and the `preserveContent` branch
+  of `ai-designer/util/image-doc-to-video.ts`. Source pages become sequential, full-duration scene
+  clips with markers; tracks preserve back-to-front source order and hidden/locked state. Unsupported
+  constructs are baked to internal `design-asset` PNGs and returned in the summary. Never reintroduce
+  the AI mapper's type-bucket ordering or clip slicing into this path, and never bypass the existing
+  track/clip/180-second bounds to make a conversion succeed.
 - Render code lives in `libraries/nestjs-libraries/src/media/design-render/` (service,
   encoder, frame capture, Podman runner, config, spec). The controller stays thin; new
   render ops extend `RenderJobSpec` + the worker CLI + `processRenderJob` routing

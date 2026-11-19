@@ -52,6 +52,8 @@ import { BulkCreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/b
 import { DesignBulkCreateService, bulkRowErrorDetail } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service';
 import { applyBulkRow } from '@postmill-ai/nestjs-libraries/media/designer-doc/bulk-variables';
 import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design.dto';
+import { ConvertDesignToVideoDto } from '@postmill-ai/nestjs-libraries/dtos/design/convert-design-to-video.dto';
+import { DesignVideoConversionService } from '@postmill-ai/nestjs-libraries/media/design-render/design-video-conversion.service';
 import { ImportLibraryDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/import-library-design.dto';
 import { UpdateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-design.dto';
 import { RegenPreviewsDto } from '@postmill-ai/nestjs-libraries/dtos/design/regen-previews.dto';
@@ -106,6 +108,7 @@ export class DesignController {
     private _fontLoaderService: FontLoaderService,
     private _designExportService: DesignExportService,
     private _designBulkCreateService: DesignBulkCreateService,
+    private _designVideoConversionService: DesignVideoConversionService,
   ) {}
 
   @Get('/')
@@ -138,6 +141,25 @@ export class DesignController {
     @Body() body: CreateDesignDto,
   ) {
     return this._designService.createDesign(org.id, user.id, body);
+  }
+
+  @Post('/:id/convert-to-video')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async convertToVideo(
+    @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
+    @Param('id') id: string,
+    @Body() body: ConvertDesignToVideoDto,
+    @Headers('x-idempotency-key') idempotencyKey?: string,
+  ) {
+    return this._designVideoConversionService.convertDesignToVideo(
+      org.id,
+      user.id,
+      id,
+      body.pageDurationMs,
+      idempotencyKey,
+    );
   }
 
   /**

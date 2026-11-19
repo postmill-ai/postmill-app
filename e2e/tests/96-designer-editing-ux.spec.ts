@@ -77,6 +77,55 @@ const initialVideoDoc = {
   }],
 };
 
+const VIDEO_DESIGN_ID = 'designer-edit-as-video-e2e';
+const editAsVideoSourceDoc = {
+  version: 14,
+  mode: 'image',
+  outputs: [{
+    id: 'burger-square', formatId: 'custom-square', name: 'Burger Square', width: 400, height: 400,
+    background: '#ffffff',
+    children: [
+      { id: 'burger-bg', type: 'shape', shape: 'rect', fill: '#fff3d6', x: 0, y: 0, width: 400, height: 400, rotation: 0, opacity: 1, locked: false, hidden: false },
+      { id: 'burger-photo', type: 'image', src: PNG_DATA_URL, x: 70, y: 50, width: 260, height: 180, rotation: 0, opacity: 1, locked: false, hidden: false },
+      { id: 'burger-icon', type: 'icon', src: PNG_DATA_URL, x: 20, y: 20, width: 32, height: 32, rotation: 0, opacity: 1, locked: false, hidden: false },
+      { id: 'burger-copy', type: 'text', text: 'BURGER NIGHT', x: 40, y: 260, width: 320, height: 60, rotation: 0, opacity: 1, locked: false, hidden: false, fontFamily: 'Arial', fontSize: 32 },
+      { id: 'burger-hidden', type: 'text', text: 'Hidden note', x: 40, y: 330, width: 200, height: 30, rotation: 0, opacity: 1, locked: false, hidden: true },
+    ],
+    pages: [{ id: 'burger-page-two', name: 'Details', children: [{
+      id: 'burger-details', type: 'text', text: 'Friday at 7', x: 50, y: 160, width: 300, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, fontFamily: 'Arial', fontSize: 28,
+    }] }],
+  }, {
+    id: 'burger-wide', formatId: 'custom-wide', name: 'Burger Wide', width: 600, height: 400,
+    background: '#fff3d6',
+    children: [{ id: 'burger-wide-copy', type: 'text', text: 'BURGER NIGHT', x: 40, y: 160, width: 500, height: 60,
+      rotation: 0, opacity: 1, locked: false, hidden: false, fontFamily: 'Arial', fontSize: 36 }],
+  }],
+};
+const editAsVideoConvertedDoc = {
+  version: 14,
+  mode: 'video',
+  outputs: [{
+    id: 'burger-square', formatId: 'custom-square', name: 'Burger Square', width: 400, height: 400,
+    fps: 30, durationMs: 4000, bg: { type: 'color', color: '#fff3d6' },
+    markers: [{ id: 'scene-1', tMs: 0, name: 'Page 1' }, { id: 'scene-2', tMs: 2000, name: 'Details' }],
+    tracks: [
+      { id: 'burger-image-track', type: 'image', clips: [{ id: 'burger-photo-clip', originId: 'burger-photo', startMs: 0, endMs: 2000, src: PNG_DATA_URL, x: 70, y: 50, width: 260, height: 180 }] },
+      { id: 'burger-raster-track', type: 'raster', clips: [{ id: 'burger-icon-clip', originId: 'burger-icon', startMs: 0, endMs: 2000, src: PNG_DATA_URL, fileId: 'internal-icon', x: 0, y: 0, width: 400, height: 400 }] },
+      { id: 'burger-text-track', type: 'text', clips: [
+        { id: 'burger-copy-clip', originId: 'burger-copy', startMs: 0, endMs: 2000, text: 'BURGER NIGHT', x: 40, y: 260, width: 320, height: 60, fontFamily: 'Arial', fontSize: 32 },
+        { id: 'burger-details-clip', startMs: 2000, endMs: 4000, text: 'Friday at 7', x: 50, y: 160, width: 300, height: 60, fontFamily: 'Arial', fontSize: 28 },
+      ] },
+      { id: 'burger-hidden-track', type: 'text', hidden: true, clips: [{ id: 'burger-hidden-clip', originId: 'burger-hidden', startMs: 0, endMs: 2000, text: 'Hidden note', x: 40, y: 330, width: 200, height: 30 }] },
+    ],
+  }, {
+    id: 'burger-wide', formatId: 'custom-wide', name: 'Burger Wide', width: 600, height: 400,
+    fps: 30, durationMs: 2000, bg: { type: 'color', color: '#fff3d6' },
+    markers: [{ id: 'wide-scene-1', tMs: 0, name: 'Page 1' }],
+    tracks: [{ id: 'burger-wide-text-track', type: 'text', clips: [{ id: 'burger-wide-copy-clip', originId: 'burger-wide-copy', startMs: 0, endMs: 2000, text: 'BURGER NIGHT', x: 40, y: 160, width: 500, height: 60, fontFamily: 'Arial', fontSize: 36 }] }],
+  }],
+};
+
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
@@ -90,6 +139,10 @@ async function installMocks(page: Page, doc: any = initialDoc) {
   }
   const state = {
     doc: structuredClone(doc),
+    videoDoc: null as any,
+    videoName: 'Editing UX — Video',
+    conversionCalls: [] as Array<{ pageDurationMs: number; idempotencyKey?: string }>,
+    videoSaveDocs: [] as unknown[],
     suggestionCalls: 0,
     saveDocs: [] as unknown[],
     renderDocs: [] as unknown[],
@@ -138,6 +191,49 @@ async function installMocks(page: Page, doc: any = initialDoc) {
       return json(route, { id: DESIGN_ID, name: 'Editing UX', doc: state.doc });
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}/versions`) {
+      return json(route, []);
+    }
+    if (method === 'POST' && pathname === `/media/designs/${DESIGN_ID}/convert-to-video`) {
+      const body = request.postDataJSON() as { pageDurationMs: number };
+      state.conversionCalls.push({
+        pageDurationMs: body.pageDurationMs,
+        idempotencyKey: request.headers()['x-idempotency-key'],
+      });
+      state.videoDoc = structuredClone(editAsVideoConvertedDoc);
+      return json(route, {
+        design: { id: VIDEO_DESIGN_ID, name: state.videoName, doc: state.videoDoc },
+        summary: {
+          outputs: [
+            {
+              outputId: 'burger-square', name: 'Burger Square', pageCount: 2,
+              pageDurationMs: 2000, durationMs: 4000, hiddenLayerCount: 1,
+              fallbacks: [{ outputId: 'burger-square', pageNumber: 0, sourceIds: ['burger-icon'], sourceTypes: ['icon'], reason: 'icon layers have no editable clip counterpart' }],
+            },
+            {
+              outputId: 'burger-wide', name: 'Burger Wide', pageCount: 1,
+              pageDurationMs: 2000, durationMs: 2000, hiddenLayerCount: 0, fallbacks: [],
+            },
+          ],
+          totalPages: 3,
+          totalFallbacks: 1,
+        },
+      }, 201);
+    }
+    if (method === 'GET' && pathname === `/media/designs/${VIDEO_DESIGN_ID}`) {
+      return state.videoDoc
+        ? json(route, { id: VIDEO_DESIGN_ID, name: state.videoName, doc: state.videoDoc })
+        : json(route, { message: 'Video design not created' }, 404);
+    }
+    if (method === 'PUT' && pathname === `/media/designs/${VIDEO_DESIGN_ID}`) {
+      const body = request.postDataJSON() as { doc?: any; name?: string };
+      if (body.doc) {
+        state.videoDoc = body.doc;
+        state.videoSaveDocs.push(body.doc);
+      }
+      if (body.name) state.videoName = body.name;
+      return json(route, { id: VIDEO_DESIGN_ID, name: state.videoName, doc: state.videoDoc });
+    }
+    if (method === 'GET' && pathname === `/media/designs/${VIDEO_DESIGN_ID}/versions`) {
       return json(route, []);
     }
     if (method === 'POST' && pathname === '/media/designs/render') {
@@ -299,6 +395,51 @@ test('selected words retain independent colors through autosave and reopen', asy
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await editText(page);
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toContainText('Hello world');
+});
+
+test('Edit as Video preserves the source and opens a timed editable design through resize and reload', async ({ page }) => {
+  const originalSource = structuredClone(editAsVideoSourceDoc);
+  const state = await installMocks(page, editAsVideoSourceDoc);
+  await openDesigner(page);
+
+  await page.getByRole('menuitem', { name: 'File', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Format', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Edit as Video', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Page duration (seconds)' }).fill('2');
+  await page.getByRole('button', { name: 'Create video design' }).click();
+
+  await expect(page.getByText('Your video design is ready')).toBeVisible();
+  await expect(page.getByText('3 scenes across 2 variants. The original static design remains separate.')).toBeVisible();
+  await expect(page.getByText(/Scene 1: icon rasterized/)).toBeVisible();
+  expect(state.conversionCalls).toEqual([{ pageDurationMs: 2000, idempotencyKey: expect.any(String) }]);
+  expect(state.doc).toEqual(originalSource);
+  expect(state.saveDocs).toHaveLength(0);
+
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX — Video');
+  await expect(page).toHaveURL(new RegExp(`designId=${VIDEO_DESIGN_ID}`));
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+
+  await page.getByRole('button', { name: 'Add format', exact: true }).click();
+  await page.getByRole('checkbox', { name: /Instagram Story/ }).check();
+  await page.getByRole('button', { name: 'Add 1 format', exact: true }).click();
+  await expect.poll(() => state.videoSaveDocs.length).toBeGreaterThan(0);
+  const savedVideo = state.videoSaveDocs.at(-1) as any;
+  expect(savedVideo.outputs).toHaveLength(3);
+  const resized = savedVideo.outputs[2];
+  expect(resized.width).toBe(1080);
+  expect(resized.height).toBe(1920);
+  expect(resized.durationMs).toBe(4000);
+  expect(resized.tracks.flatMap((track: any) => track.clips).map((clip: any) => [clip.startMs, clip.endMs])).toEqual([
+    [0, 2000], [0, 2000], [0, 2000], [2000, 4000], [0, 2000],
+  ]);
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX — Video', { timeout: 60_000 });
+  await expect(page.locator('.konva-stage').first()).toBeVisible({ timeout: 60_000 });
+  expect(state.videoDoc.outputs).toHaveLength(3);
+  expect(state.doc).toEqual(originalSource);
+  expect(state.saveDocs).toHaveLength(0);
 });
 
 test('shape insertion stays on an independent format through save, reload, and export', async ({ page }) => {

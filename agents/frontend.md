@@ -253,6 +253,15 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `private, no-store` and no File row. Stored version thumbnails avoid only the version fetch;
   preview loads are request-scoped by design/version id and are not restarted by changing
   translation identities.
+- **Edit as Video clones instead of switching modes.** File → Format → Edit as Video opens
+  `edit-as-video-dialog.tsx`; it saves current edits through `runManualSave`, then POSTs only the
+  source id and selected page duration to `/media/designs/:id/convert-to-video` with one stable
+  `X-Idempotency-Key` per dialog attempt. The backend creates a separate video design and returns it
+  with the conversion summary. The dialog loads that returned document/id and updates the standalone
+  URL without refetching; Cancel makes no request, failures leave the source open, and success lists
+  scene timing, hidden layers, and every raster fallback. The old static-to-video `setMode` warning is
+  gone. Video-to-image mode conversion remains unchanged and is not a reverse-content-preservation
+  feature.
 - **Video outputs have variants too.** The `+` add-format flow works in video mode: a new output
   CLONES the current output's tracks/clips with fresh ids and smart-reflows the geometry onto the
   new canvas via `designer-doc/video-reflow.ts` (clips map onto pseudo-elements and go through

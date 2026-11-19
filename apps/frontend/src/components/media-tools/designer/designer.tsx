@@ -70,6 +70,7 @@ import { ShareDialog } from './share-dialog';
 import { fetchDesignForEditor } from './load-design';
 import { downloadPdesignArtifact, replaceDesignerDesignId } from './pdesign-file';
 import { BulkCreateDialog } from './bulk-create-dialog';
+import { EditAsVideoDialog } from './edit-as-video-dialog';
 import { MobileQuickActions, MobileSheetHeader, MobileToolsDialog, MobileWorkspaceSheet, type MobileSheetSnap } from './mobile-designer-tools';
 import { addImageClipToTimeline, addMediaToTimeline, timelineMediaTypeForPick } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
@@ -965,7 +966,7 @@ const DesignerContent: FC<
   // --- .pdesign import/export (stage 2: bundled interchange file) ---
   const importInputRef = useRef<HTMLInputElement>(null);
   const [pdesignExporting, setPdesignExporting] = useState(false);
-  const syncImportedDesignLocation = useCallback((id: string) => {
+  const syncDesignLocation = useCallback((id: string) => {
     if (setMedia || closeModal) return;
     replaceDesignerDesignId(id);
   }, [setMedia, closeModal]);
@@ -1053,7 +1054,7 @@ const DesignerContent: FC<
           throw new Error(data?.message || translate('designer_import_failed', 'Failed to import the design file'));
         }
         store.getState().loadDesign(data.doc, data.id, data.name, null);
-        syncImportedDesignLocation(data.id);
+        syncDesignLocation(data.id);
         toaster.show(translate('designer_import_success', 'Design imported'), 'success');
       } catch (err) {
         toaster.show(
@@ -1062,7 +1063,7 @@ const DesignerContent: FC<
         );
       }
     },
-    [confirmDiscardIfDirty, fetch, store, syncImportedDesignLocation, toaster, translate]
+    [confirmDiscardIfDirty, fetch, store, syncDesignLocation, toaster, translate]
   );
 
   // Reusable image-from-media placement (centered + aspect-correct) — shared by
@@ -1424,13 +1425,30 @@ const DesignerContent: FC<
       onTextToOutlines,
       onConvertMode: async () => {
         const st = store.getState();
-        const cur = st.doc.mode;
-        const target = cur === 'image' ? 'video' : 'image';
-        const msg =
-          cur === 'image'
-            ? translate('convert_to_video_mode_confirm', 'Convert to video mode? All image elements will be lost.')
-            : translate('convert_to_image_mode_confirm', 'Convert to image mode? All video tracks and clips will be lost.');
-        if (await decision.open({ description: msg })) st.setMode(target);
+        if (st.doc.mode === 'image') {
+          modals.openModal({
+            title: translate('edit_as_video_title', 'Edit as Video'),
+            size: 560,
+            withCloseButton: false,
+            closeOnEscape: false,
+            closeOnClickOutside: false,
+            children: (close: () => void) => (
+              <EditAsVideoDialog
+                store={store}
+                designAutosave={designAutosave}
+                fetchFn={fetch}
+                onConverted={(design) => {
+                  store.getState().loadDesign(design.doc, design.id, design.name, null);
+                  syncDesignLocation(design.id);
+                }}
+                onClose={close}
+              />
+            ),
+          });
+          return;
+        }
+        const msg = translate('convert_to_image_mode_confirm', 'Convert to image mode? All video tracks and clips will be lost.');
+        if (await decision.open({ description: msg })) st.setMode('image');
       },
       onToggleShare: handleShare,
       onSelectAll: pixelOps.onSelectAll,
@@ -1533,11 +1551,9 @@ const DesignerContent: FC<
       store,
       modals,
       decision,
-      layersPanel,
       historyPanel,
       versionsPanel,
       templatePanel,
-      brandPanel,
       pixelOps,
       fetch,
       toaster,
@@ -1546,8 +1562,10 @@ const DesignerContent: FC<
       handleExport,
       handleSaveToFiles,
       handleExportPostmill,
-      handleImportDesignFile,
       pdesignExporting,
+      designAutosave,
+      syncDesignLocation,
+      onTextToOutlines,
       onOpenMedia,
       onInsertMedia,
       confirmDiscardIfDirty,
@@ -1971,7 +1989,7 @@ const DesignerContent: FC<
         <StartDialog
           store={store}
           fetchFn={fetch}
-          onImportSuccess={syncImportedDesignLocation}
+          onImportSuccess={syncDesignLocation}
           onDone={() => setShowStart(false)}
         />
       )}
