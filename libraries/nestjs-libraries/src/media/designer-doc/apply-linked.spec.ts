@@ -118,6 +118,52 @@ describe('applyLinked fontSize propagation', () => {
     expect((zero.outputs[1] as any).children[0].textStroke.width).toBe(0);
   });
 
+  it('re-fits explicit rich-text runs for each linked output', () => {
+    const doc = makeDoc();
+    Object.assign(doc.outputs[1], { width: 540, height: 540 });
+    const source = (doc.outputs[0] as any).children[0];
+    const target = (doc.outputs[1] as any).children[0];
+    source.fontSize = 64;
+    source.richText = [
+      { text: 'Big ', fontSize: 64, fontWeight: 700, fill: '#112233' },
+      { text: 'rich ', fontSize: 32, fontStyle: 'italic' },
+      { text: '™', fontSize: 8 },
+      { text: 'headline', fontWeight: 500 },
+    ];
+    target.fontSize = 32;
+    target.richText = [
+      { text: 'Big ', fontSize: 32, fontWeight: 700, fill: '#112233' },
+      { text: 'rich ', fontSize: 16, fontStyle: 'italic' },
+      { text: '™', fontSize: 8 },
+      { text: 'headline', fontWeight: 500 },
+    ];
+    const editedRuns = source.richText.map((run: any, index: number) =>
+      index === 0 ? { ...run, fill: '#abcdef' } : { ...run }
+    );
+
+    const { outputs, affected } = applyLinked(
+      doc,
+      0,
+      new Set(['e1']),
+      { richText: editedRuns },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].fontSize).toBe(64);
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 32, 8, undefined,
+    ]);
+    expect((outputs[1] as any).children[0].fontSize).toBe(32);
+    expect((outputs[1] as any).children[0].richText).toEqual([
+      { text: 'Big ', fontSize: 32, fontWeight: 700, fill: '#abcdef' },
+      { text: 'rich ', fontSize: 16, fontStyle: 'italic' },
+      { text: '™', fontSize: 8 },
+      { text: 'headline', fontWeight: 500 },
+    ]);
+    expect((outputs[1] as any).children[0].richText[3]).not.toHaveProperty('fontSize');
+    expect(affected).toEqual([1]);
+  });
+
   it('keeps the edit on the current output when editFormatOnly is set', () => {
     const { outputs, affected } = applyLinked(
       makeDoc(),

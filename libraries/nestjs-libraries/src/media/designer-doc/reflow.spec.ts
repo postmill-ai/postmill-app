@@ -1313,6 +1313,23 @@ describe('smartReflow rich-text font sizes', () => {
     expect(grouped.richText?.map((run) => run.fontSize)).toEqual([12, undefined]);
     expect(ungrouped.richText?.map((run) => run.fontSize)).toEqual([10, undefined]);
   });
+
+  it('never grows a run authored below the legibility floor', () => {
+    const element = {
+      ...richText(),
+      richText: [{ text: '™', fontSize: 8 }],
+    };
+
+    expect(smartReflow(element, source, source).richText?.[0].fontSize).toBe(8);
+    expect(
+      smartReflow(element, source, { width: 1080, height: 1350 }).richText?.[0]
+        .fontSize
+    ).toBe(9);
+    expect(
+      smartReflow(element, source, { width: 540, height: 540 }).richText?.[0]
+        .fontSize
+    ).toBe(8);
+  });
 });
 
 // The single basis every cross-output type/size adjustment routes through.

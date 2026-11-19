@@ -401,6 +401,13 @@ export const roleFontFloorPx = (
     ? Math.max(10, Math.round((12 * Math.min(canvasW, canvasH)) / 1080))
     : 10;
 
+export const scaleRichTextRunFontSize = (
+  fontSize: number,
+  factor: number,
+  floor: number
+): number =>
+  Math.max(Math.min(fontSize, floor), Math.round(fontSize * factor));
+
 /**
  * Synthetic shared anchor frames for copy stacks: text units in the same
  * column — x-ranges overlapping ≥60% of the narrower box — within a normal
@@ -739,7 +746,14 @@ export const smartReflow = (
       result.richText = el.richText.map((run) =>
         run.fontSize === undefined
           ? { ...run }
-          : { ...run, fontSize: scaleFontSize(run.fontSize) }
+          : {
+              ...run,
+              fontSize: scaleRichTextRunFontSize(
+                run.fontSize,
+                contentScale,
+                floor
+              ),
+            }
       );
     }
   }

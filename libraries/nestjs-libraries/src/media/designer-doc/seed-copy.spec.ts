@@ -43,7 +43,9 @@ describe('seedChildren rich-text reflow', () => {
       { text: 'headline', fontWeight: 500 },
     ]);
     expect(copy.richText?.[2]).not.toHaveProperty('fontSize');
-    expect(copy.richText?.[0]).not.toBe(source.richText?.[0]);
+    for (const [index, run] of copy.richText!.entries()) {
+      expect(run).not.toBe(source.richText![index]);
+    }
     expect(source).toEqual(before);
   });
 });

@@ -6,7 +6,7 @@ import type {
   VideoClip,
   VideoOutput,
 } from './designer-doc.schema';
-import { scalePx, typeScaleRatio } from './reflow';
+import { scalePx, scaleRichTextRunFontSize, typeScaleRatio } from './reflow';
 import { scalePathNodes } from './path-geometry';
 import { isOutputFrozen } from './output-freeze';
 
@@ -110,11 +110,12 @@ const resizePathNodes = (
 };
 
 /**
- * Non-geometry updates propagate raw — except `fontSize` and `textStroke.width`:
- * px values authored against one canvas are wrong on another, so linked copies
- * get them re-fit through the shared aspect-aware basis (`typeScaleRatio`, the
- * same rule as smartReflow and the conductor's variant re-fit), with font size
- * floored at 10px. The old
+ * Non-geometry updates propagate raw — except `fontSize`, explicit rich-text
+ * run sizes and `textStroke.width`: px values authored against one canvas are
+ * wrong on another, so linked copies get them re-fit through the shared
+ * aspect-aware basis (`typeScaleRatio`, the same rule as smartReflow and the
+ * conductor's variant re-fit), with font size floored at 10px. Rich runs keep
+ * their authored size when it is already below that floor. The old
  * `min(scaleX, scaleY)` here silently re-imposed short-edge typography on
  * every linked edit — undoing the per-format type of every wider output.
  */
@@ -124,12 +125,24 @@ const scaledForOutput = (
   target: { width: number; height: number }
 ): Partial<DesignerElement> => {
   const hasFontSize = typeof shared.fontSize === 'number' && Number.isFinite(shared.fontSize);
-  if (!hasFontSize && !shared.textStroke) return shared;
+  if (!hasFontSize && !shared.textStroke && !shared.richText) return shared;
   const ratio = typeScaleRatio(source, target);
   return {
     ...shared,
     ...(hasFontSize
       ? { fontSize: Math.max(10, Math.round(shared.fontSize! * ratio)) }
+      : {}),
+    ...(shared.richText
+      ? {
+          richText: shared.richText.map((run) =>
+            run.fontSize === undefined
+              ? { ...run }
+              : {
+                  ...run,
+                  fontSize: scaleRichTextRunFontSize(run.fontSize, ratio, 10),
+                }
+          ),
+        }
       : {}),
     ...(shared.textStroke
       ? {
