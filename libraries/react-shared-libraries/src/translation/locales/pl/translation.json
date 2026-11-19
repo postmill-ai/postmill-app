@@ -4942,6 +4942,8 @@
   "my_designs_panel_all_designs": "← Wszystkie projekty",
   "my_designs_panel_batch_failed": "Nie udało się wczytać partii",
   "my_designs_panel_variation_count_one": "{{count}} wariant",
+  "my_designs_panel_variation_count_few": "{{count}} warianty",
+  "my_designs_panel_variation_count_many": "{{count}} wariantów",
   "my_designs_panel_variation_count_other": "Liczba wariantów: {{count}}",
   "my_designs_panel_batches": "Partie Bulk Create",
   "my_designs_panel_batch_badge": "PARTIA",

@@ -209,6 +209,51 @@ describe('Designer brand context in app-root modals', () => {
     });
   });
 
+  it('keeps a dirty design in the editor when Browse templates launches Bulk Create', async () => {
+    renderDesigner();
+    const store = mocks.store!;
+    act(() => {
+      store.getState().loadDesign(store.getState().doc, 'design-x', 'My design');
+      store.getState().addElement({
+        id: 'unsaved-text', originId: 'unsaved-text', type: 'text',
+        x: 20, y: 20, width: 200, height: 40, rotation: 0, opacity: 1,
+        locked: false, hidden: false, text: 'Unsaved edit',
+      });
+    });
+    const originalDoc = store.getState().doc;
+    const templateDoc = structuredClone(originalDoc);
+    mocks.fetch.mockImplementation(async (url: string) => {
+      const body = url === '/media/design-templates/template-1'
+        ? { id: 'template-1', name: 'Catalog Template', doc: templateDoc, isSystem: true }
+        : url.startsWith('/media/design-templates?')
+          ? {
+              templates: [{
+                id: 'template-1', name: 'Catalog Template', doc: { mode: 'image' }, isSystem: true,
+              }],
+              total: 1,
+              page: 1,
+              limit: 24,
+            }
+          : [];
+      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+    });
+
+    await act(async () => mocks.actionCtx?.onBrowseTemplates());
+    fireEvent.click(await screen.findByRole('button', { name: 'Bulk Create from this template' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Bulk Create' })).toBeTruthy();
+    expect(store.getState()).toMatchObject({
+      designId: 'design-x', designName: 'My design', isDirty: true,
+    });
+    expect(store.getState().doc).toBe(originalDoc);
+    expect(store.getState().doc.outputs[0].children)
+      .toContainEqual(expect.objectContaining({ id: 'unsaved-text', text: 'Unsaved edit' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
+    expect(store.getState().doc).toBe(originalDoc);
+    expect(store.getState().isDirty).toBe(true);
+  });
+
   it('blocks Bulk Create from a video canvas before opening the modal', () => {
     renderDesigner();
     act(() => mocks.store!.getState().setMode('video'));

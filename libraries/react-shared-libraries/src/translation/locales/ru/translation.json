@@ -4901,6 +4901,8 @@
   "my_designs_panel_all_designs": "← Все дизайны",
   "my_designs_panel_batch_failed": "Не удалось загрузить партию",
   "my_designs_panel_variation_count_one": "{{count}} вариант",
+  "my_designs_panel_variation_count_few": "{{count}} варианта",
+  "my_designs_panel_variation_count_many": "{{count}} вариантов",
   "my_designs_panel_variation_count_other": "Вариантов: {{count}}",
   "my_designs_panel_batches": "Партии массового создания",
   "my_designs_panel_batch_badge": "ПАРТИЯ",

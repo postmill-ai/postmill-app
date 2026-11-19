@@ -137,6 +137,13 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onImportSucc
     onBulkCreate({ kind: 'design', id: full.id, name: full.name });
   }, [fetchFn, onBulkCreate, onDone, onImportSuccess, store]);
 
+  const openBulkTemplate = useCallback((source: BulkCreateSource) => {
+    if (source.doc) {
+      store.getState().loadDesign(source.doc, null, source.name, source.id);
+    }
+    onBulkCreate(source);
+  }, [onBulkCreate, store]);
+
   // `.pdesign` / raw `.json` import — the server creates a NEW design
   // (re-minted ids) and returns it; opening it is exactly the openDesign flow.
   const importDesignFile = useCallback(
@@ -297,7 +304,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onImportSucc
               <TemplatesPanel
                 store={store}
                 onClose={onDone}
-                onBulkCreate={onBulkCreate}
+                onBulkCreate={openBulkTemplate}
                 showSaveCurrent={false}
               />
             )}
