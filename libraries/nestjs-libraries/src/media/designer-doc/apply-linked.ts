@@ -134,12 +134,17 @@ interface TextRangeLink {
   equal: boolean;
 }
 
+const MAX_TEXT_DIFF_LENGTH = 2000;
+
 const textEditRangeMapper = (
   previousText: string | undefined,
   nextText: string | undefined
 ) => {
   if (previousText === undefined || nextText === undefined || previousText === nextText) {
     return (start: number, end: number) => [{ start, end }];
+  }
+  if (Math.max(previousText.length, nextText.length) > MAX_TEXT_DIFF_LENGTH) {
+    return (): { start: number; end: number }[] => [];
   }
 
   const operations = diff(previousText, nextText);
@@ -213,6 +218,7 @@ const textEditRangeMapper = (
  * their authored size when it is already below that floor. Unchanged runs are
  * matched by character range through multi-hunk text edits, splits and merges,
  * retaining the target's existing size rather than round-tripping through a scale.
+ * Changed texts over the diff budget use fresh scaling to bound editor work.
  * The old
  * `min(scaleX, scaleY)` here silently re-imposed short-edge typography on
  * every linked edit — undoing the per-format type of every wider output.

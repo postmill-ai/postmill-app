@@ -268,6 +268,81 @@ describe('applyLinked fontSize propagation', () => {
     element.text = runs.map((run) => run.text).join('');
   };
 
+  it('preserves a sub-floor run when its entire text is replaced', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+    const editedRuns = smaller.richText.map((run: any) => ({ ...run }));
+    editedRuns[2].text = '®';
+    const text = editedRuns.map((run: any) => run.text).join('');
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { text, richText: editedRuns },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      32, 16, 8,
+    ]);
+  });
+
+  it('matches every mapped range when a run spans an edit and unchanged text', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    replaceRuns(larger, [
+      { text: 'Big ', fontSize: 64 },
+      { text: 'rich ', fontSize: 32 },
+    ]);
+    replaceRuns(smaller, [
+      { text: 'Big ', fontSize: 32 },
+      { text: 'rich ', fontSize: 32 },
+    ]);
+    const text = 'Bigger rich ';
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { text, richText: [{ text, fontSize: 64 }] },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([128]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([64]);
+  });
+
+  it('bounds work when replacing the maximum-length text', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    const previousText = 'The quick brown fox jumps over the lazy dog. '.repeat(500).slice(0, 20000);
+    const text = 'A completely different line of replacement copy. '.repeat(500).slice(0, 20000);
+    replaceRuns(larger, [{ text: previousText, fontSize: 8 }]);
+    replaceRuns(smaller, [{ text: previousText, fontSize: 8 }]);
+
+    const startedAt = performance.now();
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { text, richText: [{ text, fontSize: 8 }] },
+      false
+    );
+    const elapsed = performance.now() - startedAt;
+
+    expect(elapsed).toBeLessThan(250);
+    expect((outputs[0] as any).children[0].text).toBe(text);
+    expect((outputs[1] as any).children[0].text).toBe(text);
+    expect((outputs[0] as any).children[0].richText[0].fontSize).toBe(16);
+    expect((outputs[1] as any).children[0].richText[0].fontSize).toBe(8);
+  });
+
   const makeFiveRunLinkedSizeDoc = () => {
     const { doc } = makeLinkedSizeDoc();
     const larger = (doc.outputs[0] as any).children[0];
