@@ -291,31 +291,43 @@ describe('applyLinked fontSize propagation', () => {
     ]);
   });
 
-  it('matches every mapped range when a run spans an edit and unchanged text', () => {
-    const { doc } = makeLinkedSizeDoc();
-    const larger = (doc.outputs[0] as any).children[0];
-    const smaller = (doc.outputs[1] as any).children[0];
-    replaceRuns(larger, [
-      { text: 'Big ', fontSize: 64 },
-      { text: 'rich ', fontSize: 32 },
-    ]);
-    replaceRuns(smaller, [
-      { text: 'Big ', fontSize: 32 },
-      { text: 'rich ', fontSize: 32 },
-    ]);
-    const text = 'Bigger rich ';
+  it.each([
+    { side: 'target', largerSizes: [12, 8], smallerSizes: [10, 10] },
+    { side: 'source', largerSizes: [12, 12], smallerSizes: [10, 8] },
+  ])(
+    'matches every mapped $side range when a run spans an edit and unchanged text',
+    ({ largerSizes, smallerSizes }) => {
+      const { doc } = makeLinkedSizeDoc();
+      const larger = (doc.outputs[0] as any).children[0];
+      const smaller = (doc.outputs[1] as any).children[0];
+      replaceRuns(larger, [
+        { text: 'Big ', fontSize: largerSizes[0] },
+        { text: 'rich ', fontSize: largerSizes[1] },
+      ]);
+      replaceRuns(smaller, [
+        { text: 'Big ', fontSize: smallerSizes[0] },
+        { text: 'rich ', fontSize: smallerSizes[1] },
+      ]);
+      const text = 'Bigger rich ';
 
-    const { outputs } = applyLinked(
-      doc,
-      1,
-      new Set(['e9']),
-      { text, richText: [{ text, fontSize: 64 }] },
-      false
-    );
+      const { outputs } = applyLinked(
+        doc,
+        1,
+        new Set(['e9']),
+        { text, richText: [{ text, fontSize: 10 }] },
+        false
+      );
 
-    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([128]);
-    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([64]);
-  });
+      expect((outputs[0] as any).children[0].text).toBe(text);
+      expect((outputs[1] as any).children[0].text).toBe(text);
+      expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+        20,
+      ]);
+      expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+        10,
+      ]);
+    }
+  );
 
   it('bounds work when replacing the maximum-length text', () => {
     const { doc } = makeLinkedSizeDoc();
