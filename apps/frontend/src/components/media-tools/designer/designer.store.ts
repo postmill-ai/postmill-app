@@ -77,7 +77,13 @@ import type {
   DesignerPageContent,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import type { FillContents } from '@postmill-ai/nestjs-libraries/media/designer-doc/fill-stroke';
-import { mergeKeyframes } from './keyframe-props';
+import {
+  planAnimationPaste,
+  snapshotAnimation,
+  type AnimationPatch,
+  type AnimationSkipReason,
+  type AnimationSnapshot,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/animation-clipboard';
 import { expandClipRefs, groupRefsForClip, toggleClipRefs } from './video-selection';
 import type { DesignerAssistantSuggestionEntry } from './panels/designer-assistant-cache';
 
@@ -118,6 +124,22 @@ export {
   pageBackground,
   pageName,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+
+export interface AnimationCopyResult {
+  status: 'copied' | 'empty' | 'unknown' | 'org-required';
+  skipped: AnimationSkipReason[];
+}
+
+export interface AnimationSkipDetail {
+  clipId?: string;
+  reasons: AnimationSkipReason[];
+}
+
+export interface AnimationPasteResult {
+  status: 'pasted' | 'empty' | 'org-mismatch' | 'frozen' | 'no-targets';
+  targetCount: number;
+  skipped: AnimationSkipDetail[];
+}
 
 export interface DesignerState {
   doc: DesignerDoc;
@@ -200,13 +222,8 @@ export interface DesignerState {
    * the same rule add-media-to-timeline uses).
    */
   clipClipboard: { clip: VideoClip; trackId: string; trackType: VideoTrack['type'] }[];
-  /**
-   * Keyframes copied from a single clip, for paste-onto-another-clip. Editor
-   * state like `clipClipboard`, deliberately NOT part of history. tMs values
-   * are clip-relative, so a paste lands at the same offset into the target
-   * clip regardless of where either clip sits on the timeline.
-   */
-  keyframeClipboard: NonNullable<VideoClip['keyframes']> | null;
+  /** In-memory, organization-bound animation snapshot; never persisted in the document. */
+  animationClipboard: { orgId: string; snapshot: AnimationSnapshot } | null;
   linkedUpdateFlash: Record<number, number>;
   // View prefs / canvas requests (menu-driven)
   snapEnabled: boolean;
@@ -472,16 +489,19 @@ export interface DesignerActions {
    * overflow are skipped). One history entry; the pasted clips become the selection.
    */
   pasteClips: (atMs: number) => void;
-  /** Deep-clone one clip's keyframes into the keyframe clipboard. No history entry — a copy is not an edit. */
-  copyClipKeyframes: (outputIndex: number, trackId: string, clipId: string) => void;
-  /**
-   * Merge the keyframe clipboard onto the SELECTED clip (merge-by-prop: a
-   * keyframe within 1ms of an existing one overwrites the props it carries,
-   * anything else is added). Clip-relative tMs is preserved, so the motion
-   * lands at the same offset into the target clip; passing `atMs` instead
-   * shifts the batch so its earliest keyframe lands there. One history entry.
-   */
-  pasteClipKeyframes: (atMs?: number) => void;
+  /** Capture a deep-cloned, org-bound animation snapshot without editing history. */
+  copyAnimation: (
+    outputIndex: number,
+    trackId: string,
+    clipId: string,
+    orgId?: string
+  ) => AnimationCopyResult;
+  /** Preflight and apply one atomic, format-local animation patch to every eligible target. */
+  pasteAnimation: (
+    outputIndex: number,
+    refs: { trackId: string; clipId: string }[],
+    orgId?: string
+  ) => AnimationPasteResult;
 }
 
 export type DesignerStore = DesignerState & DesignerActions;
@@ -651,7 +671,7 @@ export const createDesignerStore = (
       motionPathPointIndex: null,
       selectedClips: [],
       clipClipboard: [],
-      keyframeClipboard: null,
+      animationClipboard: null,
       linkedUpdateFlash: {},
       snapEnabled: true,
       timelineSnap: true,
@@ -2903,49 +2923,100 @@ export const createDesignerStore = (
         get().pushHistory('Paste clips');
       },
 
-      copyClipKeyframes: (outputIndex, trackId, clipId) => {
+      copyAnimation: (outputIndex, trackId, clipId, orgId) => {
+        if (!orgId) {
+          mutate({ animationClipboard: null });
+          return { status: 'org-required', skipped: [] };
+        }
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
-        const clip = vo.tracks
-          .find((t) => t.id === trackId)
-          ?.clips.find((c) => c.id === clipId);
-        if (!clip?.keyframes?.length) return;
-        // Deep clone: later edits to the source clip must not rewrite what a
-        // future paste will produce.
-        mutate({ keyframeClipboard: JSON.parse(JSON.stringify(clip.keyframes)) });
+        const track = vo?.tracks.find((item) => item.id === trackId);
+        const clip = track?.clips.find((item) => item.id === clipId);
+        if (doc.mode !== 'video' || !vo || !track || !clip) {
+          mutate({ animationClipboard: null });
+          return { status: 'unknown', skipped: ['unknown'] };
+        }
+        const { snapshot, skipped } = snapshotAnimation(track, clip);
+        mutate({ animationClipboard: snapshot ? { orgId, snapshot } : null });
+        return { status: snapshot ? 'copied' : 'empty', skipped };
       },
 
-      pasteClipKeyframes: (atMs) => {
-        const { doc, keyframeClipboard, selectedClip } = get();
-        if (!keyframeClipboard?.length || !selectedClip || doc.mode !== 'video') return;
-        const vo = doc.outputs[selectedClip.outputIndex] as VideoOutput | undefined;
-        const track = vo?.tracks.find((t) => t.id === selectedClip.trackId);
-        const clip = track?.clips.find((c) => c.id === selectedClip.clipId);
-        if (!vo || !clip) return;
-
-        // A second deep clone on the way out: the clipboard stays pristine and
-        // the doc never shares objects with it.
-        let incoming = JSON.parse(JSON.stringify(keyframeClipboard)) as NonNullable<VideoClip['keyframes']>;
-        if (atMs !== undefined) {
-          const earliest = Math.min(...incoming.map((kf) => kf.tMs));
-          const offset = atMs - earliest;
-          incoming = incoming.map((kf) => ({ ...kf, tMs: kf.tMs + offset }));
+      pasteAnimation: (outputIndex, refs, orgId) => {
+        const { doc, animationClipboard } = get();
+        if (!animationClipboard) return { status: 'empty', targetCount: 0, skipped: [] };
+        if (!orgId || animationClipboard.orgId !== orgId) {
+          return { status: 'org-mismatch', targetCount: 0, skipped: [] };
         }
-        const clipDurationMs = clip.endMs + (clip.freezeAtMs || 0) - clip.startMs;
-        incoming = incoming.map((kf) => ({
-          ...kf,
-          tMs: Math.max(0, Math.min(clipDurationMs, Math.round(kf.tMs))),
-        }));
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (doc.mode !== 'video' || !vo) return { status: 'no-targets', targetCount: 0, skipped: [] };
+        if (isOutputFrozen(vo)) return { status: 'frozen', targetCount: 0, skipped: [] };
 
-        const merged = mergeKeyframes(clip.keyframes || [], incoming);
-        if (
-          get().updateClipSilent(selectedClip.outputIndex, selectedClip.trackId, selectedClip.clipId, {
-            keyframes: merged,
-          })
-        ) {
-          get().pushHistory('Paste keyframes');
+        const skipped: AnimationSkipDetail[] = animationClipboard.snapshot.skipped.length
+          ? [{ reasons: [...animationClipboard.snapshot.skipped] }]
+          : [];
+        const resolved = expandClipRefs(vo, refs);
+        const eligible: {
+          ref: { trackId: string; clipId: string };
+          track: VideoTrack;
+          clip: VideoClip;
+        }[] = [];
+        for (const ref of resolved) {
+          const track = vo.tracks.find((item) => item.id === ref.trackId);
+          const clip = track?.clips.find((item) => item.id === ref.clipId);
+          if (!track || !clip) {
+            skipped.push({ clipId: ref.clipId, reasons: ['unknown'] });
+          } else if (track.locked) {
+            skipped.push({ clipId: ref.clipId, reasons: ['locked'] });
+          } else {
+            eligible.push({ ref, track, clip });
+          }
         }
+
+        const plans = planAnimationPaste(
+          animationClipboard.snapshot,
+          eligible.map(({ track, clip }) => ({ track, clip }))
+        );
+        const patches = new Map<string, AnimationPatch>();
+        plans.forEach((plan, index) => {
+          if (plan.skipped.length) {
+            skipped.push({ clipId: plan.clipId, reasons: plan.skipped });
+          }
+          if (!plan.patch) return;
+          const { clip } = eligible[index];
+          const unchanged =
+            JSON.stringify(clip.keyframes) === JSON.stringify(plan.patch.keyframes) &&
+            JSON.stringify(clip.motionPath) === JSON.stringify(plan.patch.motionPath) &&
+            JSON.stringify(clip.textReveal) === JSON.stringify(plan.patch.textReveal);
+          if (unchanged) {
+            skipped.push({ clipId: plan.clipId, reasons: ['unchanged'] });
+            return;
+          }
+          const { ref } = eligible[index];
+          patches.set(`${ref.trackId}:${ref.clipId}`, plan.patch);
+        });
+        if (!patches.size) return { status: 'no-targets', targetCount: 0, skipped };
+
+        const updated: VideoOutput = {
+          ...vo,
+          tracks: vo.tracks.map((track) => ({
+            ...track,
+            clips: track.clips.map((clip) => {
+              const patch = patches.get(`${track.id}:${clip.id}`);
+              return patch ? { ...clip, ...patch } : clip;
+            }),
+          })),
+        };
+        const outputs = [...doc.outputs];
+        outputs[outputIndex] = updated;
+        const nextDoc = withMotionPathVersion(
+          { ...doc, outputs },
+          Array.from(patches.values())
+        );
+        if (!mutate({ doc: nextDoc, isDirty: true })) {
+          return { status: 'frozen', targetCount: 0, skipped };
+        }
+        get().pushHistory('Paste animation');
+        return { status: 'pasted', targetCount: patches.size, skipped };
       },
 
     };

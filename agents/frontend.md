@@ -490,8 +490,25 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   box factors and anchors the trail to the reflowed rendered start, including split-half displacement
   offsets. Points can be selected on canvas or in the Inspector and deleted there for touch/keyboard;
   right-click deletion remains available. Fewer than two usable points are inert.
-  Editor trails/handles never enter exports. Copying animation between clips remains a
-  separate feature.
+  Editor trails/handles never enter exports.
+- **Copy/Paste Animation is allowlisted, org-scoped, target-relative, and atomic.** The in-memory
+  `animationClipboard` binds one deep-cloned `AnimationSnapshot` to `useUser().orgId`; it is not
+  persisted, never enters the OS clipboard, and cannot be read or pasted after an organization change.
+  `designer-doc/animation-clipboard.ts` captures only visual keyframes/easing, KAN-16 motion paths,
+  and text reveal plus the numeric source context needed for remapping. It never captures content,
+  asset/file references, IDs, groups, crop/focal state, timeline placement, speed, transitions, or
+  motion blur. Volume keyframes are reported as skipped and the target's audio/fade fields stay intact.
+  Position/rotation values paste as target base + source delta; width/height/fontSize use the finite
+  target/source base ratio; opacity stays normalized. Keyframe, reveal, and path times use normalized
+  clip progress. Paths re-anchor from source base center to target base center through KAN-16's
+  translate/rescale helpers, retaining path-local deltas, easing, follow rotation, and split metadata.
+  Paste replaces compatible visual animation rather than merging stale effects, skips fontSize on
+  non-text and reveal outside text, and preserves target-owned fields. Timeline, canvas, and Inspector
+  commands share `animation-clipboard-actions.ts`: a right-click inside multi-selection retains it,
+  groups expand, locked/unknown/incompatible targets are reported, frozen outputs reject the write,
+  and accepted targets commit one current-output-only document replacement and one `Paste animation`
+  Undo. Linked `originId`s and other formats are never propagated. The clipboard survives ordinary
+  selection changes; unsupported copies clear stale snapshots.
 
 - **Gesture commits and history stay immutable.** Static drag frames batch every moved node into one
   current-output-only write through `updateElementsEphemeral`; `commitElementGesture` then applies

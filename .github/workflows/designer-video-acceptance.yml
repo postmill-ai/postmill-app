@@ -62,7 +62,7 @@ jobs:
       - name: Run Designer pointer, persistence, playback, and seek acceptance
         run: |
           touch .env
-          pnpm --dir e2e exec playwright test --config playwright.designer-ci.config.ts --grep 'Designer animated stock media|Designer video Inspector and timeline essentials|Designer mobile workspace'
+          pnpm --dir e2e exec playwright test --config playwright.designer-ci.config.ts --grep 'Designer animated stock media|Designer video Inspector and timeline essentials|Designer mobile workspace|Designer animation clipboard'
         env:
           CI: '1'
           GITHUB_ACTIONS: 'true'

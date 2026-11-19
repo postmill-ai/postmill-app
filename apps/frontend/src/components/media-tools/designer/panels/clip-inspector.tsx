@@ -66,6 +66,14 @@ import { MotionPathControls } from './motion-path-controls';
 import { CutoutRefineControls } from './cutout-refine-controls';
 import { applyClipMagicGrab, prepareClipMagicGrab } from '../magic-grab';
 import { openMagicGrabReview } from '../magic-grab-modal';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { hasSupportedAnimation } from '@postmill-ai/nestjs-libraries/media/designer-doc/animation-clipboard';
+import {
+  copyAnimation,
+  pasteAnimation,
+  showAnimationCopyResult,
+  showAnimationPasteResult,
+} from '../animation-clipboard-actions';
 
 // Same weight ladder the image-mode text panel offers.
 const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
@@ -398,10 +406,11 @@ const KeyframePropRow: FC<{
 export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trackId, clipId }) => {
   // Named `translate` (not `t`) — this component already uses `t` as a `.find()` callback var.
   const translate = useT();
+  const orgId = useUser()?.orgId;
   const toaster = useToaster();
   const modals = useModals();
   const doc = store((s: any) => s.doc);
-  const hasKeyframeClipboard = store((s: any) => !!s.keyframeClipboard?.length);
+  const hasAnimationClipboard = store((s: any) => !!s.animationClipboard && s.animationClipboard.orgId === orgId);
   const brandEnforcement = store((s: any) => s.brandEnforcement);
   const vo = doc.outputs[outputIndex];
 
@@ -1751,24 +1760,28 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           <div className="flex items-center gap-1">
             <button
               type="button"
-              disabled={!keyframes.length}
-              onClick={() => store.getState().copyClipKeyframes(outputIndex, trackId, clipId)}
+              disabled={!parentTrack || !hasSupportedAnimation(parentTrack, clip)}
+              onClick={() => showAnimationCopyResult(
+                copyAnimation(store, { outputIndex, trackId, clipId }, orgId),
+                toaster,
+                translate
+              )}
               className="px-1.5 h-[18px] rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {translate('designer_copy_keyframes', 'Copy')}
+              {translate('designer_copy_animation', 'Copy Animation')}
             </button>
             <button
               type="button"
-              disabled={!hasKeyframeClipboard}
-              title={translate('designer_paste_keyframes_hint', 'Merge the copied keyframes onto this clip')}
-              onClick={() => {
-                // The paste targets the primary selection — make it this clip.
-                store.getState().setSelectedClip({ outputIndex, trackId, clipId });
-                store.getState().pasteClipKeyframes();
-              }}
+              disabled={!hasAnimationClipboard || !!vo.frozen}
+              title={translate('designer_paste_animation_hint', 'Apply the copied animation to the selected clips')}
+              onClick={() => showAnimationPasteResult(
+                pasteAnimation(store, { outputIndex, trackId, clipId }, orgId),
+                toaster,
+                translate
+              )}
               className="px-1.5 h-[18px] rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {translate('designer_paste_keyframes', 'Paste')}
+              {translate('designer_paste_animation', 'Paste Animation')}
             </button>
             <span className="text-[10px] text-textColor/30">{keyframes.length}</span>
           </div>

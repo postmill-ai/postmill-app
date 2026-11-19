@@ -16,6 +16,14 @@ import {
   getSubmenuPlacement,
   type MenuPlacement,
 } from './context-menu-position';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { hasSupportedAnimation } from '@postmill-ai/nestjs-libraries/media/designer-doc/animation-clipboard';
+import {
+  copyAnimation,
+  pasteAnimation,
+  showAnimationCopyResult,
+  showAnimationPasteResult,
+} from './animation-clipboard-actions';
 
 interface ContextMenuProps {
   x: number;
@@ -31,6 +39,7 @@ interface ContextMenuProps {
 interface MenuItem {
   label: string;
   action: (() => void) | null;
+  disabled?: boolean;
   /** A hover/focus/touch flyout — the canvas context menu's answer to the
       menu bar's submenuPath (used by Pathfinder). */
   children?: { label: string; action: () => void }[];
@@ -38,6 +47,7 @@ interface MenuItem {
 
 export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elementId, canvasPoint, store, onClose, onAddImage }) => {
   const t = useT();
+  const orgId = useUser()?.orgId;
   const toaster = useToaster();
   const menuRef = useRef<HTMLDivElement>(null);
   const flyoutRef = useRef<HTMLDivElement>(null);
@@ -202,6 +212,32 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
           {
             label: t('designer_action_paste_paste', 'Paste'),
             action: () => store.getState().pasteClips(store.getState().playheadMs),
+          },
+          {
+            label: t('designer_copy_animation', 'Copy Animation'),
+            disabled: !hasSupportedAnimation(clipTrack, videoClip),
+            action: () => showAnimationCopyResult(
+              copyAnimation(store, {
+                outputIndex: s.currentOutput,
+                trackId: clipTrack.id,
+                clipId: videoClip.id,
+              }, orgId),
+              toaster,
+              t
+            ),
+          },
+          {
+            label: t('designer_paste_animation', 'Paste Animation'),
+            disabled: !s.animationClipboard || s.animationClipboard.orgId !== orgId || !!out.frozen,
+            action: () => showAnimationPasteResult(
+              pasteAnimation(store, {
+                outputIndex: s.currentOutput,
+                trackId: clipTrack.id,
+                clipId: videoClip.id,
+              }, orgId),
+              toaster,
+              t
+            ),
           },
           {
             label: t('designer_action_duplicate_duplicate', 'Duplicate'),
@@ -394,7 +430,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
         return (
           <button
             key={item.label}
-            className="w-full text-left px-3 py-1.5 text-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
+            disabled={item.disabled}
+            className="w-full text-left px-3 py-1.5 text-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={() => {
               item.action?.();
               onClose();
