@@ -36,12 +36,20 @@ function makeModel() {
     file: {
       findFirst: vi.fn(),
     },
+    designBatch: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
+      deleteMany: vi.fn(),
+    },
   };
 }
 
 function makeRepo(model = makeModel()) {
   return {
     repo: new DesignRepository(
+      { model } as any,
       { model } as any,
       { model } as any,
       { model } as any,
@@ -258,6 +266,55 @@ describe('DesignRepository — templates pagination', () => {
         deletedAt: null,
         OR: [{ organizationId: 'org-1' }, { isSystem: true }],
       },
+    });
+  });
+});
+
+
+describe('DesignRepository — Bulk Create batches', () => {
+  it('keeps batch lists, details, and lookups scoped to the organization', async () => {
+    const { repo, model } = makeRepo();
+    model.designBatch.findMany.mockResolvedValue([]);
+    model.designBatch.findFirst.mockResolvedValue(null);
+
+    await repo.findBatchesByOrg('org-1', 2, 25);
+    await repo.findBatchById('org-1', 'batch-1');
+    await repo.findBatchByJobId('org-1', 'job-1');
+
+    expect(model.designBatch.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { organizationId: 'org-1' },
+      skip: 25,
+      take: 25,
+    }));
+    expect(model.designBatch.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'batch-1', organizationId: 'org-1' },
+    }));
+    expect(model.designBatch.findFirst).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', jobId: 'job-1' },
+    });
+  });
+
+  it('filters batched variations only for the opt-in root listing', async () => {
+    const { repo, model } = makeRepo();
+    model.design.findMany.mockResolvedValue([]);
+    model.design.count.mockResolvedValue(0);
+
+    await repo.findByOrg('org-1', 1, 50, true);
+    await repo.countByOrg('org-1', true);
+
+    const where = { organizationId: 'org-1', deletedAt: null, batchId: null };
+    expect(model.design.findMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
+    expect(model.design.count).toHaveBeenCalledWith({ where });
+  });
+
+  it('deletes failed batch metadata with an org-scoped mutation', async () => {
+    const { repo, model } = makeRepo();
+    model.designBatch.deleteMany.mockResolvedValue({ count: 1 });
+
+    await repo.deleteBatch('org-1', 'batch-1');
+
+    expect(model.designBatch.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'batch-1', organizationId: 'org-1' },
     });
   });
 });

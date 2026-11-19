@@ -66,6 +66,8 @@ const user = { id: 'user-1' } as any;
 describe('DesignController', () => {
   let designService: {
     listDesigns: ReturnType<typeof vi.fn>;
+    listBatches: ReturnType<typeof vi.fn>;
+    getBatch: ReturnType<typeof vi.fn>;
     getDesign: ReturnType<typeof vi.fn>;
     createDesign: ReturnType<typeof vi.fn>;
     updateDesign: ReturnType<typeof vi.fn>;
@@ -108,6 +110,8 @@ describe('DesignController', () => {
   beforeEach(() => {
     designService = {
       listDesigns: vi.fn(),
+      listBatches: vi.fn(),
+      getBatch: vi.fn(),
       getDesign: vi.fn(),
       createDesign: vi.fn(),
       updateDesign: vi.fn(),
@@ -293,6 +297,35 @@ describe('DesignController', () => {
 
       await controller.list(org, '2', '10');
       expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 2, 10);
+    });
+
+    it('uses the opt-in root grouping without changing the default list', async () => {
+      designService.listDesigns.mockResolvedValue({ designs: [], total: 0 });
+
+      await controller.list(org, '1', '50', 'root');
+
+      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 50, true);
+    });
+  });
+
+  describe('GET /media/designs/batches', () => {
+    it('lists and reads batches with media-read gates', async () => {
+      designService.listBatches.mockResolvedValue({ batches: [], total: 0 });
+      designService.getBatch.mockResolvedValue({ id: 'batch-1', designs: [] });
+
+      expect(await controller.listBatches(org, '2', '10')).toEqual({ batches: [], total: 0 });
+      expect(await controller.getBatch(org, 'batch-1')).toEqual({ id: 'batch-1', designs: [] });
+      expect(designService.listBatches).toHaveBeenCalledWith('org-1', 2, 10);
+      expect(designService.getBatch).toHaveBeenCalledWith('org-1', 'batch-1');
+      expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, DesignController.prototype.listBatches))
+        .toEqual({ resource: 'media', action: 'read' });
+      expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, DesignController.prototype.getBatch))
+        .toEqual({ resource: 'media', action: 'read' });
+    });
+
+    it('returns 404 for a batch outside the org', async () => {
+      designService.getBatch.mockResolvedValue(null);
+      await expect(controller.getBatch(org, 'foreign')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -673,6 +706,8 @@ describe('DesignController', () => {
         rows: [{ headline: 'Hello' }],
         nameBase: 'Campaign',
         folderId: 'folder-1',
+        sourceDesignId: 'source-1',
+        sourceName: 'Source campaign',
       };
       designBulkCreateService.enqueueBulkCreate.mockResolvedValue({ id: 'job-1', status: 'pending' });
 

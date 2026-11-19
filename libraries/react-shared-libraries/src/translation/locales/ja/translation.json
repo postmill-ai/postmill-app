@@ -4888,5 +4888,21 @@
   "designer_carousel": "カルーセル",
   "designer_add_slide_after": "{{number}} の後にスライドを追加",
   "designer_frozen_read_only": "このフォーマットは固定されています。編集するには固定を解除してください。",
-  "designer_bulk_no_variables": "バリエーションを作成する前に、編集可能なテキスト、画像、または色要素を追加してください。"
+  "designer_bulk_no_variables": "バリエーションを作成する前に、編集可能なテキスト、画像、または色要素を追加してください。",
+  "designer_bulk_card_description": "スプレッドシートから編集可能なデザインバリエーションを作成",
+  "designer_bulk_choose_source": "ソースとして使用する画像デザインまたはテンプレートを選択してください。",
+  "designer_bulk_from_template": "このテンプレートから一括作成",
+  "designer_bulk_static_only": "一括作成は画像デザインで利用できます。",
+  "designer_bulk_source": "ソース: {{name}}",
+  "designer_bulk_open_batch": "バッチを開く",
+  "designer_back_to_batch": "← バッチに戻る",
+  "my_designs_panel_all_designs": "← すべてのデザイン",
+  "my_designs_panel_batch_failed": "バッチを読み込めませんでした",
+  "my_designs_panel_variation_count": "{{count}}件のバリエーション",
+  "my_designs_panel_batches": "一括作成バッチ",
+  "my_designs_panel_batch_badge": "バッチ",
+  "my_designs_panel_load_more_batches": "さらにバッチを読み込む",
+  "my_designs_panel_no_image_designs": "画像デザインはまだありません。",
+  "my_designs_panel_delete_design": "{{name}}を削除",
+  "designer_bulk_image_target_thumbnail": "{{name}}のサムネイル"
 }

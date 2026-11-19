@@ -4888,5 +4888,21 @@
   "designer_carousel": "Carrossel",
   "designer_add_slide_after": "Adicionar slide após {{number}}",
   "designer_frozen_read_only": "Este formato está congelado. Descongele-o para editá-lo.",
-  "designer_bulk_no_variables": "Adicione um elemento editável de texto, imagem ou cor antes de criar variações."
+  "designer_bulk_no_variables": "Adicione um elemento editável de texto, imagem ou cor antes de criar variações.",
+  "designer_bulk_card_description": "Transforme uma planilha em variações de design editáveis",
+  "designer_bulk_choose_source": "Escolha um design de imagem ou modelo para usar como origem.",
+  "designer_bulk_from_template": "Criação em massa a partir deste modelo",
+  "designer_bulk_static_only": "A criação em massa está disponível para designs de imagem.",
+  "designer_bulk_source": "Origem: {{name}}",
+  "designer_bulk_open_batch": "Abrir lote",
+  "designer_back_to_batch": "← Voltar ao lote",
+  "my_designs_panel_all_designs": "← Todos os designs",
+  "my_designs_panel_batch_failed": "Falha ao carregar o lote",
+  "my_designs_panel_variation_count": "{{count}} variações",
+  "my_designs_panel_batches": "Lotes de criação em massa",
+  "my_designs_panel_batch_badge": "LOTE",
+  "my_designs_panel_load_more_batches": "Carregar mais lotes",
+  "my_designs_panel_no_image_designs": "Ainda não há designs de imagem.",
+  "my_designs_panel_delete_design": "Excluir {{name}}",
+  "designer_bulk_image_target_thumbnail": "Miniatura de {{name}}"
 }

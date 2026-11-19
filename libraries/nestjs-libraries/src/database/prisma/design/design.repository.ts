@@ -8,18 +8,20 @@ export class DesignRepository {
     private readonly _designTemplate: PrismaRepository<'designTemplate'>,
     private readonly _designTemplateFolder: PrismaRepository<'designTemplateFolder'>,
     private readonly _designVersion: PrismaRepository<'designVersion'>,
-    private readonly _file: PrismaRepository<'file'>
+    private readonly _file: PrismaRepository<'file'>,
+    private readonly _designBatch: PrismaRepository<'designBatch'>
   ) {}
 
   findById(orgId: string, id: string) {
     return this._design.model.design.findFirst({
       where: { id, organizationId: orgId, deletedAt: null },
+      include: { batch: { select: { id: true, name: true } } },
     });
   }
 
-  findByOrg(orgId: string, page: number = 1, limit: number = 20) {
+  findByOrg(orgId: string, page: number = 1, limit: number = 20, rootOnly = false) {
     return this._design.model.design.findMany({
-      where: { organizationId: orgId, deletedAt: null },
+      where: { organizationId: orgId, deletedAt: null, ...(rootOnly ? { batchId: null } : {}) },
       orderBy: { updatedAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
@@ -27,9 +29,9 @@ export class DesignRepository {
     });
   }
 
-  countByOrg(orgId: string) {
+  countByOrg(orgId: string, rootOnly = false) {
     return this._design.model.design.count({
-      where: { organizationId: orgId, deletedAt: null },
+      where: { organizationId: orgId, deletedAt: null, ...(rootOnly ? { batchId: null } : {}) },
     });
   }
 
@@ -43,6 +45,7 @@ export class DesignRepository {
     previewDataUrl?: string;
     previewFileId?: string;
     campaignId?: string;
+    batchId?: string;
   }) {
     return this._design.model.design.create({ data });
   }
@@ -58,6 +61,67 @@ export class DesignRepository {
     return this._design.model.design.update({
       where: { id, organizationId: orgId },
       data: { deletedAt: new Date() },
+    });
+  }
+
+  createBatch(data: {
+    organizationId: string;
+    createdById: string;
+    name: string;
+    jobId: string;
+    sourceDesignId?: string;
+    sourceTemplateId?: string;
+    sourceName?: string;
+  }) {
+    return this._designBatch.model.designBatch.create({ data });
+  }
+
+  findBatchByJobId(orgId: string, jobId: string) {
+    return this._designBatch.model.designBatch.findFirst({
+      where: { organizationId: orgId, jobId },
+    });
+  }
+
+  findBatchById(orgId: string, id: string) {
+    return this._designBatch.model.designBatch.findFirst({
+      where: { id, organizationId: orgId },
+      include: {
+        designs: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'asc' },
+          include: { previewFile: { select: { path: true } } },
+        },
+      },
+    });
+  }
+
+  findBatchesByOrg(orgId: string, page: number, limit: number) {
+    return this._designBatch.model.designBatch.findMany({
+      where: { organizationId: orgId },
+      orderBy: { updatedAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        _count: { select: { designs: { where: { deletedAt: null } } } },
+        designs: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+          include: { previewFile: { select: { path: true } } },
+        },
+      },
+    });
+  }
+
+  countBatchesByOrg(orgId: string) {
+    return this._designBatch.model.designBatch.count({
+      where: { organizationId: orgId },
+    });
+  }
+
+  deleteBatch(orgId: string, id: string) {
+    return this._designBatch.model.designBatch.deleteMany({
+      where: { id, organizationId: orgId },
     });
   }
 

@@ -4887,5 +4887,21 @@
   "designer_carousel": "Carousel",
   "designer_add_slide_after": "Add slide after {{number}}",
   "designer_frozen_read_only": "This format is frozen. Unfreeze it to edit.",
-  "designer_bulk_no_variables": "Add an editable text, image, or color element before creating variations."
+  "designer_bulk_no_variables": "Add an editable text, image, or color element before creating variations.",
+  "designer_bulk_card_description": "Turn a spreadsheet into editable design variations",
+  "designer_bulk_choose_source": "Choose an image design or template to use as the source.",
+  "designer_bulk_from_template": "Bulk Create from this template",
+  "designer_bulk_static_only": "Bulk Create is available for image designs.",
+  "designer_bulk_source": "Source: {{name}}",
+  "designer_bulk_open_batch": "Open batch",
+  "designer_back_to_batch": "← Back to batch",
+  "my_designs_panel_all_designs": "← All designs",
+  "my_designs_panel_batch_failed": "Failed to load batch",
+  "my_designs_panel_variation_count": "{{count}} variations",
+  "my_designs_panel_batches": "Bulk Create batches",
+  "my_designs_panel_batch_badge": "BATCH",
+  "my_designs_panel_load_more_batches": "Load more batches",
+  "my_designs_panel_no_image_designs": "No image designs yet.",
+  "my_designs_panel_delete_design": "Delete {{name}}",
+  "designer_bulk_image_target_thumbnail": "{{name}} thumbnail"
 }

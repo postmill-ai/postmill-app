@@ -33,6 +33,7 @@ import { MoveTemplateModal } from './move-template-modal';
 import { SaveTemplateModal } from './save-template-modal';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useBrandKit } from '../brand-kit-context';
+import type { BulkCreateSource } from '../bulk-create-dialog';
 
 interface DesignTemplate {
   id: string;
@@ -55,6 +56,7 @@ interface TemplatesPanelProps {
   /** Hide the "Save current as template" button (e.g. the start modal, where
    *  there is no design worth templating yet). Defaults to shown. */
   showSaveCurrent?: boolean;
+  onBulkCreate?: (source: BulkCreateSource) => void;
 }
 
 interface TemplatePage {
@@ -66,7 +68,7 @@ interface TemplatePage {
 
 const PAGE_LIMIT = 24;
 
-export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard, showSaveCurrent = true }) => {
+export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard, showSaveCurrent = true, onBulkCreate }) => {
   const fetch = useFetch();
   const user = useUser();
   const toaster = useToaster();
@@ -254,6 +256,22 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     store.getState().loadDesign(doc, data.id, full.name, full.id);
     onClose?.();
   }, [activeBrand?.id, store, onClose, fetch, toaster, guard, decision, t]);
+
+  const bulkCreateFromTemplate = useCallback(async (template: DesignTemplate) => {
+    if (!onBulkCreate) return;
+    const response = await fetch(`/media/design-templates/${template.id}`);
+    if (!response.ok) {
+      toaster.show(t('templates_panel_failed_to_create_from_template', 'Failed to create design from template'), 'warning');
+      return;
+    }
+    const full = await response.json() as DesignTemplate;
+    const doc = {
+      ...full.doc,
+      brandProfileId: full.brandProfileId ?? store.getState().doc.brandProfileId ?? activeBrand?.id ?? null,
+    } as DesignerDoc;
+    onClose?.();
+    onBulkCreate({ kind: 'template', id: full.id, name: full.name, doc });
+  }, [activeBrand?.id, fetch, onBulkCreate, onClose, store, t, toaster]);
 
   const persistTemplate = useCallback(async (category: string): Promise<boolean> => {
     const state = store.getState();
@@ -443,6 +461,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
                       key={template.id}
                       template={template}
                       onApply={applyTemplate}
+                      onBulkCreate={onBulkCreate ? bulkCreateFromTemplate : undefined}
                       onSystemFileAttempt={systemCantBeFiled}
                       onMenu={openCardMenu}
                       t={t}
@@ -492,10 +511,11 @@ const DRAG_THRESHOLD_PX = 5;
 const TemplateCard: FC<{
   template: DesignTemplate;
   onApply: (template: DesignTemplate) => void;
+  onBulkCreate?: (template: DesignTemplate) => void;
   onSystemFileAttempt: () => void;
   onMenu: (e: React.MouseEvent, template: DesignTemplate) => void;
   t: ReturnType<typeof useT>;
-}> = ({ template, onApply, onSystemFileAttempt, onMenu, t }) => {
+}> = ({ template, onApply, onBulkCreate, onSystemFileAttempt, onMenu, t }) => {
   // Whole-card drag, same arming pattern as FileTile in the Files library:
   // `draggable` only switches on after the pointer has travelled past a small
   // threshold, so a plain click still applies the template. System templates
@@ -623,6 +643,15 @@ const TemplateCard: FC<{
                 : t('other', 'Other'))}
           </span>
         </div>
+        {onBulkCreate && templateModeOf(template) === 'image' && (
+          <button
+            type="button"
+            onClick={() => onBulkCreate(template)}
+            className="mt-2 w-full px-2 py-1 rounded-sm text-[11px] border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10"
+          >
+            {t('designer_bulk_from_template', 'Bulk Create from this template')}
+          </button>
+        )}
         <button
           onClick={() => onApply(template)}
           className="mt-1 w-full px-2 py-1 rounded-sm text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80"

@@ -4888,5 +4888,21 @@
   "designer_carousel": "Atlıkarınca",
   "designer_add_slide_after": "{{number}} sonrasına slayt ekle",
   "designer_frozen_read_only": "Bu biçim dondurulmuş. Düzenlemek için dondurmayı çözün.",
-  "designer_bulk_no_variables": "Varyasyonlar oluşturmadan önce düzenlenebilir bir metin, görsel veya renk öğesi ekleyin."
+  "designer_bulk_no_variables": "Varyasyonlar oluşturmadan önce düzenlenebilir bir metin, görsel veya renk öğesi ekleyin.",
+  "designer_bulk_card_description": "Elektronik tabloyu düzenlenebilir tasarım varyasyonlarına dönüştürün",
+  "designer_bulk_choose_source": "Kaynak olarak kullanılacak bir görsel tasarımı veya şablon seçin.",
+  "designer_bulk_from_template": "Bu şablondan Toplu Oluşturma",
+  "designer_bulk_static_only": "Toplu Oluşturma, görsel tasarımlarında kullanılabilir.",
+  "designer_bulk_source": "Kaynak: {{name}}",
+  "designer_bulk_open_batch": "Partiyi aç",
+  "designer_back_to_batch": "← Partiye dön",
+  "my_designs_panel_all_designs": "← Tüm tasarımlar",
+  "my_designs_panel_batch_failed": "Parti yüklenemedi",
+  "my_designs_panel_variation_count": "{{count}} varyasyon",
+  "my_designs_panel_batches": "Toplu Oluşturma partileri",
+  "my_designs_panel_batch_badge": "PARTİ",
+  "my_designs_panel_load_more_batches": "Daha fazla parti yükle",
+  "my_designs_panel_no_image_designs": "Henüz görsel tasarımı yok.",
+  "my_designs_panel_delete_design": "{{name}} öğesini sil",
+  "designer_bulk_image_target_thumbnail": "{{name}} küçük resmi"
 }

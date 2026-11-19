@@ -4890,5 +4890,21 @@
   "designer_carousel": "Карусель",
   "designer_add_slide_after": "Добавить слайд после {{number}}",
   "designer_frozen_read_only": "Этот формат заморожен. Разморозьте его, чтобы редактировать.",
-  "designer_bulk_no_variables": "Перед созданием вариантов добавьте редактируемый текст, изображение или элемент цвета."
+  "designer_bulk_no_variables": "Перед созданием вариантов добавьте редактируемый текст, изображение или элемент цвета.",
+  "designer_bulk_card_description": "Превратите таблицу в редактируемые варианты дизайна",
+  "designer_bulk_choose_source": "Выберите дизайн изображения или шаблон в качестве источника.",
+  "designer_bulk_from_template": "Массовое создание из этого шаблона",
+  "designer_bulk_static_only": "Массовое создание доступно для дизайнов изображений.",
+  "designer_bulk_source": "Источник: {{name}}",
+  "designer_bulk_open_batch": "Открыть партию",
+  "designer_back_to_batch": "← Назад к партии",
+  "my_designs_panel_all_designs": "← Все дизайны",
+  "my_designs_panel_batch_failed": "Не удалось загрузить партию",
+  "my_designs_panel_variation_count": "Вариантов: {{count}}",
+  "my_designs_panel_batches": "Партии массового создания",
+  "my_designs_panel_batch_badge": "ПАРТИЯ",
+  "my_designs_panel_load_more_batches": "Загрузить ещё партии",
+  "my_designs_panel_no_image_designs": "Пока нет дизайнов изображений.",
+  "my_designs_panel_delete_design": "Удалить {{name}}",
+  "designer_bulk_image_target_thumbnail": "Миниатюра: {{name}}"
 }

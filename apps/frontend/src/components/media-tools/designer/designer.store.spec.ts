@@ -3457,3 +3457,25 @@ describe('frozen output read-only clipboard actions', () => {
     expect(store.getState().doc).toBe(before);
   });
 });
+
+
+describe('Bulk Create batch identity', () => {
+  it('loads a variation batch and clears it for a new design', () => {
+    const store = createDesignerStore();
+    const doc = store.getState().doc;
+
+    store.getState().loadDesign(doc, 'variation-1', 'Variation 1', null, {
+      id: 'batch-1', name: 'Catalog',
+    });
+    expect(store.getState()).toMatchObject({ batchId: 'batch-1', batchName: 'Catalog' });
+
+    store.getState().loadDesign(doc, 'variation-2', 'Variation 2');
+    expect(store.getState()).toMatchObject({ batchId: null, batchName: null });
+
+    store.getState().loadDesign(doc, 'variation-1', 'Variation 1', null, {
+      id: 'batch-1', name: 'Catalog',
+    });
+    store.getState().reset();
+    expect(store.getState()).toMatchObject({ batchId: null, batchName: null });
+  });
+});

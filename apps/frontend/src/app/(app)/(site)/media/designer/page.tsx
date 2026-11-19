@@ -169,6 +169,7 @@ function DesignerWithParams() {
   const sp = useSearchParams();
   const url = sp.get('url') || undefined;
   const designId = sp.get('designId') || undefined;
+  const batchId = sp.get('batchId') || undefined;
   const num = (k: string) => (sp.get(k) ? Number(sp.get(k)) : undefined);
 
   const initialAsset = url
@@ -223,6 +224,7 @@ function DesignerWithParams() {
     <DesignerPage
       key={
         designId ||
+        (batchId ? `batch-${batchId}` : undefined) ||
         url ||
         (initialTimelineMedia
           ? `timeline-${initialTimelineMedia.type}`
@@ -233,6 +235,7 @@ function DesignerWithParams() {
           : 'blank')
       }
       designId={designId}
+      batchId={batchId}
       initialAsset={initialAsset}
       initialAssets={initialAssets}
       initialCaptionVideo={initialCaptionVideo}

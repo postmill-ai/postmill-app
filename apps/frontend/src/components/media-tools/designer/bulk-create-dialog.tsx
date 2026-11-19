@@ -12,13 +12,22 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/bulk-variables';
 import { parseSpreadsheetText } from '@postmill-ai/frontend/components/shared/csv';
 import { Button } from '@postmill-ai/react/form/button';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
 import { buildBulkTemplateCsv, inferBulkHeaderKind } from './bulk-create-template';
 
 type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
 type Row = Record<string, string>;
 
+export interface BulkCreateSource {
+  kind: 'design' | 'template' | 'draft';
+  id?: string;
+  name: string;
+  doc?: ReturnType<Store['getState']>['doc'];
+}
+
 interface BulkCreateDialogProps {
   store: Store;
+  source?: BulkCreateSource;
   onClose: () => void;
 }
 
@@ -33,6 +42,7 @@ interface JobResult {
 interface BulkJob {
   id: string;
   status: string;
+  batchId?: string;
   artifactUrl?: string;
   error?: string | null;
   progress?: { done: number; total: number };
@@ -54,7 +64,7 @@ const mapBulkRows = (
   ])));
 };
 
-export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) => {
+export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, source, onClose }) => {
   const t = useT();
   const fetch = useFetch();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -73,6 +83,7 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
   const [job, setJob] = useState<BulkJob | null>(null);
   const doc = store((state) => state.doc);
   const designName = store((state) => state.designName);
+  const resolvedSource = source || { kind: 'draft' as const, name: designName };
   const selectedIds = store((state) => state.selectedIds);
   const variables = useMemo(() => collectBulkVariables(doc), [doc]);
   const assignmentTargets = useMemo(() => collectBulkAssignmentTargets(doc), [doc]);
@@ -240,14 +251,17 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
           doc: current.doc,
           rows: current.rows,
           nameBase: current.designName || 'Bulk variation',
+          sourceDesignId: resolvedSource.kind === 'design' ? resolvedSource.id : undefined,
+          sourceTemplateId: resolvedSource.kind === 'template' ? resolvedSource.id : undefined,
+          sourceName: resolvedSource.name,
         }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.message || t('designer_bulk_start_failed', 'Could not start Bulk Create.'));
       }
-      const created = await response.json() as { id: string; status: string };
-      setJob({ id: created.id, status: created.status });
+      const created = await response.json() as { id: string; status: string; batchId?: string };
+      setJob({ id: created.id, status: created.status, batchId: created.batchId });
       poll(created.id);
     } catch (cause) {
       setError((cause as Error).message);
@@ -282,6 +296,9 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
     <div className="flex flex-col gap-4">
       <p className="text-[12px] text-newTextColor/65">
         {t('designer_bulk_description', 'Generate editable design variations from CSV or TSV data. Map columns to text, image, and color variables, preview one row, then create the batch.')}
+      </p>
+      <p className="text-[12px] text-textColor/70">
+        {t('designer_bulk_source', 'Source: {{name}}', { name: resolvedSource.name })}
       </p>
       <details className="rounded-md border border-studioBorder p-3 text-[12px] text-newTextColor/65">
         <summary className="cursor-pointer font-medium text-textColor">
@@ -354,8 +371,23 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
               <div className="max-h-[260px] space-y-2 overflow-y-auto">
                 {assignmentTargets.map((target) => (
                   <label key={target.id} className="grid grid-cols-[1fr_1.4fr] items-center gap-3 text-[12px]">
-                    <span className="text-textColor/70">
-                      {assignmentTargetLabel(target)} · {t(`designer_bulk_kind_${target.kind}`, target.kind)}
+                    <span className="flex min-w-0 items-center gap-2 text-textColor/70">
+                      {target.kind === 'image' && (
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded border border-studioBorder bg-designerCanvas text-[9px]">
+                          {target.thumbnailUrl ? (
+                            <SafeImage
+                              src={target.thumbnailUrl}
+                              alt={t('designer_bulk_image_target_thumbnail', '{{name}} thumbnail', { name: target.label })}
+                              width={32}
+                              height={32}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : t('designer_bulk_kind_image', 'image')}
+                        </span>
+                      )}
+                      <span className="min-w-0 break-words">
+                        {assignmentTargetLabel(target)} · {t(`designer_bulk_kind_${target.kind}`, target.kind)}
+                      </span>
                     </span>
                     <select
                       aria-label={t('designer_bulk_assignment_for', 'Column for {{name}} ({{kind}})', {
@@ -433,8 +465,13 @@ export const BulkCreateDialog: FC<BulkCreateDialogProps> = ({ store, onClose }) 
               <a href={job.artifactUrl} target="_blank" rel="noreferrer" className="inline-block px-3 py-2 rounded-md bg-designerAccent text-[12px] text-white hover:bg-designerAccent/80">
                 {t('designer_bulk_download_zip', 'Download PNG + editable designs (.zip)')}
               </a>
-              <a href="/media/designer" className="text-[12px] text-btnPrimaryAccent hover:underline">
-                {t('designer_bulk_open_recent', 'Open Recent Designs')}
+              <a
+                href={job.batchId ? `/media/designer?batchId=${encodeURIComponent(job.batchId)}` : '/media/designer'}
+                className="text-[12px] text-btnPrimaryAccent hover:underline"
+              >
+                {job.batchId
+                  ? t('designer_bulk_open_batch', 'Open batch')
+                  : t('designer_bulk_open_recent', 'Open Recent Designs')}
               </a>
             </div>
           )}

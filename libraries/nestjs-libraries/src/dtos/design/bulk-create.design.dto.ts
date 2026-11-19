@@ -19,4 +19,19 @@ export class BulkCreateDesignDto {
   @IsString()
   @MaxLength(200)
   folderId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  sourceDesignId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  sourceTemplateId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  sourceName?: string;
 }

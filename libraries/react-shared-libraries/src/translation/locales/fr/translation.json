@@ -4888,5 +4888,21 @@
   "designer_carousel": "Carrousel",
   "designer_add_slide_after": "Ajouter une diapositive après {{number}}",
   "designer_frozen_read_only": "Ce format est figé. Libérez-le pour le modifier.",
-  "designer_bulk_no_variables": "Ajoutez un élément modifiable de texte, d’image ou de couleur avant de créer des variations."
+  "designer_bulk_no_variables": "Ajoutez un élément modifiable de texte, d’image ou de couleur avant de créer des variations.",
+  "designer_bulk_card_description": "Transformez un tableur en variations de design modifiables",
+  "designer_bulk_choose_source": "Choisissez un design d’image ou un modèle comme source.",
+  "designer_bulk_from_template": "Création en masse à partir de ce modèle",
+  "designer_bulk_static_only": "La création en masse est disponible pour les designs d’image.",
+  "designer_bulk_source": "Source : {{name}}",
+  "designer_bulk_open_batch": "Ouvrir le lot",
+  "designer_back_to_batch": "← Retour au lot",
+  "my_designs_panel_all_designs": "← Tous les designs",
+  "my_designs_panel_batch_failed": "Échec du chargement du lot",
+  "my_designs_panel_variation_count": "{{count}} variations",
+  "my_designs_panel_batches": "Lots de création en masse",
+  "my_designs_panel_batch_badge": "LOT",
+  "my_designs_panel_load_more_batches": "Charger plus de lots",
+  "my_designs_panel_no_image_designs": "Aucun design d’image pour l’instant.",
+  "my_designs_panel_delete_design": "Supprimer {{name}}",
+  "designer_bulk_image_target_thumbnail": "Miniature de {{name}}"
 }
