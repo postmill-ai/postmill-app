@@ -4894,8 +4894,6 @@
   "designer_unlink_format_edits": "Отвязать изменения между форматами",
   "designer_link_format_edits_hint": "Возобновить совместное редактирование элементов; существующие связи элементов сохраняются",
   "designer_unlink_format_edits_hint": "Редактируйте активный формат без синхронизации связанных элементов; существующие связи сохраняются",
-  "designer_link_edits": "Связать",
-  "designer_unlink_edits": "Отвязать",
   "designer_page_view": "Просмотр страниц",
   "designer_carousel": "Карусель",
   "designer_add_slide_after": "Добавить слайд после {{number}}",

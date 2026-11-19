@@ -4892,8 +4892,6 @@
   "designer_unlink_format_edits": "フォーマット間の編集リンクを解除",
   "designer_link_format_edits_hint": "要素の共有編集を再開します。既存の要素リンクは保持されます",
   "designer_unlink_format_edits_hint": "アクティブなフォーマットを、リンクした要素を同期せずに編集します。既存のリンクは維持されます",
-  "designer_link_edits": "リンク",
-  "designer_unlink_edits": "リンク解除",
   "designer_page_view": "ページ表示",
   "designer_carousel": "カルーセル",
   "designer_add_slide_after": "{{number}} の後にスライドを追加",

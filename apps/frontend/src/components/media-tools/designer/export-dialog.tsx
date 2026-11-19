@@ -98,12 +98,23 @@ export const outputExportFileBases = (
   );
   const counts = new Map<string, number>();
   sanitized.forEach((name) => counts.set(name, (counts.get(name) || 0) + 1));
+  const reserved = new Set(sanitized.filter((name) => counts.get(name) === 1));
+  const emitted = new Set<string>();
   const occurrences = new Map<string, number>();
   return sanitized.map((name, index) => {
-    if (counts.get(name) === 1) return name;
-    const occurrence = (occurrences.get(name) || 0) + 1;
+    if (counts.get(name) === 1) {
+      emitted.add(name);
+      return name;
+    }
+    let occurrence = occurrences.get(name) || 0;
+    let candidate: string;
+    do {
+      occurrence++;
+      candidate = `${name}_${outputs[index].width}x${outputs[index].height}_${occurrence}`;
+    } while (reserved.has(candidate) || emitted.has(candidate));
     occurrences.set(name, occurrence);
-    return `${name}_${outputs[index].width}x${outputs[index].height}_${occurrence}`;
+    emitted.add(candidate);
+    return candidate;
   });
 };
 

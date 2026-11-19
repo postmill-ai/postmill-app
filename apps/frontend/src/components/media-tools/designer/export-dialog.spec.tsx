@@ -463,6 +463,11 @@ describe('ExportDialog duplicate output names', () => {
       { name: 'A B', width: 400, height: 400 },
       { name: 'A_B', width: 400, height: 400 },
     ])).toEqual(['A_B_400x400_1', 'A_B_400x400_2']);
+    expect(outputExportFileBases([
+      { name: 'A', width: 400, height: 400 },
+      { name: 'A', width: 400, height: 400 },
+      { name: 'A_400x400_1', width: 400, height: 400 },
+    ])).toEqual(['A_400x400_2', 'A_400x400_3', 'A_400x400_1']);
   });
 
   it('uploads distinct filenames for legacy duplicate custom outputs with the same dimensions', async () => {

@@ -4892,8 +4892,6 @@
   "designer_unlink_format_edits": "取消链接跨格式编辑",
   "designer_link_format_edits_hint": "恢复共享元素编辑；保留现有元素链接",
   "designer_unlink_format_edits_hint": "编辑当前活动的格式，不同步关联元素；现有关联会保留",
-  "designer_link_edits": "链接",
-  "designer_unlink_edits": "取消链接",
   "designer_page_view": "页面视图",
   "designer_carousel": "轮播",
   "designer_add_slide_after": "在 {{number}} 后添加幻灯片",

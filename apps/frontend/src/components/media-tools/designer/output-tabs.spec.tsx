@@ -443,3 +443,79 @@ describe('OutputTabs rename identity', () => {
       .toBe('Instagram Post');
   });
 });
+
+
+describe('OutputTabs follow-up regressions', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('turns linking back on from a non-current card menu', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Linked',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
+    store.getState().setEditFormatOnly(true);
+    const origins = store.getState().doc.outputs.map((output: any) => output.children[0].originId);
+    const historyIndex = store.getState().historyIndex;
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
+    fireEvent.click(screen.getByRole('button', { name: /Link edits across formats/ }));
+
+    expect(store.getState().currentOutput).toBe(1);
+    expect(store.getState().editFormatOnly).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Resume linked editing' })).toBeNull();
+    expect(store.getState().historyIndex).toBe(historyIndex);
+    expect(store.getState().doc.outputs.map((output: any) => output.children[0].originId)).toEqual(origins);
+  });
+
+  it('keeps Remove Undo available when a save adopts a materialized document', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    render(<OutputTabs store={store} />);
+    const outputId = store.getState().doc.outputs[1].id;
+    const card = document.querySelector(`[data-format-card="${outputId}"]`) as HTMLElement;
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove format' }));
+    const sentDoc = store.getState().doc;
+    const persistedDoc = {
+      ...sentDoc,
+      outputs: sentDoc.outputs.map((output) => ({ ...output })),
+    };
+    act(() => {
+      expect(store.getState().adoptPersistedDoc(sentDoc, persistedDoc)).toBe(true);
+    });
+
+    expect(store.getState().doc).not.toBe(sentDoc);
+    expect(screen.getByRole('status')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+    expect(store.getState().doc.outputs).toHaveLength(2);
+    expect(store.getState().doc.outputs[1].name).toBe('X');
+  });
+
+  it('invalidates Remove Undo for a silent edit before a history commit', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Linked',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    render(<OutputTabs store={store} />);
+    const outputId = store.getState().doc.outputs[1].id;
+    const card = document.querySelector(`[data-format-card="${outputId}"]`) as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove format' }));
+    const removalHistoryIndex = store.getState().historyIndex;
+
+    act(() => {
+      expect(store.getState().updateElementEphemeral('headline', { x: 25 })).toBe(true);
+    });
+
+    expect(store.getState().historyIndex).toBe(removalHistoryIndex);
+    expect(store.getState().doc).not.toBe(store.getState().history[removalHistoryIndex]);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});

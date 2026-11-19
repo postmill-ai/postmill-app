@@ -4892,8 +4892,6 @@
   "designer_unlink_format_edits": "Dissocier les modifications entre les formats",
   "designer_link_format_edits_hint": "Reprendre les modifications partagées des éléments ; les liens existants sont conservés",
   "designer_unlink_format_edits_hint": "Modifiez le format actif sans synchroniser les éléments liés ; les liens existants sont conservés",
-  "designer_link_edits": "Lier",
-  "designer_unlink_edits": "Dissocier",
   "designer_page_view": "Vue des pages",
   "designer_carousel": "Carrousel",
   "designer_add_slide_after": "Ajouter une diapositive après {{number}}",

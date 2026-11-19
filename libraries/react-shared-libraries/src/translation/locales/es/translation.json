@@ -4892,8 +4892,6 @@
   "designer_unlink_format_edits": "Desvincular ediciones entre formatos",
   "designer_link_format_edits_hint": "Reanudar ediciones compartidas de elementos; se conservan los vínculos existentes",
   "designer_unlink_format_edits_hint": "Edita el formato que esté activo sin sincronizar los elementos vinculados; los enlaces existentes se conservan",
-  "designer_link_edits": "Vincular",
-  "designer_unlink_edits": "Desvincular",
   "designer_page_view": "Vista de páginas",
   "designer_carousel": "Carrusel",
   "designer_add_slide_after": "Añadir diapositiva después de {{number}}",

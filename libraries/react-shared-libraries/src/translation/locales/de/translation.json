@@ -4892,8 +4892,6 @@
   "designer_unlink_format_edits": "Verknüpfung der Bearbeitungen zwischen Formaten aufheben",
   "designer_link_format_edits_hint": "Gemeinsame Elementbearbeitung fortsetzen; vorhandene Elementverknüpfungen bleiben erhalten",
   "designer_unlink_format_edits_hint": "Bearbeiten Sie das jeweils aktive Format, ohne verknüpfte Elemente zu synchronisieren; bestehende Verknüpfungen bleiben erhalten",
-  "designer_link_edits": "Verknüpfen",
-  "designer_unlink_edits": "Verknüpfung aufheben",
   "designer_page_view": "Seitenansicht",
   "designer_carousel": "Karussell",
   "designer_add_slide_after": "Folie nach {{number}} hinzufügen",

@@ -4891,8 +4891,6 @@
   "designer_unlink_format_edits": "Unlink edits between formats",
   "designer_link_format_edits_hint": "Resume shared element edits; existing element links are preserved",
   "designer_unlink_format_edits_hint": "Edit whichever format is active without syncing linked elements; existing links are preserved",
-  "designer_link_edits": "Link",
-  "designer_unlink_edits": "Unlink",
   "designer_page_view": "Page view",
   "designer_carousel": "Carousel",
   "designer_add_slide_after": "Add slide after {{number}}",

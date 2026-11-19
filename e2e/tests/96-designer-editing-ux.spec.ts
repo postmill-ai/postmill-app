@@ -743,7 +743,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX', { timeout: 60_000 });
-  await page.getByRole('button', { name: /Instagram Story/ }).click();
+  await page.locator(`[data-format-select="${cloned.id}"]`).click();
   assertClone(state.doc);
   const rendersBeforeExport = state.renderDocs.length;
   await page.getByRole('button', { name: 'Export', exact: true }).click();

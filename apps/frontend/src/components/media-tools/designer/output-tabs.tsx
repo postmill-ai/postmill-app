@@ -66,7 +66,6 @@ interface PopoverState {
 
 interface RemovedFormatState {
   name: string;
-  doc: unknown;
   historyIndex: number;
 }
 
@@ -202,6 +201,8 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
   const toaster = useToaster();
   const promptModal = usePromptModal();
   const doc = store((s: any) => s.doc);
+  const historyIndex = store((s: any) => s.historyIndex);
+  const currentHistoryDoc = store((s: any) => s.history[s.historyIndex]);
   const currentOutput = store((s: any) => s.currentOutput);
   const currentPage = store((s: any) => s.currentPage ?? 0);
   const editFormatOnly = store((s: any) => s.editFormatOnly);
@@ -271,7 +272,6 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
     if (nextState.doc === beforeDoc) return;
     setRemovedFormat({
       name: output.name,
-      doc: nextState.doc,
       historyIndex: nextState.historyIndex,
     });
   };
@@ -280,8 +280,8 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
     const state = store.getState();
     if (
       removedFormat &&
-      state.doc === removedFormat.doc &&
-      state.historyIndex === removedFormat.historyIndex
+      state.historyIndex === removedFormat.historyIndex &&
+      state.doc === state.history[state.historyIndex]
     ) {
       state.undo();
     }
@@ -314,7 +314,9 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
     closePopover();
   };
 
-  const visibleRemoval = removedFormat?.doc === doc ? removedFormat : null;
+  const visibleRemoval = removedFormat?.historyIndex === historyIndex && doc === currentHistoryDoc
+    ? removedFormat
+    : null;
 
   const toggleFormat = (id: string) => {
     setPendingFormats((prev) => {

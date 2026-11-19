@@ -4896,8 +4896,6 @@
   "designer_unlink_format_edits": "إلغاء ربط التعديلات بين التنسيقات",
   "designer_link_format_edits_hint": "استئناف تعديلات العناصر المشتركة مع الحفاظ على روابط العناصر الحالية",
   "designer_unlink_format_edits_hint": "عدّل أي تنسيق نشط دون مزامنة العناصر المرتبطة؛ تبقى الروابط الحالية محفوظة",
-  "designer_link_edits": "ربط",
-  "designer_unlink_edits": "إلغاء الربط",
   "designer_page_view": "عرض الصفحات",
   "designer_carousel": "عرض شرائح",
   "designer_add_slide_after": "إضافة شريحة بعد {{number}}",

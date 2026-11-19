@@ -4892,8 +4892,6 @@
   "designer_unlink_format_edits": "Biçimler arası düzenleme bağlantısını kaldır",
   "designer_link_format_edits_hint": "Paylaşılan öğe düzenlemelerini sürdür; mevcut öğe bağlantıları korunur",
   "designer_unlink_format_edits_hint": "Etkin formatı, bağlantılı öğeleri eşitlemeden düzenleyin; mevcut bağlantılar korunur",
-  "designer_link_edits": "Bağla",
-  "designer_unlink_edits": "Bağlantıyı kaldır",
   "designer_page_view": "Sayfa görünümü",
   "designer_carousel": "Atlıkarınca",
   "designer_add_slide_after": "{{number}} sonrasına slayt ekle",
