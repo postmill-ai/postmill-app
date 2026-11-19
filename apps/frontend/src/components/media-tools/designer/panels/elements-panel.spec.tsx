@@ -48,6 +48,7 @@ describe('ElementsPanel', () => {
   it('lazy-mounts categories and retains their search state', () => {
     const { container } = render(<ElementsPanel onInsertMedia={vi.fn()} />);
     for (const name of ['videos', 'vectors', 'icons', 'stickers', 'audio']) {
+      expect(container.querySelector(`[data-elements-category="${name}"]`)).toBeNull();
       expect(screen.queryByRole('button', { name: `Select ${name} asset` })).toBeNull();
       expect(screen.queryByRole('textbox', { name: `${name} query` })).toBeNull();
     }

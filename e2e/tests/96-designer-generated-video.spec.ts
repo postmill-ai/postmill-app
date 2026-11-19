@@ -1440,13 +1440,19 @@ test.describe('Designer Elements workspace (mocked stock and storage)', () => {
     await openElements(page, 'Stickers');
     await page.getByRole('button', { name: 'QA animated sticker', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(5);
-    expect(mocks.doc.outputs[0].children![4]).toMatchObject({ type: 'image', src: ASYMMETRIC_URL });
+    await expect.poll(() => mocks.doc.outputs[0].children![4]?.naturalWidth).toBe(8);
+    expect(mocks.doc.outputs[0].children![4]).toMatchObject({
+      type: 'image', src: ASYMMETRIC_URL, width: 8, height: 2, naturalWidth: 8, naturalHeight: 2,
+    });
 
     await page.getByRole('menuitem', { name: 'Insert', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Sticker…', exact: true }).click();
     await page.getByTestId('media-picker').getByRole('button', { name: 'QA animated sticker', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(6);
-    expect(mocks.doc.outputs[0].children![5]).toMatchObject({ type: 'image', src: ASYMMETRIC_URL });
+    await expect.poll(() => mocks.doc.outputs[0].children![5]?.naturalWidth).toBe(8);
+    expect(mocks.doc.outputs[0].children![5]).toMatchObject({
+      type: 'image', src: ASYMMETRIC_URL, width: 8, height: 2, naturalWidth: 8, naturalHeight: 2,
+    });
     expect(mocks.doc.mode).toBe('image');
     expect(mocks.doc.outputs[0].children![0]).toMatchObject({ id: 'existing-text', text: 'Keep this image design' });
     expect(mocks.generatePosts).toHaveLength(0);

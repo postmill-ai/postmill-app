@@ -150,7 +150,7 @@ describe('useDesignerMediaInsertion', () => {
     expect(store.getState().doc.outputs[0].children[0]).toMatchObject({ id: 'existing-text', text: 'Keep me' });
     expect(mocks.addMedia).not.toHaveBeenCalled();
     expect(mocks.addImage).toHaveBeenCalledWith(store, expect.objectContaining({
-      url: '/sticker.png', at,
+      url: '/sticker.png', width: undefined, height: undefined, at,
     }));
   });
 
