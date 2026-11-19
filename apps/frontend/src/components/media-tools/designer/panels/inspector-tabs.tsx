@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { FC, createContext, useCallback, useContext, useEffect, useId, useState } from 'react';
 import { Disclosure } from '@postmill-ai/frontend/components/ui/disclosure';
 
 /**
@@ -18,6 +18,7 @@ export type InspectorCategory =
   | 'text'
   | 'shape'
   | 'path'
+  | 'raster'
   | 'icon'
   | 'symbol'
   | 'fill'
@@ -45,6 +46,7 @@ const TAB_LISTS: Record<InspectorCategory, InspectorTabDescriptor[]> = {
   text: [LAYOUT, TEXT, EFFECTS],
   shape: [LAYOUT, STYLE],
   path: [LAYOUT, STYLE],
+  raster: [LAYOUT, STYLE],
   icon: [LAYOUT, STYLE],
   symbol: [LAYOUT, STYLE],
   fill: [LAYOUT, STYLE],
@@ -59,6 +61,9 @@ export const inspectorTabsFor = (category: InspectorCategory): InspectorTabDescr
 /** Where the shared EffectsList lives for a category: its own tab for text, Style elsewhere. */
 export const effectsTabFor = (category: InspectorCategory): InspectorTabKey =>
   category === 'text' ? 'effects' : 'style';
+
+export const commonStyleTabFor = (category: InspectorCategory): InspectorTabKey =>
+  category === 'text' ? 'effects' : category === 'adjustment' ? 'adjust' : 'style';
 
 interface InspectorTabPreference {
   /** category → last active tab. */
@@ -188,13 +193,26 @@ export const InspectorTabGroup: FC<{
   active?: InspectorTabKey;
   className?: string;
   children: React.ReactNode;
-}> = ({ for: key, active, className = 'space-y-3', children }) => (
-  <div hidden={active !== undefined && active !== key} className={className}>
-    {children}
-  </div>
-);
+}> = ({ for: key, active, className = 'space-y-3', children }) => {
+  const context = useContext(InspectorSectionsContext);
+  const panelId = useId();
+  const tabId = active !== undefined && context ? `${context.tabIdPrefix}-${key}-tab` : undefined;
+
+  return (
+    <div
+      id={panelId}
+      role={tabId ? 'tabpanel' : undefined}
+      aria-labelledby={tabId}
+      hidden={active !== undefined && active !== key}
+      className={className}
+    >
+      {children}
+    </div>
+  );
+};
 
 interface InspectorSectionsContextValue {
+  tabIdPrefix: string;
   sectionOpen: (id: string) => boolean;
   toggleSection: (id: string) => void;
 }

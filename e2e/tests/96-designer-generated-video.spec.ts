@@ -3012,7 +3012,7 @@ test.describe('Designer blend controls and renderer parity', () => {
     for (const [id, x] of [['text', 50], ['shape', 150], ['image', 250]] as const) {
       const point = await canvasDocumentPoint(page, 400, 100, x, 50);
       await page.mouse.click(point.x, point.y);
-      await page.getByRole('tab', { name: 'Style', exact: true }).click();
+      await page.getByRole('tab', { name: id === 'text' ? 'Effects' : 'Style', exact: true }).click();
       await expect(select).toBeVisible();
       for (const blendMode of ['multiply', 'screen', 'overlay', 'soft-light']) {
         await select.selectOption(blendMode);
@@ -3023,10 +3023,10 @@ test.describe('Designer blend controls and renderer parity', () => {
       }
     }
 
-    await page.keyboard.press('Control+k');
-    await page.getByRole('button', { name: 'Layers View', exact: true }).click();
+    await page.getByRole('tab', { name: 'Layers', exact: true }).click();
     await page.getByRole('option', { name: /\bGroup\b/ }).click();
-    await page.getByRole('button', { name: 'Close', exact: true }).first().click();
+    await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+    await page.getByRole('tab', { name: 'Style', exact: true }).click();
     for (const blendMode of ['multiply', 'screen', 'overlay', 'soft-light']) {
       await select.selectOption(blendMode);
       await expect.poll(() => mocks.doc.outputs[0].children!.find((el) => el.id === 'group')?.blendMode).toBe(blendMode);

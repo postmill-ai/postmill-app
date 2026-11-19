@@ -3,7 +3,9 @@ import { act, fireEvent, render, renderHook, screen } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   InspectorSection,
+  InspectorSectionsProvider,
   InspectorTabGroup,
+  commonStyleTabFor,
   effectsTabFor,
   inspectorTabsFor,
   readInspectorTabPreference,
@@ -27,7 +29,7 @@ describe('inspectorTabsFor', () => {
   });
 
   it('gives the remaining categories an equivalent Layout | Style grouping', () => {
-    for (const category of ['shape', 'path', 'icon', 'symbol', 'fill', 'group', 'mixed'] as const) {
+    for (const category of ['shape', 'path', 'raster', 'icon', 'symbol', 'fill', 'group', 'mixed'] as const) {
       expect(keys(category)).toEqual(['layout', 'style']);
     }
     expect(keys('adjustment')).toEqual(['layout', 'adjust']);
@@ -37,6 +39,13 @@ describe('inspectorTabsFor', () => {
     expect(effectsTabFor('text')).toBe('effects');
     expect(effectsTabFor('image')).toBe('style');
     expect(effectsTabFor('mixed')).toBe('style');
+  });
+
+  it('hosts common appearance controls on Effects for text and Adjust for adjustments', () => {
+    expect(commonStyleTabFor('text')).toBe('effects');
+    expect(commonStyleTabFor('adjustment')).toBe('adjust');
+    expect(commonStyleTabFor('image')).toBe('style');
+    expect(commonStyleTabFor('raster')).toBe('style');
   });
 });
 
@@ -48,10 +57,10 @@ describe('inspector tab persistence', () => {
   it('drops stored tabs that the category does not offer', () => {
     localStorage.setItem(
       'designer-inspector-tabs',
-      JSON.stringify({ tabs: { image: 'ai', text: 'ai', bogus: 'layout' }, sections: { 'image:filters': false } }),
+      JSON.stringify({ tabs: { image: 'ai', text: 'ai', raster: 'style', bogus: 'layout' }, sections: { 'image:filters': false } }),
     );
     const preference = readInspectorTabPreference(localStorage);
-    expect(preference.tabs).toEqual({ image: 'ai' });
+    expect(preference.tabs).toEqual({ image: 'ai', raster: 'style' });
     expect(preference.sections).toEqual({ 'image:filters': false });
   });
 
@@ -90,6 +99,20 @@ describe('inspector tab persistence', () => {
     await flushHydration();
     expect(otherOrg.result.current.tab).toBe('layout');
     otherOrg.unmount();
+  });
+
+  it('keeps an early tab click when stored state finishes hydrating', async () => {
+    localStorage.setItem(
+      'designer-inspector-tabs-org-a',
+      JSON.stringify({ tabs: { image: 'style' }, sections: {} }),
+    );
+    const { result } = renderHook(() => useInspectorTabState('image', 'org-a'));
+
+    act(() => result.current.setTab('ai'));
+    await flushHydration();
+
+    expect(result.current.tab).toBe('ai');
+    expect(readInspectorTabPreference(localStorage, 'org-a').tabs.image).toBe('ai');
   });
 
   it('persists collapsible-section state per category', async () => {
@@ -142,7 +165,46 @@ describe('InspectorTabGroup', () => {
     expect(screen.getByLabelText('X').closest('[hidden]')).toBeNull();
     expect(screen.getByLabelText('Fill').closest('[hidden]')).toBeNull();
   });
+
+  it('labels every tab panel with its tab and keeps panel IDs unique', () => {
+    render(
+      <>
+        <button id="test-layout-tab" role="tab">Layout</button>
+        <button id="test-style-tab" role="tab">Style</button>
+        <InspectorSectionsProvider
+          value={{ tabIdPrefix: 'test', sectionOpen: () => true, toggleSection: () => {} }}
+        >
+          <InspectorTabGroup for="layout" active="layout"><input aria-label="X" /></InspectorTabGroup>
+          <InspectorTabGroup for="layout" active="layout"><input aria-label="Y" /></InspectorTabGroup>
+          <InspectorTabGroup for="style" active="layout"><input aria-label="Fill" /></InspectorTabGroup>
+        </InspectorSectionsProvider>
+      </>,
+    );
+
+    const layoutPanels = screen.getAllByRole('tabpanel', { name: 'Layout' });
+    expect(layoutPanels).toHaveLength(2);
+    expect(layoutPanels.every((panel) => panel.getAttribute('aria-labelledby') === 'test-layout-tab')).toBe(true);
+    expect(new Set(layoutPanels.map((panel) => panel.id)).size).toBe(2);
+
+    const stylePanel = screen.getByLabelText('Fill').closest('[role="tabpanel"]')!;
+    expect(stylePanel.getAttribute('aria-labelledby')).toBe('test-style-tab');
+    expect(stylePanel.hasAttribute('hidden')).toBe(true);
+  });
 });
+
+const PersistedSection = ({ category, orgId }: {
+  category: Parameters<typeof useInspectorTabState>[0];
+  orgId: string;
+}) => {
+  const { sectionOpen, toggleSection } = useInspectorTabState(category, orgId);
+  return (
+    <InspectorSectionsProvider value={{ tabIdPrefix: 'section-test', sectionOpen, toggleSection }}>
+      <InspectorSection id="filters" title="Filters">
+        <input aria-label="Blur" defaultValue="3" />
+      </InspectorSection>
+    </InspectorSectionsProvider>
+  );
+};
 
 describe('InspectorSection', () => {
   it('collapses without unmounting the body and reopens with its draft intact', () => {
@@ -159,6 +221,30 @@ describe('InspectorSection', () => {
     expect((screen.getByLabelText('Blur') as HTMLInputElement).value).toBe('3');
 
     fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    expect(screen.getByLabelText('Blur').closest('[hidden]')).toBeNull();
+  });
+
+  it('uses the panel context to persist collapsed sections per category and org', async () => {
+    localStorage.clear();
+    const first = render(<PersistedSection category="image" orgId="org-a" />);
+    await flushHydration();
+    fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    expect(screen.getByLabelText('Blur').closest('[hidden]')).not.toBeNull();
+    first.unmount();
+
+    const remounted = render(<PersistedSection category="image" orgId="org-a" />);
+    await flushHydration();
+    expect(screen.getByLabelText('Blur').closest('[hidden]')).not.toBeNull();
+    expect(readInspectorTabPreference(localStorage, 'org-a').sections['image:filters']).toBe(false);
+    remounted.unmount();
+
+    const otherCategory = render(<PersistedSection category="text" orgId="org-a" />);
+    await flushHydration();
+    expect(screen.getByLabelText('Blur').closest('[hidden]')).toBeNull();
+    otherCategory.unmount();
+
+    render(<PersistedSection category="image" orgId="org-b" />);
+    await flushHydration();
     expect(screen.getByLabelText('Blur').closest('[hidden]')).toBeNull();
   });
 });

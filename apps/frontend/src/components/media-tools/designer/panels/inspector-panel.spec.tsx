@@ -175,6 +175,12 @@ describe('InspectorPanel task tabs', () => {
     expect(tab('Text')).toBeTruthy();
     expect(tab('Effects')).toBeTruthy();
     expect(screen.queryByRole('tab', { name: 'AI Tools' })).toBeNull();
+
+    const effectsTab = tab('Effects');
+    fireEvent.click(effectsTab);
+    const effectsPanels = screen.getAllByRole('tabpanel', { name: 'Effects' });
+    expect(effectsPanels.length).toBeGreaterThan(0);
+    expect(effectsPanels.every((panel) => panel.getAttribute('aria-labelledby') === effectsTab.id)).toBe(true);
   });
 
   it('shows Layout | Style for a mixed-type selection', async () => {

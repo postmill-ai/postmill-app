@@ -402,12 +402,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   bodies scroll independently and Brand mounts only in its active mobile layout. Mobile keeps design rename
   and timeline collapse/zoom-to-fit available.
 - **Inspector is task-tabbed per element category** (`panels/inspector-tabs.tsx`): image gets
-  Layout | Style | AI Tools, text gets Layout | Text | Effects, shape/path/icon/symbol/fill/group/mixed
+  Layout | Style | AI Tools, text gets Layout | Text | Effects, shape/path/raster/icon/symbol/fill/group/mixed
   get Layout | Style, and adjustment gets Layout | Adjust. `inspector-panel.tsx` owns the sticky
   `OverflowTabs` bar (below the always-visible Linked/Unlink row) and the category discriminator;
   each inspector takes a `tab` prop and wraps its controls in `InspectorTabGroup`s, which hide inactive
   groups with `hidden` instead of unmounting — in-flight AI jobs, mask canvases, rich-text selection and
-  control drafts survive tab switches. `CommonInspector` splits geometry/alignment/layer order (Layout)
+  control drafts survive tab switches. Each group is a labeled `tabpanel` linked to its tab's stable
+  per-Inspector ID. `CommonInspector` splits geometry/alignment/layer order (Layout)
   from opacity/blend (`styleTab`: Style normally, Effects for text, Adjust for adjustment layers), and the
   shared `EffectsList` lives on Effects for text and Style elsewhere. Every control keeps exactly one
   primary home. Active tab and `InspectorSection` collapse state persist per category per org in

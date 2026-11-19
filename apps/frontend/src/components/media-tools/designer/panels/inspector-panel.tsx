@@ -14,6 +14,7 @@ import { EffectsList } from './effects-list';
 import {
   InspectorSectionsProvider,
   InspectorTabGroup,
+  commonStyleTabFor,
   effectsTabFor,
   useInspectorTabState,
   type InspectorCategory,
@@ -32,6 +33,7 @@ interface InspectorProps {
 export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
   const t = useT();
   const user = useUser();
+  const tabIdPrefix = React.useId();
   const doc = store((s: any) => s.doc);
   const currentOutput = store((s: any) => s.currentOutput);
   const currentPage = store((s: any) => s.currentPage);
@@ -104,8 +106,7 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
 
   const ids = selected.map((s) => s.id);
   const isLinked = currentPage === 0 && !!primary.originId;
-  const commonStyleTab: InspectorTabKey =
-    category === 'text' ? 'effects' : category === 'adjustment' ? 'adjust' : 'style';
+  const commonStyleTab = commonStyleTabFor(category);
 
   return (
     <div className="space-y-4">
@@ -165,6 +166,7 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
         <OverflowTabs
           items={tabs.map((descriptor) => ({
             key: descriptor.key,
+            id: `${tabIdPrefix}-${descriptor.key}-tab`,
             label: t(descriptor.labelKey, descriptor.fallback),
           }))}
           activeKey={tab}
@@ -177,7 +179,7 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
         />
       </div>
 
-      <InspectorSectionsProvider value={{ sectionOpen, toggleSection }}>
+      <InspectorSectionsProvider value={{ tabIdPrefix, sectionOpen, toggleSection }}>
         <div className="space-y-3">
           {category === 'text' && (
             <TextInspector store={store} tab={tab} />
