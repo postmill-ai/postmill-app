@@ -152,10 +152,15 @@ async function installMocks(page: Page, doc: any = initialDoc) {
       });
     }
     if (method === 'GET' && pathname === '/media/designs') {
-      return json(route, {
-        designs: [{ id: DESIGN_ID, name: 'Editing UX', doc: state.doc, mode: 'image', updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL }],
-        total: 1,
-      });
+      const group = new URL(request.url()).searchParams.get('group');
+      const variations = state.batchStarted && group !== 'root'
+        ? ['variation-1', 'variation-2'].map((id, index) => ({
+            id, name: `Variation ${index + 1}`, mode: 'image',
+            updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL,
+          }))
+        : [];
+      const designs = [{ id: DESIGN_ID, name: 'Editing UX', doc: state.doc, mode: 'image', updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL }, ...variations];
+      return json(route, { designs, total: designs.length });
     }
     if (method === 'GET' && pathname === '/media/design-templates/folders') {
       return json(route, []);
@@ -1531,4 +1536,23 @@ test('Bulk Create from an image template works over an unrelated video canvas', 
 
   await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Catalog Template');
   await expect(page.getByText('Bulk Create is available for image designs.')).toHaveCount(0);
+});
+
+
+test('Start dialog Bulk Create keeps the selected template in the editor after close', async ({ page }) => {
+  const state = await installMocks(page);
+  await page.goto('/media/designer');
+
+  await page.getByRole('button', { name: /Bulk Create Turn a spreadsheet/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Templates', exact: true }).click();
+  await page.getByRole('button', { name: 'Bulk Create from this template' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Bulk Create' });
+  await expect(dialog).toContainText('Source: Catalog Template');
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Catalog Template');
+  await expect(page.getByText('Start a design', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  expect(state.designCreates).toBe(0);
 });

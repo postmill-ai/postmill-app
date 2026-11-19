@@ -269,6 +269,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       ...full.doc,
       brandProfileId: full.brandProfileId ?? store.getState().doc.brandProfileId ?? activeBrand?.id ?? null,
     } as DesignerDoc;
+    store.getState().loadDesign(doc, null, full.name, full.id);
     onClose?.();
     onBulkCreate({ kind: 'template', id: full.id, name: full.name, doc });
   }, [activeBrand?.id, fetch, onBulkCreate, onClose, store, t, toaster]);

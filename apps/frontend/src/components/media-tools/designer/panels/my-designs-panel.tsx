@@ -191,7 +191,7 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose, initi
             <div className="mb-3">
               <h3 className="text-[14px] font-semibold text-textColor">{activeBatch?.name}</h3>
               <p className="text-[11px] text-newTextColor/60">
-                {t('my_designs_panel_variation_count', '{{count}} variations', { count: activeBatch?.designs?.length || 0 })}
+                {t('my_designs_panel_variation_count', '{{count}} variation', { count: activeBatch?.designs?.length || 0 })}
               </p>
             </div>
             <DesignGrid designs={activeBatch?.designs || []} onOpen={openDesign} onDelete={handleDelete} />
@@ -243,7 +243,7 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose, initi
                 <div className="p-2">
                   <p className="text-[12px] text-textColor truncate">{batch.name}</p>
                   <p className="text-[10px] text-newTextColor/60">
-                    {t('my_designs_panel_variation_count', '{{count}} variations', { count: batch.count })}
+                    {t('my_designs_panel_variation_count', '{{count}} variation', { count: batch.count })}
                   </p>
                 </div>
               </button>

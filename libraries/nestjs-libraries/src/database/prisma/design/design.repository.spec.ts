@@ -272,25 +272,52 @@ describe('DesignRepository — templates pagination', () => {
 
 
 describe('DesignRepository — Bulk Create batches', () => {
-  it('keeps batch lists, details, and lookups scoped to the organization', async () => {
+  it('keeps batch lists, counts, and lookups scoped to the organization', async () => {
     const { repo, model } = makeRepo();
     model.designBatch.findMany.mockResolvedValue([]);
     model.designBatch.findFirst.mockResolvedValue(null);
+    model.designBatch.count.mockResolvedValue(0);
 
     await repo.findBatchesByOrg('org-1', 2, 25);
-    await repo.findBatchById('org-1', 'batch-1');
+    await repo.countBatchesByOrg('org-1');
     await repo.findBatchByJobId('org-1', 'job-1');
 
+    const where = { organizationId: 'org-1', designs: { some: { deletedAt: null } } };
     expect(model.designBatch.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { organizationId: 'org-1' },
+      where,
       skip: 25,
       take: 25,
     }));
+    expect(model.designBatch.count).toHaveBeenCalledWith({ where });
+    expect(model.designBatch.findFirst).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', jobId: 'job-1' },
+    });
+  });
+
+  it('loads only live member metadata and includes batch identity on a full design', async () => {
+    const { repo, model } = makeRepo();
+    model.designBatch.findFirst.mockResolvedValue(null);
+    model.design.findFirst.mockResolvedValue(null);
+
+    await repo.findBatchById('org-1', 'batch-1');
+    await repo.findById('org-1', 'design-1');
+
     expect(model.designBatch.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'batch-1', organizationId: 'org-1' },
     }));
-    expect(model.designBatch.findFirst).toHaveBeenCalledWith({
-      where: { organizationId: 'org-1', jobId: 'job-1' },
+    const memberQuery = model.designBatch.findFirst.mock.calls[0][0].include.designs;
+    expect(memberQuery.where).toEqual({ deletedAt: null });
+    expect(memberQuery.select).toEqual({
+      id: true,
+      name: true,
+      updatedAt: true,
+      previewFile: { select: { path: true } },
+    });
+    expect(memberQuery.select).not.toHaveProperty('doc');
+    expect(memberQuery.select).not.toHaveProperty('previewDataUrl');
+    expect(model.design.findFirst).toHaveBeenCalledWith({
+      where: { id: 'design-1', organizationId: 'org-1', deletedAt: null },
+      include: { batch: { select: { id: true, name: true } } },
     });
   });
 

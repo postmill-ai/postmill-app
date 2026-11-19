@@ -335,8 +335,8 @@ export class DesignService {
           createdAt: batch.createdAt,
           updatedAt: batch.updatedAt,
           count: batch._count.designs,
-          previewUrl: first?.previewFile?.path ?? first?.previewDataUrl ?? null,
-          mode: first && (first.doc as any)?.mode === 'video' ? 'video' : 'image',
+          previewUrl: first?.previewFile?.path ?? null,
+          mode: 'image',
         };
       }),
       total,
@@ -355,11 +355,11 @@ export class DesignService {
       createdAt: batch.createdAt,
       updatedAt: batch.updatedAt,
       designs: batch.designs.map((design) => ({
-        ...design,
-        batchId: batch.id,
-        batch: { id: batch.id, name: batch.name },
-        previewUrl: design.previewFile?.path ?? design.previewDataUrl ?? null,
-        mode: (design.doc as any)?.mode === 'video' ? 'video' : 'image',
+        id: design.id,
+        name: design.name,
+        updatedAt: design.updatedAt,
+        previewUrl: design.previewFile?.path ?? null,
+        mode: 'image',
       })),
     };
   }

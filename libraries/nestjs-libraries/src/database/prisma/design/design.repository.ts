@@ -89,15 +89,21 @@ export class DesignRepository {
         designs: {
           where: { deletedAt: null },
           orderBy: { createdAt: 'asc' },
-          include: { previewFile: { select: { path: true } } },
+          select: {
+            id: true,
+            name: true,
+            updatedAt: true,
+            previewFile: { select: { path: true } },
+          },
         },
       },
     });
   }
 
   findBatchesByOrg(orgId: string, page: number, limit: number) {
+    const where = { organizationId: orgId, designs: { some: { deletedAt: null } } };
     return this._designBatch.model.designBatch.findMany({
-      where: { organizationId: orgId },
+      where,
       orderBy: { updatedAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
@@ -107,7 +113,12 @@ export class DesignRepository {
           where: { deletedAt: null },
           orderBy: { createdAt: 'asc' },
           take: 1,
-          include: { previewFile: { select: { path: true } } },
+          select: {
+            id: true,
+            name: true,
+            updatedAt: true,
+            previewFile: { select: { path: true } },
+          },
         },
       },
     });
@@ -115,7 +126,7 @@ export class DesignRepository {
 
   countBatchesByOrg(orgId: string) {
     return this._designBatch.model.designBatch.count({
-      where: { organizationId: orgId },
+      where: { organizationId: orgId, designs: { some: { deletedAt: null } } },
     });
   }
 
