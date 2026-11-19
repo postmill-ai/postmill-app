@@ -7,10 +7,12 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { symbolFillCommit } from '../symbol-edit';
 import type { DesignerElement } from '../designer.store';
 import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
+import { InspectorTabGroup, type InspectorTabKey } from './inspector-tabs';
 
 interface SymbolInspectorProps {
   element: DesignerElement;
   store: any;
+  tab?: InspectorTabKey;
 }
 
 /**
@@ -22,7 +24,7 @@ interface SymbolInspectorProps {
  * colour" means. Without a symbol branch in the Inspector the instance
  * selected fine but offered no colour UI at all.
  */
-export const SymbolInspector: FC<SymbolInspectorProps> = ({ element, store }) => {
+export const SymbolInspector: FC<SymbolInspectorProps> = ({ element, store, tab }) => {
   const t = useT();
   const brandColors = useBrandColors();
   const brandEnforcement = store((s: any) => s.brandEnforcement);
@@ -38,10 +40,7 @@ export const SymbolInspector: FC<SymbolInspectorProps> = ({ element, store }) =>
   if (!textChildren.length) return null;
 
   return (
-    <div className="space-y-2">
-      <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
-        {t('designer_symbol_heading', 'Symbol')}
-      </div>
+    <InspectorTabGroup for="style" active={tab} className="space-y-2">
       {textChildren.map((child) => (
         <ColorSwatch
           key={child.id}
@@ -56,6 +55,6 @@ export const SymbolInspector: FC<SymbolInspectorProps> = ({ element, store }) =>
           brandEnforcement={brandEnforcement}
         />
       ))}
-    </div>
+    </InspectorTabGroup>
   );
 };

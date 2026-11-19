@@ -11,11 +11,15 @@ import {
   groupBounds,
   groupGeometryPatches,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
+import { InspectorSection, InspectorTabGroup, type InspectorTabKey } from './inspector-tabs';
 
 interface CommonInspectorProps {
   selected: DesignerElement[];
   ids: string[];
   store: any;
+  tab?: InspectorTabKey;
+  /** Which category tab hosts opacity/blend — Effects for text, Adjust for adjustment layers. */
+  styleTab?: InspectorTabKey;
 }
 
 const ALIGN_CENTER = 'center' as const;
@@ -24,6 +28,8 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
   selected,
   ids,
   store,
+  tab,
+  styleTab = 'style',
 }) => {
   const t = useT();
   const updateElement = store((s: any) => s.updateElement);
@@ -190,10 +196,7 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
 
   return (
     <div className="space-y-3 pt-2 border-t border-studioBorder">
-      <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
-        {t('designer_common', 'Common')}
-      </div>
-
+      <InspectorTabGroup for="layout" active={tab}>
       <div className="grid grid-cols-2 gap-2">
         <Stepper
           label={t('designer_label_x', 'X')}
@@ -251,6 +254,9 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
         onCommit={() => pushHistory()}
       />
 
+      </InspectorTabGroup>
+
+      <InspectorTabGroup for="style" active={tab === styleTab ? 'style' : tab}>
       <Slider
         label={t('designer_label_opacity', 'Opacity')}
         suffix="%"
@@ -274,7 +280,9 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
           ))}
         </select>
       </div>
+      </InspectorTabGroup>
 
+      <InspectorTabGroup for="layout" active={tab}>
       <div className="flex items-center justify-between">
         <span className="text-[11px] text-textColor/50">{t('designer_label_lock', 'Lock')}</span>
         <button
@@ -307,10 +315,10 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
         />
       </div>
 
-      <div>
-        <div className="text-[11px] text-textColor/50 mb-1">
-          {isMulti ? t('designer_align_to_selection', 'Align to selection') : t('designer_align_to_canvas', 'Align to canvas')}
-        </div>
+      <InspectorSection
+        id="align"
+        title={isMulti ? t('designer_align_to_selection', 'Align to selection') : t('designer_align_to_canvas', 'Align to canvas')}
+      >
         <div className="flex gap-1">
           <button
             onClick={() => alignV('top')}
@@ -375,10 +383,9 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
             </button>
           </div>
         )}
-      </div>
+      </InspectorSection>
 
-      <div>
-        <div className="text-[11px] text-textColor/50 mb-1">{t('designer_label_layer_order', 'Layer order')}</div>
+      <InspectorSection id="layer-order" title={t('designer_label_layer_order', 'Layer order')}>
         <div className="flex gap-1">
           <button
             onClick={() => reorder(ids, 'back')}
@@ -409,7 +416,7 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
             {t('designer_layer_btn_front', '⤓ Front')}
           </button>
         </div>
-      </div>
+      </InspectorSection>
 
       {hasImageWithNatural && (
         <button
@@ -419,6 +426,7 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
           {t('designer_reset_to_original_size', 'Reset to original size')}
         </button>
       )}
+      </InspectorTabGroup>
     </div>
   );
 };

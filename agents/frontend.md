@@ -401,6 +401,19 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   growth cannot move an active clip drag; without a sheet, the canvas retains its flexible sizing. Long sheet
   bodies scroll independently and Brand mounts only in its active mobile layout. Mobile keeps design rename
   and timeline collapse/zoom-to-fit available.
+- **Inspector is task-tabbed per element category** (`panels/inspector-tabs.tsx`): image gets
+  Layout | Style | AI Tools, text gets Layout | Text | Effects, shape/path/icon/symbol/fill/group/mixed
+  get Layout | Style, and adjustment gets Layout | Adjust. `inspector-panel.tsx` owns the sticky
+  `OverflowTabs` bar (below the always-visible Linked/Unlink row) and the category discriminator;
+  each inspector takes a `tab` prop and wraps its controls in `InspectorTabGroup`s, which hide inactive
+  groups with `hidden` instead of unmounting — in-flight AI jobs, mask canvases, rich-text selection and
+  control drafts survive tab switches. `CommonInspector` splits geometry/alignment/layer order (Layout)
+  from opacity/blend (`styleTab`: Style normally, Effects for text, Adjust for adjustment layers), and the
+  shared `EffectsList` lives on Effects for text and Style elsewhere. Every control keeps exactly one
+  primary home. Active tab and `InspectorSection` collapse state persist per category per org in
+  localStorage (`designer-inspector-tabs-<orgId>`), hydrated in a microtask that merges under any earlier
+  click; selection changes never write the preference, so they cannot force a tab. Sections collapse
+  through `Disclosure`'s `keepMounted` mode, never by unmounting draft-holding bodies.
 - **Timeline gestures and exact timing.** Clip move/trim and ruler scrub use `trySetPointerCapture`
   from `pointer-capture.ts` (an inactive pointer returns false instead of throwing; every Designer
   capture call goes through it), with pointer-id checks, cancellation/lost-capture handling, and

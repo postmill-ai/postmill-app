@@ -239,6 +239,7 @@ async function selectBodyCopy(page: Page) {
   await expect(row).toBeVisible();
   await row.click();
   await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+  await page.getByRole('tab', { name: 'Text', exact: true }).click();
   await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
 }
 
@@ -265,6 +266,7 @@ test('selected words retain independent colors through autosave and reopen', asy
   const state = await installMocks(page);
   await openDesigner(page);
   await editText(page);
+  await page.getByRole('tab', { name: 'Text', exact: true }).click();
 
   await page.locator('[data-text-editor-id="body-copy"]').evaluate((editor) => {
     const range = document.createRange();
@@ -681,6 +683,7 @@ test('text effects remain editable through Paint layers, preview, undo, reopen, 
   await openDesigner(page);
   await editText(page);
   await page.getByRole('textbox', { name: 'Design name' }).click();
+  await page.getByRole('tab', { name: 'Effects', exact: true }).click();
 
   const textEffects = page.getByText('Text Effects', { exact: true }).locator('..');
   for (const name of ['Arc', 'Wave', 'Circle', 'Drop shadow']) {
@@ -779,6 +782,7 @@ test('Smart suggestions restore for the same layer without another request', asy
   const state = await installMocks(page);
   await openDesigner(page);
   await editText(page);
+  await page.getByRole('tab', { name: 'Text', exact: true }).click();
   await page.getByRole('button', { name: 'Smart suggestions' }).click();
   await expect(page.getByText('Use the saved accent')).toBeVisible();
   expect(state.suggestionCalls).toBe(1);
@@ -1380,4 +1384,78 @@ test('clip context menu duplicates the intended clip without changing another tr
   expect(duplicate.id).not.toBe(source.id);
   expect(state.doc.outputs[0].tracks[0].clips).toHaveLength(1);
   expect(state.doc.outputs[0].tracks[0].clips[0]).toMatchObject({ id: 'video-clip', src: '/video.mp4' });
+});
+
+test('inspector task tabs keep image AI drafts mounted and persist across reload', async ({ page }) => {
+  await installMocks(page);
+  await page.route('**/media/tools/status', (route) =>
+    json(route, { operations: { inpaint: { available: true } }, tools: {} }));
+  await openDesigner(page);
+
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+  await page.locator('[data-element-id="drop-target"]').click();
+  await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+
+  await expect(page.getByRole('tab', { name: 'Layout', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Style', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
+
+  const prompt = page.getByPlaceholder('Inpaint prompt...');
+  await expect(prompt).toBeVisible();
+  await prompt.fill('remove the background crowd');
+
+  // The tab switch hides the AI section but never unmounts it.
+  await page.getByRole('tab', { name: 'Layout', exact: true }).click();
+  await expect(prompt).toBeHidden();
+  await expect(page.getByLabel('Focal X', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
+  await expect(prompt).toHaveValue('remove the background crowd');
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+  await page.locator('[data-element-id="drop-target"]').click();
+  await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+  // The AI Tools tab was remembered for the image category; the draft itself
+  // is session-local and intentionally starts empty after a reload.
+  await expect(page.getByRole('tab', { name: 'AI Tools', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByPlaceholder('Inpaint prompt...')).toBeVisible();
+});
+
+test('text task tabs keep formatting and effects reachable and persist across reload', async ({ page }) => {
+  await installMocks(page);
+  await openDesigner(page);
+  await editText(page);
+  await page.getByRole('textbox', { name: 'Design name' }).click();
+
+  await page.getByRole('tab', { name: 'Text', exact: true }).click();
+  await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Text color', { exact: true })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Effects', exact: true }).click();
+  await expect(page.getByText('Text Effects', { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await editText(page);
+  // Effects was the text category's remembered tab — no click needed.
+  await expect(page.getByText('Text Effects', { exact: true })).toBeVisible();
+});
+
+test('mobile inspector sheet shares the task tabs and remembers them', async ({ page }) => {
+  await installMocks(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openDesigner(page);
+  await editText(page);
+  const inspectorButton = page.getByRole('button', { name: 'Inspector', exact: true });
+  if (await inspectorButton.isVisible()) await inspectorButton.click();
+
+  await page.getByRole('tab', { name: 'Text', exact: true }).click();
+  await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await editText(page);
+  if (await inspectorButton.isVisible()) await inspectorButton.click();
+  await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
 });

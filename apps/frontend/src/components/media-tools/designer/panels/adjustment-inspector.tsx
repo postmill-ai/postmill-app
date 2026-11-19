@@ -16,6 +16,7 @@ import type {
   DesignerGradient,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import type { DesignerElement } from '../designer.store';
+import { InspectorTabGroup, type InspectorTabKey } from './inspector-tabs';
 
 /**
  * The settings of an adjustment layer.
@@ -29,11 +30,13 @@ import type { DesignerElement } from '../designer.store';
 interface AdjustmentInspectorProps {
   element: DesignerElement;
   store: any;
+  tab?: InspectorTabKey;
 }
 
 export const AdjustmentInspector: FC<AdjustmentInspectorProps> = ({
   element,
   store,
+  tab,
 }) => {
   const t = useT();
   const updateElement = store((s: any) => s.updateElement);
@@ -72,7 +75,8 @@ export const AdjustmentInspector: FC<AdjustmentInspectorProps> = ({
   };
 
   return (
-    <div className="space-y-3" data-testid="adjustment-inspector">
+    <InspectorTabGroup for="adjust" active={tab} className="space-y-3">
+    <div data-testid="adjustment-inspector" className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
           {t(`designer_adjustment_${adjustment.type}`, descriptor.label)}
@@ -181,5 +185,6 @@ export const AdjustmentInspector: FC<AdjustmentInspectorProps> = ({
         </p>
       )}
     </div>
+    </InspectorTabGroup>
   );
 };
