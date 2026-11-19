@@ -1552,11 +1552,11 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     const maximum = Number(await separator.getAttribute('aria-valuemax'));
     await expect.poll(regionHeight).toBe(maximum);
     expect(await canvasHeight()).toBeGreaterThan(100);
-    await page.getByRole('button', { name: 'Enter full screen', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Exit full screen', exact: true })).toBeVisible();
+    await timeline.getByRole('button', { name: 'Enter full screen', exact: true }).click();
+    await expect(timeline.getByRole('button', { name: 'Exit full screen', exact: true })).toBeVisible();
     await expect(separator).toBeVisible();
     expect(await canvasHeight()).toBeGreaterThan(100);
-    await page.getByRole('button', { name: 'Exit full screen', exact: true }).click();
+    await timeline.getByRole('button', { name: 'Exit full screen', exact: true }).click();
 
     await imageClip.click();
     const split = page.getByRole('button', { name: 'Split clip', exact: true });
