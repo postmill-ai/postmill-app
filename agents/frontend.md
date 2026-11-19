@@ -42,6 +42,9 @@ New authenticated pages go under `(app)/(site)/<feature>/page.tsx`.
   into unmounting panels that discard unsaved edits. `FontCatalogPicker` owns the context-independent
   Designer font search/previews. `FontFamilyPicker` supplies Designer BrandKit/upload context, while
   Brand Studio passes its explicitly scoped custom fonts and selected families directly.
+  Any Brand Kit writer that PUTs normalized `palette` or `logoFileIds` arrays must reattach existing
+  roles through `withBrandColorRoles`/`withBrandLogoRoles` in `settings/brand/brand-visual-fields.ts`.
+  Sending the normalized string arrays directly replaces the whole JSON column and erases roles.
 
 ## Data fetching — SWR via `useFetch`
 

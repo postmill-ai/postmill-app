@@ -338,7 +338,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       "cream, espresso, terracotta), every plan's palette MUST honor them — never substitute a",
       'different temperature family (a warm-toned brief must never get an all-cool palette).',
       'When brandPalette is present without a pinned style, include those exact brand colors in every plan.palette while preserving the surface/text/accent roles. A pinned style keeps its palette. Every explicit #rrggbb color in the brief or intent MUST also appear in plan.palette.',
-      'When brandColorRoles is present, use primary for the main brand emphasis, accent for secondary highlights, background for canvas and panel surfaces, and text for primary typography. Unroled brandPalette colors remain available. These assignments guide planning; never discard or reorder brandPalette, and a pinned style still keeps its palette.',
+      'When brandColorRoles is present, use primary for the main brand emphasis, accent for secondary highlights, background for canvas and panel surfaces, and text for primary typography. Multiple entries may share one role; treat them as ordered candidates for that purpose. Unroled brandPalette colors remain available. These assignments guide planning; never discard or reorder brandPalette, and a pinned style still keeps its palette.',
       '',
       'Layout: when the concept describes a side-by-side layout with a specific side for text and',
       'imagery (e.g. "photo left, text right"), set "panelSide" to the TEXT panel side ("left" =',

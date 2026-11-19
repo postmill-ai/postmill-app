@@ -14,6 +14,7 @@ import { addBrandLogo, applyBrandColor, applyBrandFont } from './brand-actions';
 import { useBrandKit } from '../brand-kit-context';
 import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
 import type { Brand } from '@postmill-ai/frontend/components/settings/brand/use-brands';
+import { withBrandColorRoles, withBrandLogoRoles } from '@postmill-ai/frontend/components/settings/brand/brand-visual-fields';
 
 type BrandProfile = Brand;
 
@@ -170,11 +171,17 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
         const res = await fetch(`/brands/${activeBrand.id}`, {
           method: 'PUT',
           body: JSON.stringify({
-            logoFileIds: activeBrand.logoFileIds || [],
-            palette: activeBrand.palette || [],
             fontFamilies: activeBrand.fontFamilies || [],
             enforcement: activeBrand.enforcement || {},
             ...patch,
+            palette: withBrandColorRoles(
+              patch.palette ?? activeBrand.palette ?? [],
+              activeBrand.colorRoles,
+            ),
+            logoFileIds: withBrandLogoRoles(
+              patch.logoFileIds ?? activeBrand.logoFileIds ?? [],
+              activeBrand.logoRoles,
+            ),
           }),
         });
         if (!res.ok) {

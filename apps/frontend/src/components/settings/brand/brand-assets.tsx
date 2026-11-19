@@ -18,6 +18,7 @@ import {
 } from '@postmill-ai/frontend/components/media-tools/designer/panels/use-brand-fonts';
 import { FontCatalogPicker } from '@postmill-ai/frontend/components/media-tools/designer/panels/font-catalog-picker';
 import type { Brand, BrandAsset } from './use-brands';
+import { withBrandColorRoles, withBrandLogoRoles } from './brand-visual-fields';
 
 interface FileItem {
   id: string;
@@ -249,11 +250,14 @@ export const BrandAssets = ({
       if (!item.fileId) return;
       const selectedId = item.fileId;
       if (logoTargetRole) {
-        const previousId = logoFileIds.find((id) => logoRoles[id] === logoTargetRole);
-        setLogoFileIds((current) => [
-          ...current.filter((id) => id !== previousId && id !== selectedId),
-          selectedId,
-        ]);
+        setLogoFileIds((current) => {
+          const previousIndex = current.findIndex((id) => logoRoles[id] === logoTargetRole);
+          if (previousIndex < 0) return current.includes(selectedId) ? current : [...current, selectedId];
+          const previousId = current[previousIndex];
+          const next = current.filter((id) => id !== previousId && id !== selectedId);
+          next.splice(Math.min(previousIndex, next.length), 0, selectedId);
+          return next;
+        });
         assignLogoRole(selectedId, logoTargetRole);
       } else {
         setLogoFileIds((current) => current.includes(selectedId) ? current : [...current, selectedId]);
@@ -289,9 +293,15 @@ export const BrandAssets = ({
       const res = await fetch(`/brands/${brandId}`, {
         method: 'PUT',
         body: JSON.stringify({
-          palette: palette.map((entry) => entry.role ? { hex: entry.hex, role: entry.role } : entry.hex),
+          palette: withBrandColorRoles(
+            palette.map((entry) => entry.hex),
+            palette.flatMap((entry, index) => entry.role ? [{ index, hex: entry.hex, role: entry.role }] : []),
+          ),
           assets,
-          logoFileIds: logoFileIds.map((fileId) => logoRoles[fileId] ? { fileId, role: logoRoles[fileId] } : fileId),
+          logoFileIds: withBrandLogoRoles(
+            logoFileIds,
+            Object.entries(logoRoles).flatMap(([fileId, role]) => role ? [{ fileId, role }] : []),
+          ),
           fontFamilies,
           preferredFormats,
           introFileId,
@@ -360,7 +370,10 @@ export const BrandAssets = ({
               : (
                 <select
                   value=""
-                  aria-label={t('brand_logo_role_for', 'Logo role for {{name}}', { name: file?.name || fileId })}
+                  aria-label={t('brand_logo_role_for', 'Logo role for {{name}}', {
+                    name: file?.name || fileId,
+                    interpolation: { escapeValue: false },
+                  })}
                   onChange={(event) => assignLogoRole(fileId, (event.target.value || undefined) as BrandLogoRole | undefined)}
                   className="max-w-full bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[4px] py-[3px] text-textColor"
                 >
@@ -401,7 +414,7 @@ export const BrandAssets = ({
       <BrandKitSection
         id="colors"
         title={t('color_palette', 'Your brand colours')}
-        description={t('brand_color_roles_hint', 'Optionally tell AI Designer how to use each colour. Unassigned colours stay in the palette.')}
+        description={t('brand_color_roles_hint', 'Optionally tell AI Designer how to use each colour. Colours can share a role as ordered choices; unassigned colours stay in the palette.')}
       >
         <div className="flex flex-wrap items-start gap-[10px]">
           {palette.map((entry, index) => (

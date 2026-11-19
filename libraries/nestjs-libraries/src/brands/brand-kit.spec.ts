@@ -86,6 +86,22 @@ describe('Brand Kit normalization', () => {
       .toThrow(BadRequestException);
   });
 
+  it('allows ordered colors to share a semantic role', () => {
+    const stored = [
+      { hex: '#111111', role: 'primary' as const },
+      { hex: '#222222', role: 'primary' as const },
+      '#333333',
+    ];
+    expect(normalizeBrandProfilePatch({ palette: stored })).toEqual({ palette: stored });
+    expect(normalizeBrandProfile({ id: 'brand-1', palette: stored })).toMatchObject({
+      palette: ['#111111', '#222222', '#333333'],
+      colorRoles: [
+        { index: 0, hex: '#111111', role: 'primary' },
+        { index: 1, hex: '#222222', role: 'primary' },
+      ],
+    });
+  });
+
   it('rejects unknown preferred formats', () => {
     expect(() => normalizeBrandProfilePatch({ preferredFormats: ['not-a-format'] }))
       .toThrow(BadRequestException);

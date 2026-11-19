@@ -368,8 +368,7 @@ test('Brand Kit deep links and visual roles survive save, reload, and mobile nav
   await page.getByRole('button', { name: 'More Brand Kit sections', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Templates', exact: true }).click();
   await expect(page).toHaveURL(/#templates$/);
-  await page.getByRole('button', { name: 'More Brand Kit sections', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Colors', exact: true }).click();
+  await page.getByRole('link', { name: 'Colors', exact: true }).first().click();
   await expect(page.getByRole('combobox', { name: 'Colour role for #111111', exact: true })).toHaveValue('text');
   await expect(page.getByRole('status')).toHaveText('Unsaved changes');
 });

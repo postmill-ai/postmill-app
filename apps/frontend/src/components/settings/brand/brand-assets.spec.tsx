@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import type { ReactNode } from 'react';
 import { BrandAssets } from './brand-assets';
@@ -7,18 +7,29 @@ import type { Brand } from './use-brands';
 const fetchMock = vi.fn();
 const toasterShow = vi.fn();
 const scrollIntoView = vi.fn();
+let logoPickerOnSelect: ((item: { fileId: string }) => void) | undefined;
 
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({ useFetch: () => fetchMock }));
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({ useToaster: () => ({ show: toasterShow }) }));
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
-  useT: () => (_key: string, fallback: string, params?: Record<string, string>) => Object.entries(params || {})
-    .reduce((text, [key, value]) => text.replaceAll(`{{${key}}}`, value), fallback),
+  useT: () => (_key: string, fallback: string, params?: Record<string, any>) => {
+    const escapeValue = params?.interpolation?.escapeValue !== false;
+    return Object.entries(params || {})
+      .filter(([key]) => key !== 'interpolation')
+      .reduce((text, [key, value]) => text.replaceAll(
+        `{{${key}}}`,
+        escapeValue ? String(value).replaceAll('&', '&amp;').replaceAll("'", '&#39;').replaceAll('/', '&#x2F;') : String(value),
+      ), fallback);
+  },
 }));
 vi.mock('@postmill-ai/frontend/components/layout/use-permissions', () => ({
   usePermissions: () => ({ isResolved: true, hasPermission: () => true }),
 }));
 vi.mock('@postmill-ai/frontend/components/media-tools/use-media-picker', () => ({
-  useMediaPicker: () => ({ open: vi.fn(), element: null }),
+  useMediaPicker: (options: { importName?: string; onSelect: (item: { fileId: string }) => void }) => {
+    if (options.importName === 'brand-logo') logoPickerOnSelect = options.onSelect;
+    return { open: vi.fn(), element: null };
+  },
 }));
 vi.mock('@postmill-ai/react/form/slider', () => ({
   Slider: ({ value }: { value: string }) => <span>{value}</span>,
@@ -73,15 +84,16 @@ const initial: Brand = {
 
 const response = (body: unknown) => ({ ok: true, json: vi.fn().mockResolvedValue(body) });
 
-const renderAssets = () => render(
+const renderAssets = (brand: Brand = initial) => render(
   <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-    <BrandAssets brandId="brand-1" initial={initial} />
+    <BrandAssets brandId="brand-1" initial={brand} />
   </SWRConfig>
 );
 
 describe('BrandAssets', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    logoPickerOnSelect = undefined;
     window.history.replaceState(null, '', '/brands/brand-1/kit');
     Element.prototype.scrollIntoView = scrollIntoView;
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
@@ -148,6 +160,36 @@ describe('BrandAssets', () => {
     expect(body.logoFileIds).toEqual([
       { fileId: 'legacy-logo', role: 'icon' },
       { fileId: 'main-logo', role: 'main' },
+    ]);
+  });
+
+  it('renders literal special characters in logo-role accessible names', async () => {
+    fetchMock.mockImplementation((url: string) => Promise.resolve(response(
+      url.startsWith('/files/by-ids')
+        ? { results: [{ id: 'legacy-logo', path: '/logo.png', name: 'Logo & icon.png' }] }
+        : { templates: [], total: 0 },
+    )));
+    renderAssets({ ...initial, logoFileIds: ['legacy-logo'], logoRoles: [] });
+
+    expect(await screen.findByRole('combobox', { name: 'Logo role for Logo & icon.png', exact: true })).toBeTruthy();
+  });
+
+  it('replaces a first Main logo at the same index without changing the remaining order', async () => {
+    renderAssets({
+      ...initial,
+      logoFileIds: ['main-logo', 'legacy-logo'],
+      logoRoles: [{ fileId: 'main-logo', role: 'main' }],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Replace', exact: true }));
+    expect(logoPickerOnSelect).toBeDefined();
+    act(() => logoPickerOnSelect!({ fileId: 'replacement-logo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/brands/brand-1', expect.objectContaining({ method: 'PUT' })));
+    const body = JSON.parse(fetchMock.mock.calls.find(([url, options]) => url === '/brands/brand-1' && options?.method === 'PUT')![1].body);
+    expect(body.logoFileIds).toEqual([
+      { fileId: 'replacement-logo', role: 'main' },
+      'legacy-logo',
     ]);
   });
 });

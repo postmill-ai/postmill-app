@@ -236,7 +236,8 @@ viewers can read them. The old Settings → AI → Brands links redirect here.
   `#formats`, and `#templates` deep links) to reach the palette, fonts, logos, reference images,
   preferred formats, and associated templates. All sections remain on one form, so navigation keeps
   unsaved edits; the save status shows when changes are pending. Colors can optionally be labeled
-  Primary, Accent, Background, or Text for AI planning. Logo cards identify Main, Icon, and Dark
+  Primary, Accent, Background, or Text for AI planning. Multiple colors may share one role as ordered
+  candidate choices; unroled colors remain in the palette. Logo cards identify Main, Icon, and Dark
   version while leaving additional logos unassigned. Named fonts come from the searchable Designer
   catalog with previews; previously saved custom family names and uploaded font files remain valid.
   Preferred formats appear first but are not restrictions. Intro/outro and enforcement share the
