@@ -1,3 +1,4 @@
+import diff from 'fast-diff';
 import type {
   DesignerDoc,
   DesignerElement,
@@ -125,47 +126,82 @@ const richTextRanges = (runs: TextRun[] | undefined): RichTextRange[] => {
   });
 };
 
+interface TextRangeLink {
+  previousStart: number;
+  previousEnd: number;
+  nextStart: number;
+  nextEnd: number;
+  equal: boolean;
+}
+
 const textEditRangeMapper = (
   previousText: string | undefined,
   nextText: string | undefined
 ) => {
   if (previousText === undefined || nextText === undefined || previousText === nextText) {
-    return (start: number, end: number) => ({ start, end });
+    return (start: number, end: number) => [{ start, end }];
   }
 
-  let prefix = 0;
-  while (
-    prefix < previousText.length &&
-    prefix < nextText.length &&
-    previousText[prefix] === nextText[prefix]
-  ) {
-    prefix += 1;
-  }
+  const operations = diff(previousText, nextText);
+  const links: TextRangeLink[] = [];
+  let previousOffset = 0;
+  let nextOffset = 0;
+  let index = 0;
 
-  let suffix = 0;
-  while (
-    suffix < previousText.length - prefix &&
-    suffix < nextText.length - prefix &&
-    previousText[previousText.length - 1 - suffix] ===
-      nextText[nextText.length - 1 - suffix]
-  ) {
-    suffix += 1;
-  }
-
-  const previousChangedEnd = previousText.length - suffix;
-  const nextChangedEnd = nextText.length - suffix;
-  const mapOffset = (offset: number) => {
-    if (offset <= prefix) return offset;
-    if (offset >= nextChangedEnd) {
-      return offset - nextChangedEnd + previousChangedEnd;
+  while (index < operations.length) {
+    const [operation, text] = operations[index];
+    if (operation === 0) {
+      if (text.length > 0) {
+        links.push({
+          previousStart: previousOffset,
+          previousEnd: previousOffset + text.length,
+          nextStart: nextOffset,
+          nextEnd: nextOffset + text.length,
+          equal: true,
+        });
+      }
+      previousOffset += text.length;
+      nextOffset += text.length;
+      index += 1;
+      continue;
     }
-    return prefix;
-  };
 
-  return (start: number, end: number) => ({
-    start: mapOffset(start),
-    end: mapOffset(end),
-  });
+    const previousStart = previousOffset;
+    const nextStart = nextOffset;
+    while (index < operations.length && operations[index][0] !== 0) {
+      const [changeOperation, changeText] = operations[index];
+      if (changeOperation === -1) previousOffset += changeText.length;
+      else nextOffset += changeText.length;
+      index += 1;
+    }
+    if (previousOffset > previousStart && nextOffset > nextStart) {
+      links.push({
+        previousStart,
+        previousEnd: previousOffset,
+        nextStart,
+        nextEnd: nextOffset,
+        equal: false,
+      });
+    }
+  }
+
+  return (start: number, end: number) => {
+    const ranges: { start: number; end: number }[] = [];
+    for (const link of links) {
+      const overlapStart = Math.max(start, link.nextStart);
+      const overlapEnd = Math.min(end, link.nextEnd);
+      if (overlapStart >= overlapEnd) continue;
+      if (!link.equal) {
+        ranges.push({ start: link.previousStart, end: link.previousEnd });
+        continue;
+      }
+      ranges.push({
+        start: link.previousStart + overlapStart - link.nextStart,
+        end: link.previousStart + overlapEnd - link.nextStart,
+      });
+    }
+    return ranges;
+  };
 };
 
 /**
@@ -175,8 +211,8 @@ const textEditRangeMapper = (
  * aspect-aware basis (`typeScaleRatio`, the same rule as smartReflow and the
  * conductor's variant re-fit), with font size floored at 10px. Rich runs keep
  * their authored size when it is already below that floor. Unchanged runs are
- * matched by character range through text edits, splits and merges, retaining
- * the target's existing size rather than round-tripping through a scale.
+ * matched by character range through multi-hunk text edits, splits and merges,
+ * retaining the target's existing size rather than round-tripping through a scale.
  * The old
  * `min(scaleX, scaleY)` here silently re-imposed short-edge typography on
  * every linked edit — undoing the per-format type of every wider output.
@@ -210,15 +246,17 @@ const scaledForOutput = (
     ...(sharedRuns
       ? {
           richText: richTextRanges(sharedRuns).map(({ run, start, end }) => {
-            const sourceRange = mapSourceRange(start, end);
-            const targetRange = mapTargetRange(start, end);
-            const sourceMatches = sourceRanges.filter(
-              (range) =>
-                range.start < sourceRange.end && range.end > sourceRange.start
+            const mappedSourceRanges = mapSourceRange(start, end);
+            const mappedTargetRanges = mapTargetRange(start, end);
+            const sourceMatches = sourceRanges.filter((range) =>
+              mappedSourceRanges.some(
+                (mapped) => range.start < mapped.end && range.end > mapped.start
+              )
             );
-            const targetMatches = targetRanges.filter(
-              (range) =>
-                range.start < targetRange.end && range.end > targetRange.start
+            const targetMatches = targetRanges.filter((range) =>
+              mappedTargetRanges.some(
+                (mapped) => range.start < mapped.end && range.end > mapped.start
+              )
             );
             const unchanged =
               sourceMatches.length > 0 &&

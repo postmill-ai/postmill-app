@@ -268,6 +268,96 @@ describe('applyLinked fontSize propagation', () => {
     element.text = runs.map((run) => run.text).join('');
   };
 
+  const makeFiveRunLinkedSizeDoc = () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    replaceRuns(larger, [
+      { text: 'Big ', fontSize: 64, fill: '#112233' },
+      { text: 'rich ', fontSize: 32 },
+      { text: '™', fontSize: 8 },
+      { text: ' and ', fontSize: 32 },
+      { text: '©', fontSize: 8 },
+    ]);
+    replaceRuns(smaller, [
+      { text: 'Big ', fontSize: 32, fill: '#112233' },
+      { text: 'rich ', fontSize: 16 },
+      { text: '™', fontSize: 8 },
+      { text: ' and ', fontSize: 16 },
+      { text: '©', fontSize: 8 },
+    ]);
+    return { doc };
+  };
+
+  it.each([
+    {
+      label: 'rich ',
+      runIndex: 1,
+      text: 'Big ™ and ©',
+      largerSizes: [64, 8, 32, 8],
+      smallerSizes: [32, 8, 16, 8],
+    },
+    {
+      label: ' and ',
+      runIndex: 3,
+      text: 'Big rich ™©',
+      largerSizes: [64, 32, 8, 8],
+      smallerSizes: [32, 16, 8, 8],
+    },
+  ])(
+    'preserves surviving run sizes after deleting the whole $label run',
+    ({ runIndex, text, largerSizes, smallerSizes }) => {
+      const { doc } = makeFiveRunLinkedSizeDoc();
+      const smaller = (doc.outputs[1] as any).children[0];
+      const editedRuns = smaller.richText
+        .filter((_: any, index: number) => index !== runIndex)
+        .map((run: any) => ({ ...run }));
+
+      const { outputs } = applyLinked(
+        doc,
+        1,
+        new Set(['e9']),
+        { text, richText: editedRuns },
+        false
+      );
+
+      expect((outputs[0] as any).children[0].text).toBe(text);
+      expect((outputs[1] as any).children[0].text).toBe(text);
+      expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual(
+        largerSizes
+      );
+      expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual(
+        smallerSizes
+      );
+    }
+  );
+
+  it('preserves run sizes between separate text edits in one editing session', () => {
+    const { doc } = makeFiveRunLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+    const editedRuns = smaller.richText.map((run: any) => ({ ...run }));
+    editedRuns[0].text = 'Bigger ';
+    editedRuns[3].text = ' & ';
+    const text = editedRuns.map((run: any) => run.text).join('');
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { text, richText: editedRuns },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].text).toBe(text);
+    expect((outputs[1] as any).children[0].text).toBe(text);
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 32, 8, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      32, 16, 8, 16, 8,
+    ]);
+  });
+
   it('scales a changed size when differently sized runs merge on the smaller format', () => {
     const { doc } = makeLinkedSizeDoc();
     const larger = (doc.outputs[0] as any).children[0];
