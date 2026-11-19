@@ -1836,7 +1836,7 @@ const DesignerContent: FC<
         )}
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-y-auto">
-          <div className={`relative flex-1 flex min-h-0 min-w-0 ${mobileWorkspaceSheetOpen ? 'mobile:grid mobile:flex-none mobile:grid-rows-[120px_auto] mobile:overflow-hidden' : 'mobile:flex-[1_0_auto]'}`}>
+          <div className={`relative flex-1 flex min-h-[240px] min-w-0 mobile:min-h-0 ${mobileWorkspaceSheetOpen ? 'mobile:grid mobile:flex-none mobile:grid-rows-[120px_auto] mobile:overflow-hidden' : 'mobile:flex-[1_0_auto]'}`}>
             <DesignerCanvas
               store={store}
               mobileSheetOpen={mobileWorkspaceSheetOpen}

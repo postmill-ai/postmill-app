@@ -1445,11 +1445,35 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await fitDesignerCanvas(page);
 
     const canvas = page.locator('.designer-canvas-container').first();
+    const timeline = page.getByRole('toolbar', { name: 'Video timeline', exact: true });
     const trackRegion = page.getByRole('region', { name: 'Timeline tracks', exact: true });
     const canvasHeight = async () => (await canvas.boundingBox())!.height;
     const regionHeight = async () => (await trackRegion.boundingBox())!.height;
     await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(7);
     const comfortableCanvas = await canvasHeight();
+    const canvasBox = await canvas.boundingBox();
+    const timelineBox = await timeline.boundingBox();
+    expect(canvasBox).not.toBeNull();
+    expect(timelineBox).not.toBeNull();
+    expect(canvasBox!.y + canvasBox!.height).toBeLessThanOrEqual(timelineBox!.y + 1);
+
+    const comfortableRow = timelineTrackRow(page, 'Image main');
+    await page.getByRole('button', { name: 'Collapse track: Image main', exact: true }).click();
+    await expect(comfortableRow).toHaveAttribute('data-collapsed', 'true');
+    const comfortableExpand = page.getByRole('button', { name: 'Expand track: Image main', exact: true });
+    const comfortableLock = comfortableRow.getByRole('button', { name: 'Lock track', exact: true });
+    const comfortableName = comfortableRow.getByTitle('Image main', { exact: true });
+    const expandBox = await comfortableExpand.boundingBox();
+    const lockBox = await comfortableLock.boundingBox();
+    const nameBox = await comfortableName.boundingBox();
+    expect(expandBox).not.toBeNull();
+    expect(lockBox).not.toBeNull();
+    expect(nameBox).not.toBeNull();
+    expect(nameBox!.width).toBeGreaterThan(0);
+    expect(expandBox!.y + expandBox!.height).toBeLessThanOrEqual(lockBox!.y);
+    await comfortableExpand.click({ position: { x: expandBox!.width - 1, y: expandBox!.height / 2 } });
+    await expect(comfortableRow).toHaveAttribute('data-collapsed', 'false');
+    await expect(comfortableLock).toHaveAttribute('aria-pressed', 'false');
 
     await page.getByRole('button', { name: 'Compact tracks', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Compact tracks', exact: true })).toHaveAttribute('aria-pressed', 'true');

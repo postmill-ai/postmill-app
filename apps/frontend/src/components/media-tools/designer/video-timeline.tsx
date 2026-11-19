@@ -711,7 +711,7 @@ export const TrackRow = React.memo(function TrackRow({
     >
       {/* Track label */}
       <div
-        className={`flex px-1.5 text-[10px] font-medium uppercase tracking-wider shrink-0 border-r border-studioBorder/30 gap-0.5 ${collapsed ? 'flex-row items-center' : 'flex-col items-end justify-center'}`}
+        className="flex flex-col items-end justify-center px-1.5 text-[10px] font-medium uppercase tracking-wider shrink-0 border-r border-studioBorder/30 gap-0.5"
         style={{ width: labelWidth }}
       >
         <div className="flex min-w-0 w-full items-center gap-0.5">
@@ -736,7 +736,7 @@ export const TrackRow = React.memo(function TrackRow({
             {track.type === 'audio' && track.muted ? ' \uD83D\uDD07' : ''}
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className={`flex items-center gap-1 ${collapsed ? 'h-3 leading-none' : ''}`}>
           <button
             className={`text-[11px] ${track.locked ? 'text-designerAccent' : 'text-textColor/40 hover:text-textColor'}`}
             title={track.locked ? translate('unlock_track', 'Unlock track') : translate('lock_track', 'Lock track')}
