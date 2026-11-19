@@ -4931,5 +4931,15 @@
   "designer_carousel": "Karuzela",
   "designer_add_slide_after": "Dodaj slajd po {{number}}",
   "designer_frozen_read_only": "Ten format jest zablokowany. Odblokuj go, aby go edytować.",
-  "designer_bulk_no_variables": "Przed utworzeniem wariantów dodaj edytowalny element tekstu, obrazu lub koloru."
+  "designer_bulk_no_variables": "Przed utworzeniem wariantów dodaj edytowalny element tekstu, obrazu lub koloru.",
+  "designer_focal_preview": "Podgląd punktu ostrości",
+  "designer_focal_cover_hint": "Punkt ostrości działa, gdy obraz jest przycinany (Cover).",
+  "designer_focal_explicit_crop_hint": "Zresetuj poniższe jawne przycięcie, aby dostosować punkt ostrości.",
+  "designer_focal_quick_positions": "Szybkie pozycje ostrości",
+  "designer_focal_quick_position": "Ustaw punkt ostrości: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "Ostrość X (%)",
+  "designer_focal_y_percent": "Ostrość Y (%)",
+  "designer_reset_focal_format": "Zresetuj ten format",
+  "designer_format_crops": "Przycięcia formatów",
+  "designer_format_crop_preview": "Podgląd przycięcia {{format}}"
 }

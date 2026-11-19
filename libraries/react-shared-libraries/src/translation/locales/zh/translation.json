@@ -4888,5 +4888,15 @@
   "designer_carousel": "轮播",
   "designer_add_slide_after": "在 {{number}} 后添加幻灯片",
   "designer_frozen_read_only": "此格式已冻结。请取消冻结后再编辑。",
-  "designer_bulk_no_variables": "请先添加可编辑的文本、图像或颜色元素，再创建变体。"
+  "designer_bulk_no_variables": "请先添加可编辑的文本、图像或颜色元素，再创建变体。",
+  "designer_focal_preview": "焦点预览",
+  "designer_focal_cover_hint": "焦点仅在裁剪图像时（Cover）应用。",
+  "designer_focal_explicit_crop_hint": "重置下方的明确裁剪以调整焦点。",
+  "designer_focal_quick_positions": "快速焦点位置",
+  "designer_focal_quick_position": "设置焦点：{{x}}%、{{y}}%",
+  "designer_focal_x_percent": "焦点 X（%）",
+  "designer_focal_y_percent": "焦点 Y（%）",
+  "designer_reset_focal_format": "重置此格式",
+  "designer_format_crops": "格式裁剪",
+  "designer_format_crop_preview": "{{format}} 裁剪预览"
 }

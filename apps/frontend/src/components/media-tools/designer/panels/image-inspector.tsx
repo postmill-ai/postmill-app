@@ -8,7 +8,7 @@ import { ColorSwatch, Slider, SegmentedControl, Stepper } from '../controls';
 import { useBrandColors } from './use-brand-colors';
 import { ShadowSection, BackdropSection } from './shadow-section';
 import { getImageNaturalSize } from '../elements';
-import { detectFocalPoint, estimateFocalPoint, smartReflow } from '../reflow';
+import { smartReflow } from '../reflow';
 import type {
   DesignerElement,
   DesignerMask,
@@ -29,6 +29,7 @@ import { applyStaticMagicGrab, prepareStaticMagicGrab } from '../magic-grab';
 import { openMagicGrabReview } from '../magic-grab-modal';
 import { usePresetPreview } from '../use-preset-preview';
 import { replaceStaticImage } from '../image-replacement';
+import { FocalPointEditor } from './focal-point-editor';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -52,7 +53,6 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   const brandEnforcement = store((s: any) => s.brandEnforcement);
   const updateElement = store((s: any) => s.updateElement);
   const updateElements = store((s: any) => s.updateElements);
-  const updateElementsSilent = store((s: any) => s.updateElementsSilent);
   const { preview, cancel } = usePresetPreview(store);
 
   const [aiLoading, setAiLoading] = useState<string | false>(false);
@@ -80,7 +80,6 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const previewImgRef = useRef<HTMLImageElement | null>(null);
-  const [draggingFocal, setDraggingFocal] = useState(false);
 
   const set = (u: Partial<DesignerElement>) => updateElements(ids, u);
   const previewFrame = (mask: DesignerElement['mask']) => {
@@ -463,36 +462,6 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
 
   const isSingle = ids.length === 1;
 
-  const updateFocalFromEvent = (e: React.PointerEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-    // Silent during the drag — a single history entry is committed on pointer-up.
-    updateElementsSilent(ids, { focalPoint: { x, y } });
-  };
-
-  const handleFocalPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    trySetPointerCapture(e.currentTarget, e.pointerId);
-    setDraggingFocal(true);
-    updateFocalFromEvent(e);
-  };
-
-  const handleFocalPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!draggingFocal) return;
-    updateFocalFromEvent(e);
-  };
-
-  const handleFocalPointerUp = useCallback(() => {
-    setDraggingFocal(false);
-    store.getState().pushHistory();
-  }, [store]);
-
-  const nudgeFocal = (dx: number, dy: number) => {
-    const x = Math.min(1, Math.max(0, (element.focalPoint?.x ?? 0.5) + dx));
-    const y = Math.min(1, Math.max(0, (element.focalPoint?.y ?? 0.5) + dy));
-    set({ focalPoint: { x, y } });
-  };
-
   const resetFormatLayout = () => {
     const state = store.getState();
     const output = state.doc.outputs[state.currentOutput];
@@ -547,135 +516,13 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         />
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-textColor/50">{t('designer_label_focal_point', 'Focal point')}</span>
-          <button
-            className="text-[10px] text-btnPrimaryAccent"
-            onClick={() => set({ focalPoint: { x: 0.5, y: 0.5 } })}
-          >
-            {t('designer_center', 'Center')}
-          </button>
-        </div>
-        <div
-          className="relative w-full h-[96px] rounded-sm overflow-hidden border border-studioBorder bg-newBgColorInner cursor-crosshair"
-          style={{
-            backgroundImage: element.src ? `url(${element.src})` : undefined,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-          onPointerDown={handleFocalPointerDown}
-          onPointerMove={handleFocalPointerMove}
-          onPointerUp={handleFocalPointerUp}
-          onPointerLeave={handleFocalPointerUp}
-        >
-          <div
-            className="absolute w-3 h-3 rounded-full border-2 border-white bg-designerAccent shadow pointer-events-none"
-            style={{
-              left: `calc(${(element.focalPoint?.x ?? 0.5) * 100}% - 6px)`,
-              top: `calc(${(element.focalPoint?.y ?? 0.5) * 100}% - 6px)`,
-            }}
-          />
-        </div>
-        <div className="grid grid-cols-3 gap-1">
-          <div />
-          <button
-            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
-            onClick={() => nudgeFocal(0, -0.02)}
-            aria-label={t('designer_move_focal_point_up', 'Move focal point up')}
-          >
-            ↑
-          </button>
-          <div />
-          <button
-            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
-            onClick={() => nudgeFocal(-0.02, 0)}
-            aria-label={t('designer_move_focal_point_left', 'Move focal point left')}
-          >
-            ←
-          </button>
-          <button
-            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
-            onClick={() => nudgeFocal(0, 0.02)}
-            aria-label={t('designer_move_focal_point_down', 'Move focal point down')}
-          >
-            ↓
-          </button>
-          <button
-            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
-            onClick={() => nudgeFocal(0.02, 0)}
-            aria-label={t('designer_move_focal_point_right', 'Move focal point right')}
-          >
-            →
-          </button>
-        </div>
-      </div>
+      <FocalPointEditor element={element} ids={ids} store={store} />
 
       <button
         className="w-full px-3 py-2 bg-newBgColor hover:bg-studioBorder/10 text-sm rounded-sm border border-studioBorder text-left"
         onClick={resetFormatLayout}
       >
         {t('designer_reset_format_layout', 'Reset this format’s layout')}
-      </button>
-
-      <div className="grid grid-cols-2 gap-2">
-        <Stepper
-          label={t('designer_focal_x', 'Focal X')}
-          min={0}
-          max={100}
-          step={1}
-          value={
-            element.focalPoint
-              ? Math.round(element.focalPoint.x * 100)
-              : 50
-          }
-          onChange={(n) =>
-            set({
-              focalPoint: {
-                x: n / 100,
-                y: element.focalPoint?.y ?? 0.5,
-              },
-            })
-          }
-        />
-        <Stepper
-          label={t('designer_focal_y', 'Focal Y')}
-          min={0}
-          max={100}
-          step={1}
-          value={
-            element.focalPoint
-              ? Math.round(element.focalPoint.y * 100)
-              : 50
-          }
-          onChange={(n) =>
-            set({
-              focalPoint: {
-                x: element.focalPoint?.x ?? 0.5,
-                y: n / 100,
-              },
-            })
-          }
-        />
-      </div>
-
-      <button
-        className="w-full px-3 py-1.5 text-[12px] border border-studioBorder bg-newBgColorInner hover:bg-newBgColor text-textColor/70 hover:text-textColor rounded-sm transition-colors"
-        disabled={!!aiLoading}
-        onClick={async () => {
-          if (!element.src) return;
-          setAiLoading('detect-focal');
-          try {
-            const fp = await detectFocalPoint(element.src, fetch);
-            updateElement(element.id, { focalPoint: fp });
-          } catch {
-            toaster.show(t('designer_subject_detection_failed', 'Subject detection failed; using center fallback'), 'warning');
-          } finally {
-            setAiLoading(false);
-          }
-        }}
-      >
-        {aiLoading === 'detect-focal' ? t('designer_detecting_ellipsis', 'Detecting…') : t('designer_auto_detect_subject', 'Auto-detect Subject')}
       </button>
 
       <Stepper

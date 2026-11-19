@@ -4888,5 +4888,15 @@
   "designer_carousel": "Karussell",
   "designer_add_slide_after": "Folie nach {{number}} hinzufügen",
   "designer_frozen_read_only": "Dieses Format ist fixiert. Hebe die Fixierung auf, um es zu bearbeiten.",
-  "designer_bulk_no_variables": "Füge ein bearbeitbares Text-, Bild- oder Farbelement hinzu, bevor du Varianten erstellst."
+  "designer_bulk_no_variables": "Füge ein bearbeitbares Text-, Bild- oder Farbelement hinzu, bevor du Varianten erstellst.",
+  "designer_focal_preview": "Fokuspunkt-Vorschau",
+  "designer_focal_cover_hint": "Der Fokuspunkt wirkt sich aus, wenn das Bild zugeschnitten wird (Cover).",
+  "designer_focal_explicit_crop_hint": "Setze den expliziten Zuschnitt unten zurück, um den Fokuspunkt anzupassen.",
+  "designer_focal_quick_positions": "Schnelle Fokuspositionen",
+  "designer_focal_quick_position": "Fokuspunkt festlegen: {{x}} %, {{y}} %",
+  "designer_focal_x_percent": "Fokus X (%)",
+  "designer_focal_y_percent": "Fokus Y (%)",
+  "designer_reset_focal_format": "Dieses Format zurücksetzen",
+  "designer_format_crops": "Formatzuschnitte",
+  "designer_format_crop_preview": "Zuschnittvorschau für {{format}}"
 }

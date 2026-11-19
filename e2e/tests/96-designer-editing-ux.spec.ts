@@ -261,6 +261,128 @@ async function editBodyCopyWithPointer(page: Page) {
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
 }
 
+const FOCAL_IMAGE_DATA_URL = `data:image/svg+xml;base64,${Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="200" height="200" fill="#ff0000"/><rect x="200" width="200" height="200" fill="#0000ff"/></svg>'
+).toString('base64')}`;
+
+async function canvasCenterPixel(page: Page) {
+  return page.locator('.konva-stage').first().evaluate((stage) => {
+    const layers = [...stage.querySelectorAll('canvas')];
+    if (!layers.length) return [];
+    const composite = document.createElement('canvas');
+    composite.width = Math.max(...layers.map((layer) => layer.width));
+    composite.height = Math.max(...layers.map((layer) => layer.height));
+    const context = composite.getContext('2d')!;
+    layers.forEach((layer) => context.drawImage(layer, 0, 0));
+    return [...context.getImageData(
+      Math.floor(composite.width / 2),
+      Math.floor(composite.height / 2),
+      1,
+      1
+    ).data];
+  });
+}
+
+test('focal editor changes cached canvas crops and preserves per-format settings', async ({ page }) => {
+  const focalImage = {
+    id: 'focal-image', originId: 'focal-image-origin', name: 'Focal image', type: 'image',
+    src: FOCAL_IMAGE_DATA_URL, x: 150, y: 100, width: 100, height: 200,
+    naturalWidth: 400, naturalHeight: 200, fitMode: 'cover', focalPoint: { x: 0, y: 0.5 },
+    rotation: 0, opacity: 1, locked: false, hidden: false, filters: ['brightness:1.1'],
+    styles: [{ type: 'drop-shadow', color: '#000000', opacity: 0.4, distance: 4, angle: 45, size: 4, spread: 0 }],
+  };
+  const doc = {
+    version: 13,
+    mode: 'image',
+    outputs: [{
+      id: 'focal-square', formatId: 'custom-square', name: 'Square', width: 400, height: 400,
+      background: '#ffffff', contentLinkGroup: 'focal-linked', children: [focalImage],
+    }, {
+      id: 'focal-second', formatId: 'custom-second', name: 'Second', width: 400, height: 400,
+      background: '#ffffff', contentLinkGroup: 'focal-linked',
+      children: [{ ...focalImage, id: 'focal-second-image', focalPoint: { x: 0.25, y: 0.5 } }],
+    }],
+  };
+  const state = await installMocks(page, doc);
+  const persist = async () => {
+    const before = state.saveDocs.length;
+    await page.getByRole('textbox', { name: 'Design name' }).click();
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => state.saveDocs.length).toBeGreaterThan(before);
+    return (state.saveDocs.at(-1) as any).outputs;
+  };
+  const selectImage = async () => {
+    await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+    await page.locator('[data-element-id="focal-image"]').click();
+    await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Focal point preview' })).toBeVisible();
+  };
+
+  await openDesigner(page);
+  await fitContextMenuCanvas(page);
+  await selectImage();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([255, 0, 0, 255]);
+
+  await page.getByRole('button', { name: 'Set focal point: 100%, 50%' }).click();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([0, 0, 255, 255]);
+  let outputs = await persist();
+  expect(outputs[0].children[0].focalPoint).toEqual({ x: 1, y: 0.5 });
+  expect(outputs[1].children[0].focalPoint).toEqual({ x: 0.25, y: 0.5 });
+  await expect(page.getByRole('img', { name: 'Second crop preview' }).locator('img')).toHaveAttribute('style', /left:\s*-75%/);
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([255, 0, 0, 255]);
+
+  const preview = page.getByRole('group', { name: 'Focal point preview' });
+  const previewBox = await preview.boundingBox();
+  if (!previewBox) throw new Error('Focal preview has no bounding box');
+  await page.mouse.move(previewBox.x + previewBox.width * 0.2, previewBox.y + previewBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(previewBox.x + previewBox.width * 0.8, previewBox.y + previewBox.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([0, 0, 255, 255]);
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('83');
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([255, 0, 0, 255]);
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('0');
+
+  const focalX = page.getByRole('spinbutton', { name: 'Focal X (%)' });
+  await focalX.fill('80');
+  await page.getByText('Focal point', { exact: true }).click();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([0, 0, 255, 255]);
+
+  await preview.dispatchEvent('wheel', {
+    deltaY: -100,
+    ctrlKey: true,
+    clientX: previewBox.x + previewBox.width / 2,
+    clientY: previewBox.y + previewBox.height / 2,
+  });
+  await expect(preview.getByText(/\d+%/)).toBeVisible();
+  await expect(focalX).toHaveValue('80');
+
+  await page.getByRole('radio', { name: 'Fit', exact: true }).click();
+  await expect(page.getByText('Focal point applies when the image is cropped (Cover).')).toBeVisible();
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveCount(0);
+  await page.getByRole('radio', { name: 'Fill', exact: true }).click();
+  await expect(page.getByText('Focal point applies when the image is cropped (Cover).')).toBeVisible();
+  await page.getByRole('radio', { name: 'Cover', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('80');
+
+  await page.getByRole('button', { name: 'Reset this format' }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('50');
+  await page.getByRole('button', { name: 'Set focal point: 100%, 50%' }).click();
+  outputs = await persist();
+  expect(outputs[0].children[0].focalPoint).toEqual({ x: 1, y: 0.5 });
+  expect(outputs[1].children[0].focalPoint).toEqual({ x: 0.25, y: 0.5 });
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await fitContextMenuCanvas(page);
+  await selectImage();
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('100');
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([0, 0, 255, 255]);
+});
+
 test('selected words retain independent colors through autosave and reopen', async ({ page }) => {
   const state = await installMocks(page);
   await openDesigner(page);

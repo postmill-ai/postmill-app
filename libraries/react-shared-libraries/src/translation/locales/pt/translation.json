@@ -4888,5 +4888,15 @@
   "designer_carousel": "Carrossel",
   "designer_add_slide_after": "Adicionar slide após {{number}}",
   "designer_frozen_read_only": "Este formato está congelado. Descongele-o para editá-lo.",
-  "designer_bulk_no_variables": "Adicione um elemento editável de texto, imagem ou cor antes de criar variações."
+  "designer_bulk_no_variables": "Adicione um elemento editável de texto, imagem ou cor antes de criar variações.",
+  "designer_focal_preview": "Pré-visualização do ponto focal",
+  "designer_focal_cover_hint": "O ponto focal aplica-se quando a imagem é recortada (Cover).",
+  "designer_focal_explicit_crop_hint": "Reponha o recorte explícito abaixo para ajustar o ponto focal.",
+  "designer_focal_quick_positions": "Posições focais rápidas",
+  "designer_focal_quick_position": "Definir ponto focal: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "X focal (%)",
+  "designer_focal_y_percent": "Y focal (%)",
+  "designer_reset_focal_format": "Repor este formato",
+  "designer_format_crops": "Recortes dos formatos",
+  "designer_format_crop_preview": "Pré-visualização do recorte de {{format}}"
 }

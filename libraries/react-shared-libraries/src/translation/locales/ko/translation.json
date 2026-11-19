@@ -4889,5 +4889,15 @@
   "designer_carousel": "캐러셀",
   "designer_add_slide_after": "{{number}} 뒤에 슬라이드 추가",
   "designer_frozen_read_only": "이 형식은 고정되어 있습니다. 편집하려면 고정을 해제하세요.",
-  "designer_bulk_no_variables": "변형을 만들기 전에 편집 가능한 텍스트, 이미지 또는 색상 요소를 추가하세요."
+  "designer_bulk_no_variables": "변형을 만들기 전에 편집 가능한 텍스트, 이미지 또는 색상 요소를 추가하세요.",
+  "designer_focal_preview": "초점 미리보기",
+  "designer_focal_cover_hint": "초점은 이미지가 잘릴 때(Cover) 적용됩니다.",
+  "designer_focal_explicit_crop_hint": "초점을 조정하려면 아래의 명시적 자르기를 재설정하세요.",
+  "designer_focal_quick_positions": "빠른 초점 위치",
+  "designer_focal_quick_position": "초점 설정: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "초점 X(%)",
+  "designer_focal_y_percent": "초점 Y(%)",
+  "designer_reset_focal_format": "이 형식 재설정",
+  "designer_format_crops": "형식별 자르기",
+  "designer_format_crop_preview": "{{format}} 자르기 미리보기"
 }

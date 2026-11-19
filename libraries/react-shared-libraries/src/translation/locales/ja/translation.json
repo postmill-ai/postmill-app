@@ -4888,5 +4888,15 @@
   "designer_carousel": "カルーセル",
   "designer_add_slide_after": "{{number}} の後にスライドを追加",
   "designer_frozen_read_only": "このフォーマットは固定されています。編集するには固定を解除してください。",
-  "designer_bulk_no_variables": "バリエーションを作成する前に、編集可能なテキスト、画像、または色要素を追加してください。"
+  "designer_bulk_no_variables": "バリエーションを作成する前に、編集可能なテキスト、画像、または色要素を追加してください。",
+  "designer_focal_preview": "焦点のプレビュー",
+  "designer_focal_cover_hint": "焦点は画像がクロップされる場合（Cover）に適用されます。",
+  "designer_focal_explicit_crop_hint": "焦点を調整するには、下の明示的なクロップをリセットしてください。",
+  "designer_focal_quick_positions": "焦点のクイック位置",
+  "designer_focal_quick_position": "焦点を設定：{{x}}%、{{y}}%",
+  "designer_focal_x_percent": "焦点 X（%）",
+  "designer_focal_y_percent": "焦点 Y（%）",
+  "designer_reset_focal_format": "このフォーマットをリセット",
+  "designer_format_crops": "フォーマットのクロップ",
+  "designer_format_crop_preview": "{{format}} のクロッププレビュー"
 }

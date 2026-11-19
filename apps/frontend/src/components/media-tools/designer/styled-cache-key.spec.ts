@@ -92,6 +92,16 @@ describe('styledLeafCacheKey', () => {
     expect(ready).toContain(':mask-ready');
   });
 
+  it.each([
+    ['focal point', { fitMode: 'cover', focalPoint: { x: 0.8, y: 0.2 } }],
+    ['fit mode', { fitMode: 'contain' }],
+    ['explicit crop', { crop: { x: 10, y: 20, width: 300, height: 200 } }],
+  ] as const)('turns over when an image’s %s changes', (_name, patch) => {
+    const before = styledLeafCacheKey({ ...styledImage, fitMode: 'cover' }, null);
+    const after = styledLeafCacheKey({ ...styledImage, fitMode: 'cover', ...patch }, null);
+    expect(after).not.toBe(before);
+  });
+
   it('turns over when the element’s own geometry changes — and on a commit bump', () => {
     // Mid-drag the element's x/y change every rAF frame and the key MUST
     // follow for the dragged element: its styled buffer is cached in scene
