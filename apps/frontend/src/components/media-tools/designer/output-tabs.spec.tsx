@@ -1,13 +1,22 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { computePopoverLeft, computePopoverPlacement, OutputTabs } from './output-tabs';
 import { createDesignerStore } from './designer.store';
 
 const toasterShow = vi.hoisted(() => vi.fn());
+const promptOpen = vi.hoisted(() => vi.fn());
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: toasterShow }),
 }));
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
+  usePromptModal: () => ({ open: promptOpen }),
+}));
+
+beforeEach(() => {
+  toasterShow.mockClear();
+  promptOpen.mockReset();
+});
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
@@ -244,20 +253,142 @@ describe('OutputTabs format workflows', () => {
     expect(toasterShow).toHaveBeenCalledWith('Something went wrong', 'warning');
   });
 
-  it('Link/Unlink changes edit scope without rewriting element links', () => {
+  it('moves Link/Unlink into the targeted card menu without rewriting element links', () => {
     const store = createDesignerStore();
     store.getState().addElement({
       id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
       rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Linked',
     });
     store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
     const origins = store.getState().doc.outputs.map((out: any) => out.children[0].originId);
+    const historyIndex = store.getState().historyIndex;
     render(<OutputTabs store={store} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Unlink edits between formats' }));
+    expect(screen.queryByRole('button', { name: 'Unlink edits between formats' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
+    fireEvent.click(screen.getByRole('button', { name: /Unlink this format/ }));
+    expect(store.getState().currentOutput).toBe(1);
     expect(store.getState().editFormatOnly).toBe(true);
+    expect(store.getState().historyIndex).toBe(historyIndex);
     expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
-    fireEvent.click(screen.getByRole('button', { name: 'Link edits across formats' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
+    fireEvent.click(screen.getByRole('button', { name: /Link this format/ }));
     expect(store.getState().editFormatOnly).toBe(false);
+    expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
+  });
+});
+
+
+describe('OutputTabs safe format actions', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  const card = (store: ReturnType<typeof createDesignerStore>, index: number) => {
+    const id = store.getState().doc.outputs[index].id;
+    const element = document.querySelector(`[data-format-card="${id}"]`);
+    if (!element) throw new Error(`Missing format card ${id}`);
+    return element as HTMLElement;
+  };
+
+  it('uses a default custom name and renames through the card prompt', async () => {
+    const store = createDesignerStore();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.change(screen.getByPlaceholderText('W'), { target: { value: '1920' } });
+    fireEvent.change(screen.getByPlaceholderText('H'), { target: { value: '1080' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom size' }));
+
+    expect(store.getState().doc.outputs[1]).toMatchObject({
+      name: 'Custom size', width: 1920, height: 1080,
+    });
+    expect(screen.getByText('Custom size')).toBeTruthy();
+    expect(screen.getByText('1920×1080')).toBeTruthy();
+    expect(screen.queryByText('1920×1080 1920×1080')).toBeNull();
+
+    promptOpen.mockResolvedValue('Landscape campaign');
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Custom size' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename format' }));
+
+    await waitFor(() => expect(store.getState().doc.outputs[1].name).toBe('Landscape campaign'));
+    expect(promptOpen).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Rename format', label: 'Format name', initialValue: 'Custom size',
+    }));
+    expect(store.getState().historyLabels.at(-1)).toBe('Rename format');
+  });
+
+  it('does not rename when the prompt is cancelled', async () => {
+    const store = createDesignerStore();
+    const before = store.getState().doc;
+    const historyIndex = store.getState().historyIndex;
+    promptOpen.mockResolvedValue(null);
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename format' }));
+
+    await waitFor(() => expect(promptOpen).toHaveBeenCalled());
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().historyIndex).toBe(historyIndex);
+  });
+
+  it('keeps resize anchored to the intended non-active card', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resize / change format' }));
+    fireEvent.change(screen.getByPlaceholderText('W'), { target: { value: '800' } });
+    fireEvent.change(screen.getByPlaceholderText('H'), { target: { value: '600' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(store.getState().doc.outputs[0]).toMatchObject({ width: 1080, height: 1080 });
+    expect(store.getState().doc.outputs[1]).toMatchObject({
+      formatId: 'custom', name: 'Custom size', width: 800, height: 600,
+    });
+  });
+
+  it('shows Remove for selection or hover and restores the same format with Undo', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
+    render(<OutputTabs store={store} />);
+
+    expect(within(card(store, 0)).getByRole('button', { name: 'Remove format' }).className).toContain('visible');
+    expect(within(card(store, 1)).getByRole('button', { name: 'Remove format' }).className).toContain('invisible');
+    expect(within(card(store, 1)).getByRole('button', { name: 'Remove format' }).className).toContain('group-hover:visible');
+
+    fireEvent.mouseOver(card(store, 1));
+    fireEvent.click(within(card(store, 1)).getByRole('button', { name: 'Remove format' }));
+    expect(store.getState().doc.outputs).toHaveLength(1);
+    expect(screen.getByRole('status').textContent).toContain('Format “X” removed');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+    expect(store.getState().doc.outputs).toHaveLength(2);
+    expect(store.getState().doc.outputs[1]).toMatchObject({ formatId: 'x-post', name: 'X' });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('invalidates the removal Undo after a later edit instead of reverting it', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(within(card(store, 1)).getByRole('button', { name: 'Remove format' }));
+    expect(screen.getByRole('status')).toBeTruthy();
+    act(() => {
+      store.getState().addOutput({ formatId: 'custom', name: 'Later edit', width: 800, height: 600 });
+    });
+
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Undo', exact: true })).toBeNull();
+    expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
+      'Instagram Post', 'Later edit',
+    ]);
   });
 });

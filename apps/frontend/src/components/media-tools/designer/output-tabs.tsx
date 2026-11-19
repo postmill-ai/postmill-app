@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { usePromptModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import {
   CHANNEL_PRESETS,
   type ChannelPreset,
@@ -50,15 +51,23 @@ for (const p of CHANNEL_PRESETS) {
 
 const RECOMMENDED_IDS = ['ig-post', 'ig-story', 'linkedin-post', 'x-post'];
 
-const THUMB_H = 82;
-const THUMB_MIN_W = 100;
+const THUMB_H = 112;
+const THUMB_MIN_W = 118;
+const REMOVE_UNDO_DURATION_MS = 6000;
 
-type PopoverKind = 'addFormats' | 'overflow' | 'resize';
+type PopoverKind = 'addFormats' | 'overflow' | 'resize' | 'formatActions';
 
 interface PopoverState {
   kind: PopoverKind;
   anchor: HTMLElement;
   resizeIndex?: number;
+  outputIndex?: number;
+}
+
+interface RemovedFormatState {
+  name: string;
+  doc: unknown;
+  historyIndex: number;
 }
 
 interface PortalPopoverProps {
@@ -191,6 +200,7 @@ const PortalPopover: React.FC<PortalPopoverProps> = ({
 export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsProps) {
   const t = useT();
   const toaster = useToaster();
+  const promptModal = usePromptModal();
   const doc = store((s: any) => s.doc);
   const currentOutput = store((s: any) => s.currentOutput);
   const currentPage = store((s: any) => s.currentPage ?? 0);
@@ -215,6 +225,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
   const [cW, setCW] = useState('1080');
   const [cH, setCH] = useState('1080');
   const [linkContent, setLinkContent] = useState(true);
+  const [removedFormat, setRemovedFormat] = useState<RemovedFormatState | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
@@ -223,11 +234,19 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
   const closePopover = useCallback(() => setPopover(null), []);
 
   const openPopover = useCallback(
-    (kind: PopoverKind, el: HTMLElement, extra?: Partial<Pick<PopoverState, 'resizeIndex'>>) => {
+    (kind: PopoverKind, el: HTMLElement, extra?: Partial<Pick<PopoverState, 'resizeIndex' | 'outputIndex'>>) => {
       setPopover({ kind, anchor: el, ...extra });
     },
     [],
   );
+
+  useEffect(() => {
+    if (!removedFormat) return;
+    const timeout = window.setTimeout(() => {
+      setRemovedFormat((current) => current === removedFormat ? null : current);
+    }, REMOVE_UNDO_DURATION_MS);
+    return () => window.clearTimeout(timeout);
+  }, [removedFormat]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -243,9 +262,59 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
 
   const handleRemove = (e: React.MouseEvent, i: number) => {
     e.stopPropagation();
-    if (outputs.length <= 1) return;
-    store.getState().removeOutput(i);
+    const state = store.getState();
+    const output = state.doc.outputs[i];
+    if (!output || state.doc.outputs.length <= 1 || output.frozen) return;
+    const beforeDoc = state.doc;
+    state.removeOutput(i);
+    const nextState = store.getState();
+    if (nextState.doc === beforeDoc) return;
+    setRemovedFormat({
+      name: output.name,
+      doc: nextState.doc,
+      historyIndex: nextState.historyIndex,
+    });
   };
+
+  const handleUndoRemove = () => {
+    const state = store.getState();
+    if (
+      removedFormat &&
+      state.doc === removedFormat.doc &&
+      state.historyIndex === removedFormat.historyIndex
+    ) {
+      state.undo();
+    }
+    setRemovedFormat(null);
+  };
+
+  const handleRename = async (index: number) => {
+    const output = store.getState().doc.outputs[index];
+    if (!output || output.frozen) return;
+    closePopover();
+    const name = await promptModal.open({
+      title: t('designer_rename_format', 'Rename format'),
+      label: t('designer_format_name', 'Format name'),
+      initialValue: output.name,
+      approveLabel: t('save', 'Save'),
+      cancelLabel: t('cancel', 'Cancel'),
+    });
+    if (name === null) return;
+    const currentIndex = store.getState().doc.outputs.findIndex(
+      (candidate: any) => candidate.id === output.id
+    );
+    if (currentIndex >= 0) store.getState().renameOutput(currentIndex, name);
+  };
+
+  const handleToggleFormatLink = (index: number) => {
+    const state = store.getState();
+    const shouldLink = index === state.currentOutput && state.editFormatOnly;
+    state.setCurrentOutput(index);
+    state.setEditFormatOnly(!shouldLink);
+    closePopover();
+  };
+
+  const visibleRemoval = removedFormat?.doc === doc ? removedFormat : null;
 
   const toggleFormat = (id: string) => {
     setPendingFormats((prev) => {
@@ -293,7 +362,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
     if (w > 0 && h > 0) {
       const added = store.getState().addOutput({
         formatId: 'custom',
-        name: `${w}×${h}`,
+        name: t('designer_custom_size_name', 'Custom size'),
         width: w,
         height: h,
       }, { linkContent });
@@ -324,9 +393,15 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
     const w = parseInt(cW, 10);
     const h = parseInt(cH, 10);
     if (w > 0 && h > 0) {
+      const output = store.getState().doc.outputs[index];
+      const legacyDimensionName = output?.formatId === 'custom' &&
+        /^\d+×\d+(?: \d+)?$/.test(output.name);
+      const name = output?.formatId === 'custom' && !legacyDimensionName
+        ? output.name
+        : t('designer_custom_size_name', 'Custom size');
       store
         .getState()
-        .resizeOutput(index, w, h, undefined, `${w}×${h}`);
+        .resizeOutput(index, w, h, 'custom', name);
       closePopover();
       setCW('1080');
       setCH('1080');
@@ -341,37 +416,60 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
   const showAddFormats = popoverKind === 'addFormats';
   const showOverflowMenu = popoverKind === 'overflow';
   const showResize = popoverKind === 'resize';
+  const showFormatActions = popoverKind === 'formatActions';
+  const formatActionsIndex = popover?.outputIndex ?? null;
+  const formatActionsOutput = formatActionsIndex === null
+    ? null
+    : outputs[formatActionsIndex];
 
   return (
-    <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-t border-studioBorder bg-newBgColorInner">
+    <div className="relative shrink-0 flex items-center gap-2 px-3 py-2 border-t border-studioBorder bg-newBgColorInner">
+      {visibleRemoval && (
+        <div
+          role="status"
+          className="absolute bottom-full end-3 z-30 mb-2 flex items-center gap-3 rounded-md border border-studioBorder bg-newBgColorInner px-3 py-2 text-[12px] text-textColor shadow-menu"
+        >
+          <span>{t('designer_format_removed', 'Format “{{name}}” removed', { name: visibleRemoval.name })}</span>
+          <button
+            type="button"
+            onClick={handleUndoRemove}
+            aria-label={t('undo', 'Undo')}
+            className="min-h-7 rounded-sm px-2 font-medium text-btnPrimaryAccent hover:bg-designerAccent/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+          >
+            {t('undo', 'Undo')}
+          </button>
+        </div>
+      )}
       <div
         ref={scrollRef}
-        className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0"
+        className="flex items-center gap-3 overflow-x-auto flex-1 min-w-0 px-1 py-1"
       >
         {outputs.map((output: any, i: number) => (
           <div
             key={output.id}
-            className="relative group shrink-0"
+            data-format-card={output.id}
+            className={`relative group shrink-0 rounded-md border-2 transition-colors ${
+              i === currentOutput
+                ? 'border-designerAccent bg-designerAccent/10'
+                : 'border-studioBorder'
+            }`}
+            style={{ minWidth: THUMB_MIN_W, height: THUMB_H }}
           >
             <button
+              type="button"
               onClick={() => store.getState().setCurrentOutput(i)}
               aria-current={i === currentOutput}
-              className={`relative rounded-md border-2 flex flex-col items-center justify-center text-center px-2 gap-0.5 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
-                i === currentOutput
-                  ? 'border-designerAccent bg-designerAccent/10'
-                  : 'border-studioBorder hover:border-studioBorder'
-              }`}
-              style={{ minWidth: THUMB_MIN_W, height: THUMB_H }}
+              className="absolute inset-0 flex flex-col items-center justify-center text-center px-2 pb-1 pt-8 gap-0.5 rounded-[4px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
             >
               {i !== currentOutput && Array.isArray(output.children) && output.children.some((c: any) => c?.originId && activeOriginIds.has(c.originId)) && (
-                <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-designerAccent" title={t('designer_has_linked_elements', 'Has linked elements')} />
+                <div className="absolute top-9 end-1 w-2 h-2 rounded-full bg-designerAccent" title={t('designer_has_linked_elements', 'Has linked elements')} />
               )}
               {(() => {
                 const updatedAt = i !== currentOutput ? linkedUpdateFlash[i] : 0;
                 const isUpdated = updatedAt && Date.now() - updatedAt < 1500;
                 return isUpdated ? (
                   <div
-                    className={`absolute top-1 left-1 w-2 h-2 rounded-full bg-green-400 ${reduceMotion ? '' : 'animate-pulse'}`}
+                    className={`absolute top-9 start-1 w-2 h-2 rounded-full bg-green-400 ${reduceMotion ? '' : 'animate-pulse'}`}
                     title={t('designer_updated_from_another_format', 'Updated from another format')}
                   />
                 ) : null;
@@ -382,7 +480,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
                 maxDim={72}
                 className="h-[32px] max-w-[54px]"
               />
-              <span className="text-[11px] font-medium text-textColor leading-tight truncate max-w-[80px]">
+              <span className="text-[11px] font-medium text-textColor leading-tight truncate max-w-[94px]">
                 {output.name}
               </span>
               <span className="text-[9px] text-textColor/50 leading-none">
@@ -390,57 +488,68 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
               </span>
               {mode === 'image' && pageCount(output) > 1 && (
                 <span
-                  className="absolute bottom-1 right-1 rounded-sm bg-designerAccent/15 text-btnPrimaryAccent text-[8px] leading-none px-1 py-0.5"
+                  className="absolute bottom-1 end-1 rounded-sm bg-designerAccent/15 text-btnPrimaryAccent text-[8px] leading-none px-1 py-0.5"
                   title={t('designer_pages_count', '{{count}} pages', { count: pageCount(output) })}
                 >
                   {pageCount(output)}p
                 </span>
               )}
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                store.getState().setOutputFrozen(i, !output.frozen);
-              }}
-              aria-pressed={output.frozen === true}
-              aria-label={output.frozen
-                ? t('designer_unfreeze_format', 'Unfreeze format')
-                : t('designer_freeze_format', 'Freeze format')}
-              title={output.frozen
-                ? t('designer_unfreeze_format_hint', 'Allow edits to this format')
-                : t('designer_freeze_format_hint', 'Prevent edits to this format')}
-              className={`absolute -top-1.5 -left-1.5 z-20 w-5 h-5 flex items-center justify-center rounded-full bg-newBgColorInner border text-[11px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
-                output.frozen
-                  ? 'border-designerAccent text-btnPrimaryAccent'
-                  : 'border-studioBorder text-textColor/40 hover:text-textColor'
-              }`}
-            >
-              ❄
-            </button>
-            <div className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center gap-0.5 z-10">
+            <div className="absolute top-1 inset-x-1 z-20 flex items-center justify-between pointer-events-none">
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  openPopover('resize', e.currentTarget as HTMLElement, { resizeIndex: i });
+                  store.getState().setOutputFrozen(i, !output.frozen);
                 }}
-                disabled={output.frozen === true}
-                title={t('designer_resize_change_format_title', 'Resize / change format')}
-                aria-label={t('designer_resize_or_change_format_aria', 'Resize or change format')}
-                className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[8px] text-textColor/60 hover:text-textColor disabled:opacity-30"
+                aria-pressed={output.frozen === true}
+                aria-label={output.frozen
+                  ? t('designer_unfreeze_format', 'Unfreeze format')
+                  : t('designer_freeze_format', 'Freeze format')}
+                data-tooltip-id="tooltip"
+                data-tooltip-content={output.frozen
+                  ? t('designer_unfreeze_format_hint', 'Allow edits to this format')
+                  : t('designer_freeze_format_hint', 'Prevent edits to this format')}
+                className={`pointer-events-auto w-7 h-7 flex items-center justify-center rounded-full bg-newBgColorInner border text-[13px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
+                  output.frozen
+                    ? 'border-designerAccent text-btnPrimaryAccent'
+                    : 'border-studioBorder text-textColor/40 hover:text-textColor'
+                }`}
               >
-                ⋮
+                ❄
               </button>
-              {outputs.length > 1 && (
+              <div className="flex items-center gap-1 pointer-events-none">
                 <button
-                  onClick={(e) => handleRemove(e, i)}
-                  disabled={output.frozen === true}
-                  title={t('designer_remove_format', 'Remove format')}
-                  aria-label={t('designer_remove_format', 'Remove format')}
-                  className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[9px] text-dangerText hover:bg-red-500/20 disabled:opacity-30"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openPopover('formatActions', e.currentTarget as HTMLElement, { outputIndex: i });
+                  }}
+                  data-tooltip-id="tooltip"
+                  data-tooltip-content={t('designer_format_actions', 'Format actions')}
+                  aria-label={t('designer_format_actions_for', 'Format actions for {{name}}', { name: output.name })}
+                  className="pointer-events-auto w-7 h-7 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[13px] text-textColor/60 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
                 >
-                  ×
+                  ⋮
                 </button>
-              )}
+                {outputs.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemove(e, i)}
+                    disabled={output.frozen === true}
+                    data-tooltip-id="tooltip"
+                    data-tooltip-content={t('designer_remove_format', 'Remove format')}
+                    aria-label={t('designer_remove_format', 'Remove format')}
+                    className={`pointer-events-auto w-7 h-7 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[14px] text-dangerText hover:bg-red-500/20 disabled:opacity-30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
+                      i === currentOutput
+                        ? 'visible'
+                        : 'invisible group-hover:visible group-focus-within:visible'
+                    }`}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -491,24 +600,34 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
                       </span>
                     </button>
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        openPopover('resize', e.currentTarget as HTMLElement, { resizeIndex: i });
+                        if (overflowBtnRef.current) {
+                          openPopover('formatActions', overflowBtnRef.current, { outputIndex: i });
+                        }
                       }}
-                      title={t('designer_resize_change_format_title', 'Resize / change format')}
-                      aria-label={t('designer_resize_or_change_format_aria', 'Resize or change format')}
-                      className="w-5 h-5 flex items-center justify-center rounded-sm text-[10px] text-textColor/40 hover:text-textColor opacity-0 group-hover/item:opacity-100"
+                      data-tooltip-id="tooltip"
+                      data-tooltip-content={t('designer_format_actions', 'Format actions')}
+                      aria-label={t('designer_format_actions_for', 'Format actions for {{name}}', { name: output.name })}
+                      className="w-7 h-7 flex items-center justify-center rounded-sm text-[13px] text-textColor/40 hover:text-textColor opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100"
                     >
                       ⋮
                     </button>
                     {outputs.length > 1 && (
                       <button
+                        type="button"
                         onClick={(e) => {
                           handleRemove(e, i);
                           closePopover();
                         }}
+                        disabled={output.frozen === true}
+                        data-tooltip-id="tooltip"
+                        data-tooltip-content={t('designer_remove_format', 'Remove format')}
                         aria-label={t('designer_remove_format', 'Remove format')}
-                        className="w-5 h-5 flex items-center justify-center rounded-sm text-[10px] text-dangerText hover:bg-red-500/20 opacity-0 group-hover/item:opacity-100"
+                        className={`w-7 h-7 flex items-center justify-center rounded-sm text-[14px] text-dangerText hover:bg-red-500/20 disabled:opacity-30 group-hover/item:opacity-100 focus-visible:opacity-100 ${
+                          i === currentOutput ? 'opacity-100' : 'opacity-0'
+                        }`}
                       >
                         ×
                       </button>
@@ -521,32 +640,12 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
         )}
       </div>
 
-      <button
-        onClick={() => store.getState().setEditFormatOnly(!editFormatOnly)}
-        aria-pressed={!editFormatOnly}
-        aria-label={editFormatOnly
-          ? t('designer_link_format_edits', 'Link edits across formats')
-          : t('designer_unlink_format_edits', 'Unlink edits between formats')}
-        title={editFormatOnly
-          ? t('designer_link_format_edits_hint', 'Resume shared element edits; existing element links are preserved')
-          : t('designer_unlink_format_edits_hint', 'Edit this format only; existing element links are preserved')}
-        className={`shrink-0 rounded-md border px-2 text-[10px] font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
-          editFormatOnly
-            ? 'border-studioBorder text-textColor/60'
-            : 'border-designerAccent bg-designerAccent/10 text-btnPrimaryAccent'
-        }`}
-        style={{ width: 58, height: THUMB_H }}
-      >
-        {editFormatOnly
-          ? t('designer_link_edits', 'Link')
-          : t('designer_unlink_edits', 'Unlink')}
-      </button>
-
       {/* Add-format is available in BOTH modes now: image docs seed linked
           element copies, video docs clone+reflow a full timeline variant. */}
       <div className="relative shrink-0">
         <button
           ref={addBtnRef}
+          type="button"
           onClick={(e) => {
             if (popoverKind === 'addFormats') {
               closePopover();
@@ -555,10 +654,13 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
             }
           }}
           aria-label={t('designer_add_format_aria', 'Add format')}
-          className="shrink-0 flex items-center justify-center rounded-md border-2 border-dashed border-studioBorder text-textColor/50 hover:border-designerAccent hover:text-btnPrimaryAccent text-[18px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent disabled:opacity-30 disabled:hover:border-studioBorder"
-          style={{ width: 40, height: THUMB_H }}
+          data-tooltip-id="tooltip"
+          data-tooltip-content={t('designer_add_format_aria', 'Add format')}
+          className="shrink-0 flex flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed border-studioBorder px-2 text-textColor/50 hover:border-designerAccent hover:text-btnPrimaryAccent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent disabled:opacity-30 disabled:hover:border-studioBorder"
+          style={{ minWidth: 96, height: THUMB_H }}
         >
-          +
+          <span className="text-[22px] leading-none">+</span>
+          <span className="text-[11px] font-medium">{t('designer_add_format_aria', 'Add format')}</span>
         </button>
 
         <PortalPopover
@@ -697,6 +799,58 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           )}
         </PortalPopover>
       </div>
+
+      <PortalPopover
+        anchorEl={showFormatActions && formatActionsOutput ? popoverAnchor : null}
+        open={showFormatActions && !!formatActionsOutput}
+        onClose={closePopover}
+        className="bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl overflow-hidden w-72 p-1.5"
+      >
+        {formatActionsOutput && formatActionsIndex !== null && (
+          <div className="space-y-0.5" aria-label={formatActionsOutput.name}>
+            <div className="px-2 py-1.5 text-[11px] font-medium text-textColor/60 truncate">
+              {formatActionsOutput.name}
+            </div>
+            <button
+              type="button"
+              disabled={formatActionsOutput.frozen === true}
+              onClick={() => {
+                if (popoverAnchor) {
+                  openPopover('resize', popoverAnchor, { resizeIndex: formatActionsIndex });
+                }
+              }}
+              className="w-full min-h-9 rounded-sm px-2 py-1.5 text-start text-[12px] text-textColor hover:bg-studioBorder/10 disabled:opacity-30"
+            >
+              {t('designer_resize_change_format_title', 'Resize / change format')}
+            </button>
+            <button
+              type="button"
+              disabled={formatActionsOutput.frozen === true}
+              onClick={() => void handleRename(formatActionsIndex)}
+              className="w-full min-h-9 rounded-sm px-2 py-1.5 text-start text-[12px] text-textColor hover:bg-studioBorder/10 disabled:opacity-30"
+            >
+              {t('designer_rename_format', 'Rename format')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={formatActionsIndex === currentOutput && editFormatOnly}
+              onClick={() => handleToggleFormatLink(formatActionsIndex)}
+              className="w-full rounded-sm px-2 py-1.5 text-start hover:bg-studioBorder/10"
+            >
+              <span className="block text-[12px] text-textColor">
+                {formatActionsIndex === currentOutput && editFormatOnly
+                  ? t('designer_link_this_format', 'Link this format')
+                  : t('designer_unlink_this_format', 'Unlink this format')}
+              </span>
+              <span className="mt-0.5 block text-[10px] leading-snug text-textColor/50">
+                {formatActionsIndex === currentOutput && editFormatOnly
+                  ? t('designer_link_format_edits_hint', 'Resume shared element edits; existing element links are preserved')
+                  : t('designer_unlink_format_edits_hint', 'Edit this format only; existing element links are preserved')}
+              </span>
+            </button>
+          </div>
+        )}
+      </PortalPopover>
 
       <PortalPopover
         anchorEl={showResize ? popoverAnchor : null}

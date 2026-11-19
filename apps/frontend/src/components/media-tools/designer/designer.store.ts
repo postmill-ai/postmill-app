@@ -324,6 +324,7 @@ export interface DesignerActions {
   ) => boolean;
   removeOutput: (index: number) => void;
   resizeOutput: (index: number, width: number, height: number, formatId?: string, name?: string) => void;
+  renameOutput: (index: number, name: string) => void;
   setOutputFrozen: (index: number, frozen: boolean) => void;
   // pages within an image output (doc v8). pageNumber is 0-based; 0 = page 1.
   setCurrentPage: (pageNumber: number) => void;
@@ -1684,7 +1685,18 @@ export const createDesignerStore = (
           selectedIds: [],
           isDirty: true,
         });
-        get().pushHistory();
+        get().pushHistory('Remove format');
+      },
+
+      renameOutput: (index, name) => {
+        const { doc } = get();
+        const output = doc.outputs[index];
+        const trimmed = name.trim().slice(0, 200);
+        if (!output || isOutputFrozen(output) || !trimmed || output.name === trimmed) return;
+        const outputs = [...doc.outputs];
+        outputs[index] = { ...output, name: trimmed };
+        mutate({ doc: { ...doc, outputs }, isDirty: true });
+        get().pushHistory('Rename format');
       },
 
       resizeOutput: (index, width, height, formatId, name) => {
