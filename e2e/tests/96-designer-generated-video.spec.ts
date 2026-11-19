@@ -1388,7 +1388,10 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       stroke: '#123456', strokeWidth: 6,
     });
     await deselectCanvas();
-    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 202, 60))
+    // Sample the centre of the left stroke band (the shape edge itself): a
+    // 6px stroke spans doc x 197–203, so this point stays solid stroke even
+    // when the sampled canvas pixel rounds one device pixel off.
+    await expect.poll(async () => canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))
       .toEqual([18, 52, 86, 255]);
 
     await clipOnTrack(page, 'Shape').click();
@@ -1398,8 +1401,13 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       stroke: '#123456', strokeWidth: 0,
     });
     await deselectCanvas();
-    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 202, 60))[0])
-      .toBeGreaterThan(240);
+    // At width 0 the same point shows what lies beneath the old stroke band:
+    // the gradient's dark-blue outer stop at the shape edge, or the black
+    // artboard just outside it — never the stroke's red/green channels.
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))[0])
+      .toBeLessThan(10);
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))[1])
+      .toBeLessThan(10);
 
     await clipOnTrack(page, 'Shape').click();
     await width.fill('6');
@@ -1422,8 +1430,9 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     expect(mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
       stroke: '#123456', strokeWidth: 6,
     });
-    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 225, 95))[0]).toBeGreaterThan(240);
-    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 202, 60))
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 225, 95))[0]).toBeGreaterThan(200);
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 225, 95))[2]).toBeLessThan(40);
+    await expect.poll(async () => canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))
       .toEqual([18, 52, 86, 255]);
 
     const framePage = await page.context().newPage();
@@ -1663,6 +1672,45 @@ async function canvasRgbaAtDocumentPoint(
     const pixelY = Math.max(0, Math.min(canvas.height - 1, Math.round((clientY - rect.top) * canvas.height / rect.height)));
     return Array.from(context.getImageData(pixelX, pixelY, 1, 1).data);
   }, point);
+}
+
+// Sample the preview without assuming anything about the stage's on-screen
+// layout. The Konva backing store always holds the whole artboard regardless
+// of zoom, pan, or Inspector overlays, and the video output's artboard is the
+// only solid opaque black rectangle on it, so locating that rectangle gives
+// the exact doc → canvas-pixel mapping after any layout change (selection,
+// deselect, reload).
+async function canvasRgbaAtOutputPoint(
+  page: Page,
+  outputWidth: number,
+  outputHeight: number,
+  x: number,
+  y: number
+): Promise<number[]> {
+  return page.evaluate(({ ow, oh, dx, dy }) => {
+    const canvases = Array.from(document.querySelectorAll<HTMLCanvasElement>('.konvajs-content canvas'));
+    const canvas = canvases.sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    if (!canvas) throw new Error('No designer canvas');
+    const context = canvas.getContext('2d')!;
+    const { width: w, height: h } = canvas;
+    const data = context.getImageData(0, 0, w, h).data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const i = (py * w + px) * 4;
+        if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0 && data[i + 3] === 255) {
+          if (px < minX) minX = px;
+          if (px > maxX) maxX = px;
+          if (py < minY) minY = py;
+          if (py > maxY) maxY = py;
+        }
+      }
+    }
+    if (maxX < 0) throw new Error('Artboard not found on canvas');
+    const sx = Math.max(0, Math.min(w - 1, Math.round(minX + dx * (maxX - minX + 1) / ow)));
+    const sy = Math.max(0, Math.min(h - 1, Math.round(minY + dy * (maxY - minY + 1) / oh)));
+    return Array.from(context.getImageData(sx, sy, 1, 1).data);
+  }, { ow: outputWidth, oh: outputHeight, dx: x, dy: y });
 }
 
 async function renderedFrameRgba(
