@@ -13,11 +13,12 @@ async function installSharingMocks(page: Page) {
     comments: [] as any[],
     approvedAt: null as string | null,
     approvedBy: null as string | null,
+    renderPaths: [] as string[],
   };
   const metadata = (publicMode: boolean) => ({
     name: 'Client campaign',
     mode: 'image',
-    outputs: [{ outputIndex: 0, name: 'Square', width: 1080, height: 1080, pages: [{ pageNumber: 0, name: 'Page 1' }] }],
+    outputs: [{ outputIndex: 0, name: 'Square', width: 1080, height: 1080, pages: [{ pageNumber: 0, name: 'Page 1' }, { pageNumber: 1, name: 'Details' }] }],
     commentsEnabled: state.share?.commentsEnabled ?? true,
     expiresAt: publicMode ? state.share?.expiresAt ?? null : null,
     approvedAt: state.approvedAt,
@@ -62,11 +63,13 @@ async function installSharingMocks(page: Page) {
       return json(route, state.share);
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}/preview`) return json(route, metadata(false));
-    if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}/preview/0/0`) {
+    if (method === 'GET' && [`/media/designs/${DESIGN_ID}/preview/0/0`, `/media/designs/${DESIGN_ID}/preview/0/1`].includes(pathname)) {
+      state.renderPaths.push(pathname);
       return route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
     }
     if (method === 'GET' && pathname === `/public/design-share/${TOKEN}`) return json(route, metadata(true));
-    if (method === 'GET' && pathname === `/public/design-share/${TOKEN}/preview/0/0`) {
+    if (method === 'GET' && [`/public/design-share/${TOKEN}/preview/0/0`, `/public/design-share/${TOKEN}/preview/0/1`].includes(pathname)) {
+      state.renderPaths.push(pathname);
       return route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
     }
     if (method === 'POST' && pathname === `/public/design-share/${TOKEN}/comments`) {
@@ -113,6 +116,11 @@ test('team view links and account-free client feedback work from Share design', 
   await expect(page.getByRole('heading', { name: 'Client campaign', exact: true })).toBeVisible();
   await expect(page.getByText('View-only design preview', { exact: true })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Client campaign — Page 1', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Details', exact: true }).click();
+  await expect(page.getByRole('img', { name: 'Client campaign — Details', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Page 1', exact: true }).click();
+  await expect(page.getByRole('img', { name: 'Client campaign — Page 1', exact: true })).toBeVisible();
+  expect(state.renderPaths.filter((path) => path === `/media/designs/${DESIGN_ID}/preview/0/0`)).toHaveLength(1);
   await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
 
   await page.goto(`/share/design/${TOKEN}`);

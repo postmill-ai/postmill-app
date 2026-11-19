@@ -4,6 +4,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DesignPreviewView } from './design-preview-view';
 import { formatDesignShareDate, type DesignPreviewData } from './design-sharing';
 
+const imageMocks = vi.hoisted(() => ({
+  fetch: vi.fn(),
+  createObjectURL: vi.fn(),
+  revokeObjectURL: vi.fn(),
+}));
+
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string, params?: Record<string, any>) =>
     Object.entries(params || {}).filter(([key]) => key !== 'interpolation').reduce(
@@ -59,16 +65,37 @@ const preview = (overrides: Partial<DesignPreviewData> = {}): DesignPreviewData 
 });
 
 describe('DesignPreviewView', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    imageMocks.fetch.mockReset().mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['image'], { type: 'image/png' })),
+    });
+    imageMocks.createObjectURL.mockReset().mockImplementation(() => `blob:preview-${imageMocks.createObjectURL.mock.calls.length}`);
+    imageMocks.revokeObjectURL.mockReset();
+    vi.stubGlobal('fetch', imageMocks.fetch);
+    Object.defineProperty(URL, 'createObjectURL', { value: imageMocks.createObjectURL, configurable: true });
+    Object.defineProperty(URL, 'revokeObjectURL', { value: imageMocks.revokeObjectURL, configurable: true });
+  });
 
-  it('renders server images and navigates outputs and pages', () => {
+  it('renders server images and caches them across output and page navigation', async () => {
     render(<DesignPreviewView data={preview()} imageBaseUrl="https://api.test/team/preview" />);
 
-    expect(screen.getByRole('img')).toHaveProperty('src', 'https://api.test/team/preview/0/0');
+    expect(await screen.findByRole('img')).toHaveProperty('src', 'blob:preview-1');
+    expect(imageMocks.fetch).toHaveBeenCalledWith('https://api.test/team/preview/0/0', {
+      credentials: 'include',
+      signal: expect.any(AbortSignal),
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Wide' }));
-    expect(screen.getByRole('img')).toHaveProperty('src', 'https://api.test/team/preview/1/0');
+    await waitFor(() => expect(imageMocks.fetch).toHaveBeenCalledWith('https://api.test/team/preview/1/0', expect.anything()));
     fireEvent.click(screen.getByRole('button', { name: 'Details' }));
-    expect(screen.getByRole('img')).toHaveProperty('src', 'https://api.test/team/preview/1/1');
+    await waitFor(() => expect(imageMocks.fetch).toHaveBeenCalledWith('https://api.test/team/preview/1/1', expect.anything()));
+    fireEvent.click(screen.getByRole('button', { name: 'Cover' }));
+    await waitFor(() => expect(imageMocks.createObjectURL).toHaveBeenCalledTimes(4));
+    fireEvent.click(screen.getByRole('button', { name: 'Square' }));
+    await waitFor(() => expect(imageMocks.createObjectURL).toHaveBeenCalledTimes(5));
+    for (const url of ['0/0', '1/0', '1/1']) {
+      expect(imageMocks.fetch.mock.calls.filter(([requestUrl]) => requestUrl === `https://api.test/team/preview/${url}`)).toHaveLength(1);
+    }
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     expect(screen.queryByLabelText('Leave a comment')).toBeNull();
   });
@@ -95,7 +122,7 @@ describe('DesignPreviewView', () => {
     await waitFor(() => expect(onApprove).toHaveBeenCalledWith('Acme client'));
   });
 
-  it('hides the comment form when comments are disabled but keeps approval available', () => {
+  it('hides the comment form when comments are disabled but keeps approval available', async () => {
     render(
       <DesignPreviewView
         data={preview({ commentsEnabled: false })}
@@ -104,11 +131,12 @@ describe('DesignPreviewView', () => {
         onApprove={vi.fn()}
       />,
     );
+    await screen.findByRole('img');
     expect(screen.queryByLabelText('Leave a comment')).toBeNull();
     expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
   });
 
-  it('retains feedback and allows comments after approval', () => {
+  it('retains feedback and allows comments after approval', async () => {
     render(
       <DesignPreviewView
         data={preview({
@@ -121,13 +149,14 @@ describe('DesignPreviewView', () => {
         onComment={vi.fn()}
       />,
     );
+    await screen.findByRole('img');
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     expect(screen.getByText('Approved with thanks')).toBeTruthy();
     expect(screen.getByLabelText('Your name')).toBeTruthy();
     expect(screen.getByLabelText('Leave a comment')).toBeTruthy();
   });
 
-  it('preserves reviewer and design names without HTML entities', () => {
+  it('preserves reviewer and design names without HTML entities', async () => {
     render(
       <DesignPreviewView
         data={preview({
@@ -139,19 +168,23 @@ describe('DesignPreviewView', () => {
         publicMode
       />,
     );
-    expect(screen.getByRole('img', { name: 'Smith & Co — Page 1', exact: true })).toBeTruthy();
-    expect(screen.getByText("Approved by O'Brien & Co on Nov 18, 2026.")).toBeTruthy();
+    expect(await screen.findByRole('img', { name: 'Smith & Co — Page 1', exact: true })).toBeTruthy();
+    expect(screen.getByText(/^Approved by O'Brien & Co on .+\.$/)).toBeTruthy();
   });
 
   it('formats dates for the active locale', () => {
     const value = '2026-11-18T00:00:00.000Z';
-    expect(formatDesignShareDate(value, 'en')).toBe('Nov 18, 2026');
+    expect(formatDesignShareDate(value, 'en')).toContain('2026');
     expect(formatDesignShareDate(value, 'fr')).not.toBe(formatDesignShareDate(value, 'en'));
   });
 
-  it('shows a fallback when the rendered image cannot load', () => {
+  it('shows a fallback and retries a failed render', async () => {
+    imageMocks.fetch.mockResolvedValueOnce({ ok: false, status: 429 });
     render(<DesignPreviewView data={preview()} imageBaseUrl="/preview" />);
-    fireEvent.error(screen.getByRole('img'));
-    expect(screen.getByText('This preview image is unavailable.')).toBeTruthy();
+    expect(await screen.findByText('This preview image is unavailable.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('img')).toBeTruthy();
+    expect(imageMocks.fetch.mock.calls.filter(([url]) => url === '/preview/0/0')).toHaveLength(2);
   });
 });

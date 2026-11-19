@@ -44,7 +44,12 @@ describe('PublicDesignShareController', () => {
     expect(res.end).toHaveBeenCalledWith(Buffer.from('png'));
   });
 
-  it.each(['renderPublicPreview', 'addComment', 'approve'] as const)(
+  it('limits public renders to the authenticated 600/hour budget', () => {
+    expect(Reflect.getMetadata(TTL_KEY, PublicDesignShareController.prototype.renderPublicPreview)).toBe(3600000);
+    expect(Reflect.getMetadata(LIMIT_KEY, PublicDesignShareController.prototype.renderPublicPreview)).toBe(600);
+  });
+
+  it.each(['addComment', 'approve'] as const)(
     'limits %s to 10 requests per minute',
     (method) => {
       expect(Reflect.getMetadata(TTL_KEY, PublicDesignShareController.prototype[method])).toBe(60000);

@@ -30,7 +30,7 @@ export class PublicDesignShareController {
   }
 
   @Get('/:token/preview/:outputIndex/:pageNumber')
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: 600, ttl: 3600000 } })
   async renderPublicPreview(
     @Param('token') token: string,
     @Param('outputIndex', ParseIntPipe) outputIndex: number,

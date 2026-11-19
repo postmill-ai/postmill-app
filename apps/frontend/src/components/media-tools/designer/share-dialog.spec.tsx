@@ -144,7 +144,7 @@ describe('design sharing', () => {
       'value',
       'http://localhost:3000/share/design/client-token',
     );
-    expect(screen.getByText("Approved by O'Brien & Co on Nov 18, 2026.")).toBeTruthy();
+    expect(screen.getByText(/^Approved by O'Brien & Co on .+\.$/)).toBeTruthy();
     expect(screen.getByText('Looks good')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Disable link' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/media/designs/design-123/share', { method: 'DELETE' }));

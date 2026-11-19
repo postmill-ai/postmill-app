@@ -9,6 +9,7 @@ import { useT, useTranslationSettings } from '@postmill-ai/react/translation/get
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
+import { usePreviewImage } from './preview-image-cache';
 import {
   designPreviewImageUrl,
   formatDesignShareDate,
@@ -32,7 +33,6 @@ export const DesignPreviewView: FC<{
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState<'comment' | 'approve' | null>(null);
   const [actionError, setActionError] = useState('');
-  const [imageFailed, setImageFailed] = useState(false);
   const output = data.outputs.find((item) => item.outputIndex === outputIndex) ?? data.outputs[0];
   const page = output?.pages.find((item) => item.pageNumber === pageNumber) ?? output?.pages[0];
 
@@ -44,7 +44,7 @@ export const DesignPreviewView: FC<{
   const imageUrl = output && page
     ? designPreviewImageUrl(imageBaseUrl, output.outputIndex, page.pageNumber)
     : '';
-  useEffect(() => setImageFailed(false), [imageUrl]);
+  const { src: imageSrc, failed: imageFailed, retry: retryImage, fail: failImage } = usePreviewImage(imageUrl);
 
   const outputItems = useMemo(() => data.outputs.map((item) => ({
     key: String(item.outputIndex),
@@ -131,10 +131,10 @@ export const DesignPreviewView: FC<{
             </div>
           )}
           <div className="mt-4 flex min-h-[320px] items-center justify-center overflow-hidden rounded-md bg-studioCanvas p-3">
-            {imageUrl && !imageFailed ? (
+            {imageUrl && imageSrc && !imageFailed ? (
               <SafeImage
-                key={imageUrl}
-                src={imageUrl}
+                key={imageSrc}
+                src={imageSrc}
                 alt={t('designer_preview_alt', '{{name}} — {{page}}', {
                   name: data.name,
                   page: page?.name || t('designer_poster', 'Poster'),
@@ -143,10 +143,15 @@ export const DesignPreviewView: FC<{
                 width={output?.width ?? 1080}
                 height={output?.height ?? 1080}
                 className="max-h-[75vh] max-w-full object-contain"
-                onError={() => setImageFailed(true)}
+                onError={failImage}
               />
+            ) : imageFailed ? (
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-[13px] text-newTextColor/60">{t('designer_preview_image_unavailable', 'This preview image is unavailable.')}</p>
+                <Button secondary onClick={retryImage}>{t('retry', 'Retry')}</Button>
+              </div>
             ) : (
-              <p className="text-[13px] text-newTextColor/60">{t('designer_preview_image_unavailable', 'This preview image is unavailable.')}</p>
+              <p className="text-[13px] text-newTextColor/60">{t('loading_ellipsis', 'Loading…')}</p>
             )}
           </div>
           {data.mode === 'video' && (
