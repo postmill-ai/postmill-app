@@ -3867,6 +3867,7 @@
   "layers_panel_lock_layer": "レイヤーをロック",
   "elements_label": "エレメント",
   "elements_asset_types": "アセットの種類",
+  "designer_media_requires_video_design": "このメディアには動画デザインが必要です。画像デザインは変更されていません。",
   "media_section_free_assets": "無料アセット",
   "media_free_assets_description": "コンテンツパックを検索して、次のデザインに無料メディアを追加しましょう。",
   "media_free_assets_browse": "無料アセットを見る",

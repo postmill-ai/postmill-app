@@ -60,16 +60,17 @@ describe('useDesignerMediaInsertion', () => {
     expect(mocks.importStock).not.toHaveBeenCalled();
   });
 
-  it('routes static images and square icons to image clips in video documents', async () => {
+  it('routes static images and square icons to image clips at the drop point in video documents', async () => {
     const store = createDesignerStore(400, 300);
     store.getState().setMode('video');
     const { result } = renderHook(() => useDesignerMediaInsertion(store));
+    const at = { x: 140, y: 120 };
 
-    await result.current('sticker', item());
-    await result.current('icon', item({ url: 'https://api.iconify.design/mdi/home.svg', width: 24, height: 24 }));
+    await result.current('sticker', item(), at);
+    await result.current('icon', item({ url: 'https://api.iconify.design/mdi/home.svg', width: 24, height: 24 }), at);
 
-    expect(mocks.addImageClip).toHaveBeenNthCalledWith(1, store, expect.objectContaining({ square: false }));
-    expect(mocks.addImageClip).toHaveBeenNthCalledWith(2, store, expect.objectContaining({ square: true }));
+    expect(mocks.addImageClip).toHaveBeenNthCalledWith(1, store, expect.objectContaining({ square: false, at }));
+    expect(mocks.addImageClip).toHaveBeenNthCalledWith(2, store, expect.objectContaining({ square: true, at }));
   });
 
   it('resolves an editable static icon and centers it on the drop point', async () => {
@@ -111,8 +112,64 @@ describe('useDesignerMediaInsertion', () => {
     expect(mocks.show).toHaveBeenCalledWith('Import unavailable', 'warning');
   });
 
-  it('routes videos, audio, and animated stickers to their real timeline media types', async () => {
+  it.each([
+    ['video', item({ type: 'video', url: '/video.mp4' })],
+    ['audio', item({ type: 'audio', url: '/audio.mp3', width: 0, height: 0 })],
+  ] as const)('rejects %s without changing a populated image design', async (kind, picked) => {
     const store = createDesignerStore(400, 300);
+    store.getState().addElement({
+      id: 'existing-text', type: 'text', text: 'Keep me', x: 20, y: 20, width: 200, height: 50,
+    } as never);
+    const before = store.getState().doc;
+    const { result } = renderHook(() => useDesignerMediaInsertion(store));
+
+    await result.current(kind, picked, { x: 200, y: 150 });
+
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().doc.mode).toBe('image');
+    expect(store.getState().doc.outputs[0].children[0]).toMatchObject({ id: 'existing-text', text: 'Keep me' });
+    expect(mocks.addMedia).not.toHaveBeenCalled();
+    expect(mocks.addImage).not.toHaveBeenCalled();
+    expect(mocks.show).toHaveBeenCalledWith(
+      'This media requires a video design. Your image design has not been changed.',
+      'warning'
+    );
+  });
+
+  it('inserts an animated sticker as its static thumbnail in an image design', async () => {
+    const store = createDesignerStore(400, 300);
+    store.getState().addElement({ id: 'existing-text', type: 'text', text: 'Keep me' } as never);
+    const { result } = renderHook(() => useDesignerMediaInsertion(store));
+    const at = { x: 200, y: 150 };
+
+    await result.current('sticker', item({
+      type: 'video', url: '/sticker.mp4', thumbnail: '/sticker.png',
+    }), at);
+
+    expect(store.getState().doc.mode).toBe('image');
+    expect(store.getState().doc.outputs[0].children[0]).toMatchObject({ id: 'existing-text', text: 'Keep me' });
+    expect(mocks.addMedia).not.toHaveBeenCalled();
+    expect(mocks.addImage).toHaveBeenCalledWith(store, expect.objectContaining({
+      url: '/sticker.png', at,
+    }));
+  });
+
+  it('rejects an animated sticker without a static thumbnail in an image design', async () => {
+    const store = createDesignerStore(400, 300);
+    const before = store.getState().doc;
+    const { result } = renderHook(() => useDesignerMediaInsertion(store));
+
+    await result.current('sticker', item({ type: 'video', url: '/sticker.mp4' }));
+
+    expect(store.getState().doc).toBe(before);
+    expect(mocks.addMedia).not.toHaveBeenCalled();
+    expect(mocks.addImage).not.toHaveBeenCalled();
+    expect(mocks.show).toHaveBeenCalledWith(expect.stringContaining('requires a video design'), 'warning');
+  });
+
+  it('routes videos, audio, and animated stickers to their real timeline media types in video designs', async () => {
+    const store = createDesignerStore(400, 300);
+    store.getState().setMode('video');
     const { result } = renderHook(() => useDesignerMediaInsertion(store));
     const at = { x: 200, y: 150 };
 
@@ -129,6 +186,7 @@ describe('useDesignerMediaInsertion', () => {
 
   it('retains the existing metadata-probe warning', async () => {
     const store = createDesignerStore(400, 300);
+    store.getState().setMode('video');
     mocks.addMedia.mockResolvedValue({ probeFailed: true });
     const { result } = renderHook(() => useDesignerMediaInsertion(store));
 

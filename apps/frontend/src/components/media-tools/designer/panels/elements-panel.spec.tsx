@@ -47,7 +47,10 @@ const selection = {
 describe('ElementsPanel', () => {
   it('lazy-mounts categories and retains their search state', () => {
     const { container } = render(<ElementsPanel onInsertMedia={vi.fn()} />);
-    expect(screen.queryByRole('button', { name: 'Select videos asset' })).toBeNull();
+    for (const name of ['videos', 'vectors', 'icons', 'stickers', 'audio']) {
+      expect(screen.queryByRole('button', { name: `Select ${name} asset` })).toBeNull();
+      expect(screen.queryByRole('textbox', { name: `${name} query` })).toBeNull();
+    }
 
     fireEvent.change(screen.getByRole('textbox', { name: 'photos query' }), { target: { value: 'mountains' } });
     fireEvent.click(screen.getAllByRole('tab', { name: 'Videos', exact: true })[0]);

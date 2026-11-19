@@ -466,6 +466,22 @@ describe('addMediaToTimeline — clip geometry', () => {
     });
   });
 
+  it('keeps late metadata centered on the original drop point', async () => {
+    const probe = deferredVideoProbe();
+    const store = createDesignerStore(1080, 1080);
+    store.getState().setMode('video');
+    const landing = addMediaToTimeline(store, {
+      type: 'video', url: 'https://example.com/slow.mp4', at: { x: 400, y: 500 },
+    });
+    probe.fail();
+    await landing;
+
+    probe.succeed({ duration: 6.25, videoWidth: 720, videoHeight: 1280 });
+
+    const { clip } = firstVideoClip(store);
+    expect(clip).toMatchObject({ x: 96, y: -40, width: 608, height: 1080 });
+  });
+
   it('does not clobber user edits when a late probe succeeds', async () => {
     const probe = deferredVideoProbe();
     const store = createDesignerStore(1080, 1080);

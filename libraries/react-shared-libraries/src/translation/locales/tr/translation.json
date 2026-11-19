@@ -3867,6 +3867,7 @@
   "layers_panel_lock_layer": "Katmanı kilitle",
   "elements_label": "Öğeler",
   "elements_asset_types": "Varlık türleri",
+  "designer_media_requires_video_design": "Bu medya bir video tasarımı gerektirir. Görsel tasarımınız değiştirilmedi.",
   "media_section_free_assets": "Ücretsiz varlıklar",
   "media_free_assets_description": "İçerik Paketi'nde arama yapın ve bir sonraki tasarımınıza ücretsiz medya ekleyin.",
   "media_free_assets_browse": "Ücretsiz varlıklara göz atın",

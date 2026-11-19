@@ -3867,6 +3867,7 @@
   "layers_panel_lock_layer": "Ebene sperren",
   "elements_label": "Elemente",
   "elements_asset_types": "Asset-Typen",
+  "designer_media_requires_video_design": "Dieses Medium erfordert ein Videodesign. Dein Bilddesign wurde nicht geändert.",
   "media_section_free_assets": "Kostenlose Assets",
   "media_free_assets_description": "Durchsuche das Content Pack und füge deinem nächsten Design kostenlose Medien hinzu.",
   "media_free_assets_browse": "Kostenlose Assets durchsuchen",

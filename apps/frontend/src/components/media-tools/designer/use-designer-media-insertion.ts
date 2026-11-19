@@ -37,6 +37,18 @@ export const useDesignerMediaInsertion = (store: Store): InsertDesignerMedia => 
     }
 
     const timelineType = timelineMediaTypeForPick(kind, resolved.type);
+    if (store.getState().doc.mode !== 'video' && (timelineType === 'video' || timelineType === 'audio')) {
+      if (kind === 'sticker' && timelineType === 'video' && resolved.thumbnail) {
+        addImageElementFromMedia(store, { ...resolved, url: resolved.thumbnail, at });
+      } else {
+        toaster.show(
+          t('designer_media_requires_video_design', 'This media requires a video design. Your image design has not been changed.'),
+          'warning'
+        );
+      }
+      return;
+    }
+
     if (timelineType === 'video' || timelineType === 'audio') {
       try {
         const landed = await addMediaToTimeline(store, {

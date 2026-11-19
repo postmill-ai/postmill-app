@@ -1130,8 +1130,9 @@ const DesignerContent: FC<
    * One picker instance, narrowed per call through `openWith` — which is what
    * that API exists for. In an image document, image-kind picks become elements;
    * in a video document static image picks become image clips at the playhead via
-   * `addImageClipToTimeline`; videos (including animated stickers) and audio go
-   * to `addMediaToTimeline`, which finds the track and probes real duration.
+   * `addImageClipToTimeline`; in video mode, videos (including animated stickers)
+   * and audio go to `addMediaToTimeline`. Image mode rejects timeline-only media
+   * and uses an animated sticker's static thumbnail without changing the document mode.
    */
   const insertMedia = useDesignerMediaInsertion(store);
   const onInsertMedia = useCallback(

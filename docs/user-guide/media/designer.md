@@ -73,11 +73,14 @@ saved.
 
 ## Workspace panels
 
-On desktop, the right panel has **Inspector**, **Layers**, **Brand**, and **AI** tabs. Your explicit tab
-choice stays active during selection, multi-select, and rename. AI and Brand mount when first opened,
-then stay mounted while hidden so generated results and in-flight work survive tab changes and collapse.
-Your active tab and collapsed state are remembered per organization, and Expand restores that tab. On
-phones and tablets, Inspector starts closed so the canvas stays visible. The tool rail's Brand button
+On desktop, the right panel has **Inspector**, **Layers**, **Elements**, **Brand**, and **AI** tabs.
+Elements browses Photos, Videos, Vectors, Icons, Stickers, and Audio: click an asset to center it on the
+canvas, or drag it onto the canvas to center it on the drop point. Video and audio require a video design;
+in an image design, animated stickers insert their static thumbnail instead of changing the design mode.
+Your explicit tab choice stays active during selection, multi-select, and rename. Elements, AI, and Brand
+mount when first opened, then stay mounted while hidden so searches, generated results, and in-flight work
+survive tab changes and collapse. Your active tab and collapsed state are remembered per organization, and
+Expand restores that tab. On phones and tablets, Inspector starts closed so the canvas stays visible. The tool rail's Brand button
 and **Tools ▸ Workspace** open the same surfaces. **History** and **Versions** are beside Undo/Redo,
 **Templates** is beside Save, and View is reserved for zoom and display settings. History, Versions,
 and Template Fields retain their movable floating panels.

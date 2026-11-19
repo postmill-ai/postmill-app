@@ -141,7 +141,23 @@ const staticElementsDoc = (): DesignerDocSnapshot => ({
     height: 300,
     background: '#ffffff',
     tracks: [],
-    children: [],
+    children: [{
+      id: 'existing-text',
+      type: 'text',
+      text: 'Keep this image design',
+      x: 20,
+      y: 20,
+      width: 240,
+      height: 40,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      fontFamily: 'Inter',
+      fontSize: 24,
+      fontWeight: 400,
+      fill: '#000000',
+    }],
   }],
 });
 
@@ -667,6 +683,26 @@ class DesignerMocks {
           totalPages: 1,
           configured: true,
           source: 'pexels',
+        });
+        return;
+      }
+
+      if (pathname === '/media/stock/audio' && method === 'GET') {
+        await json(route, {
+          results: [{
+            id: 'audio-1',
+            url: GENERATED_URL,
+            downloadUrl: GENERATED_URL,
+            name: 'QA stock audio',
+            duration: 4,
+            author: 'QA Audio',
+            source: 'jamendo',
+            attribution: { provider: 'Jamendo' },
+          }],
+          page: 1,
+          totalPages: 1,
+          configured: true,
+          source: 'jamendo',
         });
         return;
       }
@@ -1355,8 +1391,9 @@ test.describe('Designer Elements workspace (mocked stock and storage)', () => {
     )).toBe(true);
 
     await page.getByRole('button', { name: 'QA stock photo', exact: true }).click();
-    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(1);
-    expect(mocks.doc.outputs[0].children![0]).toMatchObject({
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(2);
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({ id: 'existing-text', text: 'Keep this image design' });
+    expect(mocks.doc.outputs[0].children![1]).toMatchObject({
       type: 'image', src: STOCK_PHOTO_URL, x: 40, y: 110, width: 320, height: 80,
       naturalWidth: 1600, naturalHeight: 400,
     });
@@ -1364,8 +1401,8 @@ test.describe('Designer Elements workspace (mocked stock and storage)', () => {
 
     await openElements(page, 'Vectors');
     await page.getByRole('button', { name: 'QA outline vector', exact: true }).click();
-    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(2);
-    expect(mocks.doc.outputs[0].children![1]).toMatchObject({
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(3);
+    expect(mocks.doc.outputs[0].children![2]).toMatchObject({
       type: 'image', src: IMPORTED_VECTOR_URL, fileId: 'vector-file-1',
     });
     expect(mocks.stockVectorUploads).toBe(1);
@@ -1374,8 +1411,8 @@ test.describe('Designer Elements workspace (mocked stock and storage)', () => {
     await expect(search).toHaveValue('mountain');
     await fitDesignerCanvas(page);
     await dragStockAssetToDocumentPoint(page, 'QA stock photo', 400, 300, 100, 100);
-    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(3);
-    const draggedPhoto = mocks.doc.outputs[0].children![2];
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(4);
+    const draggedPhoto = mocks.doc.outputs[0].children![3];
     expect(draggedPhoto).toMatchObject({
       type: 'image', src: STOCK_PHOTO_URL, width: 320, height: 80,
     });
@@ -1384,12 +1421,87 @@ test.describe('Designer Elements workspace (mocked stock and storage)', () => {
     expect(draggedPhoto.x).toBeGreaterThanOrEqual(-65);
     expect(draggedPhoto.x).toBeLessThanOrEqual(-55);
     expect(mocks.stockVectorUploads, 'drag must not repeat the vector import').toBe(1);
+
+    const imageModeWarning = 'This media requires a video design. Your image design has not been changed.';
+    await openElements(page, 'Videos');
+    await page.getByRole('button', { name: 'QA stock video', exact: true }).click();
+    await expect(page.getByText(imageModeWarning).last()).toBeVisible();
+    await dragStockAssetToDocumentPoint(page, 'QA stock video', 400, 300, 200, 150);
+    await expect(page.getByText(imageModeWarning).last()).toBeVisible();
+    expect(mocks.doc.mode).toBe('image');
+    expect(mocks.doc.outputs[0].children).toHaveLength(4);
+
+    await openElements(page, 'Audio');
+    await page.getByRole('button', { name: 'Use', exact: true }).click();
+    await expect(page.getByText(imageModeWarning).last()).toBeVisible();
+    expect(mocks.doc.mode).toBe('image');
+    expect(mocks.doc.outputs[0].children).toHaveLength(4);
+
+    await openElements(page, 'Stickers');
+    await page.getByRole('button', { name: 'QA animated sticker', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(5);
+    expect(mocks.doc.outputs[0].children![4]).toMatchObject({ type: 'image', src: ASYMMETRIC_URL });
+
+    await page.getByRole('menuitem', { name: 'Insert', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Sticker…', exact: true }).click();
+    await page.getByTestId('media-picker').getByRole('button', { name: 'QA animated sticker', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(6);
+    expect(mocks.doc.outputs[0].children![5]).toMatchObject({ type: 'image', src: ASYMMETRIC_URL });
+    expect(mocks.doc.mode).toBe('image');
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({ id: 'existing-text', text: 'Keep this image design' });
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });
 });
 
 test.describe('Designer animated stock media (local non-paid fixture)', () => {
+  test('MP4 sticker picker insertion plays, seeks, saves and reopens as a video clip', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+
+    await page.getByRole('menuitem', { name: 'Insert', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Sticker…', exact: true }).click();
+    await page.getByRole('button', { name: 'QA animated sticker', exact: true }).click();
+    await expect.poll(() => mocks.savedClips()[0]?.mediaType).toBe('video');
+    expect(mocks.doc.outputs[0].tracks[0]).toMatchObject({ type: 'video' });
+    expect(mocks.savedClips()[0]).toMatchObject({
+      src: STOCK_STICKER_URL,
+      startMs: 0,
+      endMs: 4000,
+      x: 180,
+      y: 320,
+      width: 720,
+      height: 1280,
+      naturalWidth: 720,
+      naturalHeight: 1280,
+    });
+    expect(mocks.doc.outputs[0].tracks.some((track) => track.type === 'image')).toBe(false);
+
+    await expectRealPlayback(page);
+    const seek = page.getByRole('slider', { name: 'Seek timeline', exact: true });
+    await seek.press('Home');
+    await seek.press('Shift+ArrowRight');
+    await expect.poll(() => page.locator('video').first().evaluate((element: HTMLVideoElement) => element.currentTime))
+      .toBeGreaterThan(0.75);
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1);
+    expect(mocks.savedClips()[0]).toMatchObject({
+      src: STOCK_STICKER_URL,
+      mediaType: 'video',
+      endMs: 4000,
+      width: 720,
+      height: 1280,
+      naturalWidth: 720,
+      naturalHeight: 1280,
+    });
+    await expectRealPlayback(page);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
   test('MP4 sticker drag insertion plays, seeks, saves and reopens as a video clip', async ({ page }) => {
     const mocks = new DesignerMocks();
     await mocks.install(page);

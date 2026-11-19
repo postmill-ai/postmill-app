@@ -3869,6 +3869,7 @@
   "layers_panel_lock_layer": "Заблокировать слой",
   "elements_label": "Элементы",
   "elements_asset_types": "Типы ресурсов",
+  "designer_media_requires_video_design": "Для этого медиафайла требуется видеодизайн. Дизайн изображения не изменился.",
   "media_section_free_assets": "Бесплатные ресурсы",
   "media_free_assets_description": "Найдите бесплатные материалы в пакете контента для своего следующего дизайна.",
   "media_free_assets_browse": "Просмотреть бесплатные ресурсы",

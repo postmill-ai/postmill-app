@@ -3871,6 +3871,7 @@
   "layers_panel_lock_layer": "قفل الطبقة",
   "elements_label": "العناصر",
   "elements_asset_types": "أنواع الأصول",
+  "designer_media_requires_video_design": "هذه الوسائط تتطلب تصميم فيديو. لم يتغير تصميم الصورة.",
   "media_section_free_assets": "أصول مجانية",
   "media_free_assets_description": "ابحث في حزمة المحتوى وأضف وسائط مجانية إلى تصميمك التالي.",
   "media_free_assets_browse": "تصفح الأصول المجانية",

@@ -19,8 +19,8 @@ const categories: Array<{ id: CategoryId; kind: DesignerMediaKind; labelKey: str
   { id: 'photos', kind: 'image', labelKey: 'photos', label: 'Photos' },
   { id: 'videos', kind: 'video', labelKey: 'videos', label: 'Videos' },
   { id: 'vectors', kind: 'vector', labelKey: 'vectors_tab', label: 'Vectors' },
-  { id: 'icons', kind: 'icon', labelKey: 'icons', label: 'Icons' },
-  { id: 'stickers', kind: 'sticker', labelKey: 'stickers', label: 'Stickers' },
+  { id: 'icons', kind: 'icon', labelKey: 'panel_icons', label: 'Icons' },
+  { id: 'stickers', kind: 'sticker', labelKey: 'uploads_panel_stickers', label: 'Stickers' },
   { id: 'audio', kind: 'audio', labelKey: 'audio', label: 'Audio' },
 ];
 

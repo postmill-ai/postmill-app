@@ -271,6 +271,25 @@ describe('DesignerCanvas stock drops', () => {
       url: 'https://cdn.example.test/photo.png', source: 'stock',
     }), expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }));
   });
+
+  it('ignores stock drops into a frozen output', async () => {
+    const store = createDesignerStore(500, 400);
+    const onInsertMedia = vi.fn().mockResolvedValue(undefined);
+    store.getState().setOutputFrozen(0, true);
+    await renderCanvas(store, onInsertMedia);
+    const data = new Map<string, string>();
+    writeStockMediaDrag({ setData: (mime, value) => data.set(mime, value) }, 'image', {
+      url: 'https://cdn.example.test/photo.png', width: 800, height: 600, type: 'image', source: 'unsplash',
+    });
+
+    fireEvent.drop(document.querySelector('.designer-canvas-container')!, {
+      clientX: 100,
+      clientY: 100,
+      dataTransfer: { getData: (mime: string) => data.get(mime) || '', files: [] },
+    });
+
+    expect(onInsertMedia).not.toHaveBeenCalled();
+  });
 });
 
 describe('DesignerCanvas safe-zone overlays', () => {

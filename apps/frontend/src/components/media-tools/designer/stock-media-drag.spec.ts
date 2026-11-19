@@ -43,11 +43,14 @@ describe('stock media drag payloads', () => {
     });
   });
 
+  const validItem = { source: 'stock', url: selection.url, type: 'image', width: 640, height: 480 };
+
   it.each([
     ['malformed JSON', '{broken'],
-    ['the wrong version', JSON.stringify({ version: 2, kind: 'image', item: {} })],
-    ['an unknown kind', JSON.stringify({ version: 1, kind: 'executable', item: {} })],
-    ['an invalid item', JSON.stringify({ version: 1, kind: 'image', item: { source: 'stock', url: '', type: 'image', width: -1, height: 10 } })],
+    ['the wrong version', JSON.stringify({ version: 2, kind: 'image', item: validItem })],
+    ['an unknown kind', JSON.stringify({ version: 1, kind: 'executable', item: validItem })],
+    ['an empty URL', JSON.stringify({ version: 1, kind: 'image', item: { ...validItem, url: '' } })],
+    ['invalid dimensions', JSON.stringify({ version: 1, kind: 'image', item: { ...validItem, width: -1 } })],
   ])('rejects %s', (_name, raw) => {
     expect(readStockMediaDrag({ getData: () => raw })).toBeNull();
   });

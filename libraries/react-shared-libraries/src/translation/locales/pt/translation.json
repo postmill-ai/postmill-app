@@ -3867,6 +3867,7 @@
   "layers_panel_lock_layer": "Bloquear camada",
   "elements_label": "Elementos",
   "elements_asset_types": "Tipos de recursos",
+  "designer_media_requires_video_design": "Esta mídia requer um design de vídeo. O seu design de imagem não foi alterado.",
   "media_section_free_assets": "Recursos gratuitos",
   "media_free_assets_description": "Pesquise no pacote de conteúdo e adicione mídia gratuita ao seu próximo design.",
   "media_free_assets_browse": "Explorar recursos gratuitos",

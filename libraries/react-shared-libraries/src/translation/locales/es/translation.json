@@ -3867,6 +3867,7 @@
   "layers_panel_lock_layer": "Bloquear capa",
   "elements_label": "Elementos",
   "elements_asset_types": "Tipos de recursos",
+  "designer_media_requires_video_design": "Este contenido requiere un diseño de video. Tu diseño de imagen no ha cambiado.",
   "media_section_free_assets": "Recursos gratuitos",
   "media_free_assets_description": "Busca en el paquete de contenido y añade medios gratuitos a tu próximo diseño.",
   "media_free_assets_browse": "Explorar recursos gratuitos",
