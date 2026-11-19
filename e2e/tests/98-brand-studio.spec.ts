@@ -362,7 +362,7 @@ test('editor searches and assigns a paged visual template browser without duplic
   await page.getByRole('textbox', { name: 'Search templates' }).fill('video launch');
   await expect(cards).toHaveCount(1);
   await expect(page.getByRole('img', { name: 'Video launch template preview', exact: true })).toBeVisible();
-  await expect(page.getByText('VIDEO', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-template-id="template-video"] span').filter({ hasText: /^Video$/i }).first()).toBeVisible();
 
   await page.getByRole('textbox', { name: 'Search templates' }).fill('');
   await expect(cards).toHaveCount(24);
