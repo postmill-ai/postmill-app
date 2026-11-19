@@ -7576,8 +7576,12 @@ paths:
         - name: limit
           required: false
           in: query
+          description: Maximum number of designs to return (1–100). Values above 100 are capped at 100. Defaults to 20.
           schema:
-            type: string
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
         - name: query
           required: false
           in: query
@@ -8131,8 +8135,12 @@ paths:
         - name: limit
           required: false
           in: query
+          description: Maximum number of templates to return (1–100). Values above 100 are capped at 100. Defaults to 24.
           schema:
-            type: string
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 24
         - name: brandId
           required: false
           in: query
