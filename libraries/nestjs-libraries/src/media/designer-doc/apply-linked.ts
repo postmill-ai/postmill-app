@@ -125,6 +125,49 @@ const richTextRanges = (runs: TextRun[] | undefined): RichTextRange[] => {
   });
 };
 
+const textEditRangeMapper = (
+  previousText: string | undefined,
+  nextText: string | undefined
+) => {
+  if (previousText === undefined || nextText === undefined || previousText === nextText) {
+    return (start: number, end: number) => ({ start, end });
+  }
+
+  let prefix = 0;
+  while (
+    prefix < previousText.length &&
+    prefix < nextText.length &&
+    previousText[prefix] === nextText[prefix]
+  ) {
+    prefix += 1;
+  }
+
+  let suffix = 0;
+  while (
+    suffix < previousText.length - prefix &&
+    suffix < nextText.length - prefix &&
+    previousText[previousText.length - 1 - suffix] ===
+      nextText[nextText.length - 1 - suffix]
+  ) {
+    suffix += 1;
+  }
+
+  const previousChangedEnd = previousText.length - suffix;
+  const nextChangedEnd = nextText.length - suffix;
+  const mapOffset = (offset: number) => {
+    if (offset <= prefix) return offset;
+    if (offset >= nextChangedEnd) {
+      return offset - nextChangedEnd + previousChangedEnd;
+    }
+    return prefix;
+  };
+
+  return (start: number, end: number) => ({
+    start: mapOffset(start),
+    end: mapOffset(end),
+  });
+};
+
 /**
  * Non-geometry updates propagate raw — except `fontSize`, explicit rich-text
  * run sizes and `textStroke.width`: px values authored against one canvas are
@@ -132,8 +175,8 @@ const richTextRanges = (runs: TextRun[] | undefined): RichTextRange[] => {
  * aspect-aware basis (`typeScaleRatio`, the same rule as smartReflow and the
  * conductor's variant re-fit), with font size floored at 10px. Rich runs keep
  * their authored size when it is already below that floor. Unchanged runs are
- * matched by character range through splits and merges, retaining the target's
- * existing size rather than round-tripping through a scale.
+ * matched by character range through text edits, splits and merges, retaining
+ * the target's existing size rather than round-tripping through a scale.
  * The old
  * `min(scaleX, scaleY)` here silently re-imposed short-edge typography on
  * every linked edit — undoing the per-format type of every wider output.
@@ -151,6 +194,14 @@ const scaledForOutput = (
   const sharedRuns = shared.richText;
   const sourceRanges = richTextRanges(sourceElement?.richText);
   const targetRanges = richTextRanges(targetElement?.richText);
+  const mapSourceRange = textEditRangeMapper(
+    sourceElement?.text ?? sourceElement?.richText?.map((run) => run.text).join(''),
+    shared.text
+  );
+  const mapTargetRange = textEditRangeMapper(
+    targetElement?.text ?? targetElement?.richText?.map((run) => run.text).join(''),
+    shared.text
+  );
   return {
     ...shared,
     ...(hasFontSize
@@ -159,11 +210,15 @@ const scaledForOutput = (
     ...(sharedRuns
       ? {
           richText: richTextRanges(sharedRuns).map(({ run, start, end }) => {
+            const sourceRange = mapSourceRange(start, end);
+            const targetRange = mapTargetRange(start, end);
             const sourceMatches = sourceRanges.filter(
-              (range) => range.start < end && range.end > start
+              (range) =>
+                range.start < sourceRange.end && range.end > sourceRange.start
             );
             const targetMatches = targetRanges.filter(
-              (range) => range.start < end && range.end > start
+              (range) =>
+                range.start < targetRange.end && range.end > targetRange.start
             );
             const unchanged =
               sourceMatches.length > 0 &&

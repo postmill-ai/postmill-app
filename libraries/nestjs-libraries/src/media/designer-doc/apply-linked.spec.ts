@@ -179,6 +179,8 @@ describe('applyLinked fontSize propagation', () => {
       { text: 'rich ', fontSize: 16 },
       { text: '™', fontSize: 8 },
     ];
+    larger.text = larger.richText.map((run: any) => run.text).join('');
+    smaller.text = smaller.richText.map((run: any) => run.text).join('');
     return { doc };
   };
 
@@ -229,6 +231,116 @@ describe('applyLinked fontSize propagation', () => {
     expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
       40, 16, 8,
     ]);
+  });
+
+  it.each([
+    { action: 'typing into', text: 'Bigger rich ™', firstRunText: 'Bigger ' },
+    { action: 'deleting from', text: 'Bi rich ™', firstRunText: 'Bi ' },
+  ])(
+    'preserves later run sizes when $action an earlier run on the smaller format',
+    ({ text, firstRunText }) => {
+      const { doc } = makeLinkedSizeDoc();
+      const smaller = (doc.outputs[1] as any).children[0];
+      const editedRuns = smaller.richText.map((run: any) => ({ ...run }));
+      editedRuns[0].text = firstRunText;
+
+      const { outputs } = applyLinked(
+        doc,
+        1,
+        new Set(['e9']),
+        { text, richText: editedRuns },
+        false
+      );
+
+      expect((outputs[0] as any).children[0].text).toBe(text);
+      expect((outputs[1] as any).children[0].text).toBe(text);
+      expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+        64, 32, 8,
+      ]);
+      expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+        32, 16, 8,
+      ]);
+    }
+  );
+
+  const replaceRuns = (element: any, runs: any[]) => {
+    element.richText = runs;
+    element.text = runs.map((run) => run.text).join('');
+  };
+
+  it('scales a changed size when differently sized runs merge on the smaller format', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    replaceRuns(larger, [
+      { text: 'small ', fontSize: 12 },
+      { text: 'type', fontSize: 14 },
+    ]);
+    replaceRuns(smaller, [
+      { text: 'small ', fontSize: 10 },
+      { text: 'type', fontSize: 10 },
+    ]);
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: [{ text: 'small type', fontSize: 10 }] },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([20]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([10]);
+  });
+
+  it('requires every covered source run to agree before preserving a merged target size', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    replaceRuns(larger, [
+      { text: 'Big ', fontSize: 24 },
+      { text: 'rich ', fontSize: 28 },
+    ]);
+    replaceRuns(smaller, [
+      { text: 'Big ', fontSize: 12 },
+      { text: 'rich ', fontSize: 12 },
+    ]);
+
+    const { outputs } = applyLinked(
+      doc,
+      0,
+      new Set(['e1']),
+      { richText: [{ text: 'Big rich ', fontSize: 28 }] },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([28]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([14]);
+  });
+
+  it('does not choose the first target size when differently sized target runs merge', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    replaceRuns(larger, [
+      { text: 'Big ', fontSize: 14 },
+      { text: 'rich ', fontSize: 12 },
+    ]);
+    replaceRuns(smaller, [
+      { text: 'Big ', fontSize: 12 },
+      { text: 'rich ', fontSize: 12 },
+    ]);
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: [{ text: 'Big rich ', fontSize: 12 }] },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([24]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([12]);
   });
 
   const splitFirstRun = (element: any) => {
