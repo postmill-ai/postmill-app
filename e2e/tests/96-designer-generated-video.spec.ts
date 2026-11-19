@@ -1613,9 +1613,10 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     const scrollRect = await trackRegion.boundingBox();
     expect(autoScrollBox).not.toBeNull();
     expect(scrollRect).not.toBeNull();
-    await page.mouse.move(autoScrollBox!.x + autoScrollBox!.width / 2, autoScrollBox!.y + autoScrollBox!.height / 2);
+    // The clip is wider than the visible track area, so grab it near its visible left edge.
+    await page.mouse.move(autoScrollBox!.x + 24, autoScrollBox!.y + autoScrollBox!.height / 2);
     await page.mouse.down();
-    await page.mouse.move(scrollRect!.x + scrollRect!.width - 4, autoScrollBox!.y + autoScrollBox!.height / 2);
+    await page.mouse.move(scrollRect!.x + scrollRect!.width - 4, autoScrollBox!.y + autoScrollBox!.height / 2, { steps: 8 });
     await page.waitForTimeout(800);
     await page.mouse.up();
     await expect.poll(() => trackRegion.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
