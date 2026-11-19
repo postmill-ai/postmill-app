@@ -352,9 +352,10 @@ test('format card controls stay separated and custom format actions survive remo
   expect(firstRemove.x + firstRemove.width).toBeLessThan(secondFreeze.x);
 
   await secondCard.getByRole('button', { name: 'Format actions for Second' }).click();
-  await page.getByRole('button', { name: /Unlink this format/ }).click();
+  await page.getByRole('button', { name: /Unlink edits between formats/ }).click();
+  await expect(page.getByRole('button', { name: 'Resume linked editing' })).toBeVisible();
   await secondCard.getByRole('button', { name: 'Format actions for Second' }).click();
-  await expect(page.getByRole('button', { name: /Link this format/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Link edits across formats/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Unlink edits between formats' })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Add format', exact: true }).click();
@@ -419,7 +420,7 @@ test('shape insertion stays on an independent format through save, reload, and e
     expect(doc.outputs[0].contentLinkGroup).not.toBe(doc.outputs[1].contentLinkGroup);
   };
   await openDesigner(page);
-  await page.getByRole('button', { name: /Independent/ }).click();
+  await page.locator('[data-format-select="independent-output"]').click();
 
   const stage = page.locator('.konva-stage').first();
   // The canvas menu opens only on the bare stage: right of the 20px ruler,
@@ -434,7 +435,7 @@ test('shape insertion stays on an independent format through save, reload, and e
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await expect(page.locator('.konva-stage').first()).toBeVisible();
-  await page.getByRole('button', { name: /Independent/ }).click();
+  await page.locator('[data-format-select="independent-output"]').click();
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Save to Files' }).click();
   await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
@@ -501,7 +502,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   // Shortcuts are canvas-focus-scoped, so the keys go to the canvas itself.
   const canvasRegion = page.getByRole('application', { name: 'Design canvas' });
   await canvasRegion.press('Control+c');
-  await page.getByRole('button', { name: /Paste Target/ }).click();
+  await page.locator('[data-format-select="paste-target"]').click();
 
   // Keyboard paste retains its offset behavior and remains one atomic edit.
   await canvasRegion.press('Control+v');
@@ -598,7 +599,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
-  await page.getByRole('button', { name: /Paste Target/ }).click();
+  await page.locator('[data-format-select="paste-target"]').click();
   expect((state.doc as any).outputs[1].children).toHaveLength(9);
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -686,7 +687,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
     return cloned;
   };
 
-  await page.getByRole('button', { name: /Source/ }).click();
+  await page.locator('[data-format-select="source-output"]').click();
   await page.getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
   const stage = page.locator('.konva-stage').first();

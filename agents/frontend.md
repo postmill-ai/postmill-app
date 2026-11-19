@@ -284,9 +284,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `originId`s, in which case the popover stays open with a warning and independent copies remain
   available. Each output card contains its Freeze, actions, and Remove controls; Remove appears on
   the selected or hovered card and offers an Undo message while the removal is still the latest edit.
-  The card's actions menu holds Resize, Rename, and Link/Unlink. Link/Unlink selects that card and only
-  toggles `editFormatOnly`; it never rewrites existing element/clip links. Custom formats default to
-  **Custom size** with dimensions shown separately and can be renamed from the same menu. Static page-1 insertion
+  The card's actions menu holds Resize, Rename, and Link/Unlink. Link/Unlink selects that card and
+  toggles the store-wide `editFormatOnly` flag, which applies to whichever output is active; a visible
+  **Format-only editing** status remains beside Add Format while the flag is on and clicking it resumes
+  linked editing. The toggle never rewrites existing element/clip links. Custom formats default to
+  **Custom size** with dimensions shown separately and can be renamed from the same menu. Add, resize,
+  and rename suffix colliding output names, and export filenames disambiguate legacy duplicates by
+  dimensions and occurrence. Static page-1 insertion
   is local when that toggle is on. New static outputs persist an optional-additive
   `contentLinkGroup`: linked copies inherit the source's group and independent copies get a fresh
   group, so separate linked sets can coexist and empty copies retain their behavior after reload.

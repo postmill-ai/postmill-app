@@ -51,7 +51,7 @@ for (const p of CHANNEL_PRESETS) {
 
 const RECOMMENDED_IDS = ['ig-post', 'ig-story', 'linkedin-post', 'x-post'];
 
-const THUMB_H = 112;
+const THUMB_H = 82;
 const THUMB_MIN_W = 118;
 const REMOVE_UNDO_DURATION_MS = 6000;
 
@@ -308,7 +308,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
 
   const handleToggleFormatLink = (index: number) => {
     const state = store.getState();
-    const shouldLink = index === state.currentOutput && state.editFormatOnly;
+    const shouldLink = state.editFormatOnly;
     state.setCurrentOutput(index);
     state.setEditFormatOnly(!shouldLink);
     closePopover();
@@ -442,7 +442,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
       )}
       <div
         ref={scrollRef}
-        className="flex items-center gap-3 overflow-x-auto flex-1 min-w-0 px-1 py-1"
+        className="flex items-center gap-3 overflow-x-auto flex-1 min-w-0 px-1"
       >
         {outputs.map((output: any, i: number) => (
           <div
@@ -457,9 +457,10 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           >
             <button
               type="button"
+              data-format-select={output.id}
               onClick={() => store.getState().setCurrentOutput(i)}
               aria-current={i === currentOutput}
-              className="absolute inset-0 flex flex-col items-center justify-center text-center px-2 pb-1 pt-8 gap-0.5 rounded-[4px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+              className="absolute inset-0 flex flex-col items-center justify-start text-center px-2 pb-1 pt-8 gap-0 rounded-[4px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
             >
               {i !== currentOutput && Array.isArray(output.children) && output.children.some((c: any) => c?.originId && activeOriginIds.has(c.originId)) && (
                 <div className="absolute top-9 end-1 w-2 h-2 rounded-full bg-designerAccent" title={t('designer_has_linked_elements', 'Has linked elements')} />
@@ -478,7 +479,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
                 output={output}
                 symbols={doc.symbols}
                 maxDim={72}
-                className="h-[32px] max-w-[54px]"
+                className="h-[20px] max-w-[40px]"
               />
               <span className="text-[11px] font-medium text-textColor leading-tight truncate max-w-[94px]">
                 {output.name}
@@ -639,6 +640,19 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
           </div>
         )}
       </div>
+
+      {editFormatOnly && (
+        <button
+          type="button"
+          onClick={() => store.getState().setEditFormatOnly(false)}
+          aria-label={t('designer_resume_linked_editing', 'Resume linked editing')}
+          data-tooltip-id="tooltip"
+          data-tooltip-content={t('designer_format_only_editing_hint', 'Edits stay local on whichever format is active. Click to resume linked editing.')}
+          className="h-7 shrink-0 rounded-md border border-designerAccent bg-designerAccent/10 px-2 text-[10px] font-medium text-btnPrimaryAccent hover:bg-designerAccent/15 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+        >
+          {t('designer_format_only_editing', 'Format-only editing')}
+        </button>
+      )}
 
       {/* Add-format is available in BOTH modes now: image docs seed linked
           element copies, video docs clone+reflow a full timeline variant. */}
@@ -833,19 +847,19 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
             </button>
             <button
               type="button"
-              aria-pressed={formatActionsIndex === currentOutput && editFormatOnly}
+              aria-pressed={editFormatOnly}
               onClick={() => handleToggleFormatLink(formatActionsIndex)}
               className="w-full rounded-sm px-2 py-1.5 text-start hover:bg-studioBorder/10"
             >
               <span className="block text-[12px] text-textColor">
-                {formatActionsIndex === currentOutput && editFormatOnly
-                  ? t('designer_link_this_format', 'Link this format')
-                  : t('designer_unlink_this_format', 'Unlink this format')}
+                {editFormatOnly
+                  ? t('designer_link_format_edits', 'Link edits across formats')
+                  : t('designer_unlink_format_edits', 'Unlink edits between formats')}
               </span>
               <span className="mt-0.5 block text-[10px] leading-snug text-textColor/50">
-                {formatActionsIndex === currentOutput && editFormatOnly
+                {editFormatOnly
                   ? t('designer_link_format_edits_hint', 'Resume shared element edits; existing element links are preserved')
-                  : t('designer_unlink_format_edits_hint', 'Edit this format only; existing element links are preserved')}
+                  : t('designer_unlink_format_edits_hint', 'Edit whichever format is active without syncing linked elements; existing links are preserved')}
               </span>
             </button>
           </div>

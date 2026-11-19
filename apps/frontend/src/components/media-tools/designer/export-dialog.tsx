@@ -90,6 +90,23 @@ const useFocusTrap = (containerRef: React.RefObject<HTMLElement | null>) => {
   }, [containerRef]);
 };
 
+export const outputExportFileBases = (
+  outputs: Array<{ name?: string; formatId?: string; width: number; height: number }>
+) => {
+  const sanitized = outputs.map((output, index) =>
+    (output.name || output.formatId || `output_${index + 1}`).replace(/[^a-zA-Z0-9]/g, '_')
+  );
+  const counts = new Map<string, number>();
+  sanitized.forEach((name) => counts.set(name, (counts.get(name) || 0) + 1));
+  const occurrences = new Map<string, number>();
+  return sanitized.map((name, index) => {
+    if (counts.get(name) === 1) return name;
+    const occurrence = (occurrences.get(name) || 0) + 1;
+    occurrences.set(name, occurrence);
+    return `${name}_${outputs[index].width}x${outputs[index].height}_${occurrence}`;
+  });
+};
+
 interface ExportDialogProps {
   store: any;
   onClose: () => void;
@@ -1449,6 +1466,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
 
       const state = store.getState();
       const baseName = (state.designName || 'design').replace(/[^a-zA-Z0-9]/g, '_');
+      const outputFileBases = outputExportFileBases(selectedOutputs);
       const tasks: StaticExportTask[] = [];
       const allPdf = selectedOutputs.every((o) => (outputFormats[o.id] || 'png') === 'pdf');
       const configurationIdentity = JSON.stringify({
@@ -1467,7 +1485,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
       if (allPdf) {
         const output = selectedOutputs[0];
         const pdfName = selectedOutputs.length === 1
-          ? `${baseName} - ${(output.name || output.formatId || 'output').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+          ? `${baseName} - ${outputFileBases[0]}.pdf`
           : `${baseName} - Combined.pdf`;
         tasks.push({
           key: taskKey(output.id, 0),
@@ -1483,10 +1501,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
         for (let i = 0; i < selectedOutputs.length; i++) {
           const output = selectedOutputs[i];
           const fmt = outputFormats[output.id] || 'png';
-          const outputName = (output.name || output.formatId || `output_${i + 1}`).replace(
-            /[^a-zA-Z0-9]/g,
-            '_'
-          );
+          const outputName = outputFileBases[i];
           if (fmt === 'pdf') {
             tasks.push({
               key: taskKey(output.id, 0),

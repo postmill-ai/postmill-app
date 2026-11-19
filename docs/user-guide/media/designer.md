@@ -24,14 +24,16 @@ saved.
 ## Formats, pages and versions
 
 - **Output tabs** — a design can carry several formats (sizes) at once. The **Add format** card adds
-  another size; linked elements stay in sync across formats unless you choose **Unlink this format**
-  in that card's **⋮** menu. **Link this format** resumes shared edits without changing any existing
-  element links. The same menu renames or resizes the format. Custom sizes start with a **Custom size**
-  name and show their dimensions underneath. Remove is available on the selected or hovered card and
-  shows an **Undo** action immediately after removal. Choose **Independent
+  another size; linked elements stay in sync across formats unless you choose **Unlink edits between
+  formats** in a card's **⋮** menu. This is a global mode for whichever format is active. A
+  **Format-only editing** status stays visible beside Add format while it is on; select it to resume
+  linked editing without changing any existing element links. The card menu also renames or resizes
+  the format. Custom sizes start with a **Custom size** name, numbered when needed, and show their
+  dimensions underneath. Remove is available on the selected or hovered card and shows an **Undo**
+  action immediately after removal. Choose **Independent
   copies** when adding repeated dimensions that should be edited separately. A new element on page
-  1 is added to the linked formats; it stays on the current format when **Unlink this format** is
-  selected or the format is an independent copy. Linked formats remain
+  1 is added to the linked formats; it stays on the current format while **Format-only editing** is
+  on or the format is an independent copy. Linked formats remain
   the default. Grouped presets include 1080×1350 portraits for Instagram, Facebook, LinkedIn, and
   Threads, plus Facebook and LinkedIn squares. **View → Safe Zones** shows approximate platform UI
   regions scaled to the active format: shaded areas may be covered, so keep important content outside

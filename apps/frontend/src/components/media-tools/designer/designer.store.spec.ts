@@ -3520,3 +3520,30 @@ describe('format rename and removal history', () => {
     expect(store.getState().doc.outputs[1].name).toBe('X');
   });
 });
+
+
+describe('unique output names', () => {
+  it('deduplicates custom add, resize, and rename names while preserving the length cap', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'custom', name: 'Custom size', width: 1920, height: 1080 });
+    store.getState().addOutput({ formatId: 'custom', name: 'Custom size', width: 1280, height: 720 });
+    expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
+      'Instagram Post', 'Custom size', 'Custom size 2',
+    ]);
+
+    store.getState().renameOutput(2, 'Instagram Post');
+    expect(store.getState().doc.outputs[2].name).toBe('Instagram Post 2');
+
+    store.getState().resizeOutput(0, 800, 600, 'custom', 'Custom size');
+    expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
+      'Custom size 2', 'Custom size', 'Instagram Post 2',
+    ]);
+
+    const longName = 'a'.repeat(200);
+    store.getState().addOutput({ formatId: 'custom', name: longName, width: 400, height: 400 });
+    store.getState().addOutput({ formatId: 'custom', name: longName, width: 500, height: 500 });
+    const duplicateLongName = store.getState().doc.outputs.at(-1)?.name;
+    expect(duplicateLongName).toHaveLength(200);
+    expect(duplicateLongName?.endsWith(' 2')).toBe(true);
+  });
+});

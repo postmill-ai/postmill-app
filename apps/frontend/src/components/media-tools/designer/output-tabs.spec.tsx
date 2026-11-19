@@ -267,15 +267,22 @@ describe('OutputTabs format workflows', () => {
 
     expect(screen.queryByRole('button', { name: 'Unlink edits between formats' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
-    fireEvent.click(screen.getByRole('button', { name: /Unlink this format/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Unlink edits between formats/ }));
     expect(store.getState().currentOutput).toBe(1);
     expect(store.getState().editFormatOnly).toBe(true);
+    expect(screen.getByRole('button', { name: 'Resume linked editing' })).toBeTruthy();
     expect(store.getState().historyIndex).toBe(historyIndex);
     expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
-    fireEvent.click(screen.getByRole('button', { name: /Link this format/ }));
+    fireEvent.click(document.querySelector('[data-format-select]')!);
+    expect(store.getState().currentOutput).toBe(0);
+    expect(store.getState().editFormatOnly).toBe(true);
+    expect(screen.getByRole('button', { name: 'Resume linked editing' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    expect(screen.getByRole('button', { name: /Link edits across formats/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Resume linked editing' }));
     expect(store.getState().editFormatOnly).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Resume linked editing' })).toBeNull();
     expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
   });
 });
@@ -390,5 +397,49 @@ describe('OutputTabs safe format actions', () => {
     expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
       'Instagram Post', 'Later edit',
     ]);
+  });
+});
+
+
+describe('OutputTabs rename identity', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('renames by output id when collaboration reorders outputs while the prompt is open', async () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
+    const targetId = store.getState().doc.outputs[1].id;
+    const otherId = store.getState().doc.outputs[0].id;
+    let resolvePrompt!: (value: string | null) => void;
+    const pendingName = new Promise<string | null>((resolve) => {
+      resolvePrompt = resolve;
+    });
+    promptOpen.mockReturnValue(pendingName);
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename format' }));
+    await waitFor(() => expect(promptOpen).toHaveBeenCalled());
+
+    act(() => {
+      const doc = store.getState().doc;
+      store.getState().replaceDocTrusted({
+        ...doc,
+        outputs: [doc.outputs[1], doc.outputs[0]],
+      });
+    });
+    await act(async () => {
+      resolvePrompt('Renamed X');
+      await pendingName;
+    });
+
+    await waitFor(() => {
+      expect(store.getState().doc.outputs.find((output) => output.id === targetId)?.name)
+        .toBe('Renamed X');
+    });
+    expect(store.getState().doc.outputs.find((output) => output.id === otherId)?.name)
+      .toBe('Instagram Post');
   });
 });

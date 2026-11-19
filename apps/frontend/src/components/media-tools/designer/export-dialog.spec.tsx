@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import { createDesignerStore } from './designer.store';
-import { ExportDialog } from './export-dialog';
+import { ExportDialog, outputExportFileBases } from './export-dialog';
 import { DesignerExportError } from './export-format';
 
 const mocks = vi.hoisted(() => ({
@@ -449,5 +449,56 @@ describe('ExportDialog static export recovery', () => {
     expect(mocks.upload).toHaveBeenCalledTimes(1);
     expect(mocks.render).toHaveBeenCalledTimes(1);
     expect(mocks.toast).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('ExportDialog duplicate output names', () => {
+  it('keeps unique basenames unchanged and disambiguates sanitized collisions', () => {
+    expect(outputExportFileBases([
+      { name: 'A', width: 400, height: 400 },
+      { name: 'B', width: 600, height: 400 },
+    ])).toEqual(['A', 'B']);
+    expect(outputExportFileBases([
+      { name: 'A B', width: 400, height: 400 },
+      { name: 'A_B', width: 400, height: 400 },
+    ])).toEqual(['A_B_400x400_1', 'A_B_400x400_2']);
+  });
+
+  it('uploads distinct filenames for legacy duplicate custom outputs with the same dimensions', async () => {
+    const store = makeStore();
+    store.setState((state) => ({
+      doc: {
+        ...state.doc,
+        outputs: state.doc.outputs.map((output) => ({
+          ...output,
+          formatId: 'custom',
+          name: 'Custom size',
+          width: 400,
+          height: 400,
+        })),
+      },
+    }));
+    mocks.upload.mockImplementation((_endpoint, formData) => {
+      const name = (formData.get('file') as File).name;
+      return Promise.resolve({ id: name, path: `/files/${name}` });
+    });
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ExportDialog store={store} initialAction="save" onClose={vi.fn()} />
+      </SWRConfig>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Choose Folder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Export 2 file' }));
+    await waitFor(() => expect(mocks.render).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Export 2 file' }));
+    expect(await screen.findByText('Saved to /files')).toBeTruthy();
+
+    const names = mocks.upload.mock.calls.map(([, formData]) => (formData.get('file') as File).name);
+    expect(names).toEqual([
+      'Test - Custom_size_400x400_1.png',
+      'Test - Custom_size_400x400_2.png',
+    ]);
   });
 });
