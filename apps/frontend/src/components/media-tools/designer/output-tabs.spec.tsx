@@ -482,6 +482,7 @@ describe('OutputTabs follow-up regressions', () => {
 
     fireEvent.click(within(card).getByRole('button', { name: 'Remove format' }));
     const sentDoc = store.getState().doc;
+    const removalHistory = store.getState().history;
     const persistedDoc = {
       ...sentDoc,
       outputs: sentDoc.outputs.map((output) => ({ ...output })),
@@ -491,6 +492,7 @@ describe('OutputTabs follow-up regressions', () => {
     });
 
     expect(store.getState().doc).not.toBe(sentDoc);
+    expect(store.getState().history).toBe(removalHistory);
     expect(screen.getByRole('status')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
     expect(store.getState().doc.outputs).toHaveLength(2);
@@ -517,5 +519,49 @@ describe('OutputTabs follow-up regressions', () => {
     expect(store.getState().historyIndex).toBe(removalHistoryIndex);
     expect(store.getState().doc).not.toBe(store.getState().history[removalHistoryIndex]);
     expect(screen.queryByRole('status')).toBeNull();
+  });
+});
+
+
+describe('OutputTabs capped removal history', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('invalidates Remove Undo when a later edit reuses index 49 at the history cap', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Linked',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
+    for (let index = 0; store.getState().history.length < 50; index++) {
+      store.getState().updateElement('headline', { x: index + 1 });
+      store.getState().pushHistory('Move');
+    }
+    expect(store.getState().history).toHaveLength(50);
+    expect(store.getState().historyIndex).toBe(49);
+    store.getState().setCurrentOutput(1);
+    render(<OutputTabs store={store} />);
+    const outputId = store.getState().doc.outputs[1].id;
+    const card = document.querySelector(`[data-format-card="${outputId}"]`) as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove format' }));
+    const removalHistory = store.getState().history;
+    expect(store.getState().historyIndex).toBe(49);
+    expect(screen.getByRole('status')).toBeTruthy();
+
+    act(() => {
+      store.getState().updateElement('headline', { x: 999 });
+      store.getState().pushHistory('Move');
+    });
+
+    expect(store.getState().history).toHaveLength(50);
+    expect(store.getState().historyIndex).toBe(49);
+    expect(store.getState().history).not.toBe(removalHistory);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Undo', exact: true })).toBeNull();
+    expect(store.getState().doc.outputs).toHaveLength(1);
+    expect((store.getState().doc.outputs[0] as any).children[0].x).toBe(999);
   });
 });
