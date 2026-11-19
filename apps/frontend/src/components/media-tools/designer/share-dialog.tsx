@@ -6,12 +6,13 @@ import { Button } from '@postmill-ai/react/form/button';
 import { Checkbox } from '@postmill-ai/react/form/checkbox';
 import { Input } from '@postmill-ai/react/form/input';
 import { Select } from '@postmill-ai/react/form/select';
-import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useT, useTranslationSettings } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import {
   clientDesignShareUrl,
   designShareUrl,
   designViewUrl,
+  formatDesignShareDate,
   useDesignShare,
 } from './design-sharing';
 
@@ -24,6 +25,7 @@ export const ShareDialog: FC<{
   onToggleCollaboration: (enabled: boolean) => void;
 }> = ({ designId, initialCollabEnabled, connectedCount, onToggleCollaboration }) => {
   const t = useT();
+  const i18next = useTranslationSettings();
   const fetch = useFetch();
   const [collabEnabled, setCollabEnabled] = useState(initialCollabEnabled);
   const [teamAccess, setTeamAccess] = useState<'edit' | 'view'>('edit');
@@ -119,6 +121,9 @@ export const ShareDialog: FC<{
           <option value="edit">{t('designer_can_edit', 'Can edit')}</option>
           <option value="view">{t('designer_can_view', 'Can view')}</option>
         </Select>
+        <p className="text-[11px] text-newTextColor/60">
+          {t('designer_team_view_hint', 'Can view opens a read-only preview; it does not restrict teammates who can edit.')}
+        </p>
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
             <Input
@@ -198,7 +203,7 @@ export const ShareDialog: FC<{
             </div>
             {share && (
               <p className="text-[11px] text-newTextColor/60">
-                {t('designer_share_expires_on', 'Link expires on {{date}}.', { date: dayjs(share.expiresAt).format('MMM D, YYYY') })}
+                {t('designer_share_expires_on', 'Link expires on {{date}}.', { date: formatDesignShareDate(share.expiresAt, i18next.resolvedLanguage) })}
               </p>
             )}
             <div className="flex flex-wrap gap-2">
@@ -220,7 +225,8 @@ export const ShareDialog: FC<{
           <p className="rounded-md bg-positive/10 px-3 py-2 text-[12px] text-positive">
             {t('designer_approved_by_on', 'Approved by {{name}} on {{date}}.', {
               name: share.approvedBy || t('designer_client', 'Client'),
-              date: dayjs(share.approvedAt).format('MMM D, YYYY'),
+              date: formatDesignShareDate(share.approvedAt, i18next.resolvedLanguage),
+              interpolation: { escapeValue: false },
             })}
           </p>
         )}
@@ -230,7 +236,7 @@ export const ShareDialog: FC<{
             {share.comments.map((comment) => (
               <div key={comment.id} className="text-[12px]">
                 <span className="font-medium text-textColor">{comment.authorName}</span>
-                <span className="text-newTextColor/50"> · {dayjs(comment.createdAt).format('MMM D, YYYY')}</span>
+                <span className="text-newTextColor/50"> · {formatDesignShareDate(comment.createdAt, i18next.resolvedLanguage)}</span>
                 <p className="whitespace-pre-wrap text-newTextColor/75">{comment.content}</p>
               </div>
             ))}

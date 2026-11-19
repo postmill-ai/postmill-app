@@ -112,7 +112,7 @@ test('team view links and account-free client feedback work from Share design', 
   await page.goto(`/media/designer/view?designId=${DESIGN_ID}`);
   await expect(page.getByRole('heading', { name: 'Client campaign', exact: true })).toBeVisible();
   await expect(page.getByText('View-only design preview', { exact: true })).toBeVisible();
-  await expect(page.getByRole('img')).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Client campaign — Page 1', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
 
   await page.goto(`/share/design/${TOKEN}`);

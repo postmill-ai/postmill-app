@@ -133,8 +133,12 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   image, comment, and approval call, using a uniform 404 for invalid tokens.
 - Comment/approval names cap at 80 characters and comment bodies at 2,000. Disabling comments rejects new
   submissions but preserves existing feedback. Approval is an atomic first-write-wins update. Public
-  routes have tighter per-IP throttles and no session middleware. Organization import regenerates and
-  disables DesignShare tokens while retaining feedback.
+  routes have tighter per-IP throttles and no session middleware; anonymous image rendering caps at
+  10/minute in addition to the global 600/hour limit, matching the authenticated render budget. Team Can
+  view is a read-only route, not an ACL for teammates who already have edit permission. Re-enabling a
+  disabled link rotates its token and clears approval; every document update atomically clears approval
+  for the new revision while retaining comments. Organization import regenerates and disables
+  DesignShare tokens while retaining feedback.
 
 ## CSRF
 

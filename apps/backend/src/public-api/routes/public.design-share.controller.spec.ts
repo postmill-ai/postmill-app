@@ -5,6 +5,9 @@ import { PublicDesignShareController } from './public.design-share.controller';
 import { PublicApiModule } from '../public.api.module';
 import { CreateDesignShareCommentDto } from '@postmill-ai/nestjs-libraries/dtos/design/design-share.dto';
 
+const TTL_KEY = 'THROTTLER:TTLdefault';
+const LIMIT_KEY = 'THROTTLER:LIMITdefault';
+
 describe('PublicDesignShareController', () => {
   let service: Record<string, ReturnType<typeof vi.fn>>;
   let controller: PublicDesignShareController;
@@ -40,6 +43,14 @@ describe('PublicDesignShareController', () => {
     expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
     expect(res.end).toHaveBeenCalledWith(Buffer.from('png'));
   });
+
+  it.each(['renderPublicPreview', 'addComment', 'approve'] as const)(
+    'limits %s to 10 requests per minute',
+    (method) => {
+      expect(Reflect.getMetadata(TTL_KEY, PublicDesignShareController.prototype[method])).toBe(60000);
+      expect(Reflect.getMetadata(LIMIT_KEY, PublicDesignShareController.prototype[method])).toBe(10);
+    },
+  );
 
   it('rejects undeclared fields through the global DTO contract', async () => {
     const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });

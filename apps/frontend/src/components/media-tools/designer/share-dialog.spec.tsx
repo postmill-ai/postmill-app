@@ -19,11 +19,17 @@ const shareHook = vi.hoisted(() => ({
 const fetchMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
-  useT: () => (_key: string, fallback: string, params?: Record<string, unknown>) =>
-    Object.entries(params || {}).reduce(
-      (text, [key, value]) => text.replaceAll(`{{${key}}}`, String(value)),
+  useT: () => (_key: string, fallback: string, params?: Record<string, any>) =>
+    Object.entries(params || {}).filter(([key]) => key !== 'interpolation').reduce(
+      (text, [key, value]) => text.replaceAll(
+        `{{${key}}}`,
+        params?.interpolation?.escapeValue === false
+          ? String(value)
+          : String(value).replaceAll('&', '&amp;').replaceAll("'", '&#39;'),
+      ),
       fallback,
     ),
+  useTranslationSettings: () => ({ resolvedLanguage: 'en' }),
 }));
 
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
@@ -100,6 +106,7 @@ describe('design sharing', () => {
       'value',
       'http://localhost:3000/media/designer/view?designId=design-123',
     );
+    expect(screen.getByText(/read-only preview; it does not restrict teammates who can edit/)).toBeTruthy();
   });
 
   it('creates a client link with comments and expiry', async () => {
@@ -124,7 +131,7 @@ describe('design sharing', () => {
   it('shows and disables an existing client link', async () => {
     shareHook.state.data = existingShare({
       approvedAt: '2026-11-18T12:00:00.000Z',
-      approvedBy: 'Acme client',
+      approvedBy: "O'Brien & Co",
       comments: [{ id: 'c1', authorName: 'Acme client', content: 'Looks good', createdAt: '2026-11-18T11:00:00.000Z' }],
     });
     fetchMock.mockResolvedValue({
@@ -137,7 +144,7 @@ describe('design sharing', () => {
       'value',
       'http://localhost:3000/share/design/client-token',
     );
-    expect(screen.getByText(/Approved by Acme client/)).toBeTruthy();
+    expect(screen.getByText("Approved by O'Brien & Co on Nov 18, 2026.")).toBeTruthy();
     expect(screen.getByText('Looks good')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Disable link' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/media/designs/design-123/share', { method: 'DELETE' }));

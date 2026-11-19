@@ -64,15 +64,19 @@ export class DesignShareRepository {
       enabled: boolean;
       commentsEnabled: boolean;
       expiresAt: Date;
+      resetApproval?: boolean;
     },
   ) {
+    const { resetApproval = false, ...shareData } = data;
     return this._share.model.designShare.upsert({
       where: { designId },
-      create: { organizationId: orgId, designId, ...data },
+      create: { organizationId: orgId, designId, ...shareData },
       update: {
+        token: data.token,
         enabled: data.enabled,
         commentsEnabled: data.commentsEnabled,
         expiresAt: data.expiresAt,
+        ...(resetApproval ? { approvedAt: null, approvedBy: null } : {}),
       },
       include: { comments: commentList },
     });

@@ -56,6 +56,9 @@ export const clientDesignShareUrl = (token: string, origin: string): string =>
 export const designPreviewImageUrl = (baseUrl: string, outputIndex: number, pageNumber: number): string =>
   `${baseUrl}/${outputIndex}/${pageNumber}`;
 
+export const formatDesignShareDate = (value: string, language = 'en'): string =>
+  new Intl.DateTimeFormat(language, { dateStyle: 'medium' }).format(new Date(value));
+
 const usePreviewResource = (key: string | null, url: string) => {
   const fetch = useFetch();
   const load = useCallback(async () => {

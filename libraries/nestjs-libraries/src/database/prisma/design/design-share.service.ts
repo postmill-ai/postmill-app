@@ -91,11 +91,13 @@ export class DesignShareService {
   ) {
     await this._design(orgId, designId);
     const existing = await this._repository.findShareByDesign(orgId, designId) as ShareRecord | null;
+    const rotating = !!existing && !existing.enabled && input.enabled === true;
     const share = await this._repository.saveShare(orgId, designId, {
-      token: existing?.token ?? randomBytes(32).toString('hex'),
+      token: rotating || !existing ? randomBytes(32).toString('hex') : existing.token,
       enabled: input.enabled ?? existing?.enabled ?? true,
       commentsEnabled: input.commentsEnabled ?? existing?.commentsEnabled ?? false,
       expiresAt: this._expiry(input.expiresAt, existing?.expiresAt),
+      resetApproval: rotating,
     });
     return this._managementShare(share as ShareRecord);
   }

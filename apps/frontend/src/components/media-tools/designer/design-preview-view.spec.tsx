@@ -2,14 +2,20 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DesignPreviewView } from './design-preview-view';
-import type { DesignPreviewData } from './design-sharing';
+import { formatDesignShareDate, type DesignPreviewData } from './design-sharing';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
-  useT: () => (_key: string, fallback: string, params?: Record<string, unknown>) =>
-    Object.entries(params || {}).reduce(
-      (text, [key, value]) => text.replaceAll(`{{${key}}}`, String(value)),
+  useT: () => (_key: string, fallback: string, params?: Record<string, any>) =>
+    Object.entries(params || {}).filter(([key]) => key !== 'interpolation').reduce(
+      (text, [key, value]) => text.replaceAll(
+        `{{${key}}}`,
+        params?.interpolation?.escapeValue === false
+          ? String(value)
+          : String(value).replaceAll('&', '&amp;').replaceAll("'", '&#39;'),
+      ),
       fallback,
     ),
+  useTranslationSettings: () => ({ resolvedLanguage: 'en' }),
 }));
 
 vi.mock('@postmill-ai/frontend/components/ui/overflow-tabs', () => ({
@@ -119,6 +125,28 @@ describe('DesignPreviewView', () => {
     expect(screen.getByText('Approved with thanks')).toBeTruthy();
     expect(screen.getByLabelText('Your name')).toBeTruthy();
     expect(screen.getByLabelText('Leave a comment')).toBeTruthy();
+  });
+
+  it('preserves reviewer and design names without HTML entities', () => {
+    render(
+      <DesignPreviewView
+        data={preview({
+          name: 'Smith & Co',
+          approvedAt: '2026-11-18T00:00:00.000Z',
+          approvedBy: "O'Brien & Co",
+        })}
+        imageBaseUrl="/public/preview"
+        publicMode
+      />,
+    );
+    expect(screen.getByRole('img', { name: 'Smith & Co — Page 1', exact: true })).toBeTruthy();
+    expect(screen.getByText("Approved by O'Brien & Co on Nov 18, 2026.")).toBeTruthy();
+  });
+
+  it('formats dates for the active locale', () => {
+    const value = '2026-11-18T00:00:00.000Z';
+    expect(formatDesignShareDate(value, 'en')).toBe('Nov 18, 2026');
+    expect(formatDesignShareDate(value, 'fr')).not.toBe(formatDesignShareDate(value, 'en'));
   });
 
   it('shows a fallback when the rendered image cannot load', () => {

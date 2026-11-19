@@ -91,6 +91,23 @@ describe('DesignShareService', () => {
     expect(repository.saveShare.mock.calls[0][2].commentsEnabled).toBe(false);
   });
 
+  it('rotates the token and clears approval only when a disabled link is re-enabled', async () => {
+    repository.findShareByDesign.mockResolvedValue(share({
+      enabled: false,
+      approvedAt: new Date('2026-11-01T00:00:00.000Z'),
+      approvedBy: 'Previous client',
+    }));
+    repository.saveShare.mockImplementation(async (_org, _design, data) => share(data));
+
+    const result = await service.saveShare('org-1', 'design-1', { enabled: true });
+    const input = repository.saveShare.mock.calls[0][2];
+    expect(input.token).toMatch(/^[0-9a-f]{64}$/);
+    expect(input.token).not.toBe('secret-token');
+    expect(input.resetApproval).toBe(true);
+    expect(result.approvedAt).toBeNull();
+    expect(result.approvedBy).toBeNull();
+  });
+
   it.each([new Date(Date.now() - 1000), new Date(Date.now() + 366 * 86400000)])(
     'rejects invalid expiry %s',
     async (expiresAt) => {

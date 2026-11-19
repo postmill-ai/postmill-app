@@ -1,17 +1,17 @@
 'use client';
 
 import React, { FC, useEffect, useMemo, useState } from 'react';
-import dayjs from 'dayjs';
 import SafeImage from '@postmill-ai/react/helpers/safe.image';
 import { Button } from '@postmill-ai/react/form/button';
 import { Input } from '@postmill-ai/react/form/input';
 import { Textarea } from '@postmill-ai/react/form/textarea';
-import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useT, useTranslationSettings } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import {
   designPreviewImageUrl,
+  formatDesignShareDate,
   usePublicDesignPreview,
   useTeamDesignPreview,
   type DesignPreviewData,
@@ -25,6 +25,7 @@ export const DesignPreviewView: FC<{
   onApprove?: (name: string) => Promise<void>;
 }> = ({ data, imageBaseUrl, publicMode = false, onComment, onApprove }) => {
   const t = useT();
+  const i18next = useTranslationSettings();
   const [outputIndex, setOutputIndex] = useState(data.outputs[0]?.outputIndex ?? 0);
   const [pageNumber, setPageNumber] = useState(0);
   const [name, setName] = useState('');
@@ -94,7 +95,7 @@ export const DesignPreviewView: FC<{
           </div>
           {data.expiresAt && (
             <p className="text-[12px] text-newTextColor/60">
-              {t('designer_preview_expires', 'Preview expires {{date}}', { date: dayjs(data.expiresAt).format('MMM D, YYYY') })}
+              {t('designer_preview_expires', 'Preview expires {{date}}', { date: formatDesignShareDate(data.expiresAt, i18next.resolvedLanguage) })}
             </p>
           )}
         </div>
@@ -137,6 +138,7 @@ export const DesignPreviewView: FC<{
                 alt={t('designer_preview_alt', '{{name}} — {{page}}', {
                   name: data.name,
                   page: page?.name || t('designer_poster', 'Poster'),
+                  interpolation: { escapeValue: false },
                 })}
                 width={output?.width ?? 1080}
                 height={output?.height ?? 1080}
@@ -167,7 +169,8 @@ export const DesignPreviewView: FC<{
               <strong>{t('designer_approved', 'Approved')}</strong>
               <p>{t('designer_approved_by_on', 'Approved by {{name}} on {{date}}.', {
                 name: data.approvedBy || t('designer_client', 'Client'),
-                date: dayjs(data.approvedAt).format('MMM D, YYYY'),
+                date: formatDesignShareDate(data.approvedAt, i18next.resolvedLanguage),
+                interpolation: { escapeValue: false },
               })}</p>
             </div>
           ) : publicMode && (
@@ -195,7 +198,7 @@ export const DesignPreviewView: FC<{
               <article key={item.id} className="border-b border-newTableBorder pb-3 last:border-0">
                 <div className="text-[12px]">
                   <strong>{item.authorName}</strong>
-                  <span className="text-newTextColor/50"> · {dayjs(item.createdAt).format('MMM D, YYYY')}</span>
+                  <span className="text-newTextColor/50"> · {formatDesignShareDate(item.createdAt, i18next.resolvedLanguage)}</span>
                 </div>
                 <p className="mt-1 whitespace-pre-wrap text-[13px] text-newTextColor/80">{item.content}</p>
               </article>

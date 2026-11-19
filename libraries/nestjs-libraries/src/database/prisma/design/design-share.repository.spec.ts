@@ -64,7 +64,28 @@ describe('DesignShareRepository', () => {
 
     const call = model.designShare.upsert.mock.calls[0][0];
     expect(call.create.token).toBe('new-token');
-    expect(call.update).toEqual({ enabled: false, commentsEnabled: true, expiresAt });
+    expect(call.update).toEqual({ token: 'new-token', enabled: false, commentsEnabled: true, expiresAt });
+  });
+
+  it('persists rotation and clears approval when requested', async () => {
+    const { model, repository } = makeRepository();
+    const expiresAt = new Date();
+    await repository.saveShare('org-1', 'design-1', {
+      token: 'rotated-token',
+      enabled: true,
+      commentsEnabled: true,
+      expiresAt,
+      resetApproval: true,
+    });
+
+    expect(model.designShare.upsert.mock.calls[0][0].update).toEqual({
+      token: 'rotated-token',
+      enabled: true,
+      commentsEnabled: true,
+      expiresAt,
+      approvedAt: null,
+      approvedBy: null,
+    });
   });
 
   it('claims approval atomically only while unapproved', async () => {

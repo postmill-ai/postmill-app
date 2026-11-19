@@ -347,6 +347,10 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `DesignPreviewService`, and use the video time-zero poster. One `DesignShare` per design stores the
   client token, enabled/comments settings, expiry, approval, and bounded feedback. Client links live at
   `/share/design/<token>` and reflect the latest saved doc; opening Share does not implicitly save.
+  Re-enabling a disabled link rotates its token and clears the old approval. Any document update clears
+  approval atomically through `DesignRepository.update`, so the latest saved revision can be approved
+  again; comments remain as history and metadata-only updates do not reset approval. Can view is only a
+  read-only route, not an ACL: the dialog states that teammates with existing edit access can still edit.
   Deep-linked loads reject HTTP and error-shaped responses with a visible unavailable state instead
   of treating an error body as a DesignerDoc.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
