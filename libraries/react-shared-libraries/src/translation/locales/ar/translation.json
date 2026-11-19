@@ -3723,6 +3723,8 @@
   "designer_reset_to_original_size": "إعادة التعيين إلى الحجم الأصلي",
   "designer_text_formatting": "تنسيق النص",
   "designer_text_format": "تنسيق النص",
+  "designer_auto_fit_text": "احتواء النص تلقائيًا",
+  "designer_auto_fit_minimum": "الحد الأدنى لحجم الخط",
   "designer_label_font_family": "عائلة الخط",
   "designer_placeholder_search_fonts": "البحث عن خطوط...",
   "designer_no_fonts_found": "لم يتم العثور على خطوط",

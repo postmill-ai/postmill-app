@@ -106,3 +106,28 @@ describe('textScaleX on the document schema', () => {
     expect(parsed.outputs[0].children[0].textScaleX).toBeUndefined();
   });
 });
+
+describe('auto-fit document fields', () => {
+  it.each([true, false])('round-trips autoFit=%s and its minimum', (autoFit) => {
+    const source = doc({ autoFit, autoFitMinFontSize: 12 });
+    expect(DesignerDocStrictSchema.parse(source).outputs[0].children[0]).toMatchObject({
+      autoFit,
+      autoFitMinFontSize: 12,
+    });
+    expect(DesignerDocLenientSchema.parse(source).outputs[0].children[0]).toMatchObject({
+      autoFit,
+      autoFitMinFontSize: 12,
+    });
+  });
+
+  it('does not stamp either field onto an existing document', () => {
+    const parsed = DesignerDocLenientSchema.parse(doc({}));
+    expect(parsed.outputs[0].children[0]).not.toHaveProperty('autoFit');
+    expect(parsed.outputs[0].children[0]).not.toHaveProperty('autoFitMinFontSize');
+  });
+
+  it('rejects an unbounded minimum in strict mode', () => {
+    expect(() => DesignerDocStrictSchema.parse(doc({ autoFitMinFontSize: 0 }))).toThrow();
+    expect(() => DesignerDocStrictSchema.parse(doc({ autoFitMinFontSize: 10000 }))).toThrow();
+  });
+});

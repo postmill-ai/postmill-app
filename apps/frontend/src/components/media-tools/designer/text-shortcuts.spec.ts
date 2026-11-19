@@ -11,7 +11,9 @@ vi.mock('./measure-text', () => ({
   fittedFontSize: (element: DesignerElement) =>
     element.text === 'fitted' ? 29 : element.fontSize ?? 16,
   growBoxFor: (element: DesignerElement, fontSize: number) =>
-    element.richText?.length ? {} : { height: Math.ceil(fontSize * 1.2) },
+    element.autoFit === true || element.richText?.length
+      ? {}
+      : { height: Math.ceil(fontSize * 1.2) },
 }));
 
 const textElement = (id: string, over: Partial<DesignerElement> = {}): DesignerElement => ({
@@ -98,6 +100,19 @@ describe('adjustSelectedTextFontSize', () => {
     expect(children(store)[0]).toMatchObject({ fontSize: 33, height: 40 });
     expect(adjustSelectedTextFontSize(store, 1)).toBe(true);
     expect(children(store)[0]).toMatchObject({ fontSize: 34, height: 41 });
+  });
+
+  it('keeps an auto-fit box stable while changing its authored ceiling', () => {
+    const store = createDesignerStore();
+    store.getState().addElement(textElement('auto', {
+      autoFit: true, fontSize: 32, width: 200, height: 40,
+    }));
+    store.getState().setSelectedIds(['auto']);
+
+    expect(adjustSelectedTextFontSize(store, 1)).toBe(true);
+    expect(children(store)[0]).toMatchObject({
+      autoFit: true, fontSize: 33, width: 200, height: 40,
+    });
   });
 
   it('starts from the fitted size and leaves the existing box unchanged', () => {

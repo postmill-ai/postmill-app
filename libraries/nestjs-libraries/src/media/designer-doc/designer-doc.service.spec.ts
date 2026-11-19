@@ -109,11 +109,13 @@ describe('DesignerDocService', () => {
         op: 'updateElement',
         outputIndex: 0,
         elementId: id,
-        patch: { text: 'World' },
+        patch: { text: 'World', autoFit: true, autoFitMinFontSize: 8 },
       },
     ]);
     const el = (result.outputs[0] as any).children[0];
     expect(el.text).toBe('World');
+    expect(el.autoFit).toBe(true);
+    expect(el.autoFitMinFontSize).toBe(8);
     expect(el.type).toBe('text');
     expect(el.id).toBe(id);
   });

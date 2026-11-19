@@ -53,6 +53,44 @@ describe('addText — image documents', () => {
     expect(el.fontSize).toBe(72);
     expect(el.fontFamily).toBe('Anton');
   });
+
+  it.each([
+    { width: 540, height: 540, fontSize: 16 },
+    { width: 1080, height: 1920, fontSize: 43 },
+    { width: 1920, height: 1080, fontSize: 43 },
+  ])('scales default text and its box for $width×$height', ({ width, height, fontSize }) => {
+    const store = createDesignerStore(width, height);
+    addText(store);
+    const [el] = store.getState().doc.outputs[0].children;
+    expect(el.fontSize).toBe(fontSize);
+    expect(el.height).toBe(Math.ceil(fontSize * 1.2));
+    expect(el.width).toBeGreaterThan(fontSize);
+    expect(el.autoFit).toBe(false);
+  });
+
+  it('grows the measured box with the canvas and matches equal type bases', () => {
+    const small = createDesignerStore(540, 540);
+    const story = createDesignerStore(1080, 1920);
+    const landscape = createDesignerStore(1920, 1080);
+    addText(small);
+    addText(story);
+    addText(landscape);
+    const smallText = small.getState().doc.outputs[0].children[0];
+    const storyText = story.getState().doc.outputs[0].children[0];
+    const landscapeText = landscape.getState().doc.outputs[0].children[0];
+    expect(storyText.width).toBeGreaterThan(smallText.width * 2);
+    expect(storyText.height).toBeGreaterThan(smallText.height * 2);
+    expect(landscapeText.width).toBe(storyText.width);
+    expect(landscapeText.height).toBe(storyText.height);
+  });
+
+  it('scales preset size and tracking from the same type basis', () => {
+    const store = createDesignerStore(540, 540);
+    addText(store, { fontSize: 72, letterSpacing: -2 });
+    const [el] = store.getState().doc.outputs[0].children;
+    expect(el.fontSize).toBe(36);
+    expect(el.letterSpacing).toBe(-1);
+  });
 });
 
 describe('addText — video documents', () => {
@@ -111,6 +149,18 @@ describe('addText — video documents', () => {
     }).tracks.find((t) => t.type === 'text')!.clips[0];
     expect(clip.startMs).toBeLessThanOrEqual(durationMs - 1000);
     expect(clip.endMs).toBeLessThanOrEqual(durationMs);
+  });
+
+  it('uses canvas-aware defaults without adding static auto-fit fields', () => {
+    const store = createDesignerStore(1080, 1920);
+    store.getState().setMode('video');
+    addText(store);
+    const output = store.getState().doc.outputs[0] as never as {
+      tracks: { type: string; clips: { fontSize?: number; autoFit?: boolean }[] }[];
+    };
+    const clip = output.tracks.find((track) => track.type === 'text')!.clips[0];
+    expect(clip.fontSize).toBe(43);
+    expect(clip.autoFit).toBeUndefined();
   });
 
   it('adds no ELEMENT in video mode', () => {

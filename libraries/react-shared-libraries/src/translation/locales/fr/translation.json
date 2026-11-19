@@ -3719,6 +3719,8 @@
   "designer_reset_to_original_size": "Réinitialiser à la taille d'origine",
   "designer_text_formatting": "Mise en forme du texte",
   "designer_text_format": "Format de texte",
+  "designer_auto_fit_text": "Ajustement automatique du texte",
+  "designer_auto_fit_minimum": "Taille minimale de police",
   "designer_label_font_family": "Police",
   "designer_placeholder_search_fonts": "Rechercher des polices...",
   "designer_no_fonts_found": "Aucune police trouvée",

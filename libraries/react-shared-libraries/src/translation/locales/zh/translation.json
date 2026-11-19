@@ -3719,6 +3719,8 @@
   "designer_reset_to_original_size": "重置为原始大小",
   "designer_text_formatting": "文字格式",
   "designer_text_format": "文字格式",
+  "designer_auto_fit_text": "自动适应文本框",
+  "designer_auto_fit_minimum": "最小字号",
   "designer_label_font_family": "字体系列",
   "designer_placeholder_search_fonts": "搜索字体…",
   "designer_no_fonts_found": "未找到字体",

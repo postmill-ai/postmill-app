@@ -301,6 +301,95 @@ test('selected words retain independent colors through autosave and reopen', asy
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toContainText('Hello world');
 });
 
+test('canvas-aware text defaults and auto-fit survive variants, reload, and export', async ({ page }) => {
+  const doc = structuredClone(initialDoc) as any;
+  doc.outputs[0].name = 'Small';
+  doc.outputs[0].children[0].originId = 'body-origin';
+  const story = structuredClone(doc.outputs[0]);
+  story.id = 'story-output';
+  story.name = 'Story';
+  story.width = 1080;
+  story.height = 1920;
+  story.children = story.children.map((child: any) => ({ ...child, id: `story-${child.id}` }));
+  doc.outputs.push(story);
+  const state = await installMocks(page, doc);
+  const persist = async () => {
+    const before = state.saveDocs.length;
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => state.saveDocs.length).toBeGreaterThan(before);
+  };
+  const addDefaultText = async () => {
+    const stage = page.locator('.konva-stage').first();
+    await stage.click({ button: 'right', position: { x: 60, y: 150 } });
+    await page.getByRole('button', { name: 'Add Text', exact: true }).click();
+    await persist();
+  };
+
+  await openDesigner(page);
+  await addDefaultText();
+  expect((state.saveDocs.at(-1) as any).outputs[0].children.find((child: any) => child.text === 'Text')).toMatchObject({
+    fontSize: 16,
+    autoFit: false,
+  });
+
+  await page.getByRole('button', { name: /Story/ }).click();
+  await addDefaultText();
+  expect((state.saveDocs.at(-1) as any).outputs[1].children.find((child: any) => child.text === 'Text')).toMatchObject({
+    fontSize: 43,
+    autoFit: false,
+  });
+
+  await page.getByRole('button', { name: /Small/ }).click();
+  await selectBodyCopy(page);
+  const autoFit = page.getByRole('switch', { name: 'Auto-fit text', exact: true });
+  await expect(autoFit).toHaveAttribute('aria-checked', 'false');
+  await autoFit.click();
+  await page.getByRole('spinbutton', { name: 'Minimum font size', exact: true }).fill('6');
+  await page.getByRole('spinbutton', { name: 'Size', exact: true }).fill('64');
+  await editText(page);
+  const longValue = 'social media managers unbrokenSupercalifragilisticExpialidocious';
+  await page.locator('[data-text-editor-id="body-copy"]').fill(longValue);
+  await page.getByRole('textbox', { name: 'Design name' }).click();
+  await persist();
+
+  const saved = state.saveDocs.at(-1) as any;
+  expect(saved.outputs[0].children[0]).toMatchObject({
+    text: longValue,
+    width: 300,
+    height: 40,
+    fontSize: 64,
+    autoFit: true,
+    autoFitMinFontSize: 6,
+  });
+  expect(saved.outputs[1].children[0]).toMatchObject({
+    text: longValue,
+    fontSize: 230,
+    autoFit: true,
+    autoFitMinFontSize: 22,
+  });
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await selectBodyCopy(page);
+  await expect(page.getByRole('switch', { name: 'Auto-fit text', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('spinbutton', { name: 'Minimum font size', exact: true })).toHaveValue('6');
+  await expect(page.getByRole('spinbutton', { name: 'Size', exact: true })).toHaveValue('64');
+
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save to Files' }).click();
+  await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
+  await page.getByRole('button', { name: 'Next: Export 2 files' }).click();
+  await page.getByRole('button', { name: 'Export 2 files', exact: true }).click();
+  await expect(page.getByRole('link', { name: /\.png$/ })).toHaveCount(2);
+  const rendered = state.renderDocs.slice(-2);
+  expect(rendered.flatMap((renderedDoc: any) => renderedDoc.outputs[0].children)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ text: longValue, autoFit: true, autoFitMinFontSize: 6 }),
+      expect.objectContaining({ text: longValue, autoFit: true, autoFitMinFontSize: 22 }),
+    ])
+  );
+});
+
 test('shape insertion stays on an independent format through save, reload, and export', async ({ page }) => {
   const independentDoc = structuredClone(initialDoc) as any;
   Object.assign(independentDoc.outputs[0], {

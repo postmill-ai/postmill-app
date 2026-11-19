@@ -188,14 +188,23 @@ Manage kits in **Brand Studio** (`/brands`).
 The mouse wheel zooms by default. Laptop users can enable **View → Touchpad mode** to pan with a
 two-finger swipe and zoom with a pinch (or **Ctrl/Cmd+scroll**). The preference is remembered per
 organization. While editing text, the color control above the text box colors only the selected
-characters, so one text box can contain multiple colors. Ordinary text edits retain the box's existing
-shrink-to-fit behavior. The Inspector's **Size** control can grow the box for wrapping or one long word,
-within the output bounds and without shrinking a manually resized box. With text selected,
+characters, so one text box can contain multiple colors. New text uses a font size and starting box
+scaled to the active canvas. Existing designs keep their previous fitting behavior, and newly added
+text starts with **Auto-fit text** off so its explicit size is preserved.
+
+Enable **Auto-fit text** in the Inspector to shrink flat or mixed-style text only as needed to fit
+both the width and height of its box, including a long unbroken word. **Minimum font size** sets the
+lower bound (8px by default); text never grows above its authored size, and auto-fit never changes
+the box. If content still does not fit at that bound, export Preflight reports the overflow. This is
+especially useful for long Bulk Create values. Side handles change only the wrapping frame, while a
+corner resize intentionally scales the box, authored size, and minimum together. With auto-fit on,
+changing **Size** or using the font-size shortcuts changes the authored ceiling without growing the
+box; with it off, the existing intentional box-growth behavior remains.
+
 **Ctrl/Cmd+>** and **Ctrl/Cmd+<** (with or without Shift, including ISO keyboard layouts) increase or
 decrease font size across the selection as one undoable edit, starting from the size painted on canvas.
-An already shrunk box keeps its geometry; an unshrunk box grows within the output as needed so each
-increase remains visible. Mixed rich-text sizes adjust independently, and the shortcuts also work in
-the inline editor without running in ordinary fields.
+Mixed rich-text sizes adjust independently, and the shortcuts also work in the inline editor without
+running in ordinary fields.
 
 A normal image-file drop always inserts a new image, and an SVG drop imports editable paths. Hold
 **Alt/Option** while dropping onto an unlocked static image or still-image clip to show the distinct

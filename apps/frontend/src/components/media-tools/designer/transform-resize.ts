@@ -75,6 +75,7 @@ export interface ResizePatch {
   height: number;
   rotation: number;
   fontSize?: number;
+  autoFitMinFontSize?: number;
 }
 
 /**
@@ -97,7 +98,10 @@ const uniformScale = (scaleX: number, scaleY: number): number =>
  * through different code paths where a single fontSize isn't authoritative.
  */
 export const buildResizePatch = (
-  el: Pick<DesignerElement, 'type' | 'fontSize' | 'richText' | 'textPath' | 'curve'>,
+  el: Pick<
+    DesignerElement,
+    'type' | 'fontSize' | 'autoFitMinFontSize' | 'richText' | 'textPath' | 'curve'
+  >,
   node: NodeGeometry,
   anchor: string | null | undefined
 ): ResizePatch => {
@@ -143,6 +147,12 @@ export const buildResizePatch = (
         MAX_FONT_SIZE,
         Math.max(MIN_FIT_FONT_SIZE, Math.round(el.fontSize * factor))
       );
+      if (el.autoFitMinFontSize) {
+        patch.autoFitMinFontSize = Math.min(
+          MAX_FONT_SIZE,
+          Math.max(1, Math.round(el.autoFitMinFontSize * factor))
+        );
+      }
     }
   }
 
@@ -175,6 +185,7 @@ export const bakeElementTransform = (
     | 'flipX'
     | 'flipY'
     | 'fontSize'
+    | 'autoFitMinFontSize'
     | 'richText'
     | 'textPath'
     | 'curve'

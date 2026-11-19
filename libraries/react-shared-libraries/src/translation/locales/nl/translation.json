@@ -3732,6 +3732,8 @@
   "designer_reset_to_original_size": "Terugzetten naar oorspronkelijke grootte",
   "designer_text_formatting": "Tekstopmaak",
   "designer_text_format": "Tekstopmaak",
+  "designer_auto_fit_text": "Tekst automatisch passend maken",
+  "designer_auto_fit_minimum": "Minimale lettergrootte",
   "designer_label_font_family": "Lettertypefamilie",
   "designer_placeholder_search_fonts": "Lettertypen zoeken...",
   "designer_no_fonts_found": "Geen lettertypen gevonden",

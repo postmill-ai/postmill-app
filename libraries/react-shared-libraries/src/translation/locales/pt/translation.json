@@ -3719,6 +3719,8 @@
   "designer_reset_to_original_size": "Redefinir para o tamanho original",
   "designer_text_formatting": "Formatação de texto",
   "designer_text_format": "Formato de Texto",
+  "designer_auto_fit_text": "Ajuste automático de texto",
+  "designer_auto_fit_minimum": "Tamanho mínimo da fonte",
   "designer_label_font_family": "Família da fonte",
   "designer_placeholder_search_fonts": "Pesquisar fontes...",
   "designer_no_fonts_found": "Nenhuma fonte encontrada",
