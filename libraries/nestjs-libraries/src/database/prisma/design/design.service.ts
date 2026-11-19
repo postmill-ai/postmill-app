@@ -394,17 +394,18 @@ export class DesignService {
     return { success: true };
   }
 
-  async listTemplates(orgId: string, page?: number, limit?: number, brandProfileId?: string, scope?: 'org') {
+  async listTemplates(orgId: string, page?: number, limit?: number, brandProfileId?: string, scope?: 'org', query?: string) {
     // Backward compatible: no pagination params = the historical plain array
     // (other callers depend on the shape). Both present = one page wrapped in
     // { templates, total, page, limit }.
     const paginated = page !== undefined && limit !== undefined;
+    const search = query?.trim() || undefined;
     const [templates, total] = paginated
       ? await Promise.all([
-          this._designRepository.findTemplatesByOrg(orgId, page, limit, brandProfileId, scope),
-          this._designRepository.countTemplatesByOrg(orgId, scope),
+          this._designRepository.findTemplatesByOrg(orgId, page, limit, brandProfileId, scope, search),
+          this._designRepository.countTemplatesByOrg(orgId, scope, search),
         ])
-      : ([await this._designRepository.findTemplatesByOrg(orgId, undefined, undefined, brandProfileId, scope), undefined] as const);
+      : ([await this._designRepository.findTemplatesByOrg(orgId, undefined, undefined, brandProfileId, scope, search), undefined] as const);
     const mapped = templates.map((t) => ({
       ...t,
       // The gallery list is chrome: it reads the mode (badge, uncategorized

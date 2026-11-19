@@ -248,6 +248,39 @@ describe('DesignRepository — templates pagination', () => {
     expect(result.map((template) => template.id)).toEqual(['brand-template', 'shared-template']);
   });
 
+  it('applies one literal case-insensitive search to org-scoped lists and counts', async () => {
+    const { repo, model } = makeRepo();
+    model.designTemplate.findMany.mockResolvedValue([]);
+    model.designTemplate.count.mockResolvedValue(2);
+    const searchWhere = {
+      deletedAt: null,
+      organizationId: 'org-1',
+      AND: [{
+        OR: [
+          { name: { contains: 'launch', mode: 'insensitive' } },
+          { category: { contains: 'launch', mode: 'insensitive' } },
+        ],
+      }],
+    };
+
+    await repo.findTemplatesByOrg('org-1', 1, 24, undefined, 'org', ' launch ');
+    expect(model.designTemplate.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: searchWhere }));
+    expect(await repo.countTemplatesByOrg('org-1', 'org', ' launch ')).toBe(2);
+    expect(model.designTemplate.count).toHaveBeenCalledWith({ where: searchWhere });
+  });
+
+  it('parameterizes literal search in the brand-priority SQL path', async () => {
+    const { repo, model } = makeRepo();
+    model.$queryRawUnsafe.mockResolvedValue([]);
+
+    await repo.findTemplatesByOrg('org-1', 1, 24, 'brand-1', 'org', '100% launch');
+
+    expect(model.$queryRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('POSITION(LOWER($5) IN LOWER("name"))'),
+      'org-1', 'brand-1', 24, 0, '100% launch',
+    );
+  });
+
   it('countTemplatesByOrg counts the same org/system scope as the list', async () => {
     const { repo, model } = makeRepo();
     model.designTemplate.count.mockResolvedValue(7);
