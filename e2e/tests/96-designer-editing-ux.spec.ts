@@ -1433,13 +1433,13 @@ test('text task tabs keep formatting and effects reachable and persist across re
   await page.getByRole('textbox', { name: 'Design name' }).click();
 
   await page.getByRole('tab', { name: 'Effects', exact: true }).click();
-  await expect(page.getByText('Text Effects', { exact: true })).toBeVisible();
+  await expect(page.getByText('Text Effects', { exact: true }).first()).toBeVisible();
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await editText(page);
   // Effects was the text category's remembered tab — no click needed.
-  await expect(page.getByText('Text Effects', { exact: true })).toBeVisible();
+  await expect(page.getByText('Text Effects', { exact: true }).first()).toBeVisible();
 });
 
 test('mobile inspector sheet shares the task tabs and remembers them', async ({ page }) => {
