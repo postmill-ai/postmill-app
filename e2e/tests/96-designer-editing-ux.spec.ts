@@ -1433,6 +1433,7 @@ test('text readability warning keeps fixes on one row and toggles the backdrop',
   await page.keyboard.press('Escape');
   await page.getByTestId('designer-contrast-fixes').getByRole('button', { name: 'Darken background', exact: true }).click();
   await expect(page.getByRole('button', { name: '#FFFFFF', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Text is hard to read on this background' })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Layers', exact: true }).click();
   await expect(page.locator('[data-element-id^="background-dimmer-"]')).toBeVisible();
   await selectBodyCopy(page);

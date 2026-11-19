@@ -17,7 +17,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import type { DesignerElement } from '../designer.store';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { TextEffectPresets } from './text-effect-presets';
-import { getContrastRatio } from '../contrast';
+import { getContrastRatio, getDimmedColor } from '../contrast';
 import {
   pageBackground,
   pageChildren,
@@ -26,6 +26,8 @@ import {
 interface TextInspectorProps {
   store: any;
 }
+
+const BACKGROUND_DIMMER_OPACITY = 0.75;
 
 const findTextBackdrop = (
   children: DesignerElement[],
@@ -36,6 +38,19 @@ const findTextBackdrop = (
         (element) =>
           element.type === 'shape' &&
           element.name === 'Text Backdrop' &&
+          element.parentId === primary.parentId
+      )
+    : undefined;
+
+const findBackgroundDimmer = (
+  children: DesignerElement[],
+  primary: DesignerElement | undefined
+) =>
+  primary
+    ? children.find(
+        (element) =>
+          element.type === 'shape' &&
+          element.name === 'Background Dimmer' &&
           element.parentId === primary.parentId
       )
     : undefined;
@@ -298,6 +313,12 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
   const handleDarkenBackground = useCallback(() => {
     const state = store.getState();
     const output = state.doc.outputs[state.currentOutput];
+    const children = pageChildren(output, state.currentPage);
+    const selected = children.find(
+      (element: DesignerElement) => state.selectedIds.includes(element.id) && element.type === 'text'
+    );
+    if (!selected || findBackgroundDimmer(children, selected)) return;
+
     const dimmer: DesignerElement = {
       id: `background-dimmer-${Date.now()}`,
       type: 'shape',
@@ -307,17 +328,17 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
       width: output.width,
       height: output.height,
       fill: '#000000',
-      opacity: 0.2,
+      opacity: BACKGROUND_DIMMER_OPACITY,
       locked: false,
       hidden: false,
       rotation: 0,
       name: 'Background Dimmer',
+      parentId: selected.parentId,
+      groupId: selected.groupId,
     };
-    state.commitActivePage(
-      [dimmer, ...pageChildren(output, state.currentPage)],
-      state.selectedIds,
-      'Darken background'
-    );
+    const next = [...children];
+    next.splice(children.findIndex((element: DesignerElement) => element.id === selected.id), 0, dimmer);
+    state.commitActivePage(next, state.selectedIds, 'Darken background');
   }, [store]);
 
   const openTextColor = useCallback(() => {
@@ -327,10 +348,9 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
   }, []);
 
   const primary = textElements[0];
-  const textBackdrop = findTextBackdrop(
-    out ? pageChildren(out, currentPage) : [],
-    primary
-  );
+  const pageElements = out ? pageChildren(out, currentPage) : [];
+  const textBackdrop = findTextBackdrop(pageElements, primary);
+  const backgroundDimmer = findBackgroundDimmer(pageElements, primary);
   const textFill = primary?.fill || '#000000';
   const background = out ? pageBackground(out, currentPage) : undefined;
   const heuristicBg =
@@ -345,7 +365,7 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
   // is new on every store mutation) stops the background being re-sampled on every
   // unrelated edit while a text element is selected.
   const sampleKey = primary
-    ? `${primary.id}:${primary.x}:${primary.y}:${primary.width}:${primary.height}`
+    ? `${primary.id}:${primary.x}:${primary.y}:${primary.width}:${primary.height}:${backgroundDimmer?.id ?? ''}:${backgroundDimmer?.opacity ?? ''}`
     : '';
   useEffect(() => {
     if (!primary) {
@@ -357,6 +377,11 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
   const bgColor = sampledBg ?? heuristicBg;
   const ratio = primary ? getContrastRatio(textFill, bgColor) ?? 21 : 21;
   const isLowContrast = ratio < 4.5;
+  const dimmedBackground = getDimmedColor(bgColor, BACKGROUND_DIMMER_OPACITY);
+  const dimmedRatio = primary && dimmedBackground
+    ? getContrastRatio(textFill, dimmedBackground)
+    : null;
+  const canDarkenBackground = isLowContrast && dimmedRatio !== null && dimmedRatio >= 4.5 && dimmedRatio > ratio;
 
   const categories = ['heading', 'subheading', 'body', 'caption'] as const;
   const categoryLabels: Record<string, string> = {
@@ -488,14 +513,16 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
                   >
                     {t('designer_add_backdrop', 'Add backdrop')}
                   </button>
-                  <button
-                    type="button"
-                    className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-[10px]"
-                    title={t('designer_darken_background', 'Darken background')}
-                    onClick={handleDarkenBackground}
-                  >
-                    {t('designer_darken_background', 'Darken background')}
-                  </button>
+                  {canDarkenBackground && (
+                    <button
+                      type="button"
+                      className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-[10px]"
+                      title={t('designer_darken_background', 'Darken background')}
+                      onClick={handleDarkenBackground}
+                    >
+                      {t('designer_darken_background', 'Darken background')}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-[10px]"

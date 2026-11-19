@@ -4,6 +4,7 @@ import { SWRConfig } from 'swr';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TextInspector } from './text-inspector';
 import { ensureFontLoaded } from '../fonts';
+import { sharedStageRef } from '../stage-ref';
 import {
   createDesignerStore,
   type DesignerElement,
@@ -114,6 +115,7 @@ const createSecondOutputPageTwoSelection = () => {
 };
 
 afterEach(() => {
+  sharedStageRef.current = null;
   vi.clearAllMocks();
 });
 
@@ -152,12 +154,7 @@ describe('TextInspector paged text', () => {
     expect(warning.className).toContain('dark:text-yellow-200');
     expect(screen.getByTestId('designer-contrast-fixes').className).toContain('flex-nowrap');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Darken background' }));
-    const darkenedChildren = output(store, 1).pages?.[0].children ?? [];
-    expect(darkenedChildren[0]).toMatchObject({
-      type: 'shape', name: 'Background Dimmer', x: 0, y: 0, width: 1080, height: 1920, opacity: 0.2,
-    });
-    expect(darkenedChildren.find((element) => element.id === 'page-two')?.fill).toBe('#123456');
+    expect(screen.queryByRole('button', { name: 'Darken background' })).toBeNull();
     await clickStyle(/Heading 1/);
     fireEvent.click(screen.getByRole('button', { name: 'Text color' }));
     const colorTrigger = screen.getByRole('button', { name: '#123456', expanded: true });
@@ -175,6 +172,84 @@ describe('TextInspector paged text', () => {
     expect(output(store, 1).children[0]).toMatchObject({ fontSize: linkedPageOneFontSize, fill: '#123456' });
     expect(output(store, 0).children[0]).toMatchObject({ fontSize: 16, fill: '#123456' });
     expect(output(store, 0).pages).toBeUndefined();
+  });
+
+  it('darkens a full-bleed image directly below the text without stacking dimmers', async () => {
+    const store = createDesignerStore();
+    const canvas = store.getState().doc.outputs[0];
+    store.getState().addElement({
+      id: 'full-bleed-photo',
+      type: 'image',
+      src: 'photo.png',
+      x: 0,
+      y: 0,
+      width: canvas.width,
+      height: canvas.height,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+    } as DesignerElement);
+    store.getState().addElement({ ...textElement('image-text', 'Read me'), fill: '#ffffff' });
+    await renderInspector(store);
+    const historyDepth = store.getState().history.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Darken background' }));
+    let children = output(store, 0).children;
+    expect(children.map((element) => element.id)).toEqual([
+      'full-bleed-photo',
+      children[1].id,
+      'image-text',
+    ]);
+    expect(children[1]).toMatchObject({
+      type: 'shape',
+      name: 'Background Dimmer',
+      x: 0,
+      y: 0,
+      width: canvas.width,
+      height: canvas.height,
+      opacity: 0.75,
+    });
+    expect(children[0]).toMatchObject({ id: 'full-bleed-photo', src: 'photo.png' });
+    expect(children[2]).toMatchObject({ id: 'image-text', fill: '#ffffff' });
+    expect(store.getState().selectedIds).toEqual(['image-text']);
+    expect(store.getState().history).toHaveLength(historyDepth + 1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Darken background' }));
+    children = output(store, 0).children;
+    expect(children.filter((element) => element.name === 'Background Dimmer')).toHaveLength(1);
+    expect(children).toHaveLength(3);
+    expect(store.getState().history).toHaveLength(historyDepth + 1);
+  });
+
+  it('resamples the dimmed background and clears the contrast warning', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement({ ...textElement('sampled-text', 'Read me'), fill: '#ffffff' });
+    const node = {
+      getClientRect: () => ({ x: 0, y: 0, width: 100, height: 40 }),
+      visible: vi.fn(),
+      getLayer: () => ({ batchDraw: vi.fn() }),
+    };
+    sharedStageRef.current = {
+      findOne: () => node,
+      toCanvas: () => {
+        const value = output(store, 0).children.some((element) => element.name === 'Background Dimmer') ? 64 : 255;
+        return {
+          width: 1,
+          height: 1,
+          getContext: () => ({
+            getImageData: () => ({ data: new Uint8ClampedArray([value, value, value, 255]) }),
+          }),
+        };
+      },
+    } as any;
+    await renderInspector(store);
+    expect(screen.getByRole('alert').textContent).toContain('Text is hard to read on this background');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Darken background' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(output(store, 0).children.some((element) => element.name === 'Background Dimmer')).toBe(true);
+    expect(output(store, 0).children.find((element) => element.id === 'sampled-text')?.fill).toBe('#ffffff');
   });
 
   it('toggles and groups a backdrop with the primary text on page 2 only', async () => {
