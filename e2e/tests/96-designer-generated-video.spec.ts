@@ -1450,7 +1450,7 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     const canvasHeight = async () => (await canvas.boundingBox())!.height;
     const regionHeight = async () => (await trackRegion.boundingBox())!.height;
     await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(7);
-    const comfortableCanvas = await canvasHeight();
+    const comfortableRegion = await regionHeight();
     const canvasBox = await canvas.boundingBox();
     const timelineBox = await timeline.boundingBox();
     expect(canvasBox).not.toBeNull();
@@ -1475,10 +1475,27 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     await expect(comfortableRow).toHaveAttribute('data-collapsed', 'false');
     await expect(comfortableLock).toHaveAttribute('aria-pressed', 'false');
 
-    await page.getByRole('button', { name: 'Compact tracks', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Compact tracks', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await expect.poll(canvasHeight).toBeGreaterThan(comfortableCanvas + 60);
+    const compactToggle = page.getByRole('button', { name: 'Compact tracks', exact: true });
+    await compactToggle.click();
+    await expect(compactToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(regionHeight).toBe(comfortableRegion - 108);
+    await expect.poll(canvasHeight).toBe(240);
     await expect(timelineTrackRow(page, 'Text main')).toHaveAttribute('style', /height: 38px/);
+
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await expect.poll(canvasHeight).toBeGreaterThan(240);
+    const compactCanvas = await canvasHeight();
+    await compactToggle.click();
+    await expect(compactToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(regionHeight).toBe(comfortableRegion);
+    const comfortableTallCanvas = await canvasHeight();
+    expect(comfortableTallCanvas).toBeLessThan(compactCanvas - 60);
+    await compactToggle.click();
+    await expect(compactToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(canvasHeight).toBeGreaterThan(comfortableTallCanvas + 60);
+    await expect.poll(regionHeight).toBe(comfortableRegion - 108);
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await expect.poll(canvasHeight).toBe(240);
 
     const imageClip = timelineTrackRow(page, 'Image main').getByRole('slider', { name: 'Clip', exact: true });
     await imageClip.click();
