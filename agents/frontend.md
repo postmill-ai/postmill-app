@@ -408,7 +408,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   responsive height bounds; `timeline-geometry.ts` and `timeline-marquee.ts` share cumulative row tops
   so cross-track drops, the new-track zone, and marquee selection remain correct with collapsed rows.
   The splitter supports pointer drag plus Arrow Up/Down and Home/End; it is hidden on mobile, where the
-  wrapping toolbar and selected-clip timing fields remain available beside the Inspector sheet.
+  wrapping toolbar and selected-clip timing fields remain available beside the Inspector sheet. Desktop
+  keeps a 240 px minimum canvas; when that and the minimum timeline cannot both fit, the workspace column
+  scrolls instead of collapsing the canvas. Existing mobile canvas/sheet minimums stay unchanged.
 - **Timeline gestures and exact timing.** Clip move/trim and ruler scrub use `trySetPointerCapture`
   from `pointer-capture.ts` (an inactive pointer returns false instead of throwing; every Designer
   capture call goes through it), with pointer-id checks, cancellation/lost-capture handling, and
