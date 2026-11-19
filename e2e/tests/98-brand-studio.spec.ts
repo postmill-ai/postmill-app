@@ -339,7 +339,7 @@ test('Brand Kit deep links and visual roles survive save, reload, and mobile nav
   });
 
   await page.goto('/brands/brand-a/kit#fonts');
-  await expect(page.getByText('Legacy Sans', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove Legacy Sans', exact: true })).toBeVisible();
   await expect(page.getByText('B Custom', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Search and add a font…', exact: true }).click();
   await page.getByPlaceholder('Search fonts...').fill('Inter');
@@ -360,7 +360,7 @@ test('Brand Kit deep links and visual roles survive save, reload, and mobile nav
   await expect(page.getByRole('combobox', { name: 'Logo role for logo-b.png', exact: true })).toHaveCount(0);
   await expect(page.getByText('Icon', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Remove Inter', exact: true })).toBeVisible();
-  await expect(page.getByText('Legacy Sans', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove Legacy Sans', exact: true })).toBeVisible();
   await expect(page.getByText('B Custom', { exact: true })).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 800 });
