@@ -186,20 +186,8 @@ jobs:
       # Lives here rather than in test.yml because generating the document constructs
       # AppModule, which instantiates every provider and therefore needs the same
       # Postgres/Redis/JWT env this job already provisions. test.yml has no Redis.
-      - name: Generate OpenAPI document
-        run: node tools/codegen/generate-openapi.mjs
-
-      - name: Upload generated OpenAPI document
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: kan-33-generated-openapi
-          path: openapi.yml
-          if-no-files-found: error
-          retention-days: 1
-
       - name: OpenAPI drift gate
-        run: git diff --exit-code -- openapi.yml
+        run: node tools/codegen/generate-openapi.mjs --check
 
       - name: Boot backend and assert it answers (not a 502/crash-loop)
         run: |
