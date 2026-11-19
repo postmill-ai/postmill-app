@@ -44,6 +44,26 @@ export interface ImageDropResolution {
   bounds: { x: number; y: number; width: number; height: number };
 }
 
+export const imageDropNodeBounds = (node: Konva.Node) => {
+  const width = node.width();
+  const height = node.height();
+  if (width > 0 && height > 0) {
+    const transform = node.getAbsoluteTransform();
+    const points = [
+      transform.point({ x: 0, y: 0 }),
+      transform.point({ x: width, y: 0 }),
+      transform.point({ x: width, y: height }),
+      transform.point({ x: 0, y: height }),
+    ];
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+  }
+  return node.getClientRect({ skipShadow: true, skipStroke: true });
+};
+
 export const resolveImageDropTarget = ({
   stage,
   store,
@@ -65,7 +85,7 @@ export const resolveImageDropTarget = ({
     const id = node.id();
     const target = id ? imageDropTargetById(store, id) : null;
     if (target) {
-      const bounds = node.getClientRect({ skipShadow: true, skipStroke: true });
+      const bounds = imageDropNodeBounds(node);
       return { target, bounds };
     }
     node = node.getParent();

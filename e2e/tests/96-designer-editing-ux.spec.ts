@@ -1077,19 +1077,25 @@ test('File Library and Insert Image stock drags replace without uploads or sourc
   };
   const dragToImage = async (source: Locator) => {
     const stageBox = await page.locator('.konva-stage').first().boundingBox();
-    const canvas = page.locator('.designer-canvas-container');
-    const canvasBox = await canvas.boundingBox();
+    const sourceBox = await source.boundingBox();
     expect(stageBox).not.toBeNull();
-    expect(canvasBox).not.toBeNull();
+    expect(sourceBox).not.toBeNull();
     const scale = Math.min(stageBox!.width / 400, stageBox!.height / 400) * 0.85;
     const outputX = (stageBox!.width - 400 * scale) / 2;
     const outputY = (stageBox!.height - 400 * scale) / 2;
-    await source.dragTo(canvas, {
-      targetPosition: {
-        x: stageBox!.x + outputX + 120 * scale - canvasBox!.x,
-        y: stageBox!.y + outputY + 260 * scale - canvasBox!.y,
-      },
-    });
+    const startX = sourceBox!.x + sourceBox!.width / 2;
+    const startY = sourceBox!.y + sourceBox!.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 16, startY, { steps: 4 });
+    await expect(source).toHaveAttribute('draggable', 'true');
+    await page.mouse.move(
+      stageBox!.x + outputX + 120 * scale,
+      stageBox!.y + outputY + 260 * scale,
+      { steps: 12 }
+    );
+    await expect(page.getByTestId('media-picker').parentElement!).toHaveClass(/pointer-events-none/);
+    await page.mouse.up();
   };
 
   await openPicker();

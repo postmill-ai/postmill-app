@@ -108,6 +108,21 @@ describe('resolveImageDropTarget', () => {
     expect(getIntersection).toHaveBeenCalledWith({ x: 40, y: 50 });
   });
 
+  it('uses the full frame rather than a smaller painted child box', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'image', type: 'image', x: 10, y: 20, width: 100, height: 50,
+      rotation: 0, opacity: 1, locked: false, hidden: false, src: '/image.png',
+    });
+    const node = new Konva.Group({ id: 'image', x: 10, y: 20, width: 100, height: 50 });
+    node.add(new Konva.Rect({ x: 20, y: 10, width: 60, height: 30 }));
+    const stage = { getIntersection: () => node } as unknown as Konva.Stage;
+
+    expect(resolveImageDropTarget({
+      stage, store, clientX: 45, clientY: 65, containerRect: { left: 0, top: 0 } as DOMRect,
+    })?.bounds).toEqual({ x: 10, y: 20, width: 100, height: 50 });
+  });
+
   it('does not highlight a locked target', () => {
     const store = createDesignerStore();
     store.getState().addElement({
