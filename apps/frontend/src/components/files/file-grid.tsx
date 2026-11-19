@@ -146,6 +146,7 @@ export const FileGrid: FC<{
             file={file}
             isSelected={selectedIds.has(file.id)}
             onDragStart={handleDragStart}
+            immediateDrag={!!onFileDragStart}
             onActivate={() => (onSelect ? onSelect([file]) : onToggleSelect(file))}
             onPreview={!onSelect ? () => onFileClick(file) : undefined}
             onMenu={onFileMenu ? (e) => onFileMenu(e, file) : undefined}
@@ -162,21 +163,21 @@ const FileTile: FC<{
   file: FileItem;
   isSelected: boolean;
   onDragStart: (e: React.DragEvent, file: FileItem) => void;
+  immediateDrag: boolean;
   onActivate: () => void;
   onPreview?: () => void;
   onMenu?: (e: MenuEvent) => void;
   longPress?: Record<string, unknown>;
   t: ReturnType<typeof useT>;
-}> = ({ file, isSelected, onDragStart, onActivate, onPreview, onMenu, longPress, t }) => {
+}> = ({ file, isSelected, onDragStart, immediateDrag, onActivate, onPreview, onMenu, longPress, t }) => {
   const tags: string[] = file.tags ? JSON.parse(file.tags) : [];
   const presentation = getFilePresentation(file);
   const designLabel = getDesignLabel(file);
 
-  // The tile is only armed for HTML5 drag after the pointer has actually
-  // travelled — with `draggable` set unconditionally, a few px of movement
-  // during mousedown started a drag that swallowed the click (and made
-  // double-click unreliable). A plain click never crosses the threshold, so
-  // selection/preview stay crisp while drag-to-move keeps working.
+  // Standalone folder-move tiles arm only after pointer travel so a sloppy
+  // click stays a click. Picker tiles are draggable immediately: native HTML5
+  // drag reads the attribute when the gesture starts, before a threshold state
+  // update could enable it.
   const DRAG_THRESHOLD_PX = 5;
   const [dragArmed, setDragArmed] = useState(false);
   const pressPos = useRef<{ x: number; y: number } | null>(null);
@@ -193,7 +194,7 @@ const FileTile: FC<{
     <div
       role="button"
       tabIndex={0}
-      draggable={dragArmed}
+      draggable={immediateDrag || dragArmed}
       onDragStart={(e) => onDragStart(e, file)}
       onDragEnd={() => {
         justDragged.current = true;

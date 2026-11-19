@@ -276,6 +276,7 @@ describe('FileGrid', () => {
       />
     );
     const tile = screen.getByRole('button');
+    expect(tile.getAttribute('draggable')).toBe('true');
     fireEvent.pointerDown(tile, { button: 0, clientX: 50, clientY: 50 });
     fireEvent.pointerMove(tile, { clientX: 80, clientY: 80 });
     const dataTransfer = { setData: vi.fn(), effectAllowed: 'move' };
