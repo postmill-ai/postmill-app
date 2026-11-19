@@ -1430,6 +1430,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const selectedClip = store((s) => s.selectedClip);
   const selectedClips = store((s) => s.selectedClips);
   const selectedIds = store((s) => s.selectedIds);
+  const hasKeyframeClipboard = store((s) => !!s.keyframeClipboard?.length);
   const hasAnimationClipboard = store((s) => s.animationClipboard?.orgId === orgId && !!s.animationClipboard);
   const timelineSnap = store((s) => s.timelineSnap);
   const timelineHeight = store((s) => s.timelineHeight);
@@ -2864,6 +2865,23 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     store.getState().copySelectedClips();
     setClipMenu(null);
   }, [store]);
+
+  const handleCopyClipKeyframes = useCallback(() => {
+    if (!clipMenu) return;
+    store.getState().copyClipKeyframes(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId);
+    setClipMenu(null);
+  }, [clipMenu, store]);
+
+  const handlePasteClipKeyframes = useCallback(() => {
+    if (!clipMenu) return;
+    store.getState().setSelectedClip({
+      outputIndex: clipMenu.outputIndex,
+      trackId: clipMenu.trackId,
+      clipId: clipMenu.clipId,
+    });
+    store.getState().pasteClipKeyframes();
+    setClipMenu(null);
+  }, [clipMenu, store]);
 
   const handleCopyAnimation = useCallback(() => {
     if (!clipMenu) return;
@@ -4429,21 +4447,43 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                   >
                     {translate('copy_clips', 'Copy')}
                   </button>
-                  <button
-                    onClick={handleCopyAnimation}
-                    disabled={!track || !hasSupportedAnimation(track, clip)}
-                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {translate('designer_copy_animation', 'Copy Animation')}
-                  </button>
-                  <button
-                    onClick={handlePasteAnimation}
-                    disabled={!hasAnimationClipboard || !!vo.frozen}
-                    title={translate('designer_paste_animation_hint', 'Apply the copied animation to the selected clips')}
-                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {translate('designer_paste_animation', 'Paste Animation')}
-                  </button>
+                  {track?.type === 'audio' ? (
+                    <>
+                      <button
+                        onClick={handleCopyClipKeyframes}
+                        disabled={!clip.keyframes?.length}
+                        className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {translate('copy_keyframes', 'Copy keyframes')}
+                      </button>
+                      <button
+                        onClick={handlePasteClipKeyframes}
+                        disabled={!hasKeyframeClipboard || !!vo.frozen}
+                        title={translate('paste_keyframes_hint', 'Merge the copied keyframes onto this clip')}
+                        className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {translate('paste_keyframes', 'Paste keyframes')}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleCopyAnimation}
+                        disabled={!track || !hasSupportedAnimation(track, clip)}
+                        className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {translate('designer_copy_animation', 'Copy Animation')}
+                      </button>
+                      <button
+                        onClick={handlePasteAnimation}
+                        disabled={!hasAnimationClipboard || !!vo.frozen}
+                        title={translate('designer_paste_animation_hint', 'Apply the copied animation to the selected clips')}
+                        className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {translate('designer_paste_animation', 'Paste Animation')}
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={handleSplitClipAtPlayhead}
                     disabled={!canSplitClipAt(vo, clipMenu.trackId, clipMenu.clipId, store.getState().playheadMs)}

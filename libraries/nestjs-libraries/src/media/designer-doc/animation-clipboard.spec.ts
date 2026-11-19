@@ -187,6 +187,35 @@ describe('planAnimationPaste', () => {
     });
   });
 
+  it('clamps out-of-range source keyframes into the target duration', () => {
+    const { snapshot } = snapshotAnimation(sourceTrack, clip({
+      keyframes: [
+        { tMs: -1000, props: { opacity: 0 } },
+        { tMs: 6000, props: { opacity: 1 } },
+      ],
+    }));
+    const [plan] = planAnimationPaste(snapshot!, [{
+      track: { type: 'image' },
+      clip: clip({ startMs: 1000, endMs: 3000 }),
+    }]);
+    expect(plan.patch?.keyframes?.map((keyframe) => keyframe.tMs)).toEqual([0, 2000]);
+  });
+
+  it('keeps the target volume easing when it shares a timestamp with pasted visual animation', () => {
+    const { snapshot } = snapshotAnimation(sourceTrack, clip({
+      keyframes: [{ tMs: 1000, props: { opacity: 0.5 }, ease: 'easeOut' }],
+    }));
+    const [plan] = planAnimationPaste(snapshot!, [{
+      track: sourceTrack,
+      clip: clip({
+        keyframes: [{ tMs: 1000, props: { volume: 0.25 }, ease: 'easeIn' }],
+      }),
+    }]);
+    expect(plan.patch?.keyframes).toEqual([
+      { tMs: 1000, props: { opacity: 0.5, volume: 0.25 }, ease: 'easeIn' },
+    ]);
+  });
+
   it('re-anchors and rescales KAN-16 paths while preserving path-local movement and rotation', () => {
     const { snapshot } = snapshotAnimation(sourceTrack, clip({
       x: 100,

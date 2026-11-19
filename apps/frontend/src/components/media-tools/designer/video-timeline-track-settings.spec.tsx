@@ -90,6 +90,47 @@ const openAudioSettings = ({ frozen = false, locked = false } = {}) => {
 };
 
 describe('video timeline audio track settings', () => {
+  it('copies and pastes an audio volume envelope through the clip menu', () => {
+    const store = createDesignerStore(1080, 1080);
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'audio');
+    const output = store.getState().doc.outputs[0] as VideoOutput;
+    const trackId = output.tracks.find((track) => track.type === 'audio')!.id;
+    store.getState().addClip(0, trackId, {
+      id: 'audio-source', startMs: 0, endMs: 4000,
+      keyframes: [
+        { tMs: 0, props: { volume: 0 } },
+        { tMs: 1000, props: { volume: 1 } },
+      ],
+    } as never);
+    store.getState().addClip(0, trackId, {
+      id: 'audio-target', startMs: 4000, endMs: 8000,
+    } as never);
+
+    render(<VideoTimeline store={store} />);
+    const expand = screen.queryByRole('button', { name: 'Expand timeline' });
+    if (expand) fireEvent.click(expand);
+    const clips = screen.getAllByRole('slider', { name: 'Clip', exact: true });
+    fireEvent.contextMenu(clips[0], { clientX: 100, clientY: 100 });
+    const copy = screen.getByRole('button', { name: 'Copy keyframes', exact: true });
+    expect(copy).toHaveProperty('disabled', false);
+    expect(screen.queryByRole('button', { name: 'Copy Animation', exact: true })).toBeNull();
+    fireEvent.click(copy);
+    expect(store.getState().keyframeClipboard).toHaveLength(2);
+
+    fireEvent.contextMenu(clips[1], { clientX: 100, clientY: 100 });
+    const paste = screen.getByRole('button', { name: 'Paste keyframes', exact: true });
+    expect(paste).toHaveProperty('disabled', false);
+    expect(screen.queryByRole('button', { name: 'Paste Animation', exact: true })).toBeNull();
+    fireEvent.click(paste);
+    expect((store.getState().doc.outputs[0] as VideoOutput).tracks
+      .find((track) => track.id === trackId)?.clips
+      .find((clip) => clip.id === 'audio-target')?.keyframes).toEqual([
+        { tMs: 0, props: { volume: 0 } },
+        { tMs: 1000, props: { volume: 1 } },
+      ]);
+  });
+
   it('disables gain, auto-duck and mute when the format is frozen', () => {
     const controls = openAudioSettings({ frozen: true });
 

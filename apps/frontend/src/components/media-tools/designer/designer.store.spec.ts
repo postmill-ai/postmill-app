@@ -3447,12 +3447,15 @@ describe('frozen output read-only clipboard actions', () => {
     const before = store.getState().doc;
 
     store.getState().copySelectedClips();
+    store.getState().copyClipKeyframes(0, trackId, 'clip');
     store.getState().copyAnimation(0, trackId, 'clip', 'org-a');
     expect(store.getState().clipClipboard).toHaveLength(1);
     expect(store.getState().clipClipboard[0].clip.id).toBe('clip');
+    expect(store.getState().keyframeClipboard).toHaveLength(1);
     expect(store.getState().animationClipboard?.snapshot.keyframes).toHaveLength(1);
 
     store.getState().pasteClips(2000);
+    store.getState().pasteClipKeyframes();
     store.getState().pasteAnimation(0, [{ trackId, clipId: 'clip' }], 'org-a');
     expect(store.getState().doc).toBe(before);
   });

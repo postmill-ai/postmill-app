@@ -1357,12 +1357,13 @@ test.describe('Designer animation clipboard (mocked local document)', () => {
     await page.getByRole('button', { name: 'Paste Animation', exact: true }).click();
     await expect(page.getByText('Animation pasted to 1 clip(s)', { exact: true })).toBeVisible();
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.motionPath).toBeDefined();
-    await page.keyboard.press('Control+z');
+    await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+    await page.getByRole('menuitem', { name: /^Undo/ }).click();
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.keyframes).toBeUndefined();
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.motionPath).toBeUndefined();
 
     await clipOnTrack(page, 'Target').click();
-    await clipOnTrack(page, 'Shape target').click({ modifiers: ['Control'] });
+    await clipOnTrack(page, 'Shape target').click({ modifiers: ['Shift'] });
     await clipOnTrack(page, 'Target').click({ button: 'right' });
     await page.getByLabel('Video timeline').getByRole('button', { name: 'Paste Animation', exact: true }).click();
     await expect(page.getByText(/Animation pasted to 2 clip\(s\)\. Skipped:/)).toBeVisible();

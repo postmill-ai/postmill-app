@@ -139,8 +139,10 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      and rotation retain source deltas from each target's base, dimensions and font size use finite
      base ratios, and paths re-anchor between base centers through `translateMotionPath` and
      `rescaleMotionPathTimes`. Target content/assets, base geometry, timing, crop/focal state, speed,
-     audio, and linked variants remain local and unchanged. Preview, poster, and injected export frames
-     therefore evaluate the pasted document through the same `interpolateClipWithMotionPath` and reveal
+     audio, and linked variants remain local and unchanged. Source volume is skipped; target volume
+     keyframes survive, with their easing taking precedence at coincident timestamps. Audio clips keep
+     the separate merge-based Copy/Paste Keyframes workflow for volume envelopes. Preview, poster, and
+     injected export frames therefore evaluate the pasted document through the same `interpolateClipWithMotionPath` and reveal
      implementations as authored animation; acceptance must compare normalized timestamps and at least
      two `renderScale` values rather than only checking saved fields.
    - Text extrusion (`clip.textExtrusion`, optional-additive doc v12) draws bounded far-to-near

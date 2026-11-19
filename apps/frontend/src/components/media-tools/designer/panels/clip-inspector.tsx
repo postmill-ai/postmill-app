@@ -410,6 +410,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   const toaster = useToaster();
   const modals = useModals();
   const doc = store((s: any) => s.doc);
+  const hasKeyframeClipboard = store((s: any) => !!s.keyframeClipboard?.length);
   const hasAnimationClipboard = store((s: any) => !!s.animationClipboard && s.animationClipboard.orgId === orgId);
   const brandEnforcement = store((s: any) => s.brandEnforcement);
   const vo = doc.outputs[outputIndex];
@@ -1758,31 +1759,58 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         <div className="flex items-center justify-between">
           <div className="text-[11px] text-textColor/50">{translate('designer_label_keyframes', 'Keyframes')}</div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={!parentTrack || !hasSupportedAnimation(parentTrack, clip)}
-              onClick={() => showAnimationCopyResult(
-                copyAnimation(store, { outputIndex, trackId, clipId }, orgId),
-                toaster,
-                translate
-              )}
-              className="px-1.5 h-[18px] rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {translate('designer_copy_animation', 'Copy Animation')}
-            </button>
-            <button
-              type="button"
-              disabled={!hasAnimationClipboard || !!vo.frozen}
-              title={translate('designer_paste_animation_hint', 'Apply the copied animation to the selected clips')}
-              onClick={() => showAnimationPasteResult(
-                pasteAnimation(store, { outputIndex, trackId, clipId }, orgId),
-                toaster,
-                translate
-              )}
-              className="px-1.5 h-[18px] rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {translate('designer_paste_animation', 'Paste Animation')}
-            </button>
+            {parentTrack?.type === 'audio' ? (
+              <>
+                <button
+                  type="button"
+                  disabled={!keyframes.length}
+                  onClick={() => store.getState().copyClipKeyframes(outputIndex, trackId, clipId)}
+                  className="px-1.5 h-[18px] rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {translate('designer_copy_keyframes', 'Copy keyframes')}
+                </button>
+                <button
+                  type="button"
+                  disabled={!hasKeyframeClipboard || !!vo.frozen}
+                  title={translate('designer_paste_keyframes_hint', 'Merge the copied keyframes onto this clip')}
+                  onClick={() => {
+                    store.getState().setSelectedClip({ outputIndex, trackId, clipId });
+                    store.getState().pasteClipKeyframes();
+                  }}
+                  className="px-1.5 h-[18px] rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {translate('designer_paste_keyframes', 'Paste keyframes')}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={!parentTrack || !hasSupportedAnimation(parentTrack, clip)}
+                  onClick={() => showAnimationCopyResult(
+                    copyAnimation(store, { outputIndex, trackId, clipId }, orgId),
+                    toaster,
+                    translate
+                  )}
+                  className="px-1.5 h-[18px] rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {translate('designer_copy_animation', 'Copy Animation')}
+                </button>
+                <button
+                  type="button"
+                  disabled={!hasAnimationClipboard || !!vo.frozen}
+                  title={translate('designer_paste_animation_hint', 'Apply the copied animation to the selected clips')}
+                  onClick={() => showAnimationPasteResult(
+                    pasteAnimation(store, { outputIndex, trackId, clipId }, orgId),
+                    toaster,
+                    translate
+                  )}
+                  className="px-1.5 h-[18px] rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {translate('designer_paste_animation', 'Paste Animation')}
+                </button>
+              </>
+            )}
             <span className="text-[10px] text-textColor/30">{keyframes.length}</span>
           </div>
         </div>

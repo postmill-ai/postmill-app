@@ -86,6 +86,42 @@ describe('animation clipboard menu and Inspector', () => {
     expect(screen.getByRole('button', { name: 'Copy Animation' })).toHaveProperty('disabled', true);
   });
 
+  it('copies and pastes an audio volume envelope through the Inspector keyframe commands', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'audio');
+    const trackId = (store.getState().doc.outputs[0] as VideoOutput).tracks
+      .find((track) => track.type === 'audio')!.id;
+    store.getState().addClip(0, trackId, {
+      id: 'audio-source', startMs: 0, endMs: 4000,
+      keyframes: [
+        { tMs: 0, props: { volume: 0 } },
+        { tMs: 1000, props: { volume: 1 } },
+      ],
+    } as never);
+    store.getState().addClip(0, trackId, {
+      id: 'audio-target', startMs: 4000, endMs: 8000,
+    } as never);
+
+    const source = render(<ClipInspector store={store} outputIndex={0} trackId={trackId} clipId="audio-source" />);
+    expect(screen.getByRole('button', { name: 'Copy keyframes' })).toHaveProperty('disabled', false);
+    expect(screen.queryByRole('button', { name: 'Copy Animation' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy keyframes' }));
+    source.unmount();
+
+    render(<ClipInspector store={store} outputIndex={0} trackId={trackId} clipId="audio-target" />);
+    const paste = screen.getByRole('button', { name: 'Paste keyframes' });
+    expect(paste).toHaveProperty('disabled', false);
+    expect(screen.queryByRole('button', { name: 'Paste Animation' })).toBeNull();
+    fireEvent.click(paste);
+    expect((store.getState().doc.outputs[0] as VideoOutput).tracks
+      .find((track) => track.id === trackId)?.clips
+      .find((clip) => clip.id === 'audio-target')?.keyframes).toEqual([
+        { tMs: 0, props: { volume: 0 } },
+        { tMs: 1000, props: { volume: 1 } },
+      ]);
+  });
+
   it('invokes the same multi-target paste from the Inspector', () => {
     const { store, trackId } = storeWithAnimation();
     store.getState().copyAnimation(0, trackId, 'source', 'org-a');

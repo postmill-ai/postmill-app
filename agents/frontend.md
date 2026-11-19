@@ -497,7 +497,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `designer-doc/animation-clipboard.ts` captures only visual keyframes/easing, KAN-16 motion paths,
   and text reveal plus the numeric source context needed for remapping. It never captures content,
   asset/file references, IDs, groups, crop/focal state, timeline placement, speed, transitions, or
-  motion blur. Volume keyframes are reported as skipped and the target's audio/fade fields stay intact.
+  motion blur. Volume keyframes are reported as skipped and the target's audio/fade fields and volume
+  keyframes stay intact. Audio clips instead retain the separate in-memory `keyframeClipboard` and
+  Copy/Paste Keyframes commands, which deep-clone and merge clip-relative keyframes so volume envelopes
+  can still be copied between audio clips. At a coincident visual/volume keyframe, the preserved target
+  volume keyframe's easing wins for the shared keyframe.
   Position/rotation values paste as target base + source delta; width/height/fontSize use the finite
   target/source base ratio; opacity stays normalized. Keyframe, reveal, and path times use normalized
   clip progress. Paths re-anchor from source base center to target base center through KAN-16's

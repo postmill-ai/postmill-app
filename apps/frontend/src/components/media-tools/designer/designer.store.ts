@@ -77,6 +77,7 @@ import type {
   DesignerPageContent,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import type { FillContents } from '@postmill-ai/nestjs-libraries/media/designer-doc/fill-stroke';
+import { mergeKeyframes } from './keyframe-props';
 import {
   planAnimationPaste,
   snapshotAnimation,
@@ -222,6 +223,8 @@ export interface DesignerState {
    * the same rule add-media-to-timeline uses).
    */
   clipClipboard: { clip: VideoClip; trackId: string; trackType: VideoTrack['type'] }[];
+  /** Deep-cloned clip-relative keyframes for the audio keyframe clipboard. */
+  keyframeClipboard: NonNullable<VideoClip['keyframes']> | null;
   /** In-memory, organization-bound animation snapshot; never persisted in the document. */
   animationClipboard: { orgId: string; snapshot: AnimationSnapshot } | null;
   linkedUpdateFlash: Record<number, number>;
@@ -489,6 +492,8 @@ export interface DesignerActions {
    * overflow are skipped). One history entry; the pasted clips become the selection.
    */
   pasteClips: (atMs: number) => void;
+  copyClipKeyframes: (outputIndex: number, trackId: string, clipId: string) => void;
+  pasteClipKeyframes: (atMs?: number) => void;
   /** Capture a deep-cloned, org-bound animation snapshot without editing history. */
   copyAnimation: (
     outputIndex: number,
@@ -671,6 +676,7 @@ export const createDesignerStore = (
       motionPathPointIndex: null,
       selectedClips: [],
       clipClipboard: [],
+      keyframeClipboard: null,
       animationClipboard: null,
       linkedUpdateFlash: {},
       snapEnabled: true,
@@ -2921,6 +2927,47 @@ export const createDesignerStore = (
           selectedIds: [],
         });
         get().pushHistory('Paste clips');
+      },
+
+      copyClipKeyframes: (outputIndex, trackId, clipId) => {
+        const { doc } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return;
+        const clip = vo.tracks
+          .find((t) => t.id === trackId)
+          ?.clips.find((c) => c.id === clipId);
+        if (!clip?.keyframes?.length) return;
+        mutate({ keyframeClipboard: JSON.parse(JSON.stringify(clip.keyframes)) });
+      },
+
+      pasteClipKeyframes: (atMs) => {
+        const { doc, keyframeClipboard, selectedClip } = get();
+        if (!keyframeClipboard?.length || !selectedClip || doc.mode !== 'video') return;
+        const vo = doc.outputs[selectedClip.outputIndex] as VideoOutput | undefined;
+        const track = vo?.tracks.find((t) => t.id === selectedClip.trackId);
+        const clip = track?.clips.find((c) => c.id === selectedClip.clipId);
+        if (!vo || !clip) return;
+
+        let incoming = JSON.parse(JSON.stringify(keyframeClipboard)) as NonNullable<VideoClip['keyframes']>;
+        if (atMs !== undefined) {
+          const earliest = Math.min(...incoming.map((kf) => kf.tMs));
+          const offset = atMs - earliest;
+          incoming = incoming.map((kf) => ({ ...kf, tMs: kf.tMs + offset }));
+        }
+        const clipDurationMs = clip.endMs + (clip.freezeAtMs || 0) - clip.startMs;
+        incoming = incoming.map((kf) => ({
+          ...kf,
+          tMs: Math.max(0, Math.min(clipDurationMs, Math.round(kf.tMs))),
+        }));
+
+        const merged = mergeKeyframes(clip.keyframes || [], incoming);
+        if (
+          get().updateClipSilent(selectedClip.outputIndex, selectedClip.trackId, selectedClip.clipId, {
+            keyframes: merged,
+          })
+        ) {
+          get().pushHistory('Paste keyframes');
+        }
       },
 
       copyAnimation: (outputIndex, trackId, clipId, orgId) => {
