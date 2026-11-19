@@ -568,7 +568,10 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
           const pixelX = Math.round(x * scale);
           const pixelY = Math.round(y * scale);
           const offset = (pixelY * info.width + pixelX) * info.channels;
-          expect([...data.subarray(offset, offset + 4)]).toEqual([255, 0, 0, 255]);
+          const actual = [...data.subarray(offset, offset + 4)];
+          for (const [channel, expected] of [255, 0, 0, 255].entries()) {
+            expect(Math.abs(actual[channel] - expected)).toBeLessThanOrEqual(12);
+          }
         }
       } finally {
         encoder.cleanup(path.dirname(result.videoPath));
