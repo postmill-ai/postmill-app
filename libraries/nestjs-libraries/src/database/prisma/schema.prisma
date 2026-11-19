@@ -76,6 +76,8 @@ model Organization {
   roles                AppRole[]
   designs              Design[]
   designVersions       DesignVersion[]
+  designShares         DesignShare[]
+  designShareComments  DesignShareComment[]
   designTemplates      DesignTemplate[]
   designTemplateFolders DesignTemplateFolder[]
   aiDesignerSessions   AiDesignerSession[]
@@ -1854,6 +1856,7 @@ model Design {
   campaign        Campaign?     @relation(fields: [campaignId], references: [id])
   previewFile     File?         @relation(fields: [previewFileId], references: [id])
   versions        DesignVersion[]
+  share           DesignShare?
 
   @@index([organizationId])
   @@index([createdById])
@@ -1883,6 +1886,44 @@ model DesignVersion {
   createdBy       User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([designId])
+  @@index([organizationId])
+}
+
+// One revocable client-preview link per design. The token is a capability:
+// management routes require media:update; public routes expose no editable doc.
+model DesignShare {
+  id              String   @id @default(uuid())
+  designId        String   @unique
+  organizationId  String
+  token           String   @unique
+  enabled         Boolean  @default(true)
+  commentsEnabled Boolean  @default(false)
+  expiresAt       DateTime
+  approvedAt      DateTime?
+  approvedBy      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  design          Design       @relation(fields: [designId], references: [id], onDelete: Cascade)
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  comments        DesignShareComment[]
+
+  @@index([organizationId])
+  @@index([expiresAt])
+}
+
+model DesignShareComment {
+  id             String   @id @default(uuid())
+  shareId        String
+  organizationId String
+  authorName     String
+  content        String
+  createdAt      DateTime @default(now())
+
+  share          DesignShare  @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([shareId, createdAt])
   @@index([organizationId])
 }
 

@@ -102,7 +102,7 @@ sanctioned exceptions (seeders, cross-domain leaf-reads) are enumerated in
 `agents/backend.md`. Connection-pool tuning via env `DATABASE_CONNECTION_LIMIT` /
 `DATABASE_POOL_TIMEOUT` (appended to `DATABASE_URL` by `PrismaService` when set).
 
-## Data model overview (91 models — read `schema.prisma` for ground truth)
+## Data model overview (93 models — read `schema.prisma` for ground truth)
 
 | Domain | Key models |
 |---|---|
@@ -110,7 +110,7 @@ sanctioned exceptions (seeders, cross-domain leaf-reads) are enumerated in
 | Org | `Organization`, `UserOrganization`, `OrgPortabilityJob` |
 | Channels | `Integration`, `OrgProviderConfiguration` |
 | Posts / comments | `Post`, `Comments`, `PostCommentRead`, `Media` |
-| Designer | `Design`, `DesignVersion`, `DesignTemplate`, `DesignTemplateFolder`, `AiDesignerSession` |
+| Designer | `Design`, `DesignVersion`, `DesignShare`, `DesignShareComment`, `DesignTemplate`, `DesignTemplateFolder`, `AiDesignerSession` |
 | Provider configs | `AIOrgProviderConfig`, `MediaProviderConfig`, `StorageProviderConfig`, `OrgShortLinkConfig`, `OrgVpnConfig`, `ContentPackConfig`, `AuthProviderConfig`, `CommsProviderConfig` (+ per-user `CommsUserLink`) |
 | Billing | `Subscription`, `Credits` |
 | Notifications | `Notifications`, `NotificationRead`, `NotificationPreference`, `NotificationDigestQueue` |

@@ -119,6 +119,8 @@ import { RolesRepository } from '@postmill-ai/nestjs-libraries/database/prisma/r
 import { RolesService } from '@postmill-ai/nestjs-libraries/database/prisma/roles/roles.service';
 import { DesignRepository } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.repository';
 import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
+import { DesignShareRepository } from '@postmill-ai/nestjs-libraries/database/prisma/design/design-share.repository';
+import { DesignShareService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design-share.service';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
 import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
@@ -261,6 +263,8 @@ import { OrgImportRepository } from '@postmill-ai/nestjs-libraries/database/pris
     RolesService,
     DesignRepository,
     DesignService,
+    DesignShareRepository,
+    DesignShareService,
     DesignerDocService,
     DesignRenderService,
     DesignPreviewService,

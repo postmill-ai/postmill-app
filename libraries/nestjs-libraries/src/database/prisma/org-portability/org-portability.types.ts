@@ -62,6 +62,7 @@ export const ORG_PORTABILITY_SECRET_FIELDS: Record<string, string[]> = {
 export const ORG_PORTABILITY_REGENERATED_TOKEN_FIELDS: Record<string, string[]> = {
   AnalyticsShare: ['token'],
   Campaign: ['shareToken'],
+  DesignShare: ['token'],
   CommsProviderConfig: ['webhookToken'],
   CommsUserLink: ['connectCode'],
 };

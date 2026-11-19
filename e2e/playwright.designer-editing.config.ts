@@ -21,7 +21,7 @@ const mockStorageState = skipAuthSetup && ['localhost', '127.0.0.1', '::1'].incl
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['**/96-designer-editing-ux.spec.ts'],
+  testMatch: ['**/96-designer-editing-ux.spec.ts', '**/98-designer-sharing.spec.ts'],
   timeout: 120_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
