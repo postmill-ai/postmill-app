@@ -403,7 +403,7 @@ test('Edit as Video preserves the source and opens a timed editable design throu
   await openDesigner(page);
 
   await page.getByRole('menuitem', { name: 'File', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Format', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Format ▶', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Edit as Video', exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Page duration (seconds)' }).fill('2');
   await page.getByRole('button', { name: 'Create video design' }).click();
