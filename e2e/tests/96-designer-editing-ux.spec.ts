@@ -156,6 +156,9 @@ async function installMocks(page: Page, doc: any = initialDoc) {
       state.uploads++;
       return json(route, { id: `dropped-file-${state.uploads}`, path: state.uploadPath });
     }
+    if (method === 'POST' && pathname === '/user/preferred-language') {
+      return json(route, {});
+    }
     if (method === 'POST' && pathname === '/media/generate-image-with-prompt') {
       state.generationCalls++;
       return json(route, {
@@ -1391,20 +1394,30 @@ test('text readability warning keeps fixes on one row and toggles the backdrop',
   await selectBodyCopy(page);
 
   const description = 'Adds a solid or see-through box behind the text, so it stays readable on busy photos.';
-  const expectSingleRow = async () => {
-    const warning = page.getByRole('alert');
-    await expect(warning).toContainText('Text is hard to read on this background');
+  const expectSingleRow = async (copy = {
+    warning: 'Text is hard to read on this background',
+    add: 'Add backdrop',
+    darken: 'Darken background',
+    color: 'Text color',
+  }) => {
+    const warning = page.getByRole('alert').filter({ hasText: copy.warning });
+    await expect(warning).toContainText(copy.warning);
     await expect(warning).not.toContainText('Low contrast');
     await warning.scrollIntoViewIfNeeded();
     const row = page.getByTestId('designer-contrast-fixes');
-    await expect(row.getByRole('button', { name: 'Add backdrop', exact: true })).toBeVisible();
-    await expect(row.getByRole('button', { name: 'Darken background', exact: true })).toBeVisible();
-    await expect(row.getByRole('button', { name: 'Text color', exact: true })).toBeVisible();
-    const tops = await row.getByRole('button').evaluateAll((buttons) =>
-      buttons.map((button) => button.getBoundingClientRect().top)
+    await expect(row.getByRole('button', { name: copy.add, exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: copy.darken, exact: true })).toHaveAttribute('title', copy.darken);
+    await expect(row.getByRole('button', { name: copy.color, exact: true })).toBeVisible();
+    const buttons = row.getByRole('button');
+    const tops = await buttons.evaluateAll((elements) =>
+      elements.map((button) => button.getBoundingClientRect().top)
     );
     expect(new Set(tops).size).toBe(1);
     expect(await row.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    expect(await buttons.evaluateAll((elements) => elements.every((button) => {
+      const style = getComputedStyle(button);
+      return style.overflow === 'hidden' && style.textOverflow === 'ellipsis';
+    }))).toBe(true);
   };
   await expectSingleRow();
 
@@ -1419,27 +1432,40 @@ test('text readability warning keeps fixes on one row and toggles the backdrop',
   await expect(page.getByRole('textbox', { name: 'Hex color', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByTestId('designer-contrast-fixes').getByRole('button', { name: 'Darken background', exact: true }).click();
-  await expect(page.getByRole('button', { name: '#000000', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '#ffffff', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+  await expect(page.locator('[data-element-id^="background-dimmer-"]')).toBeVisible();
+  await selectBodyCopy(page);
 
   const toggle = readability.getByRole('switch', { name: 'Text backdrop', exact: true });
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
   await toggle.click();
-  await selectBodyCopy(page);
   await expect(readability.getByRole('switch', { name: 'Text backdrop', exact: true })).toHaveAttribute('aria-checked', 'true');
   await readability.getByRole('switch', { name: 'Text backdrop', exact: true }).click();
   await expect(readability.getByRole('switch', { name: 'Text backdrop', exact: true })).toHaveAttribute('aria-checked', 'false');
   await expect(page.getByRole('button', { name: 'Add Text Backdrop', exact: true })).toHaveCount(0);
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.context().addCookies([{
+    name: 'i18next',
+    value: 'nl',
+    url: `${process.env.E2E_BASE || 'http://localhost:4201'}/`,
+  }]);
   await page.reload();
-  await openDesigner(page);
-  await page.getByRole('menuitem', { name: 'More menus', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Layers', exact: true }).click();
-  const layers = page.getByRole('dialog', { name: 'Layers', exact: true });
+  await expect(page.getByRole('textbox', { name: 'Naam ontwerp', exact: true })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await page.getByRole('menuitem', { name: "Meer menu's", exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Lagen', exact: true }).click();
+  const layers = page.getByRole('dialog', { name: 'Lagen', exact: true });
   await layers.locator('[data-element-id="body-copy"]').click();
   if (await layers.count()) {
-    await layers.getByRole('button', { name: 'Close', exact: true }).click();
+    await layers.getByRole('button', { name: 'Sluiten', exact: true }).click();
   }
   await page.getByRole('button', { name: 'Inspector', exact: true }).click();
-  await expectSingleRow();
+  await expectSingleRow({
+    warning: 'Tekst is moeilijk leesbaar op deze achtergrond',
+    add: 'Achtergrond toevoegen',
+    darken: 'Achtergrond verdonkeren',
+    color: 'Tekstkleur',
+  });
 });

@@ -225,6 +225,19 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
     );
     if (!primary || findTextBackdrop(children, primary)) return;
 
+    const group: DesignerElement | undefined = primary.parentId ? undefined : {
+      id: `text-backdrop-group-${Date.now()}`,
+      type: 'group',
+      name: 'Text Backdrop Group',
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+    };
     const backdrop: DesignerElement = {
       id: `backdrop-${Date.now()}`,
       type: 'shape',
@@ -240,11 +253,16 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
       hidden: false,
       rotation: 0,
       name: 'Text Backdrop',
+      parentId: primary.parentId ?? group?.id,
+      groupId: primary.groupId,
     };
 
-    store.getState().addElement(backdrop, primary.id);
-    store.getState().setSelectedIds([primary.id, backdrop.id]);
-    setTimeout(() => store.getState().groupSelection(), 0);
+    const next = children.map((element: DesignerElement) =>
+      group && element.id === primary.id ? { ...element, parentId: group.id } : element
+    );
+    const primaryIndex = next.findIndex((element: DesignerElement) => element.id === primary.id);
+    next.splice(primaryIndex, 0, ...(group ? [group, backdrop] : [backdrop]));
+    state.commitActivePage(next, state.selectedIds, 'Add text backdrop');
   }, [store]);
 
   const handleToggleBackdrop = useCallback(() => {
@@ -255,12 +273,52 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
       (element: DesignerElement) => state.selectedIds.includes(element.id) && element.type === 'text'
     );
     const backdrop = findTextBackdrop(children, selected);
-    if (backdrop) {
-      state.removeElement(backdrop.id);
+    if (!backdrop) {
+      handleAddBackdrop();
       return;
     }
-    handleAddBackdrop();
+
+    const group = children.find(
+      (element: DesignerElement) => element.id === backdrop.parentId && element.type === 'group'
+    );
+    let next = children.filter((element: DesignerElement) => element.id !== backdrop.id);
+    if (group?.name === 'Text Backdrop Group') {
+      const remaining = next.filter((element: DesignerElement) => element.parentId === group.id);
+      if (remaining.length === 1 && remaining[0].id === selected?.id) {
+        next = next
+          .filter((element: DesignerElement) => element.id !== group.id)
+          .map((element: DesignerElement) =>
+            element.id === selected.id ? { ...element, parentId: group.parentId } : element
+          );
+      }
+    }
+    state.commitActivePage(next, state.selectedIds, 'Remove text backdrop');
   }, [handleAddBackdrop, store]);
+
+  const handleDarkenBackground = useCallback(() => {
+    const state = store.getState();
+    const output = state.doc.outputs[state.currentOutput];
+    const dimmer: DesignerElement = {
+      id: `background-dimmer-${Date.now()}`,
+      type: 'shape',
+      shape: 'rect',
+      x: 0,
+      y: 0,
+      width: output.width,
+      height: output.height,
+      fill: '#000000',
+      opacity: 0.2,
+      locked: false,
+      hidden: false,
+      rotation: 0,
+      name: 'Background Dimmer',
+    };
+    state.commitActivePage(
+      [dimmer, ...pageChildren(output, state.currentPage)],
+      state.selectedIds,
+      'Darken background'
+    );
+  }, [store]);
 
   const openTextColor = useCallback(() => {
     const trigger = textColorTriggerRef.current;
@@ -423,7 +481,8 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
                 <div data-testid="designer-contrast-fixes" className="flex flex-nowrap items-center gap-1">
                   <button
                     type="button"
-                    className="flex-1 min-w-0 whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-50 rounded-sm text-[10px]"
+                    className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-50 rounded-sm text-[10px]"
+                    title={t('designer_add_backdrop', 'Add backdrop')}
                     onClick={handleAddBackdrop}
                     disabled={!!textBackdrop}
                   >
@@ -431,16 +490,16 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
                   </button>
                   <button
                     type="button"
-                    className="flex-1 min-w-0 whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-[10px]"
-                    onClick={() => {
-                      store.getState().updateElement(primary.id, { fill: '#000000' });
-                    }}
+                    className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-[10px]"
+                    title={t('designer_darken_background', 'Darken background')}
+                    onClick={handleDarkenBackground}
                   >
                     {t('designer_darken_background', 'Darken background')}
                   </button>
                   <button
                     type="button"
-                    className="flex-1 min-w-0 whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-[10px]"
+                    className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-1 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-[10px]"
+                    title={t('designer_text_color', 'Text color')}
                     onClick={openTextColor}
                   >
                     {t('designer_text_color', 'Text color')}

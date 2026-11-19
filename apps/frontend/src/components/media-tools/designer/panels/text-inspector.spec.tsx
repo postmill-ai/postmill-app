@@ -153,16 +153,20 @@ describe('TextInspector paged text', () => {
     expect(screen.getByTestId('designer-contrast-fixes').className).toContain('flex-nowrap');
 
     fireEvent.click(screen.getByRole('button', { name: 'Darken background' }));
-    expect(output(store, 1).pages?.[0].children[0].fill).toBe('#000000');
+    const darkenedChildren = output(store, 1).pages?.[0].children ?? [];
+    expect(darkenedChildren[0]).toMatchObject({
+      type: 'shape', name: 'Background Dimmer', x: 0, y: 0, width: 1080, height: 1920, opacity: 0.2,
+    });
+    expect(darkenedChildren.find((element) => element.id === 'page-two')?.fill).toBe('#123456');
     await clickStyle(/Heading 1/);
     fireEvent.click(screen.getByRole('button', { name: 'Text color' }));
-    const colorTrigger = screen.getByRole('button', { name: '#000000', expanded: true });
+    const colorTrigger = screen.getByRole('button', { name: '#123456', expanded: true });
     expect(colorTrigger.getAttribute('aria-expanded')).toBe('true');
     const color = screen.getByRole('textbox', { name: 'Hex color' });
     fireEvent.change(color, { target: { value: '#abcdef' } });
     fireEvent.blur(color);
 
-    expect(output(store, 1).pages?.[0].children[0]).toMatchObject({
+    expect(output(store, 1).pages?.[0].children.find((element) => element.id === 'page-two')).toMatchObject({
       id: 'page-two',
       fontSize: 64,
       fontWeight: 700,
@@ -185,9 +189,6 @@ describe('TextInspector paged text', () => {
     const toggle = screen.getByRole('switch', { name: 'Text backdrop' });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
     fireEvent.click(toggle);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
 
     const pageOne = output(store, 1).children;
     const pageTwo = output(store, 1).pages?.[0].children ?? [];
@@ -202,20 +203,62 @@ describe('TextInspector paged text', () => {
     });
     expect(primary?.parentId).toBe(backdrop?.parentId);
     expect(primary?.parentId).toBeTruthy();
+    expect(store.getState().selectedIds).toEqual(['page-two']);
     expect(pageOne).toHaveLength(1);
     expect(pageOne[0].name).not.toBe('Text Backdrop');
     expect(output(store, 0).pages).toBeUndefined();
 
-    act(() => store.getState().setSelectedIds(['page-two']));
     const enabledToggle = screen.getByRole('switch', { name: 'Text backdrop' });
     expect(enabledToggle.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(enabledToggle);
 
     const afterRemoval = output(store, 1).pages?.[0].children ?? [];
     expect(afterRemoval.some((element) => element.name === 'Text Backdrop')).toBe(false);
-    expect(afterRemoval.some((element) => element.id === 'page-two')).toBe(true);
+    expect(afterRemoval.filter((element) => element.type === 'group')).toHaveLength(0);
+    expect(afterRemoval.find((element) => element.id === 'page-two')?.parentId).toBeUndefined();
+    expect(store.getState().selectedIds).toEqual(['page-two']);
     expect(output(store, 1).children).toHaveLength(1);
     expect(screen.getByRole('switch', { name: 'Text backdrop' }).getAttribute('aria-checked')).toBe('false');
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Text backdrop' }));
+    const secondAddition = output(store, 1).pages?.[0].children ?? [];
+    expect(secondAddition.filter((element) => element.type === 'group')).toHaveLength(1);
+    expect(secondAddition.some((element) => element.name === 'Text Backdrop')).toBe(true);
+    expect(store.getState().selectedIds).toEqual(['page-two']);
+    fireEvent.click(screen.getByRole('switch', { name: 'Text backdrop' }));
+
+    const finalChildren = output(store, 1).pages?.[0].children ?? [];
+    expect(finalChildren.filter((element) => element.type === 'group')).toHaveLength(0);
+    expect(finalChildren).toHaveLength(1);
+    expect(finalChildren[0]).toMatchObject({ id: 'page-two', type: 'text' });
+    expect(store.getState().selectedIds).toEqual(['page-two']);
+  });
+
+  it('reuses and preserves an existing text group when toggling a backdrop', async () => {
+    const store = createDesignerStore();
+    store.getState().addElement(textElement('grouped-text', 'Grouped'));
+    store.getState().groupSelection(['grouped-text']);
+    store.getState().setSelectedIds(['grouped-text']);
+    const originalGroup = output(store, 0).children.find((element) => element.type === 'group');
+    const originalGroupId = output(store, 0).children.find((element) => element.id === 'grouped-text')?.groupId;
+    await renderInspector(store);
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Text backdrop' }));
+    const withBackdrop = output(store, 0).children;
+    expect(withBackdrop.filter((element) => element.type === 'group')).toHaveLength(1);
+    expect(withBackdrop.find((element) => element.type === 'group')?.id).toBe(originalGroup?.id);
+    expect(withBackdrop.find((element) => element.name === 'Text Backdrop')?.parentId).toBe(originalGroup?.id);
+    expect(store.getState().selectedIds).toEqual(['grouped-text']);
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Text backdrop' }));
+    const restored = output(store, 0).children;
+    expect(restored.some((element) => element.name === 'Text Backdrop')).toBe(false);
+    expect(restored.find((element) => element.type === 'group')?.id).toBe(originalGroup?.id);
+    expect(restored.find((element) => element.id === 'grouped-text')).toMatchObject({
+      parentId: originalGroup?.id,
+      groupId: originalGroupId,
+    });
+    expect(store.getState().selectedIds).toEqual(['grouped-text']);
   });
 
   it('preserves colors and rich-run typography when applying a style', async () => {
