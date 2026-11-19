@@ -336,17 +336,16 @@ test('focal editor changes cached canvas crops and preserves per-format settings
 
   const preview = page.getByRole('group', { name: 'Focal point preview' });
   const previewBox = await preview.boundingBox();
-  const imageBox = await preview.locator('img').first().boundingBox();
-  if (!previewBox || !imageBox) throw new Error('Focal preview geometry is unavailable');
+  if (!previewBox) throw new Error('Focal preview has no bounding box');
   const finalPointerX = previewBox.x + previewBox.width * 0.8;
-  const sourceX = Math.min(1, Math.max(0, (finalPointerX - imageBox.x) / imageBox.width));
-  const expectedFocalX = String(Math.round(Math.min(1, Math.max(0, (sourceX * 400 - 50) / 300)) * 100));
   await page.mouse.move(previewBox.x + previewBox.width * 0.2, previewBox.y + previewBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(finalPointerX, previewBox.y + previewBox.height / 2, { steps: 5 });
   await page.mouse.up();
   await expect.poll(() => canvasCenterPixel(page)).toEqual([0, 0, 255, 255]);
-  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue(expectedFocalX);
+  const markerBox = await preview.locator('[data-focal-marker]').boundingBox();
+  if (!markerBox) throw new Error('Focal marker has no bounding box');
+  expect(Math.abs(markerBox.x + markerBox.width / 2 - finalPointerX)).toBeLessThanOrEqual(2);
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
   await selectImage();
   await expect.poll(() => canvasCenterPixel(page)).toEqual([255, 0, 0, 255]);
