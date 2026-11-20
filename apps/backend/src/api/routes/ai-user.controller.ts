@@ -17,6 +17,7 @@ import {
   IsOptional,
   IsNumber,
   IsBoolean,
+  IsArray,
   Min,
   MaxLength,
 } from 'class-validator';
@@ -39,6 +40,8 @@ import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analyt
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { PROMPT_CONSTANTS } from '@postmill-ai/nestjs-libraries/ai/prompt-constants.const';
 import { BrandMemorySearchDto } from '@postmill-ai/backend/dtos/ai/brand-memory-search.dto';
+import type { BrandLogoFileEntry, BrandPaletteEntry } from '@postmill-ai/nestjs-libraries/brands/brand-kit';
+import { IsBrandLogoFileIds, IsBrandPalette } from './brand-profile-validators';
 import dayjs from 'dayjs';
 
 /**
@@ -71,7 +74,7 @@ class SuggestCompletionDto {
   brandId?: string;
 }
 
-class UpsertBrandProfileDto {
+export class UpsertBrandProfileDto {
   @IsOptional()
   @IsString()
   instructions?: string;
@@ -99,10 +102,14 @@ class UpsertBrandProfileDto {
   languageProfiles?: Record<string, { instructions?: string; overrides?: Record<string, string> }>;
 
   @IsOptional()
-  logoFileIds?: string[];
+  @IsArray()
+  @IsBrandLogoFileIds()
+  logoFileIds?: Array<string | BrandLogoFileEntry>;
 
   @IsOptional()
-  palette?: Array<{ name?: string; hex?: string } | string>;
+  @IsArray()
+  @IsBrandPalette()
+  palette?: Array<string | BrandPaletteEntry>;
 
   @IsOptional()
   fontFamilies?: Array<{ name?: string; fallback?: string } | string>;

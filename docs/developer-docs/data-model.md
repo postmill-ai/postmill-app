@@ -120,7 +120,7 @@ A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: S
 |---|---|---|
 | `AIOrgProviderConfig` | Per-org AI provider + encrypted credentials + `defaultModel` and `reasoningModel` | FK → `Organization` |
 | `AISpendLog` | Cost ledger — input/output tokens, cost, provider, model, scope | FK → `Organization` (nullable), `User` (nullable) |
-| `AIBrandProfile` | Brand voice instructions + language + brand kit (`palette`, `fontFamilies`, `logoFileIds`, `enforcement`, `assets[]`). Many per org (`name`, `isDefault`, `slug`); one default per org, selectable per-post via `Post.brandId`. | FK → `Organization`; has many `Post` |
+| `AIBrandProfile` | Brand voice instructions + language + brand kit (`palette`, `fontFamilies`, `logoFileIds`, `enforcement`, `assets[]`). Palette/logo JSON entries may carry optional color/logo roles without changing legacy ordered arrays. Many per org (`name`, `isDefault`, `slug`); one default per org, selectable per-post via `Post.brandId`. | FK → `Organization`; has many `Post` |
 | `AIPromptTemplate` | Editable prompt templates (org-scoped or global, with key) | FK → `Organization` (nullable) |
 | `AISettingsAudit` | Append-only audit of AI-settings changes | FK → `User` (nullable) |
 | `AIMediaJob` | Media pipeline job — operation, status, artifact URL, provenance, cost. Tracks async media generation (video/audio/avatar/stt) in the media-provider system. | FK → `Organization`, `User` (nullable) |

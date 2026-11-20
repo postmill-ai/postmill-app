@@ -9,6 +9,9 @@ on:
       - 'apps/frontend/src/components/media-tools/designer/**'
       - 'apps/frontend/src/components/settings/brand/**'
       - 'apps/backend/src/api/routes/design.controller*'
+      - 'apps/frontend/src/app/(app)/(site)/brands/**'
+      - 'apps/backend/src/api/routes/brands.controller.ts'
+      - 'apps/backend/src/api/routes/ai-user.controller.ts'
       - 'libraries/**'
       - 'e2e/**'
       - 'pnpm-lock.yaml'
@@ -19,6 +22,9 @@ on:
       - 'apps/frontend/src/components/media-tools/designer/**'
       - 'apps/frontend/src/components/settings/brand/**'
       - 'apps/backend/src/api/routes/design.controller*'
+      - 'apps/frontend/src/app/(app)/(site)/brands/**'
+      - 'apps/backend/src/api/routes/brands.controller.ts'
+      - 'apps/backend/src/api/routes/ai-user.controller.ts'
       - 'libraries/**'
       - 'e2e/**'
       - 'pnpm-lock.yaml'
@@ -206,6 +212,7 @@ jobs:
         working-directory: e2e
         run: pnpm exec playwright test --config playwright.brand-studio-ci.config.ts
         env:
+          NEXT_PUBLIC_BACKEND_URL: https://api.postmill.ai
           NEXT_TELEMETRY_DISABLED: '1'
 
       - name: Upload Brand Studio failure artifacts

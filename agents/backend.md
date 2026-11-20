@@ -204,9 +204,15 @@ Invariants:
 
 - `AIBrandProfile` is the only Brand Kit store. `BrandsService` and `brands/brand-kit.ts`
   normalize current and legacy palette/font JSON, validate preferred channel formats, and resolve
-  explicit ids strictly by organization. `/ai/brand-profile` is a compatibility adapter over the
-  same service, not a second schema or permission bypass. Editors have brand CRUD; members/viewers
-  read only. Custom fonts and template associations always carry an explicit brand id.
+  explicit ids strictly by organization. Palette and logo entries may carry optional semantic roles
+  (`primary`/`accent`/`background`/`text` and `main`/`icon`/`dark`) inside their existing JSON columns.
+  Normalized responses retain ordered `palette`/`logoFileIds` string arrays and add `colorRoles`/
+  `logoRoles` only when present; writes store objects only for role-bearing entries. Color roles are
+  not unique: multiple entries may share one role as ordered candidates for that purpose. No role backfill
+  or migration is required, and duplicate palette values retain their indexed roles.
+  `/ai/brand-profile` is a compatibility adapter over the same service, not a second schema or
+  permission bypass. Editors have brand CRUD; members/viewers read only. Custom fonts and template
+  associations always carry an explicit brand id.
 - Designer documents carry `brandProfileId`: string = Brand Mode, `null` = General Mode, absent =
   legacy default. Preserve it in schemas, migration, version restore, and `.pdesign` round trips.
 - Effective Knowledge access requires both the deployment RAG flag and the org not being disabled:

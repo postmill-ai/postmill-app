@@ -44,6 +44,7 @@ export default defineConfig({
       'src/components/launches/calendar/**/*.spec.{ts,tsx}',
       'src/components/launches/generator/**/*.spec.{ts,tsx}',
       'src/components/dashboard/**/*.spec.{ts,tsx}',
+      'src/components/settings/brand/**/*.spec.{ts,tsx}',
       'src/components/settings/media-providers/**/*.spec.{ts,tsx}',
       'src/components/shared/**/*.spec.{ts,tsx}',
       'src/components/ai/**/*.spec.{ts,tsx}',

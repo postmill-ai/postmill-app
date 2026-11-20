@@ -22,8 +22,10 @@ import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.servi
 import { IsString, IsOptional, IsBoolean, IsArray, IsObject } from 'class-validator';
 import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.guard';
 import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import type { BrandLogoFileEntry, BrandPaletteEntry } from '@postmill-ai/nestjs-libraries/brands/brand-kit';
+import { IsBrandLogoFileIds, IsBrandPalette } from './brand-profile-validators';
 
-class CreateBrandDto {
+export class CreateBrandDto {
   @IsString()
   name!: string;
 
@@ -49,13 +51,13 @@ class CreateBrandDto {
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  logoFileIds?: string[];
+  @IsBrandLogoFileIds()
+  logoFileIds?: Array<string | BrandLogoFileEntry>;
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  palette?: string[];
+  @IsBrandPalette()
+  palette?: Array<string | BrandPaletteEntry>;
 
   @IsOptional()
   @IsArray()
@@ -77,7 +79,7 @@ class CreateBrandDto {
   enforcement?: Record<string, any>;
 }
 
-class UpdateBrandDto {
+export class UpdateBrandDto {
   @IsOptional()
   @IsString()
   name?: string;
@@ -104,13 +106,13 @@ class UpdateBrandDto {
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  logoFileIds?: string[];
+  @IsBrandLogoFileIds()
+  logoFileIds?: Array<string | BrandLogoFileEntry>;
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  palette?: string[];
+  @IsBrandPalette()
+  palette?: Array<string | BrandPaletteEntry>;
 
   @IsOptional()
   @IsArray()

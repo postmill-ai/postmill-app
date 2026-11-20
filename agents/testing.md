@@ -148,6 +148,11 @@ the same GitHub-hosted production-build path for `98-brand-studio.spec.ts`. Its 
 only a mock loopback auth cookie; the spec stubs identity, org-scoped paged templates, assignments,
 and provider traffic. The config refuses to load outside GitHub Actions. Never run it, its `webServer`,
 or Playwright on the production host.
+`98-brand-studio.spec.ts` and `playwright.brand-studio-ci.config.ts` use the same GitHub-only
+production-build model in the `production-brand-studio` job. The suite mocks identity, Brand Kit,
+Knowledge, font, file, template, and Designer traffic; it covers section deep links, mobile overflow
+navigation, unsaved-state retention, legacy/custom fonts, and visual-role save/reload. Its config also
+refuses to load outside GitHub Actions. Do not run its server or Playwright on the production host.
 
 `96-designer-editing-ux.spec.ts` also has `playwright.designer-editing.config.ts` for its
 network-mocked canvas interaction cases. Only with `E2E_SKIP_AUTH_SETUP=1` does the spec install a

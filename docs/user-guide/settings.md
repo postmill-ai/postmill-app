@@ -232,10 +232,17 @@ viewers can read them. The old Settings → AI → Brands links redirect here.
   saved with the design.
 - **Voice & Tone** — enable/disable a brand, choose its language, define instructions, and add
   per-channel overrides for each language.
-- **Brand Kit** — manage the palette, logos, reference images, font families and custom font files,
-  preferred formats, associated templates, intro/outro, and enforcement. Preferred formats appear
-  first but are not restrictions. Removing an asset does not delete its File or existing canvas
-  layers. Brand Studio and Designer read and update the same kit.
+- **Brand Kit** — use the section links (or their `#colors`, `#fonts`, `#logos`, `#images`,
+  `#formats`, and `#templates` deep links) to reach the palette, fonts, logos, reference images,
+  preferred formats, and associated templates. All sections remain on one form, so navigation keeps
+  unsaved edits; the save status shows when changes are pending. Colors can optionally be labeled
+  Primary, Accent, Background, or Text for AI planning. Multiple colors may share one role as ordered
+  candidate choices; unroled colors remain in the palette. Logo cards identify Main, Icon, and Dark
+  version while leaving additional logos unassigned. Named fonts come from the searchable Designer
+  catalog with previews; previously saved custom family names and uploaded font files remain valid.
+  Preferred formats appear first but are not restrictions. Intro/outro and enforcement share the
+  same Save. Removing an asset does not delete its File or existing canvas layers. Brand Studio and
+  Designer read and update the same kit.
 
 ### Brand Knowledge
 
