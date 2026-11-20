@@ -76,7 +76,6 @@ export const TOOL_OPTION_SPECS: Record<string, ToolOptionSpec[]> = {
         { value: '9:16', label: '9:16' },
       ],
     },
-    { kind: 'toggle', key: 'deleteCropped', label: 'Delete cropped pixels', labelKey: 'tool_opt_delete_cropped', def: false },
   ],
   gradient: [
     {

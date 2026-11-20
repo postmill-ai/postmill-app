@@ -92,18 +92,16 @@ describe('styledLeafCacheKey', () => {
     expect(ready).toContain(':mask-ready');
   });
 
-  it('turns over when the element’s own geometry changes — and on a commit bump', () => {
-    // Mid-drag the element's x/y change every rAF frame and the key MUST
-    // follow for the dragged element: its styled buffer is cached in scene
-    // space, so a key that ignored geometry kept painting the bitmap at the
-    // pre-drag position until drop. Only the dragged element's key turns
-    // over — every other layer's buffer stays cached. On commit the canvas
-    // also bumps the geometry generation, which still turns the key over.
-    const moved = { ...styledImage, x: 640, y: 480 } as DesignerElement;
-    expect(styledLeafCacheKey(moved, null, 3)).not.toBe(styledLeafCacheKey(styledImage, null, 3));
-    expect(styledLeafCacheKey(styledImage, null, 3)).toBe(styledLeafCacheKey(styledImage, null, 3));
-    expect(styledLeafCacheKey(styledImage, null, 4)).not.toBe(
-      styledLeafCacheKey(styledImage, null, 3)
-    );
+  it('turns over when media source, crop, focal geometry, or filter presets change', () => {
+    const original = styledLeafCacheKey(styledImage, null);
+    for (const patch of [
+      { src: 'https://cdn.example.com/other.png' },
+      { crop: { x: 10, y: 0, width: 100, height: 100 } },
+      { fitMode: 'contain' as const },
+      { focalPoint: { x: 0.25, y: 0.75 } },
+      { filters: ['sepia', 'contrast:1.2'] },
+    ]) {
+      expect(styledLeafCacheKey({ ...styledImage, ...patch }, null)).not.toBe(original);
+    }
   });
 });

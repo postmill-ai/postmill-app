@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDesignerStore, type DesignerElement } from './designer.store';
-import { aiRemoveBackground, applyAiRemoveBackground } from './ai-image-actions';
+import { aiImageToImage, aiInpaint, aiRemoveBackground, aiUpscale, applyAiRemoveBackground } from './ai-image-actions';
 
 const setup = () => {
   const store = createDesignerStore();
@@ -199,5 +199,79 @@ describe('AI background removal review', () => {
       maskEnabled: undefined,
       fitMode: 'cover',
     });
+  });
+});
+
+
+describe('direct image AI actions', () => {
+  it('keeps request payloads and commits one labeled history entry per accepted result', async () => {
+    const store = setup();
+    const fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ url: '/upscaled.png' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ url: '/inpainted.png' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ url: '/transformed.png' }) });
+    const depth = store.getState().history.length;
+
+    await expect(aiUpscale({ store, elementId: 'image-1', fetch }, 4)).resolves.toBe(true);
+    await expect(aiInpaint(
+      { store, elementId: 'image-1', fetch },
+      { maskUrl: '/mask.png', prompt: 'replace this area' }
+    )).resolves.toBe(true);
+    await expect(aiImageToImage({ store, elementId: 'image-1', fetch }, 'make it a sketch')).resolves.toBe(true);
+
+    expect(fetch.mock.calls.map(([path, init]) => ({ path, body: JSON.parse(String(init?.body)) }))).toEqual([
+      { path: '/media/upscale', body: { imageUrl: '/before.png', scale: 4 } },
+      { path: '/media/inpaint', body: { imageUrl: '/upscaled.png', maskUrl: '/mask.png', prompt: 'replace this area' } },
+      { path: '/media/image-to-image', body: { imageUrl: '/inpainted.png', prompt: 'make it a sketch' } },
+    ]);
+    expect(element(store).src).toBe('/transformed.png');
+    expect(store.getState().history).toHaveLength(depth + 3);
+    expect(store.getState().historyLabels.slice(-3)).toEqual(['Upscale image', 'Inpaint image', 'Image to image']);
+  });
+
+  it('rejects a response after the source changes', async () => {
+    const store = setup();
+    let resolve!: (response: Response) => void;
+    const fetch = vi.fn(() => new Promise<Response>((done) => { resolve = done; }));
+    const pending = aiImageToImage({ store, elementId: 'image-1', fetch }, 'sketch');
+    const depth = store.getState().history.length;
+    store.getState().updateElement('image-1', { src: '/newer.png' });
+    resolve({ ok: true, json: async () => ({ url: '/stale.png' }) } as Response);
+
+    await expect(pending).resolves.toBe(false);
+    expect(element(store).src).toBe('/newer.png');
+    expect(store.getState().history).toHaveLength(depth);
+  });
+
+  it('rejects an older out-of-order response', async () => {
+    const store = setup();
+    const resolvers: ((response: Response) => void)[] = [];
+    const fetch = vi.fn(() => new Promise<Response>((resolve) => { resolvers.push(resolve); }));
+    const first = aiUpscale({ store, elementId: 'image-1', fetch }, 2);
+    const second = aiUpscale({ store, elementId: 'image-1', fetch }, 4);
+    resolvers[1]({ ok: true, json: async () => ({ url: '/newest.png' }) } as Response);
+    await expect(second).resolves.toBe(true);
+    resolvers[0]({ ok: true, json: async () => ({ url: '/older.png' }) } as Response);
+
+    await expect(first).resolves.toBe(false);
+    expect(element(store).src).toBe('/newest.png');
+    expect(store.getState().historyLabels.filter((label) => label === 'Upscale image')).toHaveLength(1);
+  });
+
+  it('resolves and updates an image on a later page', async () => {
+    const store = setup();
+    store.getState().addPage();
+    store.getState().addElement({
+      ...element(store),
+      id: 'page-2-image',
+      originId: undefined,
+      src: '/page-2.png',
+    });
+    const depth = store.getState().history.length;
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ url: '/page-2-result.png' }) });
+
+    await expect(aiImageToImage({ store, elementId: 'page-2-image', fetch }, 'watercolor')).resolves.toBe(true);
+    expect((store.getState().doc.outputs[0] as any).pages[0].children[0].src).toBe('/page-2-result.png');
+    expect(store.getState().history).toHaveLength(depth + 1);
   });
 });

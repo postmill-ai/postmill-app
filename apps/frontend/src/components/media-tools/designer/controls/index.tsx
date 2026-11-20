@@ -488,7 +488,13 @@ export const Slider: React.FC<SliderProps> = ({
   suffix,
 }) => {
   const id = useId();
+  const changed = useRef(false);
   const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+  const commit = () => {
+    if (!changed.current) return;
+    changed.current = false;
+    onCommit?.();
+  };
 
   return (
     <div className="flex flex-col gap-[6px]">
@@ -508,10 +514,13 @@ export const Slider: React.FC<SliderProps> = ({
         max={max}
         step={step}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        onPointerUp={onCommit}
-        onKeyUp={onCommit}
-        onBlur={onCommit}
+        onChange={(e) => {
+          changed.current = true;
+          onChange(Number(e.target.value));
+        }}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
         className="designer-slider w-full h-[4px] appearance-none rounded-full cursor-pointer focus:outline-hidden"
         style={{
           background: `linear-gradient(90deg, ${ACCENT} 0%, ${ACCENT} ${pct}%, var(--studio-border) ${pct}%, var(--studio-border) 100%)`,

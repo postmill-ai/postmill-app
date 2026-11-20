@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useMemo, useRef, useState } from 'react';
+import React, { FC, useCallback, useRef, useState } from 'react';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -14,22 +14,16 @@ import type {
   DesignerMask,
 } from '../designer.store';
 import { useMediaPicker } from '../../use-media-picker';
-import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
-import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
-import { aiRemoveBackground, applyAiRemoveBackground, aiUpscale, readErrorMessage } from '../ai-image-actions';
-import { OutpaintDialog, type OutpaintRequest } from '../outpaint-dialog';
-import { applyAiOutpaint, applyWholePageOutpaint, cleanupOutpaintCandidate, prepareAiOutpaint, prepareWholePageOutpaint } from '../outpaint';
-import { BackgroundRemovalDialog } from '../background-removal-dialog';
 import { centeredMediaFrame, fitMediaToCanvas } from '../background-removal';
 import { cropFromSourceRect } from '../crop-geometry';
 import { CutoutRefineControls } from './cutout-refine-controls';
 import { QrCodeControls } from './qr-code-controls';
 import { trySetPointerCapture } from '../pointer-capture';
-import { applyStaticMagicGrab, prepareStaticMagicGrab } from '../magic-grab';
-import { openMagicGrabReview } from '../magic-grab-modal';
 import { usePresetPreview } from '../use-preset-preview';
 import { replaceStaticImage } from '../image-replacement';
 import { InspectorSection, InspectorTabGroup, type InspectorTabKey } from './inspector-tabs';
+import { ImageFilterControls } from './image-filter-controls';
+import { ImageAiTools } from './image-ai-tools';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -47,10 +41,6 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   const t = useT();
   const toaster = useToaster();
   const fetch = useFetch();
-  // Same availability signal the Tools menu gates on (GET /media/tools/status) —
-  // hide AI buttons the org has no configured provider for (fail-open while loading).
-  const { operationAvailable } = useMediaToolsStatus();
-  const modals = useModals();
   const brandColors = useBrandColors();
   const brandEnforcement = store((s: any) => s.brandEnforcement);
   const updateElement = store((s: any) => s.updateElement);
@@ -59,9 +49,6 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   const { preview, cancel } = usePresetPreview(store);
 
   const [aiLoading, setAiLoading] = useState<string | false>(false);
-  const [upscaleScale, setUpscaleScale] = useState(2);
-  const [inpaintPrompt, setInpaintPrompt] = useState('');
-  const [imageToImagePrompt, setImageToImagePrompt] = useState('');
   const replacePicker = useMediaPicker({
     title: t('replace_image', 'Replace image'),
     kinds: ['image'],
@@ -76,14 +63,13 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     },
   });
 
-  const [inpaintMaskUrl, setInpaintMaskUrl] = useState<string | null>(null);
-  const [masking, setMasking] = useState(false);
-  const [brushSize, setBrushSize] = useState(14);
-  const [isDrawingMask, setIsDrawingMask] = useState(false);
-  const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const previewImgRef = useRef<HTMLImageElement | null>(null);
   const [draggingFocal, setDraggingFocal] = useState(false);
+  const cropChanged = useRef(false);
+  const commitCropInset = () => {
+    if (!cropChanged.current) return;
+    cropChanged.current = false;
+    store.getState().pushHistory('Crop image');
+  };
 
   const set = (u: Partial<DesignerElement>) => updateElements(ids, u);
   const previewFrame = (mask: DesignerElement['mask']) => {
@@ -93,38 +79,6 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     cancel();
     updateElements(ids, { mask });
   };
-
-  const filters = useMemo(() => element.filters || [], [element.filters]);
-
-  const hasFilter = useCallback(
-    (prefix: string) => filters.some((f) => f === prefix || f.startsWith(prefix + ':')),
-    [filters],
-  );
-
-  const getFilterVal = useCallback(
-    (prefix: string, fallback: number): number => {
-      const match = filters.find((f) => f.startsWith(prefix + ':'));
-      return match ? parseFloat(match.slice(prefix.length + 1)) : fallback;
-    },
-    [filters],
-  );
-
-  const toggleFilter = useCallback(
-    (token: string, enabled: boolean) => {
-      const rest = filters.filter((f) => f !== token);
-      updateElement(element.id, { filters: enabled ? [...rest, token] : rest });
-    },
-    [filters, element.id, updateElement],
-  );
-
-  const setFilterVal = useCallback(
-    (prefix: string, value: number, defaultVal: number) => {
-      const rest = filters.filter((f) => !(f === prefix || f.startsWith(prefix + ':')));
-      if (value !== defaultVal) rest.push(`${prefix}:${value}`);
-      updateElement(element.id, { filters: rest });
-    },
-    [filters, element.id, updateElement],
-  );
 
   const natural = getImageNaturalSize(element.src);
 
@@ -166,8 +120,8 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     } else {
       height = natural.height * (1 - f) - y;
     }
-    updateElement(
-      element.id,
+    const accepted = updateElementsSilent(
+      [element.id],
       cropFromSourceRect(
         element,
         {
@@ -180,69 +134,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         side
       )
     );
-  };
-
-  const handleRemoveBackground = async () => {
-    if (!element.src) return;
-    setAiLoading('remove-bg');
-    try {
-      const candidate = await aiRemoveBackground({ fetch, store, elementId: element.id });
-      if (!candidate) {
-        toaster.show(t('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'), 'warning');
-        return;
-      }
-      modals.openModal({
-        title: t('designer_review_background_removal', 'Review background removal'),
-        size: 720,
-        children: (close: () => void) => (
-          <BackgroundRemovalDialog
-            originalUrl={candidate.before.src!}
-            asset={candidate.asset}
-            onCancel={close}
-            onApply={async (fit) => {
-              const state = store.getState();
-              const output = state.doc.outputs[state.currentOutput];
-              const applied = await applyAiRemoveBackground({ store, candidate, output, fit, fetch });
-              if (applied) close();
-              else throw new Error(t('designer_bg_result_outdated', 'The design changed while this result was being prepared. Please generate it again.'));
-            }}
-          />
-        ),
-      });
-    } catch (err) {
-      // The shared action throws the server's error message — show it verbatim.
-      toaster.show((err as Error)?.message || t('designer_bg_removal_failed', 'Background removal failed'), 'warning');
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleMagicGrab = async () => {
-    if (!element.src) return;
-    setAiLoading('magic-grab');
-    try {
-      const candidate = await prepareStaticMagicGrab({ fetch, store, elementId: element.id });
-      if (!candidate) {
-        toaster.show(t('designer_magic_grab_outdated', 'The design changed before this result could be applied. Please try again.'), 'warning');
-        return;
-      }
-      openMagicGrabReview({
-        modals,
-        title: t('designer_magic_grab_title', 'Magic Grab / Select Subject'),
-        fetch,
-        candidate,
-        onApply: () => applyStaticMagicGrab({
-          fetch,
-          store,
-          candidate,
-          subjectName: t('designer_magic_grab_subject', 'Movable subject'),
-        }),
-      });
-    } catch (err) {
-      toaster.show((err as Error)?.message || t('designer_magic_grab_failed', 'Magic Grab failed'), 'warning');
-    } finally {
-      setAiLoading(false);
-    }
+    cropChanged.current = accepted || cropChanged.current;
   };
 
   const fitImageToFrame = () => updateElement(element.id, { fitMode: 'contain' });
@@ -262,207 +154,6 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     const state = store.getState();
     const output = state.doc.outputs[state.currentOutput];
     updateElement(element.id, centeredMediaFrame(element, output));
-  };
-
-  const handleUpscale = async () => {
-    if (!element.src) return;
-    setAiLoading('upscale');
-    try {
-      await aiUpscale({ fetch, store, elementId: element.id }, upscaleScale);
-    } catch (err) {
-      toaster.show((err as Error)?.message || t('designer_upscale_failed', 'Upscale failed'), 'warning');
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleInpaint = async () => {
-    if (!element.src || !inpaintPrompt || !inpaintMaskUrl) return;
-    setAiLoading('inpaint');
-    try {
-      const res = await fetch('/media/inpaint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: element.src, maskUrl: inpaintMaskUrl, prompt: inpaintPrompt }),
-      });
-      if (!res.ok) throw new Error(await readErrorMessage(res, ''));
-      const data = await res.json();
-      updateElement(element.id, { src: data.url, fileId: undefined });
-    } catch (err) {
-      toaster.show((err as Error)?.message || t('designer_inpaint_failed', 'Inpaint failed'), 'warning');
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleImageToImage = async () => {
-    if (!element.src || !imageToImagePrompt.trim()) return;
-    setAiLoading('image-to-image');
-    try {
-      const res = await fetch('/media/image-to-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: element.src, prompt: imageToImagePrompt.trim() }),
-      });
-      if (!res.ok) throw new Error(await readErrorMessage(res, ''));
-      const data = await res.json();
-      updateElement(element.id, { src: data.url, fileId: undefined });
-    } catch (err) {
-      toaster.show((err as Error)?.message || t('designer_image_to_image_failed', 'Image-to-image failed'), 'warning');
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  // Same dialog the Tools ▸ Expand Image (AI)… action opens — one implementation.
-  const handleOutpaint = () => {
-    if (!element.src) return;
-    modals.openModal({
-      title: t('designer_expand_image_ai', 'Expand Image (AI)'),
-      children: (close: () => void) => (
-        <OutpaintDialog
-          pageWidth={store.getState().doc.outputs[store.getState().currentOutput].width}
-          pageHeight={store.getState().doc.outputs[store.getState().currentOutput].height}
-          onCancel={close}
-          onPrepare={(request: OutpaintRequest) => request.scope === 'page'
-            ? prepareWholePageOutpaint({
-                fetch,
-                store,
-                elementId: element.id,
-                targetWidth: request.targetWidth!,
-                targetHeight: request.targetHeight!,
-                prompt: request.prompt,
-              })
-            : prepareAiOutpaint({
-                fetch,
-                store,
-                elementId: element.id,
-                mode: request.mode!,
-                prompt: request.prompt,
-              })}
-          onApply={async (candidate) => candidate.kind === 'page'
-            ? applyWholePageOutpaint({ store, candidate })
-            : applyAiOutpaint({ store, candidate })}
-          onDiscard={(candidate) => cleanupOutpaintCandidate(fetch, candidate)}
-        />
-      ),
-    });
-  };
-
-  const initMaskCanvases = useCallback(() => {
-    const img = previewImgRef.current;
-    if (!img) return;
-    const width = Math.max(1, img.clientWidth);
-    const height = Math.max(1, img.clientHeight);
-    if (!maskCanvasRef.current) {
-      maskCanvasRef.current = document.createElement('canvas');
-    }
-    maskCanvasRef.current.width = width;
-    maskCanvasRef.current.height = height;
-    const mctx = maskCanvasRef.current.getContext('2d');
-    if (mctx) {
-      mctx.fillStyle = '#000000';
-      mctx.fillRect(0, 0, width, height);
-    }
-    const overlay = overlayCanvasRef.current;
-    if (overlay) {
-      overlay.width = width;
-      overlay.height = height;
-      const octx = overlay.getContext('2d');
-      if (octx) {
-        octx.clearRect(0, 0, width, height);
-      }
-    }
-  }, []);
-
-  const clearMask = useCallback(() => {
-    const mask = maskCanvasRef.current;
-    const overlay = overlayCanvasRef.current;
-    if (!mask || !overlay) return;
-    const mctx = mask.getContext('2d');
-    if (mctx) {
-      mctx.fillStyle = '#000000';
-      mctx.fillRect(0, 0, mask.width, mask.height);
-    }
-    const octx = overlay.getContext('2d');
-    if (octx) {
-      octx.clearRect(0, 0, overlay.width, overlay.height);
-    }
-  }, []);
-
-  const drawMaskStroke = useCallback(
-    (x: number, y: number) => {
-      const mask = maskCanvasRef.current;
-      const overlay = overlayCanvasRef.current;
-      if (!mask || !overlay) return;
-      const mctx = mask.getContext('2d');
-      if (!mctx) return;
-      mctx.beginPath();
-      mctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
-      mctx.fillStyle = '#ffffff';
-      mctx.fill();
-
-      const octx = overlay.getContext('2d');
-      if (!octx) return;
-      octx.clearRect(0, 0, overlay.width, overlay.height);
-      octx.drawImage(mask, 0, 0);
-      octx.globalCompositeOperation = 'source-in';
-      octx.fillStyle = 'rgba(255, 0, 0, 0.55)';
-      octx.fillRect(0, 0, overlay.width, overlay.height);
-      octx.globalCompositeOperation = 'source-over';
-    },
-    [brushSize]
-  );
-
-  const getMaskPos = (e: React.PointerEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
-
-  const handleMaskPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    trySetPointerCapture(e.currentTarget, e.pointerId);
-    setIsDrawingMask(true);
-    const { x, y } = getMaskPos(e);
-    drawMaskStroke(x, y);
-  };
-
-  const handleMaskPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDrawingMask) return;
-    const { x, y } = getMaskPos(e);
-    drawMaskStroke(x, y);
-  };
-
-  const handleMaskPointerUp = useCallback(() => {
-    setIsDrawingMask(false);
-  }, []);
-
-  const uploadMask = async () => {
-    const mask = maskCanvasRef.current;
-    if (!mask) return;
-    setAiLoading('mask-upload');
-    try {
-      const blob = await new Promise<Blob | null>((resolve) =>
-        mask.toBlob(resolve, 'image/png')
-      );
-      if (!blob) throw new Error('Mask empty');
-      const formData = new FormData();
-      formData.append('file', blob, `mask-${Date.now()}.png`);
-      formData.append('internal', 'design-asset');
-      const res = await fetch('/files/upload-simple', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
-      const url = data.path || data.url;
-      if (!url) throw new Error('No mask URL');
-      setInpaintMaskUrl(url);
-      setMasking(false);
-    } catch {
-      toaster.show(t('designer_mask_upload_failed', 'Mask upload failed'), 'warning');
-    } finally {
-      setAiLoading(false);
-    }
   };
 
   const isSingle = ids.length === 1;
@@ -721,82 +412,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         brandEnforcement={brandEnforcement}
       />
 
-      <InspectorSection id="filters" title={t('designer_label_filters', 'Filters')} className="pt-1 border-t border-studioBorder">
-        <div className="flex flex-col gap-2">
-
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-textColor/70">{t('designer_label_grayscale', 'Grayscale')}</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={hasFilter('grayscale')}
-            onClick={() => toggleFilter('grayscale', !hasFilter('grayscale'))}
-            className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
-              hasFilter('grayscale') ? 'bg-designerAccent' : 'bg-studioBorder'
-            }`}
-          >
-            <span
-              className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
-                hasFilter('grayscale') ? 'translate-x-[18px]' : ''
-              }`}
-            />
-          </button>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-textColor/70">{t('designer_label_sepia', 'Sepia')}</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={hasFilter('sepia')}
-            onClick={() => toggleFilter('sepia', !hasFilter('sepia'))}
-            className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
-              hasFilter('sepia') ? 'bg-designerAccent' : 'bg-studioBorder'
-            }`}
-          >
-            <span
-              className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
-                hasFilter('sepia') ? 'translate-x-[18px]' : ''
-              }`}
-            />
-          </button>
-        </div>
-
-        <Slider
-          label={t('designer_label_blur', 'Blur')}
-          suffix="px"
-          min={0}
-          max={20}
-          step={0.5}
-          value={getFilterVal('blur', 0)}
-          onChange={(n) => setFilterVal('blur', n, 0)}
-        />
-        <Slider
-          label={t('designer_label_brightness', 'Brightness')}
-          min={0}
-          max={3}
-          step={0.05}
-          value={getFilterVal('brightness', 1)}
-          onChange={(n) => setFilterVal('brightness', n, 1)}
-        />
-        <Slider
-          label={t('designer_label_contrast', 'Contrast')}
-          min={0}
-          max={3}
-          step={0.05}
-          value={getFilterVal('contrast', 1)}
-          onChange={(n) => setFilterVal('contrast', n, 1)}
-        />
-        <Slider
-          label={t('designer_label_saturate', 'Saturate')}
-          min={0}
-          max={3}
-          step={0.05}
-          value={getFilterVal('saturate', 1)}
-          onChange={(n) => setFilterVal('saturate', n, 1)}
-        />
-        </div>
-      </InspectorSection>
+      <ImageFilterControls element={element} ids={ids} store={store} />
 
       <InspectorSection id="mask" title={t('designer_label_mask_frame', 'Mask / Frame')}>
         <div className="space-y-2">
@@ -956,9 +572,10 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
             {element.crop && (
               <button
                 className="text-[10px] text-btnPrimaryAccent"
-                onClick={() =>
-                  updateElement(element.id, { crop: undefined })
-                }
+                onClick={() => {
+                  updateElement(element.id, { crop: undefined });
+                  store.getState().pushHistory('Reset crop');
+                }}
               >
                 {t('reset', 'Reset')}
               </button>
@@ -978,6 +595,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
                 max={45}
                 value={cropInset('left')}
                 onChange={(n) => applyCrop('left', n)}
+                onCommit={commitCropInset}
               />
               <Slider
                 label={t('designer_label_right', 'Right')}
@@ -986,6 +604,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
                 max={45}
                 value={cropInset('right')}
                 onChange={(n) => applyCrop('right', n)}
+                onCommit={commitCropInset}
               />
               <Slider
                 label={t('designer_label_top', 'Top')}
@@ -994,6 +613,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
                 max={45}
                 value={cropInset('top')}
                 onChange={(n) => applyCrop('top', n)}
+                onCommit={commitCropInset}
               />
               <Slider
                 label={t('designer_label_bottom', 'Bottom')}
@@ -1002,6 +622,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
                 max={45}
                 value={cropInset('bottom')}
                 onChange={(n) => applyCrop('bottom', n)}
+                onCommit={commitCropInset}
               />
             </>
           )}
@@ -1009,158 +630,20 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       )}
       </InspectorTabGroup>
 
-      <InspectorTabGroup for="ai" active={tab}>
-      <div>
-        <div className="space-y-2">
-          {operationAvailable('bg-remove') && (
-            <button
-              className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
-              onClick={handleRemoveBackground}
-              disabled={!!aiLoading}
-            >
-              {aiLoading === 'remove-bg' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_remove_background', 'Remove Background')}
-            </button>
-          )}
-          {operationAvailable('bg-remove') && operationAvailable('inpaint') && (
-            <button
-              className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
-              onClick={handleMagicGrab}
-              disabled={!!aiLoading}
-            >
-              {aiLoading === 'magic-grab' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_magic_grab', 'Magic Grab / Select Subject')}
-            </button>
-          )}
-          {operationAvailable('upscale') && (
-          <div className="flex gap-2">
-            <select
-              className="flex-1 px-2 py-1.5 bg-newBgColor border border-studioBorder rounded-sm text-sm text-textColor"
-              value={upscaleScale}
-              onChange={e => setUpscaleScale(Number(e.target.value))}
-            >
-              <option value={2}>{t('designer_upscale_2x', '2× Upscale')}</option>
-              <option value={4}>{t('designer_upscale_4x', '4× Upscale')}</option>
-            </select>
-            <button
-              className="px-3 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30"
-              onClick={handleUpscale}
-              disabled={!!aiLoading}
-            >
-              {aiLoading === 'upscale' ? '...' : t('designer_upscale', 'Upscale')}
-            </button>
-          </div>
-          )}
-
-          {operationAvailable('image') && (
-          <div className="flex flex-col gap-2">
-            <input
-              className="w-full px-2 py-1.5 bg-newBgColor border border-studioBorder rounded-sm text-sm text-textColor"
-              placeholder={t('designer_placeholder_image_to_image', 'Image-to-image prompt...')}
-              value={imageToImagePrompt}
-              onChange={(e) => setImageToImagePrompt(e.target.value)}
-            />
-            <button
-              className="w-full px-3 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
-              onClick={handleImageToImage}
-              disabled={!!aiLoading || !imageToImagePrompt.trim()}
-            >
-              {aiLoading === 'image-to-image' ? '…' : t('designer_image_to_image', 'Image to Image')}
-            </button>
-          </div>
-          )}
-
-          {operationAvailable('inpaint') && (
-          <div className="flex flex-col gap-2">
-            <input
-              className="w-full px-2 py-1.5 bg-newBgColor border border-studioBorder rounded-sm text-sm text-textColor"
-              placeholder={t('designer_placeholder_inpaint', 'Inpaint prompt...')}
-              value={inpaintPrompt}
-              onChange={(e) => setInpaintPrompt(e.target.value)}
-            />
-
-            {masking && (
-              <div className="flex flex-col gap-2">
-                <div
-                  className="relative w-full rounded-sm overflow-hidden border border-studioBorder cursor-crosshair"
-                  onPointerDown={handleMaskPointerDown}
-                  onPointerMove={handleMaskPointerMove}
-                  onPointerUp={handleMaskPointerUp}
-                  onPointerLeave={handleMaskPointerUp}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- external media file */}
-                  <img
-                    ref={previewImgRef}
-                    src={element.src}
-                    alt=""
-                    className="w-full h-auto block"
-                    onLoad={initMaskCanvases}
-                  />
-                  <canvas
-                    ref={overlayCanvasRef}
-                    className="absolute inset-0 w-full h-full pointer-events-none"
-                  />
-                </div>
-                <Slider
-                  label={t('designer_label_brush', 'Brush')}
-                  suffix="px"
-                  min={4}
-                  max={48}
-                  step={2}
-                  value={brushSize}
-                  onChange={setBrushSize}
-                />
-                <div className="flex gap-2">
-                  <button
-                    className="flex-1 px-2 py-1.5 bg-newBgColor hover:bg-studioBorder/10 text-xs rounded-sm border border-studioBorder"
-                    onClick={clearMask}
-                  >
-                    {t('clear', 'Clear')}
-                  </button>
-                  <button
-                    className="flex-1 px-2 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-xs rounded-sm border border-designerAccent/30"
-                    onClick={uploadMask}
-                    disabled={!!aiLoading}
-                  >
-                    {aiLoading === 'mask-upload' ? t('designer_uploading_ellipsis_dots', 'Uploading…') : t('done', 'Done')}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {!masking && (
-              <button
-                className="w-full px-3 py-1.5 bg-newBgColor hover:bg-studioBorder/10 text-sm rounded-sm border border-studioBorder text-left"
-                onClick={() => setMasking(true)}
-                disabled={!!aiLoading}
-              >
-                {inpaintMaskUrl ? t('designer_edit_mask', 'Edit mask') : t('designer_draw_mask', 'Draw mask…')}
-              </button>
-            )}
-
-            {inpaintMaskUrl && !masking && (
-              <div className="text-[10px] text-green-700 dark:text-green-400">{t('designer_mask_ready', 'Mask ready')}</div>
-            )}
-
-            <button
-              className="w-full px-3 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
-              onClick={handleInpaint}
-              disabled={!!aiLoading || !inpaintPrompt || !inpaintMaskUrl}
-            >
-              {aiLoading === 'inpaint' ? '…' : t('designer_inpaint', 'Inpaint')}
-            </button>
-          </div>
-          )}
-
-          {operationAvailable('outpaint') && (
-            <button
-              className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
-              onClick={handleOutpaint}
-              disabled={!!aiLoading}
-            >
-              {aiLoading === 'outpaint' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_expand_image_ai', 'Expand Image (AI)')}
-            </button>
-          )}
-        </div>
+      <div className="grid grid-cols-3 gap-1">
+        <button type="button" onClick={fitImageToFrame} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+          {t('designer_fit_to_frame', 'Fit to frame')}
+        </button>
+        <button type="button" onClick={fitImageToCanvas} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+          {t('designer_fit_to_canvas', 'Fit to canvas')}
+        </button>
+        <button type="button" onClick={centerImage} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+          {t('designer_center', 'Center')}
+        </button>
       </div>
+
+      <InspectorTabGroup for="ai" active={tab}>
+        {isSingle && <ImageAiTools key={element.id} element={element} store={store} />}
       </InspectorTabGroup>
     </div>
     <InspectorTabGroup for="ai" active={tab}>

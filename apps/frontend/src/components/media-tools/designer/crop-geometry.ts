@@ -45,7 +45,7 @@ export const normaliseFraction = (f: BoxFraction): BoxFraction => {
 
 type CropElement = Pick<
   DesignerElement,
-  'x' | 'y' | 'width' | 'height' | 'crop' | 'fitMode' | 'focalPoint'
+  'x' | 'y' | 'width' | 'height' | 'crop' | 'fitMode' | 'focalPoint' | 'flipX' | 'flipY'
 >;
 
 export type CropResizeHandle =
@@ -156,14 +156,19 @@ export const cropFromBoxFraction = (
     };
   }
 
+  const sourceFraction = {
+    ...f,
+    x: el.flipX ? 1 - f.x - f.width : f.x,
+    y: el.flipY ? 1 - f.y - f.height : f.y,
+  };
   const current = currentSourceWindow(el, natural);
   return cropFromSourceRect(
     cropDisplayBox(el, natural),
     {
-      x: current.x + f.x * current.width,
-      y: current.y + f.y * current.height,
-      width: Math.max(1, f.width * current.width),
-      height: Math.max(1, f.height * current.height),
+      x: current.x + sourceFraction.x * current.width,
+      y: current.y + sourceFraction.y * current.height,
+      width: Math.max(1, sourceFraction.width * current.width),
+      height: Math.max(1, sourceFraction.height * current.height),
     },
     f,
     handle
@@ -187,21 +192,44 @@ export const constrainFractionToRatio = (
   f: BoxFraction,
   ratio: number | null,
   boxWidth: number,
-  boxHeight: number
+  boxHeight: number,
+  handle?: CropResizeHandle
 ): BoxFraction => {
-  if (!ratio || !(boxWidth > 0) || !(boxHeight > 0)) return f;
-  const pxW = f.width * boxWidth;
-  const pxH = f.height * boxHeight;
-  if (!(pxW > 0) || !(pxH > 0)) return f;
+  const current = normaliseFraction(f);
+  if (!ratio || !(boxWidth > 0) || !(boxHeight > 0)) return current;
+  const pxW = current.width * boxWidth;
+  const pxH = current.height * boxHeight;
+  if (!(pxW > 0) || !(pxH > 0)) return current;
 
-  // Keep whichever axis implies the smaller rect, so we never grow past the box.
   const wFromH = pxH * ratio;
   const [newW, newH] = wFromH <= pxW ? [wFromH, pxH] : [pxW, pxW / ratio];
+  const width = newW / boxWidth;
+  const height = newH / boxHeight;
+  let x = current.x;
+  let y = current.y;
 
-  return normaliseFraction({
-    x: f.x,
-    y: f.y,
-    width: newW / boxWidth,
-    height: newH / boxHeight,
-  });
+  if (handle?.includes('left')) x = current.x + current.width - width;
+  else if (!handle?.includes('right') && handle) x = current.x + (current.width - width) / 2;
+  if (handle?.includes('top')) y = current.y + current.height - height;
+  else if (!handle?.includes('bottom') && handle) y = current.y + (current.height - height) / 2;
+
+  return {
+    x: Math.max(0, Math.min(1 - width, x)),
+    y: Math.max(0, Math.min(1 - height, y)),
+    width,
+    height,
+  };
+};
+
+export const centeredCropFraction = (
+  ratio: number | null,
+  boxWidth: number,
+  boxHeight: number
+): BoxFraction => {
+  const constrained = constrainFractionToRatio(FULL_BOX, ratio, boxWidth, boxHeight);
+  return {
+    ...constrained,
+    x: (1 - constrained.width) / 2,
+    y: (1 - constrained.height) / 2,
+  };
 };

@@ -225,11 +225,25 @@ picker includes **Upload font** for one or more of your own `.ttf`, `.otf`, or `
 Batch uploads continue past individual failures and report partial success; WOFF2 fonts are not
 used in server-rendered exports.
 
+The image Inspector also groups **Remove Background**, **Magic Grab**, **Upscale**, **Image to
+Image**, **Inpaint**, and **Expand Image** into expandable **AI Tools** cards. Each card keeps its
+description, prompt or mask controls, and **Generate** action together. Drafts remain attached to
+their selected image, and results cannot overwrite a newer edit.
+
 **Crop** works on both images and visual timeline clips, through canvas handles or the Inspector's
-inset sliders. Cropping keeps the selected pixels' aspect ratio. **Cover** fills the frame and crops
-around the adjustable focal point, **Fit** letterboxes without cropping, and **Fill** stretches;
-video and image clips default to Cover when no fit was saved. Image backgrounds, thumbnails, SVG,
-and video exports use the same crop and focal-point geometry as the canvas.
+inset sliders. Choose **Free**, **1:1**, **4:5**, **9:16**, or **16:9**, drag with the
+rule-of-thirds guide, then choose **Done** or **Cancel**. **Reset** restores the current crop
+session's starting rectangle; the Inspector's Reset clears a previously applied crop. Cropping
+keeps the selected pixels' aspect ratio. **Cover** fills the frame and crops around the adjustable
+focal point, **Fit** letterboxes without cropping, and **Fill** stretches; video and image clips
+default to Cover when no fit was saved. Image backgrounds, thumbnails, SVG, and video exports use
+the same crop and focal-point geometry as the canvas.
+
+For static images, **Looks** applies a one-click filter preset using the selected image's own
+thumbnails. **Adjust** exposes standalone Grayscale and Sepia switches, Brightness, Contrast, and
+Saturation as percentages, and Blur in pixels. On a multi-selection, sliders and switches preserve
+each image's other filters. Manual edits deselect the exact preset match, and **Reset all** clears every look and
+adjustment. Static images and video clips share the same preset definitions and export filters.
 
 ### QR codes
 
