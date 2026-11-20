@@ -470,6 +470,16 @@ const DesignerContent: FC<
       return next;
     });
   }, [showPagesBar, user?.orgId]);
+  const onPagesContentAdded = useCallback(() => {
+    // Only a saved hide stops the automatic rule; a saved "show" already shows the strip.
+    if (pagesBarOverride !== false) return;
+    setPagesBarOverride(null);
+    try {
+      localStorage.removeItem(`designer-pages-bar-${user?.orgId}`);
+    } catch {
+      // The automatic content rule still opens the strip when storage is unavailable.
+    }
+  }, [pagesBarOverride, user?.orgId]);
   const selectedIds = store((s) => s.selectedIds);
   const selectedClip = store((s) => s.selectedClip);
   const brandEnforcement = store((s) => s.brandEnforcement);
@@ -1954,8 +1964,8 @@ const DesignerContent: FC<
             }}
           />
           {docMode === 'video' && <VideoTimeline store={store} sendTimelineAwareness={collabData.sendTimelineAwareness} />}
-          <PagesPanel store={store} visible={showPagesBar} />
-          <OutputTabs store={store} />
+          <PagesPanel store={store} visible={showPagesBar} onContentAdded={onPagesContentAdded} />
+          <OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />
         </div>
       </div>
       <CommandPalette actions={actions} />

@@ -326,7 +326,7 @@ test('shape insertion stays on an independent format through save, reload, and e
     expect(doc.outputs[0].contentLinkGroup).not.toBe(doc.outputs[1].contentLinkGroup);
   };
   await openDesigner(page);
-  await page.getByRole('button', { name: /Independent/ }).click();
+  await page.getByRole('button', { name: /^Independent(?! actions)/ }).click();
 
   const stage = page.locator('.konva-stage').first();
   // The canvas menu opens only on the bare stage: right of the 20px ruler,
@@ -341,7 +341,7 @@ test('shape insertion stays on an independent format through save, reload, and e
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await expect(page.locator('.konva-stage').first()).toBeVisible();
-  await page.getByRole('button', { name: /Independent/ }).click();
+  await page.getByRole('button', { name: /^Independent(?! actions)/ }).click();
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Save to Files' }).click();
   await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
@@ -408,7 +408,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   // Shortcuts are canvas-focus-scoped, so the keys go to the canvas itself.
   const canvasRegion = page.getByRole('application', { name: 'Design canvas' });
   await canvasRegion.press('Control+c');
-  await page.getByRole('button', { name: /Paste Target/ }).click();
+  await page.getByRole('button', { name: /^Paste Target(?! actions)/ }).click();
 
   // Keyboard paste retains its offset behavior and remains one atomic edit.
   await canvasRegion.press('Control+v');
@@ -505,7 +505,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
-  await page.getByRole('button', { name: /Paste Target/ }).click();
+  await page.getByRole('button', { name: /^Paste Target(?! actions)/ }).click();
   expect((state.doc as any).outputs[1].children).toHaveLength(9);
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -593,7 +593,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
     return cloned;
   };
 
-  await page.getByRole('button', { name: /Source/ }).click();
+  await page.getByRole('button', { name: /^Source(?! actions)/ }).click();
   await page.getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
   const stage = page.locator('.konva-stage').first();
@@ -649,7 +649,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX', { timeout: 60_000 });
-  await page.getByRole('button', { name: /Instagram Story/ }).click();
+  await page.getByRole('button', { name: /^Instagram Story(?! actions)/ }).click();
   assertClone(state.doc);
   const rendersBeforeExport = state.renderDocs.length;
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -1458,4 +1458,204 @@ test('mobile inspector sheet shares the task tabs and remembers them', async ({ 
   await editText(page);
   if (await inspectorButton.isVisible()) await inspectorButton.click();
   await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
+
+test('page and format duplication reopen Pages and preserve exact linked content with Undo', async ({ page }) => {
+  const doc = structuredClone(initialDoc) as any;
+  Object.assign(doc.outputs[0], { formatId: 'ig-post', name: 'Instagram Post' });
+  doc.outputs[0].children.forEach((child: any, index: number) => {
+    child.originId = `source-origin-${index}`;
+  });
+  doc.outputs[0].pages = [{
+    id: 'details-page', name: 'Details', background: { type: 'color', color: '#eef2ff' },
+    children: [{
+      ...structuredClone(doc.outputs[0].children[0]), id: 'details-copy', originId: 'details-origin',
+      text: 'Details page',
+    }],
+  }];
+  const state = await installMocks(page, doc);
+  await page.addInitScript(() => {
+    localStorage.setItem('designer-pages-bar-e2e-org', 'false');
+  });
+  await openDesigner(page);
+  const pagesStrip = page.locator('div[aria-label="Pages"][aria-disabled]');
+  await expect(pagesStrip).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Instagram Post actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Duplicate linked', exact: true }).click();
+  await expect.poll(() => state.doc.outputs.length).toBe(2);
+  await expect(pagesStrip).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('designer-pages-bar-e2e-org'))).toBeNull();
+  expect(state.doc.outputs[1]).toMatchObject({ width: 400, height: 400, name: 'Instagram Post 2' });
+  expect(state.doc.outputs[1].children.map((child: any) => child.originId))
+    .toEqual(state.doc.outputs[0].children.map((child: any) => child.originId));
+  expect(state.doc.outputs[1].pages[0].children[0]).toMatchObject({ text: 'Details page' });
+  expect(state.doc.outputs[1].pages[0].children[0].originId).not.toBe('details-origin');
+  expect(state.doc.outputs[1].pages[0].background).toEqual({ type: 'color', color: '#eef2ff' });
+
+  await page.getByRole('button', { name: 'Pages', exact: true }).hover();
+  await expect(page.getByText('Manage pages in this format', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Carousel', exact: true }).hover();
+  await expect(page.getByText('Arrange slides; insert or delete at any position', { exact: true })).toBeVisible();
+
+  await page.locator('[data-page-index="0"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Duplicate page', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[1].pages.length).toBe(2);
+  expect(state.doc.outputs[0].pages).toHaveLength(1);
+  expect(state.doc.outputs[1].pages[0].children[0].text).toBe('Hello world');
+  expect(state.doc.outputs[1].pages[1].children[0].text).toBe('Details page');
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[1].pages.length).toBe(1);
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs.length).toBe(1);
+
+  await page.getByRole('button', { name: 'Freeze format', exact: true }).click();
+  await expect(page.getByText('Frozen', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Add format', exact: true }).click();
+  const addCustom = page.getByRole('button', { name: 'Add custom size', exact: true });
+  await addCustom.scrollIntoViewIfNeeded();
+  await expect(addCustom).toBeVisible();
+  const customBox = await addCustom.boundingBox();
+  expect(customBox).not.toBeNull();
+  expect(customBox!.x).toBeGreaterThanOrEqual(0);
+  expect(customBox!.x + customBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(await addCustom.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
+
+test('video format right-click duplicates exact timing independently with one Undo', async ({ page }) => {
+  const state = await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+
+  await page.locator('[data-output-index="0"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Duplicate independently', exact: true }).click();
+
+  await expect.poll(() => state.doc.outputs.length).toBe(2);
+  const source = state.doc.outputs[0];
+  const copy = state.doc.outputs[1];
+  expect(copy).toMatchObject({ width: 400, height: 400, durationMs: 5000 });
+  expect(copy.tracks).toHaveLength(source.tracks.length);
+  expect(copy.tracks[0].clips[0]).toMatchObject({
+    startMs: 0, endMs: 5000, x: 220, y: 40, width: 140, height: 100,
+  });
+  expect(copy.tracks[1].clips[0].crop).toEqual(source.tracks[1].clips[0].crop);
+  expect(copy.tracks[1].clips[0].fileId).toBe('old-still-file');
+  expect(copy.tracks[0].clips[0].id).not.toBe(source.tracks[0].clips[0].id);
+  expect(copy.tracks[0].clips[0].originId).toBeUndefined();
+  expect(copy.tracks[0].id).not.toBe(source.tracks[0].id);
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs.length).toBe(1);
+});
+
+test('brand explanations and custom-size controls fit a narrow mobile layout', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installMocks(page);
+  await page.route('**/brands', (route) => json(route, [{
+    id: 'default-brand', name: 'Acme', enabled: true, isDefault: true,
+    palette: [], fontFamilies: [], logoFileIds: [],
+  }]));
+  await openDesigner(page);
+
+  await page.getByRole('button', { name: 'Tools', exact: true }).click();
+  await page.getByRole('button', { name: 'Brand', exact: true }).click();
+  const brandSelect = page.getByRole('combobox', { name: 'Brand Profile', exact: true });
+  await expect(brandSelect).toBeVisible();
+  expect(await brandSelect.locator('option').allTextContents()).toEqual([
+    'General Mode — No brand rules',
+    'Acme — Default',
+  ]);
+  await page.getByRole('region', { name: 'Brand', exact: true })
+    .getByRole('button', { name: 'Collapse panel', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Add format', exact: true }).click();
+  const addCustom = page.getByRole('button', { name: 'Add custom size', exact: true });
+  await addCustom.scrollIntoViewIfNeeded();
+  await expect(addCustom).toBeVisible();
+  const box = await addCustom.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  expect(await addCustom.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
+
+
+test('adding a page does not make Pages always visible on later single-page designs', async ({ page }) => {
+  const doc = structuredClone(initialDoc) as any;
+  doc.outputs[0].pages = [{
+    id: 'second-page', children: [structuredClone(doc.outputs[0].children[0])],
+  }];
+  const state = await installMocks(page, doc);
+  await openDesigner(page);
+  const pagesStrip = page.locator('div[aria-label="Pages"][aria-disabled]');
+  await expect(pagesStrip).toBeVisible();
+
+  await page.getByRole('button', { name: 'Add page', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].pages.length).toBe(2);
+  expect(await page.evaluate(() => localStorage.getItem('designer-pages-bar-e2e-org'))).toBeNull();
+
+  state.doc = structuredClone(initialDoc);
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await expect(pagesStrip).toHaveCount(0);
+});
+
+test('adding a page preserves an explicit always-show Pages choice on later single-page designs', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+  const pagesStrip = page.locator('div[aria-label="Pages"][aria-disabled]');
+  await expect(pagesStrip).toHaveCount(0);
+
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Pages / Carousel', exact: true }).click();
+  await expect(pagesStrip).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('designer-pages-bar-e2e-org'))).toBe('true');
+
+  await page.getByRole('button', { name: 'Add page', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].pages?.length).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('designer-pages-bar-e2e-org'))).toBe('true');
+
+  state.doc = structuredClone(initialDoc);
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await expect(pagesStrip).toBeVisible();
+});
+
+test('frozen and selected formats stay visually distinct without covering dimensions', async ({ page }) => {
+  const doc = structuredClone(initialDoc) as any;
+  doc.outputs[0].name = 'Selected';
+  doc.outputs.push({
+    ...structuredClone(doc.outputs[0]), id: 'frozen-output', name: 'Frozen copy',
+  });
+  await installMocks(page, doc);
+  await openDesigner(page);
+
+  await page.getByRole('button', { name: 'Freeze format', exact: true }).nth(1).click();
+  const selected = page.locator('[data-output-index="0"] > button').first();
+  const frozen = page.locator('[data-output-index="1"] > button').first();
+  const selectedStyle = await selected.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { border: style.borderTopColor, background: style.backgroundColor };
+  });
+  const frozenStyle = await frozen.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { border: style.borderTopColor, background: style.backgroundColor };
+  });
+  expect(frozenStyle).not.toEqual(selectedStyle);
+
+  const frozenLabel = frozen.getByText('Frozen', { exact: true });
+  const dimensions = frozen.getByText('400×400', { exact: true });
+  await expect(frozenLabel).toBeVisible();
+  await expect(dimensions).toBeVisible();
+  const labelBox = await frozenLabel.boundingBox();
+  const dimensionsBox = await dimensions.boundingBox();
+  expect(labelBox).not.toBeNull();
+  expect(dimensionsBox).not.toBeNull();
+  const overlaps = !(
+    labelBox!.x + labelBox!.width <= dimensionsBox!.x ||
+    dimensionsBox!.x + dimensionsBox!.width <= labelBox!.x ||
+    labelBox!.y + labelBox!.height <= dimensionsBox!.y ||
+    dimensionsBox!.y + dimensionsBox!.height <= labelBox!.y
+  );
+  expect(overlaps).toBe(false);
 });
