@@ -3,6 +3,8 @@ import { test, expect, type Page, type Route, type Locator } from '@playwright/t
 const DESIGN_ID = 'designer-editing-ux-e2e';
 
 const PNG_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg==';
+const LIBRARY_IMAGE_URL = '/mock-export/library.png';
+const STOCK_IMAGE_URL = '/mock-export/stock.png';
 
 const initialDoc = {
   version: 13,
@@ -125,6 +127,33 @@ const editAsVideoConvertedDoc = {
     tracks: [{ id: 'burger-wide-text-track', type: 'text', clips: [{ id: 'burger-wide-copy-clip', originId: 'burger-wide-copy', startMs: 0, endMs: 2000, text: 'BURGER NIGHT', x: 40, y: 160, width: 500, height: 60, fontFamily: 'Arial', fontSize: 36 }] }],
   }],
 };
+const galleryDesigns = [
+  ...Array.from({ length: 25 }, (_, index) => ({
+    id: `gallery-design-${index + 1}`,
+    name: `Gallery design ${String(index + 1).padStart(2, '0')}`,
+    createdAt: new Date(Date.UTC(2026, 0, 25 - index)).toISOString(),
+    updatedAt: new Date(Date.UTC(2026, 0, 25 - index)).toISOString(),
+    previewUrl: PNG_DATA_URL,
+    mode: 'image',
+  })),
+  {
+    id: 'gallery-design-unloaded', name: 'R&D launch', createdAt: '2020-01-01T00:00:00.000Z',
+    updatedAt: '2020-01-01T00:00:00.000Z', previewUrl: null, previewDataUrl: null, mode: 'image',
+  },
+];
+
+const galleryTemplates = [
+  ...Array.from({ length: 25 }, (_, index) => ({
+    id: `gallery-template-${index + 1}`, name: `Gallery template ${String(index + 1).padStart(2, '0')}`,
+    category: 'Social', isSystem: false, folderId: null, brandProfileId: null,
+    doc: { mode: 'image' }, thumbnail: PNG_DATA_URL, createdAt: new Date(Date.UTC(2026, 0, 25 - index)).toISOString(),
+  })),
+  {
+    id: 'gallery-template-unloaded', name: 'Unloaded launch', category: 'instagram-post', isSystem: false,
+    folderId: null, brandProfileId: null, doc: { mode: 'image' }, thumbnail: null,
+    createdAt: '2020-01-01T00:00:00.000Z',
+  },
+];
 
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -148,8 +177,22 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     renderDocs: [] as unknown[],
     generationCalls: 0,
     uploads: 0,
+    deletedFiles: [] as string[],
     uploadPath: PNG_DATA_URL,
+    uploadRecords: [] as Array<{ id: string; name: string; internal: string | null; path: string }>,
+    libraryFiles: [] as Array<Record<string, unknown>>,
+    mediaOperations: {} as Record<string, { available: boolean }>,
+    inpaintCalls: [] as Array<Record<string, unknown>>,
+    recentDesignIds: [] as string[],
+    recentTemplateIds: [] as string[],
+    templateRequests: [] as string[],
+    bulkRequests: [] as any[],
+    batchStarted: false,
+    designCreates: 0,
   };
+  const templateDoc = structuredClone(initialDoc);
+  templateDoc.outputs[0].children[1].name = 'Product hero';
+  templateDoc.outputs[0].children[1].id = 'template-image-internal';
   await page.route('**/*', async (route) => {
     const request = route.request();
     const method = request.method();
@@ -177,7 +220,188 @@ async function installMocks(page: Page, doc: any = initialDoc) {
       return json(route, {});
     }
     if (method === 'GET' && pathname === '/media/tools/status') {
-      return json(route, { operations: {}, tools: { 'text-to-image': { available: true } } });
+      return json(route, { operations: state.mediaOperations, tools: { 'text-to-image': { available: true } } });
+    }
+    // Navigating to the Files page is a document request for the same path.
+    if (method === 'GET' && pathname === '/files' && request.resourceType() !== 'document') {
+      const search = url.searchParams.get('search')?.toLowerCase() || '';
+      const results = state.libraryFiles.filter((file) =>
+        !search || String(file.originalName || file.name).toLowerCase().includes(search));
+      return json(route, { pages: 1, results });
+    }
+    if (method === 'GET' && pathname === '/files/search') {
+      const search = String(url.searchParams.get('q') || '').toLowerCase();
+      return json(route, state.libraryFiles.filter((file) =>
+        String(file.originalName || file.name).toLowerCase().includes(search)));
+    }
+    if (method === 'GET' && pathname === '/files') {
+      return json(route, {
+        results: [{
+          id: 'library-image-file', name: 'library-image.png', originalName: 'library-image.png',
+          path: LIBRARY_IMAGE_URL, thumbnail: PNG_DATA_URL, alt: null, thumbnailTimestamp: null,
+          fileSize: 100, type: 'image', tags: null, description: null, folderId: null,
+          createdAt: '2026-11-19T00:00:00.000Z', metadata: { dimensions: { width: 1, height: 1 } },
+        }],
+        total: 1, page: 1, limit: 24,
+      });
+    }
+    if (method === 'GET' && pathname === '/media/stock/photos') {
+      return json(route, {
+        results: [{
+          id: 'picker-stock', url: STOCK_IMAGE_URL, thumbUrl: PNG_DATA_URL,
+          description: 'Picker stock photo', author: 'QA', authorUrl: 'https://example.test/author',
+          sourceUrl: 'https://example.test/photo', width: 1, height: 1, source: 'unsplash',
+        }],
+        configured: true,
+      });
+    }
+    if (method === 'DELETE' && pathname.startsWith('/files/')) {
+      state.deletedFiles.push(pathname.slice('/files/'.length));
+      return json(route, {});
+    }
+    if (method === 'GET' && pathname === '/media/designs') {
+      const query = (url.searchParams.get('query') || '').toLowerCase();
+      const sort = url.searchParams.get('sort') || 'newest';
+      const filtered = galleryDesigns.filter((design) => !query || design.name.toLowerCase().includes(query));
+      const ordered = [...filtered].sort((a, b) => {
+        if (sort === 'name') return a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id.localeCompare(b.id);
+        if (sort === 'recent') {
+          const recent = state.recentDesignIds.indexOf(a.id) - state.recentDesignIds.indexOf(b.id);
+          if (state.recentDesignIds.includes(a.id) || state.recentDesignIds.includes(b.id)) {
+            if (!state.recentDesignIds.includes(a.id)) return 1;
+            if (!state.recentDesignIds.includes(b.id)) return -1;
+            return recent;
+          }
+        }
+        return b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
+      });
+      const pageNumber = Number(url.searchParams.get('page')) || 1;
+      const limit = Number(url.searchParams.get('limit')) || 24;
+      const start = (pageNumber - 1) * limit;
+      return json(route, { designs: ordered.slice(start, start + limit), total: ordered.length, page: pageNumber, limit });
+    }
+    if (method === 'GET' && pathname === '/media/design-templates/folders') return json(route, []);
+    if (method === 'GET' && pathname === '/media/design-templates') {
+      state.templateRequests.push(`${pathname}${url.search}`);
+      const query = (url.searchParams.get('query') || '').toLowerCase();
+      const category = url.searchParams.get('category');
+      const sort = url.searchParams.get('sort') || 'newest';
+      const filtered = galleryTemplates.filter((template) => {
+        const searchable = `${template.name} ${template.category} ${template.category === 'instagram-post' ? 'ig post instagram post' : ''}`.toLowerCase();
+        return (!query || searchable.includes(query)) &&
+          (!category || (category === 'ig-post' ? template.category === 'instagram-post' : template.category.toLowerCase() === category)) &&
+          (url.searchParams.get('folderId') !== 'none' || !template.folderId);
+      });
+      const ordered = [...filtered].sort((a, b) => {
+        if (sort === 'name') return a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id.localeCompare(b.id);
+        if (sort === 'recent') {
+          const aIndex = state.recentTemplateIds.indexOf(a.id);
+          const bIndex = state.recentTemplateIds.indexOf(b.id);
+          if (aIndex >= 0 || bIndex >= 0) {
+            if (aIndex < 0) return 1;
+            if (bIndex < 0) return -1;
+            return aIndex - bIndex;
+          }
+        }
+        return b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
+      });
+      const pageNumber = Number(url.searchParams.get('page')) || 1;
+      const limit = Number(url.searchParams.get('limit')) || 24;
+      const start = (pageNumber - 1) * limit;
+      return json(route, {
+        templates: ordered.slice(start, start + limit), total: ordered.length, page: pageNumber, limit,
+        categories: [{ key: 'social', label: 'Social' }, { key: 'ig-post', label: 'IG Post' }], unfiledCount: galleryTemplates.length,
+      });
+    }
+    if (method === 'GET' && /^\/media\/designs\/gallery-design-/.test(pathname)) {
+      const id = pathname.split('/').pop()!;
+      state.recentDesignIds = [id, ...state.recentDesignIds.filter((entry) => entry !== id)];
+      const design = galleryDesigns.find((entry) => entry.id === id)!;
+      return json(route, { id, name: design.name, doc: initialDoc });
+    }
+    if (method === 'GET' && /^\/media\/design-templates\/gallery-template-/.test(pathname)) {
+      const id = pathname.split('/').pop()!;
+      return json(route, {
+        ...galleryTemplates.find((entry) => entry.id === id)!,
+        doc: structuredClone(initialDoc),
+      });
+    }
+    if (method === 'POST' && pathname === '/media/designs') {
+      const body = request.postDataJSON() as { name: string; doc: unknown; sourceTemplateId?: string };
+      if (body.sourceTemplateId) {
+        state.recentTemplateIds = [body.sourceTemplateId, ...state.recentTemplateIds.filter((id) => id !== body.sourceTemplateId)];
+      }
+      return json(route, { id: 'gallery-created-design', name: body.name, doc: body.doc }, 201);
+    }
+    if (method === 'GET' && pathname === '/media/designs/batches') {
+      return json(route, {
+        batches: state.batchStarted ? [{
+          id: 'batch-1', name: 'Catalog Template', count: 2,
+          updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL,
+        }] : [],
+        total: state.batchStarted ? 1 : 0,
+      });
+    }
+    if (method === 'GET' && pathname === '/media/designs/batches/batch-1') {
+      return json(route, {
+        id: 'batch-1', name: 'Catalog Template',
+        designs: ['variation-1', 'variation-2'].map((id, index) => ({
+          id, name: `Variation ${index + 1}`, doc: templateDoc, mode: 'image',
+          updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL,
+          batchId: 'batch-1', batch: { id: 'batch-1', name: 'Catalog Template' },
+        })),
+      });
+    }
+    if (method === 'GET' && pathname === '/media/designs') {
+      const group = new URL(request.url()).searchParams.get('group');
+      const variations = state.batchStarted && group !== 'root'
+        ? ['variation-1', 'variation-2'].map((id, index) => ({
+            id, name: `Variation ${index + 1}`, mode: 'image',
+            updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL,
+          }))
+        : [];
+      const designs = [{ id: DESIGN_ID, name: 'Editing UX', doc: state.doc, mode: 'image', updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL }, ...variations];
+      return json(route, { designs, total: designs.length });
+    }
+    if (method === 'GET' && pathname === '/media/design-templates/folders') {
+      return json(route, []);
+    }
+    if (method === 'GET' && pathname === '/media/design-templates') {
+      return json(route, {
+        templates: [{ id: 'template-1', name: 'Catalog Template', doc: { mode: 'image' }, isSystem: true, category: 'Catalog', thumbnail: PNG_DATA_URL }],
+        total: 1, page: 1, limit: 24,
+      });
+    }
+    if (method === 'GET' && pathname === '/media/design-templates/template-1') {
+      return json(route, { id: 'template-1', name: 'Catalog Template', doc: templateDoc, isSystem: true });
+    }
+    if (method === 'POST' && pathname === '/media/designs/bulk-generate') {
+      return json(route, { images: [PNG_DATA_URL] });
+    }
+    if (method === 'POST' && pathname === '/media/designs/bulk-create') {
+      state.bulkRequests.push(request.postDataJSON());
+      state.batchStarted = true;
+      return json(route, { id: 'bulk-job-1', status: 'pending', batchId: 'batch-1' }, 201);
+    }
+    if (method === 'GET' && pathname === '/media/designs/bulk-create/bulk-job-1') {
+      return json(route, {
+        id: 'bulk-job-1', status: 'completed', batchId: 'batch-1', artifactUrl: '/uploads/bulk.zip',
+        results: [1, 2].map((row) => ({ row, designId: `variation-${row}`, fileIds: [`file-${row}`] })),
+      });
+    }
+    if (method === 'GET' && ['/media/designs/variation-1', '/media/designs/variation-2'].includes(pathname)) {
+      const index = pathname.endsWith('1') ? 1 : 2;
+      return json(route, {
+        id: `variation-${index}`, name: `Variation ${index}`, doc: templateDoc,
+        batchId: 'batch-1', batch: { id: 'batch-1', name: 'Catalog Template' },
+      });
+    }
+    if (method === 'PUT' && pathname.startsWith('/media/designs/variation-')) {
+      return json(route, request.postDataJSON());
+    }
+    if (method === 'POST' && pathname === '/media/designs') {
+      state.designCreates++;
+      return json(route, { id: 'unexpected-source-copy', ...request.postDataJSON() }, 201);
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}`) {
       return json(route, { id: DESIGN_ID, name: 'Editing UX', doc: state.doc });
@@ -245,12 +469,32 @@ async function installMocks(page: Page, doc: any = initialDoc) {
         body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg==', 'base64'),
       });
     }
-    if (method === 'POST' && pathname === '/files/upload-simple') {
-      if (request.postDataBuffer()?.includes(Buffer.from('design-preview'))) {
+    if (method === 'POST' && ['/files/upload-simple', '/files/upload-server'].includes(pathname)) {
+      const multipart = request.postDataBuffer()?.toString('latin1') || '';
+      const internal = multipart.match(/name="internal"\r\n\r\n([^\r]+)/)?.[1] || null;
+      const name = multipart.match(/name="file"; filename="([^"]+)"/)?.[1] || `upload-${state.uploads + 1}`;
+      if (internal === 'design-preview') {
+        state.uploadRecords.push({ id: 'design-preview-file', name, internal, path: PNG_DATA_URL });
         return json(route, { id: 'design-preview-file', path: PNG_DATA_URL }, 201);
       }
       state.uploads++;
-      return json(route, { id: `dropped-file-${state.uploads}`, path: state.uploadPath });
+      const id = `dropped-file-${state.uploads}`;
+      state.uploadRecords.push({ id, name, internal, path: state.uploadPath });
+      if (!internal) {
+        state.libraryFiles.push({
+          id, name, originalName: name, path: state.uploadPath, type: 'image',
+          fileSize: 128, createdAt: '2026-11-18T00:00:00.000Z', folderId: null,
+        });
+      }
+      return json(route, { id, path: state.uploadPath });
+    }
+    if (method === 'POST' && pathname === '/media/inpaint') {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      state.inpaintCalls.push(body);
+      return json(route, { url: PNG_DATA_URL });
+    }
+    if (method === 'POST' && pathname === '/user/preferred-language') {
+      return json(route, {});
     }
     if (method === 'POST' && pathname === '/media/generate-image-with-prompt') {
       state.generationCalls++;
@@ -258,7 +502,7 @@ async function installMocks(page: Page, doc: any = initialDoc) {
         id: 'paid-generation', path: PNG_DATA_URL, name: 'Paid generation result',
       });
     }
-    if (method === 'GET' && pathname === '/mock-export/editing.png') {
+    if (method === 'GET' && ['/mock-export/editing.png', LIBRARY_IMAGE_URL, STOCK_IMAGE_URL].includes(pathname)) {
       return route.fulfill({
         status: 200,
         contentType: 'image/png',
@@ -358,6 +602,140 @@ async function editBodyCopyWithPointer(page: Page) {
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toBeVisible();
 }
 
+const FOCAL_IMAGE_DATA_URL = `data:image/svg+xml;base64,${Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="200" height="200" fill="#ff0000"/><rect x="200" width="200" height="200" fill="#0000ff"/></svg>'
+).toString('base64')}`;
+
+async function canvasCenterPixel(page: Page) {
+  return page.locator('.konva-stage').first().evaluate((stage) => {
+    const layers = [...stage.querySelectorAll('canvas')];
+    if (!layers.length) return [];
+    const composite = document.createElement('canvas');
+    composite.width = Math.max(...layers.map((layer) => layer.width));
+    composite.height = Math.max(...layers.map((layer) => layer.height));
+    const context = composite.getContext('2d')!;
+    layers.forEach((layer) => context.drawImage(layer, 0, 0));
+    return [...context.getImageData(
+      Math.floor(composite.width / 2),
+      Math.floor(composite.height / 2),
+      1,
+      1
+    ).data];
+  });
+}
+
+test('focal editor changes cached canvas crops and preserves per-format settings', async ({ page }) => {
+  const focalImage = {
+    id: 'focal-image', originId: 'focal-image-origin', name: 'Focal image', type: 'image',
+    src: FOCAL_IMAGE_DATA_URL, x: 150, y: 100, width: 100, height: 200,
+    naturalWidth: 400, naturalHeight: 200, fitMode: 'cover', focalPoint: { x: 0, y: 0.5 },
+    rotation: 0, opacity: 1, locked: false, hidden: false, filters: ['brightness:1.1'],
+    styles: [{ type: 'drop-shadow', color: '#000000', opacity: 0.4, distance: 4, angle: 45, size: 4, spread: 0 }],
+  };
+  const doc = {
+    version: 13,
+    mode: 'image',
+    outputs: [{
+      id: 'focal-square', formatId: 'custom-square', name: 'Square', width: 400, height: 400,
+      background: '#ffffff', contentLinkGroup: 'focal-linked', children: [focalImage],
+    }, {
+      id: 'focal-second', formatId: 'custom-second', name: 'Second', width: 400, height: 400,
+      background: '#ffffff', contentLinkGroup: 'focal-linked',
+      children: [{ ...focalImage, id: 'focal-second-image', focalPoint: { x: 0.25, y: 0.5 } }],
+    }],
+  };
+  const state = await installMocks(page, doc);
+  const persist = async () => {
+    const before = state.saveDocs.length;
+    await page.getByRole('textbox', { name: 'Design name' }).click();
+    await page.keyboard.press('Control+s');
+    await expect.poll(() => state.saveDocs.length).toBeGreaterThan(before);
+    return (state.saveDocs.at(-1) as any).outputs;
+  };
+  const selectImage = async () => {
+    await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+    await page.locator('[data-element-id="focal-image"]').click();
+    await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Focal point preview' })).toBeVisible();
+  };
+
+  await openDesigner(page);
+  await fitContextMenuCanvas(page);
+  await selectImage();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([255, 0, 0, 255]);
+
+  await page.getByRole('button', { name: 'Set focal point: 100%, 50%' }).click();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([0, 0, 255, 255]);
+  let outputs = await persist();
+  expect(outputs[0].children[0].focalPoint).toEqual({ x: 1, y: 0.5 });
+  expect(outputs[1].children[0].focalPoint).toEqual({ x: 0.25, y: 0.5 });
+  await expect(page.getByRole('img', { name: 'Second crop preview' }).locator('img')).toHaveAttribute('style', /left:\s*-75%/);
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await selectImage();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([255, 0, 0, 255]);
+
+  const preview = page.getByRole('group', { name: 'Focal point preview' });
+  const previewBox = await preview.boundingBox();
+  if (!previewBox) throw new Error('Focal preview has no bounding box');
+  const finalPointerX = previewBox.x + previewBox.width * 0.8;
+  await page.mouse.move(previewBox.x + previewBox.width * 0.2, previewBox.y + previewBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(finalPointerX, previewBox.y + previewBox.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([0, 0, 255, 255]);
+  const markerBox = await preview.locator('[data-focal-marker]').boundingBox();
+  if (!markerBox) throw new Error('Focal marker has no bounding box');
+  expect(Math.abs(markerBox.x + markerBox.width / 2 - finalPointerX)).toBeLessThanOrEqual(2);
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await selectImage();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([255, 0, 0, 255]);
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('0');
+
+  const focalX = page.getByRole('spinbutton', { name: 'Focal X (%)' });
+  await focalX.fill('80');
+  await page.getByText('Focal point', { exact: true }).click();
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([0, 0, 255, 255]);
+
+  await preview.dispatchEvent('wheel', {
+    deltaY: -100,
+    ctrlKey: true,
+    clientX: previewBox.x + previewBox.width / 2,
+    clientY: previewBox.y + previewBox.height / 2,
+  });
+  const resetZoom = page.getByRole('button', { name: 'Reset preview zoom' });
+  await expect(resetZoom).toHaveText('272%');
+  await expect(focalX).toHaveValue('80');
+  await resetZoom.click();
+  await expect(resetZoom).toHaveText('100%');
+  await preview.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await expect(resetZoom).toHaveText('125%');
+  await preview.getByRole('button', { name: 'Zoom out', exact: true }).click();
+  await expect(resetZoom).toHaveText('100%');
+
+  await page.getByRole('radio', { name: 'Fit', exact: true }).click();
+  await expect(page.getByText('Focal point applies when the image is cropped (Cover).')).toBeVisible();
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveCount(0);
+  await page.getByRole('radio', { name: 'Fill', exact: true }).click();
+  await expect(page.getByText('Focal point applies when the image is cropped (Cover).')).toBeVisible();
+  await page.getByRole('radio', { name: 'Cover', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('80');
+
+  await page.getByRole('button', { name: 'Reset focal point (this format)', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('50');
+  await page.getByRole('button', { name: 'Set focal point: 100%, 50%' }).click();
+  outputs = await persist();
+  expect(outputs[0].children[0].focalPoint).toEqual({ x: 1, y: 0.5 });
+  expect(outputs[1].children[0].focalPoint).toEqual({ x: 0.25, y: 0.5 });
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await fitContextMenuCanvas(page);
+  await selectImage();
+  await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('100');
+  await expect.poll(() => canvasCenterPixel(page)).toEqual([0, 0, 255, 255]);
+});
+
 test('selected words retain independent colors through autosave and reopen', async ({ page }) => {
   const state = await installMocks(page);
   await openDesigner(page);
@@ -442,6 +820,8 @@ test('Edit as Video preserves the source and opens a timed editable design throu
   expect(state.videoDoc.outputs).toHaveLength(3);
   expect(state.doc).toEqual(originalSource);
   expect(state.saveDocs).toHaveLength(0);
+});
+
 test('canvas-aware text defaults and auto-fit survive variants, reload, and export', async ({ page }) => {
   const doc = structuredClone(initialDoc) as any;
   doc.outputs[0].name = 'Small';
@@ -533,6 +913,102 @@ test('canvas-aware text defaults and auto-fit survive variants, reload, and expo
   );
 });
 
+test('format card controls stay separated and custom format actions survive removal Undo and reload', async ({ page }) => {
+  const doc = {
+    version: 13,
+    mode: 'image',
+    outputs: [{
+      id: 'format-first', formatId: 'ig-post', name: 'First', width: 400, height: 400,
+      background: '#ffffff', children: [{
+        id: 'first-copy', originId: 'shared-copy', type: 'text', text: 'First',
+        x: 20, y: 20, width: 200, height: 40, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }],
+    }, {
+      id: 'format-second', formatId: 'x-post', name: 'Second', width: 600, height: 400,
+      background: '#ffffff', children: [{
+        id: 'second-copy', originId: 'shared-copy', type: 'text', text: 'Second',
+        x: 20, y: 20, width: 200, height: 40, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }],
+    }],
+  };
+  const state = await installMocks(page, doc);
+  await openDesigner(page);
+
+  const firstCard = page.locator('[data-format-card="format-first"]');
+  const secondCard = page.locator('[data-format-card="format-second"]');
+  await expect(firstCard).toBeVisible();
+  await expect(secondCard.getByRole('button', { name: 'Remove format' })).toBeHidden();
+  await secondCard.hover();
+  await expect(secondCard.getByRole('button', { name: 'Remove format' })).toBeVisible();
+
+  const boxesInside = async (card: Locator) => {
+    const cardBox = await card.boundingBox();
+    if (!cardBox) throw new Error('Format card has no bounding box');
+    const controls = card.locator('button[aria-label="Freeze format"], button[aria-label^="Format actions for"], button[aria-label="Remove format"]');
+    for (const control of await controls.all()) {
+      const box = await control.boundingBox();
+      if (!box) throw new Error('Format control has no bounding box');
+      expect(box.width).toBeGreaterThanOrEqual(28);
+      expect(box.height).toBeGreaterThanOrEqual(28);
+      expect(box.x).toBeGreaterThanOrEqual(cardBox.x);
+      expect(box.y).toBeGreaterThanOrEqual(cardBox.y);
+      expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(cardBox.y + cardBox.height);
+    }
+  };
+  await boxesInside(firstCard);
+  await boxesInside(secondCard);
+  const firstRemove = await firstCard.getByRole('button', { name: 'Remove format' }).boundingBox();
+  const secondFreeze = await secondCard.getByRole('button', { name: 'Freeze format' }).boundingBox();
+  if (!firstRemove || !secondFreeze) throw new Error('Adjacent format controls are missing');
+  expect(firstRemove.x + firstRemove.width).toBeLessThan(secondFreeze.x);
+
+  await secondCard.getByRole('button', { name: 'Format actions for Second' }).click();
+  await page.getByRole('button', { name: /Unlink edits between formats/ }).click();
+  await expect(page.getByRole('button', { name: 'Resume linked editing' })).toBeVisible();
+  await secondCard.getByRole('button', { name: 'Format actions for Second' }).click();
+  await expect(page.getByRole('button', { name: /Link edits across formats/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Unlink edits between formats' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Add format', exact: true }).click();
+  await page.getByPlaceholder('W', { exact: true }).fill('1920');
+  await page.getByPlaceholder('H', { exact: true }).fill('1080');
+  await page.getByRole('button', { name: 'Add custom size', exact: true }).click();
+  let customCard = page.locator('[data-format-card]', { hasText: 'Custom size' });
+  await expect(customCard).toBeVisible();
+  await expect(customCard.getByText('1920×1080', { exact: true })).toHaveCount(1);
+
+  await customCard.getByRole('button', { name: 'Format actions for Custom size' }).click();
+  await page.getByRole('button', { name: 'Rename format', exact: true }).click();
+  const renameDialog = page.getByRole('dialog', { name: 'Rename format' });
+  await renameDialog.getByRole('textbox', { name: 'Format name' }).fill('Landscape campaign');
+  await renameDialog.getByRole('button', { name: 'Save', exact: true }).click();
+  customCard = page.locator('[data-format-card]', { hasText: 'Landscape campaign' });
+  await expect(customCard).toBeVisible();
+
+  await customCard.getByRole('button', { name: 'Remove format' }).click();
+  await expect(page.locator('[role="status"]', { hasText: 'Format “Landscape campaign” removed' })).toBeVisible();
+  await expect(page.locator('[data-format-card]')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(page.locator('[data-format-card]')).toHaveCount(3);
+  await expect(page.locator('[data-format-card]', { hasText: 'Landscape campaign' })).toBeVisible();
+
+  const savesBefore = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBefore);
+  const saved = state.saveDocs.at(-1) as any;
+  expect(saved.outputs.map((output: any) => output.name)).toEqual([
+    'First', 'Second', 'Landscape campaign',
+  ]);
+  expect(saved.outputs[2]).toMatchObject({ formatId: 'custom', width: 1920, height: 1080 });
+  expect(saved.outputs[0].children[0].originId).toBe('shared-copy');
+  expect(saved.outputs[1].children[0].originId).toBe('shared-copy');
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX', { timeout: 60_000 });
+  await expect(page.locator('[data-format-card]', { hasText: 'Landscape campaign' })).toBeVisible();
+});
+
 test('shape insertion stays on an independent format through save, reload, and export', async ({ page }) => {
   const independentDoc = structuredClone(initialDoc) as any;
   Object.assign(independentDoc.outputs[0], {
@@ -556,7 +1032,7 @@ test('shape insertion stays on an independent format through save, reload, and e
     expect(doc.outputs[0].contentLinkGroup).not.toBe(doc.outputs[1].contentLinkGroup);
   };
   await openDesigner(page);
-  await page.getByRole('button', { name: /^Independent(?! actions)/ }).click();
+  await page.locator('[data-format-select="independent-output"]').click();
 
   const stage = page.locator('.konva-stage').first();
   // The canvas menu opens only on the bare stage: right of the 20px ruler,
@@ -571,7 +1047,7 @@ test('shape insertion stays on an independent format through save, reload, and e
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await expect(page.locator('.konva-stage').first()).toBeVisible();
-  await page.getByRole('button', { name: /^Independent(?! actions)/ }).click();
+  await page.locator('[data-format-select="independent-output"]').click();
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Save to Files' }).click();
   await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
@@ -638,7 +1114,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   // Shortcuts are canvas-focus-scoped, so the keys go to the canvas itself.
   const canvasRegion = page.getByRole('application', { name: 'Design canvas' });
   await canvasRegion.press('Control+c');
-  await page.getByRole('button', { name: /^Paste Target(?! actions)/ }).click();
+  await page.locator('[data-format-select="paste-target"]').click();
 
   // Keyboard paste retains its offset behavior and remains one atomic edit.
   await canvasRegion.press('Control+v');
@@ -739,7 +1215,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
-  await page.getByRole('button', { name: /^Paste Target(?! actions)/ }).click();
+  await page.locator('[data-format-select="paste-target"]').click();
   expect((state.doc as any).outputs[1].children).toHaveLength(9);
   const reloadedRuns = (state.doc as any).outputs[1].children
     .filter((child: any) => child.text === 'Pointer pasted headline')
@@ -833,7 +1309,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
     return cloned;
   };
 
-  await page.getByRole('button', { name: /^Source(?! actions)/ }).click();
+  await page.locator('[data-format-select="source-output"]').click();
   await page.getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
   const stage = page.locator('.konva-stage').first();
@@ -889,7 +1365,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX', { timeout: 60_000 });
-  await page.getByRole('button', { name: /^Instagram Story(?! actions)/ }).click();
+  await page.locator(`[data-format-select="${cloned.id}"]`).click();
   assertClone(state.doc);
   const rendersBeforeExport = state.renderDocs.length;
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -1040,6 +1516,7 @@ async function dragImageFile(
   y: number,
   options: {
     altKey?: boolean;
+    shiftKey?: boolean;
     eventName?: 'dragover' | 'drop';
     type?: string;
     contents?: string;
@@ -1063,19 +1540,21 @@ async function dragImageFile(
       clientX: point.clientX,
       clientY: point.clientY,
       altKey: point.altKey,
+      shiftKey: point.shiftKey,
     }));
   }, {
     clientX,
     clientY,
     altKey: !!options.altKey,
+    shiftKey: !!options.shiftKey,
     eventName: options.eventName || 'drop',
     type: options.type || 'image/png',
     contents: options.contents || 'replacement',
   });
 }
 
-async function dropPng(page: Page, x: number, y: number, altKey = false) {
-  await dragImageFile(page, x, y, { altKey });
+async function dropPng(page: Page, x: number, y: number, altKey = false, shiftKey = false) {
+  await dragImageFile(page, x, y, { altKey, shiftKey });
 }
 
 test('desktop workspace tabs switch the visible panel and keep View display-only', async ({ page }) => {
@@ -1239,21 +1718,35 @@ test('font-size shortcuts respect selection, text focus, bounds and help', async
   await expect(page.getByText('Decrease font size', { exact: true })).toBeVisible();
 });
 
-test('ordinary drops insert while Alt-drop shows Replace and replaces once', async ({ page }) => {
+test('direct drops replace, blank drops insert, and Shift forces insertion over targets', async ({ page }) => {
   const state = await installMocks(page);
   await openDesigner(page);
-  await dropPng(page, 120, 260);
+  await dropPng(page, 350, 350);
   await expect.poll(() => state.uploads).toBe(1);
   await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
   expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
   await expect.poll(() => state.doc.outputs[0].children.length).toBe(2);
 
-  await dragImageFile(page, 120, 260, { eventName: 'dragover', altKey: true });
-  await expect(page.locator('[data-drop-mode="replace"]')).toHaveText('Replace image…');
-  await dropPng(page, 120, 260, true);
+  await dragImageFile(page, 120, 260, { eventName: 'dragover' });
+  const preview = page.locator('[data-drop-mode="replace"]');
+  await expect(preview).toHaveText('Drop to replace');
+  const stageBox = await page.locator('.konva-stage').first().boundingBox();
+  const previewBox = await preview.boundingBox();
+  expect(stageBox).not.toBeNull();
+  expect(previewBox).not.toBeNull();
+  const scale = Math.min(stageBox!.width / 400, stageBox!.height / 400) * 0.85;
+  const outputX = (stageBox!.width - 400 * scale) / 2;
+  const outputY = (stageBox!.height - 400 * scale) / 2;
+  expect(previewBox!.x).toBeCloseTo(stageBox!.x + outputX + 40 * scale, 0);
+  expect(previewBox!.y).toBeCloseTo(stageBox!.y + outputY + 200 * scale, 0);
+  expect(previewBox!.width).toBeCloseTo(160 * scale, 0);
+  expect(previewBox!.height).toBeCloseTo(120 * scale, 0);
+
+  await dropPng(page, 120, 260);
   await expect.poll(() => state.uploads).toBe(2);
   await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('dropped-file-2');
+  expect(state.doc.outputs[0].children).toHaveLength(2);
   expect(state.doc.outputs[0].children[1]).toMatchObject({
     x: 40, y: 200, width: 160, height: 120,
     naturalWidth: 1, naturalHeight: 1,
@@ -1263,10 +1756,65 @@ test('ordinary drops insert while Alt-drop shows Replace and replaces once', asy
 
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
   await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
-  await dropPng(page, 350, 350);
+  await dragImageFile(page, 120, 260, { eventName: 'dragover', shiftKey: true });
+  await expect(page.locator('[data-drop-mode="insert"]')).toBeVisible();
+  await dropPng(page, 120, 260, false, true);
   await expect.poll(() => state.uploads).toBe(3);
   await expect.poll(() => state.doc.outputs[0].children.length).toBe(3);
   expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
+});
+
+test('File Library and Insert Image stock drags replace without uploads or source deletion', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+
+  const openPicker = async () => {
+    await page.getByRole('menuitem', { name: 'Insert', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Image…', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Insert image', exact: true })).toBeVisible();
+  };
+  const dragToImage = async (source: Locator) => {
+    const stageBox = await page.locator('.konva-stage').first().boundingBox();
+    const sourceBox = await source.boundingBox();
+    expect(stageBox).not.toBeNull();
+    expect(sourceBox).not.toBeNull();
+    const scale = Math.min(stageBox!.width / 400, stageBox!.height / 400) * 0.85;
+    const outputX = (stageBox!.width - 400 * scale) / 2;
+    const outputY = (stageBox!.height - 400 * scale) / 2;
+    const startX = sourceBox!.x + sourceBox!.width / 2;
+    const startY = sourceBox!.y + sourceBox!.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 16, startY, { steps: 4 });
+    await page.mouse.move(
+      stageBox!.x + outputX + 120 * scale,
+      stageBox!.y + outputY + 260 * scale,
+      { steps: 12 }
+    );
+    await expect(page.getByTestId('media-picker').locator('..')).toHaveClass(/pointer-events-none/);
+    await page.mouse.up();
+  };
+
+  await openPicker();
+  const libraryFile = page.getByRole('button', { name: /library-image\.png/ });
+  await expect(libraryFile).toBeVisible();
+  await dragToImage(libraryFile);
+  await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('library-image-file');
+  expect(state.doc.outputs[0].children).toHaveLength(2);
+  expect(state.uploads).toBe(0);
+  await expect(page.getByRole('dialog', { name: 'Insert image', exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
+  await openPicker();
+  await page.getByRole('tab', { name: 'Photos', exact: true }).click();
+  await dragToImage(page.getByRole('button', { name: 'Picker stock photo', exact: true }));
+  await expect.poll(() => state.doc.outputs[0].children[1].src).toBe(STOCK_IMAGE_URL);
+  expect(state.doc.outputs[0].children).toHaveLength(2);
+  expect(state.doc.outputs[0].children[1].fileId).toBeUndefined();
+  expect(state.uploads).toBe(0);
+  expect(state.deletedFiles).toEqual([]);
+  await expect(page.getByRole('dialog', { name: 'Insert image', exact: true })).toHaveCount(0);
 });
 
 test('Alt-drop replaces a still clip but never a video clip', async ({ page }) => {
@@ -1330,6 +1878,7 @@ test('an undecodable Alt-drop keeps the old target and reports decode failure', 
   await expect(page.getByText('Failed to load dropped image', { exact: true })).toBeVisible();
   expect(state.doc.outputs[0].children).toHaveLength(2);
   expect(state.doc.outputs[0].children[1].fileId).toBe('old-image-file');
+  expect(state.deletedFiles).toEqual(['dropped-file-1']);
 });
 
 type SafeZoneSample = { x: number; y: number; expected: 'shaded' | 'clear' };
@@ -1697,6 +2246,8 @@ test('records, edits, and reloads a custom motion path with easing and Undo', as
   expect(persisted.ease).toBe('easeInOut');
   expect(persisted.followRotation).toBe(true);
   expect(persisted.points.length).toBeGreaterThanOrEqual(3);
+});
+
 test('inspector task tabs keep image AI drafts mounted and persist across reload', async ({ page }) => {
   await installMocks(page);
   await page.route('**/media/tools/status', (route) =>
@@ -1769,6 +2320,7 @@ test('mobile inspector sheet shares the task tabs and remembers them', async ({ 
   await editText(page);
   if (await inspectorButton.isVisible()) await inspectorButton.click();
   await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
+});
 
 test('page and format duplication reopen Pages and preserve exact linked content with Undo', async ({ page }) => {
   const doc = structuredClone(initialDoc) as any;
@@ -1969,4 +2521,487 @@ test('frozen and selected formats stay visually distinct without covering dimens
     dimensionsBox!.y + dimensionsBox!.height <= labelBox!.y
   );
   expect(overlaps).toBe(false);
+});
+
+test('entrance, emphasis, and exit animations remain independent through save and reopen', async ({ page }) => {
+  const state = await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+  const selectStillClip = async () => {
+    await fitContextMenuCanvas(page);
+    const point = await contextMenuCanvasPoint(page, 120, 260);
+    await page.mouse.click(point.x, point.y);
+    await expect(page.getByText('Animations', { exact: true })).toBeVisible();
+  };
+  const expectSelected = async () => {
+    for (const name of ['Fade Up', 'Pulse', 'Fade Out']) {
+      await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    }
+  };
+
+  await selectStillClip();
+  for (const name of ['Fade Up', 'Pulse', 'Fade Out']) {
+    await page.getByRole('button', { name, exact: true }).click();
+  }
+  await expectSelected();
+  await page.getByRole('button', { name: 'Fade Out', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Fade Out', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'Fade Up', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Pulse', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Fade Out', exact: true }).click();
+  await expectSelected();
+
+  const savesBefore = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBefore);
+  const savedClip = (state.saveDocs.at(-1) as any).outputs[0].tracks[1].clips[0];
+  expect(savedClip.id).toBe('still-clip');
+  expect(savedClip.keyframes.map((frame: any) => frame.tMs)).toEqual([0, 0, 300, 500, 600, 4500, 5000]);
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await selectStillClip();
+  await expectSelected();
+  expect(state.doc.outputs[0].tracks[1].clips[0].keyframes).toEqual(savedClip.keyframes);
+});
+
+test('video canvas background color survives undo, reload, and Add Format', async ({ page }) => {
+  const state = await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+
+  await expect(page.getByText('Background', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Blue', exact: true }).click();
+  await expect(page.getByRole('button', { name: '#2B5CD3', exact: true })).toBeVisible();
+
+  const stage = page.locator('.konva-stage').first();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('Canvas has no bounding box');
+  const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
+  const sample = {
+    x: (box.width - 400 * scale) / 2 + 200 * scale,
+    y: (box.height - 400 * scale) / 2 + 100 * scale,
+  };
+  await expect.poll(() => stage.locator('canvas').first().evaluate((canvas: HTMLCanvasElement, point) => {
+    const ratio = canvas.width / canvas.getBoundingClientRect().width;
+    return Array.from(canvas.getContext('2d')!.getImageData(
+      Math.round(point.x * ratio), Math.round(point.y * ratio), 1, 1,
+    ).data);
+  }, sample)).toEqual([43, 92, 211, 255]);
+
+  await page.getByRole('button', { name: '#2B5CD3', exact: true }).click();
+  const hex = page.getByRole('textbox', { name: 'Hex color' });
+  await hex.fill('#B61A32');
+  await hex.press('Enter');
+  await expect(page.getByRole('button', { name: '#B61A32', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect(page.getByRole('button', { name: '#2B5CD3', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)', exact: true }).click();
+  await expect(page.getByRole('button', { name: '#B61A32', exact: true })).toBeVisible();
+
+  let saves = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(saves);
+  expect((state.saveDocs.at(-1) as any).outputs[0].bg).toEqual({ type: 'color', color: '#B61A32' });
+  expect((state.saveDocs.at(-1) as any).outputs[0]).not.toHaveProperty('background');
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.getByRole('button', { name: '#B61A32', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Add format', exact: true }).click();
+  await page.getByRole('checkbox', { name: /Instagram Reel \(Video\)/ }).check();
+  await page.getByRole('button', { name: 'Add 1 format', exact: true }).click();
+  saves = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(saves);
+  expect((state.saveDocs.at(-1) as any).outputs[1].bg).toEqual({ type: 'color', color: '#B61A32' });
+});
+
+async function editingCanvasPoint(page: Page, x: number, y: number) {
+  const stage = page.locator('.konva-stage').first();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('Canvas has no bounding box');
+  const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
+  return {
+    x: box.x + (box.width - 400 * scale) / 2 + x * scale,
+    y: box.y + (box.height - 400 * scale) / 2 + y * scale,
+  };
+}
+
+async function selectEditingLayer(page: Page, id: string) {
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+  await page.locator(`[data-element-id="${id}"]`).click();
+  await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+}
+
+test('paint working files retain references but stay out of Files while exports remain visible', async ({ page }) => {
+  const doc: any = structuredClone(initialDoc);
+  doc.outputs[0].children.push({
+    id: 'empty-paint', type: 'raster', name: 'Paint layer', x: 0, y: 0,
+    width: 400, height: 400, rotation: 0, opacity: 1, locked: false, hidden: false,
+  });
+  const state = await installMocks(page, doc);
+  await openDesigner(page);
+  await selectEditingLayer(page, 'empty-paint');
+
+  const canvas = page.getByRole('application', { name: 'Design canvas' });
+  await canvas.press('b');
+  const from = await editingCanvasPoint(page, 100, 100);
+  const to = await editingCanvasPoint(page, 180, 140);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 4 });
+  await page.mouse.up();
+
+  await expect.poll(() => state.uploadRecords.some((file) => file.name === 'paint-empty-paint.png')).toBe(true);
+  const paint = state.uploadRecords.find((file) => file.name === 'paint-empty-paint.png')!;
+  expect(paint.internal).toBe('design-asset');
+  await expect.poll(() => state.doc.outputs[0].children.find((child: any) => child.id === 'empty-paint')?.fileId)
+    .toBe(paint.id);
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].children.find((child: any) => child.id === 'empty-paint')?.fileId)
+    .toBeUndefined();
+  await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].children.find((child: any) => child.id === 'empty-paint')?.fileId)
+    .toBe(paint.id);
+
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(0);
+  await page.reload();
+  await expect(page.locator('.konva-stage').first()).toBeVisible({ timeout: 60_000 });
+  expect(state.doc.outputs[0].children.find((child: any) => child.id === 'empty-paint').fileId).toBe(paint.id);
+
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save to Files' }).click();
+  await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
+  await page.getByRole('button', { name: 'Next: Export 1 file' }).click();
+  await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
+  await expect(page.getByRole('link', { name: /\.png$/ })).toBeVisible();
+  expect(JSON.stringify(state.renderDocs.at(-1))).toContain(paint.id);
+  const exported = state.libraryFiles.at(-1)!;
+  expect(state.uploadRecords.find((file) => file.id === exported.id)?.internal).toBeNull();
+  expect(state.libraryFiles.some((file) => file.id === paint.id)).toBe(false);
+
+  await page.goto('/files');
+  await expect(page.getByText(String(exported.originalName), { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(paint.name, { exact: true })).toHaveCount(0);
+});
+
+test('inpaint masks are internal while ordinary image replacements stay visible through reload', async ({ page }) => {
+  const state = await installMocks(page);
+  state.mediaOperations = { inpaint: { available: true } };
+  await openDesigner(page);
+  await selectEditingLayer(page, 'drop-target');
+
+  await page.getByPlaceholder('Inpaint prompt...').fill('Replace the selected area');
+  await page.getByRole('button', { name: 'Draw mask…', exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="inspector"] canvas')).toBeVisible();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByText('Mask ready', { exact: true })).toBeVisible();
+
+  const mask = state.uploadRecords.find((file) => file.name.startsWith('mask-'))!;
+  expect(mask.internal).toBe('design-asset');
+  await page.getByRole('button', { name: 'Inpaint', exact: true }).click();
+  await expect.poll(() => state.inpaintCalls.length).toBe(1);
+  expect(state.inpaintCalls[0].maskUrl).toBe(mask.path);
+
+  await dropPng(page, 120, 260, true);
+  await expect.poll(() => state.uploadRecords.some((file) => file.name === 'replacement')).toBe(true);
+  const replacement = state.uploadRecords.find((file) => file.name === 'replacement')!;
+  await expect.poll(() => state.doc.outputs[0].children.find((child: any) => child.id === 'drop-target')?.fileId)
+    .toBe(replacement.id);
+  expect(replacement.internal).toBeNull();
+  expect(state.libraryFiles.map((file) => file.id)).toEqual([replacement.id]);
+
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(0);
+  await page.reload();
+  await expect(page.locator('.konva-stage').first()).toBeVisible({ timeout: 60_000 });
+  expect(state.doc.outputs[0].children.find((child: any) => child.id === 'drop-target').fileId)
+    .toBe(replacement.id);
+
+  await page.goto('/files');
+  await expect(page.getByText(replacement.name, { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(mask.name, { exact: true })).toHaveCount(0);
+});
+
+async function openDesignGallery(page: Page) {
+  await page.getByRole('menuitem', { name: 'File', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Open Design…', exact: true }).click();
+  return page.getByRole('dialog', { name: 'Open design', exact: true });
+}
+
+async function openTemplateGallery(page: Page) {
+  await page.getByRole('menuitem', { name: 'File', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Browse Templates…', exact: true }).click();
+  return page.getByRole('dialog', { name: 'Browse templates', exact: true });
+}
+
+const galleryColumnCount = (list: Locator) => list.evaluate((element) =>
+  getComputedStyle(element).gridTemplateColumns.split(' ').filter(Boolean).length
+);
+
+test('Open Design searches and sorts the full library with persistent compact sizing', async ({ page }) => {
+  await installMocks(page);
+  await openDesigner(page);
+  let dialog = await openDesignGallery(page);
+  let list = dialog.getByRole('list');
+  await expect(list.getByRole('listitem')).toHaveCount(24);
+  const mediumColumns = await galleryColumnCount(list);
+  expect(mediumColumns).toBe(5);
+
+  await dialog.getByRole('button', { name: 'Size S', exact: true }).click();
+  expect(await galleryColumnCount(list)).toBeGreaterThan(mediumColumns);
+  await expect(dialog.getByRole('button', { name: 'Size S', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+  await dialog.getByRole('textbox', { name: 'Search designs' }).fill('R&D');
+  await expect(list.getByRole('listitem')).toHaveCount(1);
+  await expect(list).toContainText('R&D launch');
+  await expect(list).toContainText('No preview available');
+  await dialog.getByRole('textbox', { name: 'Search designs' }).fill('');
+  await expect(list.getByRole('listitem')).toHaveCount(24);
+  await dialog.getByRole('button', { name: 'Load more', exact: true }).click();
+  await expect(list.getByRole('listitem')).toHaveCount(26);
+  expect(await list.getByRole('listitem').evaluateAll((cards) => new Set(cards.map((card) => card.getAttribute('data-design-id'))).size)).toBe(26);
+
+  await dialog.getByRole('combobox', { name: 'Sort by' }).selectOption('name');
+  await expect(list.getByRole('listitem').first()).toContainText('Gallery design 01');
+  await dialog.getByRole('textbox', { name: 'Search designs' }).fill('R&D');
+  await expect(list.getByRole('listitem')).toHaveCount(1);
+  await dialog.getByRole('button', { name: 'Open R&D launch', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+
+  dialog = await openDesignGallery(page);
+  list = dialog.getByRole('list');
+  await expect(dialog.getByRole('button', { name: 'Size S', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await dialog.getByRole('button', { name: 'Size L', exact: true }).click();
+  expect(await galleryColumnCount(list)).toBeLessThan(mediumColumns);
+  await dialog.getByRole('combobox', { name: 'Sort by' }).selectOption('recent');
+  await expect(list.getByRole('listitem').first()).toContainText('R&D launch');
+  const open = list.getByRole('button', { name: 'Open R&D launch', exact: true });
+  await open.focus();
+  await expect.poll(() => open.evaluate((button) => getComputedStyle(button.parentElement!).opacity)).toBe('1');
+  await page.keyboard.press('Enter');
+  await expect(dialog).toHaveCount(0);
+});
+
+test('Browse Templates filters canonical categories and records Apply for recent ordering', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+  let dialog = await openTemplateGallery(page);
+  let list = dialog.getByRole('list');
+  await expect(list.getByRole('listitem')).toHaveCount(24);
+  expect(await galleryColumnCount(list)).toBe(5);
+  await expect(dialog.getByRole('button', { name: 'No folder', exact: true })).toBeVisible();
+
+  await dialog.locator('button[data-overflow-slot="inline"]').filter({ hasText: /^IG Post$/ }).click();
+  await expect.poll(() => state.templateRequests.some((request) => request.includes('category=ig-post'))).toBe(true);
+  await dialog.locator('button[data-overflow-slot="inline"]').filter({ hasText: /^All$/ }).click();
+  await dialog.getByRole('textbox', { name: 'Search templates' }).fill('IG Post');
+  await expect(list.getByRole('listitem')).toHaveCount(1);
+  await expect(list).toContainText('Unloaded launch');
+  await expect(list).toContainText('IG Post');
+  await expect(list).toContainText('No preview available');
+
+  const card = list.getByRole('listitem').first();
+  await card.hover();
+  await dialog.getByRole('button', { name: 'Preview Unloaded launch', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Unloaded launch', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Unloaded launch', exact: true })).toHaveCount(0);
+  await dialog.getByRole('combobox', { name: 'Sort by' }).selectOption('recent');
+  await dialog.getByRole('button', { name: 'Apply template Unloaded launch', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(state.recentTemplateIds[0]).toBe('gallery-template-unloaded');
+
+  dialog = await openTemplateGallery(page);
+  list = dialog.getByRole('list');
+  await dialog.getByRole('combobox', { name: 'Sort by' }).selectOption('recent');
+  await expect(list.getByRole('listitem').first()).toContainText('Unloaded launch');
+});
+
+test('Bulk Create entry points preserve source context and batches survive navigation and reload', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Bulk Create', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Editing UX');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.getByRole('menuitem', { name: 'File', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Bulk Create…', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Editing UX');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.goto('/media/designer');
+  await page.getByRole('button', { name: /Bulk Create Turn a spreadsheet/ }).click();
+  await page.getByText('Editing UX', { exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Editing UX');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Browse templates', exact: true }).click();
+  await page.getByRole('button', { name: 'Bulk Create from this template' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Bulk Create' });
+  await expect(dialog).toContainText('Source: Catalog Template');
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'catalog.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('headline,hero\nAda,data:image/png;base64,one\nGrace,data:image/png;base64,two'),
+  });
+  await expect(dialog.getByRole('img', { name: /Product hero thumbnail/ })).toBeVisible();
+  await expect(dialog).toContainText('Product hero');
+  await expect(dialog).not.toContainText('template-image-internal');
+  await dialog.getByRole('combobox', { name: /Hello world \(text\)/ }).selectOption('headline');
+  await dialog.getByRole('combobox', { name: /Product hero \(image\)/ }).selectOption('hero');
+  await dialog.getByRole('button', { name: 'Apply variable assignments' }).click();
+  await dialog.getByRole('button', { name: 'Create 2 variations' }).click();
+  await expect(dialog.getByRole('link', { name: 'Open batch' })).toHaveAttribute('href', '/media/designer?batchId=batch-1');
+  expect(state.bulkRequests).toHaveLength(1);
+  expect(state.bulkRequests[0]).toMatchObject({
+    sourceTemplateId: 'template-1', sourceName: 'Catalog Template',
+    doc: { mode: 'image' },
+  });
+  expect(state.designCreates).toBe(0);
+
+  await dialog.getByRole('link', { name: 'Open editable design' }).first().click();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Variation 1');
+  await expect(page.getByRole('link', { name: '← Back to batch' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Variation 1');
+  await page.getByRole('link', { name: '← Back to batch' }).click();
+
+  await expect(page).toHaveURL(/batchId=batch-1/);
+  await expect(page.getByText('Variation 1', { exact: true })).toBeVisible();
+  await expect(page.getByText('Variation 2', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '← All designs' }).click();
+  await expect(page.getByText('Catalog Template', { exact: true })).toBeVisible();
+  await expect(page.getByText('Variation 1', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Variation 2', { exact: true })).toHaveCount(0);
+
+  await page.getByText('Catalog Template', { exact: true }).click();
+  await page.getByText('Variation 2', { exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Variation 2');
+  await expect(page).toHaveURL(/designId=variation-2/);
+  await page.reload();
+  await expect(page.getByRole('link', { name: '← Back to batch' })).toBeVisible();
+});
+
+
+test('Bulk Create from an image template works over an unrelated video canvas', async ({ page }) => {
+  await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+
+  await page.getByRole('button', { name: 'Browse templates', exact: true }).click();
+  await page.getByRole('button', { name: 'Bulk Create from this template' }).click();
+
+  await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Catalog Template');
+  await expect(page.getByText('Bulk Create is available for image designs.')).toHaveCount(0);
+});
+
+
+test('Start dialog Bulk Create keeps the selected template in the editor after close', async ({ page }) => {
+  const state = await installMocks(page);
+  await page.goto('/media/designer');
+
+  await page.getByRole('button', { name: /Bulk Create Turn a spreadsheet/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Templates', exact: true }).click();
+  await page.getByRole('button', { name: 'Bulk Create from this template' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Bulk Create' });
+  await expect(dialog).toContainText('Source: Catalog Template');
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Catalog Template');
+  await expect(page.getByText('Start a design', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  expect(state.designCreates).toBe(0);
+});
+
+test('text readability warning keeps fixes on one row and toggles the backdrop', async ({ page }) => {
+  const lowContrastDoc = structuredClone(initialDoc) as any;
+  lowContrastDoc.outputs[0].children[0].fill = '#ffffff';
+  await installMocks(page, lowContrastDoc);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openDesigner(page);
+  await selectBodyCopy(page);
+
+  const description = 'Adds a solid or see-through box behind the text, so it stays readable on busy photos.';
+  const expectSingleRow = async (copy = {
+    warning: 'Text is hard to read on this background',
+    add: 'Add backdrop',
+    darken: 'Darken background',
+    color: 'Text color',
+  }) => {
+    const warning = page.getByRole('alert').filter({ hasText: copy.warning });
+    await expect(warning).toContainText(copy.warning);
+    await expect(warning).not.toContainText('Low contrast');
+    await warning.scrollIntoViewIfNeeded();
+    const row = page.getByTestId('designer-contrast-fixes');
+    await expect(row.getByRole('button', { name: copy.add, exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: copy.darken, exact: true })).toHaveAttribute('title', copy.darken);
+    await expect(row.getByRole('button', { name: copy.color, exact: true })).toBeVisible();
+    const buttons = row.getByRole('button');
+    const tops = await buttons.evaluateAll((elements) =>
+      elements.map((button) => button.getBoundingClientRect().top)
+    );
+    expect(new Set(tops).size).toBe(1);
+    expect(await row.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    expect(await buttons.evaluateAll((elements) => elements.every((button) => {
+      const style = getComputedStyle(button);
+      return style.overflow === 'hidden' && style.textOverflow === 'ellipsis';
+    }))).toBe(true);
+  };
+  await expectSingleRow();
+
+  const readability = page.getByRole('group', { name: 'Readability', exact: true });
+  const info = readability.getByRole('button', { name: 'About Text backdrop', exact: true });
+  await expect(info).toHaveAttribute('data-tooltip-content', description);
+  await info.hover();
+  await expect(page.locator('#tooltip')).toContainText(description);
+  await expect(readability).toContainText(description);
+
+  await page.getByTestId('designer-contrast-fixes').getByRole('button', { name: 'Text color', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Hex color', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('designer-contrast-fixes').getByRole('button', { name: 'Darken background', exact: true }).click();
+  await expect(page.getByRole('button', { name: '#FFFFFF', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Text is hard to read on this background' })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+  await expect(page.locator('[data-element-id^="background-dimmer-"]')).toBeVisible();
+  await selectBodyCopy(page);
+
+  const toggle = readability.getByRole('switch', { name: 'Text backdrop', exact: true });
+  await expect(toggle).toHaveAttribute('aria-checked', 'false');
+  await toggle.click();
+  await expect(readability.getByRole('switch', { name: 'Text backdrop', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await readability.getByRole('switch', { name: 'Text backdrop', exact: true }).click();
+  await expect(readability.getByRole('switch', { name: 'Text backdrop', exact: true })).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByRole('button', { name: 'Add Text Backdrop', exact: true })).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.context().addCookies([{
+    name: 'i18next',
+    value: 'nl',
+    url: `${process.env.E2E_BASE || 'http://localhost:4201'}/`,
+  }]);
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Naam ontwerp', exact: true })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await page.getByRole('menuitem', { name: "Meer menu's", exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Lagen', exact: true }).click();
+  const layers = page.getByRole('dialog', { name: 'Lagen', exact: true });
+  await layers.locator('[data-element-id="body-copy"]').click();
+  if (await layers.count()) {
+    await layers.getByRole('button', { name: 'Sluiten', exact: true }).click();
+  }
+  await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+  await expectSingleRow({
+    warning: 'Tekst is moeilijk leesbaar op deze achtergrond',
+    add: 'Achtergrond toevoegen',
+    darken: 'Achtergrond verdonkeren',
+    color: 'Tekstkleur',
+  });
 });

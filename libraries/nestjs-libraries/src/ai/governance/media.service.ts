@@ -28,8 +28,8 @@ import {
   MediaProviderCapabilities,
   MediaGenerationResult,
 } from '@postmill-ai/nestjs-libraries/media/media-provider-adapter.interface';
-import type { MediaGenerateOptions } from '@postmill-ai/provider-kernel';
-import type { OutpaintMode } from '@postmill-ai/provider-kernel';
+import type { MediaGenerateOptions, OutpaintMode } from '@postmill-ai/provider-kernel';
+import { buildOutpaintPrompt } from '@postmill-ai/provider-kernel';
 // Type-only imports: SlideService/CaptionService both inject back into this AI module
 // (slide -> AiDefaultsService -> AiMediaService; caption -> AiMediaService), so a runtime
 // value-import here closes a circular `require` that leaves AiMediaService `undefined` at
@@ -741,6 +741,7 @@ export class AiMediaService {
     orgId: string,
     url: string,
     namePrefix: string,
+    options: { internal?: 'design-asset' } = {},
   ): Promise<{ id: string; path: string; name: string }> {
     if (!this._storageService || !this._fileService) {
       throw new Error('Storage/file services are not available');
@@ -749,7 +750,15 @@ export class AiMediaService {
     const { bytes, ext, mime } = await readValidatedImageSource(url);
     const path = await adapter.writeBuffer(bytes, mime);
     const fileName = `${namePrefix}-${Date.now()}.${ext}`;
-    const saved = await this._fileService.saveFile(orgId, fileName, path, fileName);
+    const saved = await this._fileService.saveFile(
+      orgId,
+      fileName,
+      path,
+      fileName,
+      undefined,
+      undefined,
+      { internal: options.internal },
+    );
     return { id: saved.id, path: saved.path, name: saved.name };
   }
 
@@ -1747,7 +1756,8 @@ export class AiMediaService {
     const file = await this.saveUrlToFile(
       orgId,
       `data:image/png;base64,${expanded.toString('base64')}`,
-      'magic-grab-reconstruction-mask'
+      'magic-grab-reconstruction-mask',
+      { internal: 'design-asset' }
     );
     return file.path;
   }
@@ -1794,7 +1804,8 @@ export class AiMediaService {
       const backgroundFile = await this.saveUrlToFile(
         options.orgId,
         backgroundUrl,
-        'magic-grab-background'
+        'magic-grab-background',
+        { internal: 'design-asset' }
       );
       return {
         background: { url: backgroundFile.path, fileId: backgroundFile.id },
@@ -1804,7 +1815,10 @@ export class AiMediaService {
       if (reconstructionMaskUrl) temporaryMaskUrls.add(reconstructionMaskUrl);
       await Promise.all([...temporaryMaskUrls].map(async (url) => {
         const file = await this._fileService?.getFileByPath(options.orgId, url).catch(() => null);
-        if (file) await this._fileService?.deleteFile(options.orgId, file.id).catch(() => undefined);
+        const metadata = file?.metadata as { internal?: string } | null | undefined;
+        if (metadata?.internal === 'design-asset') {
+          await this._fileService?.deleteFile(options.orgId, file.id).catch(() => undefined);
+        }
       }));
     }
   }
@@ -1812,7 +1826,8 @@ export class AiMediaService {
   async cleanupMagicGrab(fileId: string, orgId: string): Promise<void> {
     if (!this._fileService) return;
     const file = await this._fileService.getFileById(orgId, fileId).catch(() => null);
-    if (!file?.name.startsWith('magic-grab-background-')) return;
+    const metadata = file?.metadata as { internal?: string } | null | undefined;
+    if (!file?.name.startsWith('magic-grab-background-') || metadata?.internal !== 'design-asset') return;
     await this._fileService.deleteFile(orgId, file.id).catch(() => undefined);
   }
 
@@ -1822,6 +1837,19 @@ export class AiMediaService {
     const metadata = file?.metadata as { internal?: string } | null | undefined;
     if (!file || metadata?.internal !== 'design-asset') return;
     await this._fileService.deleteFile(orgId, file.id).catch(() => undefined);
+  }
+
+  async outpaintPage(
+    imageUrl: string,
+    maskUrl: string,
+    prompt: string | undefined,
+    options?: { orgId?: string },
+  ): Promise<string> {
+    return this.inpaintImage(imageUrl, maskUrl, buildOutpaintPrompt(prompt), {
+      ...options,
+      modelByProvider: { replicate: 'black-forest-labs/flux-fill-pro' },
+      input: { prompt_upsampling: false },
+    });
   }
 
   async outpaintImage(

@@ -18,6 +18,7 @@ import {
   mediaUpstreamError,
   mediaUpstreamFailure,
   mediaUpstreamFromBody,
+  buildOutpaintPrompt,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.replicate.com/v1';
@@ -40,12 +41,6 @@ const DEFAULT_INPAINT_MODEL = 'stability-ai/stable-diffusion-inpainting';
 // Its runtime now requires `mask` even though its schema says outpaint ignores it;
 // outpaintImage therefore sends the same-dimension source as that ignored mask.
 const DEFAULT_OUTPAINT_MODEL = 'black-forest-labs/flux-fill-pro';
-// flux-fill-pro marks `prompt` REQUIRED (live 422 "input: prompt is required" when
-// omitted — it sits outside the tunables `fields` list in metadata.ts because the
-// snapshot filters prompt-type fields out). Outpainting is often prompt-less, so
-// fall back to a neutral seamless-extension instruction.
-const DEFAULT_OUTPAINT_PROMPT =
-  'Extend the image naturally beyond its borders, seamlessly matching the existing style, lighting, colors, and content.';
 
 // Canonical OutpaintMode → flux-fill-pro `outpaint` select token.
 const OUTPAINT_TOKENS: Record<OutpaintMode, string> = {
@@ -706,7 +701,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
         image: imageUrl,
         ...(model === DEFAULT_OUTPAINT_MODEL ? { mask: imageUrl } : {}),
         outpaint: OUTPAINT_TOKENS[mode] ?? OUTPAINT_TOKENS['zoom-1.5x'],
-        prompt: prompt?.trim() || DEFAULT_OUTPAINT_PROMPT,
+        prompt: buildOutpaintPrompt(prompt),
       },
     );
   }

@@ -204,9 +204,15 @@ Invariants:
 
 - `AIBrandProfile` is the only Brand Kit store. `BrandsService` and `brands/brand-kit.ts`
   normalize current and legacy palette/font JSON, validate preferred channel formats, and resolve
-  explicit ids strictly by organization. `/ai/brand-profile` is a compatibility adapter over the
-  same service, not a second schema or permission bypass. Editors have brand CRUD; members/viewers
-  read only. Custom fonts and template associations always carry an explicit brand id.
+  explicit ids strictly by organization. Palette and logo entries may carry optional semantic roles
+  (`primary`/`accent`/`background`/`text` and `main`/`icon`/`dark`) inside their existing JSON columns.
+  Normalized responses retain ordered `palette`/`logoFileIds` string arrays and add `colorRoles`/
+  `logoRoles` only when present; writes store objects only for role-bearing entries. Color roles are
+  not unique: multiple entries may share one role as ordered candidates for that purpose. No role backfill
+  or migration is required, and duplicate palette values retain their indexed roles.
+  `/ai/brand-profile` is a compatibility adapter over the same service, not a second schema or
+  permission bypass. Editors have brand CRUD; members/viewers read only. Custom fonts and template
+  associations always carry an explicit brand id.
 - Designer documents carry `brandProfileId`: string = Brand Mode, `null` = General Mode, absent =
   legacy default. Preserve it in schemas, migration, version restore, and `.pdesign` round trips.
 - Effective Knowledge access requires both the deployment RAG flag and the org not being disabled:
@@ -223,7 +229,9 @@ Invariants:
   `brands:update`, reads require `brands:read`, and the expected disabled state is a 4xx, not a
   Sentry-worthy 500. Disabled brands still allow Knowledge list/delete. Brand deletion cascades its
   chunks; template associations use `SetNull`. `GET /media/design-templates?scope=org` excludes
-  system templates from both results and count while retaining brand-first SQL ordering. Brand Studio
+  system templates from both results and count while retaining brand-first SQL ordering. Designer gallery
+  query/sort/folder/category parameters use the same scoped list/count predicates; recent ordering joins only
+  the current user and organization through `DesignerRecentOpen`, never shared template rows. Brand Studio
   resolves displayed assets through bounded `GET /files/by-ids` lookups rather than library scans.
 - Brand-kit billing limits only `create`: reads, updates, deletes, and existing custom fonts continue
   to work on Starter and at the plan cap. Repository writes use `BrandProfileInput` normalization
@@ -292,8 +300,8 @@ Invariants:
 6. Global `ValidationPipe` (`transform`, `whitelist`, `forbidNonWhitelisted`).
 7. 50mb JSON limit on `/copilot/{*splat}`, `/posts`, the design save routes
    (`/media/designs`, `/media/design-templates`, `/media/designer/{*splat}`), and
-   `/media/remove-background` + `/media/inpaint` + `/media/outpaint` + `/media/magic-grab` +
-   `/media/upscale` for inline image input; `cookieParser()`; `compression()`.
+   `/media/remove-background` + `/media/inpaint` + `/media/outpaint` + `/media/outpaint/page` +
+   `/media/magic-grab` + `/media/upscale` for inline image input; `cookieParser()`; `compression()`.
 8. `helmet(...)` — skipped under `NOT_SECURED` (+ dev); CSP/HSTS/frameguard/noSniff otherwise.
 9. Global filters (see §6).
 10. `ConfigurationChecker` fail-fast — fatal-missing secrets exit non-zero before `listen` in

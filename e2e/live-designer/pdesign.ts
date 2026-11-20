@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, type Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
+import sharp from 'sharp';
 import { collectBrowserFailures, locateElements, openDesign, openMenuAction, requiredEnv } from './helpers';
 
 const apiPath = (url: string): string => new URL(url).pathname.replace(/^\/api(?=\/)/, '');
@@ -26,6 +27,24 @@ export async function runPdesignRoundTrip(page: Page): Promise<void> {
   expect(Object.keys(entries)).toContain('doc.json');
   const exportedDoc = JSON.parse(strFromU8(entries['doc.json'])) as unknown;
   expect(locateElements(exportedDoc).filter(({ element }) => element.qr).length).toBe(sourceQr.length);
+  const expectedPreviews = (exportedDoc as any).outputs.flatMap((output: any, outputIndex: number) =>
+    'children' in output
+      ? Array.from({ length: 1 + (output.pages?.length ?? 0) }, (_, pageNumber) => ({
+          name: `previews/output-${outputIndex + 1}-page-${pageNumber + 1}.jpg`,
+          width: output.width,
+          height: output.height,
+        }))
+      : []
+  );
+  expect(Object.keys(entries).filter((name) => name.startsWith('previews/')).sort()).toEqual(
+    expectedPreviews.map(({ name }: { name: string }) => name).sort()
+  );
+  for (const preview of expectedPreviews) {
+    expect(Array.from(entries[preview.name].subarray(0, 3))).toEqual([0xff, 0xd8, 0xff]);
+    expect(await sharp(entries[preview.name]).metadata()).toMatchObject({
+      format: 'jpeg', width: preview.width, height: preview.height,
+    });
+  }
   await expect(page.getByText('Design file download started', { exact: true })).toBeVisible();
 
   const importPromise = page.waitForResponse((response) =>

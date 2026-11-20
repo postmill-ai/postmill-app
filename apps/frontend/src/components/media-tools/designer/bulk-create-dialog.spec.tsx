@@ -105,9 +105,14 @@ describe('BulkCreateDialog', () => {
         id: 'job-2', status: 'completed', artifactUrl: '/uploads/org/bulk.zip',
         results: [{ row: 1, designId: 'editable-1', fileIds: ['file-1'] }],
       }));
-    render(<BulkCreateDialog store={store} onClose={vi.fn()} />);
+    render(<BulkCreateDialog
+      store={store}
+      source={{ kind: 'design', id: 'source-1', name: 'Catalog source' }}
+      onClose={vi.fn()}
+    />);
     await upload('headline,hero_image,accent_color\nAda,https://cdn.example.test/ada.png,#ff0000\nGrace,https://cdn.example.test/grace.png,#00ff00');
 
+    expect(screen.getByRole('img', { name: 'Instagram Post / Page 1: Headline thumbnail' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Apply variable assignments' }));
     const slotFor = (id: string) => store.getState().doc.outputs[0].children.find((child) => child.id === id)?.slot;
     await waitFor(() => expect(slotFor('title')).toEqual({ name: 'headline', kind: 'text' }));
@@ -127,6 +132,7 @@ describe('BulkCreateDialog', () => {
       'href', 'http://localhost:3000/media/designer?designId=editable-1'
     );
     const batch = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(batch).toMatchObject({ sourceDesignId: 'source-1', sourceName: 'Catalog source' });
     expect(batch.rows[1]).toEqual({
       headline: 'Grace', hero_image: 'https://cdn.example.test/grace.png', accent_color: '#00ff00',
     });
@@ -277,7 +283,7 @@ describe('BulkCreateDialog', () => {
     const assign = (name: string, value: string) => fireEvent.change(
       screen.getByRole('combobox', { name }), { target: { value } },
     );
-    assign('Column for Instagram Post / Page 1: accent (color)', 'accent_color');
+    assign('Column for Instagram Post / Page 1: Shape (color)', 'accent_color');
     assign('Column for Instagram Post / Page 1: Hero (image)', 'hero_image');
     assign('Column for Instagram Post / Page 1: Brand gradient gradient stop 1 (color)', 'gradient_start');
     assign('Column for Instagram Post / Page 1: Brand gradient gradient stop 2 (color)', 'gradient_end');

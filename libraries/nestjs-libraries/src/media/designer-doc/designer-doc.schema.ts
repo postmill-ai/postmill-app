@@ -273,7 +273,7 @@ import type { SymbolDefinition, SymbolOverrides, SlotDefinition } from './symbol
 import type { CaptionStyle } from './caption-styles';
 import type { StrokeStyle } from './stroke-style';
 import type { MotionBlur } from './motion-blur';
-import type { KeyframeEase } from './keyframes';
+import type { Keyframe, KeyframeEase } from './keyframes';
 import type { TextReveal } from './text-reveal';
 import type { DesignerPathNode } from './path-geometry';
 import type { SpeedCurvePoint } from './speed-curve';
@@ -822,6 +822,7 @@ export interface VideoClip {
      * one it arrives at; see `designer-doc/keyframes`.
      */
     ease?: KeyframeEase;
+    animationPreset?: Keyframe['animationPreset'];
   }[];
   /**
    * Progressive text reveal for text clips (optional-additive): the drawn
@@ -1718,6 +1719,19 @@ const EaseSchema = z.union([
   z.enum(['linear', 'easeInOut', 'easeIn', 'easeOut']),
   z.object({ in: easeHandle.optional(), out: easeHandle.optional() }).strict(),
 ]);
+const KeyframeAnimationPresetBaseSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  width: z.number().finite(),
+  height: z.number().finite(),
+  rotation: z.number().finite(),
+  fontSize: z.number().finite(),
+}).strict();
+const KeyframeAnimationPresetSchema = z.object({
+  name: z.string().min(1).max(100),
+  category: z.enum(['entrance', 'emphasis', 'exit']),
+  base: KeyframeAnimationPresetBaseSchema.optional(),
+}).strict();
 
 const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
   dualObject(
@@ -1725,6 +1739,7 @@ const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
       tMs: strictNum(0, MAX_VIDEO_DURATION_MS),
       props: z.record(z.string(), z.number().finite()),
       ease: EaseSchema.optional(),
+      animationPreset: KeyframeAnimationPresetSchema.optional(),
     },
     {
       tMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
@@ -1743,6 +1758,7 @@ const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
         z.record(z.string(), z.number().finite())
       ),
       ease: EaseSchema.optional(),
+      animationPreset: KeyframeAnimationPresetSchema.optional(),
     }
   );
 

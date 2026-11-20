@@ -184,6 +184,7 @@ export interface BulkAssignmentTarget {
   kind: BulkVariableKind;
   gradientStopIndex?: number;
   label: string;
+  thumbnailUrl?: string;
 }
 
 const hasMustache = (value: unknown): boolean =>
@@ -203,7 +204,15 @@ export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTa
     }
   ) => {
     for (const element of children || []) {
-      const elementLabel = element.name || element.text?.trim().slice(0, 40) || element.id;
+      const fallbackLabels: Partial<Record<DesignerElement['type'], string>> = {
+        text: 'Text',
+        image: 'Image',
+        raster: 'Image',
+        shape: 'Shape',
+        path: 'Path',
+        icon: 'Icon',
+      };
+      const elementLabel = element.name || element.text?.trim().slice(0, 40) || fallbackLabels[element.type] || 'Element';
       const add = (kind: BulkVariableKind, gradientStopIndex?: number) => {
         targets.push({
           id: `${location.idPrefix}:${element.id}:${kind}${gradientStopIndex === undefined ? '' : `:${gradientStopIndex}`}`,
@@ -214,6 +223,7 @@ export const collectBulkAssignmentTargets = (doc: DesignerDoc): BulkAssignmentTa
           kind,
           gradientStopIndex,
           label: `${location.labelPrefix}: ${elementLabel}`,
+          thumbnailUrl: kind === 'image' ? element.src : undefined,
         });
       };
       const canAssignText = element.type === 'text' &&

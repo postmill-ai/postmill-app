@@ -37,6 +37,14 @@ New authenticated pages go under `(app)/(site)/<feature>/page.tsx`.
 - `apps/frontend/src/components/<feature>/` — feature components (`composer/`, `dashboard/`, `settings/`,
   `media-tools/`, `layout/`, `shared/`, `errors/`, …).
 - **Check existing components before building a new one**; reuse over new.
+- **Brand Kit navigation keeps one mounted form.** `/brands/:id/kit#colors|fonts|logos|images|formats|templates`
+  uses `OverflowTabs` with navigation semantics and stable section anchors; do not turn the sections
+  into unmounting panels that discard unsaved edits. `FontCatalogPicker` owns the context-independent
+  Designer font search/previews. `FontFamilyPicker` supplies Designer BrandKit/upload context, while
+  Brand Studio passes its explicitly scoped custom fonts and selected families directly.
+  Any Brand Kit writer that PUTs normalized `palette` or `logoFileIds` arrays must reattach existing
+  roles through `withBrandColorRoles`/`withBrandLogoRoles` in `settings/brand/brand-visual-fields.ts`.
+  Sending the normalized string arrays directly replaces the whole JSON column and erases roles.
 
 ## Data fetching — SWR via `useFetch`
 
@@ -177,6 +185,15 @@ Gate composer/UI features per channel on the shared capability matrix, not on ad
   timeout when image/document IDs are present (10 seconds otherwise) so pre-session extraction cannot enable
   a duplicate Start click while validation is still running.
 
+## Designer galleries
+
+File → Open design and File → Browse templates share `gallery-toolbar.tsx`, `gallery-card.tsx`, and an
+org-scoped local S/M/L preference. Search, Newest/Name/Recently opened sorting, folder/category filters,
+facets, and totals are server-driven across the full result set; never sort or filter only downloaded pages.
+`useSWRInfinite` pages reconcile by id. `DesignerRecentOpen` tracks design opens and successful template
+applies per user/org; template apply passes `sourceTemplateId` through design creation. Card actions appear
+on hover/focus and coarse pointers, and missing/broken thumbnails use the shared preview fallback.
+
 ## Designer: four renderers, one document
 
 `/media/designer` draws every document **four times**:
@@ -300,8 +317,15 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   behavior, and Undo adds/removes the whole format. The store seeds from the ACTIVE output (including
   its pages); a frozen source is allowed unless linked copying would need to backfill its missing
   `originId`s, in which case the popover stays open with a warning and independent copies remain
-  available. The Link/Unlink button beside output tabs only
-  toggles `editFormatOnly`; it never rewrites existing element/clip links. Static page-1 insertion
+  available. Each output card contains its Freeze, actions, and Remove controls; Remove appears on
+  the selected or hovered card and offers an Undo message while the removal is still the latest edit.
+  The card's actions menu holds Resize, Rename, and Link/Unlink. Link/Unlink selects that card and
+  toggles the store-wide `editFormatOnly` flag, which applies to whichever output is active; a visible
+  **Format-only editing** status remains beside Add Format while the flag is on and clicking it resumes
+  linked editing. The toggle never rewrites existing element/clip links. Custom formats default to
+  **Custom size** with dimensions shown separately and can be renamed from the same menu. Add, resize,
+  and rename suffix colliding output names, and export filenames disambiguate legacy duplicates by
+  dimensions and occurrence. Static page-1 insertion
   is local when that toggle is on. New static outputs persist an optional-additive
   `contentLinkGroup`: linked copies inherit the source's group and independent copies get a fresh
   group, so separate linked sets can coexist and empty copies retain their behavior after reload.
@@ -360,9 +384,19 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   A render failure keeps the previous preview, and preview replacement cleans up only the old File
   row it actually replaced. Legacy remote video clips with no File row use the bounded streaming
   frame extractor (never the 256 MB whole-buffer path), and only successful posters stay cached.
-  Share opens a dialog whose URL is derived from `currentDesignId` as `/media/designer?designId=<id>`;
-  it never copies the generic current location. Deep-linked loads reject HTTP and error-shaped
-  responses with a visible unavailable state instead of treating an error body as a DesignerDoc.
+  Share opens a dialog whose team Can edit URL is derived from `currentDesignId` as
+  `/media/designer?designId=<id>`; Can view targets `/media/designer/view?designId=<id>` instead.
+  The view route never mounts the editable store, autosave, or collaboration socket. Team and public
+  previews share `design-preview-view.tsx`, server-render selected outputs/pages through
+  `DesignPreviewService`, and use the video time-zero poster. One `DesignShare` per design stores the
+  client token, enabled/comments settings, expiry, approval, and bounded feedback. Client links live at
+  `/share/design/<token>` and reflect the latest saved doc; opening Share does not implicitly save.
+  Re-enabling a disabled link rotates its token and clears the old approval. Any document update clears
+  approval atomically through `DesignRepository.update`, so the latest saved revision can be approved
+  again; comments remain as history and metadata-only updates do not reset approval. Can view is only a
+  read-only route, not an ACL: the dialog states that teammates with existing edit access can still edit.
+  Deep-linked loads reject HTTP and error-shaped responses with a visible unavailable state instead
+  of treating an error body as a DesignerDoc.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
   carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame
@@ -435,7 +469,7 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   node-canvas, SVG, preflight, previews and Bulk Create consume the shared result; curved/on-path and
   video/caption layout stay separate.
 - **Desktop/mobile workspace shares one store and tool registry.** Desktop docks Inspector, Layers,
-  Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; AI and Brand mount on their first visible
+  Elements, Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; Elements, AI, and Brand mount on their first visible
   activation, then stay mounted under hidden wrappers so results and in-flight work survive tab and
   collapse changes without eager fetches or hidden job adoption. Selection never changes the user's tab
   or collapsed state; Layers multi-select/rename and Brand/AI workflows stay sticky, and Expand restores
@@ -499,12 +533,19 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   and derives a bounded frame-aspect cover crop around the old relative center when source aspects differ
   (or clears an unmeasurable incompatible crop), so explicit crops never letterbox the frame. It adopts
   the new owned File, clears original/smart-filter and painted-mask state, propagates linked content,
-  and commits one Undo. Ordinary file drops always retain insertion/SVG-import routing. Alt/Option-drop
-  on an unlocked, visible static image or image/sticker clip shows a distinct Replace indicator and uses
-  those same actions with `dropEffect: 'copy'` for OS drag negotiation; locked targets fall through to
-  insertion, video/audio clips are never targets, undecodable uploads are rejected, target failures are
-  not reported as upload failures, and a failed replacement deletes its newly uploaded File. Generation
-  returns a review candidate and does not edit the doc; Apply commits once after the before/after dialog. Static
+  and commits one Undo. OS files, Insert Image/My Files, and Elements still images share one validated
+  metadata drop route. A compatible unlocked, visible static image or image/sticker clip is outlined at
+  its own bounds with **Drop to replace**; a direct drop or Alt/Option-drop replaces it exactly once,
+  while Shift-drop forces insertion over a compatible target and blank/unsupported targets retain
+  insertion/SVG-import routing. The media picker stays mounted during an outbound drag but becomes
+  pointer-transparent in a macrotask after `dragstart` returns (synchronous hit-test removal cancels
+  the drag in Chromium), so the canvas receives dragover/drop; cancellation restores it and only an
+  accepted copy drop closes it. Video/audio clips are never targets,
+  undecodable sources leave the old target untouched, and target failures are not reported as upload
+  failures. Existing library/stock source Files are never deleted. Only a newly uploaded OS File is
+  cleaned up after decode/apply failure, and refused cleanup reports that the upload remains in the
+  library. Generation returns a review candidate and does not edit the doc; Apply commits once after the
+  before/after dialog. Static
   (`ai-image-actions.ts`) and clip paths share `background-removal.ts` geometry: preserve the existing
   crop/fit/focal geometry by default, with preserve-frame contain and aspect-correct canvas fitting
   as options. Apply keeps original pixels as `src`, rasterizes the reviewed alpha into the final
@@ -525,12 +566,22 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   replaces/inserts adjacent layers; still-video Apply uses adjacent tracks. Both commit once, select
   only the subject, and delete the temporary inpaint-mask File. It does not claim moving-subject
   extraction from video footage.
+  Every Designer-created working raster (paint, pixel/smart-filter output, layer/cutout/inpaint masks,
+  Magic Grab reconstruction files, and materialized inline rasters) carries `internal: 'design-asset'`.
+  `commitCanvas` applies the stamp on both size-switched upload endpoints. Ordinary list, search, and
+  folder queries hide internal and AI Designer working rows, while org-scoped direct ID/path reads keep
+  saved documents, history, versions, templates, and renderers working. Never stamp user imports or
+  exported deliverables, and do not reclassify legacy rows whose ownership cannot be established.
   Outpainting (`outpaint.ts`) uses one prepare/review/Apply candidate flow for selected images and
   whole pages. The dialog owns pending/error state and blocks duplicate requests. Directional input
   is the exact cropped/cover display frame, restored from the same bitmap; canonical mode geometry
-  is independent of provider-returned pixel dimensions. Whole-page Apply inserts a generated
-  extension whose original-page rect is transparent, then translates every ORIGINAL layer by the
-  same centering offset without flattening the selected image, other layers, or page background.
+  is independent of provider-returned pixel dimensions. Directional requests use `POST /media/outpaint`;
+  whole-page requests send the browser-composed source and mask to `POST /media/outpaint/page`, which
+  pins Replicate Flux Fill instead of using the generic inpainting default. Both server paths use the
+  shared background-only expansion prompt and append optional user guidance without dropping its
+  no-unrequested-text-or-objects constraints. Whole-page Apply inserts a generated extension whose
+  original-page rect is transparent, then translates every ORIGINAL layer by the same centering offset
+  without flattening the selected image, other layers, or page background.
   Final compositions are referenced `internal: 'design-asset'` Files, hidden from the library;
   cancel/stale cleanup uses `/media/outpaint/cleanup`, while Apply and Undo/redo retain them.
   `cutout-refine-controls.tsx` arms the same mask for Restore
@@ -630,7 +681,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   and name-only saves reuse the persisted preview. Video saves still omit client snapshots. Create
   and update saves drive the Saving indicator, including the first create.
 
-- **Animated stock stickers are video media.** `stock-stickers.tsx` marks an MP4 pick as `type: 'video'`;
+- **Elements shares the existing stock and insertion paths.** `panels/elements-panel.tsx` reuses all six stock browsers in a compact, opt-in draggable mode, lazy-mounting each visited category and keeping its search state alive. Click and drag selections both go through `use-designer-media-insertion.ts`, the same callback used by the Insert picker; direct stock vectors import once only while still stock-sourced. Canvas stock drops carry a validated metadata-only MIME payload and return before OS-file upload handling, after the frozen-output guard. Drop-point geometry preserves each asset's aspect/default sizing and late-probe corrections preserve the drop center. In image mode the shared inserter rejects video/audio with an explanation instead of calling the mode-switching timeline helper; animated stickers use their static thumbnail, probed for its own natural dimensions rather than inheriting the MP4's dimensions. Do not add a second provider search, import, or media-routing implementation.
+- **Animated stock stickers are video media in video designs.** `stock-stickers.tsx` marks an MP4 pick as `type: 'video'`;
   video-mode `onInsertMedia` must route that pick through `addMediaToTimeline` (real duration/dimensions,
   `mediaType: 'video'`, playback/seek/poster/export), never `addImageClipToTimeline`. Animated stickers
   use the static-sticker sizing rule too: contain within 80% of the canvas without upscaling a small
@@ -642,6 +694,22 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   owned PNG File before insertion; raster fallbacks use ordinary URL import without upscaling.
   Icon wrappers set both `fill` and inherited `color`, so outline
   artwork using `stroke="currentColor"` follows the selected fill in Konva, server PNG/PDF and SVG export.
+
+- **Crop drafts commit once.** The Crop tool's handles, ratio choices, Done/Cancel/Reset and
+  Inspector inset sliders share `crop-geometry.ts`. Canvas draft changes stay out of the document,
+  autosave and history until Done; accepted static/video writes create one Undo, while Cancel and
+  full-box Done create none. Ratio choices center an immediate draft, handle drags retain the
+  opposite-edge anchor, and rotation/flips use the displayed media geometry. Reset restores the
+  current session's entry rectangle; the Inspector separately clears an already-committed crop.
+- **Static and video looks share filter tokens.** `filter-presets.ts` owns the twelve preset
+  bundles used by both Inspectors. Static preset/Reset all actions commit once; standalone
+  Grayscale/Sepia switches and continuous Brightness/Contrast/Saturation (percentage UI) and Blur
+  (px UI) update each selected image's own tokens without copying the primary's other filters,
+  using silent linked writes and one release/action commit. Exact token matching controls the active look. Ordinary filters participate in
+  styled/layer-thumbnail cache keys and force SVG rasterization rather than dropping their pixels.
+  Selected-image AI operations are target-scoped expandable cards; direct Upscale/Inpaint/Image to
+  Image responses must pass the source/history/sequence guards in `ai-image-actions.ts` before one
+  labeled history commit.
 
 - **Effects, warp and text metrics are SHARED code, not two implementations.** `designer-doc/`
   carries the painter (`layer-style-render.ts`), the deformation (`warp.ts`), the fitter
@@ -668,9 +736,22 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   offsets from the bounded `text-extrusion.ts` module (depth ≤200), which is injected into the frame
   script and projected onto the poster as an extrusion style. Animation presets live in
   `text-animation-presets.ts`, grouped into entrance/emphasis/exit, and write only the existing
-  keyframe/reveal channels — never a parallel animation model. Zoom/pulse frames compensate x/y to
-  preserve the center and scale fontSize on text/caption clips. Exit frames are clamped at zero and
-  re-anchored to the new duration by `updateClipSilent` when a timing edit changes a matched exit.
+  keyframe/reveal channels — never a parallel animation model. Generated frames carry optional
+  `animationPreset` identity; applying, replacing or clicking the selected preset again affects only
+  that category and preserves unrelated manual keyframes. Typewriter coexists with emphasis/exit.
+  Untagged-only clips retain legacy interpolation. Tagged categories interpolate independently before
+  adding x/y/rotation offsets, multiplying width/height/fontSize scale factors, and multiplying shared
+  opacity factors, so one category never resets another's properties. Untagged manual frames always use
+  legacy whole-frame interpolation and override composed values for properties they animate. Every edit,
+  retime, easing change and clipboard merge targets timestamp PLUS preset identity, never timestamp alone.
+  Canvas geometry gestures translate the requested rendered delta into the target category's local values,
+  then convert them back to stored values with the inverse of the current-base/preset-base composition.
+  Each preset keeps its authoring base in `animationPreset.base`; composition uses that snapshot against
+  the current clip base, so later X/Y/size/rotation edits never reverse or amplify a gesture. Base
+  resize uses the rendered after/before ratio, not an additive pixel delta that scale factors would multiply.
+  Zoom/pulse frames compensate x/y to preserve the center and scale fontSize on text/caption clips. Exit frames are clamped at zero and
+  only that exit contribution is re-anchored to the new duration by `updateClipSilent` when a timing
+  edit changes a matched exit.
   Multi-select text effects compute each element's own path and commit one history entry.
 - **Preset previews are transient, never edits.** Text styles/effects and photo frames store scoped
   `previewPatches` outside `doc`; only the interactive canvas passes them to `CanvasElements`, which
@@ -745,7 +826,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   modal manager renders outside the Designer's React subtree, so context from the caller is not retained.
   Selected-brand template priority is applied in the repository before pagination, not by sorting
   the loaded page. Brand Studio fetches only referenced file IDs and loads org-scoped template pages
-  on demand (`scope=org`), never the whole library on open.
+  on demand (`scope=org`), never the whole library on open. Template name/category search uses the
+  same bounded server-side pages; loaded pages are reconciled by template id before assignment
+  sections are derived.
 - **Custom font batches are sequential and brand-scoped.** Both the Brand panel and shared family picker accept
   multiple TTF/OTF/WOFF2 files through `useUploadCustomFont(brandId).uploadMany`: validate and post each
   file through the existing single-file endpoint, continue after individual failures, expose
@@ -836,7 +919,11 @@ anchor; its blob object URL is revoked only after a 60-second start window, neve
 `click()`. A successful standalone import loads the returned doc and replaces
 the current URL's `designId` through the native History API without a full-page navigation; the
 search-param effect skips that load when the store already has the same ID. Embedded Designers keep
-the import in memory and leave the host route alone. The export activity
+the import in memory and leave the host route alone. Image archives additionally contain a
+full-size 1× JPG for every output/page at `previews/output-N-page-M.jpg`; these convenience entries
+are ignored by import. A static JPG rendering failure fails the job rather than silently omitting
+previews. Bulk Create supplies JPGs encoded from its existing row PNG renders, avoiding a second
+render of every row. The export activity
 (`media/design-export/design-export.service.ts`) pre-flights summed asset bytes against a 1 GB
 ceiling, reads each file through its folder-resolved adapter, streams the zip (never `zipSync`)
 and lands the artifact via `writeBuffer` + `saveGeneratedMedia`. The media-jobs sweep routes
@@ -892,6 +979,15 @@ arrays, compressed chunks, and a concatenated ZIP buffer are never retained in m
 after enqueue rolls back every design, imported/generated file, editable archive, and source artifact
 rather than calling a partial batch complete. Never substitute a client-only flattened image for the
 editable result.
+
+Bulk Create is available from Start a design, File, Export, and image-template cards. All entries use the
+same dialog and media-create policy/RBAC checks; choosing a template loads an unsaved template-based draft
+without creating a duplicate source Design. Image assignment targets show their source thumbnail and a
+meaningful layer/location label, never a raw element id. Each enqueue creates an org-scoped `DesignBatch`
+whose id is carried by the job payload and every generated Design; failed batches remove that metadata
+during rollback. Batch list/detail routes are org-scoped media reads. My Designs shows batch cards plus
+unbatched root designs, while `/media/designer?batchId=<id>` opens the sibling variations directly. A
+variation loads its batch identity with the document and exposes Back to batch after save/reload.
 
 ## Forms
 

@@ -16,6 +16,8 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { useImportStockMedia } from '@postmill-ai/frontend/components/media-tools/media-import';
 import { downscaleImageForUpload } from '@postmill-ai/frontend/components/media-tools/downscale-image';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
+import type { StockMediaSelection } from './stock.types';
+import { mediaItemFromFileSelection, mediaItemFromStockSelection } from './designer/stock-media-drag';
 
 export type MediaKind = 'image' | 'video' | 'audio';
 
@@ -145,6 +147,8 @@ export interface MediaSelectorModalProps {
   title?: React.ReactNode;
   /** Legacy single-select callback. Closes the modal. Default behavior. */
   onSelect?: (item: MediaSelectorItem) => void | Promise<void>;
+  /** Enables metadata-only outbound drags without changing click selection. */
+  onMediaDragStart?: (item: MediaSelectorItem, event: React.DragEvent) => void;
   /** Multi-select mode: keeps the modal open and accumulates selections. */
   multiple?: boolean;
   /** Multi-select confirmation callback. Receives the accumulated batch. */
@@ -184,6 +188,7 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
   onClose,
   title,
   onSelect,
+  onMediaDragStart,
   multiple,
   onConfirm,
   tabs: tabsProp,
@@ -229,6 +234,9 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isMediaDragging, setIsMediaDragging] = useState(false);
+  const mediaDragActiveRef = useRef(false);
+  const mediaDragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   useFocusTrap(containerRef, open, onClose);
@@ -244,6 +252,11 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
       setActiveTab(tabs[0]);
     }
   }, [tabs, activeTab]);
+
+  useEffect(() => () => {
+    mediaDragActiveRef.current = false;
+    if (mediaDragTimerRef.current !== null) clearTimeout(mediaDragTimerRef.current);
+  }, []);
 
   if (!open) return null;
 
@@ -288,6 +301,22 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
     await onSelect?.(resolved[0]);
   };
 
+  const startMediaDrag = (item: MediaSelectorItem, event: React.DragEvent) => {
+    if (!onMediaDragStart) return;
+    onMediaDragStart(item, event);
+    mediaDragActiveRef.current = true;
+    if (mediaDragTimerRef.current !== null) clearTimeout(mediaDragTimerRef.current);
+    // Chromium cancels the drag if its origin stops hit-testing during dragstart.
+    mediaDragTimerRef.current = setTimeout(() => {
+      mediaDragTimerRef.current = null;
+      if (mediaDragActiveRef.current) setIsMediaDragging(true);
+    }, 0);
+  };
+  const stockDragProps = onMediaDragStart ? {
+    onDragStart: (item: StockMediaSelection, event: React.DragEvent<HTMLButtonElement>) =>
+      startMediaDrag(mediaItemFromStockSelection(item), event),
+  } : {};
+
   const handleStockSelect = (item: {
     url: string;
     width: number;
@@ -316,26 +345,7 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
   const handleFileSelect = (items: FileItem[]) => {
     const item = items[0];
     if (!item) return;
-    // Intrinsic dims recorded at upload time — handing them through lets the
-    // designer place the image immediately instead of blocking on a full
-    // re-download just to learn its size.
-    const dims = item.metadata?.dimensions;
-    finalize({
-      source: 'file',
-      url: item.path,
-      fileId: item.id,
-      width: dims?.width || 0,
-      height: dims?.height || 0,
-      type: item.type?.startsWith('audio')
-        ? 'audio'
-        : item.type?.startsWith('video')
-        ? 'video'
-        : /\.(mp3|wav|ogg|m4a)$/i.test(item.name || '')
-        ? 'audio'
-        : 'image',
-      name: item.name,
-      thumbnail: item.thumbnail || undefined,
-    });
+    finalize(mediaItemFromFileSelection(item));
   };
 
   const removeSelection = (index: number) => {
@@ -416,7 +426,20 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-100 flex items-center justify-center bg-black/50"
+      className={clsx(
+        'fixed inset-0 z-100 flex items-center justify-center bg-black/50',
+        isMediaDragging && 'pointer-events-none opacity-0'
+      )}
+      onDragEnd={(event) => {
+        if (!mediaDragActiveRef.current) return;
+        mediaDragActiveRef.current = false;
+        if (mediaDragTimerRef.current !== null) {
+          clearTimeout(mediaDragTimerRef.current);
+          mediaDragTimerRef.current = null;
+        }
+        setIsMediaDragging(false);
+        if (event.dataTransfer.dropEffect === 'copy') onClose();
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -497,22 +520,22 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           {activeTab === 'Stock Audio' && (
-            <StockAudio mode="select" onSelectFull={handleStockSelect} />
+            <StockAudio mode="select" onSelectFull={handleStockSelect} {...stockDragProps} />
           )}
           {activeTab === 'Stock Photos' && (
-            <StockPhotos mode="select" onSelectFull={handleStockSelect} />
+            <StockPhotos mode="select" onSelectFull={handleStockSelect} {...stockDragProps} />
           )}
           {activeTab === 'Stock Videos' && (
-            <StockVideos mode="select" onSelectFull={handleStockSelect} />
+            <StockVideos mode="select" onSelectFull={handleStockSelect} {...stockDragProps} />
           )}
           {activeTab === 'Stock Vectors' && (
-            <StockVectors mode="select" onSelectFull={handleStockSelect} />
+            <StockVectors mode="select" onSelectFull={handleStockSelect} {...stockDragProps} />
           )}
           {activeTab === 'Stock Stickers' && (
-            <StockStickers mode="select" onSelectFull={handleStockSelect} />
+            <StockStickers mode="select" onSelectFull={handleStockSelect} {...stockDragProps} />
           )}
           {activeTab === 'Stock Icons' && (
-            <StockIcons mode="select" onSelectFull={handleStockSelect} />
+            <StockIcons mode="select" onSelectFull={handleStockSelect} {...stockDragProps} />
           )}
           {activeTab === 'My Files' && (
             <div className="flex flex-col gap-3">
@@ -577,6 +600,9 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
               </div>
               <FileManager
                 onSelect={handleFileSelect}
+                onFileDragStart={onMediaDragStart
+                  ? (file, event) => startMediaDrag(mediaItemFromFileSelection(file), event)
+                  : undefined}
                 onFolderChange={setMyFilesFolderId}
                 refreshKey={myFilesRefreshKey}
                 sidebarMode="drawer"

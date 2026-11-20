@@ -328,6 +328,50 @@ describe('FileRepository — AI Designer intermediate visibility', () => {
       },
     ]);
   });
+
+  it('applies the same visibility clauses to search without displacing its OR conditions', async () => {
+    const { repo, model } = makeRepo();
+    model.file.findMany.mockResolvedValue([]);
+
+    await repo.searchFiles('org-1', 'paint', 'folder-1');
+
+    const { where } = findManyArgs(model);
+    expect(where).toMatchObject({
+      organizationId: 'org-1',
+      deletedAt: null,
+      folderId: 'folder-1',
+      AND: [
+        { NOT: { metadata: { path: ['aiDesigner'], not: expect.anything() } } },
+        { NOT: { metadata: { path: ['internal'], not: expect.anything() } } },
+      ],
+    });
+    expect(where.OR).toEqual([
+      { name: { contains: 'paint', mode: 'insensitive' } },
+      { originalName: { contains: 'paint', mode: 'insensitive' } },
+      { tags: { contains: 'paint', mode: 'insensitive' } },
+      { description: { contains: 'paint', mode: 'insensitive' } },
+    ]);
+  });
+
+  it('uses the same visibility clauses for folder results and their count', async () => {
+    const { repo, model } = makeRepo();
+    model.file.count.mockResolvedValue(0);
+    model.file.findMany.mockResolvedValue([]);
+
+    await repo.getFilesByFolder('org-1', 'folder-1', 1);
+
+    const where = {
+      organizationId: 'org-1',
+      deletedAt: null,
+      folderId: 'folder-1',
+      AND: [
+        { NOT: { metadata: { path: ['aiDesigner'], not: expect.anything() } } },
+        { NOT: { metadata: { path: ['internal'], not: expect.anything() } } },
+      ],
+    };
+    expect(model.file.count).toHaveBeenCalledWith({ where });
+    expect(model.file.findMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
+  });
 });
 
 describe('FileRepository — AI Designer session purge queries', () => {

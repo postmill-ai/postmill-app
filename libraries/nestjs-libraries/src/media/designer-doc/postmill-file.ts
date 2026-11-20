@@ -13,6 +13,8 @@ import { DESIGNER_DOC_VERSION } from './designer-doc.limits';
  *                     rewritten only on IMPORT, never on export)
  *   assets/           (format v2) media bytes, one entry per referenced fileId
  *   assets/fonts/     (format v2) custom font bytes used by the doc
+ *   previews/         full-size JPGs of every static output/page; convenience
+ *                     exports ignored on import, never source-asset references
  *
  * Format history:
  *   v1 (stage 1): manifest + doc only; doc `fileId` media references travel

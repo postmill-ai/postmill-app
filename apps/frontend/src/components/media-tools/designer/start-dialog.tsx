@@ -9,6 +9,7 @@ import { TemplatesPanel } from './panels/templates-panel';
 import { fitWithin } from './panels/fit-within';
 import SafeImage from '@postmill-ai/react/helpers/safe.image';
 import { useBrandKit } from './brand-kit-context';
+import type { BulkCreateSource } from './bulk-create-dialog';
 
 type StoreApi = ReturnType<typeof import('./designer.store').createDesignerStore>;
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
@@ -17,16 +18,18 @@ interface StartDialogProps {
   store: StoreApi;
   fetchFn: FetchLike;
   onImportSuccess: (designId: string) => void;
+  onBulkCreate: (source: BulkCreateSource) => void;
+  initialBatchId?: string;
   /** Called once a design has been created or opened — closes the dialog. */
   onDone: () => void;
 }
 
-type Step = 'home' | 'formats' | 'custom';
+type Step = 'home' | 'formats' | 'custom' | 'bulk';
 
 // Required startup modal over the editor (no dismiss): the user must Open an
 // existing design/template, or create a New one and pick ≥1 format. This
 // replaces the silent "blank → Instagram Post" default.
-export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onImportSuccess, onDone }) => {
+export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onImportSuccess, onBulkCreate, initialBatchId, onDone }) => {
   const translate = useT();
   const toaster = useToaster();
   const [step, setStep] = useState<Step>('home');
@@ -116,11 +119,30 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onImportSucc
       const res = await fetchFn(`/media/designs/${d.id}`);
       if (!res.ok) return;
       const full = await res.json();
-      store.getState().loadDesign(full.doc, full.id, full.name, null);
+      store.getState().loadDesign(full.doc, full.id, full.name, null, full.batch);
+      onImportSuccess(full.id);
       onDone();
     },
-    [fetchFn, store, onDone]
+    [fetchFn, store, onImportSuccess, onDone]
   );
+
+  const openBulkDesign = useCallback(async (design: { id: string }) => {
+    const response = await fetchFn(`/media/designs/${design.id}`);
+    if (!response.ok) return;
+    const full = await response.json();
+    if (full.doc.mode !== 'image') return;
+    store.getState().loadDesign(full.doc, full.id, full.name, null, full.batch);
+    onImportSuccess(full.id);
+    onDone();
+    onBulkCreate({ kind: 'design', id: full.id, name: full.name });
+  }, [fetchFn, onBulkCreate, onDone, onImportSuccess, store]);
+
+  const openBulkTemplate = useCallback((source: BulkCreateSource) => {
+    if (source.doc) {
+      store.getState().loadDesign(source.doc, null, source.name, source.id);
+    }
+    onBulkCreate(source);
+  }, [onBulkCreate, store]);
 
   // `.pdesign` / raw `.json` import — the server creates a NEW design
   // (re-minted ids) and returns it; opening it is exactly the openDesign flow.
@@ -193,6 +215,17 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onImportSucc
                 <span className="text-[11px] text-newTableText">{translate('designer_new_video_description', 'Video design with a timeline')}</span>
               </button>
               <button
+                onClick={() => {
+                  setTab('my-designs');
+                  setStep('bulk');
+                }}
+                className="flex flex-col items-start gap-1 p-4 rounded-xl border border-studioBorder hover:border-designerAccent hover:bg-designerAccent/5 transition-colors text-left"
+              >
+                <span className="text-[22px]">📊</span>
+                <span className="text-[14px] font-semibold text-textColor">{translate('designer_bulk_title', 'Bulk Create')}</span>
+                <span className="text-[11px] text-newTableText">{translate('designer_bulk_card_description', 'Turn a spreadsheet into editable design variations')}</span>
+              </button>
+              <button
                 onClick={() => importInputRef.current?.click()}
                 disabled={importing}
                 className="flex flex-col items-start gap-1 p-4 rounded-xl border border-studioBorder hover:border-designerAccent hover:bg-designerAccent/5 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
@@ -228,11 +261,53 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onImportSucc
             </div>
             <div>
               {tab === 'my-designs' ? (
-                <MyDesignsPanel onOpen={openDesign} />
+                <MyDesignsPanel onOpen={openDesign} initialBatchId={initialBatchId} />
               ) : (
                 <TemplatesPanel store={store} onClose={onDone} showSaveCurrent={false} />
               )}
             </div>
+          </div>
+        )}
+
+        {step === 'bulk' && (
+          <div className="p-6">
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <h2 className="text-[20px] font-bold text-textColor">{translate('designer_bulk_title', 'Bulk Create')}</h2>
+              <button
+                onClick={() => setStep('home')}
+                className="text-[13px] text-textColor/50 hover:text-textColor transition-colors"
+              >
+                {translate('designer_back_arrow', '← Back')}
+              </button>
+            </div>
+            <p className="text-[13px] text-newTableText mb-5">
+              {translate('designer_bulk_choose_source', 'Choose an image design or template to use as the source.')}
+            </p>
+            <div className="flex border-b border-studioBorder mb-3">
+              {(['my-designs', 'templates'] as const).map((sourceTab) => (
+                <button
+                  key={sourceTab}
+                  onClick={() => setTab(sourceTab)}
+                  className={`px-3 py-2 text-[13px] font-medium transition-colors ${
+                    tab === sourceTab
+                      ? 'text-btnPrimaryAccent border-b-2 border-designerAccent'
+                      : 'text-newTableText hover:text-textColor'
+                  }`}
+                >
+                  {sourceTab === 'my-designs' ? translate('designer_recent_designs', 'Recent Designs') : translate('designer_templates', 'Templates')}
+                </button>
+              ))}
+            </div>
+            {tab === 'my-designs' ? (
+              <MyDesignsPanel onOpen={openBulkDesign} imageOnly />
+            ) : (
+              <TemplatesPanel
+                store={store}
+                onClose={onDone}
+                onBulkCreate={openBulkTemplate}
+                showSaveCurrent={false}
+              />
+            )}
           </div>
         )}
 

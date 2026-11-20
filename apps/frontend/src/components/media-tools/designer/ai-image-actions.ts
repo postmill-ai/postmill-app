@@ -3,6 +3,7 @@
 import { detectFocalPoint } from './reflow';
 import { probeImageNaturalSize } from './elements';
 import type { DesignerElement } from './designer.store';
+import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import {
   backgroundRemovalPatch,
   flattenedBackgroundRemovalPatch,
@@ -29,7 +30,7 @@ interface AiActionArgs {
 const getElement = (store: StoreApi, elementId: string): DesignerElement | undefined => {
   const st = store.getState();
   const out = st.doc.outputs[st.currentOutput] as any;
-  return out?.children?.find((c: any) => c.id === elementId);
+  return pageChildren(out, st.currentPage)?.find((c: any) => c.id === elementId);
 };
 
 const getSrc = (store: StoreApi, elementId: string): string | undefined =>
@@ -163,24 +164,89 @@ export const applyAiRemoveBackground = async ({
   return true;
 };
 
-export const aiUpscale = async ({ fetch, store, elementId }: AiActionArgs, scale: number): Promise<void> => {
-  const src = getSrc(store, elementId);
-  if (!src) throw new Error('No image');
-  const res = await fetch('/media/upscale', {
+const directSequences = new WeakMap<StoreApi, Map<string, number>>();
+
+const runDirectImageEdit = async ({
+  args,
+  path,
+  body,
+  fallback,
+  label,
+  patch,
+}: {
+  args: AiActionArgs;
+  path: string;
+  body: Record<string, unknown>;
+  fallback: string;
+  label: string;
+  patch: (url: string) => Partial<DesignerElement>;
+}): Promise<boolean> => {
+  const { fetch, store, elementId } = args;
+  const before = getElement(store, elementId);
+  if (!before?.src) throw new Error('No image');
+  const history = store.getState().history;
+  let sequences = directSequences.get(store);
+  if (!sequences) {
+    sequences = new Map();
+    directSequences.set(store, sequences);
+  }
+  const sequence = (sequences.get(elementId) || 0) + 1;
+  sequences.set(elementId, sequence);
+
+  const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageUrl: src, scale }),
+    body: JSON.stringify({ imageUrl: before.src, ...body }),
   });
-  if (!res.ok) throw new Error(await readErrorMessage(res, 'Upscale failed'));
-  const data = await res.json();
-  store.getState().updateElement(elementId, {
-    src: data.url,
-    fileId: undefined,
-    maskSrc: undefined,
-    maskFileId: undefined,
-    maskEnabled: undefined,
-  });
+  if (!res.ok) throw new Error(await readErrorMessage(res, fallback));
+  const data = await res.json() as { url?: string };
+  if (!data.url) throw new Error(fallback);
+  if (sequences.get(elementId) !== sequence || store.getState().history !== history ||
+    !staticMediaMatches(before, getElement(store, elementId))) return false;
+
+  if (!store.getState().updateElement(elementId, patch(data.url))) return false;
+  store.getState().pushHistory(label);
+  return true;
 };
+
+export const aiUpscale = async (args: AiActionArgs, scale: number): Promise<boolean> =>
+  runDirectImageEdit({
+    args,
+    path: '/media/upscale',
+    body: { scale },
+    fallback: 'Upscale failed',
+    label: 'Upscale image',
+    patch: (url) => ({
+      src: url,
+      fileId: undefined,
+      maskSrc: undefined,
+      maskFileId: undefined,
+      maskEnabled: undefined,
+    }),
+  });
+
+export const aiInpaint = async (
+  args: AiActionArgs,
+  { maskUrl, prompt }: { maskUrl: string; prompt: string }
+): Promise<boolean> =>
+  runDirectImageEdit({
+    args,
+    path: '/media/inpaint',
+    body: { maskUrl, prompt },
+    fallback: 'Inpaint failed',
+    label: 'Inpaint image',
+    patch: (url) => ({ src: url, fileId: undefined }),
+  });
+
+export const aiImageToImage = async (args: AiActionArgs, prompt: string): Promise<boolean> =>
+  runDirectImageEdit({
+    args,
+    path: '/media/image-to-image',
+    body: { prompt },
+    fallback: 'Image-to-image failed',
+    label: 'Image to image',
+    patch: (url) => ({ src: url, fileId: undefined }),
+  });
 
 export const aiDetectSubject = async ({ fetch, store, elementId }: AiActionArgs): Promise<void> => {
   const src = getSrc(store, elementId);

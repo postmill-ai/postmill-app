@@ -4,7 +4,7 @@ import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { useDebounce } from 'use-debounce';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { StockPreviewModal } from './stock-preview-modal';
-import { StockStickerItem, stockSourceLabel } from './stock.types';
+import { StockMediaSelection, StockStickerItem, stockSourceLabel } from './stock.types';
 import { useStockSearch } from './use-stock-search';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
@@ -13,19 +13,12 @@ const SUGGESTED_SEARCHES = ['Happy', 'Cat', 'Reaction', 'Celebration', 'Meme'];
 interface StockStickersProps {
   mode?: 'browse' | 'select';
   onSelect?: (item: { url: string; width: number; height: number; thumbnail?: string; type: 'image' | 'video' }) => void;
-  onSelectFull?: (item: {
-    url: string;
-    width: number;
-    height: number;
-    thumbnail?: string;
-    type: 'image' | 'video';
-    source?: string;
-    attribution?: Record<string, unknown>;
-    name?: string;
-  }) => void;
+  onSelectFull?: (item: StockMediaSelection) => void;
+  onDragStart?: (item: StockMediaSelection, event: React.DragEvent<HTMLButtonElement>) => void;
+  compact?: boolean;
 }
 
-export const StockStickers: FC<StockStickersProps> = ({ mode = 'browse', onSelect, onSelectFull }) => {
+export const StockStickers: FC<StockStickersProps> = ({ mode = 'browse', onSelect, onSelectFull, onDragStart, compact = false }) => {
   const t = useT();
   const modal = useModals();
   const [query, setQuery] = useState('');
@@ -92,7 +85,7 @@ export const StockStickers: FC<StockStickersProps> = ({ mode = 'browse', onSelec
 
   return (
     <div className="flex flex-col gap-[15px]">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-[12px]">
+      <div className={compact ? 'flex flex-col gap-[12px]' : 'flex flex-col sm:flex-row sm:items-center gap-[12px]'}>
         <div className="relative flex-1">
           <svg className="absolute left-[14px] top-1/2 -translate-y-1/2 w-[16px] h-[16px] text-newTextColor/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
@@ -139,7 +132,7 @@ export const StockStickers: FC<StockStickersProps> = ({ mode = 'browse', onSelec
           </button>
         </div>
       ) : initialLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-[12px]">
+        <div className={compact ? 'grid grid-cols-2 gap-[10px]' : 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-[12px]'}>
           {Array.from({ length: 10 }).map((_, i) => (
             <div key={i} className="rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner">
               <div className="aspect-square bg-newColColor/20 animate-pulse rounded-[8px]" />
@@ -198,25 +191,25 @@ export const StockStickers: FC<StockStickersProps> = ({ mode = 'browse', onSelec
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-[12px]">
+          <div className={compact ? 'grid grid-cols-2 gap-[10px]' : 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-[12px]'}>
             {items.map((sticker) => {
               // Plain container tile; the media area is the single interactive
               // control (a real <button>) so the author-credit <a> below stays a
               // sibling — never nested inside another interactive element.
+              const isVideo = !!sticker.mp4Url;
+              const type: 'image' | 'video' = isVideo ? 'video' : 'image';
+              const payload = {
+                url: isVideo ? sticker.mp4Url! : sticker.url,
+                width: sticker.width,
+                height: sticker.height,
+                thumbnail: sticker.thumbUrl,
+                type,
+                source: sticker.source,
+                attribution: sticker.attribution,
+                name: sticker.description || undefined,
+              };
               const activate = () => {
                 if (mode === 'select' && (onSelect || onSelectFull)) {
-                  const isVideo = !!sticker.mp4Url;
-                  const type: 'image' | 'video' = isVideo ? 'video' : 'image';
-                  const payload = {
-                    url: isVideo ? sticker.mp4Url! : sticker.url,
-                    width: sticker.width,
-                    height: sticker.height,
-                    thumbnail: sticker.thumbUrl,
-                    type,
-                    source: sticker.source,
-                    attribution: sticker.attribution,
-                    name: sticker.description || undefined,
-                  };
                   onSelectFull?.(payload);
                   onSelect?.(payload);
                 } else {
@@ -231,6 +224,8 @@ export const StockStickers: FC<StockStickersProps> = ({ mode = 'browse', onSelec
                 <button
                   type="button"
                   onClick={activate}
+                  draggable={!!onDragStart}
+                  onDragStart={(event) => onDragStart?.(payload, event)}
                   aria-label={sticker.description || t('open_preview', 'Open preview')}
                   className="block w-full aspect-square relative overflow-hidden bg-transparent cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2B5CD3]"
                 >

@@ -20,6 +20,8 @@ const CUSTOM_POSTER_URL = '/mock-storage/custom-poster.png';
 const STOCK_VECTOR_URL = '/mock-storage/outline-vector.svg';
 const STOCK_ICON_URL = '/mock-storage/outline-icon.svg';
 const STOCK_STICKER_URL = '/mock-storage/animated-sticker.mp4';
+const STOCK_PHOTO_URL = ASYMMETRIC_URL;
+const STOCK_VIDEO_URL = GENERATED_URL;
 const STOCK_VECTOR_THUMB_URL = '/mock-storage/vector-thumb.png';
 const IMPORTED_VECTOR_URL = '/mock-storage/imported-vector.png';
 const GENERATED_POSTER_URL = 'https://app.postmill.ai/mock-storage/generated-poster.jpg';
@@ -150,6 +152,37 @@ const blankDoc = (): DesignerDocSnapshot => ({
   ],
 });
 
+const staticElementsDoc = (): DesignerDocSnapshot => ({
+  version: 13,
+  mode: 'image',
+  outputs: [{
+    id: 'elements-output',
+    formatId: 'elements-static',
+    name: 'Elements static',
+    width: 400,
+    height: 300,
+    background: '#ffffff',
+    tracks: [],
+    children: [{
+      id: 'existing-text',
+      type: 'text',
+      text: 'Keep this image design',
+      x: 20,
+      y: 20,
+      width: 240,
+      height: 40,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      fontFamily: 'Inter',
+      fontSize: 24,
+      fontWeight: 400,
+      fill: '#000000',
+    }],
+  }],
+});
+
 const staticCropDoc = (): DesignerDocSnapshot => ({
   version: 9,
   mode: 'image',
@@ -258,7 +291,10 @@ const json = (route: Route, body: unknown, status = 200) =>
 class DesignerMocks {
   readonly generatePosts: string[] = [];
   readonly backgroundRemovalPosts: string[] = [];
+  readonly directImagePosts: Array<{ path: string; body: Record<string, unknown> }> = [];
+  directImageTools = false;
   readonly maskUploads = new Map<string, Buffer>();
+  readonly maskUploadInternal = new Map<string, string | null>();
   readonly assistantCopyPosts: string[] = [];
   readonly assistantSuggestionPosts: string[] = [];
   readonly unexpectedProviderPosts: string[] = [];
@@ -268,6 +304,8 @@ class DesignerMocks {
   readonly renderRequests: Array<Record<string, unknown>> = [];
   readonly fileInformationUpdates: Array<Record<string, unknown>> = [];
   readonly fontUploads: string[] = [];
+  readonly stockSearches: string[] = [];
+  stockVectorUploads = 0;
   readonly customFonts: Array<Record<string, unknown>> = [];
   dashboardJobReads = 0;
   studioStatusReads = 0;
@@ -470,6 +508,12 @@ class DesignerMocks {
             tts: { available: true },
             stt: { available: true },
             'bg-remove': { available: true },
+            ...(this.directImageTools ? {
+              upscale: { available: true },
+              image: { available: true },
+              inpaint: { available: true },
+              outpaint: { available: true },
+            } : {}),
           },
           tools: Object.fromEntries(
             [
@@ -589,6 +633,12 @@ class DesignerMocks {
         return;
       }
 
+      if (['/media/upscale', '/media/inpaint', '/media/image-to-image'].includes(pathname) && method === 'POST') {
+        this.directImagePosts.push({ path: pathname, body: request.postDataJSON() as Record<string, unknown> });
+        await json(route, { url: REPLACEMENT_IMAGE_URL });
+        return;
+      }
+
       if (pathname === GENERATE_PATH && method === 'POST') {
         this.generatePosts.push(request.postData() || '');
         await json(route, { id: this.jobOutcome === 'completed' ? 'job-complete' : 'job-failed' });
@@ -621,6 +671,76 @@ class DesignerMocks {
 
       if (pathname === '/media/upscale-video' && method === 'POST') {
         await json(route, { id: REPLACEMENT_URL });
+        return;
+      }
+
+      if (pathname === '/media/stock/photos' && method === 'GET') {
+        this.stockSearches.push(`${pathname}?${new URL(request.url()).searchParams}`);
+        await json(route, {
+          results: [{
+            id: 'photo-1',
+            url: STOCK_PHOTO_URL,
+            thumbUrl: STOCK_PHOTO_URL,
+            description: 'QA stock photo',
+            author: 'QA Photos',
+            authorUrl: 'https://example.com/photos',
+            sourceUrl: 'https://example.com/photo',
+            width: 1600,
+            height: 400,
+            source: 'unsplash',
+            downloadLocation: null,
+            attribution: { provider: 'Unsplash' },
+          }],
+          page: 1,
+          totalPages: 1,
+          configured: true,
+          source: 'unsplash',
+        });
+        return;
+      }
+
+      if (pathname === '/media/stock/videos' && method === 'GET') {
+        this.stockSearches.push(`${pathname}?${new URL(request.url()).searchParams}`);
+        await json(route, {
+          results: [{
+            id: 'video-1',
+            url: STOCK_VIDEO_URL,
+            thumbUrl: ASYMMETRIC_URL,
+            description: 'QA stock video',
+            author: 'QA Videos',
+            authorUrl: 'https://example.com/videos',
+            sourceUrl: 'https://example.com/video',
+            width: 720,
+            height: 1280,
+            duration: 4,
+            source: 'pexels',
+            attribution: { provider: 'Pexels' },
+          }],
+          page: 1,
+          totalPages: 1,
+          configured: true,
+          source: 'pexels',
+        });
+        return;
+      }
+
+      if (pathname === '/media/stock/audio' && method === 'GET') {
+        await json(route, {
+          results: [{
+            id: 'audio-1',
+            url: GENERATED_URL,
+            downloadUrl: GENERATED_URL,
+            name: 'QA stock audio',
+            duration: 4,
+            author: 'QA Audio',
+            source: 'jamendo',
+            attribution: { provider: 'Jamendo' },
+          }],
+          page: 1,
+          totalPages: 1,
+          configured: true,
+          source: 'jamendo',
+        });
         return;
       }
 
@@ -776,6 +896,7 @@ class DesignerMocks {
       if (pathname === '/files/upload-simple' && method === 'POST') {
         const multipart = request.postDataBuffer()?.toString('latin1') || '';
         if (multipart.includes('QA outline vector.png')) {
+          this.stockVectorUploads++;
           await json(route, { id: 'vector-file-1', path: IMPORTED_VECTOR_URL });
           return;
         }
@@ -785,7 +906,13 @@ class DesignerMocks {
           const end = raw.lastIndexOf(Buffer.from('\r\n--'));
           const fileId = `mask-file-${this.maskUploads.size + 1}`;
           const path = `/mock-masks/${fileId}.png`;
+          const internal = multipart.match(/name="internal"\r\n\r\n([^\r]+)/)?.[1] || null;
+          this.maskUploadInternal.set(path, internal);
           this.maskUploads.set(path, raw.subarray(start, end));
+          if (internal !== 'design-asset') {
+            await json(route, { message: 'Designer working masks must be internal' }, 400);
+            return;
+          }
           await json(route, { id: fileId, path });
           return;
         }
@@ -1509,8 +1636,117 @@ test.describe('Designer animation clipboard (mocked local document)', () => {
   });
 });
 
+test.describe('Designer Elements workspace (mocked stock and storage)', () => {
+  test('static search, click insertion, vector import, and drag placement share one path', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticElementsDoc();
+    mocks.name = 'Static Elements E2E';
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await openElements(page);
+
+    const search = page.getByPlaceholder('Search photos...');
+    await search.fill('mountain');
+    await page.getByLabel('Filter by orientation').selectOption('landscape');
+    await expect.poll(() => mocks.stockSearches.some((request) =>
+      request.includes('query=mountain') && request.includes('orientation=landscape')
+    )).toBe(true);
+
+    await page.getByRole('button', { name: 'QA stock photo', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(2);
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({ id: 'existing-text', text: 'Keep this image design' });
+    expect(mocks.doc.outputs[0].children![1]).toMatchObject({
+      type: 'image', src: STOCK_PHOTO_URL, x: 40, y: 110, width: 320, height: 80,
+      naturalWidth: 1600, naturalHeight: 400,
+    });
+    expect(mocks.stockVectorUploads).toBe(0);
+
+    await fitDesignerCanvas(page);
+    await dragStockAssetToDocumentPoint(page, 'QA stock photo', 400, 300, 100, 100);
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(3);
+    const draggedPhoto = mocks.doc.outputs[0].children![2];
+    expect(draggedPhoto).toMatchObject({
+      type: 'image', src: STOCK_PHOTO_URL, width: 320, height: 80,
+    });
+    expect(draggedPhoto.y).toBeGreaterThanOrEqual(55);
+    expect(draggedPhoto.y).toBeLessThanOrEqual(65);
+    expect(draggedPhoto.x).toBeGreaterThanOrEqual(-65);
+    expect(draggedPhoto.x).toBeLessThanOrEqual(-55);
+    await openElements(page, 'Vectors');
+    await page.getByRole('button', { name: 'QA outline vector', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(4);
+    expect(mocks.doc.outputs[0].children![3]).toMatchObject({
+      type: 'image', src: IMPORTED_VECTOR_URL, fileId: 'vector-file-1',
+    });
+    expect(mocks.stockVectorUploads).toBe(1);
+    await openElements(page);
+    await expect(search).toHaveValue('mountain');
+
+    const imageModeWarning = 'This media requires a video design. Your image design has not been changed.';
+    await openElements(page, 'Videos');
+    await page.getByRole('button', { name: 'QA stock video', exact: true }).click();
+    await expect(page.getByText(imageModeWarning).last()).toBeVisible();
+    await dragStockAssetToDocumentPoint(page, 'QA stock video', 400, 300, 200, 150);
+    await expect(page.getByText(imageModeWarning).last()).toBeVisible();
+    expect(mocks.doc.mode).toBe('image');
+    expect(mocks.doc.outputs[0].children).toHaveLength(4);
+
+    await openElements(page, 'Audio');
+    await page.getByRole('button', { name: 'Use', exact: true }).click();
+    await expect(page.getByText(imageModeWarning).last()).toBeVisible();
+    expect(mocks.doc.mode).toBe('image');
+    expect(mocks.doc.outputs[0].children).toHaveLength(4);
+
+    await openElements(page, 'Stickers');
+    await page.getByRole('button', { name: 'QA animated sticker', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(5);
+    await expect.poll(() => mocks.doc.outputs[0].children![4]?.naturalWidth).toBe(8);
+    expect(mocks.doc.outputs[0].children![4]).toMatchObject({
+      type: 'image', src: ASYMMETRIC_URL, width: 8, height: 2, naturalWidth: 8, naturalHeight: 2,
+    });
+
+    await page.getByRole('menuitem', { name: 'Insert', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Sticker…', exact: true }).click();
+    await page.getByTestId('media-picker').getByRole('button', { name: 'QA animated sticker', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.length).toBe(6);
+    await expect.poll(() => mocks.doc.outputs[0].children![5]?.naturalWidth).toBe(8);
+    expect(mocks.doc.outputs[0].children![5]).toMatchObject({
+      type: 'image', src: ASYMMETRIC_URL, width: 8, height: 2, naturalWidth: 8, naturalHeight: 2,
+    });
+    expect(mocks.doc.mode).toBe('image');
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({ id: 'existing-text', text: 'Keep this image design' });
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+  test('Elements photo drag replaces the highlighted static image without inserting', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    mocks.doc.outputs[0].children![0].src = TRANSPARENT_IMAGE_URL;
+    mocks.doc.outputs[0].children![0].fileId = 'elements-old-file';
+    mocks.name = 'Static Elements Replace E2E';
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await openElements(page);
+    await fitDesignerCanvas(page);
+
+    await dragStockAssetToDocumentPoint(page, 'QA stock photo', 400, 300, 200, 100);
+
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.src).toBe(STOCK_PHOTO_URL);
+    expect(mocks.doc.outputs[0].children).toHaveLength(1);
+    expect(mocks.doc.outputs[0].children![0]).toMatchObject({
+      id: 'static-image', src: STOCK_PHOTO_URL,
+      x: 100, y: 50, width: 200, height: 100,
+      naturalWidth: 1600, naturalHeight: 400,
+      fitMode: 'cover', focalPoint: { x: 0.75, y: 0.5 },
+    });
+    expect(mocks.stockVectorUploads).toBe(0);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
 test.describe('Designer animated stock media (local non-paid fixture)', () => {
-  test('MP4 sticker insertion plays, seeks, saves and reopens as a video clip', async ({ page }) => {
+  test('MP4 sticker picker insertion plays, seeks, saves and reopens as a video clip', async ({ page }) => {
     const mocks = new DesignerMocks();
     await mocks.install(page);
     await openDesigner(page, mocks);
@@ -1524,11 +1760,61 @@ test.describe('Designer animated stock media (local non-paid fixture)', () => {
       src: STOCK_STICKER_URL,
       startMs: 0,
       endMs: 4000,
+      x: 180,
+      y: 320,
       width: 720,
       height: 1280,
       naturalWidth: 720,
       naturalHeight: 1280,
     });
+    expect(mocks.doc.outputs[0].tracks.some((track) => track.type === 'image')).toBe(false);
+
+    await expectRealPlayback(page);
+    const seek = page.getByRole('slider', { name: 'Seek timeline', exact: true });
+    await seek.press('Home');
+    await seek.press('Shift+ArrowRight');
+    await expect.poll(() => page.locator('video').first().evaluate((element: HTMLVideoElement) => element.currentTime))
+      .toBeGreaterThan(0.75);
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('slider', { name: 'Clip', exact: true })).toHaveCount(1);
+    expect(mocks.savedClips()[0]).toMatchObject({
+      src: STOCK_STICKER_URL,
+      mediaType: 'video',
+      endMs: 4000,
+      width: 720,
+      height: 1280,
+      naturalWidth: 720,
+      naturalHeight: 1280,
+    });
+    await expectRealPlayback(page);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('MP4 sticker drag insertion plays, seeks, saves and reopens as a video clip', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+
+    await openElements(page, 'Stickers');
+    await fitDesignerCanvas(page);
+    await dragStockAssetToDocumentPoint(page, 'QA animated sticker', 1080, 1920, 400, 500);
+    await expect.poll(() => mocks.savedClips()[0]?.mediaType).toBe('video');
+    expect(mocks.doc.outputs[0].tracks[0]).toMatchObject({ type: 'video' });
+    expect(mocks.savedClips()[0]).toMatchObject({
+      src: STOCK_STICKER_URL,
+      startMs: 0,
+      endMs: 4000,
+      y: -140,
+      width: 720,
+      height: 1280,
+      naturalWidth: 720,
+      naturalHeight: 1280,
+    });
+    expect(mocks.savedClips()[0].x).toBeGreaterThanOrEqual(35);
+    expect(mocks.savedClips()[0].x).toBeLessThanOrEqual(45);
     expect(mocks.doc.outputs[0].tracks.some((track) => track.type === 'image')).toBe(false);
 
     await expectRealPlayback(page);
@@ -2215,6 +2501,29 @@ async function canvasDocumentPoint(
   };
 }
 
+async function openElements(page: Page, category: 'Photos' | 'Videos' | 'Vectors' | 'Icons' | 'Stickers' | 'Audio' = 'Photos') {
+  await page.getByRole('tab', { name: 'Elements', exact: true }).click();
+  await page.getByRole('tab', { name: category, exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="elements"]')).toBeVisible();
+}
+
+async function dragStockAssetToDocumentPoint(
+  page: Page,
+  name: string,
+  outputWidth: number,
+  outputHeight: number,
+  x: number,
+  y: number
+) {
+  const point = await canvasDocumentPoint(page, outputWidth, outputHeight, x, y);
+  const canvas = page.locator('.designer-canvas-container');
+  const bounds = await canvas.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.getByRole('button', { name, exact: true }).dragTo(canvas, {
+    targetPosition: { x: point.x - bounds!.x, y: point.y - bounds!.y },
+  });
+}
+
 async function canvasRgbaAtDocumentPoint(
   page: Page,
   outputWidth: number,
@@ -2393,8 +2702,19 @@ test.describe('Designer crop and browser export artifacts (mocked local document
     const imageCenter = await canvasDocumentPoint(page, 400, 300, 150, 100);
     await page.mouse.click(imageCenter.x, imageCenter.y);
     await page.getByRole('button', { name: 'Crop (C)', exact: true }).click();
+    await page.getByLabel('Ratio', { exact: true }).selectOption('1:1');
+    await expect(page.getByTestId('crop-actions')).toBeVisible();
+    expect(mocks.doc.outputs[0].children?.[0]?.crop).toBeUndefined();
+    await page.getByRole('button', { name: 'Reset', exact: true }).click();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByTestId('crop-actions')).toHaveCount(0);
+    expect(mocks.doc.outputs[0].children?.[0]?.crop).toBeUndefined();
+
+    await page.getByRole('button', { name: 'Crop (C)', exact: true }).click();
+    await page.getByLabel('Ratio', { exact: true }).selectOption('free');
     await cropFromRightHandle(page, 400, 300, 300, 100, 200);
-    await page.keyboard.press('Enter');
+    expect(mocks.doc.outputs[0].children?.[0]?.crop).toBeUndefined();
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
 
     await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.crop?.width).toBeCloseTo(2, 0);
     const cropped = mocks.doc.outputs[0].children![0];
@@ -2452,6 +2772,86 @@ test.describe('Designer crop and browser export artifacts (mocked local document
     expect(pixels.cropBottomLeft[1]).toBeGreaterThan(pixels.cropBottomLeft[2] + 50);
     expect(pixels.cropBottomRight[0]).toBeGreaterThan(pixels.cropBottomRight[2] + 50);
     expect(pixels.cropBottomRight[1]).toBeGreaterThan(pixels.cropBottomRight[2] + 50);
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+
+  test('static looks and adjustments persist and export their filtered pixels', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.doc = staticCropDoc();
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    const imageCenter = await canvasDocumentPoint(page, 400, 300, 150, 100);
+    await page.mouse.click(imageCenter.x, imageCenter.y);
+
+    await page.getByRole('button', { name: 'Mono', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.filters).toEqual(['grayscale']);
+    const brightness = page.getByRole('slider', { name: 'Brightness', exact: true });
+    await brightness.focus();
+    await brightness.press('ArrowRight');
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.filters).toEqual(['grayscale', 'brightness:1.05']);
+    await page.getByRole('button', { name: 'Reset all', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.filters).toEqual([]);
+
+    await page.getByRole('button', { name: 'Mono', exact: true }).click();
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+    const reopenedCenter = await canvasDocumentPoint(page, 400, 300, 150, 100);
+    await page.mouse.click(reopenedCenter.x, reopenedCenter.y);
+    await expect(page.getByRole('button', { name: 'Mono', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+    await page.keyboard.press('Control+e');
+    await page.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
+    await page.getByRole('button', { name: 'Next: Export 1 file', exact: true }).click();
+    await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
+    await expect(page.getByText('Exports are saved in Media → Files. Download a copy to your computer:', { exact: true }))
+      .toBeVisible({ timeout: 60_000 });
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('link', { name: /\.png$/ }).click();
+    const download = await downloadPromise;
+    const png = fs.readFileSync((await download.path())!);
+    const pixels = await analyzeDownloadedPng(page, png);
+    for (const pixel of [pixels.cropTopLeft, pixels.cropTopRight, pixels.cropBottomLeft, pixels.cropBottomRight]) {
+      expect(pixel[0]).toBe(pixel[1]);
+      expect(pixel[1]).toBe(pixel[2]);
+    }
+    mocks.expectClean();
+  });
+
+  test('AI tool cards keep prompts with one Generate request and apply the selected image result', async ({ page }) => {
+    const mocks = new DesignerMocks();
+    mocks.directImageTools = true;
+    mocks.doc = staticCropDoc();
+    await mocks.install(page);
+    await openStaticDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+    const imageCenter = await canvasDocumentPoint(page, 400, 300, 150, 100);
+    await page.mouse.click(imageCenter.x, imageCenter.y);
+
+    await page.getByRole('button', { name: 'Image to Image', exact: true }).click();
+    const prompt = page.getByRole('textbox', { name: 'Image to Image', exact: true });
+    const generate = page.getByRole('button', { name: 'Generate', exact: true });
+    await expect(generate).toBeDisabled();
+    await prompt.fill('  watercolor sketch  ');
+    await generate.click();
+    await expect.poll(() => mocks.directImagePosts.length).toBe(1);
+    expect(mocks.directImagePosts[0]).toEqual({
+      path: '/media/image-to-image',
+      body: { imageUrl: ASYMMETRIC_URL, prompt: 'watercolor sketch' },
+    });
+    await expect.poll(() => mocks.doc.outputs[0].children?.[0]?.src).toBe(REPLACEMENT_IMAGE_URL);
+
+    await page.getByRole('button', { name: 'Upscale', exact: true }).click();
+    await page.getByLabel('Upscale', { exact: true }).selectOption('4');
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect.poll(() => mocks.directImagePosts.length).toBe(2);
+    expect(mocks.directImagePosts[1]).toEqual({
+      path: '/media/upscale',
+      body: { imageUrl: REPLACEMENT_IMAGE_URL, scale: 4 },
+    });
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });
@@ -3388,6 +3788,7 @@ test.describe('Designer non-destructive cutout refinement', () => {
 
     await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
     await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
+    await page.getByRole('radio', { name: 'Preserve frame', exact: true }).click();
     await page.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).toContain('/mock-masks/');
 
@@ -3547,6 +3948,7 @@ test.describe('Designer non-destructive cutout refinement', () => {
     await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
     await page.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.savedClips()[0].maskSrc).toContain('/mock-masks/');
+    expect([...mocks.maskUploadInternal.values()]).toEqual(['design-asset']);
     expect(mocks.savedClips()[0]).toMatchObject({
       src: CUTOUT_SOURCE_URL,
       fileId: 'source-file',
@@ -3580,6 +3982,7 @@ test.describe('Designer non-destructive cutout refinement', () => {
     await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 150)).toEqual([0, 0, 255, 255]);
     await expect.poll(() => renderedFrameRgba(page, mocks, 150, 150)).toEqual([255, 0, 0, 255]);
     await expect.poll(() => renderedFrameRgba(page, mocks, 250, 150)).toEqual([0, 0, 255, 255]);
+    expect([...mocks.maskUploadInternal.values()]).toEqual(['design-asset', 'design-asset']);
     mocks.expectClean();
   });
 });

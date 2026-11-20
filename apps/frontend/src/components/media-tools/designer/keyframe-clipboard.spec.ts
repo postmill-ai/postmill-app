@@ -73,6 +73,30 @@ describe('mergeKeyframes', () => {
     expect(merged[1].ease).toBe('easeOut');
   });
 
+  it('keeps same-time categories distinct and preserves preset identity', () => {
+    const entrance = { name: 'Fade Up', category: 'entrance' as const };
+    const emphasis = { name: 'Pulse', category: 'emphasis' as const };
+    const exit = { name: 'Fade Out', category: 'exit' as const };
+    const merged = mergeKeyframes(
+      [
+        { tMs: 0, props: { opacity: 0 }, animationPreset: entrance },
+        { tMs: 0, props: { width: 200 }, animationPreset: emphasis },
+      ],
+      [
+        { tMs: 0, props: { width: 216 }, animationPreset: emphasis },
+        { tMs: 0, props: { opacity: 0 }, animationPreset: exit },
+      ]
+    );
+
+    expect(merged).toHaveLength(3);
+    expect(merged.find((frame) => frame.animationPreset?.category === 'entrance')?.props.opacity).toBe(0);
+    expect(merged.find((frame) => frame.animationPreset?.category === 'emphasis')).toMatchObject({
+      props: { width: 216 },
+      animationPreset: emphasis,
+    });
+    expect(merged.find((frame) => frame.animationPreset?.category === 'exit')?.animationPreset).toEqual(exit);
+  });
+
   it('does not mutate either input', () => {
     const target = [{ tMs: 0, props: { x: 1 } }];
     const incoming = [{ tMs: 0, props: { y: 2 } }];

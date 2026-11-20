@@ -20,7 +20,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Organization, User } from '@prisma/client';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
-import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
 import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import {
@@ -52,8 +52,6 @@ import { BulkCreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/b
 import { DesignBulkCreateService, bulkRowErrorDetail } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service';
 import { applyBulkRow } from '@postmill-ai/nestjs-libraries/media/designer-doc/bulk-variables';
 import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design.dto';
-import { ConvertDesignToVideoDto } from '@postmill-ai/nestjs-libraries/dtos/design/convert-design-to-video.dto';
-import { DesignVideoConversionService } from '@postmill-ai/nestjs-libraries/media/design-render/design-video-conversion.service';
 import { ImportLibraryDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/import-library-design.dto';
 import { UpdateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-design.dto';
 import { RegenPreviewsDto } from '@postmill-ai/nestjs-libraries/dtos/design/regen-previews.dto';
@@ -74,6 +72,7 @@ import { parseByteRange } from '@postmill-ai/nestjs-libraries/media/design-rende
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
+import type { DesignerGallerySort } from '@postmill-ai/nestjs-libraries/media/designer-doc/template-category';
 import { DesignExportService } from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
 import {
   DESIGN_IMPORT_MAX_BYTES,
@@ -95,6 +94,18 @@ import {
 const TMP_UPLOAD_DIR = path.join(tmpdir(), 'postmill-uploads');
 try { fs.mkdirSync(TMP_UPLOAD_DIR, { recursive: true }); } catch {}
 
+const galleryPage = (value?: string) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : 1;
+};
+const galleryLimit = (value?: string, fallback = 24) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.min(100, Math.floor(parsed)) : fallback;
+};
+const galleryQuery = (value?: string) => value?.trim().slice(0, 200) || undefined;
+const gallerySort = (value?: string): DesignerGallerySort | undefined =>
+  value === 'newest' || value === 'name' || value === 'recent' ? value : undefined;
+
 @ApiTags('Design')
 @Controller('/media/designs')
 export class DesignController {
@@ -108,18 +119,56 @@ export class DesignController {
     private _fontLoaderService: FontLoaderService,
     private _designExportService: DesignExportService,
     private _designBulkCreateService: DesignBulkCreateService,
-    private _designVideoConversionService: DesignVideoConversionService,
   ) {}
 
   @Get('/')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Maximum number of designs to return (1–100). Values above 100 are capped at 100. Defaults to 20.',
+    schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+  })
   async list(
     @GetOrgFromRequest() org: Organization,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('query') query?: string,
+    @Query('sort') sort?: string,
+    @Query('group') group?: string,
+    @GetUserFromRequest() user?: User,
   ) {
-    return this._designService.listDesigns(org.id, Number(page) || 1, Number(limit) || 20);
+    return this._designService.listDesigns(
+      org.id,
+      galleryPage(page),
+      galleryLimit(limit, 20),
+      { query: galleryQuery(query), sort: gallerySort(sort), userId: user?.id },
+      group === 'root',
+    );
+  }
+
+  @Get('/batches')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async listBatches(
+    @GetOrgFromRequest() org: Organization,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this._designService.listBatches(org.id, Number(page) || 1, Number(limit) || 20);
+  }
+
+  @Get('/batches/:id')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async getBatch(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+  ) {
+    const batch = await this._designService.getBatch(org.id, id);
+    if (!batch) throw new NotFoundException('Design batch not found');
+    return batch;
   }
 
   @Get('/:id')
@@ -128,8 +177,9 @@ export class DesignController {
   async get(
     @GetOrgFromRequest() org: Organization,
     @Param('id') id: string,
+    @GetUserFromRequest() user?: User,
   ) {
-    return this._designService.getDesign(org.id, id);
+    return this._designService.getDesign(org.id, id, user?.id);
   }
 
   @Post('/')
@@ -141,25 +191,6 @@ export class DesignController {
     @Body() body: CreateDesignDto,
   ) {
     return this._designService.createDesign(org.id, user.id, body);
-  }
-
-  @Post('/:id/convert-to-video')
-  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
-  @RequirePermission('media', 'create')
-  async convertToVideo(
-    @GetOrgFromRequest() org: Organization,
-    @GetUserFromRequest() user: User,
-    @Param('id') id: string,
-    @Body() body: ConvertDesignToVideoDto,
-    @Headers('x-idempotency-key') idempotencyKey?: string,
-  ) {
-    return this._designVideoConversionService.convertDesignToVideo(
-      org.id,
-      user.id,
-      id,
-      body.pageDurationMs,
-      idempotencyKey,
-    );
   }
 
   /**
@@ -469,6 +500,9 @@ export class DesignController {
       rows: body.rows,
       nameBase: body.nameBase,
       folderId: body.folderId,
+      sourceDesignId: body.sourceDesignId,
+      sourceTemplateId: body.sourceTemplateId,
+      sourceName: body.sourceName,
     });
   }
 
@@ -684,26 +718,43 @@ export class DesignTemplateController {
   @Get('/')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Maximum number of templates to return (1–100). Values above 100 are capped at 100. Defaults to 24.',
+    schema: { type: 'integer', minimum: 1, maximum: 100, default: 24 },
+  })
   async list(
     @GetOrgFromRequest() org: Organization,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('brandId') brandId?: string,
     @Query('scope') scope?: 'org',
+    @Query('query') query?: string,
+    @Query('sort') sort?: string,
+    @Query('folderId') folderId?: string,
+    @Query('category') category?: string,
+    @GetUserFromRequest() user?: User,
   ) {
-    // No params = the historical plain-array response (older clients and other
-    // callers depend on the shape). Either param present = one bounded page.
+    const options = {
+      query: galleryQuery(query),
+      sort: gallerySort(sort),
+      folderId: folderId === 'none' ? null : folderId?.trim() || undefined,
+      category: galleryQuery(category),
+      userId: user?.id,
+    };
+    // No pagination params retains the historical plain-array response.
     if (page === undefined && limit === undefined) {
-      return this._designService.listTemplates(org.id, undefined, undefined, brandId, scope);
+      return this._designService.listTemplates(org.id, undefined, undefined, brandId, scope, options);
     }
-    const pageNum = Number(page);
-    const limitNum = Number(limit);
-    const safePage = Number.isFinite(pageNum) && pageNum >= 1 ? Math.floor(pageNum) : 1;
-    const safeLimit =
-      Number.isFinite(limitNum) && limitNum >= 1
-        ? Math.min(100, Math.floor(limitNum))
-        : 24;
-    return this._designService.listTemplates(org.id, safePage, safeLimit, brandId, scope);
+    return this._designService.listTemplates(
+      org.id,
+      galleryPage(page),
+      galleryLimit(limit),
+      brandId,
+      scope,
+      options,
+    );
   }
 
   @Get('/:id')

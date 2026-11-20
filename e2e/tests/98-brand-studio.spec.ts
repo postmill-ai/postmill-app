@@ -18,12 +18,34 @@ const brands = [
   },
 ];
 
+const LONG_TEMPLATE_NAME = 'A very long seasonal launch template name whose complete accessible label must survive visual truncation';
+
+const templateFixtures = [
+  { id: 'template-b', name: 'B template', category: 'Brand', isSystem: false, brandProfileId: 'brand-b', doc: { mode: 'image' }, thumbnail: PIXEL },
+  { id: 'template-shared', name: 'Shared template', category: 'Social', isSystem: false, brandProfileId: null, doc: { mode: 'image' }, thumbnail: PIXEL },
+  { id: 'template-long', name: LONG_TEMPLATE_NAME, category: 'Campaign', isSystem: false, brandProfileId: null, doc: { mode: 'image' }, thumbnail: null },
+  { id: 'template-video', name: 'Video launch template', category: 'Video', isSystem: false, brandProfileId: null, doc: { mode: 'video' }, thumbnail: PIXEL },
+  { id: 'template-duplicate-a', name: 'Duplicate display name', category: 'Social', isSystem: false, brandProfileId: null, doc: { mode: 'image' }, thumbnail: PIXEL },
+  { id: 'template-duplicate-b', name: 'Duplicate display name', category: 'Social', isSystem: false, brandProfileId: null, doc: { mode: 'image' }, thumbnail: PIXEL },
+  ...Array.from({ length: 19 }, (_, index) => ({
+    id: `template-org-${index + 1}`,
+    name: `Org template ${String(index + 1).padStart(2, '0')}`,
+    category: index % 2 ? 'Social' : 'Marketing',
+    isSystem: false,
+    brandProfileId: null,
+    doc: { mode: 'image' },
+    thumbnail: PIXEL,
+  })),
+  { id: 'template-system', name: 'System template', category: 'System', isSystem: true, brandProfileId: null, doc: { mode: 'image' }, thumbnail: PIXEL },
+];
+
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
   const state = {
     brands: structuredClone(brands),
+    templates: structuredClone(templateFixtures),
     ragEnabled: false,
     ragGlobalEnabled: true,
     platformSettingsRequests: 0,
@@ -50,6 +72,8 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
     const brandId = url.searchParams.get('brandId');
 
     if (url.hostname.endsWith('.ingest.us.sentry.io')) return json(route, {});
+    if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ status: 200, contentType: 'text/css', body: '' });
+    if (url.hostname === 'fonts.gstatic.com') return route.fulfill({ status: 204 });
     if (url.hostname === 'www.gravatar.com') return route.fulfill({ status: 204 });
     if (method === 'GET' && pathname === '/user/self') {
       return json(route, {
@@ -85,7 +109,29 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
       const patch = request.postDataJSON() as Record<string, unknown>;
       const index = state.brands.findIndex((brand) => brand.id === id);
       if (index < 0) return json(route, { message: 'Brand not found' }, 404);
-      state.brands[index] = { ...state.brands[index], ...patch };
+      const normalized = { ...patch } as any;
+      if (Array.isArray(patch.palette)) {
+        normalized.palette = [];
+        normalized.colorRoles = [];
+        for (const entry of patch.palette as Array<string | { hex?: string; role?: string }>) {
+          const hex = typeof entry === 'string' ? entry : entry.hex;
+          if (!hex) continue;
+          const index = normalized.palette.length;
+          normalized.palette.push(hex);
+          if (typeof entry === 'object' && entry.role) normalized.colorRoles.push({ index, hex, role: entry.role });
+        }
+      }
+      if (Array.isArray(patch.logoFileIds)) {
+        normalized.logoFileIds = [];
+        normalized.logoRoles = [];
+        for (const entry of patch.logoFileIds as Array<string | { fileId?: string; role?: string }>) {
+          const fileId = typeof entry === 'string' ? entry : entry.fileId;
+          if (!fileId) continue;
+          normalized.logoFileIds.push(fileId);
+          if (typeof entry === 'object' && entry.role) normalized.logoRoles.push({ fileId, role: entry.role });
+        }
+      }
+      state.brands[index] = { ...state.brands[index], ...normalized };
       return json(route, state.brands[index]);
     }
     if (method === 'POST' && pathname === '/brands') {
@@ -181,11 +227,34 @@ async function installMocks(page: Page, role: 'editor' | 'member' = 'editor') {
     }
     if (method === 'GET' && pathname === '/media/design-templates') {
       state.templateRequests.push(`${pathname}${url.search}`);
-      const templates = [
-        { id: 'template-shared', name: 'Shared template', isSystem: false, brandProfileId: null, doc: { mode: 'image' } },
-        { id: 'template-b', name: 'B template', isSystem: false, brandProfileId: 'brand-b', doc: { mode: 'image' } },
-      ].sort((a, b) => Number(b.brandProfileId === brandId) - Number(a.brandProfileId === brandId));
-      return json(route, { templates, total: 2, page: 1, limit: 100 });
+      const query = (url.searchParams.get('query') || '').trim().toLowerCase();
+      const scoped = state.templates.filter((template) =>
+        (url.searchParams.get('scope') === 'org' ? !template.isSystem : true) &&
+        (!query || template.name.toLowerCase().includes(query) || template.category.toLowerCase().includes(query)),
+      );
+      const ordered = [...scoped].sort((a, b) =>
+        Number(b.brandProfileId === brandId) - Number(a.brandProfileId === brandId) ||
+        Number(b.isSystem) - Number(a.isSystem) ||
+        a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
+      );
+      if (!url.searchParams.has('page') && !url.searchParams.has('limit')) return json(route, ordered);
+      const pageNumber = Math.max(1, Number(url.searchParams.get('page')) || 1);
+      const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 24));
+      const start = (pageNumber - 1) * limit;
+      return json(route, {
+        templates: ordered.slice(start, start + limit),
+        total: ordered.length,
+        page: pageNumber,
+        limit,
+      });
+    }
+    if (method === 'PUT' && /^\/media\/design-templates\/[^/]+$/.test(pathname)) {
+      const id = decodeURIComponent(pathname.split('/').pop() || '');
+      const index = state.templates.findIndex((template) => template.id === id && !template.isSystem);
+      if (index < 0) return json(route, { message: 'Template not found' }, 404);
+      const body = request.postDataJSON() as { brandProfileId?: string | null };
+      state.templates[index] = { ...state.templates[index], brandProfileId: body.brandProfileId ?? null };
+      return json(route, state.templates[index]);
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}`) {
       return json(route, { id: DESIGN_ID, name: 'Brand workflow', doc: state.doc });
@@ -304,6 +373,93 @@ test('editor uses two Brand Kits, Knowledge, and persistent Designer modes', asy
   expect(state.platformSettingsRequests).toBe(0);
 });
 
+test('Brand Kit deep links and visual roles survive save, reload, and mobile navigation', async ({ page }) => {
+  const state = await installMocks(page);
+  Object.assign(state.brands.find((brand) => brand.id === 'brand-a')!, {
+    palette: ['#111111', '#222222'],
+    colorRoles: [{ index: 0, hex: '#111111', role: 'primary' }],
+    logoFileIds: ['logo-a', 'logo-b'],
+    logoRoles: [{ fileId: 'logo-a', role: 'main' }],
+    fontFamilies: ['Legacy Sans'],
+  });
+
+  await page.goto('/brands/brand-a/kit#fonts');
+  await expect(page.getByRole('button', { name: 'Remove Legacy Sans', exact: true })).toBeVisible();
+  await expect(page.getByText('B Custom', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Search and add a font…', exact: true }).click();
+  await page.getByPlaceholder('Search fonts...').fill('Inter');
+  await page.getByRole('button', { name: 'Inter', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Remove Inter', exact: true })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Colors', exact: true }).first().click();
+  await page.getByRole('combobox', { name: 'Colour role for #222222', exact: true }).selectOption('background');
+  await expect(page.getByRole('status')).toHaveText('Unsaved changes');
+  await page.getByRole('link', { name: 'Logos', exact: true }).first().click();
+  await page.getByRole('combobox', { name: 'Logo role for logo-b.png', exact: true }).selectOption('icon');
+  await expect(page.getByText('Icon', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('All changes saved');
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: 'Colour role for #222222', exact: true })).toHaveValue('background');
+  await expect(page.getByRole('combobox', { name: 'Logo role for logo-b.png', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Icon', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove Inter', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove Legacy Sans', exact: true })).toBeVisible();
+  await expect(page.getByText('B Custom', { exact: true })).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.getByRole('combobox', { name: 'Colour role for #111111', exact: true }).selectOption('text');
+  await page.getByRole('button', { name: 'More Brand Kit sections', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Templates', exact: true }).click();
+  await expect(page).toHaveURL(/#templates$/);
+  await page.getByRole('link', { name: 'Colors', exact: true }).first().click();
+  await expect(page.getByRole('combobox', { name: 'Colour role for #111111', exact: true })).toHaveValue('text');
+  await expect(page.getByRole('status')).toHaveText('Unsaved changes');
+});
+
+test('editor searches and assigns a paged visual template browser without duplicate ids', async ({ page }) => {
+  const state = await installMocks(page);
+  const orgTemplateCount = templateFixtures.filter((template) => !template.isSystem).length;
+
+  await page.goto('/brands/brand-b/kit');
+  const cards = page.locator('[data-template-id]');
+  await expect(cards).toHaveCount(24);
+  await expect(page.getByRole('img', { name: 'B template preview', exact: true })).toBeVisible();
+  await expect(page.locator('[data-template-id="template-system"]')).toHaveCount(0);
+
+  await page.getByRole('textbox', { name: 'Search templates' }).fill('video launch');
+  await expect(cards).toHaveCount(1);
+  await expect(page.getByRole('img', { name: 'Video launch template preview', exact: true })).toBeVisible();
+  await expect(page.locator('[data-template-id="template-video"] span').filter({ hasText: /^Video$/i }).first()).toBeVisible();
+
+  await page.getByRole('textbox', { name: 'Search templates' }).fill('');
+  await expect(cards).toHaveCount(24);
+  await page.getByRole('button', { name: 'Load more', exact: true }).click();
+  await expect(cards).toHaveCount(orgTemplateCount);
+  const ids = await cards.evaluateAll((elements) => elements.map((element) => element.getAttribute('data-template-id')));
+  expect(new Set(ids).size).toBe(orgTemplateCount);
+  await expect(page.getByText('Duplicate display name', { exact: true })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: `Assign ${LONG_TEMPLATE_NAME}`, exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Assign Shared template', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Unassign Shared template', exact: true })).toBeVisible();
+  await expect(page.locator('[data-template-id="template-shared"]')).toHaveCount(1);
+  await expect(page.getByRole('list', { name: 'Assigned to this brand' }).locator('[data-template-id="template-shared"]')).toHaveCount(1);
+  await expect(page.getByRole('list', { name: 'Available templates' }).locator('[data-template-id="template-shared"]')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Unassign Shared template', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Assign Shared template', exact: true })).toBeVisible();
+  await expect(page.locator('[data-template-id="template-shared"]')).toHaveCount(1);
+  await expect(page.getByRole('list', { name: 'Assigned to this brand' }).locator('[data-template-id="template-shared"]')).toHaveCount(0);
+
+  for (const request of state.templateRequests) {
+    const url = new URL(request, 'https://app.postmill.ai');
+    expect(url.searchParams.get('limit')).toBe('24');
+    expect(Number(url.searchParams.get('page'))).toBeGreaterThanOrEqual(1);
+  }
+});
+
 test('member can read Brand Kits and Knowledge but cannot mutate them', async ({ page }) => {
   const state = await installMocks(page, 'member');
 
@@ -317,6 +473,8 @@ test('member can read Brand Kits and Knowledge but cannot mutate them', async ({
   await expect(page.getByRole('button', { name: 'Add logo', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '+ Upload font (.ttf, .otf, .woff2)', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Assign / })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Unassign / })).toHaveCount(0);
 
   await page.goto('/brands/brand-a/knowledge');
   await expect(page.getByRole('button', { name: 'Enable Knowledge', exact: true })).toBeDisabled();

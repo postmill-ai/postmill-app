@@ -214,7 +214,10 @@ describe('seedVideoOutput', () => {
         ],
       },
       { id: 't2', type: 'audio', clips: [clip({ id: 'm', startMs: 0, endMs: 9000 })] },
-    ], { markers: [{ id: 'mk1', tMs: 2000, name: 'Beat' }] });
+    ], {
+      markers: [{ id: 'mk1', tMs: 2000, name: 'Beat' }],
+      bg: { type: 'color', color: '#123456' },
+    });
 
     let n = 0;
     const { output: seeded, sourceTracks } = seedVideoOutput(
@@ -234,6 +237,7 @@ describe('seedVideoOutput', () => {
     // Timing + playback semantics copy unchanged.
     expect(seeded.fps).toBe(30);
     expect(seeded.durationMs).toBe(10000);
+    expect(seeded.bg).toEqual({ type: 'color', color: '#123456' });
     expect(seeded.tracks[0].clips[0]).toMatchObject({ startMs: 0, endMs: 5000, trimInMs: 250 });
     expect(seeded.tracks[1].clips[0]).toMatchObject({ startMs: 0, endMs: 9000 });
 

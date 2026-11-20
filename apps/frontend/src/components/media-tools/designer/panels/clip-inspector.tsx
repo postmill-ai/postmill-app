@@ -11,9 +11,9 @@ import {
   AlignRightIcon,
 } from '@postmill-ai/frontend/components/ui/icons';
 import type { VideoClip } from '../designer.store';
-import { TEXT_ANIMATION_PRESETS, ANIMATION_TRACK_TYPES, buildTextAnimationUpdate, matchTextAnimationPreset } from '../text-animation-presets';
+import { TEXT_ANIMATION_PRESETS, ANIMATION_TRACK_TYPES, buildTextAnimationUpdate, clearTextAnimationCategory, matchTextAnimationPresets } from '../text-animation-presets';
 import { GraphEditor, GRAPH_PROPS } from '../graph-editor';
-import { PROP_DOT_COLORS } from '../keyframe-props';
+import { keyframeIdentityMatches, PROP_DOT_COLORS, type ClipKeyframe } from '../keyframe-props';
 import { SmartFilterList } from './smart-filter-list';
 import { analyseBeats } from '../beat-sync';
 import { estimateBpm } from '@postmill-ai/nestjs-libraries/media/designer-doc/beat-detect';
@@ -28,7 +28,6 @@ import {
   MAX_MOTION_BLUR_SAMPLES,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/motion-blur';
 import type { EaseType } from '../video-preview';
-import type { KeyframeEase } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
 import { NATIVE_BLEND_ORDER } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
 import {
   clipTimeForSourceTime,
@@ -94,12 +93,7 @@ interface ClipInspectorProps {
 
 const PRESET_STEPS: number[] = [0.25, 0.5, 1, 2, 4];
 
-interface KeyframeLike {
-  tMs: number;
-  props: Record<string, number>;
-  /** A preset name, or the graph editor's bezier handles. */
-  ease?: KeyframeEase;
-}
+type KeyframeLike = ClipKeyframe;
 
 /** The preset dropdown offers only the four names; handles come from the graph. */
 type EasePresetName = 'linear' | 'easeInOut' | 'easeIn' | 'easeOut';
@@ -129,15 +123,18 @@ const CLIP_BLEND_LABELS: Record<string, string> = {
 function useKeyframeDrag(
   containerRef: React.RefObject<HTMLDivElement | null>,
   totalMs: number,
-  onMove: (oldTMs: number, newTMs: number) => void,
+  onMove: (frame: KeyframeLike, newTMs: number) => void,
   // Continuous moves write silently; this fires once when the gesture ends so
   // a drag lands as a single history entry.
   onCommit?: () => void,
 ) {
-  const [dragging, setDragging] = useState<{ oldTMs: number; startX: number } | null>(null);
-  // The dragged keyframe's tMs changes after each move, so match on its CURRENT
-  // tMs (not the fixed mousedown value) or it moves one tick then freezes.
-  const currentTMsRef = useRef(0);
+  const [dragging, setDragging] = useState<{ frame: KeyframeLike; startX: number } | null>(null);
+  // Preserve preset identity while the dragged frame's timestamp changes.
+  const currentFrameRef = useRef<KeyframeLike>({ tMs: 0, props: {} });
+  const onMoveRef = useRef(onMove);
+  useEffect(() => {
+    onMoveRef.current = onMove;
+  }, [onMove]);
   const movedRef = useRef(false);
   // True for the trailing `click` a browser fires after a drag, so marker
   // remove / timeline add handlers can ignore it.
@@ -145,7 +142,7 @@ function useKeyframeDrag(
 
   useEffect(() => {
     if (!dragging) return;
-    currentTMsRef.current = dragging.oldTMs;
+    currentFrameRef.current = dragging.frame;
     movedRef.current = false;
     const handleMove = (e: MouseEvent) => {
       if (!containerRef.current) return;
@@ -153,9 +150,9 @@ function useKeyframeDrag(
       const dx = e.clientX - dragging.startX;
       if (Math.abs(dx) > 2) movedRef.current = true;
       const dMs = (dx / rect.width) * totalMs;
-      const clamped = Math.max(0, Math.min(totalMs, dragging.oldTMs + dMs));
-      onMove(currentTMsRef.current, clamped);
-      currentTMsRef.current = clamped;
+      const clamped = Math.max(0, Math.min(totalMs, dragging.frame.tMs + dMs));
+      onMoveRef.current(currentFrameRef.current, clamped);
+      currentFrameRef.current = { ...currentFrameRef.current, tMs: clamped };
     };
     const handleUp = () => {
       if (movedRef.current) {
@@ -180,7 +177,7 @@ function useKeyframeDrag(
       window.removeEventListener('pointercancel', handleUp);
       window.removeEventListener('blur', handleUp);
     };
-  }, [dragging, totalMs, onMove, onCommit, containerRef]);
+  }, [dragging, totalMs, onCommit, containerRef]);
 
   return { setDragging, justDraggedRef };
 }
@@ -189,8 +186,8 @@ const MiniKeyframeTimeline: FC<{
   keyframes: KeyframeLike[];
   totalMs: number;
   onAdd: (prop: string, tMs: number) => void;
-  onMove: (oldTMs: number, newTMs: number) => void;
-  onRemove: (tMs: number) => void;
+  onMove: (frame: KeyframeLike, newTMs: number) => void;
+  onRemove: (frame: KeyframeLike) => void;
   /** Fired when a continuous move gesture ends, and after each keyboard move. */
   onCommit: () => void;
 }> = ({ keyframes, totalMs, onAdd, onMove, onRemove, onCommit }) => {
@@ -229,9 +226,9 @@ const MiniKeyframeTimeline: FC<{
         }
       }}
     >
-      {keyframes.map((kf) => (
+      {keyframes.map((kf, frameIndex) => (
         <div
-          key={`${kf.tMs}-${Object.keys(kf.props).sort().join('-')}`}
+          key={`${kf.tMs}-${frameIndex}-${Object.keys(kf.props).sort().join('-')}`}
           role="button"
           tabIndex={0}
           aria-label={t('designer_keyframe_at_ms', 'Keyframe at {{ms}}ms', { ms: Math.round(kf.tMs) })}
@@ -240,18 +237,18 @@ const MiniKeyframeTimeline: FC<{
           title={t('designer_keyframe_at_ms', 'Keyframe at {{ms}}ms', { ms: kf.tMs })}
           onMouseDown={(e) => {
             e.stopPropagation();
-            setDragging({ oldTMs: kf.tMs, startX: e.clientX });
+            setDragging({ frame: kf, startX: e.clientX });
           }}
           onKeyDown={(e) => {
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
               e.preventDefault();
               const step = Math.max(1, Math.round(totalMs * 0.01));
               const delta = e.key === 'ArrowLeft' ? -step : step;
-              onMove(kf.tMs, Math.max(0, Math.min(totalMs, kf.tMs + delta)));
+              onMove(kf, Math.max(0, Math.min(totalMs, kf.tMs + delta)));
               onCommit();
             } else if (e.key === 'Enter') {
               e.preventDefault();
-              onRemove(kf.tMs);
+              onRemove(kf);
             }
           }}
         />
@@ -260,10 +257,10 @@ const MiniKeyframeTimeline: FC<{
           coloured by property. Click jumps to that property's row below.
           tabIndex -1: the bars above stay the keyboard path; the dots are a
           pointer convenience, or the tab order would gain 7 stops per frame. */}
-      {keyframes.flatMap((kf) =>
+      {keyframes.flatMap((kf, frameIndex) =>
         GRAPH_PROPS.filter((p) => kf.props[p] !== undefined).map((p) => (
           <button
-            key={`dot-${kf.tMs}-${p}`}
+            key={`dot-${frameIndex}-${p}`}
             type="button"
             tabIndex={-1}
             aria-label={t('designer_jump_to_prop_keyframes', 'Jump to {{prop}} keyframes', { prop: p })}
@@ -295,9 +292,9 @@ const KeyframePropRow: FC<{
   keyframes: KeyframeLike[];
   totalMs: number;
   onAdd: (prop: string, tMs: number) => void;
-  onMove: (oldTMs: number, newTMs: number) => void;
-  onRemove: (tMs: number, prop?: string) => void;
-  onEase: (tMs: number, ease: EasePresetName) => void;
+  onMove: (frame: KeyframeLike, newTMs: number) => void;
+  onRemove: (frame: KeyframeLike, prop?: string) => void;
+  onEase: (frame: KeyframeLike, ease: EasePresetName) => void;
   onCommit: () => void;
 }> = ({ prop, clip, keyframes, totalMs, onAdd, onMove, onRemove, onEase, onCommit }) => {
   const t = useT();
@@ -353,9 +350,9 @@ const KeyframePropRow: FC<{
           }
         }}
       >
-        {propKeyframes.map((kf) => (
+        {propKeyframes.map((kf, frameIndex) => (
           <div
-            key={kf.tMs}
+            key={`${kf.tMs}-${frameIndex}`}
             role="button"
             tabIndex={0}
             aria-label={t('designer_prop_keyframe_at_ms', '{{prop}} keyframe at {{ms}}ms', { prop, ms: Math.round(kf.tMs) })}
@@ -364,23 +361,23 @@ const KeyframePropRow: FC<{
             title={t('designer_prop_keyframe_value_at', '{{prop}}: {{value}} at {{ms}}ms', { prop, value: kf.props[prop], ms: kf.tMs })}
             onMouseDown={(e) => {
               e.stopPropagation();
-              setDragging({ oldTMs: kf.tMs, startX: e.clientX });
+              setDragging({ frame: kf, startX: e.clientX });
             }}
             onClick={(e) => {
               e.stopPropagation();
               if (justDraggedRef.current) return; // a drag ends in a click — don't delete
-              onRemove(kf.tMs, prop);
+              onRemove(kf, prop);
             }}
             onKeyDown={(e) => {
               if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
                 e.preventDefault();
                 const step = Math.max(1, Math.round(totalMs * 0.01));
                 const delta = e.key === 'ArrowLeft' ? -step : step;
-                onMove(kf.tMs, Math.max(0, Math.min(totalMs, kf.tMs + delta)));
+                onMove(kf, Math.max(0, Math.min(totalMs, kf.tMs + delta)));
                 onCommit();
               } else if (e.key === 'Enter') {
                 e.preventDefault();
-                onRemove(kf.tMs, prop);
+                onRemove(kf, prop);
               }
             }}
           />
@@ -388,12 +385,12 @@ const KeyframePropRow: FC<{
       </div>
       {propKeyframes.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {propKeyframes.map((kf) => (
+          {propKeyframes.map((kf, frameIndex) => (
             <select
-              key={kf.tMs}
+              key={`${kf.tMs}-${frameIndex}`}
               // Handles have no name; the dropdown says Custom until reset.
               value={typeof kf.ease === 'string' ? kf.ease : 'custom'}
-              onChange={(e) => onEase(kf.tMs, e.target.value as EasePresetName)}
+              onChange={(e) => onEase(kf, e.target.value as EasePresetName)}
               className="h-5 px-1 rounded-sm text-[9px] bg-newBgColor border border-studioBorder text-textColor outline-hidden"
             >
               {typeof kf.ease === 'object' && (
@@ -640,9 +637,23 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         : prop === 'volume' ? (clip.volume ?? 1)
         : 0;
 
-      const idx = existing.findIndex((kf) => kf.tMs === tMs);
+      const atTime = existing.filter((kf) => kf.tMs === tMs);
+      const owning = atTime.filter((kf) => kf.props[prop] !== undefined);
+      const manualOwning = owning.filter((kf) => !kf.animationPreset);
+      const manual = atTime.filter((kf) => !kf.animationPreset);
+      const target = manualOwning.length === 1
+        ? manualOwning[0]
+        : owning.length === 1
+          ? owning[0]
+          : !owning.length && manual.length === 1
+            ? manual[0]
+            : undefined;
+      const idx = target ? existing.indexOf(target) : -1;
       if (idx >= 0) {
-        existing[idx] = { tMs, props: { ...existing[idx].props, [prop]: currentVal } };
+        existing[idx] = {
+          ...existing[idx],
+          props: { ...existing[idx].props, [prop]: currentVal },
+        };
       } else {
         existing.push({ tMs, props: { [prop]: currentVal } });
       }
@@ -652,31 +663,24 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   );
 
   const handleRemoveKeyframe = useCallback(
-    (tMs: number, prop?: string) => {
-      const existing = keyframes
-        .map((kf) => {
-          if (kf.tMs === tMs) {
-            if (prop) {
-              const next = { ...kf.props };
-              delete next[prop];
-              if (Object.keys(next).length === 0) return null;
-              return { tMs: kf.tMs, props: next };
-            }
-            return null;
-          }
-          return kf;
-        })
-        .filter(Boolean) as { tMs: number; props: Record<string, number> }[];
+    (target: KeyframeLike, prop?: string) => {
+      const existing = keyframes.flatMap((kf) => {
+        if (!keyframeIdentityMatches(kf, target)) return [kf];
+        if (!prop) return [];
+        const props = { ...kf.props };
+        delete props[prop];
+        return Object.keys(props).length ? [{ ...kf, props }] : [];
+      });
       updateClip({ keyframes: existing });
     },
     [keyframes, updateClip],
   );
 
   const handleMoveKeyframe = useCallback(
-    (oldTMs: number, newTMs: number) => {
+    (target: KeyframeLike, newTMs: number) => {
       const clamped = Math.max(0, Math.min(totalMs, newTMs));
       const existing = keyframes.map((kf) =>
-        kf.tMs === oldTMs ? { ...kf, tMs: clamped } : kf
+        keyframeIdentityMatches(kf, target) ? { ...kf, tMs: clamped } : kf
       );
       // Drags call this per mousemove — silent; the gesture's onCommit pushes.
       updateClipSilent({ keyframes: existing });
@@ -685,9 +689,9 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   );
 
   const handleSetEase = useCallback(
-    (tMs: number, ease: EaseType) => {
+    (target: KeyframeLike, ease: EaseType) => {
       const existing = keyframes.map((kf) =>
-        kf.tMs === tMs ? { ...kf, ease } : kf
+        keyframeIdentityMatches(kf, target) ? { ...kf, ease } : kf
       );
       updateClip({ keyframes: existing });
     },
@@ -741,6 +745,17 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     return Array.from(props);
   }, [keyframes]);
 
+  const activeTextAnimations = useMemo(
+    () =>
+      clip && clipTrackType && ANIMATION_TRACK_TYPES.has(clipTrackType)
+        ? matchTextAnimationPresets(
+            clip,
+            clipTrackType === 'text' || clipTrackType === 'caption'
+          )
+        : {},
+    [clip, clipTrackType]
+  );
+
   const handleApplyTextAnimation = useCallback((presetName: string) => {
     if (!clip || !clipTrackType || !ANIMATION_TRACK_TYPES.has(clipTrackType)) return;
     const preset = TEXT_ANIMATION_PRESETS.find((p) => p.name === presetName);
@@ -748,13 +763,12 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     // Reveal presets animate the text CONTENT — meaningless on a clip with
     // none (the section already hides them there; this is the belt-and-braces).
     if (preset.textReveal && clipTrackType !== 'text') return;
-    // One animation at a time: the builder clears the other channel (reveal ⇄
-    // keyframes) as part of the patch.
-    const update = buildTextAnimationUpdate(
-      preset,
-      clip,
-      clipTrackType === 'text' || clipTrackType === 'caption'
-    );
+    const scaleText = clipTrackType === 'text' || clipTrackType === 'caption';
+    if (activeTextAnimations[preset.category] === preset.name) {
+      updateClip(clearTextAnimationCategory(clip, preset.category, scaleText));
+      return;
+    }
+    const update = buildTextAnimationUpdate(preset, clip, scaleText);
     updateClip(update);
     const clipDuration = clip.endMs - clip.startMs;
     const animWindowMs = preset.category === 'exit'
@@ -772,27 +786,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         detail: { durationMs: Math.min(animWindowMs + 600, 3000) },
       })
     );
-  }, [clip, clipTrackType, updateClip, store]);
-
-  // Which preset the clip's current keyframes match (drives the highlight).
-  const activeTextAnimation = useMemo(
-    () =>
-      clip && clipTrackType && ANIMATION_TRACK_TYPES.has(clipTrackType)
-        ? matchTextAnimationPreset(
-            clip.keyframes,
-            clip.x ?? 0,
-            clip.y ?? 0,
-            clip.rotation ?? 0,
-            clip.textReveal,
-            clip.width ?? 1,
-            clip.height ?? 1,
-            clip.endMs - clip.startMs,
-            clip.fontSize ?? 16,
-            clipTrackType === 'text' || clipTrackType === 'caption'
-          )
-        : null,
-    [clip, clipTrackType]
-  );
+  }, [clip, clipTrackType, updateClip, store, activeTextAnimations]);
 
   // --- AI background removal (video clips) ---------------------------------
   // Same runClipTransform request/poll/land path the timeline clip context
@@ -1798,7 +1792,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
                   (preset) => preset.category === category &&
                     (!preset.textReveal || clipTrackType === 'text')
                 ).map((preset) => {
-                  const active = activeTextAnimation === preset.name;
+                  const active = activeTextAnimations[category] === preset.name;
                   return (
                     <button
                       key={preset.name}

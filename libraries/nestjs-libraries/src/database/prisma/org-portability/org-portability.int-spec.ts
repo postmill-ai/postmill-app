@@ -205,7 +205,7 @@ describe('organization portability across two deployments', () => {
           ],
         },
       });
-      await source.design.create({
+      const sourceDesign = await source.design.create({
         data: {
           organizationId: sourceOrg.id,
           createdById: formerMember.id,
@@ -219,6 +219,20 @@ describe('organization portability across two deployments', () => {
                 { id: 'missing', fileId: missingFile.id, src: missingAsset },
               ],
             }],
+          },
+        },
+      });
+      const sourceShare = await source.designShare.create({
+        data: {
+          organizationId: sourceOrg.id,
+          designId: sourceDesign.id,
+          token: 'source-design-share-token',
+          expiresAt: new Date('2027-01-01T00:00:00.000Z'),
+          commentsEnabled: true,
+          approvedAt: new Date('2026-11-18T00:00:00.000Z'),
+          approvedBy: 'Portable Client',
+          comments: {
+            create: { organizationId: sourceOrg.id, authorName: 'Portable Client', content: 'Portable feedback' },
           },
         },
       });
@@ -369,6 +383,16 @@ describe('organization portability across two deployments', () => {
       expect(importedDesign.createdById).toBe(destinationOwner.id);
       expect(importedDesign.doc.outputs[0].children[0]).toMatchObject({ fileId: importedFile.id, src: importedFile.path });
       expect(importedDesign.doc.outputs[0].children[1]).toMatchObject({ fileId: null, src: null });
+      const importedShare = await destination.designShare.findFirst({
+        where: { organizationId: destinationOrg.id, designId: importedDesign.id },
+        include: { comments: true },
+      });
+      expect(importedShare.token).not.toBe(sourceShare.token);
+      expect(importedShare.token).toMatch(/^[0-9a-f]{64}$/);
+      expect(importedShare.enabled).toBe(false);
+      expect(importedShare.approvedBy).toBe('Portable Client');
+      expect(importedShare.comments).toHaveLength(1);
+      expect(importedShare.comments[0]).toMatchObject({ authorName: 'Portable Client', content: 'Portable feedback' });
       const importedJob = await destinationRepository.getJob(upload.id);
       expect(importedJob.status).toBe('completed');
       expect(importedJob.archiveKeyCiphertext).toBeNull();

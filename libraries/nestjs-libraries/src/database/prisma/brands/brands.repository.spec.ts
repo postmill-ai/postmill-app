@@ -106,6 +106,22 @@ describe('BrandsRepository — tenant isolation', () => {
         data: { name: 'Updated' },
       });
     });
+    it('passes role-bearing JSON through the org-scoped update', async () => {
+      const { repo, model } = makeRepo();
+      model.aIBrandProfile.findFirst.mockResolvedValue({ id: 'brand-1', organizationId: 'org-1' });
+      model.aIBrandProfile.update.mockResolvedValue({ id: 'brand-1' });
+      const data = {
+        palette: ['#111111', { hex: '#222222', role: 'primary' as const }],
+        logoFileIds: [{ fileId: 'logo-main', role: 'main' as const }],
+      };
+
+      await repo.updateBrand('org-1', 'brand-1', data);
+
+      expect(model.aIBrandProfile.update).toHaveBeenCalledWith({
+        where: { id: 'brand-1', organizationId: 'org-1' },
+        data,
+      });
+    });
   });
 
   describe('deleteBrand', () => {

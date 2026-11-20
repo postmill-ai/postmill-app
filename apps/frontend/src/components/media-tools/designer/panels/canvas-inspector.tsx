@@ -176,13 +176,49 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
 
   if (!out) return null;
   const isVideo = doc.mode === 'video';
-  const bgColor = !isVideo ? (out as DesignerOutput).background || '#ffffff' : '#000000';
+  const bgColor = bg?.type === 'color' && bg.color
+    ? bg.color
+    : isVideo
+      ? '#000000'
+      : (out as DesignerOutput).background || '#ffffff';
 
   const applySize = () => {
     const nw = parseInt(w, 10);
     const nh = parseInt(h, 10);
     if (nw > 0 && nh > 0) store.getState().resizeOutput(currentOutput, nw, nh);
   };
+
+  const colorControls = (
+    <>
+      <div className="grid grid-cols-5 gap-2">
+        {COLOR_PRESETS.map((preset) => (
+          <button
+            key={preset.color}
+            onClick={() => setColor(preset.color)}
+            title={t(preset.labelKey, preset.label)}
+            aria-label={t(preset.labelKey, preset.label)}
+            className={`w-full aspect-square rounded-lg border-2 transition-all ${
+              bgColor === preset.color
+                ? 'border-designerAccent ring-1 ring-designerAccent'
+                : 'border-studioBorder hover:border-designerAccent'
+            }`}
+          >
+            <div
+              className="w-full h-full rounded-[5px]"
+              style={{ backgroundColor: preset.color }}
+            />
+          </button>
+        ))}
+      </div>
+      <ColorSwatch
+        label={t('custom_color', 'Custom color')}
+        value={/^#[0-9a-fA-F]{6}$/.test(bgColor) ? bgColor : isVideo ? '#000000' : '#ffffff'}
+        onChange={setColor}
+        brandColors={brandColors}
+        brandEnforcement={brandEnforcement}
+      />
+    </>
+  );
 
   return (
     <div className="space-y-4">
@@ -237,37 +273,7 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
             onChange={(v) => setBgMode(v as BgMode)}
           />
 
-          {bgMode === 'color' && (
-            <>
-              <div className="grid grid-cols-5 gap-2">
-                {COLOR_PRESETS.map((preset) => (
-                  <button
-                    key={preset.color}
-                    onClick={() => setColor(preset.color)}
-                    title={t(preset.labelKey, preset.label)}
-                    aria-label={t(preset.labelKey, preset.label)}
-                    className={`w-full aspect-square rounded-lg border-2 transition-all ${
-                      bgColor === preset.color
-                        ? 'border-designerAccent ring-1 ring-designerAccent'
-                        : 'border-studioBorder hover:border-designerAccent'
-                    }`}
-                  >
-                    <div
-                      className="w-full h-full rounded-[5px]"
-                      style={{ backgroundColor: preset.color }}
-                    />
-                  </button>
-                ))}
-              </div>
-              <ColorSwatch
-                label={t('custom_color', 'Custom color')}
-                value={/^#[0-9a-fA-F]{6}$/.test(bgColor) ? bgColor : '#ffffff'}
-                onChange={setColor}
-                brandColors={brandColors}
-                brandEnforcement={brandEnforcement}
-              />
-            </>
-          )}
+          {bgMode === 'color' && colorControls}
 
           {bgMode === 'gradient' && (
             <div className="flex flex-col gap-3">
@@ -473,6 +479,13 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
             )}
           </div>
           {imagePicker.element}
+        </div>
+      )}
+
+      {isVideo && (
+        <div className="space-y-2">
+          <div className="text-[11px] text-textColor/50">{t('designer_label_background', 'Background')}</div>
+          {colorControls}
         </div>
       )}
 

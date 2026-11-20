@@ -50,8 +50,10 @@ Before chatting, you configure the brief:
 - **Save to folder** — an optional destination folder in `/files`.
 - **Brand profile** — apply an existing brand's voice/visual guidelines. The brand palette (and any
   hex colors you name in the prompt) are applied as fixed plan colors without swapping which color
-  is used for backgrounds, text, or accents. The brand's first logo fills any logo slot the plan
-  declares, placed as the original file rather than regenerated.
+  is used for backgrounds, text, or accents. Optional Primary, Accent, Background, and Text labels
+  guide the planner's use of those colors; multiple colors may share a role as ordered candidates,
+  unlabeled colors remain available, and a pinned style keeps its palette. The brand's first logo fills any logo slot the plan declares, placed as the
+  original file rather than regenerated. Main/Icon/Dark logo labels do not change that fallback.
 - **Style** — a style preset, or **Let AI decide**.
 - **Variants** — how many design variants to generate.
 - **Reference images** — pick existing files or import stock media as visual references. Choose

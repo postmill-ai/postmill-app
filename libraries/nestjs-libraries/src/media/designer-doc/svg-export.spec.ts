@@ -244,6 +244,12 @@ describe('what SVG cannot carry', () => {
     expect(isVectorExportable(el({ smartFilters: [{ id: 'gaussian-blur' }] }))).toBe(false);
   });
 
+  it('rasterizes ordinary filter presets instead of dropping their pixels', () => {
+    const filtered = el({ type: 'image', filters: ['sepia', 'contrast:1.2'] });
+    expect(isVectorExportable(filtered)).toBe(false);
+    expect(layersNeedingRaster(output([filtered]))).toEqual([filtered.id]);
+  });
+
   it('names exactly those layers for the caller to rasterize', () => {
     const out = output([
       el({ id: 'plain' }),

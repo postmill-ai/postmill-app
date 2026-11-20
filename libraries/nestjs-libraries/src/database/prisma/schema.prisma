@@ -75,9 +75,13 @@ model Organization {
   apiKeys              ApiKey[]
   roles                AppRole[]
   designs              Design[]
+  designBatches        DesignBatch[]
   designVersions       DesignVersion[]
+  designShares         DesignShare[]
+  designShareComments  DesignShareComment[]
   designTemplates      DesignTemplate[]
   designTemplateFolders DesignTemplateFolder[]
+  designerRecentOpens  DesignerRecentOpen[]
   aiDesignerSessions   AiDesignerSession[]
   commsProviderConfigs CommsProviderConfig[]
   commsUserLinks       CommsUserLink[]
@@ -145,7 +149,9 @@ model User {
   profile               UserProfile?
   sessions              Session[]
   designs               Design[]
+  designBatches         DesignBatch[]
   designVersions        DesignVersion[]
+  designerRecentOpens   DesignerRecentOpen[]
   notificationReads     NotificationRead[]
   notificationPreference NotificationPreference?
   notificationDigestQueues NotificationDigestQueue[]
@@ -1845,6 +1851,7 @@ model Design {
   previewFileId   String?
   createdById     String
   campaignId      String?
+  batchId         String?
   deletedAt       DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -1853,12 +1860,37 @@ model Design {
   createdBy       User          @relation(fields: [createdById], references: [id])
   campaign        Campaign?     @relation(fields: [campaignId], references: [id])
   previewFile     File?         @relation(fields: [previewFileId], references: [id])
+  batch           DesignBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
   versions        DesignVersion[]
+  recentOpens     DesignerRecentOpen[]
+  share           DesignShare?
 
   @@index([organizationId])
   @@index([createdById])
   @@index([campaignId])
+  @@index([batchId])
   @@index([deletedAt])
+}
+
+// A persisted Bulk Create group. Source ids are validated org-scoped references;
+// they remain optional because drafts and imported documents have no saved source.
+model DesignBatch {
+  id               String   @id @default(cuid())
+  organizationId   String
+  createdById      String
+  name             String
+  jobId            String   @unique
+  sourceDesignId   String?
+  sourceTemplateId String?
+  sourceName       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation(fields: [createdById], references: [id])
+  designs      Design[]
+
+  @@index([organizationId, updatedAt])
 }
 
 // Named/automatic snapshots of a Design's doc — the Designer's version history.
@@ -1886,6 +1918,44 @@ model DesignVersion {
   @@index([organizationId])
 }
 
+// One revocable client-preview link per design. The token is a capability:
+// management routes require media:update; public routes expose no editable doc.
+model DesignShare {
+  id              String   @id @default(uuid())
+  designId        String   @unique
+  organizationId  String
+  token           String   @unique
+  enabled         Boolean  @default(true)
+  commentsEnabled Boolean  @default(false)
+  expiresAt       DateTime
+  approvedAt      DateTime?
+  approvedBy      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  design          Design       @relation(fields: [designId], references: [id], onDelete: Cascade)
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  comments        DesignShareComment[]
+
+  @@index([organizationId])
+  @@index([expiresAt])
+}
+
+model DesignShareComment {
+  id             String   @id @default(uuid())
+  shareId        String
+  organizationId String
+  authorName     String
+  content        String
+  createdAt      DateTime @default(now())
+
+  share          DesignShare  @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([shareId, createdAt])
+  @@index([organizationId])
+}
+
 // Design templates — system-seeded or org-saved — for the Templates panel
 model DesignTemplate {
   id              String        @id @default(cuid())
@@ -1905,6 +1975,7 @@ model DesignTemplate {
   thumbnailFile   File?         @relation(fields: [thumbnailFileId], references: [id])
   folder          DesignTemplateFolder? @relation(fields: [folderId], references: [id])
   brandProfile    AIBrandProfile? @relation(fields: [brandProfileId], references: [id], onDelete: SetNull)
+  recentOpens     DesignerRecentOpen[]
 
   @@index([organizationId])
   @@index([category])
@@ -1913,9 +1984,32 @@ model DesignTemplate {
   @@index([deletedAt])
 }
 
+// Per-user gallery history. A row points at either a Design or a DesignTemplate;
+// the two nullable compound uniques deduplicate each target type in PostgreSQL.
+model DesignerRecentOpen {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  designId       String?
+  templateId     String?
+  openedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  design       Design?        @relation(fields: [designId], references: [id], onDelete: Cascade)
+  template     DesignTemplate? @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, designId])
+  @@unique([organizationId, userId, templateId])
+  @@index([organizationId, userId, openedAt])
+  @@index([designId])
+  @@index([templateId])
+}
+
 // Org-defined folders for grouping design templates in the Templates panel.
 // Adjacency list, same shape as FileFolder; null DesignTemplate.folderId =
-// unfiled (root). System templates are never foldered.
+// no folder (root). System templates are never foldered.
 model DesignTemplateFolder {
   id             String   @id @default(cuid())
   organizationId String

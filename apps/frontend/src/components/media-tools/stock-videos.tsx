@@ -4,7 +4,7 @@ import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { useDebounce } from 'use-debounce';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { StockPreviewModal } from './stock-preview-modal';
-import { StockVideoItem, stockSourceLabel } from './stock.types';
+import { StockMediaSelection, StockVideoItem, stockSourceLabel } from './stock.types';
 import { useStockSearch } from './use-stock-search';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
@@ -13,19 +13,12 @@ const SUGGESTED_SEARCHES = ['Nature', 'City', 'Technology', 'Ocean', 'Abstract']
 interface StockVideosProps {
   mode?: 'browse' | 'select';
   onSelect?: (item: { url: string; width: number; height: number; thumbnail?: string; type: 'video' }) => void;
-  onSelectFull?: (item: {
-    url: string;
-    width: number;
-    height: number;
-    thumbnail?: string;
-    type: 'video';
-    source?: string;
-    attribution?: Record<string, unknown>;
-    name?: string;
-  }) => void;
+  onSelectFull?: (item: StockMediaSelection) => void;
+  onDragStart?: (item: StockMediaSelection, event: React.DragEvent<HTMLButtonElement>) => void;
+  compact?: boolean;
 }
 
-export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, onSelectFull }) => {
+export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, onSelectFull, onDragStart, compact = false }) => {
   const t = useT();
   const modal = useModals();
   const [query, setQuery] = useState('');
@@ -99,7 +92,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
   return (
     <div className="flex flex-col gap-[15px]">
       {/* Toolbar — always mounted in every state */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-[12px]">
+      <div className={compact ? 'flex flex-col gap-[12px]' : 'flex flex-col sm:flex-row sm:items-center gap-[12px]'}>
         <div className="relative flex-1">
           <svg className="absolute left-[14px] top-1/2 -translate-y-1/2 w-[16px] h-[16px] text-newTextColor/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
@@ -179,7 +172,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
           </button>
         </div>
       ) : initialLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[12px]">
+        <div className={compact ? 'grid grid-cols-2 gap-[10px]' : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[12px]'}>
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner">
               <div className="aspect-video bg-newColColor/20 animate-pulse rounded-[8px]" />
@@ -239,23 +232,23 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
       ) : (
         <>
           {/* Responsive aspect-video grid (F6) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[12px]">
+          <div className={compact ? 'grid grid-cols-2 gap-[10px]' : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[12px]'}>
             {items.map((video) => {
               // Plain container tile; the media area is the single interactive
               // control (a real <button>) so the author-credit <a> below stays a
               // sibling — never nested inside another interactive element.
+              const payload = {
+                url: video.url,
+                width: video.width,
+                height: video.height,
+                thumbnail: video.thumbUrl,
+                type: 'video' as const,
+                source: video.source,
+                attribution: video.attribution,
+                name: video.description || undefined,
+              };
               const activate = () => {
                 if (mode === 'select' && (onSelect || onSelectFull)) {
-                  const payload = {
-                    url: video.url,
-                    width: video.width,
-                    height: video.height,
-                    thumbnail: video.thumbUrl,
-                    type: 'video' as const,
-                    source: video.source,
-                    attribution: video.attribution,
-                    name: video.description || undefined,
-                  };
                   onSelectFull?.(payload);
                   onSelect?.(payload);
                 } else {
@@ -270,6 +263,8 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
                 <button
                   type="button"
                   onClick={activate}
+                  draggable={!!onDragStart}
+                  onDragStart={(event) => onDragStart?.(payload, event)}
                   aria-label={video.description || t('open_preview', 'Open preview')}
                   className="block w-full aspect-video relative overflow-hidden bg-black cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-btnPrimary"
                 >

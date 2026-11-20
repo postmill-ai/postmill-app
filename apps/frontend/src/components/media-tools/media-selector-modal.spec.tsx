@@ -22,37 +22,45 @@ vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
 // The stock tabs and the file browser each pull in large trees; this spec is
 // about the picker's chrome and selection contract, so stand them in.
 vi.mock('./stock-photos', () => ({
-  StockPhotos: ({ onSelectFull }: any) => (
-    <button
-      data-testid="stock-photo"
-      onClick={() =>
-        onSelectFull({
-          url: 'https://stock.example/p.jpg',
-          width: 10,
-          height: 10,
-          type: 'image',
-          name: 'Stock Photo',
-          source: 'unsplash',
-        })
-      }
-    >
-      pick stock
-    </button>
-  ),
+  StockPhotos: ({ onSelectFull, onDragStart }: any) => {
+    const item = {
+      url: 'https://stock.example/p.jpg',
+      width: 10,
+      height: 10,
+      type: 'image',
+      name: 'Stock Photo',
+      source: 'unsplash',
+    };
+    return (
+      <button
+        data-testid="stock-photo"
+        draggable={!!onDragStart}
+        onClick={() => onSelectFull(item)}
+        onDragStart={(event) => onDragStart?.(item, event)}
+      >
+        pick stock
+      </button>
+    );
+  },
 }));
 vi.mock('./stock-videos', () => ({ StockVideos: () => <div /> }));
 vi.mock('./stock-vectors', () => ({ StockVectors: () => <div /> }));
 vi.mock('./stock-stickers', () => ({ StockStickers: () => <div /> }));
 vi.mock('./stock-icons', () => ({ StockIcons: () => <div /> }));
 vi.mock('@postmill-ai/frontend/components/files/file-manager', () => ({
-  FileManager: ({ onSelect }: any) => (
-    <button
-      data-testid="my-file"
-      onClick={() => onSelect([{ id: 'file-1', path: '/uploads/a.png', name: 'a.png', type: 'image/png' }])}
-    >
-      pick file
-    </button>
-  ),
+  FileManager: ({ onSelect, onFileDragStart }: any) => {
+    const file = { id: 'file-1', path: '/uploads/a.png', name: 'a.png', type: 'image/png' };
+    return (
+      <button
+        data-testid="my-file"
+        draggable={!!onFileDragStart}
+        onClick={() => onSelect([file])}
+        onDragStart={(event) => onFileDragStart?.(file, event)}
+      >
+        pick file
+      </button>
+    );
+  },
 }));
 
 import { MediaSelectorModal } from './media-selector-modal';
@@ -206,6 +214,81 @@ describe('MediaSelectorModal selection', () => {
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalled());
     expect(onConfirm.mock.calls[0][0]).toHaveLength(1);
+  });
+});
+
+describe('MediaSelectorModal outbound drags', () => {
+  it('routes a File Library drag without selecting and restores the picker on cancel', async () => {
+    const onMediaDragStart = vi.fn();
+    const onSelect = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <MediaSelectorModal
+        open
+        onClose={onClose}
+        onSelect={onSelect}
+        onMediaDragStart={onMediaDragStart}
+      />
+    );
+
+    fireEvent.dragStart(screen.getByTestId('my-file'), {
+      dataTransfer: { effectAllowed: 'copy', dropEffect: 'none' },
+    });
+    const overlay = screen.getByTestId('media-picker').parentElement!;
+    expect(onMediaDragStart).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'file', fileId: 'file-1', type: 'image' }),
+      expect.anything()
+    );
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(overlay.className).not.toContain('pointer-events-none');
+    await waitFor(() => expect(overlay.className).toContain('pointer-events-none'));
+    expect(overlay.className).toContain('opacity-0');
+
+    fireEvent.dragEnd(overlay, { dataTransfer: { dropEffect: 'none' } });
+    expect(overlay.className).not.toContain('pointer-events-none');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('supports stock-photo drags and closes after an accepted copy drop', async () => {
+    const onMediaDragStart = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <MediaSelectorModal
+        open
+        onClose={onClose}
+        tabs={['My Files', 'Stock Photos']}
+        onMediaDragStart={onMediaDragStart}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Photos' }));
+    fireEvent.dragStart(screen.getByTestId('stock-photo'), {
+      dataTransfer: { effectAllowed: 'copy', dropEffect: 'none' },
+    });
+    expect(onMediaDragStart).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'stock', url: 'https://stock.example/p.jpg' }),
+      expect.anything()
+    );
+
+    await waitFor(() => expect(screen.getByTestId('media-picker').parentElement!.className).toContain('pointer-events-none'));
+    fireEvent.dragEnd(screen.getByTestId('media-picker').parentElement!, {
+      dataTransfer: { dropEffect: 'copy' },
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('never hides the picker after a drag ends before the deferred transition', async () => {
+    render(<MediaSelectorModal open onClose={noop} onMediaDragStart={vi.fn()} />);
+    fireEvent.dragStart(screen.getByTestId('my-file'), {
+      dataTransfer: { effectAllowed: 'copy', dropEffect: 'none' },
+    });
+    const overlay = screen.getByTestId('media-picker').parentElement!;
+
+    fireEvent.dragEnd(overlay, { dataTransfer: { dropEffect: 'none' } });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(overlay.className).not.toContain('pointer-events-none');
+    expect(overlay.className).not.toContain('opacity-0');
   });
 });
 

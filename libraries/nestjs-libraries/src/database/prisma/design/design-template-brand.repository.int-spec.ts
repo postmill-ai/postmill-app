@@ -1,6 +1,6 @@
 import { inject } from 'vitest';
 import { getTestPrisma } from '@postmill-ai/nestjs-libraries/testing/test-db';
-import { PrismaRepository, PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository, PrismaService, PrismaTransaction } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { DesignRepository } from './design.repository';
 
 describe('DesignRepository Brand Kit template ordering (integration)', () => {
@@ -12,6 +12,10 @@ describe('DesignRepository Brand Kit template ordering (integration)', () => {
       new PrismaRepository<'designTemplateFolder'>(prisma as unknown as PrismaService),
       new PrismaRepository<'designVersion'>(prisma as unknown as PrismaService),
       new PrismaRepository<'file'>(prisma as unknown as PrismaService),
+      new PrismaRepository<'designerRecentOpen'>(prisma as unknown as PrismaService),
+      new PrismaRepository<'designBatch'>(prisma as unknown as PrismaService),
+      new PrismaRepository<'designShare'>(prisma as unknown as PrismaService),
+      new PrismaTransaction(prisma as unknown as PrismaService),
     );
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const organizationId = `template-org-${suffix}`;
@@ -30,7 +34,7 @@ describe('DesignRepository Brand Kit template ordering (integration)', () => {
             doc: { mode: 'image' },
           })),
           { id: systemTemplateId, name: 'System', category: 'test', doc: { mode: 'image' }, isSystem: true },
-          { id: brandTemplateId, organizationId, brandProfileId: brandId, name: 'Zzz last', category: 'test', doc: { mode: 'image' } },
+          { id: brandTemplateId, organizationId, brandProfileId: brandId, name: 'Zzz last', category: 'Launch Collection', doc: { mode: 'image' } },
         ],
       });
 
@@ -48,6 +52,16 @@ describe('DesignRepository Brand Kit template ordering (integration)', () => {
       expect(orgOnly.some((template) => template.id === systemTemplateId)).toBe(false);
       expect(await repository.countTemplatesByOrg(organizationId)).toBe(27);
       expect(await repository.countTemplatesByOrg(organizationId, 'org')).toBe(26);
+
+      const brandSearch = await repository.findTemplatesByOrg(organizationId, 1, 24, brandId, 'org', 'launch col');
+      expect(brandSearch.map((template) => template.id)).toEqual([brandTemplateId]);
+      expect(await repository.countTemplatesByOrg(organizationId, 'org', 'launch col')).toBe(1);
+
+      const ordinarySearch = await repository.findTemplatesByOrg(organizationId, 1, 24, undefined, 'org', 'ordinary 2');
+      expect(ordinarySearch).toHaveLength(5);
+      expect(ordinarySearch.every((template) => template.name.toLowerCase().includes('ordinary 2'))).toBe(true);
+      expect(await repository.countTemplatesByOrg(organizationId, 'org', 'ordinary 2')).toBe(5);
+      expect(await repository.findTemplatesByOrg(organizationId, 1, 24, brandId, 'org', 'no match')).toEqual([]);
     } finally {
       await prisma.designTemplate.deleteMany({ where: { organizationId } });
       await prisma.designTemplate.deleteMany({ where: { id: systemTemplateId } });

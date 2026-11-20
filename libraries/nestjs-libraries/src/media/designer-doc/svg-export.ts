@@ -55,6 +55,7 @@ const num = (n: number): string =>
  */
 export const isVectorExportable = (el: DesignerElement): boolean => {
   if (el.styles?.length) return false; // layer styles have no SVG equivalent
+  if (el.filters?.length) return false; // bake the shared pixel filter stack
   if (el.smartFilters?.length) return false; // the recipe lives on the client
   if (el.maskSrc) return false; // a bitmap mask is a bitmap
   if (el.blendMode && !CSS_BLEND_MODES.has(el.blendMode)) return false;

@@ -14,11 +14,17 @@ export const LanguageProfileSchema = z.object({
 
 export const LanguageProfilesSchema = z.record(z.string(), LanguageProfileSchema).default({});
 
-export const LogoFileIdsSchema = z.array(z.string()).default([]);
+export const LogoRoleSchema = z.enum(['main', 'icon', 'dark']);
+export const LogoFileEntrySchema = z.object({
+  fileId: z.string().optional(),
+  role: LogoRoleSchema.optional(),
+});
+export const LogoFileIdsSchema = z.array(z.union([z.string(), LogoFileEntrySchema])).default([]);
 
 export const PaletteEntrySchema = z.object({
   name: z.string().optional(),
   hex: z.string().optional(),
+  role: z.enum(['primary', 'accent', 'background', 'text']).optional(),
 });
 
 export const PaletteSchema = z.array(z.union([z.string(), PaletteEntrySchema])).default([]);

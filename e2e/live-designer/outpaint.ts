@@ -28,7 +28,7 @@ async function openOutpaintDialog(page: Page, elementId: string): Promise<void> 
   await expect(dialog).toBeVisible();
 }
 
-async function expandAndUpload(page: Page, operation: '/media/outpaint' | '/media/inpaint') {
+async function expandAndUpload(page: Page, operation: '/media/outpaint' | '/media/outpaint/page') {
   const generationPromise = page.waitForResponse((response) =>
     response.request().method() === 'POST' && apiPath(response.url()) === operation,
     { timeout: 240_000 }
@@ -206,7 +206,7 @@ export async function runWholePageOutpaintAcceptance(page: Page, testInfo: TestI
   await dialog.locator('select').first().selectOption('page');
   await dialog.locator('input[type="number"]').first().fill(String(targetWidth));
   await dialog.locator('input[type="number"]').nth(1).fill(String(targetHeight));
-  const { asset, apiOrigin } = await expandAndUpload(page, '/media/inpaint');
+  const { asset, apiOrigin } = await expandAndUpload(page, '/media/outpaint/page');
   await dialog.screenshot({ path: testInfo.outputPath('outpaint-page-review.png') });
   const extension = await pngResponse(page, asset.url);
   expect(extension.width).toBe(targetWidth);
@@ -247,7 +247,7 @@ export async function runWholePageOutpaintAcceptance(page: Page, testInfo: TestI
       expect(preserved?.src).toEqual(original.element.src);
     }
   }
-  expect(paidOperations.attempts()).toEqual(['/media/inpaint']);
+  expect(paidOperations.attempts()).toEqual(['/media/outpaint/page']);
   expect(paidOperations.blocked()).toEqual([]);
   assertNoBrowserFailures();
 }

@@ -39,10 +39,28 @@ import { getTool, resolveToolShortcut } from './tools';
 import { rectFromDrag, rectFromTap, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
 import { addText } from './add-text';
 import { CropOverlay } from './crop-overlay';
+import {
+  centeredCropFraction,
+  constrainFractionToRatio,
+  cropDisplayBox,
+  cropFromBoxFraction,
+  normaliseFraction,
+  parseCropRatio,
+  type BoxFraction,
+  type CropResizeHandle,
+} from './crop-geometry';
 import { ensureFontsUsed } from './fonts';
 import { getImageNaturalSize } from './elements';
 import { computeCoverCrop } from './reflow';
-import { imageDropTargetById, replaceUploadedImageAtDropTarget, uploadDroppedImage, imageDropErrorMessage, type ImageDropTarget } from './image-drop';
+import {
+  imageDropErrorMessage,
+  isReplaceableImageMime,
+  replaceMediaImageAtDropTarget,
+  replaceUploadedImageAtDropTarget,
+  resolveImageDropTarget,
+  uploadDroppedImage,
+  type ImageDropResolution,
+} from './image-drop';
 import { textureFillProps } from './textures';
 import { svgToPathElements } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-import';
 import {
@@ -92,6 +110,8 @@ import {
   movingNodesForSnap,
 } from './canvas-snap';
 import { selectionLeafIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
+import { hasStillImageDrag, isStillImageMedia, readStockMediaDrag } from './stock-media-drag';
+import type { InsertDesignerMedia } from './use-designer-media-insertion';
 
 /**
  * How much of the viewport a fitted artboard fills, leaving the rest as margin.
@@ -116,6 +136,7 @@ interface CanvasProps {
   touchpadMode?: boolean;
   mobileSheetOpen?: boolean;
   onAddImage?: () => void;
+  onInsertMedia?: InsertDesignerMedia;
   sendImageAwareness?: (
     outputIndex: number,
     mouseX: number,
@@ -145,6 +166,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   touchpadMode = false,
   mobileSheetOpen = false,
   onAddImage,
+  onInsertMedia,
   sendImageAwareness,
 }) => {
   const stageRef = useRef<Konva.Stage>(null);
@@ -197,6 +219,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const gradientStart = useRef<{ x: number; y: number } | null>(null);
   /** Live outline while the Artboard tool resizes the frame. */
   const [artboardPreview, setArtboardPreview] = useState<{ w: number; h: number } | null>(null);
+  const [cropDraft, setCropDraft] = useState<{
+    key: string;
+    fraction: BoxFraction;
+    lastHandle?: CropResizeHandle;
+  } | null>(null);
   /** In-progress Pen path, in document space, until it is finished. */
   const [penDraft, setPenDraft] = useState<PenDraft | null>(null);
   /** True between an anchor's mousedown and mouseup, while handles can be pulled. */
@@ -219,7 +246,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetType: 'element' | 'canvas' | 'clip'; elementId?: string; canvasPoint?: { x: number; y: number } } | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [dragReplace, setDragReplace] = useState(false);
+  const [dragReplacement, setDragReplacement] = useState<ImageDropResolution | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [uploadingFile, setUploadingFile] = useState(false);
   const rafIdRef = useRef<number | null>(null);
@@ -335,6 +362,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           ?.find((tr) => tr.id === selectedClip.trackId)
           ?.clips.find((c) => c.id === selectedClip.clipId)
       : undefined;
+  const cropTrack = isVideo && selectedClip
+    ? (output as unknown as VideoOutput | undefined)?.tracks?.find((tr) => tr.id === selectedClip.trackId)
+    : undefined;
   const cropTarget = isVideo
     ? cropClip
       ? ({
@@ -346,7 +376,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           height: cropClip.height ?? 100,
           rotation: cropClip.rotation ?? 0,
           opacity: 1,
-          locked: false,
+          locked: cropTrack?.locked ?? false,
           hidden: false,
           src: cropClip.src,
           crop: cropClip.crop,
@@ -358,9 +388,53 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       : undefined
     : effectiveTool === 'crop' && selectedIds.length === 1
       ? ((pageOutput as DesignerOutput | undefined)?.children || []).find(
-          (c) => c.id === selectedIds[0]
+          (c) => c.id === selectedIds[0] && (c.type === 'image' || c.type === 'raster')
         )
       : undefined;
+  const cropNatural = cropTarget
+    ? cropTarget.naturalWidth && cropTarget.naturalHeight
+      ? { width: cropTarget.naturalWidth, height: cropTarget.naturalHeight }
+      : getImageNaturalSize(cropTarget.src)
+    : null;
+  const cropEnabled = !!cropTarget && !!cropNatural && cropNatural.width > 0 && cropNatural.height > 0 &&
+    !cropTarget.locked && !cropTarget.hidden && !outputFrozen;
+  const cropRatio = store((s) => String(s.toolOptions['crop']?.ratio ?? 'free'));
+  const cropSessionKey = cropTarget
+    ? `${currentOutput}:${currentPage}:${isVideo ? selectedClip?.trackId : 'element'}:${cropTarget.id}:${cropRatio}`
+    : '';
+  const cropInitialFraction = cropTarget && cropNatural
+    ? centeredCropFraction(
+        parseCropRatio(cropRatio),
+        cropDisplayBox(cropTarget, cropNatural).width,
+        cropDisplayBox(cropTarget, cropNatural).height
+      )
+    : { x: 0, y: 0, width: 1, height: 1 };
+  const cropFraction = cropDraft?.key === cropSessionKey ? cropDraft.fraction : cropInitialFraction;
+  const cancelCrop = useCallback(() => store.getState().setActiveTool('move'), [store]);
+  const commitCrop = () => {
+    if (!cropTarget || !cropNatural || !cropEnabled) return;
+    const fraction = normaliseFraction(cropFraction);
+    if (fraction.x === 0 && fraction.y === 0 && fraction.width === 1 && fraction.height === 1) {
+      cancelCrop();
+      return;
+    }
+    const patch = cropFromBoxFraction(
+      cropTarget,
+      cropNatural,
+      fraction,
+      cropDraft?.key === cropSessionKey ? cropDraft.lastHandle : undefined
+    );
+    const accepted = isVideo && selectedClip
+      ? store.getState().updateClipSilent(
+          selectedClip.outputIndex,
+          selectedClip.trackId,
+          selectedClip.clipId,
+          patch as never
+        )
+      : store.getState().updateElement(cropTarget.id, patch);
+    if (accepted) store.getState().pushHistory('Crop image');
+    store.getState().setActiveTool('move');
+  };
   /** The selected path, for the anchor-editing pens and Direct Selection. */
   const penEditTarget =
     selectedIds.length === 1
@@ -1625,6 +1699,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (editingTextId) return;
+      if (cropEnabled && (e.key === 'Enter' || e.key === 'Escape')) return;
       store.getState().clearElementPreview();
       const st = store.getState();
       const mod = e.ctrlKey || e.metaKey;
@@ -1776,7 +1851,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         }
       }
     },
-    [editingTextId, selectedIds, setSelectedIds, updateElement, output, pageOutput, doc, store, pushHistory, isVideo]
+    [editingTextId, selectedIds, setSelectedIds, updateElement, output, pageOutput, doc, store, pushHistory, isVideo, cropEnabled]
   );
 
   const handleStageDblClick = useCallback(
@@ -1806,26 +1881,21 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     [pageOutput, doc, effectiveTool, paint, store]
   );
 
-  const findImageDropTarget = useCallback((clientX: number, clientY: number, rect: DOMRect) => {
-    let node = stageRef.current?.getIntersection({
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-    }) as Konva.Node | null | undefined;
-    let target: ImageDropTarget | null = null;
-    while (node && !target) {
-      const id = node.id();
-      if (id) target = imageDropTargetById(store, id);
-      node = node.getParent();
-    }
-    return target;
-  }, [store]);
+  const findImageDropTarget = useCallback((clientX: number, clientY: number, rect: DOMRect) =>
+    resolveImageDropTarget({
+      stage: stageRef.current,
+      store,
+      clientX,
+      clientY,
+      containerRect: rect,
+    }), [store]);
 
   // Drop from panels (designer elements) and OS file drops.
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragOver(false);
-      setDragReplace(false);
+      setDragReplacement(null);
       containerRef.current?.classList.remove('designer-drop-active');
       if (outputFrozen) return;
 
@@ -1834,6 +1904,31 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
       const px = (e.clientX - rect.left - viewportX) / zoom;
       const py = (e.clientY - rect.top - viewportY) / zoom;
+
+      const stock = readStockMediaDrag(e.dataTransfer);
+      if (stock) {
+        const replacement = !e.shiftKey && isStillImageMedia(stock.kind, stock.item)
+          ? findImageDropTarget(e.clientX, e.clientY, rect)
+          : null;
+        if (replacement) {
+          void replaceMediaImageAtDropTarget({
+            store,
+            target: replacement.target,
+            item: stock.item,
+          })
+            .then((replaced) => {
+              if (!replaced) {
+                toaster.show(t('designer_image_replace_failed', 'That image replacement could not be applied'), 'warning');
+              }
+            })
+            .catch((error) => {
+              toaster.show(imageDropErrorMessage(error, t), 'warning');
+            });
+          return;
+        }
+        void onInsertMedia?.(stock.kind, stock.item, { x: px, y: py });
+        return;
+      }
 
       const raw = e.dataTransfer.getData('application/x-designer-element');
       if (raw) {
@@ -1868,14 +1963,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       const file = files[0];
       if (!file.type.startsWith('image/')) return;
 
-      const replacementTarget = e.altKey && file.type !== 'image/svg+xml'
+      const replacementTarget = !e.shiftKey && isReplaceableImageMime(file.type)
         ? findImageDropTarget(e.clientX, e.clientY, rect)
         : null;
       if (replacementTarget) {
         setUploadingFile(true);
         void uploadDroppedImage(fetch, file)
           .then((item) => replaceUploadedImageAtDropTarget({
-            fetch, store, target: replacementTarget, item,
+            fetch, store, target: replacementTarget.target, item,
           }))
           .then((replaced) => {
             if (!replaced) {
@@ -1977,7 +2072,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           toaster.show(t('failed_to_upload_file', 'Failed to upload file'), 'warning');
         });
     },
-    [addElement, viewportX, viewportY, zoom, store, output, outputFrozen, toaster, fetch, isVideo, t, findImageDropTarget]
+    [addElement, viewportX, viewportY, zoom, store, output, outputFrozen, toaster, fetch, isVideo, t, findImageDropTarget, onInsertMedia]
   );
 
   const bg = pageOutput?.bg;
@@ -2038,11 +2133,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         const fileTypes = e.dataTransfer.files.length
           ? Array.from(e.dataTransfer.files, (file) => file.type)
           : Array.from(e.dataTransfer.items, (item) => item.kind === 'file' ? item.type : '');
-        const replacing = !!(rect && e.altKey && fileTypes.some(
-          (type) => type.startsWith('image/') && type !== 'image/svg+xml'
-        ) && findImageDropTarget(e.clientX, e.clientY, rect));
-        e.dataTransfer.dropEffect = 'copy';
-        setDragReplace(replacing);
+        const replacementSource = hasStillImageDrag(e.dataTransfer) || fileTypes.some(isReplaceableImageMime);
+        const replacement = rect && !e.shiftKey && replacementSource
+          ? findImageDropTarget(e.clientX, e.clientY, rect)
+          : null;
+        setDragReplacement(replacement);
         if (rect) {
           setDragPosition({
             x: (e.clientX - rect.left - viewportX) / zoom,
@@ -2055,7 +2150,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       onDragLeave={(e) => {
         if (e.currentTarget.contains(e.relatedTarget as Node)) return;
         setDragOver(false);
-        setDragReplace(false);
+        setDragReplacement(null);
         containerRef.current?.classList.remove('designer-drop-active');
       }}
       onDrop={handleDrop}
@@ -2481,32 +2576,29 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           {/* Crop tool: direct-manipulation overlay over the selected element.
               The inspector's percentage sliders remain the numeric route; both
               compose onto any existing crop through crop-geometry. */}
-          {effectiveTool === 'crop' && cropTarget && (
+          {effectiveTool === 'crop' && cropTarget && cropNatural && cropEnabled && (
             <CropOverlay
-              key={cropTarget.id}
+              key={cropSessionKey}
               element={cropTarget}
-              natural={
-                cropTarget.naturalWidth && cropTarget.naturalHeight
-                  ? { width: cropTarget.naturalWidth, height: cropTarget.naturalHeight }
-                  : getImageNaturalSize(cropTarget.src)
-              }
+              natural={cropNatural}
               zoom={zoom}
-              ratio={String(store.getState().toolOptions['crop']?.ratio ?? 'free')}
-              onCommit={(patch) => {
-                if (isVideo && selectedClip) {
-                  store.getState().updateClipSilent(
-                    selectedClip.outputIndex,
-                    selectedClip.trackId,
-                    selectedClip.clipId,
-                    patch as never
-                  );
-                } else {
-                  updateElement(cropTarget.id, patch);
-                }
-                pushHistory();
-                store.getState().setActiveTool('move');
+              fraction={cropFraction}
+              onDraftChange={(fraction, lastHandle) => {
+                const display = cropDisplayBox(cropTarget, cropNatural);
+                setCropDraft({
+                  key: cropSessionKey,
+                  fraction: constrainFractionToRatio(
+                    normaliseFraction(fraction),
+                    parseCropRatio(cropRatio),
+                    display.width,
+                    display.height,
+                    lastHandle
+                  ),
+                  lastHandle,
+                });
               }}
-              onCancel={() => store.getState().setActiveTool('move')}
+              onCommit={commitCrop}
+              onCancel={cancelCrop}
             />
           )}
 
@@ -2539,6 +2631,39 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           )}
         </Layer>
       </Stage>
+
+      {effectiveTool === 'crop' && cropEnabled && (
+        <div
+          data-testid="crop-actions"
+          className="absolute bottom-4 start-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-md border border-studioBorder bg-newBgColorInner p-1 shadow-menu"
+        >
+          <button
+            type="button"
+            className="min-h-[32px] px-3 rounded-sm bg-designerAccent text-[12px] font-medium text-white hover:bg-designerAccent/90"
+            onClick={commitCrop}
+          >
+            {t('done', 'Done')}
+          </button>
+          <button
+            type="button"
+            className="min-h-[32px] px-3 rounded-sm text-[12px] text-textColor hover:bg-boxHover"
+            onClick={cancelCrop}
+          >
+            {t('cancel', 'Cancel')}
+          </button>
+          <button
+            type="button"
+            className="min-h-[32px] px-3 rounded-sm text-[12px] text-textColor hover:bg-boxHover"
+            onClick={() => setCropDraft({
+              key: cropSessionKey,
+              fraction: cropInitialFraction,
+              lastHandle: undefined,
+            })}
+          >
+            {t('reset', 'Reset')}
+          </button>
+        </div>
+      )}
 
       {outputFrozen && (
         <div
@@ -2586,14 +2711,25 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
       {dragOver && !uploadingFile && (
         <div
-          data-drop-mode={dragReplace ? 'replace' : 'insert'}
-          className={`absolute pointer-events-none z-40 flex h-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center border-2 border-designerAccent rounded-lg bg-designerAccent/10 ${dragReplace ? 'border-solid px-3 text-[12px] font-medium text-btnPrimaryAccent' : 'w-12 border-dashed'}`}
-          style={{
+          data-drop-mode={dragReplacement ? 'replace' : 'insert'}
+          className={dragReplacement
+            ? 'absolute pointer-events-none z-40 rounded-lg border-2 border-solid border-designerAccent bg-designerAccent/10'
+            : 'absolute pointer-events-none z-40 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-lg border-2 border-dashed border-designerAccent bg-designerAccent/10'}
+          style={dragReplacement ? {
+            left: dragReplacement.bounds.x,
+            top: dragReplacement.bounds.y,
+            width: dragReplacement.bounds.width,
+            height: dragReplacement.bounds.height,
+          } : {
             left: dragPosition.x * zoom + viewportX,
             top: dragPosition.y * zoom + viewportY,
           }}
         >
-          {dragReplace && t('designer_replace_image', 'Replace image…')}
+          {dragReplacement && (
+            <span className="absolute start-1 top-1 rounded bg-newBgColorInner px-2 py-1 text-[12px] font-medium whitespace-nowrap text-btnPrimaryAccent">
+              {t('designer_drop_to_replace', 'Drop to replace')}
+            </span>
+          )}
         </div>
       )}
 

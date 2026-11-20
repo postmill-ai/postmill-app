@@ -10,9 +10,20 @@ describe('fetchDesignForEditor', () => {
     }));
 
     await expect(fetchDesignForEditor(fetch, 'design-123')).resolves.toEqual({
-      id: 'design-123', name: 'Catalog', doc: { mode: 'image', outputs: [] },
+      id: 'design-123', name: 'Catalog', doc: { mode: 'image', outputs: [] }, batch: null,
     });
     expect(fetch).toHaveBeenCalledWith('/media/designs/design-123');
+  });
+
+  it('preserves the variation batch for Back to batch after a deep-linked reload', async () => {
+    const fetch = vi.fn().mockResolvedValue(response(true, {
+      id: 'variation-1', name: 'Variation 1', doc: { mode: 'image', outputs: [] },
+      batch: { id: 'batch-1', name: 'Catalog' },
+    }));
+
+    await expect(fetchDesignForEditor(fetch, 'variation-1')).resolves.toMatchObject({
+      batch: { id: 'batch-1', name: 'Catalog' },
+    });
   });
 
   it('rejects missing designs and error-shaped success responses', async () => {

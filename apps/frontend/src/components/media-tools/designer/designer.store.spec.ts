@@ -341,6 +341,42 @@ describe('rename requests', () => {
   });
 });
 
+describe('video canvas backgrounds', () => {
+  it('updates only bg and supports undo/redo', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const historyDepth = store.getState().history.length;
+
+    store.getState().setOutputBackground({ type: 'color', color: '#123456' });
+
+    let output = store.getState().doc.outputs[0];
+    expect(output.bg).toEqual({ type: 'color', color: '#123456' });
+    expect('background' in output).toBe(false);
+    expect(store.getState().isDirty).toBe(true);
+    expect(store.getState().history).toHaveLength(historyDepth + 1);
+
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].bg).toBeUndefined();
+    store.getState().redo();
+    output = store.getState().doc.outputs[0];
+    expect(output.bg).toEqual({ type: 'color', color: '#123456' });
+  });
+
+  it('rejects background edits on a frozen video output', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().setOutputBackground({ type: 'color', color: '#123456' });
+    store.getState().setOutputFrozen(0, true);
+    const before = store.getState().doc;
+    const historyDepth = store.getState().history.length;
+
+    store.getState().setOutputBackground({ type: 'color', color: '#654321' });
+
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyDepth);
+  });
+});
+
 describe('migrateDoc', () => {
   it('leaves a new outputs-based doc unchanged', () => {
     const newDoc = {
@@ -3616,6 +3652,9 @@ describe('motion path recording and document history', () => {
       motionPath: { points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 200, tMs: 4000 }] },
     });
     expect(store.getState().doc.outputs[1].tracks[0].clips[0].motionPath).toBeUndefined();
+  });
+});
+
 describe('exact page and output duplication', () => {
   const staticStore = () => {
     const store = createDesignerStore();
@@ -3873,6 +3912,9 @@ describe('motion path versioning and trim contract', () => {
     const clip = store.getState().doc.outputs[0].tracks[0].clips[0];
     expect(clip.motionPath?.points.map((point) => point.tMs)).toEqual([0, 2000]);
     expect(clip.keyframes?.map((keyframe) => keyframe.tMs)).toEqual([0, 4000]);
+  });
+});
+
 describe('duplication review regressions', () => {
   it.each(['image', 'video'] as const)('inserts a %s duplicate immediately after a non-last source', (mode) => {
     const store = createDesignerStore();
@@ -3995,5 +4037,115 @@ describe('duplication review regressions', () => {
     expect(store.getState().duplicateOutput(0, { linkContent: false })).toBe(true);
     expect(store.getState().doc.outputs[0].frozen).toBe(true);
     expect(store.getState().doc.outputs[1].frozen).toBeUndefined();
+  });
+});
+
+describe('Bulk Create batch identity', () => {
+  it('loads a variation batch and clears it for a new design', () => {
+    const store = createDesignerStore();
+    const doc = store.getState().doc;
+
+    store.getState().loadDesign(doc, 'variation-1', 'Variation 1', null, {
+      id: 'batch-1', name: 'Catalog',
+    });
+    expect(store.getState()).toMatchObject({ batchId: 'batch-1', batchName: 'Catalog' });
+
+    store.getState().loadDesign(doc, 'variation-2', 'Variation 2');
+    expect(store.getState()).toMatchObject({ batchId: null, batchName: null });
+
+    store.getState().loadDesign(doc, 'variation-1', 'Variation 1', null, {
+      id: 'batch-1', name: 'Catalog',
+    });
+    store.getState().reset();
+    expect(store.getState()).toMatchObject({ batchId: null, batchName: null });
+  });
+});
+
+describe('format rename and removal history', () => {
+  it('renames an image output immutably with bounded guarded edits and one Undo', () => {
+    const store = createDesignerStore();
+    const before = store.getState().doc;
+    const historyLength = store.getState().history.length;
+
+    store.getState().renameOutput(0, '   ');
+    store.getState().renameOutput(0, 'Instagram Post');
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyLength);
+
+    store.getState().renameOutput(0, '  Campaign  ');
+    expect(store.getState().doc).not.toBe(before);
+    expect(store.getState().doc.outputs[0].name).toBe('Campaign');
+    expect(before.outputs[0].name).toBe('Instagram Post');
+    expect(store.getState().historyLabels.at(-1)).toBe('Rename format');
+
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].name).toBe('Instagram Post');
+    store.getState().redo();
+    expect(store.getState().doc.outputs[0].name).toBe('Campaign');
+
+    store.getState().renameOutput(0, `  ${'a'.repeat(250)}  `);
+    expect(store.getState().doc.outputs[0].name).toHaveLength(200);
+
+    store.getState().setOutputFrozen(0, true);
+    const frozenDoc = store.getState().doc;
+    const frozenHistoryLength = store.getState().history.length;
+    store.getState().renameOutput(0, 'Rejected');
+    expect(store.getState().doc).toBe(frozenDoc);
+    expect(store.getState().history).toHaveLength(frozenHistoryLength);
+  });
+
+  it('renames a video output without replacing its tracks', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const output = store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+    store.getState().renameOutput(0, 'Video campaign');
+
+    const renamed = store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+    expect(renamed.name).toBe('Video campaign');
+    expect(renamed.tracks).toBe(output.tracks);
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].name).toBe(output.name);
+  });
+
+  it('labels format removal and restores the complete output with one Undo', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    const before = store.getState().doc;
+
+    store.getState().removeOutput(1);
+
+    expect(store.getState().historyLabels.at(-1)).toBe('Remove format');
+    expect(store.getState().doc.outputs).toHaveLength(1);
+    store.getState().undo();
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().doc.outputs[1].name).toBe('X');
+  });
+});
+
+
+describe('unique output names', () => {
+  it('deduplicates custom add, resize, and rename names while preserving the length cap', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'custom', name: 'Custom size', width: 1920, height: 1080 });
+    store.getState().addOutput({ formatId: 'custom', name: 'Custom size', width: 1280, height: 720 });
+    expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
+      'Instagram Post', 'Custom size', 'Custom size 2',
+    ]);
+
+    store.getState().renameOutput(2, 'Instagram Post');
+    expect(store.getState().doc.outputs[2].name).toBe('Instagram Post 2');
+
+    store.getState().resizeOutput(0, 800, 600, 'custom', 'Custom size');
+    expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
+      'Custom size 2', 'Custom size', 'Instagram Post 2',
+    ]);
+
+    const longName = 'a'.repeat(200);
+    store.getState().addOutput({ formatId: 'custom', name: longName, width: 400, height: 400 });
+    store.getState().addOutput({ formatId: 'custom', name: longName, width: 500, height: 500 });
+    const duplicateLongName = store.getState().doc.outputs.at(-1)?.name;
+    expect(duplicateLongName).toHaveLength(200);
+    expect(duplicateLongName?.endsWith(' 2')).toBe(true);
   });
 });

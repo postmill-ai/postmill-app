@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Designer } from './designer';
@@ -7,8 +7,10 @@ import { ModalManager, useModals } from '@postmill-ai/frontend/components/layout
 
 const mocks = vi.hoisted(() => ({
   actionCtx: null as import('./actions').DesignerActionCtx | null,
+  store: null as ReturnType<typeof import('./designer.store').createDesignerStore> | null,
   closeAll: null as (() => void) | null,
   fetch: vi.fn(),
+  toastShow: vi.fn(),
   brands: {
     data: [
       {
@@ -26,7 +28,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('./actions', () => ({
-  useDesignerActions: (_store: unknown, ctx: import('./actions').DesignerActionCtx) => {
+  useDesignerActions: (store: unknown, ctx: import('./actions').DesignerActionCtx) => {
+    mocks.store = store as NonNullable<typeof mocks.store>;
     mocks.actionCtx = ctx;
     return [];
   },
@@ -41,7 +44,7 @@ vi.mock('@postmill-ai/frontend/components/layout/user.context', () => ({
   useUser: () => ({ orgId: 'org-1', role: 'admin' }),
 }));
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
-  useToaster: () => ({ show: vi.fn() }),
+  useToaster: () => ({ show: mocks.toastShow }),
 }));
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
@@ -112,12 +115,12 @@ const ModalControls = () => {
   return null;
 };
 
-const renderDesigner = () =>
+const renderDesigner = (showStart = false) =>
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <ModalManager>
         <ModalControls />
-        <Designer width={1080} height={1080} />
+        <Designer {...(showStart ? {} : { width: 1080, height: 1080 })} />
       </ModalManager>
     </SWRConfig>
   );
@@ -142,6 +145,7 @@ describe('Designer brand context in app-root modals', () => {
     cleanup();
     vi.clearAllMocks();
     mocks.actionCtx = null;
+    mocks.store = null;
     mocks.closeAll = null;
   });
 
@@ -160,7 +164,106 @@ describe('Designer brand context in app-root modals', () => {
 
     expect(await screen.findByText('No templates yet')).toBeTruthy();
     expect(mocks.fetch).toHaveBeenCalledWith(
-      '/media/design-templates?page=1&limit=24&brandId=brand-a'
+      '/media/design-templates?page=1&limit=24&sort=newest&brandId=brand-a'
     );
+  });
+
+  it('keeps a template in the editor when Start launches and then closes Bulk Create', async () => {
+    renderDesigner(true);
+    const templateDoc = structuredClone(mocks.store!.getState().doc);
+    mocks.fetch.mockImplementation(async (url: string) => {
+      const body = url === '/media/design-templates/template-1'
+        ? { id: 'template-1', name: 'Catalog Template', doc: templateDoc, isSystem: true }
+        : url.startsWith('/media/design-templates?')
+          ? {
+              templates: [{
+                id: 'template-1', name: 'Catalog Template', doc: { mode: 'image' }, isSystem: true,
+              }],
+              total: 1,
+              page: 1,
+              limit: 24,
+            }
+          : url.startsWith('/media/designs/batches?')
+            ? { batches: [], total: 0 }
+            : url.startsWith('/media/designs?')
+              ? { designs: [], total: 0 }
+              : [];
+      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Bulk Create Turn a spreadsheet/ }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Templates', exact: true }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Bulk Create from this template' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Bulk Create' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
+
+    expect(screen.getByRole('textbox', { name: 'Design name' }))
+      .toHaveProperty('value', 'Catalog Template');
+    expect(screen.queryByText('Start a design')).toBeNull();
+    expect(mocks.store!.getState()).toMatchObject({
+      designId: null,
+      designName: 'Catalog Template',
+      templateId: 'template-1',
+      doc: { mode: 'image' },
+    });
+  });
+
+  it('keeps a dirty design in the editor when Browse templates launches Bulk Create', async () => {
+    renderDesigner();
+    const store = mocks.store!;
+    act(() => {
+      store.getState().loadDesign(store.getState().doc, 'design-x', 'My design');
+      store.getState().addElement({
+        id: 'unsaved-text', originId: 'unsaved-text', type: 'text',
+        x: 20, y: 20, width: 200, height: 40, rotation: 0, opacity: 1,
+        locked: false, hidden: false, text: 'Unsaved edit',
+      });
+    });
+    const originalDoc = store.getState().doc;
+    const templateDoc = structuredClone(originalDoc);
+    mocks.fetch.mockImplementation(async (url: string) => {
+      const body = url === '/media/design-templates/template-1'
+        ? { id: 'template-1', name: 'Catalog Template', doc: templateDoc, isSystem: true }
+        : url.startsWith('/media/design-templates?')
+          ? {
+              templates: [{
+                id: 'template-1', name: 'Catalog Template', doc: { mode: 'image' }, isSystem: true,
+              }],
+              total: 1,
+              page: 1,
+              limit: 24,
+            }
+          : [];
+      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+    });
+
+    await act(async () => mocks.actionCtx?.onBrowseTemplates());
+    fireEvent.click(await screen.findByRole('button', { name: 'Bulk Create from this template' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Bulk Create' })).toBeTruthy();
+    expect(store.getState()).toMatchObject({
+      designId: 'design-x', designName: 'My design', isDirty: true,
+    });
+    expect(store.getState().doc).toBe(originalDoc);
+    expect(store.getState().doc.outputs[0].children)
+      .toContainEqual(expect.objectContaining({ id: 'unsaved-text', text: 'Unsaved edit' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
+    expect(store.getState().doc).toBe(originalDoc);
+    expect(store.getState().isDirty).toBe(true);
+  });
+
+  it('blocks Bulk Create from a video canvas before opening the modal', () => {
+    renderDesigner();
+    act(() => mocks.store!.getState().setMode('video'));
+
+    act(() => mocks.actionCtx?.onBulkCreate());
+
+    expect(mocks.toastShow).toHaveBeenCalledWith(
+      'Bulk Create is available for image designs.',
+      'warning'
+    );
+    expect(screen.queryByRole('dialog', { name: 'Bulk Create' })).toBeNull();
   });
 });

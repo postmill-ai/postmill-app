@@ -29,7 +29,7 @@ const Harness: FC<{ initialValue?: string }> = ({ initialValue = '' }) => {
     <div>
       <button
         type="button"
-        onClick={async () => setResult(await prompt.open({ initialValue }))}
+        onClick={async () => setResult(await prompt.open({ initialValue, label: 'Format name' }))}
       >
         open
       </button>
@@ -127,5 +127,12 @@ describe('usePromptModal', () => {
     await waitFor(() =>
       expect(screen.getByTestId('result').textContent).toBe('null')
     );
+  });
+
+  it('gives the input its visible label as an accessible name', async () => {
+    renderHarness('Custom size');
+    await openPrompt();
+
+    expect(screen.getByRole('textbox', { name: 'Format name' })).toBeTruthy();
   });
 });

@@ -3364,6 +3364,21 @@ paths:
           description: ""
       tags:
         - Media
+  /media/outpaint/page:
+    post:
+      operationId: MediaController_outpaintPage
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OutpaintPageImageDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Media
   /media/outpaint:
     post:
       operationId: MediaController_outpaint
@@ -7576,6 +7591,25 @@ paths:
         - name: limit
           required: false
           in: query
+          description: Maximum number of designs to return (1–100). Values above 100 are capped at 100. Defaults to 20.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: query
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: sort
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: group
+          required: false
+          in: query
           schema:
             type: string
       responses:
@@ -7595,6 +7629,43 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - Design
+  /media/designs/batches:
+    get:
+      operationId: DesignController_listBatches
+      parameters:
+        - name: page
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: limit
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design
+  /media/designs/batches/{id}:
+    get:
+      operationId: DesignController_getBatch
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
       tags:
         - Design
   /media/designs/{id}:
@@ -7609,6 +7680,10 @@ paths:
       responses:
         "200":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Design
     put:
@@ -7643,35 +7718,6 @@ paths:
           description: ""
       tags:
         - Design
-  /media/designs/{id}/convert-to-video:
-    post:
-      operationId: DesignController_convertToVideo
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: x-idempotency-key
-          required: true
-          in: header
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ConvertDesignToVideoDto"
-      responses:
-        "201":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      tags:
-        - Design
   /media/designs/import:
     post:
       operationId: DesignController_import
@@ -7679,6 +7725,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       summary: |-
         Import a `.pdesign` (zip, format v1 or v2) or raw `.json` DesignerDoc as a
         NEW design. Static segment declared before the parameterized `/:id` routes
@@ -7701,6 +7751,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Design
   /media/designs/{id}/export:
@@ -8039,6 +8093,90 @@ paths:
                 $ref: "#/components/schemas/RenderVideoStatusDto"
       tags:
         - Design
+  /media/designs/{id}/share:
+    get:
+      operationId: DesignShareController_getShare
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design sharing
+    put:
+      operationId: DesignShareController_saveShare
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDesignShareDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design sharing
+    delete:
+      operationId: DesignShareController_disableShare
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design sharing
+  /media/designs/{id}/preview:
+    get:
+      operationId: DesignShareController_getTeamPreview
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design sharing
+  /media/designs/{id}/preview/{outputIndex}/{pageNumber}:
+    get:
+      operationId: DesignShareController_renderTeamPreview
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: outputIndex
+          required: true
+          in: path
+          schema:
+            type: number
+        - name: pageNumber
+          required: true
+          in: path
+          schema:
+            type: number
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design sharing
   /media/design-templates/folders:
     get:
       operationId: DesignTemplateController_getFolderTree
@@ -8138,14 +8276,38 @@ paths:
         - name: limit
           required: false
           in: query
+          description: Maximum number of templates to return (1–100). Values above 100 are capped at 100. Defaults to 24.
           schema:
-            type: string
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 24
         - name: brandId
           required: false
           in: query
           schema:
             type: string
         - name: scope
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: query
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: sort
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: folderId
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: category
           required: false
           in: query
           schema:
@@ -10222,6 +10384,84 @@ paths:
           description: ""
       tags:
         - PublicAnalytics
+  /public/design-share/{token}:
+    get:
+      operationId: PublicDesignShareController_getPublicPreview
+      parameters:
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Public design sharing
+  /public/design-share/{token}/preview/{outputIndex}/{pageNumber}:
+    get:
+      operationId: PublicDesignShareController_renderPublicPreview
+      parameters:
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: outputIndex
+          required: true
+          in: path
+          schema:
+            type: number
+        - name: pageNumber
+          required: true
+          in: path
+          schema:
+            type: number
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Public design sharing
+  /public/design-share/{token}/comments:
+    post:
+      operationId: PublicDesignShareController_addComment
+      parameters:
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDesignShareCommentDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Public design sharing
+  /public/design-share/{token}/approve:
+    post:
+      operationId: PublicDesignShareController_approve
+      parameters:
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveDesignShareDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Public design sharing
 info:
   title: Postmill API
   description: OpenAPI description of the Postmill backend (NestJS). Generated from the controllers — do not hand-edit; run `pnpm run openapi:generate`.
@@ -11581,6 +11821,18 @@ components:
           maxLength: 200
       required:
         - fileId
+    OutpaintPageImageDto:
+      type: object
+      properties:
+        imageUrl:
+          type: string
+        maskUrl:
+          type: string
+        prompt:
+          type: string
+      required:
+        - imageUrl
+        - maskUrl
     OutpaintImageDto:
       type: object
       properties:
@@ -12810,19 +13062,11 @@ components:
           type: string
         campaignId:
           type: string
+        sourceTemplateId:
+          type: string
       required:
         - name
         - doc
-    ConvertDesignToVideoDto:
-      type: object
-      properties:
-        pageDurationMs:
-          type: number
-          minimum: 100
-          maximum: 180000
-          example: 5000
-      required:
-        - pageDurationMs
     ImportLibraryDesignDto:
       type: object
       properties:
@@ -12942,6 +13186,15 @@ components:
         folderId:
           type: string
           maxLength: 200
+        sourceDesignId:
+          type: string
+          maxLength: 200
+        sourceTemplateId:
+          type: string
+          maxLength: 200
+        sourceName:
+          type: string
+          maxLength: 200
       required:
         - doc
         - rows
@@ -13049,6 +13302,15 @@ components:
         - alt
         - thumbnailTimestamp
         - progress
+    UpdateDesignShareDto:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        commentsEnabled:
+          type: boolean
+        expiresAt:
+          type: string
     CreateTemplateFolderDto:
       type: object
       properties:
@@ -13715,3 +13977,23 @@ components:
           maxLength: 100
         enabled:
           type: boolean
+    CreateDesignShareCommentDto:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 80
+        content:
+          type: string
+          maxLength: 2000
+      required:
+        - name
+        - content
+    ApproveDesignShareDto:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 80
+      required:
+        - name

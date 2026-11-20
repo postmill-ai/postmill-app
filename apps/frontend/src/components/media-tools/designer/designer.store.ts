@@ -183,6 +183,8 @@ export interface DesignerState {
   designSession: number;
   designTemplateId: string | null;
   templateId: string | null;
+  batchId: string | null;
+  batchName: string | null;
   designName: string;
   isDirty: boolean; isSaving: boolean; lastSaved: Date | null;
   /** Editor-only projection state; preview patches never enter `doc` or history. */
@@ -368,6 +370,7 @@ export interface DesignerActions {
   duplicateOutput: (index: number, opts?: { linkContent?: boolean }) => boolean;
   removeOutput: (index: number) => void;
   resizeOutput: (index: number, width: number, height: number, formatId?: string, name?: string) => void;
+  renameOutput: (index: number, name: string) => void;
   setOutputFrozen: (index: number, frozen: boolean) => void;
   // pages within an image output (doc v8). pageNumber is 0-based; 0 = page 1.
   setCurrentPage: (pageNumber: number) => void;
@@ -419,7 +422,13 @@ export interface DesignerActions {
   markSaved: () => void; setSaving: (saving: boolean) => void; setSaveFailed: (failed: boolean) => void;
   setSaveRetryPaused: (paused: boolean) => void;
   reset: (width?: number, height?: number) => void;
-  loadDesign: (doc: any, id: string, name: string, templateId?: string | null) => void;
+  loadDesign: (
+    doc: any,
+    id: string | null,
+    name: string,
+    templateId?: string | null,
+    batch?: { id: string; name: string } | null,
+  ) => void;
   // video mode
   addTrack: (outputIndex: number, type: VideoTrack['type']) => void;
   removeTrack: (outputIndex: number, trackId: string) => void;
@@ -572,6 +581,24 @@ const sharedUpdates = (updates: Partial<DesignerElement>): Partial<DesignerEleme
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
+const uniqueOutputName = (
+  outputs: DesignerDoc['outputs'],
+  requestedName: string,
+  excludeIndex = -1
+) => {
+  const base = requestedName.trim().slice(0, 200);
+  if (!base) return '';
+  const taken = new Set(
+    outputs.filter((_, index) => index !== excludeIndex).map((output) => output.name)
+  );
+  if (!taken.has(base)) return base;
+  for (let suffix = 2; ; suffix++) {
+    const tail = ` ${suffix}`;
+    const candidate = `${base.slice(0, 200 - tail.length)}${tail}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+};
+
 export const createDesignerStore = (
   width?: number,
   height?: number,
@@ -679,6 +706,7 @@ export const createDesignerStore = (
       history: [initialDoc], historyIndex: 0, historyLabels: ['Open'],
       savedHistoryIndex: 0,
       designId: null, designSession: 0, designTemplateId: null, templateId: null,
+      batchId: null, batchName: null,
       designName: 'Untitled Design',
       isDirty: false, isSaving: false, lastSaved: null,
       previewRevision: 0,
@@ -1121,15 +1149,19 @@ export const createDesignerStore = (
       requestRename: (id) => mutate({ renamingId: id }),
 
       setOutputBackground: (bg, commit = true) => {
-        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { doc, currentOutput } = get();
         const outs = [...doc.outputs];
-        const out = outs[currentOutput] as DesignerOutput;
-        outs[currentOutput] = {
-          ...out,
-          background: bg.type === 'color' && bg.color ? bg.color : out.background,
-          bg,
-        };
+        const out = outs[currentOutput];
+        if (!out || isOutputFrozen(out)) return;
+        outs[currentOutput] = doc.mode === 'video'
+          ? { ...(out as VideoOutput), bg }
+          : {
+              ...(out as DesignerOutput),
+              background: bg.type === 'color' && bg.color
+                ? bg.color
+                : (out as DesignerOutput).background,
+              bg,
+            };
         mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         if (commit) get().pushHistory();
       },
@@ -1645,10 +1677,7 @@ export const createDesignerStore = (
         const { doc, currentOutput } = get();
         if (doc.outputs.length >= MAX_OUTPUTS) return false;
         const linkContent = opts?.linkContent ?? true;
-        let name = preset.name;
-        for (let suffix = 2; doc.outputs.some((out) => out.name === name); suffix++) {
-          name = `${preset.name} ${suffix}`;
-        }
+        const name = uniqueOutputName(doc.outputs, preset.name);
         const namedPreset = { ...preset, name };
         if (isVideoMode()) {
           const source = doc.outputs[currentOutput] as VideoOutput;
@@ -1820,17 +1849,32 @@ export const createDesignerStore = (
           selectedIds: [],
           isDirty: true,
         });
-        get().pushHistory();
+        get().pushHistory('Remove format');
+      },
+
+      renameOutput: (index, name) => {
+        const { doc } = get();
+        const output = doc.outputs[index];
+        if (!output || isOutputFrozen(output)) return;
+        const trimmed = uniqueOutputName(doc.outputs, name, index);
+        if (!trimmed || output.name === trimmed) return;
+        const outputs = [...doc.outputs];
+        outputs[index] = { ...output, name: trimmed };
+        mutate({ doc: { ...doc, outputs }, isDirty: true });
+        get().pushHistory('Rename format');
       },
 
       resizeOutput: (index, width, height, formatId, name) => {
         const { doc } = get();
         const out = doc.outputs[index];
         if (!out || isOutputFrozen(out)) return;
+        const resolvedName = name === undefined
+          ? undefined
+          : uniqueOutputName(doc.outputs, name, index);
         if ('tracks' in out) {
           // Video outputs resize in place: ids stay, every clip's geometry
           // smart-reflows onto the new canvas (timing/fps/duration untouched).
-          const resized = reflowVideoOutputInPlace(out as VideoOutput, width, height, formatId, name);
+          const resized = reflowVideoOutputInPlace(out as VideoOutput, width, height, formatId, resolvedName);
           const outs = [...doc.outputs]; outs[index] = resized;
           mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
           get().pushHistory('Resize format');
@@ -1838,7 +1882,7 @@ export const createDesignerStore = (
         }
         if (isVideoMode()) return;
         const imgOut = out as DesignerOutput;
-        const resized: DesignerOutput = { ...imgOut, width, height, formatId: formatId ?? imgOut.formatId, name: name ?? imgOut.name };
+        const resized: DesignerOutput = { ...imgOut, width, height, formatId: formatId ?? imgOut.formatId, name: resolvedName ?? imgOut.name };
         const groupBoxes = computeGroupBoxes(imgOut.children, imgOut);
         const stackBoxes = computeTextStackBoxes(imgOut.children, imgOut);
         const containerBoxes = computeContainerBoxes(imgOut.children);
@@ -2129,6 +2173,7 @@ export const createDesignerStore = (
           fitNonce: get().fitNonce + 1,
           history: [newDoc], historyLabels: ['New'], historyIndex: 0, savedHistoryIndex: 0,
           designId: null, designSession: get().designSession + 1, designTemplateId: null, templateId: null,
+          batchId: null, batchName: null,
           designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null, saveFailed: false, saveRetryPaused: false,
           editFormatOnly: false,
           brandEnforcement: false,
@@ -2144,7 +2189,7 @@ export const createDesignerStore = (
         });
       },
 
-      loadDesign: (doc, id, name, templateId = null) => {
+      loadDesign: (doc, id, name, templateId = null, batch = null) => {
         get().clearElementPreview();
         const migrated = migrateDoc(doc);
         // Buffers from the previously open design would otherwise live (and
@@ -2153,6 +2198,7 @@ export const createDesignerStore = (
         rawSet({
           doc: migrated, designId: id, designSession: get().designSession + 1, designName: name,
           templateId, designTemplateId: templateId,
+          batchId: batch?.id || null, batchName: batch?.name || null,
           selectedIds: [], currentOutput: 0, currentPage: 0,
           // The zoom and viewport belonged to whatever was open before. Reset
           // them and ask for a fit: leaving a stale zoom on screen for a frame
@@ -2461,7 +2507,8 @@ export const createDesignerStore = (
               clip.height ?? 1,
               previousDuration,
               clip.fontSize ?? 16,
-              textClip
+              textClip,
+              'exit'
             );
             const preset = TEXT_ANIMATION_PRESETS.find(
               (candidate) => candidate.name === presetName && candidate.category === 'exit'
@@ -2472,7 +2519,8 @@ export const createDesignerStore = (
                 keyframes: buildTextAnimationUpdate(
                   preset,
                   { ...clip, startMs: nextStart, endMs: nextEnd },
-                  textClip
+                  textClip,
+                  previousDuration
                 ).keyframes,
               };
             }

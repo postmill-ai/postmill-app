@@ -25,6 +25,7 @@ import { CopilotController } from '../copilot.controller';
 import { DashboardController } from '../dashboard.controller';
 import { DeepgramController } from '../deepgram.controller';
 import { DesignController } from '../design.controller';
+import { DesignShareController } from '../design-share.controller';
 import { DesignTemplateController } from '../design.controller';
 import { DesignerProxyController } from '../design.controller';
 import { DesignRenderFrameController } from '../design.controller';
@@ -122,6 +123,7 @@ const PUBLIC_CONTROLLERS = new Set<string>([
   'FederationController',
   'FederationAuthorizedController',
   'OrgPortabilityDownloadController',
+  'PublicDesignShareController',
 ]);
 
 // Operational / health / root controllers.
@@ -149,6 +151,7 @@ const ORG_RESOURCE_CONTROLLERS: Array<{ name: string; ctor: any }> = [
   { name: 'DashboardController', ctor: DashboardController },
   { name: 'DeepgramController', ctor: DeepgramController },
   { name: 'DesignController', ctor: DesignController },
+  { name: 'DesignShareController', ctor: DesignShareController },
   { name: 'DesignTemplateController', ctor: DesignTemplateController },
   { name: 'DesignerProxyController', ctor: DesignerProxyController },
   { name: 'DesignRenderFrameController', ctor: DesignRenderFrameController },
@@ -387,6 +390,7 @@ describe('RBAC coverage — every org-resource mutation is gated or explicitly a
       'DashboardController',
       'DeepgramController',
       'DesignController',
+      'DesignShareController',
       'DesignTemplateController',
       'FilesController',
       'HeyGenController',

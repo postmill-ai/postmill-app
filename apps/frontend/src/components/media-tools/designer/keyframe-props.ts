@@ -1,4 +1,4 @@
-import type { KeyframeEase } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
+import type { Keyframe, KeyframeEase } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
 import type { GraphProp } from './graph-editor';
 
 /**
@@ -12,7 +12,17 @@ export interface ClipKeyframe {
   tMs: number;
   props: Record<string, number>;
   ease?: KeyframeEase;
+  animationPreset?: Keyframe['animationPreset'];
 }
+
+export const keyframeIdentityMatches = (
+  a: Pick<ClipKeyframe, 'tMs' | 'animationPreset'>,
+  b: Pick<ClipKeyframe, 'tMs' | 'animationPreset'>,
+  toleranceMs = 0
+): boolean =>
+  Math.abs(a.tMs - b.tMs) <= toleranceMs &&
+  a.animationPreset?.name === b.animationPreset?.name &&
+  a.animationPreset?.category === b.animationPreset?.category;
 
 /**
  * Stable colour per animatable property. The chart tokens are
@@ -34,8 +44,8 @@ export const PROP_DOT_COLORS: Record<GraphProp, string> = {
 export const KEYFRAME_MERGE_TOLERANCE_MS = 1;
 
 /**
- * Merge-by-prop paste: for each incoming keyframe, a target keyframe within
- * KEYFRAME_MERGE_TOLERANCE_MS absorbs its props (incoming values overwrite
+ * Merge-by-prop paste: for each incoming keyframe, a target keyframe with the
+ * same preset identity within KEYFRAME_MERGE_TOLERANCE_MS absorbs its props (incoming values overwrite
  * props the target already carries; the incoming ease replaces the target's
  * when set). Anything else is appended. The result is sorted by tMs.
  *
@@ -53,16 +63,15 @@ export const mergeKeyframes = (
   }));
   for (const kf of incoming) {
     const hit = out.find(
-      (o) => Math.abs(o.tMs - kf.tMs) <= KEYFRAME_MERGE_TOLERANCE_MS
+      (o) => keyframeIdentityMatches(o, kf, KEYFRAME_MERGE_TOLERANCE_MS)
     );
     if (hit) {
       hit.props = { ...hit.props, ...kf.props };
       if (kf.ease !== undefined) hit.ease = kf.ease;
     } else {
       out.push({
-        tMs: kf.tMs,
+        ...kf,
         props: { ...kf.props },
-        ...(kf.ease !== undefined ? { ease: kf.ease } : {}),
       });
     }
   }

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { OUTPAINT_BACKGROUND_PROMPT } from '@postmill-ai/provider-kernel';
 import { ReplicateMediaAdapter } from '../media.adapter';
 
 // Mock SafeFetchPort: the blocking (`Prefer: wait`) create returns a succeeded
@@ -577,7 +578,7 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
       image: 'https://cdn.example.com/in.png',
       mask: 'https://cdn.example.com/in.png',
       outpaint: 'Zoom out 2x',
-      prompt: expect.stringContaining('Extend the image naturally'),
+      prompt: expect.stringContaining('Extend only the existing background'),
     });
   });
 
@@ -601,24 +602,20 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
   });
 
   // flux-fill-pro marks `prompt` required (live 422 when omitted), so a prompt-less
-  // outpaint must send the seamless-extension default, not drop the field.
-  it('sends the seamless-extension default prompt when none is supplied', async () => {
+  // outpaint must send the background-only default, not drop the field.
+  it('sends the background-only default prompt when none is supplied', async () => {
     await adapter.outpaintImage('https://cdn.example.com/in.png', 'zoom-1.5x', undefined, {
       credentials: { apiKey: 'k' },
     });
-    expect(lastRequestBody(fetchMock).input.prompt).toBe(
-      'Extend the image naturally beyond its borders, seamlessly matching the existing style, lighting, colors, and content.'
-    );
+    expect(lastRequestBody(fetchMock).input.prompt).toBe(OUTPAINT_BACKGROUND_PROMPT);
 
     await adapter.outpaintImage('https://cdn.example.com/in.png', 'zoom-1.5x', '   ', {
       credentials: { apiKey: 'k' },
     });
-    expect(lastRequestBody(fetchMock).input.prompt).toBe(
-      'Extend the image naturally beyond its borders, seamlessly matching the existing style, lighting, colors, and content.'
-    );
+    expect(lastRequestBody(fetchMock).input.prompt).toBe(OUTPAINT_BACKGROUND_PROMPT);
   });
 
-  it('lets an explicit prompt win over the default', async () => {
+  it('appends explicit guidance without dropping the background-only constraints', async () => {
     await adapter.outpaintImage('https://cdn.example.com/in.png', 'left', 'more ocean', {
       credentials: { apiKey: 'k' },
     });
@@ -626,8 +623,10 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
       image: 'https://cdn.example.com/in.png',
       mask: 'https://cdn.example.com/in.png',
       outpaint: 'Left outpaint',
-      prompt: 'more ocean',
+      prompt: expect.stringContaining('Additional guidance for the new background only: more ocean'),
     });
+    expect(lastRequestBody(fetchMock).input.prompt).toContain(OUTPAINT_BACKGROUND_PROMPT);
+    expect(lastRequestBody(fetchMock).input.prompt).toContain('do not add text, letters, logos, watermarks');
   });
 
   it('honors options.model over the default, and options.version over both', async () => {

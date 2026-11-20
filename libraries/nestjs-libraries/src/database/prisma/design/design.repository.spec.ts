@@ -17,7 +17,10 @@ function makeModel() {
       update: vi.fn(),
       count: vi.fn(),
     },
-    $queryRawUnsafe: vi.fn(),
+    $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+    designerRecentOpen: {
+      upsert: vi.fn(),
+    },
     designTemplateFolder: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
@@ -36,12 +39,27 @@ function makeModel() {
     file: {
       findFirst: vi.fn(),
     },
+    designBatch: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    designShare: {
+      updateMany: vi.fn(),
+    },
+    $transaction: vi.fn(async (operations) => operations),
   };
 }
 
 function makeRepo(model = makeModel()) {
   return {
     repo: new DesignRepository(
+      { model } as any,
+      { model } as any,
+      { model } as any,
+      { model } as any,
       { model } as any,
       { model } as any,
       { model } as any,
@@ -205,30 +223,26 @@ describe('DesignRepository — design versions', () => {
 });
 
 describe('DesignRepository — templates pagination', () => {
-  it('findTemplatesByOrg without pagination returns the full list (no skip/take)', async () => {
+  it('findTemplatesByOrg without pagination returns the full list (no LIMIT/OFFSET)', async () => {
     const { repo, model } = makeRepo();
-    model.designTemplate.findMany.mockResolvedValue([]);
 
     await repo.findTemplatesByOrg('org-1');
 
-    const args = model.designTemplate.findMany.mock.calls[0][0];
-    expect(args.where).toEqual({
-      deletedAt: null,
-      OR: [{ organizationId: 'org-1' }, { isSystem: true }],
-    });
-    expect(args).not.toHaveProperty('skip');
-    expect(args).not.toHaveProperty('take');
+    const [sql, orgId] = model.$queryRawUnsafe.mock.calls[0];
+    expect(sql).toContain('(t."organizationId" = $1 OR t."isSystem" = true)');
+    expect(sql).not.toContain('LIMIT');
+    expect(sql).not.toContain('OFFSET');
+    expect(orgId).toBe('org-1');
   });
 
-  it('findTemplatesByOrg with page/limit applies skip/take', async () => {
+  it('findTemplatesByOrg with page/limit applies bounded SQL pagination', async () => {
     const { repo, model } = makeRepo();
-    model.designTemplate.findMany.mockResolvedValue([]);
 
     await repo.findTemplatesByOrg('org-1', 3, 24);
 
-    expect(model.designTemplate.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 48, take: 24 })
-    );
+    const [sql, ...params] = model.$queryRawUnsafe.mock.calls[0];
+    expect(sql).toContain('LIMIT $2 OFFSET $3');
+    expect(params).toEqual(['org-1', 24, 48]);
   });
 
   it('prioritizes the selected brand in SQL before applying pagination', async () => {
@@ -242,22 +256,172 @@ describe('DesignRepository — templates pagination', () => {
     const result = await repo.findTemplatesByOrg('org-1', 1, 24, 'brand-1');
 
     expect(model.$queryRawUnsafe).toHaveBeenCalledWith(
-      expect.stringContaining('CASE WHEN "brandProfileId" = $2 THEN 0 ELSE 1 END'),
+      expect.stringContaining('CASE WHEN t."brandProfileId" = $2 THEN 0 ELSE 1 END'),
       'org-1', 'brand-1', 24, 0,
     );
     expect(result.map((template) => template.id)).toEqual(['brand-template', 'shared-template']);
   });
 
-  it('countTemplatesByOrg counts the same org/system scope as the list', async () => {
+  it('countTemplatesByOrg counts the same org/system scope and filters as the list', async () => {
     const { repo, model } = makeRepo();
-    model.designTemplate.count.mockResolvedValue(7);
+    model.$queryRawUnsafe.mockResolvedValue([{ total: 7 }]);
 
-    expect(await repo.countTemplatesByOrg('org-1')).toBe(7);
-    expect(model.designTemplate.count).toHaveBeenCalledWith({
-      where: {
-        deletedAt: null,
-        OR: [{ organizationId: 'org-1' }, { isSystem: true }],
-      },
+    expect(await repo.countTemplatesByOrg('org-1', undefined, { query: 'Launch' })).toBe(7);
+    const [sql, ...params] = model.$queryRawUnsafe.mock.calls[0];
+    expect(sql).toContain('SELECT COUNT(*)::int AS total');
+    expect(sql).toContain('(t."organizationId" = $1 OR t."isSystem" = true)');
+    expect(sql).toContain('POSITION');
+    expect(params).toEqual(['org-1', 'Launch', 'Launch']);
+  });
+
+  it('uses per-user history for recent design ordering and stable name ordering', async () => {
+    const { repo, model } = makeRepo();
+    model.$queryRawUnsafe.mockResolvedValue([{ id: 'd1' }]);
+    model.design.findMany.mockResolvedValue([{ id: 'd1', name: 'One' }]);
+
+    await repo.findByOrg('org-1', 1, 24, { sort: 'recent', userId: 'user-1', query: 'one' });
+    const [recentSql, ...recentParams] = model.$queryRawUnsafe.mock.calls[0];
+    expect(recentSql).toContain('LEFT JOIN "DesignerRecentOpen"');
+    expect(recentSql).toContain('r."openedAt" DESC NULLS LAST');
+    expect(recentSql).toContain('d."id" ASC');
+    expect(recentParams).toContain('user-1');
+
+    await repo.findByOrg('org-1', 1, 24, { sort: 'name' });
+    expect(model.$queryRawUnsafe.mock.calls[1][0]).toContain('LOWER(d."name") ASC');
+  });
+
+  it('filters templates by no folder and canonical category without system rows', async () => {
+    const { repo, model } = makeRepo();
+
+    await repo.findTemplatesByOrg('org-1', 1, 24, undefined, undefined, {
+      folderId: null,
+      category: 'ig-post',
+      sort: 'newest',
     });
+
+    const [sql, ...params] = model.$queryRawUnsafe.mock.calls[0];
+    expect(sql).toContain('t."organizationId" = $1');
+    expect(sql).toContain('t."folderId" IS NULL');
+    expect(params).toEqual(expect.arrayContaining(['ig-post', 'instagram-post', 'instagram post', 'ig post']));
+    expect(sql).toContain('t."createdAt" DESC');
+  });
+
+  it('reads document mode only for uncategorized facet and video/other filter rows', async () => {
+    const { repo, model } = makeRepo();
+
+    await repo.listTemplateCategories('org-1');
+    await repo.findTemplatesByOrg('org-1', 1, 24, undefined, undefined, { category: 'video' });
+    await repo.countTemplatesByOrg('org-1', undefined, { category: 'other' });
+
+    const guardedMode = "CASE WHEN TRIM(COALESCE(t.\"category\", '')) = '' THEN COALESCE(t.doc->>'mode', 'image') ELSE 'image' END";
+    for (const [sql] of model.$queryRawUnsafe.mock.calls) {
+      expect(sql).toContain(guardedMode);
+    }
+    expect(model.$queryRawUnsafe.mock.calls[0][0]).toContain(`${guardedMode} AS mode`);
+  });
+});
+
+
+describe('DesignRepository — Bulk Create batches', () => {
+  it('keeps batch lists, counts, and lookups scoped to the organization', async () => {
+    const { repo, model } = makeRepo();
+    model.designBatch.findMany.mockResolvedValue([]);
+    model.designBatch.findFirst.mockResolvedValue(null);
+    model.designBatch.count.mockResolvedValue(0);
+
+    await repo.findBatchesByOrg('org-1', 2, 25);
+    await repo.countBatchesByOrg('org-1');
+    await repo.findBatchByJobId('org-1', 'job-1');
+
+    const where = { organizationId: 'org-1', designs: { some: { deletedAt: null } } };
+    expect(model.designBatch.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where,
+      skip: 25,
+      take: 25,
+    }));
+    expect(model.designBatch.count).toHaveBeenCalledWith({ where });
+    expect(model.designBatch.findFirst).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', jobId: 'job-1' },
+    });
+  });
+
+  it('loads only live member metadata and includes batch identity on a full design', async () => {
+    const { repo, model } = makeRepo();
+    model.designBatch.findFirst.mockResolvedValue(null);
+    model.design.findFirst.mockResolvedValue(null);
+
+    await repo.findBatchById('org-1', 'batch-1');
+    await repo.findById('org-1', 'design-1');
+
+    expect(model.designBatch.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'batch-1', organizationId: 'org-1' },
+    }));
+    const memberQuery = model.designBatch.findFirst.mock.calls[0][0].include.designs;
+    expect(memberQuery.where).toEqual({ deletedAt: null });
+    expect(memberQuery.select).toEqual({
+      id: true,
+      name: true,
+      updatedAt: true,
+      previewFile: { select: { path: true } },
+    });
+    expect(memberQuery.select).not.toHaveProperty('doc');
+    expect(memberQuery.select).not.toHaveProperty('previewDataUrl');
+    expect(model.design.findFirst).toHaveBeenCalledWith({
+      where: { id: 'design-1', organizationId: 'org-1', deletedAt: null },
+      include: { batch: { select: { id: true, name: true } } },
+    });
+  });
+
+  it('filters batched variations only for the opt-in root listing', async () => {
+    const { repo, model } = makeRepo();
+    model.design.findMany.mockResolvedValue([]);
+    model.design.count.mockResolvedValue(0);
+
+    await repo.findByOrg('org-1', 1, 50, true);
+    await repo.countByOrg('org-1', true);
+
+    const where = { organizationId: 'org-1', deletedAt: null, batchId: null };
+    expect(model.design.findMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
+    expect(model.design.count).toHaveBeenCalledWith({ where });
+  });
+
+  it('deletes failed batch metadata with an org-scoped mutation', async () => {
+    const { repo, model } = makeRepo();
+    model.designBatch.deleteMany.mockResolvedValue({ count: 1 });
+
+    await repo.deleteBatch('org-1', 'batch-1');
+
+    expect(model.designBatch.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'batch-1', organizationId: 'org-1' },
+    });
+  });
+});
+
+
+describe('DesignRepository — share approval invalidation', () => {
+  it('updates a document and resets its share approval in one transaction', async () => {
+    const { repo, model } = makeRepo();
+    const doc = { mode: 'image', outputs: [] };
+
+    await repo.update('design-1', 'org-1', { doc });
+
+    expect(model.$transaction).toHaveBeenCalledTimes(1);
+    expect(model.design.update).toHaveBeenCalledWith({
+      where: { id: 'design-1', organizationId: 'org-1' },
+      data: { doc },
+    });
+    expect(model.designShare.updateMany).toHaveBeenCalledWith({
+      where: { designId: 'design-1', organizationId: 'org-1' },
+      data: { approvedAt: null, approvedBy: null },
+    });
+  });
+
+  it('preserves approval for name and preview-only updates', async () => {
+    const { repo, model } = makeRepo();
+
+    await repo.update('design-1', 'org-1', { name: 'Renamed', previewFileId: 'preview-1' });
+
+    expect(model.$transaction).not.toHaveBeenCalled();
+    expect(model.designShare.updateMany).not.toHaveBeenCalled();
   });
 });
