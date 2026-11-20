@@ -299,7 +299,8 @@ const scaledForOutput = (
                   ...run,
                   fontSize: scaleRichTextRunFontSize(run.fontSize, ratio, 10),
                 };
-          }),
+          }
+      : {}),
     ...(hasFitMinimum
       ? { autoFitMinFontSize: Math.max(1, Math.round(shared.autoFitMinFontSize! * ratio)) }
       : {}),
