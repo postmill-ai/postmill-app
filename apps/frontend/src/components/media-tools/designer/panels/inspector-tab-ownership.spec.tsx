@@ -25,7 +25,10 @@ vi.mock('../../use-media-picker', () => ({
   useMediaPicker: () => ({ open: vi.fn(), element: null }),
 }));
 vi.mock('./use-brand-colors', () => ({ useBrandColors: () => [] }));
-vi.mock('../elements', () => ({ getImageNaturalSize: () => null }));
+vi.mock('../elements', () => ({
+  getImageNaturalSize: () => null,
+  useLoadedImage: () => null,
+}));
 vi.mock('../use-preset-preview', () => ({
   usePresetPreview: () => ({ preview: vi.fn(), cancel: vi.fn() }),
 }));

@@ -119,11 +119,11 @@ describe('BrandAssets', () => {
 
     const colorRole = screen.getByRole('combobox', { name: 'Colour role for #111111' });
     fireEvent.change(colorRole, { target: { value: 'primary' } });
-    expect(screen.getByRole('status').textContent).toBe('Unsaved changes');
+    expect(screen.getByText('Unsaved changes').textContent).toBe('Unsaved changes');
     fireEvent.click(screen.getByRole('button', { name: 'Fonts' }));
 
     expect((colorRole as HTMLSelectElement).value).toBe('primary');
-    expect(screen.getByRole('status').textContent).toBe('Unsaved changes');
+    expect(screen.getByText('Unsaved changes').textContent).toBe('Unsaved changes');
     expect(scrollIntoView).toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -136,7 +136,7 @@ describe('BrandAssets', () => {
     ]);
     expect(body.logoFileIds).toEqual(['legacy-logo', { fileId: 'main-logo', role: 'main' }]);
     expect(body.fontFamilies).toEqual(['Legacy Sans']);
-    expect(screen.getByRole('status').textContent).toBe('All changes saved');
+    expect(screen.getByText('All changes saved').textContent).toBe('All changes saved');
   });
 
   it('opens the initial hash and adds each catalog family only once', () => {

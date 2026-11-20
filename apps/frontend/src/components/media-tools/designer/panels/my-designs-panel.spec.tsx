@@ -169,7 +169,7 @@ describe('MyDesignsPanel batches', () => {
       }
       if (url.startsWith('/media/designs?')) {
         return response({
-          designs: [design('standalone', 'Standalone'), design('video-only', 'Video only', 'video')],
+          designs: [design('standalone', 'Standalone'), design('video-only', 'Video only', { mode: 'video' })],
           total: 2,
         });
       }
@@ -196,9 +196,9 @@ describe('MyDesignsPanel batches', () => {
     expect(screen.getByText('Variation 2')).toBeTruthy();
     expect(screen.queryByText('Standalone')).toBeNull();
 
-    fireEvent.click(screen.getByText('Variation 2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Open Variation 2' }));
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'variation-2' }));
-    expect(onClose).toHaveBeenCalledOnce();
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   });
 
   it('uses the singular variation label on the card and batch header', async () => {

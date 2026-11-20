@@ -180,6 +180,47 @@ describe('OutputTabs repeated dimensions', () => {
   });
 });
 
+describe('OutputTabs pages visibility notification', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('notifies when a newly added image format contains multiple pages', () => {
+    const store = createDesignerStore();
+    store.getState().addPage();
+    const onPagesContentAdded = vi.fn();
+    render(<OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom size' }));
+
+    expect(onPagesContentAdded).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not notify for a single-page image format', () => {
+    const store = createDesignerStore();
+    const onPagesContentAdded = vi.fn();
+    render(<OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom size' }));
+
+    expect(onPagesContentAdded).not.toHaveBeenCalled();
+  });
+
+  it('does not notify for a video format', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const onPagesContentAdded = vi.fn();
+    render(<OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom size' }));
+
+    expect(onPagesContentAdded).not.toHaveBeenCalled();
+  });
+});
+
 
 describe('OutputTabs format workflows', () => {
   beforeAll(() => {

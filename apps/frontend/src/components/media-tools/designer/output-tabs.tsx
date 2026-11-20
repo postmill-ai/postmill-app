@@ -14,6 +14,7 @@ import { FormatThumbnail } from './format-thumbnail';
 
 interface OutputTabsProps {
   store: any;
+  onPagesContentAdded?: () => void;
 }
 
 const CHANNEL_GROUPS: Record<
@@ -197,7 +198,7 @@ const PortalPopover: React.FC<PortalPopoverProps> = ({
   );
 };
 
-export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsProps) {
+export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContentAdded }: OutputTabsProps) {
   const t = useT();
   const toaster = useToaster();
   const promptModal = usePromptModal();
@@ -333,6 +334,14 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
     });
   };
 
+  const notifyPagesContentAdded = () => {
+    const state = store.getState();
+    const output = state.doc.outputs[state.currentOutput];
+    if (output && 'children' in output && pageCount(output) > 1) {
+      onPagesContentAdded?.();
+    }
+  };
+
   const handleAddFormats = () => {
     const s = store.getState();
     const applied: string[] = [];
@@ -361,6 +370,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
       if (preset) applied.push(id);
     }
     setPendingFormats(new Set());
+    notifyPagesContentAdded();
     closePopover();
   };
 
@@ -384,6 +394,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsPr
         );
         return;
       }
+      notifyPagesContentAdded();
       closePopover();
       setCW('1080');
       setCH('1080');

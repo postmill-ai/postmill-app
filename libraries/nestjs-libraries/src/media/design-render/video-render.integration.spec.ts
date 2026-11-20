@@ -697,6 +697,9 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
       expect(second.textPixels('black')).toBeGreaterThan(10);
     } finally {
       fs.rmSync(frameDir, { recursive: true, force: true });
+    }
+  }, 120000);
+
   it('exports a multi-point motion path at matching times and resolutions', async () => {
     const capture = new ChromiumFrameCaptureService();
     const encoder = new FfmpegVideoEncoderService(capture);

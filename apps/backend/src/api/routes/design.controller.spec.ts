@@ -296,30 +296,32 @@ describe('DesignController', () => {
       designService.listDesigns.mockResolvedValue(result);
 
       expect(await controller.list(org)).toBe(result);
-      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 20, { query: undefined, sort: undefined, userId: undefined });
+      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 20, { query: undefined, sort: undefined, userId: undefined }, false);
     });
 
     it('passes explicit page and limit', async () => {
       designService.listDesigns.mockResolvedValue({ designs: [], total: 0, page: 2, limit: 10 });
 
       await controller.list(org, '2', '10');
-      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 2, 10, { query: undefined, sort: undefined, userId: undefined });
+      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 2, 10, { query: undefined, sort: undefined, userId: undefined }, false);
     });
 
     it('passes bounded search and recent sort with the current user', async () => {
       designService.listDesigns.mockResolvedValue({ designs: [], total: 0, page: 1, limit: 100 });
-      await controller.list(org, '1', '500', `  ${'x'.repeat(210)}  `, 'recent', user);
+      await controller.list(org, '1', '500', `  ${'x'.repeat(210)}  `, 'recent', undefined, user);
       expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 100, {
         query: 'x'.repeat(200), sort: 'recent', userId: 'user-1',
-      });
+      }, false);
     });
 
     it('uses the opt-in root grouping without changing the default list', async () => {
       designService.listDesigns.mockResolvedValue({ designs: [], total: 0 });
 
-      await controller.list(org, '1', '50', 'root');
+      await controller.list(org, '1', '50', undefined, undefined, 'root');
 
-      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 50, true);
+      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 50, {
+        query: undefined, sort: undefined, userId: undefined,
+      }, true);
     });
   });
 

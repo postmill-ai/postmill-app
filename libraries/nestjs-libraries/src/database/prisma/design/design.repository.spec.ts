@@ -374,15 +374,17 @@ describe('DesignRepository — Bulk Create batches', () => {
 
   it('filters batched variations only for the opt-in root listing', async () => {
     const { repo, model } = makeRepo();
-    model.design.findMany.mockResolvedValue([]);
-    model.design.count.mockResolvedValue(0);
 
-    await repo.findByOrg('org-1', 1, 50, true);
-    await repo.countByOrg('org-1', true);
+    await repo.findByOrg('org-1', 1, 50, {}, true);
+    await repo.countByOrg('org-1', undefined, true);
 
-    const where = { organizationId: 'org-1', deletedAt: null, batchId: null };
-    expect(model.design.findMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
-    expect(model.design.count).toHaveBeenCalledWith({ where });
+    expect(model.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+    for (const [sql, orgId] of model.$queryRawUnsafe.mock.calls) {
+      expect(sql).toContain('d."organizationId" = $1');
+      expect(sql).toContain('d."deletedAt" IS NULL');
+      expect(sql).toContain('d."batchId" IS NULL');
+      expect(orgId).toBe('org-1');
+    }
   });
 
   it('deletes failed batch metadata with an org-scoped mutation', async () => {

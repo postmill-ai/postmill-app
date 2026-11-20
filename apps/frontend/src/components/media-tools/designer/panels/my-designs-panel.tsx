@@ -257,37 +257,37 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose, initi
           <h3 className="mb-2 text-[11px] font-[600] uppercase tracking-wide text-newTextColor/60">
             {t('my_designs_panel_batches', 'Bulk Create batches')}
           </h3>
-          <div className="grid gap-[10px]" style={designerGalleryGridStyle(size)} role="list">
+          <ul className="grid gap-[10px]" style={designerGalleryGridStyle(size)}>
             {batches.map((batch) => (
-              <button
-                key={batch.id}
-                type="button"
-                role="listitem"
-                onClick={() => setSelectedBatchId(batch.id)}
-                className="group relative border border-studioBorder rounded-lg overflow-hidden hover:border-designerAccent/50 transition-colors cursor-pointer bg-newBgColorInner text-left"
-              >
-                <DesignPreviewImage
-                  src={batch.previewUrl}
-                  alt={batch.name}
-                  className="w-full aspect-square object-cover"
-                  fallback={(
-                    <div className="w-full aspect-square bg-studioBorder/10 flex items-center justify-center text-newTextColor/70 text-xs">
-                      {t('my_designs_panel_no_preview', 'No preview')}
-                    </div>
-                  )}
-                />
-                <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
-                  {t('my_designs_panel_batch_badge', 'BATCH')}
-                </span>
-                <div className="p-2">
-                  <p className="text-[12px] text-textColor truncate">{batch.name}</p>
-                  <p className="text-[10px] text-newTextColor/60">
-                    {t('my_designs_panel_variation_count', '{{count}} variation', { count: batch.count })}
-                  </p>
-                </div>
-              </button>
+              <li key={batch.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBatchId(batch.id)}
+                  className="group relative block h-full w-full border border-studioBorder rounded-lg overflow-hidden hover:border-designerAccent/50 transition-colors cursor-pointer bg-newBgColorInner text-left"
+                >
+                  <DesignPreviewImage
+                    src={batch.previewUrl}
+                    alt={batch.name}
+                    className="w-full aspect-square object-cover"
+                    fallback={(
+                      <div className="w-full aspect-square bg-studioBorder/10 flex items-center justify-center text-newTextColor/70 text-xs">
+                        {t('my_designs_panel_no_preview', 'No preview')}
+                      </div>
+                    )}
+                  />
+                  <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
+                    {t('my_designs_panel_batch_badge', 'BATCH')}
+                  </span>
+                  <div className="p-2">
+                    <p className="text-[12px] text-textColor truncate">{batch.name}</p>
+                    <p className="text-[10px] text-newTextColor/60">
+                      {t('my_designs_panel_variation_count', '{{count}} variation', { count: batch.count })}
+                    </p>
+                  </div>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
           {hasMoreBatches && (
             <LoadMore
               loading={loadingMoreBatches}
