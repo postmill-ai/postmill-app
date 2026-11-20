@@ -1240,6 +1240,114 @@ describe('smartReflow role-aware grouped font floor', () => {
   });
 });
 
+describe('smartReflow rich-text font sizes', () => {
+  const source = { width: 1080, height: 1080 };
+  const richText = (): DesignerElement => ({
+    id: 'rich-text',
+    type: 'text',
+    x: 100,
+    y: 100,
+    width: 600,
+    height: 100,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    text: 'Big rich headline',
+    fontSize: 64,
+    fontFamily: 'Inter',
+    fontWeight: 400,
+    richText: [
+      {
+        text: 'Big ',
+        fontSize: 64,
+        fontFamily: 'Inter',
+        fontWeight: 700,
+        fontStyle: 'italic',
+        fill: '#112233',
+        underline: true,
+      },
+      { text: 'rich ', fontSize: 32, fill: '#445566', lineThrough: true },
+      { text: 'headline', fontWeight: 500 },
+    ],
+  });
+
+  it('scales explicit runs and preserves inherited runs on a same-aspect target', () => {
+    const result = smartReflow(richText(), source, { width: 540, height: 540 });
+
+    expect(result.fontSize).toBe(32);
+    expect(result.richText).toEqual([
+      {
+        text: 'Big ',
+        fontSize: 32,
+        fontFamily: 'Inter',
+        fontWeight: 700,
+        fontStyle: 'italic',
+        fill: '#112233',
+        underline: true,
+      },
+      { text: 'rich ', fontSize: 16, fill: '#445566', lineThrough: true },
+      { text: 'headline', fontWeight: 500 },
+    ]);
+    expect(result.richText?.[2]).not.toHaveProperty('fontSize');
+  });
+
+  it('uses the parent type scale and rounding on the observed cross-aspect fixture', () => {
+    const element = richText();
+    const before = structuredClone(element);
+
+    const result = smartReflow(element, source, {
+      width: 600,
+      height: 400,
+      formatId: 'custom',
+    });
+
+    expect(result.fontSize).toBe(29);
+    expect(result.richText?.map((run) => run.fontSize)).toEqual([29, 15, undefined]);
+    expect(result.richText?.[0]).not.toBe(element.richText?.[0]);
+    expect(element).toEqual(before);
+  });
+
+  it('applies the parent role-aware floor to explicit runs', () => {
+    const floorSource = { width: 2160, height: 2160 };
+    const floorTarget = { width: 1080, height: 1920, formatId: 'ig-story' };
+    const element = {
+      ...richText(),
+      fontSize: 12,
+      groupId: 'cta',
+      richText: [{ text: 'Big ', fontSize: 12 }, { text: 'rich headline' }],
+    };
+    const boxes = computeGroupBoxes([element]);
+
+    const grouped = smartReflow(element, floorSource, floorTarget, boxes.get('cta'));
+    const ungrouped = smartReflow(
+      { ...element, groupId: undefined },
+      floorSource,
+      floorTarget
+    );
+
+    expect(grouped.richText?.map((run) => run.fontSize)).toEqual([12, undefined]);
+    expect(ungrouped.richText?.map((run) => run.fontSize)).toEqual([10, undefined]);
+  });
+
+  it('never grows a run authored below the legibility floor', () => {
+    const element = {
+      ...richText(),
+      richText: [{ text: '™', fontSize: 8 }],
+    };
+
+    expect(smartReflow(element, source, source).richText?.[0].fontSize).toBe(8);
+    expect(
+      smartReflow(element, source, { width: 1080, height: 1350 }).richText?.[0]
+        .fontSize
+    ).toBe(9);
+    expect(
+      smartReflow(element, source, { width: 540, height: 540 }).richText?.[0]
+        .fontSize
+    ).toBe(8);
+  });
+});
+
 // The single basis every cross-output type/size adjustment routes through.
 // `Math.min(w, h)` — what this replaced — typeset a 1200×675 seeded from a
 // 1080² for its 675 short edge, on a canvas 11% WIDER than the original.

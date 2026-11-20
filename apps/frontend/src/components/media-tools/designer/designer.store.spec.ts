@@ -429,6 +429,49 @@ describe('Designer smoke: multi-format linked editing', () => {
   });
 });
 
+describe('rich-text output reflow', () => {
+  it('scales explicit runs on Add format and resize while preserving inheritance', () => {
+    const store = createDesignerStore(1080, 1080);
+    store.getState().addElement({
+      id: 'rich-source', originId: 'rich-source', type: 'text',
+      text: 'Big rich headline', fontSize: 64, fontFamily: 'Inter', fontWeight: 400,
+      richText: [
+        { text: 'Big ', fontSize: 64, fontWeight: 700, fill: '#112233' },
+        { text: 'rich ', fontSize: 32, fontStyle: 'italic' },
+        { text: 'headline', fontWeight: 500 },
+      ],
+      x: 100, y: 100, width: 600, height: 100, rotation: 0,
+      opacity: 1, locked: false, hidden: false,
+    });
+    const source = store.getState().doc.outputs[0] as DesignerOutput;
+    const sourceJson = JSON.stringify(source);
+
+    expect(store.getState().addOutput({
+      formatId: 'custom', name: 'Small wide', width: 600, height: 400,
+    })).toBe(true);
+
+    const added = store.getState().doc.outputs[1] as DesignerOutput;
+    expect(added.children[0].fontSize).toBe(29);
+    expect(added.children[0].originId).toBe('rich-source');
+    expect(added.children[0].richText).toEqual([
+      { text: 'Big ', fontSize: 29, fontWeight: 700, fill: '#112233' },
+      { text: 'rich ', fontSize: 15, fontStyle: 'italic' },
+      { text: 'headline', fontWeight: 500 },
+    ]);
+    expect(added.children[0].richText?.[2]).not.toHaveProperty('fontSize');
+    expect(JSON.stringify(source)).toBe(sourceJson);
+
+    store.getState().resizeOutput(0, 540, 540, 'custom', 'Half size');
+
+    const resized = store.getState().doc.outputs[0] as DesignerOutput;
+    expect(resized.children[0].fontSize).toBe(32);
+    expect(resized.children[0].richText?.map((run) => run.fontSize)).toEqual([
+      32, 16, undefined,
+    ]);
+    expect(resized.children[0].richText?.[2]).not.toHaveProperty('fontSize');
+  });
+});
+
 describe('format-local element insertion', () => {
   afterEach(() => {
     focalMock.result = null;
@@ -3337,9 +3380,9 @@ describe('static clipboard paste placement', () => {
 
     const text = pasted.find((child) => child.type === 'text')!;
     const sourceText = source.children.find((child) => child.type === 'text')!;
-    expect(text.fontSize).toBeLessThan(sourceText.fontSize!);
-    expect(text.richText?.map((run) => ({ text: run.text, fontWeight: run.fontWeight }))).toEqual([
-      { text: 'Big headline', fontWeight: 700 },
+    expect(text.fontSize).toBe(29);
+    expect(text.richText?.map((run) => ({ text: run.text, fontWeight: run.fontWeight, fontSize: run.fontSize }))).toEqual([
+      { text: 'Big headline', fontWeight: 700, fontSize: 29 },
     ]);
     expect(text.rotation).toBe(12);
     const image = pasted.find((child) => child.type === 'image')!;

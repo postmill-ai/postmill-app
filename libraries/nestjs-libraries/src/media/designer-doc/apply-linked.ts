@@ -1,12 +1,14 @@
+import diff from 'fast-diff';
 import type {
   DesignerDoc,
   DesignerElement,
   DesignerOutput,
   SymbolOverrides,
+  TextRun,
   VideoClip,
   VideoOutput,
 } from './designer-doc.schema';
-import { scalePx, typeScaleRatio } from './reflow';
+import { scalePx, scaleRichTextRunFontSize, typeScaleRatio } from './reflow';
 import { scalePathNodes } from './path-geometry';
 import { isOutputFrozen } from './output-freeze';
 
@@ -109,19 +111,124 @@ const resizePathNodes = (
   };
 };
 
+interface RichTextRange {
+  run: TextRun;
+  start: number;
+  end: number;
+}
+
+const richTextRanges = (runs: TextRun[] | undefined): RichTextRange[] => {
+  let offset = 0;
+  return (runs ?? []).map((run) => {
+    const start = offset;
+    offset += run.text.length;
+    return { run, start, end: offset };
+  });
+};
+
+interface TextRangeLink {
+  previousStart: number;
+  previousEnd: number;
+  nextStart: number;
+  nextEnd: number;
+  equal: boolean;
+}
+
+const MAX_TEXT_DIFF_LENGTH = 2000;
+
+const textEditRangeMapper = (
+  previousText: string | undefined,
+  nextText: string | undefined
+) => {
+  if (previousText === undefined || nextText === undefined || previousText === nextText) {
+    return (start: number, end: number) => [{ start, end }];
+  }
+  if (Math.max(previousText.length, nextText.length) > MAX_TEXT_DIFF_LENGTH) {
+    return (): { start: number; end: number }[] => [];
+  }
+
+  const operations = diff(previousText, nextText);
+  const links: TextRangeLink[] = [];
+  let previousOffset = 0;
+  let nextOffset = 0;
+  let index = 0;
+
+  while (index < operations.length) {
+    const [operation, text] = operations[index];
+    if (operation === 0) {
+      if (text.length > 0) {
+        links.push({
+          previousStart: previousOffset,
+          previousEnd: previousOffset + text.length,
+          nextStart: nextOffset,
+          nextEnd: nextOffset + text.length,
+          equal: true,
+        });
+      }
+      previousOffset += text.length;
+      nextOffset += text.length;
+      index += 1;
+      continue;
+    }
+
+    const previousStart = previousOffset;
+    const nextStart = nextOffset;
+    while (index < operations.length && operations[index][0] !== 0) {
+      const [changeOperation, changeText] = operations[index];
+      if (changeOperation === -1) previousOffset += changeText.length;
+      else nextOffset += changeText.length;
+      index += 1;
+    }
+    if (previousOffset > previousStart && nextOffset > nextStart) {
+      links.push({
+        previousStart,
+        previousEnd: previousOffset,
+        nextStart,
+        nextEnd: nextOffset,
+        equal: false,
+      });
+    }
+  }
+
+  return (start: number, end: number) => {
+    const ranges: { start: number; end: number }[] = [];
+    for (const link of links) {
+      const overlapStart = Math.max(start, link.nextStart);
+      const overlapEnd = Math.min(end, link.nextEnd);
+      if (overlapStart >= overlapEnd) continue;
+      if (!link.equal) {
+        ranges.push({ start: link.previousStart, end: link.previousEnd });
+        continue;
+      }
+      ranges.push({
+        start: link.previousStart + overlapStart - link.nextStart,
+        end: link.previousStart + overlapEnd - link.nextStart,
+      });
+    }
+    return ranges;
+  };
+};
+
 /**
- * Non-geometry updates propagate raw — except `fontSize`, the auto-fit minima
- * and `textStroke.width`: px values authored against one canvas are wrong on another, so linked copies
- * get them re-fit through the shared aspect-aware basis (`typeScaleRatio`, the
- * same rule as smartReflow and the conductor's variant re-fit), with font size
- * floored at 10px. The old
+ * Non-geometry updates propagate raw — except `fontSize`, explicit rich-text
+ * run sizes, the auto-fit minima and `textStroke.width`: px values authored
+ * against one canvas are wrong on another, so linked copies get them re-fit
+ * through the shared aspect-aware basis (`typeScaleRatio`, the same rule as
+ * smartReflow and the conductor's variant re-fit), with font size floored at
+ * 10px. Rich runs keep their authored size when it is already below that floor.
+ * Unchanged runs are matched by character range through multi-hunk text edits,
+ * splits and merges, retaining the target's existing size rather than
+ * round-tripping through a scale. Changed texts over the diff budget use fresh
+ * scaling to bound editor work. The old
  * `min(scaleX, scaleY)` here silently re-imposed short-edge typography on
  * every linked edit — undoing the per-format type of every wider output.
  */
 const scaledForOutput = (
   shared: Partial<DesignerElement>,
   source: { width: number; height: number },
-  target: { width: number; height: number }
+  target: { width: number; height: number },
+  sourceElement?: DesignerElement,
+  targetElement?: DesignerElement
 ): Partial<DesignerElement> => {
   const hasFontSize = typeof shared.fontSize === 'number' && Number.isFinite(shared.fontSize);
   const hasFitMinimum =
@@ -130,13 +237,69 @@ const scaledForOutput = (
   const hasPreviousFitMinimum =
     typeof shared.autoFitPreviousMinFontSize === 'number' &&
     Number.isFinite(shared.autoFitPreviousMinFontSize);
-  if (!hasFontSize && !hasFitMinimum && !hasPreviousFitMinimum && !shared.textStroke) return shared;
+  if (
+    !hasFontSize &&
+    !hasFitMinimum &&
+    !hasPreviousFitMinimum &&
+    !shared.textStroke &&
+    !shared.richText
+  ) {
+    return shared;
+  }
   const ratio = typeScaleRatio(source, target);
+  const sharedRuns = shared.richText;
+  const sourceRanges = richTextRanges(sourceElement?.richText);
+  const targetRanges = richTextRanges(targetElement?.richText);
+  const mapSourceRange = textEditRangeMapper(
+    sourceElement?.text ?? sourceElement?.richText?.map((run) => run.text).join(''),
+    shared.text
+  );
+  const mapTargetRange = textEditRangeMapper(
+    targetElement?.text ?? targetElement?.richText?.map((run) => run.text).join(''),
+    shared.text
+  );
   return {
     ...shared,
     ...(hasFontSize
       ? { fontSize: Math.max(10, Math.round(shared.fontSize! * ratio)) }
       : {}),
+    ...(sharedRuns
+      ? {
+          richText: richTextRanges(sharedRuns).map(({ run, start, end }) => {
+            const mappedSourceRanges = mapSourceRange(start, end);
+            const mappedTargetRanges = mapTargetRange(start, end);
+            const sourceMatches = sourceRanges.filter((range) =>
+              mappedSourceRanges.some(
+                (mapped) => range.start < mapped.end && range.end > mapped.start
+              )
+            );
+            const targetMatches = targetRanges.filter((range) =>
+              mappedTargetRanges.some(
+                (mapped) => range.start < mapped.end && range.end > mapped.start
+              )
+            );
+            const unchanged =
+              sourceMatches.length > 0 &&
+              sourceMatches.every(
+                (range) => range.run.fontSize === run.fontSize
+              );
+            const targetSizes = new Set(
+              targetMatches.map((range) => range.run.fontSize)
+            );
+            if (unchanged && targetSizes.size === 1) {
+              const preserved = { ...run };
+              const targetSize = targetMatches[0].run.fontSize;
+              if (targetSize === undefined) delete preserved.fontSize;
+              else preserved.fontSize = targetSize;
+              return preserved;
+            }
+            return run.fontSize === undefined
+              ? { ...run }
+              : {
+                  ...run,
+                  fontSize: scaleRichTextRunFontSize(run.fontSize, ratio, 10),
+                };
+          }),
     ...(hasFitMinimum
       ? { autoFitMinFontSize: Math.max(1, Math.round(shared.autoFitMinFontSize! * ratio)) }
       : {}),
@@ -196,10 +359,19 @@ export const applyLinked = (
     if (!propagate || !isImageOutput(out) || isOutputFrozen(out)) return out;
 
     let changed = false;
-    const scaled = scaledForOutput(shared, current, out as DesignerOutput);
     const newChildren = (out as DesignerOutput).children.map((el) => {
       if (el.originId && origins.has(el.originId)) {
         changed = true;
+        const sourceElement = current.children.find(
+          (candidate) => idSet.has(candidate.id) && candidate.originId === el.originId
+        );
+        const scaled = scaledForOutput(
+          shared,
+          current,
+          out as DesignerOutput,
+          sourceElement,
+          el
+        );
         return applyPatch(el, scaled);
       }
       return el;

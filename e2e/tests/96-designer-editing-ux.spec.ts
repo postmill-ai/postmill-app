@@ -562,7 +562,11 @@ test('cross-format Paste centers a complete group at the pointer through reload 
     crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
     focalPoint: { x: 0.25, y: 0.75 }, rotation: 8,
   });
-  expect(pasted.find((child: any) => child.type === 'text').fontSize).toBeLessThan(48);
+  const pastedText = pasted.find((child: any) => child.type === 'text');
+  expect(pastedText.fontSize).toBe(28);
+  expect(pastedText.richText).toEqual([{
+    text: 'Pointer pasted headline', fontWeight: 700, fontSize: 28,
+  }]);
   expect((state.saveDocs.at(-1) as any).outputs[0].children).toEqual(doc.outputs[0].children);
 
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
@@ -598,6 +602,10 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await page.getByRole('button', { name: /^Paste Target(?! actions)/ }).click();
   expect((state.doc as any).outputs[1].children).toHaveLength(9);
+  const reloadedRuns = (state.doc as any).outputs[1].children
+    .filter((child: any) => child.text === 'Pointer pasted headline')
+    .flatMap((child: any) => child.richText);
+  expect(reloadedRuns.map((run: any) => run.fontSize)).toEqual([28, 28]);
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Save to Files' }).click();
@@ -612,7 +620,9 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   expect(renderedTarget.children.map((child: any) => child.type)).toEqual([
     'text', 'group', 'shape', 'image', 'text', 'group', 'shape', 'image', 'text',
   ]);
-  expect(renderedTarget.children.filter((child: any) => child.text === 'Pointer pasted headline')).toHaveLength(2);
+  const renderedHeadlines = renderedTarget.children.filter((child: any) => child.text === 'Pointer pasted headline');
+  expect(renderedHeadlines).toHaveLength(2);
+  expect(renderedHeadlines.flatMap((child: any) => child.richText).map((run: any) => run.fontSize)).toEqual([28, 28]);
   // Export sends one single-output document per rendered file.
   const renderedSource = (state.renderDocs as any[])
     .map((rendered) => rendered.outputs.find((output: any) => output.id === 'paste-source'))

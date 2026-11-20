@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
 import { DesignRenderService } from './design-render.service';
 import { videoOutputToPosterOutput } from '../designer-doc/video-poster';
+import { seedChildren } from '../designer-doc/seed-copy';
 
 /**
  * Parity fixtures — the tests that would have caught this whole round.
@@ -402,6 +403,34 @@ describe('parity: type', () => {
     fontFamily: 'sans-serif',
     fill: '#000000',
     ...over,
+  });
+
+  it('renders a reflowed explicit rich run at the inherited control size', async () => {
+    const source = text({
+      id: 'rich-reflow',
+      x: 100,
+      y: 100,
+      width: 600,
+      height: 100,
+      text: 'REFLOW',
+      fontSize: 64,
+      richText: [{ text: 'REFLOW', fontSize: 64, fontWeight: 700 }],
+    });
+    const [scaled] = seedChildren(
+      [source],
+      { width: 1080, height: 1080 },
+      { width: 600, height: 400, formatId: 'custom' },
+      () => undefined
+    );
+    const target = { width: 600, height: 400, formatId: 'custom' };
+    const inherited = { ...scaled, richText: [{ text: 'REFLOW', fontWeight: 700 }] };
+
+    const explicitPixels = await render(doc([scaled], target));
+    const inheritedPixels = await render(doc([inherited], target));
+
+    expect(scaled.fontSize).toBe(29);
+    expect(scaled.richText?.[0].fontSize).toBe(29);
+    expect(explicitPixels.inkBox()).toEqual(inheritedPixels.inkBox());
   });
 
   it('keeps a curved baseline inside the element box', async () => {
